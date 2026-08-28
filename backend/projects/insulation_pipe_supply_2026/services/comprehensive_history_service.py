@@ -50,6 +50,158 @@ def _get_pipe_models(cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
     return get_config_list(cfg, "pipe_models") or get_config_list(cfg, "pipe_model")
 
 
+def _get_supplier_map(cfg: Dict[str, Any]) -> Dict[str, str]:
+    sup_map = {
+        "KAIYUAN": "大连开元热力管道股份有限公司",
+        "SA": "大连开元热力管道股份有限公司",
+        "XINRUIDE": "河北鑫瑞得管道设备有限公司",
+        "SB": "河北鑫瑞得管道设备有限公司",
+        "TIANDILONG": "天津天地龙管业股份有限公司",
+        "SG": "天津天地龙管业股份有限公司",
+        "WOSHENG": "江苏沃圣阀业有限公司",
+        "SD": "江苏沃圣阀业有限公司",
+        "KAERSI": "天津卡尔斯阀门股份有限公司",
+        "SE": "天津卡尔斯阀门股份有限公司",
+        "ZEYUE": "河北泽悦节能设备科技有限公司",
+        "SF": "河北泽悦节能设备科技有限公司",
+        "吴近": "能源集团保温管厂",
+        "SC": "能源集团保温管厂",
+    }
+    for item in (get_config_list(cfg, "supply_entities") or get_config_list(cfg, "suppliers") or []):
+        sid = str(item.get("entity_id") or item.get("supplier_id") or "").upper()
+        code = str(item.get("code") or "").upper()
+        sname = str(item.get("entity_name") or item.get("supplier_name") or item.get("name") or sid)
+        if sid:
+            sup_map[sid] = sname
+        if code:
+            sup_map[code] = sname
+    return sup_map
+
+
+def _get_pipe_section_dynamic_suppliers(session, cfg: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    """
+    纯数据驱动解析保温管直管供给方与标段的映射：
+    1. 优先从 tube.tube_delivery 真实发货表中动态统计各标段实际供货最多的主体；
+    2. 其次从配置 tube_config.json 的 supply_entities 中查找管辖标段的主体；
+    3. 绝不基于标段名称前缀硬编码，完全按发货事实与配置动态自适应。
+    """
+    sup_name_map = _get_supplier_map(cfg)
+    sec_to_sup: Dict[str, Dict[str, str]] = {}
+
+    # 1. 优先从数据库实际直管发货记录动态提取真实主供货商
+    try:
+        rows = session.execute(text("""
+            SELECT DISTINCT ON (section_1_id)
+                section_1_id,
+                LOWER(TRIM(supply_entity_id)) AS supply_entity_id,
+                COUNT(*) as cnt
+            FROM tube.tube_delivery
+            WHERE supply_entity_id IS NOT NULL AND status <> 'cancelled'
+            GROUP BY section_1_id, LOWER(TRIM(supply_entity_id))
+            ORDER BY section_1_id, COUNT(*) DESC
+        """)).mappings().all()
+        for r in rows:
+            sid = str(r["section_1_id"] or "").strip()
+            sup_code = str(r["supply_entity_id"] or "").strip()
+            if sid and sup_code:
+                sup_name = sup_name_map.get(sup_code.upper()) or sup_name_map.get(sup_code) or sup_code
+                sec_to_sup[sid] = {"supplier_id": sup_code, "supplier_name": sup_name}
+    except Exception:
+        pass
+
+    # 2. 结合配置 supply_entities 补充尚未有实际发货记录的标段
+    for ent in (get_config_list(cfg, "supply_entities") or []):
+        ent_id = str(ent.get("entity_id") or ent.get("supplier_id") or "").strip()
+        ent_name = str(ent.get("entity_name") or ent.get("supplier_name") or ent.get("name") or ent_id)
+        for sid in (ent.get("section_1_ids") or []):
+            s_str = str(sid).strip()
+            if s_str and s_str not in sec_to_sup:
+                sec_to_sup[s_str] = {"supplier_id": ent_id, "supplier_name": ent_name}
+
+    return sec_to_sup
+
+
+def _get_fitting_dynamic_supplier_map(session, cfg: Dict[str, Any]):
+    """
+    纯数据驱动解析管件各标段与品类的供给方解析器：
+    1. 优先从 tube.tube_fitting_delivery 实际发运表中动态提取 (标段, 管件类型) 的真实供货主体；
+    2. 其次提取该标段整体在管件发货表中的供货主体；
+    3. 再次从配置 supply_entities 中查找管辖该标段的供货主体；
+    4. 彻底消除按“阀”、“补偿”等字符串硬编码判定的逻辑。
+    """
+    sup_name_map = _get_supplier_map(cfg)
+    type_map: Dict[Tuple[str, str], Dict[str, str]] = {}
+    sec_map: Dict[str, Dict[str, str]] = {}
+
+    try:
+        # 1. 细粒度：(标段, 管件类型) -> 实际发货最多主体
+        rows_type = session.execute(text("""
+            SELECT DISTINCT ON (section_1_id, fitting_type)
+                section_1_id,
+                fitting_type,
+                LOWER(TRIM(supply_entity_id)) AS supply_entity_id,
+                COUNT(*) as cnt
+            FROM tube.tube_fitting_delivery
+            WHERE supply_entity_id IS NOT NULL AND status <> 'cancelled'
+            GROUP BY section_1_id, fitting_type, LOWER(TRIM(supply_entity_id))
+            ORDER BY section_1_id, fitting_type, COUNT(*) DESC
+        """)).mappings().all()
+        for r in rows_type:
+            sid = str(r["section_1_id"] or "").strip()
+            ft = str(r["fitting_type"] or "").strip()
+            sup_code = str(r["supply_entity_id"] or "").strip()
+            if sid and ft and sup_code:
+                sup_name = sup_name_map.get(sup_code.upper()) or sup_name_map.get(sup_code) or sup_code
+                type_map[(sid, ft)] = {"supplier_id": sup_code, "supplier_name": sup_name}
+
+        # 2. 标段粒度：标段 -> 实际发货最多主体
+        rows_sec = session.execute(text("""
+            SELECT DISTINCT ON (section_1_id)
+                section_1_id,
+                LOWER(TRIM(supply_entity_id)) AS supply_entity_id,
+                COUNT(*) as cnt
+            FROM tube.tube_fitting_delivery
+            WHERE supply_entity_id IS NOT NULL AND status <> 'cancelled'
+            GROUP BY section_1_id, LOWER(TRIM(supply_entity_id))
+            ORDER BY section_1_id, COUNT(*) DESC
+        """)).mappings().all()
+        for r in rows_sec:
+            sid = str(r["section_1_id"] or "").strip()
+            sup_code = str(r["supply_entity_id"] or "").strip()
+            if sid and sup_code:
+                sup_name = sup_name_map.get(sup_code.upper()) or sup_name_map.get(sup_code) or sup_code
+                sec_map[sid] = {"supplier_id": sup_code, "supplier_name": sup_name}
+    except Exception:
+        pass
+
+    # 3. 配置标段兜底映射
+    cfg_sec_map: Dict[str, Dict[str, str]] = {}
+    for ent in (get_config_list(cfg, "supply_entities") or []):
+        ent_id = str(ent.get("entity_id") or ent.get("supplier_id") or "").strip()
+        ent_name = str(ent.get("entity_name") or ent.get("supplier_name") or ent.get("name") or ent_id)
+        for sid in (ent.get("section_1_ids") or []):
+            s_str = str(sid).strip()
+            if s_str and s_str not in cfg_sec_map:
+                cfg_sec_map[s_str] = {"supplier_id": ent_id, "supplier_name": ent_name}
+
+    def resolve_supplier(sec_id: str, fitting_type: str = "") -> Dict[str, str]:
+        s_str = str(sec_id or "").strip()
+        f_str = str(fitting_type or "").strip()
+        # 1. 命中具体管件品类的真实发货主体
+        if f_str and (s_str, f_str) in type_map:
+            return type_map[(s_str, f_str)]
+        # 2. 命中该标段整体管件发货主体
+        if s_str in sec_map:
+            return sec_map[s_str]
+        # 3. 命中配置中分配给该标段的主体
+        if s_str in cfg_sec_map:
+            return cfg_sec_map[s_str]
+        # 4. 兜底
+        return {"supplier_id": "", "supplier_name": "待分配供货方"}
+
+    return resolve_supplier
+
+
 # -----------------------------------------------------------------------------
 # 1. 📅 每日流转综合台账聚合 (Daily Flow History)
 # -----------------------------------------------------------------------------
@@ -76,11 +228,11 @@ def query_daily_flow_history(
     sec_filter_set = set(section_1_ids) if section_1_ids else None
     model_filter_set = set(pipe_model_ids) if pipe_model_ids else None
 
-    # 默认最近 30 天
+    # 默认项目启动日 2026-07-28
     if not end_date:
         end_date = datetime.now(BEIJING_TZ).date()
     if not start_date:
-        start_date = end_date - timedelta(days=30)
+        start_date = date(2026, 7, 28)
 
     session = SessionLocal()
     try:
@@ -115,23 +267,38 @@ def _query_pipe_daily_flow(
     sec_name_map: Dict[str, str],
     model_name_map: Dict[str, str],
 ) -> Dict[str, Any]:
-    """保温管 6 节点每日综合流转查询。"""
+    """保温管 6 节点每日综合流转查询（数据驱动：动态识别各标段发运与供货单位）。"""
+    cfg = load_tube_config() or {}
+    supplier_map = _get_supplier_map(cfg)
+    sec_to_sup = _get_pipe_section_dynamic_suppliers(session, cfg)
+
     sql = text("""
-        WITH p AS (
-            SELECT
+        WITH actual_sup AS (
+            SELECT DISTINCT ON (section_1_id)
                 section_1_id,
-                plan_date AS biz_date,
-                pipe_model_id,
-                SUM(COALESCE(plan_qty, 0)) AS total_plan_qty
-            FROM tube.tube_daily_plan
-            WHERE plan_date >= :start_date AND plan_date <= :end_date
-              AND plan_qty IS NOT NULL AND plan_qty > 0
-            GROUP BY section_1_id, plan_date, pipe_model_id
+                LOWER(TRIM(supply_entity_id)) AS supply_entity_id
+            FROM tube.tube_delivery
+            WHERE supply_entity_id IS NOT NULL AND status <> 'cancelled'
+            GROUP BY section_1_id, LOWER(TRIM(supply_entity_id))
+            ORDER BY section_1_id, COUNT(*) DESC
+        ), p AS (
+            SELECT
+                p_raw.section_1_id,
+                p_raw.plan_date AS biz_date,
+                p_raw.pipe_model_id,
+                COALESCE(act.supply_entity_id, '') AS supply_entity_id,
+                SUM(COALESCE(p_raw.plan_qty, 0)) AS total_plan_qty
+            FROM tube.tube_daily_plan p_raw
+            LEFT JOIN actual_sup act ON act.section_1_id = p_raw.section_1_id
+            WHERE p_raw.plan_date >= :start_date AND p_raw.plan_date <= :end_date
+              AND p_raw.plan_qty IS NOT NULL AND p_raw.plan_qty > 0
+            GROUP BY p_raw.section_1_id, p_raw.plan_date, p_raw.pipe_model_id, act.supply_entity_id
         ), s AS (
             SELECT
                 section_1_id,
                 (shipped_at AT TIME ZONE 'Asia/Shanghai')::date AS biz_date,
                 pipe_model_id,
+                LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
                 SUM(COALESCE(shipped_qty, 0)) AS total_shipped_qty
             FROM tube.tube_delivery
             WHERE shipped_at IS NOT NULL
@@ -139,12 +306,13 @@ def _query_pipe_daily_flow(
               AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
               AND status <> 'cancelled'
               AND shipped_qty IS NOT NULL AND shipped_qty > 0
-            GROUP BY section_1_id, (shipped_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
+            GROUP BY section_1_id, (shipped_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id, LOWER(TRIM(COALESCE(supply_entity_id, '')))
         ), arr AS (
             SELECT
                 section_1_id,
                 (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS biz_date,
                 pipe_model_id,
+                LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
                 SUM(COALESCE(arrived_qty, 0)) AS total_arrived_qty,
                 SUM(EXTRACT(EPOCH FROM (arrived_confirm_at - shipped_at))) AS total_transit_seconds,
                 COUNT(id) AS arrived_batch_count
@@ -154,62 +322,67 @@ def _query_pipe_daily_flow(
               AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
               AND status <> 'cancelled'
               AND arrived_qty IS NOT NULL AND arrived_qty > 0
-            GROUP BY section_1_id, (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
+            GROUP BY section_1_id, (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id, LOWER(TRIM(COALESCE(supply_entity_id, '')))
         ), rec AS (
             SELECT
                 section_1_id,
                 (received_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS biz_date,
                 pipe_model_id,
+                LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
                 SUM(COALESCE(received_qty, arrived_qty, shipped_qty, 0)) AS total_received_qty
             FROM tube.tube_delivery
             WHERE received_confirm_at IS NOT NULL
               AND (received_confirm_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date 
               AND (received_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
               AND status <> 'cancelled'
-            GROUP BY section_1_id, (received_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
+            GROUP BY section_1_id, (received_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id, LOWER(TRIM(COALESCE(supply_entity_id, '')))
         ), u AS (
             SELECT
-                section_1_id,
-                usage_date AS biz_date,
-                pipe_model_id,
-                SUM(COALESCE(usage_qty, 0)) AS total_usage_qty,
-                SUM(COALESCE(loss_qty, 0)) AS total_loss_qty
-            FROM tube.tube_daily_usage
-            WHERE usage_date >= :start_date AND usage_date <= :end_date
+                u_raw.section_1_id,
+                u_raw.usage_date AS biz_date,
+                u_raw.pipe_model_id,
+                COALESCE(act.supply_entity_id, '') AS supply_entity_id,
+                SUM(COALESCE(u_raw.usage_qty, 0)) AS total_usage_qty,
+                SUM(COALESCE(u_raw.loss_qty, 0)) AS total_loss_qty
+            FROM tube.tube_daily_usage u_raw
+            LEFT JOIN actual_sup act ON act.section_1_id = u_raw.section_1_id
+            WHERE u_raw.usage_date >= :start_date AND u_raw.usage_date <= :end_date
               AND (
-                (usage_qty IS NOT NULL AND usage_qty > 0)
-                OR (loss_qty IS NOT NULL AND loss_qty > 0)
+                (u_raw.usage_qty IS NOT NULL AND u_raw.usage_qty > 0)
+                OR (u_raw.loss_qty IS NOT NULL AND u_raw.loss_qty > 0)
               )
-            GROUP BY section_1_id, usage_date, pipe_model_id
+            GROUP BY u_raw.section_1_id, u_raw.usage_date, u_raw.pipe_model_id, act.supply_entity_id
         ), wh AS (
             SELECT
                 section_1_id,
                 (warehouse_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS biz_date,
                 pipe_model_id,
+                LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
                 SUM(COALESCE(received_qty, arrived_qty, shipped_qty, 0)) AS total_warehouse_qty
             FROM tube.tube_delivery
             WHERE warehouse_confirm_at IS NOT NULL
               AND (warehouse_confirm_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date 
               AND (warehouse_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date
               AND status = 'completed'
-            GROUP BY section_1_id, (warehouse_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id
+            GROUP BY section_1_id, (warehouse_confirm_at AT TIME ZONE 'Asia/Shanghai')::date, pipe_model_id, LOWER(TRIM(COALESCE(supply_entity_id, '')))
         ), all_keys AS (
-            SELECT section_1_id, biz_date, pipe_model_id FROM p
+            SELECT section_1_id, biz_date, pipe_model_id, supply_entity_id FROM s
             UNION
-            SELECT section_1_id, biz_date, pipe_model_id FROM s
+            SELECT section_1_id, biz_date, pipe_model_id, supply_entity_id FROM arr
             UNION
-            SELECT section_1_id, biz_date, pipe_model_id FROM arr
+            SELECT section_1_id, biz_date, pipe_model_id, supply_entity_id FROM rec
             UNION
-            SELECT section_1_id, biz_date, pipe_model_id FROM rec
+            SELECT section_1_id, biz_date, pipe_model_id, supply_entity_id FROM wh
             UNION
-            SELECT section_1_id, biz_date, pipe_model_id FROM u
+            SELECT section_1_id, biz_date, pipe_model_id, supply_entity_id FROM p
             UNION
-            SELECT section_1_id, biz_date, pipe_model_id FROM wh
+            SELECT section_1_id, biz_date, pipe_model_id, supply_entity_id FROM u
         )
         SELECT
             k.section_1_id,
             k.biz_date,
             k.pipe_model_id,
+            k.supply_entity_id,
             COALESCE(p.total_plan_qty, 0) AS plan_qty,
             COALESCE(s.total_shipped_qty, 0) AS shipped_qty,
             COALESCE(arr.total_arrived_qty, 0) AS arrived_qty,
@@ -220,12 +393,12 @@ def _query_pipe_daily_flow(
             COALESCE(arr.total_transit_seconds, 0) AS total_transit_seconds,
             COALESCE(arr.arrived_batch_count, 0) AS arrived_batch_count
         FROM all_keys k
-        LEFT JOIN p ON p.section_1_id = k.section_1_id AND p.biz_date = k.biz_date AND p.pipe_model_id = k.pipe_model_id
-        LEFT JOIN s ON s.section_1_id = k.section_1_id AND s.biz_date = k.biz_date AND s.pipe_model_id = k.pipe_model_id
-        LEFT JOIN arr ON arr.section_1_id = k.section_1_id AND arr.biz_date = k.biz_date AND arr.pipe_model_id = k.pipe_model_id
-        LEFT JOIN rec ON rec.section_1_id = k.section_1_id AND rec.biz_date = k.biz_date AND rec.pipe_model_id = k.pipe_model_id
-        LEFT JOIN u ON u.section_1_id = k.section_1_id AND u.biz_date = k.biz_date AND u.pipe_model_id = k.pipe_model_id
-        LEFT JOIN wh ON wh.section_1_id = k.section_1_id AND wh.biz_date = k.biz_date AND wh.pipe_model_id = k.pipe_model_id
+        LEFT JOIN p ON p.section_1_id = k.section_1_id AND p.biz_date = k.biz_date AND p.pipe_model_id = k.pipe_model_id AND p.supply_entity_id = k.supply_entity_id
+        LEFT JOIN s ON s.section_1_id = k.section_1_id AND s.biz_date = k.biz_date AND s.pipe_model_id = k.pipe_model_id AND s.supply_entity_id = k.supply_entity_id
+        LEFT JOIN arr ON arr.section_1_id = k.section_1_id AND arr.biz_date = k.biz_date AND arr.pipe_model_id = k.pipe_model_id AND arr.supply_entity_id = k.supply_entity_id
+        LEFT JOIN rec ON rec.section_1_id = k.section_1_id AND rec.biz_date = k.biz_date AND rec.pipe_model_id = k.pipe_model_id AND rec.supply_entity_id = k.supply_entity_id
+        LEFT JOIN wh ON wh.section_1_id = k.section_1_id AND wh.biz_date = k.biz_date AND wh.pipe_model_id = k.pipe_model_id AND wh.supply_entity_id = k.supply_entity_id
+        LEFT JOIN u ON u.section_1_id = k.section_1_id AND u.biz_date = k.biz_date AND u.pipe_model_id = k.pipe_model_id AND u.supply_entity_id = k.supply_entity_id
         ORDER BY k.biz_date DESC, k.section_1_id ASC, k.pipe_model_id ASC
     """)
 
@@ -275,10 +448,21 @@ def _query_pipe_daily_flow(
             mins = int((avg_sec % 3600) // 60)
             avg_transit_str = f"{hours}小时{mins}分" if hours > 0 else f"{mins}分钟"
 
+        raw_sup_id = str(row["supply_entity_id"] or "").strip()
+        if raw_sup_id:
+            sup_id = raw_sup_id
+            sup_name = supplier_map.get(sup_id.upper()) or supplier_map.get(sup_id) or sup_id
+        else:
+            sup_info = sec_to_sup.get(sec_id, {})
+            sup_id = sup_info.get("supplier_id") or ""
+            sup_name = sup_info.get("supplier_name") or "全网直供"
+
         items.append({
             "biz_date": row["biz_date"].isoformat() if row["biz_date"] else "",
             "section_1_id": sec_id,
             "section_1_name": sec_name_map.get(sec_id, sec_id),
+            "supplier_id": sup_id,
+            "supplier_name": sup_name,
             "pipe_model_id": model_id,
             "pipe_model_name": model_name_map.get(model_id, model_id),
             "unit": "米",
@@ -336,8 +520,7 @@ def _query_fitting_daily_flow(
 ) -> Dict[str, Any]:
     """管件 5 节点每日综合流转查询。"""
     cfg = load_tube_config() or {}
-    suppliers = get_config_list(cfg, "suppliers") or []
-    supplier_map = {str(s.get("supplier_id", "")).upper(): str(s.get("supplier_name") or s.get("name") or s.get("supplier_id")) for s in suppliers}
+    supplier_map = _get_supplier_map(cfg)
 
     sql = text("""
         WITH s AS (
@@ -442,6 +625,7 @@ def _query_fitting_daily_flow(
         ORDER BY k.biz_date DESC, k.section_1_id ASC, k.fitting_type ASC, k.model_spec ASC
     """)
 
+    resolve_fitting_supplier = _get_fitting_dynamic_supplier_map(session, cfg)
     params = {"start_date": start_date, "end_date": end_date}
     rows = session.execute(sql, params).mappings().all()
 
@@ -465,8 +649,15 @@ def _query_fitting_daily_flow(
         rec_q = int(row["received_qty"] or 0)
         use_q = int(row["usage_qty"] or 0)
         wh_q = int(row["warehouse_qty"] or 0)
-        sup_code = str(row["supply_entity_id"] or "").upper()
-        sup_name = supplier_map.get(sup_code, sup_code) if sup_code else "—"
+        
+        raw_sup = str(row["supply_entity_id"] or "").strip()
+        if raw_sup:
+            sup_code = raw_sup.lower()
+            sup_name = supplier_map.get(raw_sup.upper()) or supplier_map.get(raw_sup) or raw_sup
+        else:
+            sup_info = resolve_fitting_supplier(sec_id, str(row["fitting_type"] or ""))
+            sup_code = (sup_info.get("supplier_id") or "").lower()
+            sup_name = sup_info.get("supplier_name") or "—"
 
         items.append({
             "biz_date": row["biz_date"].isoformat() if row["biz_date"] else "",
@@ -553,53 +744,72 @@ def _query_pipe_baseline_progress(
     sec_name_map: Dict[str, str],
     model_name_map: Dict[str, str],
 ) -> Dict[str, Any]:
-    """保温管设计使用量与计划采购量对照。"""
+    """保温管设计使用量与计划采购量对照（数据驱动：动态识别发运与供货主体）。"""
+    cfg = load_tube_config() or {}
+    supplier_map = _get_supplier_map(cfg)
+    sec_to_sup = _get_pipe_section_dynamic_suppliers(session, cfg)
+
     sql = text("""
-        WITH b AS (
-            SELECT
+        WITH actual_sup AS (
+            SELECT DISTINCT ON (section_1_id)
                 section_1_id,
-                pipe_model_id,
-                unit,
-                SUM(COALESCE(design_qty, 0)) AS design_qty,
-                SUM(COALESCE(purchase_plan_qty, 0)) AS purchase_plan_qty
-            FROM tube.tube_pipe_baseline
-            GROUP BY section_1_id, pipe_model_id, unit
+                LOWER(TRIM(supply_entity_id)) AS supply_entity_id
+            FROM tube.tube_delivery
+            WHERE supply_entity_id IS NOT NULL AND status <> 'cancelled'
+            GROUP BY section_1_id, LOWER(TRIM(supply_entity_id))
+            ORDER BY section_1_id, COUNT(*) DESC
+        ), b AS (
+            SELECT
+                b_raw.section_1_id,
+                b_raw.pipe_model_id,
+                COALESCE(act.supply_entity_id, '') AS supply_entity_id,
+                MAX(COALESCE(b_raw.unit, '米')) AS unit,
+                SUM(COALESCE(b_raw.design_qty, 0)) AS design_qty,
+                SUM(COALESCE(b_raw.purchase_plan_qty, 0)) AS purchase_plan_qty
+            FROM tube.tube_pipe_baseline b_raw
+            LEFT JOIN actual_sup act ON act.section_1_id = b_raw.section_1_id
+            GROUP BY b_raw.section_1_id, b_raw.pipe_model_id, act.supply_entity_id
         ), s AS (
             SELECT
                 section_1_id,
                 pipe_model_id,
+                LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
                 SUM(COALESCE(shipped_qty, 0)) AS total_shipped_qty
             FROM tube.tube_delivery
-            WHERE status <> 'cancelled'
-            GROUP BY section_1_id, pipe_model_id
+            WHERE shipped_at IS NOT NULL AND status <> 'cancelled'
+            GROUP BY section_1_id, pipe_model_id, LOWER(TRIM(COALESCE(supply_entity_id, '')))
         ), arr AS (
             SELECT
                 section_1_id,
                 pipe_model_id,
+                LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
                 SUM(COALESCE(arrived_qty, 0)) AS total_arrived_qty
             FROM tube.tube_delivery
             WHERE arrived_confirm_at IS NOT NULL AND status <> 'cancelled'
-            GROUP BY section_1_id, pipe_model_id
+            GROUP BY section_1_id, pipe_model_id, LOWER(TRIM(COALESCE(supply_entity_id, '')))
         ), u AS (
             SELECT
-                section_1_id,
-                pipe_model_id,
-                SUM(COALESCE(usage_qty, 0)) AS total_usage_qty,
-                SUM(COALESCE(loss_qty, 0)) AS total_loss_qty
-            FROM tube.tube_daily_usage
-            GROUP BY section_1_id, pipe_model_id
+                u_raw.section_1_id,
+                u_raw.pipe_model_id,
+                COALESCE(act.supply_entity_id, '') AS supply_entity_id,
+                SUM(COALESCE(u_raw.usage_qty, 0)) AS total_usage_qty,
+                SUM(COALESCE(u_raw.loss_qty, 0)) AS total_loss_qty
+            FROM tube.tube_daily_usage u_raw
+            LEFT JOIN actual_sup act ON act.section_1_id = u_raw.section_1_id
+            GROUP BY u_raw.section_1_id, u_raw.pipe_model_id, act.supply_entity_id
         ), keys AS (
-            SELECT section_1_id, pipe_model_id FROM b
+            SELECT section_1_id, pipe_model_id, supply_entity_id FROM s
             UNION
-            SELECT section_1_id, pipe_model_id FROM s
+            SELECT section_1_id, pipe_model_id, supply_entity_id FROM arr
             UNION
-            SELECT section_1_id, pipe_model_id FROM arr
+            SELECT section_1_id, pipe_model_id, supply_entity_id FROM b
             UNION
-            SELECT section_1_id, pipe_model_id FROM u
+            SELECT section_1_id, pipe_model_id, supply_entity_id FROM u
         )
         SELECT
             k.section_1_id,
             k.pipe_model_id,
+            k.supply_entity_id,
             COALESCE(b.unit, '米') AS unit,
             COALESCE(b.design_qty, 0) AS design_qty,
             COALESCE(b.purchase_plan_qty, 0) AS purchase_plan_qty,
@@ -608,10 +818,10 @@ def _query_pipe_baseline_progress(
             COALESCE(u.total_usage_qty, 0) AS total_usage_qty,
             COALESCE(u.total_loss_qty, 0) AS total_loss_qty
         FROM keys k
-        LEFT JOIN b ON b.section_1_id = k.section_1_id AND b.pipe_model_id = k.pipe_model_id
-        LEFT JOIN s ON s.section_1_id = k.section_1_id AND s.pipe_model_id = k.pipe_model_id
-        LEFT JOIN arr ON arr.section_1_id = k.section_1_id AND arr.pipe_model_id = k.pipe_model_id
-        LEFT JOIN u ON u.section_1_id = k.section_1_id AND u.pipe_model_id = k.pipe_model_id
+        LEFT JOIN b ON b.section_1_id = k.section_1_id AND b.pipe_model_id = k.pipe_model_id AND b.supply_entity_id = k.supply_entity_id
+        LEFT JOIN s ON s.section_1_id = k.section_1_id AND s.pipe_model_id = k.pipe_model_id AND s.supply_entity_id = k.supply_entity_id
+        LEFT JOIN arr ON arr.section_1_id = k.section_1_id AND arr.pipe_model_id = k.pipe_model_id AND arr.supply_entity_id = k.supply_entity_id
+        LEFT JOIN u ON u.section_1_id = k.section_1_id AND u.pipe_model_id = k.pipe_model_id AND u.supply_entity_id = k.supply_entity_id
         ORDER BY k.section_1_id ASC, k.pipe_model_id ASC
     """)
 
@@ -650,9 +860,20 @@ def _query_pipe_baseline_progress(
         install_rate = (use_q / des_q * 100) if des_q > 0 else 0.0
         balance_qty = pur_q - arr_q
 
+        raw_sup_id = str(row["supply_entity_id"] or "").strip()
+        if raw_sup_id:
+            sup_id = raw_sup_id
+            sup_name = supplier_map.get(sup_id.upper()) or supplier_map.get(sup_id) or sup_id
+        else:
+            sup_info = sec_to_sup.get(sec_id, {})
+            sup_id = sup_info.get("supplier_id") or ""
+            sup_name = sup_info.get("supplier_name") or "全网直供"
+
         items.append({
             "section_1_id": sec_id,
             "section_1_name": sec_name_map.get(sec_id, sec_id),
+            "supplier_id": sup_id,
+            "supplier_name": sup_name,
             "pipe_model_id": model_id,
             "pipe_model_name": model_name_map.get(model_id, model_id),
             "unit": "米",
@@ -703,8 +924,7 @@ def _query_fitting_baseline_progress(
 ) -> Dict[str, Any]:
     """管件设计使用量与计划采购量对照（含累计发货、累计到货、累计使用与现场库存）。"""
     cfg = load_tube_config() or {}
-    suppliers = get_config_list(cfg, "suppliers") or []
-    supplier_map = {str(s.get("supplier_id", "")).upper(): str(s.get("supplier_name") or s.get("name") or s.get("supplier_id")) for s in suppliers}
+    supplier_map = _get_supplier_map(cfg)
 
     # 1. 查询管件设计与计划采购基准数据 (严格来自 tube.tube_fitting_baseline)
     sql_base = text("""
@@ -728,6 +948,8 @@ def _query_fitting_baseline_progress(
     total_design_qty = 0
     total_purchase_plan_qty = 0
 
+    resolve_fitting_supplier = _get_fitting_dynamic_supplier_map(session, cfg)
+
     for row in rows_base:
         sec_id = str(row["section_1_id"] or "")
         if sec_filter_set and sec_id not in sec_filter_set:
@@ -737,9 +959,15 @@ def _query_fitting_baseline_progress(
         pur_q = int(row["purchase_plan_qty"] or 0)
         raw_unit = str(row["unit"] or "").strip() or "个"
 
+        sup_info = resolve_fitting_supplier(sec_id, str(row["fitting_type"] or row["category"] or row["standard_name"] or ""))
+        sup_id = sup_info.get("supplier_id") or ""
+        sup_name = sup_info.get("supplier_name") or "—"
+
         baseline_items.append({
             "section_1_id": sec_id,
             "section_1_name": sec_name_map.get(sec_id, sec_id),
+            "supplier_id": sup_id,
+            "supplier_name": sup_name,
             "category": row["category"] or "管件",
             "standard_name": row["standard_name"] or "",
             "fitting_type": row["fitting_type"] or "管件",
@@ -821,8 +1049,14 @@ def _query_fitting_baseline_progress(
         arr_q = int(row["total_arrived_qty"] or 0)
         use_q = int(row["total_usage_qty"] or 0)
         stock_q = max(0, arr_q - use_q)
-        sup_code = str(row["supply_entity_id"] or "").upper()
-        sup_name = supplier_map.get(sup_code, sup_code) if sup_code else "—"
+        raw_sup = str(row["supply_entity_id"] or "").strip()
+        if raw_sup:
+            sup_code = raw_sup.lower()
+            sup_name = supplier_map.get(raw_sup.upper()) or supplier_map.get(raw_sup) or raw_sup
+        else:
+            fallback_sup = resolve_fitting_supplier(sec_id, str(row["fitting_type"] or ""))
+            sup_code = (fallback_sup.get("supplier_id") or "").lower()
+            sup_name = fallback_sup.get("supplier_name") or "—"
 
         flow_items.append({
             "section_1_id": sec_id,
@@ -876,6 +1110,7 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
     sec_options = _get_section_options(cfg)
     sec_name_map = {str(item.get("section_1_id")): str(item.get("section_1_name") or item.get("section_1_id")) for item in sec_options}
     
+    supplier_map = _get_supplier_map(cfg)
     supply_options = get_config_list(cfg, "supply_entities")
     construct_options = get_config_list(cfg, "construction_units")
     manager_assignments = get_config_list(cfg, "manager_assignments")
@@ -892,19 +1127,56 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
 
     users_map = accounts_data.get("users", {})
 
-    # 1. 供给主体列表
+    # 1. 动态扫描数据库中实际发货的主体与标段关联
+    db_ent_sec_map: Dict[str, Set[str]] = {}
+    try:
+        session_dir = SessionLocal()
+        try:
+            p_rows = session_dir.execute(text("""
+                SELECT DISTINCT LOWER(TRIM(supply_entity_id)) as sup_id, section_1_id
+                FROM tube.tube_delivery
+                WHERE supply_entity_id IS NOT NULL AND status <> 'cancelled'
+            """)).mappings().all()
+            for r in p_rows:
+                s_code = str(r["sup_id"] or "").strip()
+                sec = str(r["section_1_id"] or "").strip()
+                if s_code and sec:
+                    db_ent_sec_map.setdefault(s_code, set()).add(sec)
+
+            f_rows = session_dir.execute(text("""
+                SELECT DISTINCT LOWER(TRIM(supply_entity_id)) as sup_id, section_1_id
+                FROM tube.tube_fitting_delivery
+                WHERE supply_entity_id IS NOT NULL AND status <> 'cancelled'
+            """)).mappings().all()
+            for r in f_rows:
+                s_code = str(r["sup_id"] or "").strip()
+                sec = str(r["section_1_id"] or "").strip()
+                if s_code and sec:
+                    db_ent_sec_map.setdefault(s_code, set()).add(sec)
+        finally:
+            session_dir.close()
+    except Exception:
+        pass
+
+    # 2. 供给主体列表 (配置主体 + 数据库动态主体融合)
     suppliers = []
+    seen_ent_ids = set()
     supplier_users = users_map.get("tube_supplier_admin", []) + users_map.get("tube_supplier", [])
+    
     for ent in supply_options:
-        ent_id = str(ent.get("entity_id") or "")
-        ent_name = str(ent.get("entity_name") or ent_id)
+        ent_id = str(ent.get("entity_id") or ent.get("supplier_id") or "").strip()
+        seen_ent_ids.add(ent_id.lower())
+        ent_name = str(ent.get("entity_name") or ent.get("supplier_name") or ent.get("name") or ent_id)
+        
         # 寻找匹配账号
         matched_users = [u.get("username") for u in supplier_users if ent_id in str(u.get("unit", "")) or ent_name in str(u.get("unit", ""))]
         
-        # 供货管辖标段
-        sec_ids = ent.get("section_1_ids") or []
-        sec_names = [sec_name_map.get(sid, sid) for sid in sec_ids]
-        has_assigned_sections = len(sec_ids) > 0
+        # 融合配置标段与实际发货标段
+        cfg_sec_ids = set(ent.get("section_1_ids") or [])
+        real_sec_ids = db_ent_sec_map.get(ent_id.lower(), set())
+        merged_sec_ids = list(cfg_sec_ids | real_sec_ids)
+        sec_names = [sec_name_map.get(sid, sid) for sid in merged_sec_ids]
+        has_assigned_sections = len(merged_sec_ids) > 0
         scope_str = "、".join(sec_names) if sec_names else "暂未分配供应标段"
 
         suppliers.append({
@@ -916,9 +1188,29 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
             "scope_desc": scope_str,
             "has_assigned_sections": has_assigned_sections,
             "managed_sections": sec_names,
-            "managed_section_ids": sec_ids,
+            "managed_section_ids": merged_sec_ids,
             "accounts": matched_users if matched_users else ["tube_supplier_1"],
         })
+
+    # 对数据库中实际发货但配置中未列出的新增供货主体进行动态追加
+    for sup_code, sec_ids_set in db_ent_sec_map.items():
+        if sup_code not in seen_ent_ids:
+            seen_ent_ids.add(sup_code)
+            ent_name = supplier_map.get(sup_code.upper()) or supplier_map.get(sup_code) or sup_code
+            sec_list = list(sec_ids_set)
+            sec_names = [sec_name_map.get(sid, sid) for sid in sec_list]
+            suppliers.append({
+                "category": "供货厂家",
+                "entity_id": sup_code,
+                "entity_name": ent_name,
+                "contact_name": "调度负责人",
+                "contact_phone": "—",
+                "scope_desc": "、".join(sec_names) if sec_names else "实际发运供货",
+                "has_assigned_sections": len(sec_list) > 0,
+                "managed_sections": sec_names,
+                "managed_section_ids": sec_list,
+                "accounts": ["tube_supplier_1"],
+            })
 
     # 2. 施工需求主体列表 (仅列出已明确配置施工单位的企业与标段，空缺不列出)
     demand_sections = []
@@ -1050,4 +1342,374 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
         "site_managers": site_managers,
         "warehouse_keepers": warehouse_keepers,
         "global_members": global_members,
+    }
+
+
+# -----------------------------------------------------------------------------
+# 4. 🏭 供给方发货流转台账 (Supplier Delivery Ledger)
+# -----------------------------------------------------------------------------
+
+def query_supplier_ledger_history(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    supplier_ids: Optional[List[str]] = None,
+    section_1_ids: Optional[List[str]] = None,
+    pipe_model_ids: Optional[List[str]] = None,
+    material_type: str = "pipe",
+) -> Dict[str, Any]:
+    """
+    专门针对供给方视角的发货订单全生命周期流转台账。
+    直接来源于发货订单表 tube.tube_delivery / tube.tube_fitting_delivery。
+    包含发货量、确认到货量、施工接收量、库管确认量、在途时间、车次批次等。
+    """
+    cfg = load_tube_config() or {}
+    sec_options = _get_section_options(cfg)
+    sec_name_map = {str(item.get("section_1_id")): str(item.get("section_1_name") or item.get("section_1_id")) for item in sec_options}
+    
+    pipe_models = _get_pipe_models(cfg)
+    model_name_map = {str(item.get("pipe_model_id")): str(item.get("pipe_model_name") or item.get("pipe_model_id")) for item in pipe_models}
+    supplier_map = _get_supplier_map(cfg)
+
+    # 默认项目启动日 2026-07-28
+    if not end_date:
+        end_date = datetime.now(BEIJING_TZ).date()
+    if not start_date:
+        start_date = date(2026, 7, 28)
+
+    sup_filter_set = {s.lower() for s in supplier_ids} if supplier_ids else None
+    sec_filter_set = set(section_1_ids) if section_1_ids else None
+    model_filter_set = set(pipe_model_ids) if pipe_model_ids else None
+
+    session = SessionLocal()
+    try:
+        if material_type == "fitting":
+            return _query_fitting_supplier_ledger(
+                session=session,
+                start_date=start_date,
+                end_date=end_date,
+                sup_filter_set=sup_filter_set,
+                sec_filter_set=sec_filter_set,
+                sec_name_map=sec_name_map,
+                supplier_map=supplier_map,
+                cfg=cfg,
+            )
+        else:
+            return _query_pipe_supplier_ledger(
+                session=session,
+                start_date=start_date,
+                end_date=end_date,
+                sup_filter_set=sup_filter_set,
+                sec_filter_set=sec_filter_set,
+                model_filter_set=model_filter_set,
+                sec_name_map=sec_name_map,
+                model_name_map=model_name_map,
+                supplier_map=supplier_map,
+                cfg=cfg,
+            )
+    finally:
+        session.close()
+
+
+def _query_pipe_supplier_ledger(
+    session,
+    start_date: date,
+    end_date: date,
+    sup_filter_set: Optional[Set[str]],
+    sec_filter_set: Optional[Set[str]],
+    model_filter_set: Optional[Set[str]],
+    sec_name_map: Dict[str, str],
+    model_name_map: Dict[str, str],
+    supplier_map: Dict[str, str],
+    cfg: Dict[str, Any],
+) -> Dict[str, Any]:
+    """保温管直管供给方发运台账。"""
+    sql = text("""
+        SELECT
+            id,
+            COALESCE(shipment_no, order_no, '') AS batch_no,
+            COALESCE(vehicle_plate_no, '') AS vehicle_no,
+            COALESCE(ship_contact_name, '') AS driver_name,
+            COALESCE(ship_contact_phone, '') AS driver_phone,
+            section_1_id,
+            pipe_model_id,
+            LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
+            (shipped_at AT TIME ZONE 'Asia/Shanghai')::date AS shipped_date,
+            (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS arrived_date,
+            (received_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS received_date,
+            (warehouse_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS warehouse_date,
+            COALESCE(shipped_qty, 0) AS shipped_qty,
+            COALESCE(arrived_qty, 0) AS arrived_qty,
+            (CASE 
+                WHEN received_confirm_at IS NOT NULL OR status IN ('received', 'completed') 
+                THEN COALESCE(received_qty, arrived_qty, shipped_qty, 0) 
+                ELSE 0 
+            END) AS received_qty,
+            (CASE 
+                WHEN warehouse_confirm_at IS NOT NULL OR status = 'completed' 
+                THEN COALESCE(received_qty, arrived_qty, shipped_qty, 0) 
+                ELSE 0 
+            END) AS warehouse_qty,
+            status,
+            EXTRACT(EPOCH FROM (arrived_confirm_at - shipped_at)) AS transit_seconds
+        FROM tube.tube_delivery
+        WHERE status <> 'cancelled'
+          AND (
+            ((shipped_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date)
+            OR ((arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date)
+          )
+        ORDER BY shipped_at DESC, id DESC
+    """)
+
+    params = {"start_date": start_date, "end_date": end_date}
+    rows = session.execute(sql, params).mappings().all()
+
+    sec_to_sup = _get_pipe_section_dynamic_suppliers(session, cfg)
+    items = []
+    summary = {
+        "total_shipped_qty": 0.0,
+        "total_arrived_qty": 0.0,
+        "total_received_qty": 0.0,
+        "total_warehouse_qty": 0.0,
+        "total_orders_count": 0,
+        "transit_seconds_sum": 0.0,
+        "transit_count": 0,
+    }
+
+    for row in rows:
+        sec_id = str(row["section_1_id"] or "")
+        model_id = str(row["pipe_model_id"] or "")
+        raw_sup = str(row["supply_entity_id"] or "").strip().lower()
+
+        if not raw_sup:
+            sup_info = sec_to_sup.get(sec_id, {})
+            raw_sup = (sup_info.get("supplier_id") or "").lower()
+
+        if sup_filter_set and raw_sup not in sup_filter_set:
+            continue
+        if sec_filter_set and sec_id not in sec_filter_set:
+            continue
+        if model_filter_set and model_id not in model_filter_set:
+            continue
+
+        ship_q = float(row["shipped_qty"] or 0)
+        arr_q = float(row["arrived_qty"] or 0)
+        rec_q = float(row["received_qty"] or 0)
+        wh_q = float(row["warehouse_qty"] or 0)
+        t_sec = float(row["transit_seconds"] or 0)
+
+        sup_name = supplier_map.get(raw_sup.upper()) or supplier_map.get(raw_sup) or raw_sup or "待分配供货方"
+        shipped_d = row["shipped_date"].isoformat() if row["shipped_date"] else ""
+        arrived_d = row["arrived_date"].isoformat() if row["arrived_date"] else ""
+
+        transit_str = "在途中" if not arrived_d else "—"
+        if t_sec > 0:
+            h = int(t_sec // 3600)
+            m = int((t_sec % 3600) // 60)
+            transit_str = f"{h}小时{m}分" if h > 0 else (f"{m}分钟" if m > 0 else "<1分钟")
+            summary["transit_seconds_sum"] += t_sec
+            summary["transit_count"] += 1
+
+        items.append({
+            "id": row["id"],
+            "batch_no": row["batch_no"] or f"TUBE-{row['id']}",
+            "vehicle_no": row["vehicle_no"] or "—",
+            "driver_name": row["driver_name"] or "—",
+            "driver_phone": row["driver_phone"] or "—",
+            "biz_date": shipped_d or arrived_d,
+            "shipped_date": shipped_d,
+            "arrived_date": arrived_d,
+            "supplier_id": raw_sup,
+            "supplier_name": sup_name,
+            "section_1_id": sec_id,
+            "section_1_name": sec_name_map.get(sec_id, sec_id),
+            "pipe_model_id": model_id,
+            "pipe_model_name": model_name_map.get(model_id, model_id),
+            "unit": "米",
+            "shipped_qty": ship_q,
+            "arrived_qty": arr_q,
+            "received_qty": rec_q,
+            "warehouse_qty": wh_q,
+            "status": row["status"] or "shipped",
+            "transit_seconds": t_sec,
+            "transit_display": transit_str,
+            "fulfillment_rate": round(min(100.0, arr_q / ship_q * 100), 1) if ship_q > 0 else 0.0,
+            "receipt_rate": round(min(100.0, rec_q / arr_q * 100), 1) if arr_q > 0 else 0.0,
+            "warehouse_rate": round(min(100.0, wh_q / arr_q * 100), 1) if arr_q > 0 else (round(min(100.0, wh_q / ship_q * 100), 1) if ship_q > 0 else 0.0),
+        })
+
+        summary["total_shipped_qty"] += ship_q
+        summary["total_arrived_qty"] += arr_q
+        summary["total_received_qty"] += rec_q
+        summary["total_warehouse_qty"] += wh_q
+        summary["total_orders_count"] += 1
+
+    summary["total_shipped_qty"] = round(summary["total_shipped_qty"], 2)
+    summary["total_arrived_qty"] = round(summary["total_arrived_qty"], 2)
+    summary["total_received_qty"] = round(summary["total_received_qty"], 2)
+    summary["total_warehouse_qty"] = round(summary["total_warehouse_qty"], 2)
+    
+    avg_transit_str = "在途中" if summary["total_orders_count"] > 0 and summary["transit_count"] == 0 else "—"
+    if summary["transit_count"] > 0:
+        avg_sec = summary["transit_seconds_sum"] / summary["transit_count"]
+        h = int(avg_sec // 3600)
+        m = int((avg_sec % 3600) // 60)
+        avg_transit_str = f"{h}小时{m}分" if h > 0 else (f"{m}分钟" if m > 0 else "<1分钟")
+    summary["avg_transit_display"] = avg_transit_str
+    summary["overall_fulfillment_rate"] = round(min(100.0, summary["total_arrived_qty"] / summary["total_shipped_qty"] * 100), 1) if summary["total_shipped_qty"] > 0 else 0.0
+    summary["overall_receipt_rate"] = round(min(100.0, summary["total_received_qty"] / summary["total_arrived_qty"] * 100), 1) if summary["total_arrived_qty"] > 0 else 0.0
+    summary["overall_warehouse_rate"] = round(min(100.0, summary["total_warehouse_qty"] / summary["total_arrived_qty"] * 100), 1) if summary["total_arrived_qty"] > 0 else 0.0
+
+    return {
+        "ok": True,
+        "material_type": "pipe",
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "summary": summary,
+        "items": items,
+    }
+
+
+def _query_fitting_supplier_ledger(
+    session,
+    start_date: date,
+    end_date: date,
+    sup_filter_set: Optional[Set[str]],
+    sec_filter_set: Optional[Set[str]],
+    sec_name_map: Dict[str, str],
+    supplier_map: Dict[str, str],
+    cfg: Dict[str, Any],
+) -> Dict[str, Any]:
+    """管件与阀门供给方发运台账。"""
+    sql = text("""
+        SELECT
+            id,
+            COALESCE(shipment_no, order_no, '') AS batch_no,
+            COALESCE(vehicle_plate_no, '') AS vehicle_no,
+            COALESCE(ship_contact_name, '') AS driver_name,
+            COALESCE(ship_contact_phone, '') AS driver_phone,
+            section_1_id,
+            fitting_type,
+            model_spec,
+            LOWER(TRIM(COALESCE(supply_entity_id, ''))) AS supply_entity_id,
+            (shipped_at AT TIME ZONE 'Asia/Shanghai')::date AS shipped_date,
+            (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS arrived_date,
+            (received_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS received_date,
+            (warehouse_confirm_at AT TIME ZONE 'Asia/Shanghai')::date AS warehouse_date,
+            COALESCE(shipped_qty, 0) AS shipped_qty,
+            COALESCE(arrived_qty, 0) AS arrived_qty,
+            (CASE WHEN received_confirm_at IS NOT NULL THEN COALESCE(arrived_qty, shipped_qty, 0) ELSE 0 END) AS received_qty,
+            (CASE WHEN status = 'completed' OR warehouse_confirm_at IS NOT NULL THEN COALESCE(arrived_qty, shipped_qty, 0) ELSE 0 END) AS warehouse_qty,
+            status,
+            EXTRACT(EPOCH FROM (arrived_confirm_at - shipped_at)) AS transit_seconds
+        FROM tube.tube_fitting_delivery
+        WHERE status <> 'cancelled'
+          AND (
+            ((shipped_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date AND (shipped_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date)
+            OR ((arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date >= :start_date AND (arrived_confirm_at AT TIME ZONE 'Asia/Shanghai')::date <= :end_date)
+          )
+        ORDER BY shipped_at DESC, id DESC
+    """)
+
+    params = {"start_date": start_date, "end_date": end_date}
+    rows = session.execute(sql, params).mappings().all()
+
+    fitting_sup_map = _get_fitting_dynamic_supplier_map(session, cfg)
+    items = []
+    summary = {
+        "total_shipped_qty": 0,
+        "total_arrived_qty": 0,
+        "total_received_qty": 0,
+        "total_warehouse_qty": 0,
+        "total_orders_count": 0,
+        "transit_seconds_sum": 0.0,
+        "transit_count": 0,
+    }
+
+    for row in rows:
+        sec_id = str(row["section_1_id"] or "")
+        f_type = str(row["fitting_type"] or "管件")
+        m_spec = str(row["model_spec"] or "—")
+        raw_sup = str(row["supply_entity_id"] or "").strip().lower()
+
+        if not raw_sup:
+            sup_info = _resolve_fitting_supplier(fitting_sup_map, sec_id, f_type)
+            raw_sup = (sup_info.get("supplier_id") or "").lower()
+
+        if sup_filter_set and raw_sup not in sup_filter_set:
+            continue
+        if sec_filter_set and sec_id not in sec_filter_set:
+            continue
+
+        ship_q = int(row["shipped_qty"] or 0)
+        arr_q = int(row["arrived_qty"] or 0)
+        rec_q = int(row["received_qty"] or 0)
+        wh_q = int(row["warehouse_qty"] or 0)
+        t_sec = float(row["transit_seconds"] or 0)
+
+        sup_name = supplier_map.get(raw_sup.upper()) or supplier_map.get(raw_sup) or raw_sup or "待分配供货方"
+        shipped_d = row["shipped_date"].isoformat() if row["shipped_date"] else ""
+        arrived_d = row["arrived_date"].isoformat() if row["arrived_date"] else ""
+
+        transit_str = "在途中" if not arrived_d else "—"
+        if t_sec > 0:
+            h = int(t_sec // 3600)
+            m = int((t_sec % 3600) // 60)
+            transit_str = f"{h}小时{m}分" if h > 0 else (f"{m}分钟" if m > 0 else "<1分钟")
+            summary["transit_seconds_sum"] += t_sec
+            summary["transit_count"] += 1
+
+        items.append({
+            "id": row["id"],
+            "batch_no": row["batch_no"] or f"FIT-{row['id']}",
+            "vehicle_no": row["vehicle_no"] or "—",
+            "driver_name": row["driver_name"] or "—",
+            "driver_phone": row["driver_phone"] or "—",
+            "biz_date": shipped_d or arrived_d,
+            "shipped_date": shipped_d,
+            "arrived_date": arrived_d,
+            "supplier_id": raw_sup,
+            "supplier_name": sup_name,
+            "section_1_id": sec_id,
+            "section_1_name": sec_name_map.get(sec_id, sec_id),
+            "fitting_type": f_type,
+            "model_spec": m_spec,
+            "pipe_model_id": m_spec,
+            "pipe_model_name": f"{f_type} {m_spec}",
+            "unit": "件",
+            "shipped_qty": ship_q,
+            "arrived_qty": arr_q,
+            "received_qty": rec_q,
+            "warehouse_qty": wh_q,
+            "status": row["status"] or "shipped",
+            "transit_seconds": t_sec,
+            "transit_display": transit_str,
+            "fulfillment_rate": round(min(100.0, arr_q / ship_q * 100), 1) if ship_q > 0 else 0.0,
+            "receipt_rate": round(min(100.0, rec_q / arr_q * 100), 1) if arr_q > 0 else 0.0,
+            "warehouse_rate": round(min(100.0, wh_q / arr_q * 100), 1) if arr_q > 0 else (round(min(100.0, wh_q / ship_q * 100), 1) if ship_q > 0 else 0.0),
+        })
+
+        summary["total_shipped_qty"] += ship_q
+        summary["total_arrived_qty"] += arr_q
+        summary["total_received_qty"] += rec_q
+        summary["total_warehouse_qty"] += wh_q
+        summary["total_orders_count"] += 1
+
+    avg_transit_str = "在途中" if summary["total_orders_count"] > 0 and summary["transit_count"] == 0 else "—"
+    if summary["transit_count"] > 0:
+        avg_sec = summary["transit_seconds_sum"] / summary["transit_count"]
+        h = int(avg_sec // 3600)
+        m = int((avg_sec % 3600) // 60)
+        avg_transit_str = f"{h}小时{m}分" if h > 0 else (f"{m}分钟" if m > 0 else "<1分钟")
+    summary["avg_transit_display"] = avg_transit_str
+    summary["overall_fulfillment_rate"] = round(min(100.0, summary["total_arrived_qty"] / summary["total_shipped_qty"] * 100), 1) if summary["total_shipped_qty"] > 0 else 0.0
+    summary["overall_receipt_rate"] = round(min(100.0, summary["total_received_qty"] / summary["total_arrived_qty"] * 100), 1) if summary["total_arrived_qty"] > 0 else 0.0
+    summary["overall_warehouse_rate"] = round(min(100.0, summary["total_warehouse_qty"] / summary["total_arrived_qty"] * 100), 1) if summary["total_arrived_qty"] > 0 else 0.0
+
+    return {
+        "ok": True,
+        "material_type": "fitting",
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "summary": summary,
+        "items": items,
     }

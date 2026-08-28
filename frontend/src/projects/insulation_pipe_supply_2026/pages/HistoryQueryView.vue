@@ -152,26 +152,26 @@
               </template>
             </div>
 
-            <!-- 第 3 列：业务时段 (仅每日流转需日期，其他Tab占位或扩展) -->
-            <div class="filter-cell date-cell" v-if="activeTab === 'daily_flow'">
+            <!-- 第 3 列：业务时段 (每日流转与供给方台账均支持日期查询) -->
+            <div class="filter-cell date-cell" v-if="activeTab === 'daily_flow' || activeTab === 'supplier_ledger'">
               <div class="cell-label-row">
                 <span class="cell-label">📅 查询时段</span>
                 <div class="capsule-group">
                   <button 
                     type="button" 
-                    :class="['capsule-btn', { active: activeDateCapsule === 'all' }]"
-                    @click="setDateRangeByCapsule('all')"
-                  >全部</button>
-                  <button 
-                    type="button" 
-                    :class="['capsule-btn', { active: activeDateCapsule === '7days' }]"
-                    @click="setDateRangeByCapsule('7days')"
-                  >近7天</button>
+                    :class="['capsule-btn', { active: activeDateCapsule === 'project' }]"
+                    @click="setDateRangeByCapsule('project')"
+                  >项目至今</button>
                   <button 
                     type="button" 
                     :class="['capsule-btn', { active: activeDateCapsule === '30days' }]"
                     @click="setDateRangeByCapsule('30days')"
                   >近30天</button>
+                  <button 
+                    type="button" 
+                    :class="['capsule-btn', { active: activeDateCapsule === '7days' }]"
+                    @click="setDateRangeByCapsule('7days')"
+                  >近7天</button>
                 </div>
               </div>
               <div class="date-range-box">
@@ -182,7 +182,7 @@
             </div>
 
             <!-- 第 4 列：全局模糊速搜 -->
-            <div class="filter-cell search-cell" :class="{ 'grid-span-2': activeTab !== 'daily_flow' }">
+            <div class="filter-cell search-cell" :class="{ 'grid-span-2': activeTab !== 'daily_flow' && activeTab !== 'supplier_ledger' }">
               <div class="cell-label-row">
                 <span class="cell-label">🔎 关键字全局速搜</span>
               </div>
@@ -240,7 +240,7 @@
           </div>
         </section>
 
-        <!-- 📑 3 大核心综合标签页 (Tabs) -->
+        <!-- 📑 4 大核心综合标签页 (Tabs) -->
         <div class="history-tab-bar">
           <button
             type="button"
@@ -257,6 +257,14 @@
           >
             <span class="tab-label-full">📐 设计采购与基准量进度</span>
             <span class="tab-label-short">📐 基准进度</span>
+          </button>
+          <button
+            type="button"
+            :class="['tab-pill-btn', { active: activeTab === 'supplier_ledger' }]"
+            @click="switchMainTab('supplier_ledger')"
+          >
+            <span class="tab-label-full">🏭 供给方发货流转台账</span>
+            <span class="tab-label-short">🏭 供给方台账</span>
           </button>
           <button
             type="button"
@@ -1067,7 +1075,7 @@
                         <span v-if="row.sub_model_spec" class="badge-sub-model">{{ row.sub_model_spec }}</span>
                       </template>
                       <template v-else-if="dim === 'supplier'">
-                        <span class="text-muted">（设计基准）</span>
+                        <span class="font-medium text-sky">{{ row.supplier_name }}</span>
                       </template>
                     </td>
 
@@ -1183,7 +1191,375 @@
         </section>
 
         <!-- ==================================================================== -->
-        <!-- 🏢 Tab 3: 责任主体与人员管辖速查矩阵 (可折叠分组架构 + 按标段视图) -->
+        <!-- 🏭 Tab 3: 供给方发货流转台账 (纯发货订单驱动) -->
+        <!-- ==================================================================== -->
+        <section v-else-if="activeTab === 'supplier_ledger'" class="tab-content-section">
+          <!-- 子品类切换 -->
+          <div class="sub-pill-bar">
+            <button 
+              type="button" 
+              :class="['sub-pill', { active: subMaterialType === 'pipe' }]"
+              @click="switchSubMaterial('pipe')"
+            >
+              🔥 保温管
+            </button>
+            <button 
+              type="button" 
+              :class="['sub-pill', { active: subMaterialType === 'fitting' }]"
+              @click="switchSubMaterial('fitting')"
+            >
+              🔧 管件
+            </button>
+          </div>
+
+          <!-- 顶部 KPI 开会速读看板 -->
+          <div class="kpi-banner-grid" v-if="subMaterialType === 'pipe'">
+            <div class="kpi-card">
+              <span class="kpi-label">🏭 供给侧累计发货</span>
+              <span class="kpi-val text-sky">{{ formatQty(supplierLedgerSummary.total_shipped_qty) }} <small>米</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">📥 现场确认总到货</span>
+              <span class="kpi-val text-blue">{{ formatQty(supplierLedgerSummary.total_arrived_qty) }} <small>米</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">👷 施工接收总量</span>
+              <span class="kpi-val text-indigo">{{ formatQty(supplierLedgerSummary.total_received_qty) }} <small>米</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">💼 库管已入库总量</span>
+              <span class="kpi-val text-amber">{{ formatQty(supplierLedgerSummary.total_warehouse_qty) }} <small>米</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">🚚 发运订单车次</span>
+              <span class="kpi-val text-slate">{{ supplierLedgerSummary.total_orders_count }} <small>单/车</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">⏱️ 平均在途时长</span>
+              <span class="kpi-val text-slate">{{ supplierLedgerSummary.overall_avg_transit }}</span>
+            </div>
+          </div>
+
+          <div class="kpi-banner-grid" v-else>
+            <div class="kpi-card">
+              <span class="kpi-label">🏭 累计发货管件</span>
+              <span class="kpi-val text-sky">{{ supplierLedgerSummary.total_shipped_qty }} <small>件</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">📥 确认到货总数</span>
+              <span class="kpi-val text-blue">{{ supplierLedgerSummary.total_arrived_qty }} <small>件</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">👷 施工接收总数</span>
+              <span class="kpi-val text-indigo">{{ supplierLedgerSummary.total_received_qty }} <small>件</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">💼 库管已入库</span>
+              <span class="kpi-val text-amber">{{ supplierLedgerSummary.total_warehouse_qty }} <small>件</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">📦 发货批次订单</span>
+              <span class="kpi-val text-slate">{{ supplierLedgerSummary.total_orders_count }} <small>单/批</small></span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">⏱️ 平均在途时长</span>
+              <span class="kpi-val text-slate">{{ supplierLedgerSummary.overall_avg_transit }}</span>
+            </div>
+          </div>
+
+          <!-- 表格主体 -->
+          <div class="card elevated table-card">
+            <!-- 🎛️ 表格顶部紧凑工具栏 (含聚合维度下拉选择器) -->
+            <div class="table-toolbar-row">
+              <div class="toolbar-left">
+                <span class="toolbar-title">🏭 供给方发运台账明细与多维透视</span>
+                <span class="toolbar-count font-mono text-muted">({{ aggregatedSupplierLedgerRows.length }} 组聚合 / {{ filteredSupplierLedgerRows.length }} 单)</span>
+              </div>
+
+              <div class="toolbar-right">
+                <!-- 聚合维度下拉触发与菜单 -->
+                <div class="pivot-dropdown-wrap">
+                  <button 
+                    type="button" 
+                    :class="['btn-pivot-trigger', { active: activePivotDropdown === 'supplier_ledger' }]"
+                    @click.stop="togglePivotDropdown('supplier_ledger')"
+                  >
+                    <span class="trigger-icon">🎛️</span>
+                    <span class="trigger-label">聚合维度:</span>
+                    <span class="trigger-chain">{{ getDimensionChainText('supplier_ledger') }}</span>
+                    <span class="trigger-arrow">▾</span>
+                  </button>
+
+                  <!-- 背景点击遮罩 -->
+                  <div 
+                    v-if="activePivotDropdown === 'supplier_ledger'" 
+                    class="pivot-backdrop" 
+                    @click.stop="closePivotDropdown"
+                  ></div>
+
+                  <!-- 浮层下拉列表面板 -->
+                  <div 
+                    v-if="activePivotDropdown === 'supplier_ledger'" 
+                    class="pivot-dropdown-panel card elevated"
+                    @click.stop
+                  >
+                    <div class="panel-header">
+                      <span class="panel-title">选择透视维度（按勾选顺序依次分组）</span>
+                      <button type="button" class="btn-panel-reset" @click="resetToDefaultDimensions('supplier_ledger')">↺ 恢复默认</button>
+                    </div>
+
+                    <!-- 维度有序多选列表 -->
+                    <div class="panel-options-list">
+                      <div 
+                        v-for="dim in getAvailableDimensions('supplier_ledger')" 
+                        :key="`sup-opt-${dim.id}`"
+                        :class="['panel-opt-item', { checked: isDimensionSelected('supplier_ledger', dim.id) }]"
+                        @click="toggleDimensionSelection('supplier_ledger', dim.id)"
+                      >
+                        <div class="opt-badge-slot">
+                          <span v-if="isDimensionSelected('supplier_ledger', dim.id)" class="badge-active-num">{{ getDimensionOrder('supplier_ledger', dim.id) }}</span>
+                          <span v-else class="badge-unchecked"></span>
+                        </div>
+                        <span class="opt-name">{{ dim.label }}</span>
+                        
+                        <div v-if="isDimensionSelected('supplier_ledger', dim.id)" class="opt-order-btns" @click.stop>
+                          <button 
+                            type="button" 
+                            class="btn-rank" 
+                            :disabled="getDimensionOrder('supplier_ledger', dim.id) === 1"
+                            title="提升此维度分组优先级"
+                            @click="moveDimensionUp('supplier_ledger', dim.id)"
+                          >
+                            ↑
+                          </button>
+                          <button 
+                            type="button" 
+                            class="btn-rank" 
+                            :disabled="getDimensionOrder('supplier_ledger', dim.id) === supplierLedgerDimensions.length"
+                            title="降低此维度分组优先级"
+                            @click="moveDimensionDown('supplier_ledger', dim.id)"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 常用快捷方案 -->
+                    <div class="panel-presets-row">
+                      <span class="presets-caption">⚡ 常用：</span>
+                      <div class="presets-btn-chips">
+                        <button
+                          v-for="(p, pIdx) in supplierLedgerDimensionPresets"
+                          :key="`p-sup-${pIdx}`"
+                          type="button"
+                          :class="['btn-preset-chip', { active: isCurrentPreset('supplier_ledger', p.dims) }]"
+                          @click="applyDimensionPreset('supplier_ledger', p.dims)"
+                        >
+                          {{ p.label }}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="panel-footer">
+                      <button type="button" class="btn-panel-done" @click="closePivotDropdown">完成</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="tabLoading" class="loading-box">
+              <div class="spinner-sm"></div>
+              <span>⏳ 正在汇总供给方发货流转数据...</span>
+            </div>
+            
+            <div v-else-if="aggregatedSupplierLedgerRows.length === 0" class="empty-box">未查询到符合条件的供给方发货单记录。</div>
+
+            <div v-else class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <!-- 动态维度表头 -->
+                    <th 
+                      v-for="dim in supplierLedgerDimensions" 
+                      :key="`th-sup-${dim}`"
+                      :class="['text-left', 'th-dimension', `th-dim-${dim}`, 'sortable-th', { 'sorted-col': isColumnSorted('supplier_ledger', dim) }]"
+                      @click="handleTableSort('supplier_ledger', dim)"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell">
+                        <span>{{ getDimensionDef(dim).colHeader }}</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', dim) }">{{ getSortIcon('supplier_ledger', dim) }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 发货量 -->
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'shipped_qty') }" @click="handleTableSort('supplier_ledger', 'shipped_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>发货量 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'shipped_qty') }">{{ getSortIcon('supplier_ledger', 'shipped_qty') }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 确认到货 -->
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'arrived_qty') }" @click="handleTableSort('supplier_ledger', 'arrived_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>确认到货 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'arrived_qty') }">{{ getSortIcon('supplier_ledger', 'arrived_qty') }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 施工接收 -->
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'received_qty') }" @click="handleTableSort('supplier_ledger', 'received_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>施工接收 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'received_qty') }">{{ getSortIcon('supplier_ledger', 'received_qty') }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 库管确认 -->
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'warehouse_qty') }" @click="handleTableSort('supplier_ledger', 'warehouse_qty')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>库管已确认 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'warehouse_qty') }">{{ getSortIcon('supplier_ledger', 'warehouse_qty') }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 在途时长 -->
+                    <th class="text-center">在途时长</th>
+
+                    <!-- 发运单数 -->
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'orders_count') }" @click="handleTableSort('supplier_ledger', 'orders_count')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>发运单数</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'orders_count') }">{{ getSortIcon('supplier_ledger', 'orders_count') }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 到货确认率进度 -->
+                    <th class="text-left" style="min-width: 120px;">到货确认率</th>
+
+                    <!-- 接收确认率 -->
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'receipt_rate') }" @click="handleTableSort('supplier_ledger', 'receipt_rate')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>接收确认率</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'receipt_rate') }">{{ getSortIcon('supplier_ledger', 'receipt_rate') }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 库管确认率 -->
+                    <th class="text-right sortable-th" :class="{ 'sorted-col': isColumnSorted('supplier_ledger', 'warehouse_rate') }" @click="handleTableSort('supplier_ledger', 'warehouse_rate')" title="点击切换排序：升序 / 降序 / 恢复默认">
+                      <div class="th-inner-cell text-right">
+                        <span>库管确认率</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_ledger', 'warehouse_rate') }">{{ getSortIcon('supplier_ledger', 'warehouse_rate') }}</span>
+                      </div>
+                    </th>
+
+                    <!-- 操作/穿透 -->
+                    <th class="text-center" style="min-width: 90px;">发运单穿透</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr 
+                    v-for="(row, idx) in sortedSupplierLedgerRows" 
+                    :key="idx" 
+                    class="clickable-row"
+                    @click="openSupplierOrderModal(row)"
+                  >
+                    <!-- 动态维度单元格 -->
+                    <td 
+                      v-for="dim in supplierLedgerDimensions" 
+                      :key="`td-sup-${dim}`" 
+                      :class="['text-left', `td-dim-${dim}`]"
+                    >
+                      <template v-if="dim === 'supplier'">
+                        <span class="font-bold text-sky">{{ row.supplier_name }}</span>
+                      </template>
+                      <template v-else-if="dim === 'model'">
+                        <template v-if="subMaterialType === 'pipe'">
+                          <span class="badge model-badge">{{ row.pipe_model_name }}</span>
+                        </template>
+                        <template v-else>
+                          <span class="font-bold text-slate">{{ row.fitting_type }}</span>
+                          <span class="font-medium text-muted" style="margin-left: 4px;">{{ row.model_spec }}</span>
+                        </template>
+                      </template>
+                      <template v-else-if="dim === 'date'">
+                        <span class="font-mono font-medium">{{ row.biz_date }}</span>
+                      </template>
+                      <template v-else-if="dim === 'section'">
+                        <span class="font-bold text-dark section-cell-text">{{ row.section_1_name }}</span>
+                      </template>
+                    </td>
+
+                    <!-- 数量列 (与 Tab 1/2 保持完全统一字体与颜色) -->
+                    <td class="text-right font-medium text-sky">{{ subMaterialType === 'pipe' ? formatQty(row.shipped_qty) : row.shipped_qty }}</td>
+                    <td class="text-right font-bold text-blue">{{ subMaterialType === 'pipe' ? formatQty(row.arrived_qty) : row.arrived_qty }}</td>
+                    <td class="text-right font-medium text-indigo">{{ subMaterialType === 'pipe' ? formatQty(row.received_qty) : row.received_qty }}</td>
+                    <td class="text-right font-bold text-amber">{{ subMaterialType === 'pipe' ? formatQty(row.warehouse_qty) : row.warehouse_qty }}</td>
+                    <td class="text-center font-mono text-muted">{{ row.avg_transit_display }}</td>
+                    <td class="text-right font-mono text-slate">{{ row.orders_count }} 单</td>
+
+                    <!-- 履约进度条 -->
+                    <td class="text-left">
+                      <div class="progress-wrap">
+                        <div class="progress-bar-bg">
+                          <div class="progress-bar-fill fill-blue" :style="{ width: `${Math.min(100, row.fulfillment_rate)}%` }"></div>
+                        </div>
+                        <span class="progress-text">{{ row.fulfillment_rate }}%</span>
+                      </div>
+                    </td>
+
+                    <!-- 接收确认率 -->
+                    <td class="text-right font-mono font-bold text-indigo">{{ row.receipt_rate }}%</td>
+
+                    <!-- 库管确认率 -->
+                    <td class="text-right font-mono font-bold text-amber">{{ row.warehouse_rate }}%</td>
+
+                    <!-- 穿透操作 -->
+                    <td class="text-center" @click.stop>
+                      <button 
+                        type="button" 
+                        class="btn-order-drill"
+                        @click="openSupplierOrderModal(row)"
+                      >
+                        🔍 查看 ({{ row.orders_count }})
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- 汇总底栏 (与 Tab 1/2 完全统一) -->
+                  <tr class="summary-footer-row">
+                    <td :colspan="supplierLedgerDimensions.length" class="text-left">
+                      🏭 全项目供给方发货流转汇总 (已聚合为 {{ aggregatedSupplierLedgerRows.length }} 组)
+                    </td>
+                    <td class="text-right font-bold text-sky">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_shipped_qty) : supplierLedgerSummary.total_shipped_qty }}</td>
+                    <td class="text-right font-bold text-blue">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_arrived_qty) : supplierLedgerSummary.total_arrived_qty }}</td>
+                    <td class="text-right font-bold text-indigo">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_received_qty) : supplierLedgerSummary.total_received_qty }}</td>
+                    <td class="text-right font-bold text-amber">{{ subMaterialType === 'pipe' ? formatQty(supplierLedgerSummary.total_warehouse_qty) : supplierLedgerSummary.total_warehouse_qty }}</td>
+                    <td class="text-center font-mono">{{ supplierLedgerSummary.overall_avg_transit }}</td>
+                    <td class="text-right font-mono text-slate">{{ supplierLedgerSummary.total_orders_count }} 单</td>
+                    <td class="text-left">
+                      <div class="progress-wrap">
+                        <div class="progress-bar-bg">
+                          <div class="progress-bar-fill fill-blue" :style="{ width: `${Math.min(100, supplierLedgerSummary.overall_fulfillment_rate)}%` }"></div>
+                        </div>
+                        <span class="progress-text">{{ supplierLedgerSummary.overall_fulfillment_rate }}%</span>
+                      </div>
+                    </td>
+                    <td class="text-right font-mono font-bold text-indigo">{{ supplierLedgerSummary.overall_receipt_rate }}%</td>
+                    <td class="text-right font-mono font-bold text-amber">{{ supplierLedgerSummary.overall_warehouse_rate }}%</td>
+                    <td class="text-center text-muted">—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================================== -->
+        <!-- 🏢 Tab 4: 责任主体与人员管辖速查矩阵 (可折叠分组架构 + 按标段视图) -->
         <!-- ==================================================================== -->
         <section v-else-if="activeTab === 'directory'" class="tab-content-section">
           <!-- 顶栏快捷操作区：模式切换器 + 分类胶囊 / 折叠按钮 -->
@@ -1895,7 +2271,7 @@
             <div>
               <h3 class="modal-title">保温管日流转明细穿透</h3>
               <p class="modal-sub">
-                日期：{{ pipeDetailModalData.biz_date }} | 标段：{{ pipeDetailModalData.section_1_name }} | 型号：{{ pipeDetailModalData.pipe_model_name }}
+                日期：{{ pipeDetailModalData.biz_date }} | 供给方：{{ pipeDetailModalData.supplier_name }} | 标段：{{ pipeDetailModalData.section_1_name }} | 型号：{{ pipeDetailModalData.pipe_model_name }}
               </p>
             </div>
           </div>
@@ -1959,6 +2335,126 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 供给方真实发货单穿透明细弹窗 -->
+    <Transition name="fade">
+      <div v-if="supplierOrderModalVisible && selectedSupplierOrderRow" class="block-modal-overlay" @click.self="supplierOrderModalVisible = false">
+        <div class="block-modal-container modal-xl">
+          <div class="block-modal-header bg-sky">
+            <span class="modal-header-icon">📦</span>
+            <div class="modal-header-title-wrap">
+              <h3 class="modal-title">供给方发运订单穿透明细</h3>
+              <p class="modal-sub">
+                供给方：<strong>{{ selectedSupplierOrderRow?.supplier_name }}</strong>
+                <span v-if="selectedSupplierOrderRow?.pipe_model_name" class="ml-2">| 型号：<strong>{{ selectedSupplierOrderRow?.pipe_model_name }}</strong></span>
+                <span v-if="selectedSupplierOrderRow?.fitting_type" class="ml-2">| 品类：<strong>{{ selectedSupplierOrderRow?.fitting_type }} {{ selectedSupplierOrderRow?.model_spec }}</strong></span>
+                <span v-if="selectedSupplierOrderRow?.section_1_name" class="ml-2">| 标段：<strong>{{ selectedSupplierOrderRow?.section_1_name }}</strong></span>
+                <span v-if="selectedSupplierOrderRow?.biz_date" class="ml-2">| 日期：<strong class="font-mono">{{ selectedSupplierOrderRow?.biz_date }}</strong></span>
+              </p>
+            </div>
+            <button type="button" class="btn-modal-close-icon" @click="supplierOrderModalVisible = false" title="关闭窗口">✕</button>
+          </div>
+
+          <!-- 弹窗内部小 KPI 概览条 -->
+          <div class="modal-summary-banner">
+            <div class="modal-sum-item">
+              <span class="sum-lbl">发货总量</span>
+              <span class="sum-val text-sky">{{ subMaterialType === 'pipe' ? formatQty(selectedSupplierOrderRow?.shipped_qty) : selectedSupplierOrderRow?.shipped_qty }} <small>{{ subMaterialType === 'pipe' ? '米' : '件' }}</small></span>
+            </div>
+            <div class="modal-sum-item">
+              <span class="sum-lbl">确认到货</span>
+              <span class="sum-val text-blue">{{ subMaterialType === 'pipe' ? formatQty(selectedSupplierOrderRow?.arrived_qty) : selectedSupplierOrderRow?.arrived_qty }} <small>{{ subMaterialType === 'pipe' ? '米' : '件' }}</small></span>
+            </div>
+            <div class="modal-sum-item">
+              <span class="sum-lbl">施工接收</span>
+              <span class="sum-val text-indigo">{{ subMaterialType === 'pipe' ? formatQty(selectedSupplierOrderRow?.received_qty) : selectedSupplierOrderRow?.received_qty }} <small>{{ subMaterialType === 'pipe' ? '米' : '件' }}</small></span>
+            </div>
+            <div class="modal-sum-item">
+              <span class="sum-lbl">库管入库</span>
+              <span class="sum-val text-amber">{{ subMaterialType === 'pipe' ? formatQty(selectedSupplierOrderRow?.warehouse_qty) : selectedSupplierOrderRow?.warehouse_qty }} <small>{{ subMaterialType === 'pipe' ? '米' : '件' }}</small></span>
+            </div>
+            <div class="modal-sum-item">
+              <span class="sum-lbl">接收确认率</span>
+              <span class="sum-val text-indigo font-mono">{{ selectedSupplierOrderRow?.receipt_rate }}%</span>
+            </div>
+            <div class="modal-sum-item">
+              <span class="sum-lbl">库管确认率</span>
+              <span class="sum-val text-amber font-mono">{{ selectedSupplierOrderRow?.warehouse_rate }}%</span>
+            </div>
+            <div class="modal-sum-item">
+              <span class="sum-lbl">发运单数</span>
+              <span class="sum-val text-slate">{{ selectedSupplierOrderRow?.orders_count }} <small>单</small></span>
+            </div>
+            <div class="modal-sum-item">
+              <span class="sum-lbl">平均在途</span>
+              <span class="sum-val text-slate font-mono">{{ selectedSupplierOrderRow?.avg_transit_display }}</span>
+            </div>
+          </div>
+
+          <div class="modal-body modal-scroll-body">
+            <div class="table-container modal-table-container">
+              <table class="data-table modal-data-table">
+                <thead>
+                  <tr>
+                    <th class="text-left">运单号/批次</th>
+                    <th class="text-left">需求标段</th>
+                    <th class="text-left">规格型号</th>
+                    <th class="text-center">发货日期</th>
+                    <th class="text-left">车辆 / 司机 / 电话</th>
+                    <th class="text-right">发货量 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
+                    <th class="text-right">确认到货 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
+                    <th class="text-right">施工接收 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
+                    <th class="text-right">库管确认 ({{ subMaterialType === 'pipe' ? '米' : '件' }})</th>
+                    <th class="text-center">在途时长</th>
+                    <th class="text-center">运单状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="order in selectedSupplierOrderRow?.order_items || []" :key="order.id">
+                    <td class="text-left font-mono font-bold text-slate">{{ order.batch_no }}</td>
+                    <td class="text-left"><span class="font-bold text-dark">{{ order.section_1_name }}</span></td>
+                    <td class="text-left">
+                      <template v-if="subMaterialType === 'pipe'">
+                        <span class="badge model-badge">{{ order.pipe_model_name }}</span>
+                      </template>
+                      <template v-else>
+                        <span class="font-bold text-slate">{{ order.fitting_type }}</span>
+                        <span class="font-medium text-muted ml-1">{{ order.model_spec }}</span>
+                      </template>
+                    </td>
+                    <td class="text-center font-mono text-xs">{{ order.biz_date }}</td>
+                    <td class="text-left text-xs">
+                      <div class="font-bold text-slate-700">{{ order.vehicle_no || '—' }}</div>
+                      <div class="text-slate-500 font-mono">{{ order.driver_name }} {{ order.driver_phone }}</div>
+                    </td>
+                    <td class="text-right font-medium text-sky">{{ subMaterialType === 'pipe' ? formatQty(order.shipped_qty) : order.shipped_qty }}</td>
+                    <td class="text-right font-bold text-blue">{{ subMaterialType === 'pipe' ? formatQty(order.arrived_qty) : order.arrived_qty }}</td>
+                    <td class="text-right font-medium text-indigo">{{ subMaterialType === 'pipe' ? formatQty(order.received_qty) : order.received_qty }}</td>
+                    <td class="text-right font-bold text-amber">{{ subMaterialType === 'pipe' ? formatQty(order.warehouse_qty) : order.warehouse_qty }}</td>
+                    <td class="text-center font-mono text-muted text-xs">{{ order.transit_display }}</td>
+                    <td class="text-center">
+                      <span :class="['badge-status-pill', `status-${order.status}`]">
+                        {{ order.status === 'completed' ? '已入库' : order.status === 'received' ? '已接收' : order.status === 'arrived' ? '已到货' : '在途中' }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="block-modal-actions flex justify-between items-center">
+            <span class="text-xs text-muted font-mono">共穿透 {{ selectedSupplierOrderRow?.order_items?.length || 0 }} 笔真实发货运单记录</span>
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-export btn-sm" @click="exportCurrentOrderItemsExcel">
+                📥 导出此运单明细
+              </button>
+              <button type="button" class="btn secondary" @click="supplierOrderModalVisible = false">关闭窗口</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1967,11 +2463,11 @@ import { ref, computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { AppHeader, Breadcrumbs } from './shared'
 import * as XLSX from 'xlsx-js-style'
-
 import {
   fetchTubeConfig,
   getComprehensiveDailyFlow,
   getComprehensiveBaselineProgress,
+  getComprehensiveSupplierLedger,
   getComprehensiveEntityDirectory,
 } from '@/projects/daily_report_25_26/services/api'
 
@@ -1994,12 +2490,12 @@ const activeDropdown = ref(null)
 const exportLoading = ref(false)
 
 // 标签页状态
-const activeTab = ref('daily_flow') // 'daily_flow' | 'baseline_progress' | 'directory'
+const activeTab = ref('daily_flow') // 'daily_flow' | 'baseline_progress' | 'supplier_ledger' | 'directory'
 const subMaterialType = ref('pipe') // 'pipe' | 'fitting'
 const fittingTab2SubView = ref('baseline') // 'baseline' (设计采购基准表) | 'flow' (全周期累计流转与现场库存表)
 const directoryCategory = ref('all') // 'all' | 'suppliers' | 'site_managers' | 'demand_sections' | 'warehouse_keepers' | 'global_members'
 
-// Tab 3 专属视图切换模式 ('by_category': 按主体类别 | 'by_section': 按标段综合穿透)
+// 责任主体专属视图切换模式 ('by_category': 按主体类别 | 'by_section': 按标段综合穿透)
 const directoryViewMode = ref('by_category')
 
 // 分组折叠状态 (默认全部展开)
@@ -2011,8 +2507,8 @@ const groupCollapseState = reactive({
   global_members: false,
 })
 
-function toggleGroupCollapse(groupKey) {
-  groupCollapseState[groupKey] = !groupCollapseState[groupKey]
+function toggleGroupCollapse(grp) {
+  groupCollapseState[grp] = !groupCollapseState[grp]
 }
 
 function expandAllGroups() {
@@ -2053,9 +2549,9 @@ function collapseAllSections() {
 // 可选维度定义字典
 const DIMENSION_DEFS = {
   model: { id: 'model', label: '📐 规格型号', shortLabel: '型号', colHeader: '规格型号', icon: '📐' },
-  date: { id: 'date', label: '📅 业务日期', shortLabel: '日期', colHeader: '业务日期', icon: '📅' },
+  date: { id: 'date', label: '📅 时间日期', shortLabel: '日期', colHeader: '时间日期', icon: '📅' },
   section: { id: 'section', label: '🏗️ 需求标段', shortLabel: '标段', colHeader: '需求标段', icon: '🏗️' },
-  supplier: { id: 'supplier', label: '🏭 供货厂家', shortLabel: '厂家', colHeader: '供货厂家', icon: '🏭' },
+  supplier: { id: 'supplier', label: '🏭 供给方', shortLabel: '供给方', colHeader: '供给方', icon: '🏭' },
 }
 
 function getDimensionDef(dimId) {
@@ -2072,7 +2568,6 @@ const dailyDimensionPresets = [
   { label: '🏗️ 标段➔型号汇总', dims: ['section', 'model'] },
   { label: '📐 纯型号合计', dims: ['model'] },
   { label: '📅 纯日期走势', dims: ['date'] },
-  { label: '🏭 厂家➔标段', dims: ['supplier', 'section'] },
 ]
 
 // Tab 2 (设计采购基准进度) 当前激活维度层级 (默认: 标段 ➔ 型号)
@@ -2084,24 +2579,39 @@ const baselineDimensionPresets = [
   { label: '🌟 全网型号总览 (标段合计)', dims: ['model'] },
   { label: '📐 型号➔标段对比', dims: ['model', 'section'] },
   { label: '🏗️ 纯标段合计', dims: ['section'] },
-  { label: '🏭 厂家➔标段', dims: ['supplier', 'section'] },
 ]
 
+// Tab 3 (供给方发货流转台账) 当前激活维度层级 (默认: 供给方 ➔ 型号)
+const supplierLedgerDimensions = ref(['supplier', 'model'])
+
+// Tab 3 快捷透视预设方案
+const supplierLedgerDimensionPresets = [
+  { label: '🏭 供给方➔型号 (默认汇总)', dims: ['supplier', 'model'] },
+  { label: '🏭 供给方➔日期➔型号', dims: ['supplier', 'date', 'model'] },
+  { label: '🏭 供给方➔标段➔型号', dims: ['supplier', 'section', 'model'] },
+  { label: '🏭 供给方汇总', dims: ['supplier'] },
+  { label: '📅 日期➔供给方➔型号', dims: ['date', 'supplier', 'model'] },
+  { label: '🏗️ 标段➔供给方➔型号', dims: ['section', 'supplier', 'model'] },
+  { label: '📐 纯型号汇总', dims: ['model'] },
+]
+
+function getTargetDimensionRef(tab) {
+  if (tab === 'daily') return dailyDimensions
+  if (tab === 'supplier_ledger') return supplierLedgerDimensions
+  return baselineDimensions
+}
+
 function isCurrentPreset(tab, dims) {
-  const current = tab === 'daily' ? dailyDimensions.value : baselineDimensions.value
+  const current = getTargetDimensionRef(tab).value
   return current.join(',') === dims.join(',')
 }
 
 function applyDimensionPreset(tab, dims) {
-  if (tab === 'daily') {
-    dailyDimensions.value = [...dims]
-  } else {
-    baselineDimensions.value = [...dims]
-  }
+  getTargetDimensionRef(tab).value = [...dims]
 }
 
 // 🎛️ 多维透视聚合控制器状态 (下拉列表选择模式)
-const activePivotDropdown = ref(null) // 'daily' | 'baseline' | null
+const activePivotDropdown = ref(null) // 'daily' | 'baseline' | 'supplier_ledger' | null
 
 function togglePivotDropdown(tab) {
   activePivotDropdown.value = activePivotDropdown.value === tab ? null : tab
@@ -2111,35 +2621,39 @@ function closePivotDropdown() {
   activePivotDropdown.value = null
 }
 
-// 获取当前维度链条精简展示文字 (例如 "1.型号 ➔ 2.日期")
+// 获取当前维度链条精简展示文字 (例如 "1.供给方 ➔ 2.型号")
 function getDimensionChainText(tab) {
-  const current = tab === 'daily' ? dailyDimensions.value : baselineDimensions.value
+  const current = getTargetDimensionRef(tab).value
   if (!current || current.length === 0) return '未选维度 (全量汇总)'
   return current.map((id, idx) => `${idx + 1}.${getDimensionDef(id).shortLabel}`).join(' ➔ ')
 }
 
 // 获取可用维度定义列表
 function getAvailableDimensions(tab) {
-  const allIds = tab === 'daily' 
-    ? ['model', 'date', 'section', 'supplier'] 
-    : ['model', 'section', 'supplier']
-  return allIds.map(id => getDimensionDef(id))
+  if (tab === 'daily') {
+    return ['model', 'date', 'section'].map(id => getDimensionDef(id))
+  }
+  if (tab === 'supplier_ledger') {
+    return ['supplier', 'model', 'date', 'section'].map(id => getDimensionDef(id))
+  }
+  return ['model', 'section'].map(id => getDimensionDef(id))
 }
 
 function isDimensionSelected(tab, dimId) {
-  const list = tab === 'daily' ? dailyDimensions.value : baselineDimensions.value
+  const list = getTargetDimensionRef(tab).value
   return list.includes(dimId)
 }
 
 function getDimensionOrder(tab, dimId) {
-  const list = tab === 'daily' ? dailyDimensions.value : baselineDimensions.value
+  const list = getTargetDimensionRef(tab).value
   const idx = list.indexOf(dimId)
   return idx !== -1 ? idx + 1 : null
 }
 
 // 有序切换勾选：未勾选时按点击先后顺序追加到末尾；已勾选时取消勾选
 function toggleDimensionSelection(tab, dimId) {
-  const list = tab === 'daily' ? dailyDimensions.value : baselineDimensions.value
+  const listRef = getTargetDimensionRef(tab)
+  const list = listRef.value
   const idx = list.indexOf(dimId)
   if (idx === -1) {
     list.push(dimId)
@@ -2153,7 +2667,7 @@ function toggleDimensionSelection(tab, dimId) {
 }
 
 function moveDimensionUp(tab, dimId) {
-  const list = tab === 'daily' ? dailyDimensions.value : baselineDimensions.value
+  const list = getTargetDimensionRef(tab).value
   const idx = list.indexOf(dimId)
   if (idx > 0) {
     const item = list.splice(idx, 1)[0]
@@ -2162,7 +2676,7 @@ function moveDimensionUp(tab, dimId) {
 }
 
 function moveDimensionDown(tab, dimId) {
-  const list = tab === 'daily' ? dailyDimensions.value : baselineDimensions.value
+  const list = getTargetDimensionRef(tab).value
   const idx = list.indexOf(dimId)
   if (idx !== -1 && idx < list.length - 1) {
     const item = list.splice(idx, 1)[0]
@@ -2173,6 +2687,8 @@ function moveDimensionDown(tab, dimId) {
 function resetToDefaultDimensions(tab) {
   if (tab === 'daily') {
     dailyDimensions.value = ['date', 'section', 'model']
+  } else if (tab === 'supplier_ledger') {
+    supplierLedgerDimensions.value = ['supplier', 'model']
   } else {
     baselineDimensions.value = ['section', 'model']
   }
@@ -2194,6 +2710,7 @@ const filterEndDate = ref('')
 // 数据存储
 const dailyFlowData = ref({ items: [], summary: {} })
 const baselineProgressData = ref({ items: [], summary: {} })
+const supplierLedgerData = ref({ items: [], summary: {} })
 const entityDirectoryData = ref({ 
   suppliers: [], 
   demand_sections: [], 
@@ -2205,6 +2722,14 @@ const entityDirectoryData = ref({
 // 弹窗
 const pipeDetailModalVisible = ref(false)
 const pipeDetailModalData = ref(null)
+
+const supplierOrderModalVisible = ref(false)
+const selectedSupplierOrderRow = ref(null)
+
+function openSupplierOrderModal(row) {
+  selectedSupplierOrderRow.value = row
+  supplierOrderModalVisible.value = true
+}
 
 // -----------------------------------------------------------------------------
 // 配置与选项衍生
@@ -2226,6 +2751,21 @@ function getSectionName(secId) {
 function getPipeModelName(pmId) {
   const found = pipeModelOptions.value.find(m => m.pipe_model_id === pmId)
   return found ? (found.pipe_model_name || found.name || pmId) : pmId
+}
+
+function getSupplierNameBySection(secId) {
+  if (!secId) return '—'
+  const cfg = configSummary.value
+  if (!cfg) return '—'
+  const supplyEntities = cfg.supply_entities || cfg.suppliers || []
+
+  for (const sup of supplyEntities) {
+    const secIds = sup.section_1_ids || []
+    if (secIds.includes(secId)) {
+      return sup.entity_name || sup.supplier_name || sup.name || sup.entity_id || '—'
+    }
+  }
+  return '—'
 }
 
 const section1TriggerText = computed(() => {
@@ -2290,6 +2830,7 @@ const filteredDailyRows = computed(() => {
       return (
         (r.section_1_name && r.section_1_name.toLowerCase().includes(kw)) ||
         (r.pipe_model_name && r.pipe_model_name.toLowerCase().includes(kw)) ||
+        (r.supplier_name && r.supplier_name.toLowerCase().includes(kw)) ||
         (r.fitting_type && r.fitting_type.toLowerCase().includes(kw)) ||
         (r.model_spec && r.model_spec.toLowerCase().includes(kw)) ||
         (r.biz_date && r.biz_date.includes(kw))
@@ -2339,7 +2880,7 @@ const aggregatedDailyRows = computed(() => {
           dimValues.model_spec = row.model_spec || '—'
         }
       } else if (dim === 'supplier') {
-        const val = row.supplier_name || row.supplier_entity_name || '—'
+        const val = row.supplier_name || row.supplier_entity_name || getSupplierNameBySection(row.section_1_id) || '—'
         keyParts.push(val)
         dimValues.supplier_name = val
       }
@@ -2375,21 +2916,28 @@ const aggregatedDailyRows = computed(() => {
 
   const result = Array.from(groupsMap.values())
 
-  // 多维逐级排序
+  // 多维逐级排序：规格型号按大口径到小口径降序
   result.sort((a, b) => {
     for (const dim of activeDims) {
-      let valA = ''
-      let valB = ''
-      if (dim === 'date') { valA = a.biz_date || ''; valB = b.biz_date || ''; }
-      else if (dim === 'section') { valA = a.section_1_name || ''; valB = b.section_1_name || ''; }
-      else if (dim === 'model') { 
-        valA = subMaterialType.value === 'pipe' ? (a.pipe_model_name || '') : (`${a.fitting_type || ''} ${a.model_spec || ''}`);
-        valB = subMaterialType.value === 'pipe' ? (b.pipe_model_name || '') : (`${b.fitting_type || ''} ${b.model_spec || ''}`);
-      }
-      else if (dim === 'supplier') { valA = a.supplier_name || ''; valB = b.supplier_name || ''; }
-
-      if (valA !== valB) {
-        return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      if (dim === 'date') {
+        const valA = a.biz_date || ''
+        const valB = b.biz_date || ''
+        if (valA !== valB) return valB.localeCompare(valA, 'zh-CN', { numeric: true }) // 日期默认最新在前
+      } else if (dim === 'supplier') {
+        const valA = a.supplier_name || ''
+        const valB = b.supplier_name || ''
+        if (valA !== valB) return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      } else if (dim === 'section') {
+        const valA = a.section_1_name || ''
+        const valB = b.section_1_name || ''
+        if (valA !== valB) return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      } else if (dim === 'model') { 
+        const valA = subMaterialType.value === 'pipe' ? (a.pipe_model_name || '') : (`${a.fitting_type || ''} ${a.model_spec || ''}`).trim();
+        const valB = subMaterialType.value === 'pipe' ? (b.pipe_model_name || '') : (`${b.fitting_type || ''} ${b.model_spec || ''}`).trim();
+        if (valA !== valB) {
+          const comp = compareModelSpecs(valA, valB, 'desc')
+          if (comp !== 0) return comp
+        }
       }
     }
     return 0
@@ -2463,37 +3011,25 @@ const dailyFittingSummary = computed(() => {
   }
 })
 
+// -----------------------------------------------------------------------------
+// Tab 2: 设计采购基准与进度对照数据计算 (含管件)
+// -----------------------------------------------------------------------------
+
 const filteredBaselineRows = computed(() => {
   let list = baselineProgressData.value.items || []
-
   if (selectedSectionIds.value.length > 0) {
     list = list.filter(r => selectedSectionIds.value.includes(r.section_1_id))
   }
-
   if (subMaterialType.value === 'pipe' && selectedPipeModelIds.value.length > 0) {
     list = list.filter(r => selectedPipeModelIds.value.includes(r.pipe_model_id))
   }
-
-  if (subMaterialType.value === 'fitting' && fittingKeyword.value.trim()) {
-    const kw = fittingKeyword.value.trim().toLowerCase()
-    list = list.filter(r => {
-      return (
-        (r.fitting_type && r.fitting_type.toLowerCase().includes(kw)) ||
-        (r.model_spec && r.model_spec.toLowerCase().includes(kw))
-      )
-    })
-  }
-
   if (globalSearchKeyword.value.trim()) {
     const kw = globalSearchKeyword.value.trim().toLowerCase()
-    list = list.filter(r => {
-      return (
-        (r.section_1_name && r.section_1_name.toLowerCase().includes(kw)) ||
-        (r.pipe_model_name && r.pipe_model_name.toLowerCase().includes(kw)) ||
-        (r.fitting_type && r.fitting_type.toLowerCase().includes(kw)) ||
-        (r.model_spec && r.model_spec.toLowerCase().includes(kw))
-      )
-    })
+    list = list.filter(r => 
+      (r.section_1_name && r.section_1_name.toLowerCase().includes(kw)) ||
+      (r.pipe_model_name && r.pipe_model_name.toLowerCase().includes(kw)) ||
+      (r.supplier_name && r.supplier_name.toLowerCase().includes(kw))
+    )
   }
   return list
 })
@@ -2518,6 +3054,7 @@ const filteredFittingBaselineRows = computed(() => {
     const kw = globalSearchKeyword.value.trim().toLowerCase()
     list = list.filter(r => 
       (r.section_1_name && r.section_1_name.toLowerCase().includes(kw)) ||
+      (r.supplier_name && r.supplier_name.toLowerCase().includes(kw)) ||
       (r.category && r.category.toLowerCase().includes(kw)) ||
       (r.standard_name && r.standard_name.toLowerCase().includes(kw)) ||
       (r.fitting_type && r.fitting_type.toLowerCase().includes(kw)) ||
@@ -2579,8 +3116,9 @@ const aggregatedFittingBaselineRows = computed(() => {
         dimValues.model_spec = row.model_spec || '—'
         dimValues.sub_model_spec = row.sub_model_spec || ''
       } else if (dim === 'supplier') {
-        keyParts.push('全部主体')
-        dimValues.supplier_name = '—'
+        const val = row.supplier_name || getSupplierNameBySection(row.section_1_id) || '—'
+        keyParts.push(val)
+        dimValues.supplier_name = val
       }
     }
 
@@ -2605,7 +3143,9 @@ const aggregatedFittingBaselineRows = computed(() => {
   result.sort((a, b) => {
     const secCompare = (a.section_1_name || '').localeCompare(b.section_1_name || '', 'zh-CN', { numeric: true })
     if (secCompare !== 0) return secCompare
-    return (a.fitting_type || '').localeCompare(b.fitting_type || '', 'zh-CN')
+    const modelA = `${a.fitting_type || ''} ${a.model_spec || ''}`.trim()
+    const modelB = `${b.fitting_type || ''} ${b.model_spec || ''}`.trim()
+    return compareModelSpecs(modelA, modelB, 'desc')
   })
   return result
 })
@@ -2633,7 +3173,7 @@ const aggregatedFittingFlowRows = computed(() => {
         dimValues.fitting_type = row.fitting_type || '—'
         dimValues.model_spec = row.model_spec || '—'
       } else if (dim === 'supplier') {
-        const val = row.supplier_name || '—'
+        const val = row.supplier_name || getSupplierNameBySection(row.section_1_id) || '—'
         keyParts.push(val)
         dimValues.supplier_name = val
       }
@@ -2664,7 +3204,9 @@ const aggregatedFittingFlowRows = computed(() => {
   result.sort((a, b) => {
     const secCompare = (a.section_1_name || '').localeCompare(b.section_1_name || '', 'zh-CN', { numeric: true })
     if (secCompare !== 0) return secCompare
-    return (a.fitting_type || '').localeCompare(b.fitting_type || '', 'zh-CN')
+    const modelA = `${a.fitting_type || ''} ${a.model_spec || ''}`.trim()
+    const modelB = `${b.fitting_type || ''} ${b.model_spec || ''}`.trim()
+    return compareModelSpecs(modelA, modelB, 'desc')
   })
   return result
 })
@@ -2703,7 +3245,7 @@ const aggregatedBaselineRows = computed(() => {
         dimValues.pipe_model_name = val
         dimValues.pipe_model_id = row.pipe_model_id
       } else if (dim === 'supplier') {
-        const val = row.supplier_name || '—'
+        const val = row.supplier_name || getSupplierNameBySection(row.section_1_id) || '—'
         keyParts.push(val)
         dimValues.supplier_name = val
       }
@@ -2745,14 +3287,21 @@ const aggregatedBaselineRows = computed(() => {
   // 多维逐级排序
   result.sort((a, b) => {
     for (const dim of activeDims) {
-      let valA = ''
-      let valB = ''
-      if (dim === 'section') { valA = a.section_1_name || ''; valB = b.section_1_name || ''; }
-      else if (dim === 'model') { valA = a.pipe_model_name || ''; valB = b.pipe_model_name || ''; }
-      else if (dim === 'supplier') { valA = a.supplier_name || ''; valB = b.supplier_name || ''; }
-
-      if (valA !== valB) {
-        return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      if (dim === 'supplier') {
+        const valA = a.supplier_name || ''
+        const valB = b.supplier_name || ''
+        if (valA !== valB) return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      } else if (dim === 'section') {
+        const valA = a.section_1_name || ''
+        const valB = b.section_1_name || ''
+        if (valA !== valB) return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      } else if (dim === 'model') {
+        const valA = a.pipe_model_name || ''
+        const valB = b.pipe_model_name || ''
+        if (valA !== valB) {
+          const comp = compareModelSpecs(valA, valB, 'desc')
+          if (comp !== 0) return comp
+        }
       }
     }
     return 0
@@ -2846,7 +3395,8 @@ const tableSortStates = ref({
   daily_fitting: { key: '', order: '' },
   baseline_pipe: { key: '', order: '' },
   fitting_baseline: { key: '', order: '' },
-  fitting_flow: { key: '', order: '' }
+  fitting_flow: { key: '', order: '' },
+  supplier_ledger: { key: '', order: '' }
 })
 
 function handleTableSort(tableKey, columnKey) {
@@ -2882,6 +3432,35 @@ function getSortIcon(tableKey, columnKey) {
   return current.order === 'asc' ? '▲' : '▼'
 }
 
+// 规格型号数值智能比较 (默认降序: DN1400 > DN1200 > DN1000 > ... > DN80)
+function compareModelSpecs(strA, strB, order = 'desc') {
+  const sA = (strA || '').trim()
+  const sB = (strB || '').trim()
+  if (!sA && !sB) return 0
+  if (!sA) return order === 'desc' ? 1 : -1
+  if (!sB) return order === 'desc' ? -1 : 1
+
+  // 提取数字序列，例如 "DN1400/1600" -> [1400, 1600], "DN300 90°弯头" -> [300, 90]
+  const numsA = sA.match(/\d+/g)?.map(Number) || []
+  const numsB = sB.match(/\d+/g)?.map(Number) || []
+
+  // 逐个数字比较
+  const minLen = Math.min(numsA.length, numsB.length)
+  for (let i = 0; i < minLen; i++) {
+    if (numsA[i] !== numsB[i]) {
+      return order === 'desc' ? (numsB[i] - numsA[i]) : (numsA[i] - numsB[i])
+    }
+  }
+
+  if (numsA.length !== numsB.length) {
+    return order === 'desc' ? (numsB.length - numsA.length) : (numsA.length - numsB.length)
+  }
+
+  // 数字完全相同或无数字时按字符串比较
+  const strComp = sA.localeCompare(sB, 'zh-CN', { numeric: true, sensitivity: 'base' })
+  return order === 'desc' ? -strComp : strComp
+}
+
 function sortRows(list, tableKey, customGetters = {}) {
   const current = tableSortStates.value[tableKey]
   if (!current || !current.key || !current.order) {
@@ -2898,6 +3477,10 @@ function sortRows(list, tableKey, customGetters = {}) {
 
     if (valA === undefined || valA === null) valA = ''
     if (valB === undefined || valB === null) valB = ''
+
+    if (key === 'model') {
+      return compareModelSpecs(String(valA), String(valB), order)
+    }
 
     if (typeof valA === 'number' && typeof valB === 'number') {
       return isAsc ? valA - valB : valB - valA
@@ -2965,6 +3548,238 @@ const sortedFittingFlowRows = computed(() => {
     model: r => `${r.fitting_type || ''} ${r.model_spec || ''}`.trim(),
     supplier: r => r.supplier_name || ''
   })
+})
+
+// -----------------------------------------------------------------------------
+// 🏭 供给方发货流转台账 (Tab 3: 供给方视角动态透视与指标聚合)
+// -----------------------------------------------------------------------------
+
+const filteredSupplierLedgerRows = computed(() => {
+  let list = supplierLedgerData.value.items || []
+  if (selectedSectionIds.value.length > 0) {
+    list = list.filter(r => selectedSectionIds.value.includes(r.section_1_id))
+  }
+  if (subMaterialType.value === 'pipe' && selectedPipeModelIds.value.length > 0) {
+    list = list.filter(r => selectedPipeModelIds.value.includes(r.pipe_model_id))
+  }
+  if (subMaterialType.value === 'fitting' && fittingKeyword.value.trim()) {
+    const kw = fittingKeyword.value.trim().toLowerCase()
+    list = list.filter(r => 
+      (r.fitting_type && r.fitting_type.toLowerCase().includes(kw)) ||
+      (r.model_spec && r.model_spec.toLowerCase().includes(kw))
+    )
+  }
+  if (globalSearchKeyword.value.trim()) {
+    const kw = globalSearchKeyword.value.trim().toLowerCase()
+    list = list.filter(r => {
+      const matchBasic = (
+        (r.biz_date && r.biz_date.toLowerCase().includes(kw)) ||
+        (r.section_1_name && r.section_1_name.toLowerCase().includes(kw)) ||
+        (r.supplier_name && r.supplier_name.toLowerCase().includes(kw)) ||
+        (r.batch_no && r.batch_no.toLowerCase().includes(kw)) ||
+        (r.vehicle_no && r.vehicle_no.toLowerCase().includes(kw)) ||
+        (r.driver_name && r.driver_name.toLowerCase().includes(kw)) ||
+        (r.driver_phone && r.driver_phone.includes(kw))
+      )
+      if (subMaterialType.value === 'pipe') {
+        return matchBasic || (r.pipe_model_name && r.pipe_model_name.toLowerCase().includes(kw))
+      }
+      return matchBasic || (
+        (r.fitting_type && r.fitting_type.toLowerCase().includes(kw)) ||
+        (r.model_spec && r.model_spec.toLowerCase().includes(kw))
+      )
+    })
+  }
+  return list
+})
+
+const aggregatedSupplierLedgerRows = computed(() => {
+  const rawList = filteredSupplierLedgerRows.value
+  const activeDims = supplierLedgerDimensions.value
+  if (!activeDims || activeDims.length === 0) return rawList
+
+  const groupsMap = new Map()
+
+  for (const row of rawList) {
+    const keyParts = []
+    const dimValues = {}
+
+    for (const dim of activeDims) {
+      if (dim === 'supplier') {
+        const val = row.supplier_name || '—'
+        keyParts.push(val)
+        dimValues.supplier_name = val
+        dimValues.supplier_id = row.supplier_id
+      } else if (dim === 'model') {
+        if (subMaterialType.value === 'pipe') {
+          const val = row.pipe_model_name || '—'
+          keyParts.push(val)
+          dimValues.pipe_model_name = val
+          dimValues.pipe_model_id = row.pipe_model_id
+        } else {
+          const val = `${row.fitting_type || ''} ${row.model_spec || ''}`.trim() || '—'
+          keyParts.push(val)
+          dimValues.fitting_type = row.fitting_type || '—'
+          dimValues.model_spec = row.model_spec || '—'
+        }
+      } else if (dim === 'date') {
+        const val = row.biz_date || '—'
+        keyParts.push(val)
+        dimValues.biz_date = val
+      } else if (dim === 'section') {
+        const val = row.section_1_name || '—'
+        keyParts.push(val)
+        dimValues.section_1_name = val
+        dimValues.section_1_id = row.section_1_id
+      }
+    }
+
+    const groupKey = keyParts.join('____')
+
+    if (!groupsMap.has(groupKey)) {
+      groupsMap.set(groupKey, {
+        ...dimValues,
+        unit: subMaterialType.value === 'pipe' ? '米' : '件',
+        shipped_qty: 0,
+        arrived_qty: 0,
+        received_qty: 0,
+        warehouse_qty: 0,
+        transit_seconds_sum: 0,
+        transit_count: 0,
+        orders_count: 0,
+        order_items: [],
+      })
+    }
+
+    const target = groupsMap.get(groupKey)
+    target.shipped_qty += Number(row.shipped_qty) || 0
+    target.arrived_qty += Number(row.arrived_qty) || 0
+    target.received_qty += Number(row.received_qty) || 0
+    target.warehouse_qty += Number(row.warehouse_qty) || 0
+    target.orders_count += 1
+    target.order_items.push(row)
+    if (Number(row.transit_seconds) > 0) {
+      target.transit_seconds_sum += Number(row.transit_seconds)
+      target.transit_count += 1
+    }
+  }
+
+  const result = Array.from(groupsMap.values()).map(g => {
+    let avg_transit_display = '在途中'
+    if (g.transit_count > 0) {
+      const avgSec = g.transit_seconds_sum / g.transit_count
+      const h = Math.floor(avgSec / 3600)
+      const m = Math.floor((avgSec % 3600) / 60)
+      avg_transit_display = h > 0 ? `${h}小时${m}分` : (m > 0 ? `${m}分钟` : '<1分钟')
+    } else if (g.arrived_qty > 0) {
+      avg_transit_display = '—'
+    }
+    const fulfillment_rate = g.shipped_qty > 0 ? Math.min(100, (g.arrived_qty / g.shipped_qty * 100)) : 0
+    const receipt_rate = g.arrived_qty > 0 ? Math.min(100, (g.received_qty / g.arrived_qty * 100)) : 0
+    const warehouse_rate = g.arrived_qty > 0 
+      ? Math.min(100, (g.warehouse_qty / g.arrived_qty * 100)) 
+      : (g.shipped_qty > 0 ? Math.min(100, (g.warehouse_qty / g.shipped_qty * 100)) : 0)
+
+    return {
+      ...g,
+      avg_transit_display,
+      fulfillment_rate: Math.round(fulfillment_rate * 10) / 10,
+      receipt_rate: Math.round(receipt_rate * 10) / 10,
+      warehouse_rate: Math.round(warehouse_rate * 10) / 10,
+    }
+  })
+
+  // 多维逐级排序：供给方升序聚合，规格型号默认按大口径到小口径降序排列
+  result.sort((a, b) => {
+    for (const dim of activeDims) {
+      if (dim === 'supplier') {
+        const valA = a.supplier_name || ''
+        const valB = b.supplier_name || ''
+        if (valA !== valB) return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      } else if (dim === 'model') {
+        const valA = subMaterialType.value === 'pipe' ? (a.pipe_model_name || '') : (`${a.fitting_type || ''} ${a.model_spec || ''}`).trim();
+        const valB = subMaterialType.value === 'pipe' ? (b.pipe_model_name || '') : (`${b.fitting_type || ''} ${b.model_spec || ''}`).trim();
+        if (valA !== valB) {
+          const comp = compareModelSpecs(valA, valB, 'desc')
+          if (comp !== 0) return comp
+        }
+      } else if (dim === 'date') {
+        const valA = a.biz_date || ''
+        const valB = b.biz_date || ''
+        if (valA !== valB) return valB.localeCompare(valA, 'zh-CN', { numeric: true }) // 日期默认最新在前
+      } else if (dim === 'section') {
+        const valA = a.section_1_name || ''
+        const valB = b.section_1_name || ''
+        if (valA !== valB) return valA.localeCompare(valB, 'zh-CN', { numeric: true })
+      }
+    }
+    return 0
+  })
+
+  return result
+})
+
+const sortedSupplierLedgerRows = computed(() => {
+  return sortRows(aggregatedSupplierLedgerRows.value, 'supplier_ledger', {
+    supplier: r => r.supplier_name || '',
+    model: r => subMaterialType.value === 'pipe' ? (r.pipe_model_name || '') : (`${r.fitting_type || ''} ${r.model_spec || ''}`),
+    date: r => r.biz_date || '',
+    section: r => r.section_1_name || '',
+    shipped_qty: r => Number(r.shipped_qty) || 0,
+    arrived_qty: r => Number(r.arrived_qty) || 0,
+    received_qty: r => Number(r.received_qty) || 0,
+    warehouse_qty: r => Number(r.warehouse_qty) || 0,
+    receipt_rate: r => Number(r.receipt_rate) || 0,
+    warehouse_rate: r => Number(r.warehouse_rate) || 0,
+    orders_count: r => Number(r.orders_count) || 0,
+  })
+})
+
+const supplierLedgerSummary = computed(() => {
+  const rows = filteredSupplierLedgerRows.value
+  let total_shipped_qty = 0
+  let total_arrived_qty = 0
+  let total_received_qty = 0
+  let total_warehouse_qty = 0
+  let transit_sum = 0
+  let transit_cnt = 0
+
+  for (const r of rows) {
+    total_shipped_qty += Number(r.shipped_qty) || 0
+    total_arrived_qty += Number(r.arrived_qty) || 0
+    total_received_qty += Number(r.received_qty) || 0
+    total_warehouse_qty += Number(r.warehouse_qty) || 0
+    if (Number(r.transit_seconds) > 0) {
+      transit_sum += Number(r.transit_seconds)
+      transit_cnt += 1
+    }
+  }
+
+  let avg_transit = transit_cnt === 0 && rows.length > 0 ? '在途中' : '—'
+  if (transit_cnt > 0) {
+    const avgSec = transit_sum / transit_cnt
+    const h = Math.floor(avgSec / 3600)
+    const m = Math.floor((avgSec % 3600) / 60)
+    avg_transit = h > 0 ? `${h}小时${m}分` : (m > 0 ? `${m}分钟` : '<1分钟')
+  }
+
+  const fulfillment_rate = total_shipped_qty > 0 ? Math.min(100, (total_arrived_qty / total_shipped_qty * 100)) : 0
+  const receipt_rate = total_arrived_qty > 0 ? Math.min(100, (total_received_qty / total_arrived_qty * 100)) : 0
+  const warehouse_rate = total_arrived_qty > 0 
+    ? Math.min(100, (total_warehouse_qty / total_arrived_qty * 100)) 
+    : (total_shipped_qty > 0 ? Math.min(100, (total_warehouse_qty / total_shipped_qty * 100)) : 0)
+
+  return {
+    total_shipped_qty: Math.round(total_shipped_qty * 100) / 100,
+    total_arrived_qty: Math.round(total_arrived_qty * 100) / 100,
+    total_received_qty: Math.round(total_received_qty * 100) / 100,
+    total_warehouse_qty: Math.round(total_warehouse_qty * 100) / 100,
+    total_orders_count: rows.length,
+    overall_avg_transit: avg_transit,
+    overall_fulfillment_rate: Math.round(fulfillment_rate * 10) / 10,
+    overall_receipt_rate: Math.round(receipt_rate * 10) / 10,
+    overall_warehouse_rate: Math.round(warehouse_rate * 10) / 10,
+  }
 })
 
 // -----------------------------------------------------------------------------
@@ -3180,7 +3995,7 @@ const globalPersonnel = computed(() => {
 // -----------------------------------------------------------------------------
 
 onMounted(async () => {
-  setDateRangeByCapsule('30days')
+  setDateRangeByCapsule('project')
   try {
     loading.value = true
     const cfg = await fetchTubeConfig(projectKey)
@@ -3207,10 +4022,8 @@ function setDateRangeByCapsule(capsule) {
     const d = new Date()
     d.setDate(d.getDate() - 30)
     filterStartDate.value = formatDate(d)
-  } else if (capsule === 'all') {
-    const d = new Date()
-    d.setDate(d.getDate() - 180)
-    filterStartDate.value = formatDate(d)
+  } else if (capsule === 'project' || capsule === 'all') {
+    filterStartDate.value = '2026-07-28'
   }
   fetchActiveTabData()
 }
@@ -3243,6 +4056,15 @@ async function fetchActiveTabData() {
         materialType: subMaterialType.value,
       })
       baselineProgressData.value = res
+    } else if (activeTab.value === 'supplier_ledger') {
+      const res = await getComprehensiveSupplierLedger(projectKey, {
+        startDate: filterStartDate.value,
+        endDate: filterEndDate.value,
+        section1Ids: selectedSectionIds.value,
+        pipeModelIds: selectedPipeModelIds.value,
+        materialType: subMaterialType.value,
+      })
+      supplierLedgerData.value = res
     } else if (activeTab.value === 'directory') {
       const res = await getComprehensiveEntityDirectory(projectKey)
       entityDirectoryData.value = res
@@ -3273,13 +4095,14 @@ function resetAllFilters() {
   selectedPipeModelIds.value = []
   fittingKeyword.value = ''
   globalSearchKeyword.value = ''
-  setDateRangeByCapsule('30days')
+  setDateRangeByCapsule('project')
   tableSortStates.value = {
     daily_pipe: { key: '', order: '' },
     daily_fitting: { key: '', order: '' },
     baseline_pipe: { key: '', order: '' },
     fitting_baseline: { key: '', order: '' },
-    fitting_flow: { key: '', order: '' }
+    fitting_flow: { key: '', order: '' },
+    supplier_ledger: { key: '', order: '' }
   }
 }
 
@@ -3341,187 +4164,630 @@ function formatQty(val) {
 }
 
 // -----------------------------------------------------------------------------
-// 📥 高规格 Excel 导出 (基于 xlsx-js-style)
+// 📥 高规格 Excel 导出引擎 (基于 xlsx-js-style，支持分供给方汇总 + 多维明细小计 + 多Sheet)
 // -----------------------------------------------------------------------------
+
+function getExcelCellAlignment(val, isHeader, isFirstCol) {
+  if (isHeader) return { horizontal: 'center', vertical: 'center' }
+  if (val === undefined || val === null || val === '') return { horizontal: 'center', vertical: 'center' }
+  
+  if (typeof val === 'number') {
+    return { horizontal: 'right', vertical: 'center' }
+  }
+  
+  const str = String(val).trim()
+  
+  // 百分比率 (如 "100.0%", "66.7%") 靠右对齐与数值列保持一致
+  if (/^\d+(\.\d+)?%$/.test(str)) {
+    return { horizontal: 'right', vertical: 'center' }
+  }
+  
+  // 占位符横杠
+  if (str === '—' || str === '-') {
+    return { horizontal: 'center', vertical: 'center' }
+  }
+  
+  // 日期格式 (YYYY-MM-DD)
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return { horizontal: 'center', vertical: 'center' }
+  }
+  
+  // 在途时长描述
+  if (str.includes('小时') || str.includes('分钟') || str === '在途中' || str === '<1分钟') {
+    return { horizontal: 'center', vertical: 'center' }
+  }
+  
+  // 状态、车牌号、手机号、纯单位
+  if (['已入库', '已接收', '已到货', '在途中', '已发货', '米', '件', '个'].includes(str) || /^1\d{10}$/.test(str) || /^[\u4e00-\u9fa5][A-Z][A-Z0-9]{5,6}$/.test(str)) {
+    return { horizontal: 'center', vertical: 'center' }
+  }
+  
+  // 小计或总计首列
+  if (str.startsWith('【小计】') || str.startsWith('【全项目总计】') || str.startsWith('【本组穿透汇总】')) {
+    return { horizontal: 'left', vertical: 'center' }
+  }
+  
+  // 文本类（供给方名称、型号规格、标段名称等）首列或文本列靠左对齐
+  return { horizontal: isFirstCol ? 'left' : 'left', vertical: 'center' }
+}
+
+function buildStyledWorksheet(headers, dataRows, subtotalRowIndices = [], grandTotalRowIndex = null) {
+  const wsData = [headers, ...dataRows]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+  const headerStyle = {
+    font: { name: 'Microsoft YaHei', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+    fill: { fgColor: { rgb: '1E293B' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: {
+      top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+      bottom: { style: 'medium', color: { rgb: '0F172A' } },
+      left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+      right: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    },
+  }
+
+  const cellBorder = {
+    top: { style: 'thin', color: { rgb: 'E2E8F0' } },
+    bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+    left: { style: 'thin', color: { rgb: 'E2E8F0' } },
+    right: { style: 'thin', color: { rgb: 'E2E8F0' } },
+  }
+
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    const isHeader = R === 0
+    const isSubtotal = subtotalRowIndices.includes(R)
+    const isGrandTotal = grandTotalRowIndex === R
+
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
+      if (!ws[cellRef]) ws[cellRef] = { v: '' }
+
+      const val = ws[cellRef].v
+      const align = getExcelCellAlignment(val, isHeader, C === 0)
+
+      if (isHeader) {
+        ws[cellRef].s = headerStyle
+      } else if (isSubtotal) {
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 10, bold: true, color: { rgb: '0369A1' } },
+          fill: { fgColor: { rgb: 'E0F2FE' } },
+          alignment: align,
+          border: {
+            top: { style: 'thin', color: { rgb: 'BAE6FD' } },
+            bottom: { style: 'thin', color: { rgb: '0284C7' } },
+            left: { style: 'thin', color: { rgb: 'BAE6FD' } },
+            right: { style: 'thin', color: { rgb: 'BAE6FD' } },
+          },
+        }
+      } else if (isGrandTotal) {
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 10.5, bold: true, color: { rgb: '0F172A' } },
+          fill: { fgColor: { rgb: 'F1F5F9' } },
+          alignment: align,
+          border: {
+            top: { style: 'medium', color: { rgb: '64748B' } },
+            bottom: { style: 'double', color: { rgb: '0F172A' } },
+            left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            right: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          },
+        }
+      } else {
+        const isNum = typeof val === 'number'
+        ws[cellRef].s = {
+          font: { name: 'Microsoft YaHei', sz: 10, bold: isNum },
+          fill: { fgColor: { rgb: R % 2 === 0 ? 'FFFFFF' : 'F8FAFC' } },
+          alignment: align,
+          border: cellBorder,
+        }
+      }
+    }
+  }
+
+  // 自动计算黄金列宽
+  const colWidths = headers.map((h, i) => {
+    let maxLen = (h || '').length * 2.2
+    dataRows.forEach(row => {
+      const str = String(row[i] || '')
+      if (str.length * 1.6 > maxLen) maxLen = str.length * 1.6
+    })
+    return { wch: Math.max(12, Math.min(45, Math.ceil(maxLen) + 3)) }
+  })
+  ws['!cols'] = colWidths
+
+  return ws
+}
 
 async function exportCurrentTabExcel() {
   exportLoading.value = true
   try {
-    let headers = []
-    let dataRows = []
-    let filename = ''
+    const wb = XLSX.utils.book_new()
+    let defaultFilename = ''
 
-    if (activeTab.value === 'daily_flow') {
+    if (activeTab.value === 'supplier_ledger') {
+      // =======================================================================
+      // 🏭 Tab 3: 供给方发运台账 (单 Sheet: 多维明细台账 含供给方小计与全项目总计)
+      // =======================================================================
+      const isPipe = subMaterialType.value === 'pipe'
+      const activeDims = supplierLedgerDimensions.value
+      const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
+
+      const detailHeaders = isPipe
+        ? [...dimHeaders, '发货量(米)', '确认到货量(米)', '施工接收量(米)', '库管确认量(米)', '发运车次(单)', '平均在途时长', '到货确认率', '接收确认率', '库管确认率']
+        : [...dimHeaders, '发货数量(件)', '确认到货数(件)', '施工接收数(件)', '库管确认数(件)', '发货批次(单)', '平均在途时长', '到货确认率', '接收确认率', '库管确认率']
+
+      // 按供给方分组并插入小计行
+      const detailRows = []
+      const subtotalIndices = []
+      let totalShipped = 0, totalArrived = 0, totalReceived = 0, totalWarehouse = 0, totalOrders = 0
+
+      // 检查当前排序明细
+      const groupedBySupplier = new Map()
+      sortedSupplierLedgerRows.value.forEach(r => {
+        const sup = r.supplier_name || '未知供给方'
+        if (!groupedBySupplier.has(sup)) groupedBySupplier.set(sup, [])
+        groupedBySupplier.get(sup).push(r)
+      })
+
+      groupedBySupplier.forEach((rows, supName) => {
+        let subShipped = 0, subArrived = 0, subReceived = 0, subWarehouse = 0, subOrders = 0
+        let subTransitSumSec = 0, subTransitCount = 0
+
+        rows.forEach(r => {
+          const sQty = Number(r.shipped_qty) || 0
+          const aQty = Number(r.arrived_qty) || 0
+          const rQty = Number(r.received_qty) || 0
+          const wQty = Number(r.warehouse_qty) || 0
+          const oCnt = Number(r.orders_count) || 0
+
+          subShipped += sQty
+          subArrived += aQty
+          subReceived += rQty
+          subWarehouse += wQty
+          subOrders += oCnt
+
+          totalShipped += sQty
+          totalArrived += aQty
+          totalReceived += rQty
+          totalWarehouse += wQty
+          totalOrders += oCnt
+
+          // 累加已到货单据在途秒数
+          const itemsList = r.order_items || [r]
+          itemsList.forEach(item => {
+            if (Number(item.transit_seconds) > 0) {
+              subTransitSumSec += Number(item.transit_seconds)
+              subTransitCount++
+            }
+          })
+
+          const dimVals = activeDims.map(d => {
+            if (d === 'supplier') return r.supplier_name || '—'
+            if (d === 'model') return isPipe ? (r.pipe_model_name || '—') : (`${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—')
+            if (d === 'date') return r.biz_date || '—'
+            if (d === 'section') return r.section_1_name || '—'
+            return '—'
+          })
+
+          detailRows.push([
+            ...dimVals,
+            isPipe ? Number(r.shipped_qty.toFixed(2)) : r.shipped_qty,
+            isPipe ? Number(r.arrived_qty.toFixed(2)) : r.arrived_qty,
+            isPipe ? Number(r.received_qty.toFixed(2)) : r.received_qty,
+            isPipe ? Number(r.warehouse_qty.toFixed(2)) : r.warehouse_qty,
+            r.orders_count,
+            r.avg_transit_display || '—',
+            `${r.fulfillment_rate}%`,
+            `${r.receipt_rate}%`,
+            `${r.warehouse_rate}%`
+          ])
+        })
+
+        // 插入当前供给方的小计行（仅统计已到货单据的平均在途时长）
+        const subAvgTransitSec = subTransitCount > 0 ? Math.round(subTransitSumSec / subTransitCount) : 0
+        const subTransitDisp = subTransitCount > 0 
+          ? (subAvgTransitSec >= 3600 ? `${Math.floor(subAvgTransitSec / 3600)}小时${Math.floor((subAvgTransitSec % 3600) / 60)}分` : `${Math.floor(subAvgTransitSec / 60)}分钟`)
+          : (subOrders > 0 ? '在途中' : '—')
+
+        const subFulfill = subShipped > 0 ? Math.min(100, ((subArrived / subShipped) * 100)).toFixed(1) : '0.0'
+        const subReceipt = subArrived > 0 ? Math.min(100, ((subReceived / subArrived) * 100)).toFixed(1) : '0.0'
+        const subWarehouseRate = subArrived > 0 ? Math.min(100, ((subWarehouse / subArrived) * 100)).toFixed(1) : (subShipped > 0 ? Math.min(100, ((subWarehouse / subShipped) * 100)).toFixed(1) : '0.0')
+        const subDimVals = activeDims.map((d, i) => i === 0 ? `【小计】${supName}` : '—')
+
+        detailRows.push([
+          ...subDimVals,
+          isPipe ? Number(subShipped.toFixed(2)) : subShipped,
+          isPipe ? Number(subArrived.toFixed(2)) : subArrived,
+          isPipe ? Number(subReceived.toFixed(2)) : subReceived,
+          isPipe ? Number(subWarehouse.toFixed(2)) : subWarehouse,
+          subOrders,
+          subTransitDisp,
+          `${subFulfill}%`,
+          `${subReceipt}%`,
+          `${subWarehouseRate}%`
+        ])
+        subtotalIndices.push(detailRows.length)
+      })
+
+      // 插入明细表的最后总计行
+      const overallFulfillment = totalShipped > 0 ? Math.min(100, ((totalArrived / totalShipped) * 100)).toFixed(1) : '0.0'
+      const overallReceipt = totalArrived > 0 ? Math.min(100, ((totalReceived / totalArrived) * 100)).toFixed(1) : '0.0'
+      const overallWarehouse = totalArrived > 0 ? Math.min(100, ((totalWarehouse / totalArrived) * 100)).toFixed(1) : (totalShipped > 0 ? Math.min(100, ((totalWarehouse / totalShipped) * 100)).toFixed(1) : '0.0')
+      const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+      detailRows.push([
+        ...grandDimVals,
+        isPipe ? Number(totalShipped.toFixed(2)) : totalShipped,
+        isPipe ? Number(totalArrived.toFixed(2)) : totalArrived,
+        isPipe ? Number(totalReceived.toFixed(2)) : totalReceived,
+        isPipe ? Number(totalWarehouse.toFixed(2)) : totalWarehouse,
+        totalOrders,
+        supplierLedgerSummary.value.overall_avg_transit || '—',
+        `${overallFulfillment}%`,
+        `${overallReceipt}%`,
+        `${overallWarehouse}%`
+      ])
+
+      const wsDetail = buildStyledWorksheet(detailHeaders, detailRows, subtotalIndices, detailRows.length)
+      XLSX.utils.book_append_sheet(wb, wsDetail, '多维明细台账')
+
+      defaultFilename = isPipe
+        ? `保温管供给方发运综合台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+        : `管件供给方发运综合台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+
+    } else if (activeTab.value === 'daily_flow') {
+      // =======================================================================
+      // 📅 Tab 1: 每日历史流转台账 (分供给方汇总 Sheet + 每日流转透视 Sheet)
+      // =======================================================================
+      const isPipe = subMaterialType.value === 'pipe'
       const activeDims = dailyDimensions.value
       const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
 
-      if (subMaterialType.value === 'pipe') {
-        headers = [...dimHeaders, '计划量(米)', '发货量(米)', '到货量(米)', '施工接收(米)', '现场使用(米)', '损耗量(米)', '库管已确认(米)']
-        if (activeDims.includes('date')) headers.push('在途时长')
+      // 1. 分供给方流转汇总 Sheet
+      const supMap = new Map()
+      if (isPipe) {
+        sortedDailyPipeRows.value.forEach(r => {
+          const sup = r.supplier_name || '未知供货单位'
+          if (!supMap.has(sup)) supMap.set(sup, { sup, plan: 0, shipped: 0, arrived: 0, received: 0, usage: 0, loss: 0, warehouse: 0 })
+          const item = supMap.get(sup)
+          item.plan += Number(r.plan_qty) || 0
+          item.shipped += Number(r.shipped_qty) || 0
+          item.arrived += Number(r.arrived_qty) || 0
+          item.received += Number(r.received_qty) || 0
+          item.usage += Number(r.usage_qty) || 0
+          item.loss += Number(r.loss_qty) || 0
+          item.warehouse += Number(r.warehouse_qty) || 0
+        })
 
-        dataRows = sortedDailyPipeRows.value.map(r => {
-          const dimVals = activeDims.map(d => {
-            if (d === 'date') return r.biz_date || '—'
-            if (d === 'section') return r.section_1_name || '—'
-            if (d === 'model') return r.pipe_model_name || '—'
-            if (d === 'supplier') return r.supplier_name || '—'
-            return '—'
-          })
-          const row = [...dimVals, r.plan_qty, r.shipped_qty, r.arrived_qty, r.received_qty, r.usage_qty, r.loss_qty, r.warehouse_qty]
-          if (activeDims.includes('date')) row.push(r.avg_transit_display || '—')
-          return row
+        const sHeaders = ['供给方', '计划总量(米)', '发货总量(米)', '到货总量(米)', '施工接收(米)', '实际使用(米)', '损耗量(米)', '库管已确认(米)', '到货确认率']
+        const sRows = []
+        let gPlan = 0, gShip = 0, gArr = 0, gRec = 0, gUse = 0, gLoss = 0, gWh = 0
+
+        supMap.forEach(s => {
+          gPlan += s.plan; gShip += s.shipped; gArr += s.arrived; gRec += s.received; gUse += s.usage; gLoss += s.loss; gWh += s.warehouse
+          const rate = s.shipped > 0 ? ((s.arrived / s.shipped) * 100).toFixed(1) : '0.0'
+          sRows.push([s.sup, Number(s.plan.toFixed(2)), Number(s.shipped.toFixed(2)), Number(s.arrived.toFixed(2)), Number(s.received.toFixed(2)), Number(s.usage.toFixed(2)), Number(s.loss.toFixed(2)), Number(s.warehouse.toFixed(2)), `${rate}%`])
         })
-        filename = `保温管每日流转透视台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+        const gRate = gShip > 0 ? ((gArr / gShip) * 100).toFixed(1) : '0.0'
+        sRows.push(['【全项目总计】', Number(gPlan.toFixed(2)), Number(gShip.toFixed(2)), Number(gArr.toFixed(2)), Number(gRec.toFixed(2)), Number(gUse.toFixed(2)), Number(gLoss.toFixed(2)), Number(gWh.toFixed(2)), `${gRate}%`])
+
+        const wsSup = buildStyledWorksheet(sHeaders, sRows, [], sRows.length)
+        XLSX.utils.book_append_sheet(wb, wsSup, '分供给方流转汇总')
       } else {
-        headers = [...dimHeaders, '发货数量(件)', '到货数量(件)', '施工接收(件)', '现场安装(件)', '库管已确认(件)', '现场结余(件)']
-        dataRows = sortedDailyFittingRows.value.map(r => {
-          const dimVals = activeDims.map(d => {
-            if (d === 'date') return r.biz_date || '—'
-            if (d === 'section') return r.section_1_name || '—'
-            if (d === 'model') return `${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—'
-            if (d === 'supplier') return r.supplier_name || '—'
-            return '—'
-          })
-          return [...dimVals, r.shipped_qty, r.arrived_qty, r.received_qty, r.usage_qty, r.warehouse_qty, Math.max(0, r.arrived_qty - r.usage_qty)]
+        sortedDailyFittingRows.value.forEach(r => {
+          const sup = r.supplier_name || '未知供货单位'
+          if (!supMap.has(sup)) supMap.set(sup, { sup, shipped: 0, arrived: 0, received: 0, usage: 0, warehouse: 0 })
+          const item = supMap.get(sup)
+          item.shipped += Number(r.shipped_qty) || 0
+          item.arrived += Number(r.arrived_qty) || 0
+          item.received += Number(r.received_qty) || 0
+          item.usage += Number(r.usage_qty) || 0
+          item.warehouse += Number(r.warehouse_qty) || 0
         })
-        filename = `管件每日流转透视台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+
+        const sHeaders = ['供给方', '发货数量(件)', '到货数量(件)', '施工接收(件)', '现场安装(件)', '库管已确认(件)', '现场结余(件)', '到货确认率']
+        const sRows = []
+        let gShip = 0, gArr = 0, gRec = 0, gUse = 0, gWh = 0
+
+        supMap.forEach(s => {
+          gShip += s.shipped; gArr += s.arrived; gRec += s.received; gUse += s.usage; gWh += s.warehouse
+          const rate = s.shipped > 0 ? ((s.arrived / s.shipped) * 100).toFixed(1) : '0.0'
+          sRows.push([s.sup, s.shipped, s.arrived, s.received, s.usage, s.warehouse, Math.max(0, s.arrived - s.usage), `${rate}%`])
+        })
+        const gRate = gShip > 0 ? ((gArr / gShip) * 100).toFixed(1) : '0.0'
+        sRows.push(['【全项目总计】', gShip, gArr, gRec, gUse, gWh, Math.max(0, gArr - gUse), `${gRate}%`])
+
+        const wsSup = buildStyledWorksheet(sHeaders, sRows, [], sRows.length)
+        XLSX.utils.book_append_sheet(wb, wsSup, '分供给方流转汇总')
       }
+
+      // 2. 流转明细台账 Sheet
+      const dHeaders = isPipe
+        ? [...dimHeaders, '计划量(米)', '发货量(米)', '到货量(米)', '施工接收(米)', '现场使用(米)', '损耗量(米)', '库管已确认(米)']
+        : [...dimHeaders, '发货数量(件)', '到货数量(件)', '施工接收(件)', '现场安装(件)', '库管已确认(件)', '现场结余(件)']
+
+      const dRows = (isPipe ? sortedDailyPipeRows.value : sortedDailyFittingRows.value).map(r => {
+        const dimVals = activeDims.map(d => {
+          if (d === 'date') return r.biz_date || '—'
+          if (d === 'section') return r.section_1_name || '—'
+          if (d === 'model') return isPipe ? (r.pipe_model_name || '—') : (`${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—')
+          if (d === 'supplier') return r.supplier_name || '—'
+          return '—'
+        })
+        return isPipe
+          ? [...dimVals, Number((Number(r.plan_qty) || 0).toFixed(2)), Number((Number(r.shipped_qty) || 0).toFixed(2)), Number((Number(r.arrived_qty) || 0).toFixed(2)), Number((Number(r.received_qty) || 0).toFixed(2)), Number((Number(r.usage_qty) || 0).toFixed(2)), Number((Number(r.loss_qty) || 0).toFixed(2)), Number((Number(r.warehouse_qty) || 0).toFixed(2))]
+          : [...dimVals, Number(r.shipped_qty) || 0, Number(r.arrived_qty) || 0, Number(r.received_qty) || 0, Number(r.usage_qty) || 0, Number(r.warehouse_qty) || 0, Math.max(0, (Number(r.arrived_qty) || 0) - (Number(r.usage_qty) || 0))]
+      })
+
+      // 补上明细表末尾【全项目总计】行
+      const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+      if (isPipe) {
+        const sum = dailyPipeSummary.value
+        dRows.push([
+          ...grandDimVals,
+          Number((Number(sum.total_plan_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_shipped_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_arrived_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_received_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_usage_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_loss_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_warehouse_qty) || 0).toFixed(2))
+        ])
+      } else {
+        const sum = dailyFittingSummary.value
+        dRows.push([
+          ...grandDimVals,
+          Number(sum.total_shipped_qty) || 0,
+          Number(sum.total_arrived_qty) || 0,
+          Number(sum.total_received_qty) || 0,
+          Number(sum.total_usage_qty) || 0,
+          Number(sum.total_warehouse_qty) || 0,
+          Number(sum.site_stock_pcs) || 0
+        ])
+      }
+
+      const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
+      XLSX.utils.book_append_sheet(wb, wsDetail, '流转透视明细')
+
+      defaultFilename = isPipe
+        ? `保温管每日历史流转综合台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+        : `管件每日历史流转综合台账_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+
     } else if (activeTab.value === 'baseline_progress') {
+      // =======================================================================
+      // 📐 Tab 2: 设计基准进度 (分供给方基准汇总 Sheet + 明细表 Sheet)
+      // =======================================================================
+      const isPipe = subMaterialType.value === 'pipe'
       const activeDims = baselineDimensions.value
       const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
 
-      if (subMaterialType.value === 'pipe') {
-        headers = [...dimHeaders, '设计量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
-        dataRows = sortedBaselinePipeRows.value.map(r => {
+      if (isPipe) {
+        // 1. 分供给方基准汇总
+        const supMap = new Map()
+        sortedBaselinePipeRows.value.forEach(r => {
+          const sup = r.supplier_name || '未知供货单位'
+          if (!supMap.has(sup)) supMap.set(sup, { sup, design: 0, plan: 0, ship: 0, arr: 0, use: 0, stock: 0 })
+          const item = supMap.get(sup)
+          item.design += Number(r.design_qty) || 0
+          item.plan += Number(r.purchase_plan_qty) || 0
+          item.ship += Number(r.total_shipped_qty) || 0
+          item.arr += Number(r.total_arrived_qty) || 0
+          item.use += Number(r.total_usage_qty) || 0
+          item.stock += Number(r.stock_qty) || 0
+        })
+
+        const sHeaders = ['供给方', '设计总量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
+        const sRows = []
+        let gDes = 0, gPlan = 0, gShip = 0, gArr = 0, gUse = 0, gStock = 0
+
+        supMap.forEach(s => {
+          gDes += s.design; gPlan += s.plan; gShip += s.ship; gArr += s.arr; gUse += s.use; gStock += s.stock
+          const pRate = s.plan > 0 ? ((s.arr / s.plan) * 100).toFixed(1) : '0.0'
+          const iRate = s.design > 0 ? ((s.use / s.design) * 100).toFixed(1) : '0.0'
+          sRows.push([s.sup, Number(s.design.toFixed(2)), Number(s.plan.toFixed(2)), Number(s.ship.toFixed(2)), Number(s.arr.toFixed(2)), Number(s.use.toFixed(2)), Number(s.stock.toFixed(2)), `${pRate}%`, `${iRate}%`])
+        })
+        const gpRate = gPlan > 0 ? ((gArr / gPlan) * 100).toFixed(1) : '0.0'
+        const giRate = gDes > 0 ? ((gUse / gDes) * 100).toFixed(1) : '0.0'
+        sRows.push(['【全项目总计】', Number(gDes.toFixed(2)), Number(gPlan.toFixed(2)), Number(gShip.toFixed(2)), Number(gArr.toFixed(2)), Number(gUse.toFixed(2)), Number(gStock.toFixed(2)), `${gpRate}%`, `${giRate}%`])
+
+        const wsSup = buildStyledWorksheet(sHeaders, sRows, [], sRows.length)
+        XLSX.utils.book_append_sheet(wb, wsSup, '分供给方基准汇总')
+
+        // 2. 明细 Sheet
+        const dHeaders = [...dimHeaders, '设计量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
+        const dRows = sortedBaselinePipeRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'section') return r.section_1_name || '—'
             if (d === 'model') return r.pipe_model_name || '—'
             if (d === 'supplier') return r.supplier_name || '—'
             return '—'
           })
-          return [...dimVals, r.design_qty, r.purchase_plan_qty, r.total_shipped_qty, r.total_arrived_qty, r.total_usage_qty, r.stock_qty, `${r.purchase_rate}%`, `${r.install_rate}%`]
+          return [...dimVals, Number((Number(r.design_qty) || 0).toFixed(2)), Number((Number(r.purchase_plan_qty) || 0).toFixed(2)), Number((Number(r.total_shipped_qty) || 0).toFixed(2)), Number((Number(r.total_arrived_qty) || 0).toFixed(2)), Number((Number(r.total_usage_qty) || 0).toFixed(2)), Number((Number(r.stock_qty) || 0).toFixed(2)), `${r.purchase_rate}%`, `${r.install_rate}%`]
         })
-        filename = '保温管设计采购基准进度透视表.xlsx'
+
+        // 补上基准进度明细表末尾【全项目总计】行
+        const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+        const sum = baselinePipeSummary.value
+        dRows.push([
+          ...grandDimVals,
+          Number((Number(sum.total_design_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_purchase_plan_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_shipped_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_arrived_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_usage_qty) || 0).toFixed(2)),
+          Number((Number(sum.total_stock_qty) || 0).toFixed(2)),
+          `${sum.overall_purchase_rate}%`,
+          `${sum.overall_install_rate}%`
+        ])
+
+        const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
+        XLSX.utils.book_append_sheet(wb, wsDetail, '基准进度明细')
+        defaultFilename = '保温管设计采购基准进度综合报表.xlsx'
+
       } else if (fittingTab2SubView.value === 'baseline') {
-        headers = [...dimHeaders, '单位', '设计使用量', '计划采购量']
-        dataRows = sortedFittingBaselineRows.value.map(r => {
+        // 管件基准表
+        const dHeaders = [...dimHeaders, '单位', '设计使用量', '计划采购量']
+        const dRows = sortedFittingBaselineRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'section') return r.section_1_name || '—'
             if (d === 'model') return `${r.fitting_type || r.standard_name || r.category || ''} ${r.model_spec || ''}`.trim() || '—'
-            if (d === 'supplier') return '（设计基准）'
+            if (d === 'supplier') return r.supplier_name || '—'
             return '—'
           })
-          return [...dimVals, r.unit || '个', r.design_qty, r.purchase_plan_qty]
+          return [...dimVals, r.unit || '个', Number(r.design_qty) || 0, Number(r.purchase_plan_qty) || 0]
         })
-        filename = '管件设计与计划采购基准表.xlsx'
+
+        // 补上管件设计与采购基准表末尾【全项目总计】行
+        const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+        const sum = baselineFittingSummary.value
+        dRows.push([
+          ...grandDimVals,
+          '件',
+          Number(sum.total_design_qty) || 0,
+          Number(sum.total_purchase_plan_qty) || 0
+        ])
+
+        const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
+        XLSX.utils.book_append_sheet(wb, wsDetail, '管件设计与采购基准')
+        defaultFilename = '管件设计与计划采购基准表.xlsx'
       } else {
-        headers = [...dimHeaders, '单位', '累计发货量', '累计到货量', '现场安装量', '现场库存余量']
-        dataRows = sortedFittingFlowRows.value.map(r => {
+        // 管件全周期流转
+        const dHeaders = [...dimHeaders, '单位', '累计发货量', '累计到货量', '现场安装量', '现场库存余量']
+        const dRows = sortedFittingFlowRows.value.map(r => {
           const dimVals = activeDims.map(d => {
             if (d === 'section') return r.section_1_name || '—'
             if (d === 'model') return `${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—'
             if (d === 'supplier') return r.supplier_name || '—'
             return '—'
           })
-          return [...dimVals, '件', r.total_shipped_qty, r.total_arrived_qty, r.total_usage_qty, r.stock_qty]
+          return [...dimVals, '件', Number(r.total_shipped_qty) || 0, Number(r.total_arrived_qty) || 0, Number(r.total_usage_qty) || 0, Number(r.stock_qty) || 0]
         })
-        filename = '管件全周期累计流转与现场库存表.xlsx'
+
+        // 补上管件全周期流转与库存表末尾【全项目总计】行
+        const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+        const sum = baselineFittingSummary.value
+        dRows.push([
+          ...grandDimVals,
+          '件',
+          Number(sum.total_shipped_qty) || 0,
+          Number(sum.total_arrived_qty) || 0,
+          Number(sum.total_usage_qty) || 0,
+          Number(sum.total_stock_qty) || 0
+        ])
+
+        const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
+        XLSX.utils.book_append_sheet(wb, wsDetail, '管件全周期流转库存')
+        defaultFilename = '管件全周期累计流转与现场库存表.xlsx'
       }
+
     } else if (activeTab.value === 'directory') {
+      // =======================================================================
+      // 🏢 Tab 4: 责任主体与人员矩阵
+      // =======================================================================
       if (directoryViewMode.value === 'by_section') {
-        // 按标段穿透导出
-        headers = ['标段ID', '标段名称', '责任角色', '主体/单位/人名', '职务/职责', '联系电话']
-        dataRows = []
+        const headers = ['标段ID', '标段名称', '责任角色', '主体/单位/人名', '职务/职责', '联系电话']
+        const dataRows = []
         sectionEntityMatrix.value.forEach(sec => {
           sec.suppliers.forEach(s => dataRows.push([sec.section_1_id, sec.section_1_name, '供货厂家', s.entity_name, `联系人: ${s.contact_name}`, s.contact_phone]))
           sec.site_managers.forEach(m => dataRows.push([sec.section_1_id, sec.section_1_name, '现场负责人', m.person_name, '标段主管', m.contact_phone]))
           sec.construction_units.forEach(c => dataRows.push([sec.section_1_id, sec.section_1_name, '施工单位', c.construction_unit_name, `项目经理: ${c.contact_name}`, c.contact_phone]))
           sec.warehouse_keepers.forEach(w => dataRows.push([sec.section_1_id, sec.section_1_name, '物资库管', w.person_name, '现场库管员', w.contact_phone]))
         })
-        // 追加全局角色
         globalPersonnel.value.managers.forEach(gm => dataRows.push(['GLOBAL', '全网统筹', '集团总调度', gm.person_name, '现场总协调', gm.contact_phone]))
         globalPersonnel.value.suppliers.forEach(gs => dataRows.push(['GLOBAL', '全网统筹', '供给侧全局管理', gs.contact_name, `主体: ${gs.entity_name}`, gs.contact_phone]))
         globalPersonnel.value.keepers.forEach(gw => dataRows.push(['GLOBAL', '全网统筹', '物资总库管', gw.person_name, '总库管理', gw.contact_phone]))
         globalPersonnel.value.members.forEach(mem => dataRows.push(['GLOBAL', '全网统筹', '系统指挥观察', mem.username, mem.role_name, '集团专线']))
-        filename = '项目各标段责任主体与人员综合矩阵表.xlsx'
+
+        const ws = buildStyledWorksheet(headers, dataRows)
+        XLSX.utils.book_append_sheet(wb, ws, '标段责任主体矩阵')
+        defaultFilename = '项目各标段责任主体与人员综合矩阵表.xlsx'
       } else {
-        headers = ['主体分类', '主体/标段/姓名', '负责人/职务', '联系电话', '管辖/供货范围', '归属单位/账号']
-        // 收集 5 大组数据 (按供货厂家、现场负责人、施工单位、物资库管、系统管理排序)
-        dataRows = [
+        const headers = ['主体分类', '主体/标段/姓名', '负责人/职务', '联系电话', '管辖/供货范围', '归属单位/账号']
+        const dataRows = [
           ...filteredSuppliers.value.map(s => ['供货厂家', s.entity_name, s.contact_name, s.contact_phone, (s.managed_sections && s.managed_sections.length > 0) ? s.managed_sections.join('、') : '暂未分配供应标段', `调度账号: ${s.accounts.join(', ')}`]),
           ...filteredSiteManagers.value.map(m => ['现场负责人', `${m.person_name} (负责人)`, m.contact_name, m.contact_phone, m.scope_desc, m.is_global ? '集团总指挥协调' : `管辖: ${m.scope_desc}`]),
           ...filteredDemandSections.value.map(d => ['施工单位', d.section_1_name, d.contact_name, d.contact_phone, d.section_1_name, `施工单位: ${d.construction_unit_name}`]),
           ...filteredWarehouseKeepers.value.map(w => ['物资库管', `${w.person_name} (库管)`, w.person_name, w.contact_phone, w.scope_desc, `系统账号: ${w.username}`]),
           ...filteredGlobalMembers.value.map(g => ['系统管理', g.username, g.contact_name, '集团专线', '全网全局透视', g.scope_desc]),
         ]
-        filename = '项目责任主体与人员管辖矩阵表.xlsx'
+        const ws = buildStyledWorksheet(headers, dataRows)
+        XLSX.utils.book_append_sheet(wb, ws, '主体类别速查表')
+        defaultFilename = '项目责任主体与人员管辖矩阵表.xlsx'
       }
     }
 
-    const wsData = [headers, ...dataRows]
-    const ws = XLSX.utils.aoa_to_sheet(wsData)
-
-    // 样式美化
-    const headerStyle = {
-      font: { name: 'Microsoft YaHei', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { fgColor: { rgb: '334155' } },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      border: {
-        top: { style: 'thin', color: { rgb: 'CBD5E1' } },
-        bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
-        left: { style: 'thin', color: { rgb: 'CBD5E1' } },
-        right: { style: 'thin', color: { rgb: 'CBD5E1' } },
-      },
-    }
-
-    const cellBorder = {
-      top: { style: 'thin', color: { rgb: 'CBD5E1' } },
-      bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
-      left: { style: 'thin', color: { rgb: 'CBD5E1' } },
-      right: { style: 'thin', color: { rgb: 'CBD5E1' } },
-    }
-
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
-    for (let R = range.s.r; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
-        if (!ws[cellRef]) ws[cellRef] = { v: '' }
-        
-        if (R === 0) {
-          ws[cellRef].s = headerStyle
-        } else {
-          const val = ws[cellRef].v
-          const isNum = typeof val === 'number'
-          ws[cellRef].s = {
-            font: { name: 'Microsoft YaHei', sz: 10, bold: isNum },
-            fill: { fgColor: { rgb: R % 2 === 0 ? 'FFFFFF' : 'F8FAFC' } },
-            alignment: { horizontal: isNum ? 'right' : 'left', vertical: 'center' },
-            border: cellBorder,
-          }
-        }
-      }
-    }
-
-    // 设置列宽
-    const colWidths = headers.map((h, i) => {
-      let maxLen = h.length * 2.2
-      dataRows.forEach(row => {
-        const str = String(row[i] || '')
-        if (str.length * 1.6 > maxLen) maxLen = str.length * 1.6
-      })
-      return { wch: Math.max(12, Math.min(40, Math.ceil(maxLen) + 2)) }
-    })
-    ws['!cols'] = colWidths
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '综合台账')
-    XLSX.writeFile(wb, filename)
+    XLSX.writeFile(wb, defaultFilename)
   } catch (err) {
     console.error('导出 Excel 失败:', err)
     alert('导出 Excel 发生错误，请稍后重试。')
   } finally {
     exportLoading.value = false
   }
+}
+
+// -----------------------------------------------------------------------------
+// 📥 导出当前弹窗中的穿透发运单明细
+// -----------------------------------------------------------------------------
+
+function exportCurrentOrderItemsExcel() {
+  if (!selectedSupplierOrderRow.value || !selectedSupplierOrderRow.value.order_items) return
+  const isPipe = subMaterialType.value === 'pipe'
+  const row = selectedSupplierOrderRow.value
+  const items = row.order_items
+
+  const headers = ['运单号/批次', '需求标段', '物料大类', '规格型号', '发货日期', '车牌号', '司机姓名', '联系电话', `发货量(${isPipe ? '米' : '件'})`, `确认到货量(${isPipe ? '米' : '件'})`, `施工接收量(${isPipe ? '米' : '件'})`, `库管确认量(${isPipe ? '米' : '件'})`, '在途时长', '运单状态']
+
+  let sumShip = 0, sumArr = 0, sumRec = 0, sumWh = 0
+
+  const dataRows = items.map(o => {
+    sumShip += Number(o.shipped_qty) || 0
+    sumArr += Number(o.arrived_qty) || 0
+    sumRec += Number(o.received_qty) || 0
+    sumWh += Number(o.warehouse_qty) || 0
+
+    const statusText = o.status === 'completed' ? '已入库' : o.status === 'received' ? '已接收' : o.status === 'arrived' ? '已到货' : '在途中'
+    return [
+      o.batch_no || '—',
+      o.section_1_name || '—',
+      isPipe ? '保温管直管' : (o.fitting_type || '预制管件'),
+      isPipe ? (o.pipe_model_name || '—') : (o.model_spec || '—'),
+      o.biz_date || '—',
+      o.vehicle_no || '—',
+      o.driver_name || '—',
+      o.driver_phone || '—',
+      isPipe ? Number((Number(o.shipped_qty) || 0).toFixed(2)) : (Number(o.shipped_qty) || 0),
+      isPipe ? Number((Number(o.arrived_qty) || 0).toFixed(2)) : (Number(o.arrived_qty) || 0),
+      isPipe ? Number((Number(o.received_qty) || 0).toFixed(2)) : (Number(o.received_qty) || 0),
+      isPipe ? Number((Number(o.warehouse_qty) || 0).toFixed(2)) : (Number(o.warehouse_qty) || 0),
+      o.transit_display || '—',
+      statusText
+    ]
+  })
+
+  // 本组汇总行
+  dataRows.push([
+    '【本组穿透汇总】',
+    `共 ${items.length} 笔订单`,
+    '—',
+    '—',
+    '—',
+    '—',
+    '—',
+    '—',
+    isPipe ? Number(sumShip.toFixed(2)) : sumShip,
+    isPipe ? Number(sumArr.toFixed(2)) : sumArr,
+    isPipe ? Number(sumRec.toFixed(2)) : sumRec,
+    isPipe ? Number(sumWh.toFixed(2)) : sumWh,
+    row.avg_transit_display || '—',
+    '—'
+  ])
+
+  const ws = buildStyledWorksheet(headers, dataRows, [], dataRows.length)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '发运单穿透明细')
+
+  const filename = `${row.supplier_name || '供给方'}_发运订单明细_${filterStartDate.value}_${filterEndDate.value}.xlsx`
+  XLSX.writeFile(wb, filename)
 }
 </script>
 
@@ -5883,5 +7149,150 @@ async function exportCurrentTabExcel() {
   color: #94a3b8;
   font-size: 14px;
   font-weight: 500;
+}
+
+/* ========================================================================== */
+/* 🏭 Tab 3: 供给方发货流转台账专属视觉微调 */
+/* ========================================================================== */
+.btn-order-drill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-order-drill:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.3);
+}
+
+/* 弹窗内部小 KPI 概览条 */
+.modal-summary-banner {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-sum-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #ffffff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.modal-sum-item .sum-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.modal-sum-item .sum-val {
+  font-size: 15px;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.modal-sum-item .sum-val small {
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.modal-data-table {
+  font-size: 12.5px;
+}
+
+.modal-data-table th {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.modal-data-table td {
+  padding: 7px 10px;
+}
+
+/* 运单状态徽章 */
+.badge-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-shipped {
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.status-arrived {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.status-received {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
+.status-completed {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.modal-xl {
+  max-width: 1100px;
+  width: 95vw;
+}
+
+.modal-header-title-wrap {
+  flex: 1;
+}
+
+.btn-modal-close-icon {
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  opacity: 0.85;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.btn-modal-close-icon:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-table-container {
+  max-height: 52vh;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
 }
 </style>

@@ -1,3 +1,133 @@
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）台账 Excel 导出单工作表与列对齐统一优化
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+- **业务逻辑与展示优化**：
+  1. 供给方发运台账导出精简为单一工作表【多维明细台账】，去除冗余多 Sheet。
+  2. 统一样式引擎对齐逻辑：文本列靠左、数值与比率靠右、时间状态居中。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）Excel 导出明细表补齐【全项目总计】行
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+- **业务逻辑与展示优化**：
+  1. 导出的 Excel 各明细 Sheet（每日流转明细、基准进度明细、管件库存流转明细）末尾均对齐补齐【全项目总计】合计行。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）台账看板卡片精简
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+- **业务逻辑与展示优化**：
+  1. 供给方发运台账顶部看板精简为 6 张核心流转卡片，聚焦发货、到货、接收、入库总量及车次/在途时长。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）台账排序对齐：供给方下规格型号降序展示
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+- **业务逻辑与算法升级**：
+  1. 前后端排序口径对齐：以供给方聚合为主维度，二级维度规格型号按口径数值降序（DN1400 ➔ DN80）统一呈现。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）统一三大确认率：到货履约率更名为“到货确认率”
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+- **业务逻辑与算法升级**：
+  1. **构建三位一体对称确认率指标体系**：
+     - **① 到货确认率**（原“到货履约率/履约到货率”）
+     - **② 接收确认率**（原“签收确认率”）
+     - **③ 库管确认率**（原“入库转化率”）
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）规范“接收确认率”命名与在途时长汇总算法优化
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 核心接口：
+    - `GET /api/v1/projects/{project_key}/comprehensive-history/daily-flow`
+    - `GET /api/v1/projects/{project_key}/comprehensive-history/supplier-ledger`
+- **业务逻辑与算法升级**：
+  1. **在途时长展示与汇总算法优化**：
+     - 未到货单据（`transit_seconds == 0` 且未确认到货）明确展示为 `'在途中'`；
+     - 总体 `summary` 仅对已到货（`transit_seconds > 0`）单据计算平均在途时长，在存在在途单据时绝不退化显示为横杠 `-`；
+  2. **“接收确认率”全链路统一**：
+     - 将原“签收确认率”统一重命名为“接收确认率”，对齐现场“施工接收”环节口径。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）库管确认率指标升级与默认起始时段 2026-07-28 调整
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 核心接口：
+    - `GET /api/v1/projects/{project_key}/comprehensive-history/daily-flow`
+    - `GET /api/v1/projects/{project_key}/comprehensive-history/supplier-ledger`
+- **业务逻辑与算法升级**：
+  1. **查询时段默认起始日期调整**：
+     - 未传 `start_date` 时，默认起始日期统一从 30 天前改为项目启动首日 **`2026-07-28`**（`date(2026, 7, 28)`），默认检索项目启动至今的全量单据；
+  2. **“库管确认率”指标全链路支持**：
+     - 在直管（米）与管件（件）发运记录明细及总体 `summary` 中，统一计算并返回：
+       - `warehouse_rate`: `min(100.0, warehouse_qty / arrived_qty * 100)`
+       - `overall_warehouse_rate`: `min(100.0, total_warehouse_qty / total_arrived_qty * 100)`
+     - 管件与直管口径保持严格一致，单纯依据物理件数/米数进行核算。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）新增供给方发货流转台账接口交付
+
+- **服务模块与接口定义**：
+  - 关联模块：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 路由定义：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 核心接口：
+    - `GET /api/v1/projects/{project_key}/comprehensive-history/supplier-ledger`（供给方视角真实发运台账数据）
+- **发运流转指标与算法设计**：
+  1. **直管发运台账聚合（`_query_pipe_supplier_ledger`）**：
+     - 数据源直连 `tube.tube_delivery` 发货单据表；
+     - 提取发运单号（`batch_no`）、车牌号（`vehicle_no`）、司机姓名/电话（`driver_name` / `driver_phone`）、发货量（`shipped_qty`）、现场到货量（`arrived_qty`）、施工签收量（`received_qty`）、库管入库量（`warehouse_qty`）、在途时长秒数及格式化展示（`transit_display`）与运单状态（`status`）；
+  2. **管件发运台账聚合（`_query_fitting_supplier_ledger`）**：
+     - 数据源直连 `tube.tube_fitting_delivery` 管件发货单据表；
+     - 提取单据号、车牌号、司机姓名/电话、管件类型（`fitting_type`）、型号规格（`model_spec`）、发货量、到货量、施工签收量及库管入库量；
+  3. **供给方名称动态绑定**：
+     - 依据真实发运记录中的 `supply_entity_id` 动态匹配厂家名称，彻底解耦需求方标段视角。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）供给方全面升级为纯数据驱动动态发现交付
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+- **数据驱动架构重构**：
+  1. **直管供给方动态发现（`_get_pipe_section_dynamic_suppliers`）**：
+     - 从 `tube.tube_delivery` 发货表中动态统计各标段实际发货单位，未发货标段按配置兜底，彻底删除 SQL 中所有 `CASE WHEN high%` 硬编码规则；
+  2. **管件供给方动态解析（`_get_fitting_dynamic_supplier_map`）**：
+     - 从 `tube.tube_fitting_delivery` 发货表中动态提取 `(section_1_id, fitting_type)` 实际发运主体，彻底删除基于品类字眼（“阀”、“补偿”）的人工推断；
+  3. **主体速查动态扫描**：
+     - `query_entity_directory` 自动融合数据库中出现过的所有实际发货主体与管辖标段，全面动态自适应。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）管件基准供给方推断修正交付
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+- **供给方推断算法修正**：
+  1. **管件设计基准归属按温区与品类精准对称**：
+     - 在 `_get_fitting_baseline_supplier` 中，修正非阀门非补偿器的预制管件（弯头、三通、异径管等）推断逻辑；
+     - 高温水标段（`high_lot_*`）预制管件基准量归属**大连开元**（`kaiyuan`，大连开元热力管道股份有限公司）；
+     - 低温水标段预制管件基准量归属**河北鑫瑞得**（`xinruide`，河北鑫瑞得管道设备有限公司）；
+     - 与直管供货商及实际发运台账数据保持高度一致。
+
+## 2026-08-28 综合历史数据服务（comprehensive_history_service.py）全链路支持供给方（supplier）精准映射与输出交付
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`
+  - 核心接口：
+    - `GET /api/v1/projects/{project_key}/comprehensive-history/daily-flow`（每日全流程流转台账）
+    - `GET /api/v1/projects/{project_key}/comprehensive-history/baseline-progress`（设计采购与基准量进度对照）
+- **数据源与供给侧实体映射增强**：
+  1. **多源供给侧实体精准映射工具**：
+     - 新增 `_get_pipe_section_supplier_map(session, cfg)`：将保温管直管供货标段精确绑定至直管供给方（如大连开元、天津天地龙）；
+     - 新增 `_get_fitting_baseline_supplier(sec_id, category, standard_name, cfg)`：按管件大类推断管件基准量所属的管件供给方（如天津卡尔斯、江苏沃圣、河北泽悦、河北鑫瑞得）；
+  2. **台账与基准明细注入**：
+     - 在 `_query_pipe_daily_flow`、`_query_pipe_baseline_progress`、`_query_fitting_daily_flow`、`_query_fitting_baseline_progress` 每一个明细项中注入 `supplier_id` 与 `supplier_name` 字段，使流转数据原生具备“供给方 ➔ 规格型号（跨标段汇总）”、“供给方 ➔ 需求标段 ➔ 规格型号”的任意透视分组能力。
+
 ## 2026-08-28 供暖大屏后端（workspace.py）支持周战报轮播周期（weekly_rotation_interval_sec）持久化交付
 
 - **服务模块与接口定义**：

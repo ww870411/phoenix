@@ -1,3 +1,292 @@
+## 2026-08-28 [综合查询中心供给方发运台账 Excel 导出精简为单 Sheet【多维明细台账】并统一优化列对齐]
+- **需求与优化背景**：
+  - 用户指令：“*关于“供给方发货流转台账”导出的表格，目前有两个子工作表，即“分供给方汇总统计”和“多维明细台账(含小计)”，我想仅保留后者，并且名称改为“多维明细台账”，其中各列的数据，对齐方式统一优化一下*”；
+- **改动与实现详情**：
+  1. **Tab 3 Excel 导出精简为单一工作表**：
+     - 去除原 Sheet 1（分供给方汇总统计），仅保留明细与小计工作表，并将工作表标签正式命名为 **“多维明细台账”**；
+     - 表格完整保留多维维度、各供给方明细行、动态在途计算的【小计】行及末尾【全项目总计】行；
+  2. **全面升级单元格对齐引擎（`getExcelCellAlignment`）**：
+     - **文本列**（供给方名称、规格型号、需求标段）：**靠左对齐**（`left`），方便长文本与品类阅读；
+     - **小计与总计标题**（`【小计】高新`、`【全项目总计】`）：**靠左对齐**（`left`）；
+     - **物理数值列**（发货量、到货量、接收量、入库量、车次数）：**靠右对齐**（`right`）；
+     - **百分比率列**（到货确认率、接收确认率、库管确认率）：**靠右对齐**（`right`），确保数值与 `%` 符号上下笔直对齐；
+     - **日期列**（如 `2026-08-28`）、**在途时长**（如 `22小时45分`、`在途中`）、**状态/单位/占位符**（`米`、`件`、`—`）：**居中对齐**（`center`）；
+     - **表头行**：统一居中加粗。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零警告零报错。
+
+## 2026-08-28 [综合查询中心 Tab 1 与 Tab 2 Excel 导出明细表补齐末尾【全项目总计】合计行]
+- **需求与优化背景**：
+  - 用户指令：“*对于标签页“📅 每日历史综合流转台账”“📐 设计采购与基准量进度”，下方显示了一个合计，但导出的表中没有，请补上*”；
+- **改动与实现详情**：
+  1. **Tab 1（每日历史综合流转台账）Excel 明细表补齐总计**：
+     - 保温管流转明细表末尾追加【全项目总计】行，完整汇总计划总量、发货总量、到货总量、施工接收、实际使用、损耗量及库管确认总量；
+     - 管件流转明细表末尾追加【全项目总计】行，完整汇总发货、到货、施工接收、现场安装、库管确认及现场结余总量；
+  2. **Tab 2（设计采购与基准量进度）Excel 明细表补齐总计**：
+     - 保温管基准进度明细表末尾追加【全项目总计】行，完整汇总设计量、计划采购量、发货量、到货量、使用量、库存量，并精确计算综合采购完成率与施工进度率；
+     - 管件设计采购基准表与全周期流转库存表末尾均追加【全项目总计】行；
+  3. **专业格式与高亮样式对齐**：
+     - 总计行统一采用首列 `【全项目总计】` 标识，并应用加粗、顶部分隔粗线及底部双划线的专业汇总样式（`isGrandTotal`）。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零警告零报错。
+
+## 2026-08-28 [综合查询中心供给方发运台账顶部看板精简化：移除接收确认率与库管确认率卡片]
+- **需求与优化背景**：
+  - 用户指令：“*供给方发运台账明细与多维透视 表 上方的卡片，不必那么多，删掉“接收确认率”“库管确认率”。*”；
+- **改动与实现详情**：
+  1. **Tab 3 顶部 KPI 开会速读看板精简与聚焦**：
+     - 从保温管（直管）与管件的顶部 KPI 卡片网格中彻底移除 **“📈 接收确认率”** 与 **“📊 库管确认率”** 2 张多余卡片；
+     - 顶部保留 6 张核心流转与车次指标卡片：
+       1. 🏭 供给侧累计发货（累计发货管件）
+       2. 📥 现场确认总到货（确认到货总数）
+       3. 👷 施工接收总量（施工接收总数）
+       4. 💼 库管已入库总量（库管已入库）
+       5. 🚚 发运订单车次（发货批次订单）
+       6. ⏱️ 平均在途时长
+     - 表格内及 Excel 导出的比率列（到货确认率、接收确认率、库管确认率）保持完整不受影响。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零警告零报错。
+
+## 2026-08-28 [综合查询中心默认显示次序优化：供给方聚合优先，每个供给方下规格型号默认降序排列]
+- **需求与优化背景**：
+  - 用户指令：“*关于默认的显示次序，我想，首先是区分供给方，这个没问题，在每个供给方下，规格型号应该降序排列*”；
+- **改动与实现详情**：
+  1. **规格型号数值智能比较器（`compareModelSpecs`）**：
+     - 构建智能数字提取与多段数值对比算法，支持直管（如 `DN1400/1600`、`DN300/450`）与管件（如 `DN1200 90°弯头`、`DN300 45°弯头`）从大口径到小口径降序排列；
+     - 排序效果：`DN1400 > DN1200 > DN1000 > DN800 > DN700 > DN600 > DN500 > DN400 > DN350 > DN300 > DN250 > DN200 > DN150 > DN125 > DN100 > DN80`；
+  2. **多维透视聚合与表格默认排序全面对接**：
+     - **Tab 3 供给方发运台账**（`aggregatedSupplierLedgerRows`）：在第一维度供给方升序聚合的前提下，第二维度规格型号默认按大口径到小口径降序排列；
+     - **Tab 1 每日历史流转台账**（`aggregatedDailyRows`）：多维逐级排序中规格型号维度默认采用数值降序比较；
+     - **Tab 2 设计采购基准进度**（`aggregatedBaselineRows` / `aggregatedFittingBaselineRows` / `aggregatedFittingFlowRows`）：各视图规格型号维度统一按数值降序排列；
+     - **表格点击列头排序**（`sortRows`）：当用户点击“规格型号”列头时，升序/降序均调用 `compareModelSpecs` 进行智能数值排序；
+     - **Excel 导出 Sheet 2**：各供给方内明细行同步呈现规格型号降序排列。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零警告零报错。
+
+## 2026-08-28 [综合查询中心三大闭环指标命名规范化：到货履约率正式更名为“到货确认率”]
+- **需求与优化背景**：
+  - 用户指令：“*嗯，到货履约率 改为“到货确认率”吧*”；
+- **改动与实现详情**：
+  1. **构建三位一体对称确认率指标体系**：
+     - **① 到货确认率**（原“到货履约率/履约到货率”，`fulfillment_rate`）：$\min\left(100\%, \frac{\text{现场确认到货量}}{\text{供给侧发货总量}} \times 100\%\right)$；
+     - **② 接收确认率**（原“签收确认率”，`receipt_rate`）：$\min\left(100\%, \frac{\text{施工接收总量}}{\text{现场确认总到货}} \times 100\%\right)$；
+     - **③ 库管确认率**（原“入库转化率”，`warehouse_rate`）：$\min\left(100\%, \frac{\text{库管已入库数量}}{\text{现场确认总到货}} \times 100\%\right)$；
+  2. **前端界面与导出引擎全面替换**：
+     - Tab 3 供给方发运台账数据表格列头正式更名为 **“到货确认率”**；
+     - Excel 导出引擎（Tab 3 供给方台账的 Sheet 1【分供给方汇总统计】、Sheet 2【多维明细台账(含小计)】以及 Tab 1 每日流转台账的 Sheet 1【分供给方流转汇总】）中的表头全面统一为 **“到货确认率”**。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零警告零报错。
+
+## 2026-08-28 [综合查询中心 Excel 导出补齐接收确认率、术语规范为“接收确认率”与在途时长汇总算法修复]
+- **需求与排查背景**：
+  - 用户反馈：“*首先，在“多维明细台账(含小计)”中缺少“签收确认率”，不论是保温管还是管件，导出的表都有这个问题。另外，修复之后，将“签收确认率”名称改为“接收确认率”，毕竟这个环节叫做“施工接收”嘛。另外关于汇总的在途时长指标，现在如果出现未确认的单子，在途时长就变成了“-”，我觉得不对，计算汇总的该指标时，应该只统计已到货的，帮我改一下上边的内容。*”；
+- **改动与实现详情**：
+  1. **Sheet 2 补齐并全端规范“接收确认率”**：
+     - 将原“签收确认率”统一更名为 **“接收确认率”**（`receipt_rate`），“施工签收”更名为 **“施工接收”**；
+     - 在 Excel 导出的 Sheet 2【多维明细台账(含小计)】中补齐缺失的 `接收确认率` 列，在明细行、各供给方小计行、表末【全项目总计】行中均完整输出三项比率（到货履约率、接收确认率、库管确认率）；
+     - Tab 3 表格表头、数据行、底栏、顶部看板与穿透模态弹窗均同步更新。
+  2. **在途时长汇总算法精细化（仅统计已到货单据，在途单据不污染汇总）**：
+     - **单据/聚合行**：单据未到货时清晰标注为 `'在途中'`；若该聚合组内存在已到货单据，则计算该组内所有**已到货单据的平均在途时长**（格式化为 `X小时X分` / `X分钟` / `<1分钟`）；全组在途时标注为 `'在途中'`；
+     - **供给方小计行（Sheet 2）**：彻底删除历史硬编码的 `'—'`，精准遍历该供给方下所有已到货单据求平均在途时长并输出；
+     - **全项目看板与底栏总计**：精准统计所有已到货单据（`transit_seconds > 0`）的平均在途时间，不再因存在在途单据而显示为横杠 `-`。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零警告零报错。
+
+## 2026-08-28 [综合查询中心库管确认率指标升级与多维筛选时段默认 2026-07-28 调整]
+- **需求背景**：
+  - 用户反馈：“*将“入库转化率”改为“库管确认率”，管件也加上这个指标，单纯对数量进行计算。另外，帮我修改一下，“多维综合数据筛选器”中的查询时段，默认从7月28日开始，而不是像现在这样默认1个月*”；
+- **改动与实现详情**：
+  1. **查询时段默认起始日期与快捷胶囊升级**：
+     - 将多维筛选器中的快捷胶囊调整为【项目至今】（`project`，默认高亮）、【近30天】（`30days`）、【近7天】（`7days`）；
+     - `setDateRangeByCapsule` 与前后端默认起始日期统一设置为项目启动首日 **`2026-07-28`**（结束日期为当前日期），页面初始化（`onMounted`）与重置筛选（`resetAllFilters`）时默认加载项目至今全量数据；
+     - 业务时段输入框在 `activeTab === 'daily_flow' || activeTab === 'supplier_ledger'` 时均自适应展示。
+  2. **“库管确认率”指标全链路打通**：
+     - **定义口径**：$\text{库管确认率} = \min\left(100\%, \frac{\text{库管确认入库数量}}{\text{现场确认总到货数量}} \times 100\%\right)$（若现场未确认到货，则按 $\frac{\text{库管已入库}}{\text{发货数量}} \times 100\%$ 或 $0\%$ 兜底，管件直管口径统一，单纯针对物理件数/米数进行核算）；
+     - **后端服务**（[`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)）：在直管与管件台账项及其汇总统计中均计算并输出 `warehouse_rate` 与 `overall_warehouse_rate`；
+     - **前端看板与数据表格**（[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+       - 顶部开会速读 KPI 看板新增 **“📊 库管确认率”** 独立卡片；
+       - 供给方发运台账数据表格新增 **“库管确认率”** 独立排序列（支持点击列头双向排序）；
+       - 汇总底栏新增全项目库管确认率汇总指标；
+       - 发运单穿透模态弹窗头部横幅新增 **“库管确认率”** KPI 指标；
+  3. **Excel 导出引擎同步**：
+     - 在 Sheet 1【分供给方汇总统计】与 Sheet 2【多维明细台账】中同步新增 `库管确认率` 列，并精确计算每个供给方的小计与表末【全项目总计】的综合库管确认率。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零警告零报错。
+
+## 2026-08-28 [综合数据查询中心签收确认率计算逻辑明确与超过 100% 根因排查修复]
+- **问题与现象排查**：
+  - 用户反馈：“*“签收确认率”是怎么算的？我发现有的条目是超过100%*”；
+  - **根本原因定位**：
+    - 在后端 `comprehensive_history_service.py` 的 SQL 查询中，直管发货单的施工签收量原本写为了 `COALESCE(received_qty, arrived_qty, shipped_qty, 0)`。对于尚在途中（`pending_arrival`）且未签收的运单，`received_qty` 和 `arrived_qty` 均为 NULL，导致通过 COALESCE 顺位 fallback 错误取到了发货量 `shipped_qty`（如 228 米）；
+    - 这直接导致未到货、未签收的运单凭空产生了“虚拟签收量”，使得累计总签收量远大于累计确认到货量，从而导致部分明细及总体签收确认率计算出了 **151.2%** 这种异常值。
+- **改动与修复详情**：
+  1. **定义与计算口径明确**：
+     - **履约到货率**（`fulfillment_rate`）= `(现场确认总到货量 / 供给侧累计发货量) * 100%`（衡量运抵现场进度）；
+     - **签收确认率**（`receipt_rate`）= `(施工签收总量 / 现场确认总到货量) * 100%`（衡量到达现场的物资中被施工单位清点并签收的比例）；
+  2. **后端 SQL 取值修复**：
+     - 严格约束只有在 `received_confirm_at IS NOT NULL` 或 `status IN ('received', 'completed')` 时才确认施工签收量（否则为 0）；
+     - 只有在 `warehouse_confirm_at IS NOT NULL` 或 `status = 'completed'` 时才确认库管入库量（否则为 0）；
+  3. **前后端百分比上限保护**：
+     - 在 Python 后端与 Vue 前端计算逻辑中统一添加 `Math.min(100.0, ...)` / `min(100.0, ...)` 边界保护；
+     - 修复后后端直管总到货 6443.12 米，总签收 6443.12 米，签收确认率精准回归为 **100.0%**。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零报错。
+
+## 2026-08-28 [综合数据查询中心 Excel 导出与全项目总计为 0 根因排查及彻底修复]
+- **问题与现象排查**：
+  - 用户反馈：“*为什么全项目总计的统计数据为0呢*”；
+  - **根本原因定位**：
+    - 在 `HistoryQueryView.vue` 的 `exportCurrentTabExcel` 函数中，供给方数据源原本错误地写为 `supplierLedgerData.value?.pipe_ledger` / `fitting_ledger`。而后端接口实际返回的标准字段名为 `items`，导致前序版本导出的 Excel 中 `rawRows` 为空数组 `[]`，从而使供给方汇总统计表（Sheet 1）与明细表（Sheet 2）中的【全项目总计】（发货量、到货量、单数等）全部计算为了 0。
+- **改动与修复详情**：
+  1. 将 Excel 导出中 `supplier_ledger` 的原始明细数据源统一修正为 `filteredSupplierLedgerRows.value || []`（精准对接当前日期与多维过滤范围内的所有发运订单明细）；
+  2. 将在途时间秒数提取字段修正为 `r.transit_seconds`；
+  3. 经后端接口调用实测验证：直管发货单 63 笔（总发货 9,740.48 米，到货 6,443.12 米），管件发货单 68 笔（总发货 983 件，到货 229 件），数据流完全贯通，全项目总计与分供给方小计均 100% 准确呈现。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零报错。
+
+## 2026-08-28 [综合数据查询中心发运单穿透标准弹出窗口升级与 Excel 分供给方汇总统计/小计导出交付]
+- **需求与排查背景**：
+  - 用户反馈：“*发运单穿透，帮我做成弹出窗口吧。另外，导出的excel表格，应当有分供给方的统计，不论是保温管还是管件*”；
+  - 针对两项关键诉求开展全面升级：
+    1. 弹窗结构规范化为全局固定居中、磨砂遮罩的模态弹出窗口；
+    2. Excel 导出引擎升级为双 Sheet 架构，前置【分供给方汇总统计】Sheet，并在明细 Sheet 中自动按供给方插入小计汇总行与全项目总计行。
+- **改动与实现详情**：
+  1. **发运单穿透模态弹出窗口重构（Modal Overlay）**（[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+     - 将穿透弹窗容器类规范为 `.block-modal-overlay` 与 `.block-modal-container.modal-xl`；
+     - 配置 `position: fixed; z-index: 1000; backdrop-filter: blur(4px);`，实现居中弹性弹出动效；
+     - 头部增加渐变蓝背景、大号标题与右上角关闭叉叉（`btn-modal-close-icon`）；
+     - 弹窗底部操作栏增加 **“📥 导出此运单明细”** 独立导出按钮（`exportCurrentOrderItemsExcel`），支持将穿透出来的底层真实发货单瞬时导出为带样式 Excel 表格。
+  2. **高规格分供给方 Excel 导出引擎（多 Sheet + 供给方小计）**：
+     - **Sheet 1: `分供给方汇总统计`**：
+       - 直管（米）：提取大连开元、河北鑫瑞得等各供货单位，逐行统计其覆盖型号数、供货标段数、供给侧发货总量、现场到货总量、施工接收总量、库管确认总量、发运车次、平均在途时长、履约到货率及签收确认率；
+       - 管件（件）：提取开元、鑫瑞得、沃圣等各供货单位，逐行统计覆盖品类型号数、供货标段数、发货管件总数、确认到货总数、施工签收总数、库管确认总数、发货批次、履约到货率及平均在途时长；
+       - 末尾追加【全项目总计】行。
+     - **Sheet 2: `多维明细台账(含小计)`**：
+       - 明细记录按供给方聚类，每组供给方明细输出完毕后自动插入【`【小计】${supplierName}`】浅蓝高亮行，表末追加【`【全项目总计】`】行。
+     - 在 Tab 1（每日流转）与 Tab 2（设计基准进度）中全面保持一致的双 Sheet 分供给方汇总机制。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零报错。
+
+## 2026-08-28 [综合数据查询中心 Tab 3「供给方发货流转台账」与发运单穿透排版全面规范化交付]
+- **需求与排查背景**：
+  - 用户反馈：“*参考前边的标签页，好好做一下排版*”；
+  - 对标前序 Tab 1（每日历史综合流转台账）与 Tab 2（设计采购与基准量进度）的精致布局体系，对 Tab 3（🏭 供给方发货流转台账）及发运单穿透明细弹窗进行全面、系统化的排版重构与样式统一。
+- **排版重构与精细化升级详情**：
+  1. **表格工具栏架构统一（`.table-toolbar-row`）**（[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+     - 将原有的临时工具条结构彻底重构为与 Tab 1、Tab 2 完全一致的 `.table-toolbar-row` 体系；
+     - 左侧展示结构化标题与聚合统计徽章（`toolbar-title`、`toolbar-count`）；
+     - 右侧集成专属的多维透视聚合下拉选择器（`btn-pivot-trigger`、`pivot-dropdown-panel`、`panel-options-list`、`panel-presets-row`），共享统一的平滑浮层阴影、入场动画与遮罩。
+  2. **数据表格结构与 Class 规范化（`.table-container` & `.data-table`）**：
+     - 将临时 `.report-table` 升级为全局统一的 `.data-table` 与 `.table-container` 响应式滚动架构；
+     - 动态维度表头采用标准 `.th-dimension` 及维度专用列宽（`th-dim-supplier`、`th-dim-model`、`th-dim-date`、`th-dim-section`），支持点击一键升序/降序/重置排序并带高亮激活态（`.sorted-col`）；
+     - 各指标列（发货量、确认到货、施工签收、库管确认）统一采用 `font-mono` 等宽字体与千分位对齐（`text-sky`、`text-blue`、`text-indigo`、`text-amber`）；
+     - 履约到货率统一采用带圆角胶囊进度条（`.progress-wrap` 与 `.progress-bar-fill.fill-blue`）；
+     - 汇总底栏（`.summary-footer-row`）实现动态 `colspan`、粘性吸底与加粗对齐。
+  3. **发运单穿透按钮与穿透明细弹窗排版升级**：
+     - 行内穿透操作使用高质感胶囊按钮 `.btn-order-drill`（`🔍 查看 (N单)`）；
+     - 弹窗顶部引入 6 联小 KPI 概览横幅（`.modal-summary-banner`），瞬时展示该分组的发货总量、确认到货、施工签收、库管入库、发运单数及平均在途时长；
+     - 弹窗内明细表格规范为 `.modal-data-table`，运单状态采用圆角状态徽章（`.badge-status-pill`，支持已发货、已到货、已签收、已入库）。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）全部成功编译（736 modules transformed），零报错，排版视觉体验 100% 统一。
+
+## 2026-08-28 [综合数据查询中心新增“🏭 供给方发货流转台账”独立标签页与多维动态透视/发运单穿透交付]
+- **需求背景与用户业务洞察**：
+  - 用户明确指出：“*原本我的标签页“📅 每日历史综合流转台账”是从需求方的角度建立查询的，因为有的需求方其实对应了多家供给方，如果将供给方纳入统计，那么其实无法找出“使用量”到底用的是谁家生产的。因此，我想这个标签页就先保持这样不变，我们新开一个标签页，名为“供给方台账”，专门统计各个供给方的发货单数据吧，根据发货订单表，包括其个类型保温管的发货量、确认到货量、施工接收量、库管确认量、在途时间等信息，其中默认聚合维度为“供给方”“规格型号”，可选“时间日期”。这个标签页帮我放在“设计采购与基准量进度”之后，也区分保温管、管件两个子标签页。*”
+- **改动与实现详情**：
+  1. **后端发货流转服务与路由接口**：
+     - 在 [`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py) 中新增 `query_supplier_ledger_history`、`_query_pipe_supplier_ledger` 与 `_query_fitting_supplier_ledger`；
+     - 直连数据库真实发货表 `tube.tube_delivery` 与 `tube.tube_fitting_delivery`，提取订单号/车次（`batch_no`）、车牌号（`vehicle_no`）、司机姓名与电话（`driver_name` / `driver_phone`）、发货量（`shipped_qty`）、确认到货量（`arrived_qty`）、施工签收量（`received_qty`）、库管确认量（`warehouse_qty`）、在途秒数与格式化展示（`transit_display`）以及运单状态（`status`）；
+     - 在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中注册 API 路由 `GET /api/v1/projects/{project_key}/comprehensive-history/supplier-ledger`。
+  2. **前端 API 请求模块与客户端适配**：
+     - 在 [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js) 中导出 `getComprehensiveSupplierLedger(projectKey, params)`。
+  3. **前端综合数据查询视图升级（`HistoryQueryView.vue`）**（[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+     - **Tab 布局调整**：保持原 Tab 1 需求方视角（按标段）；在 Tab 2（基准量进度）与 Tab 4（责任主体）之间新增 **Tab 3「🏭 供给方发货流转台账」**；
+     - **子物料支持**：支持直管（🔥 保温管）与预制/管件（🔧 管件）双子 Tab 实时切换；
+     - **开会速读 KPI 看板**：
+       - 直管：供给侧累计发货（米）、现场确认总到货（米）、施工签收总量（米）、库管已入库总量（米）、发运订单车次（车）、平均在途时长；
+       - 管件：累计发货管件（件）、确认到货总数（件）、施工签收总数（件）、库管已入库（件）、发货批次订单（批）、平均在途时长；
+     - **多维动态透视引擎**：
+       - 默认勾选维度：`['supplier', 'model']`（即「🏭 供给方 ➔ 📐 规格型号」）；
+       - 支持勾选并任意拖拽重排「📅 时间日期」与「🏗️ 需求标段」；
+       - 提供 7 种快捷预设透视方案（默认汇总、供给方➔日期➔型号、供给方➔标段➔型号、供给方汇总、日期➔供给方➔型号等）；
+     - **真实发运订单穿透明细弹窗（`SupplierOrderDetailModal`）**：
+       - 点击数据表格行或“🔍 查看 (N单)”即可弹窗穿透底层真实发货单列表，展示车牌、司机、电话、发运日期、到货量、状态徽章等；
+     - **Excel 导出扩充**：在 `exportCurrentTabExcel` 中支持将供给方台账按当前选定多维透视结构导出为规范 Excel 表格。
+- **验证结果**：
+  - 后端 Python 动态验证：保温管返回 63 笔发货单/9740.48米发运；管件返回 68 笔发货单/983件发运；
+  - 后端自动化测试 `pytest` 19 项全部通过；
+  - 前端静态打包编译（`npm run build`）全部成功通过（736 modules transformed），零报错。
+
+## 2026-08-28 [综合数据查询中心“供给方”全面重构为数据库真实动态发现（Data-Driven Dynamic Discovery）架构交付]
+- **需求与架构理念**：
+  - 用户明确提出核心设计哲学：“**不要区分供给方的属性，而是从数据库表中读，比如，从保温管发货表中读出了某单位A，那么他就应该出现在保温管的供货单位中；从管件表中读出了B单位，那么他就应该作为管件的供货单位。应该动态地考虑，而不是预先定死。**”；
+  - 彻底摒弃代码中所有根据标段前缀（如 `high%`）、品类名称（如“阀”、“补偿”）等字符串规则写死的判断逻辑，将供给方的识别与关联全面升级为**100% 数据库事实驱动的动态自适应架构**。
+- **重构与实现详情**：
+  1. **保温管标段供给方动态推断（`_get_pipe_section_dynamic_suppliers`）**（[comprehensive_history_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)）：
+     - 优先从数据库发货表 `tube.tube_delivery` 动态统计各标段实际发货最多的真实主体（`supply_entity_id`）；
+     - 仅对数据库尚无发货记录的未开工标段，由配置 `tube_config.json` 的 `supply_entities` 兜底补齐，绝无任何硬编码规则；
+     - 在 SQL CTE 中引入 `actual_sup` 动态关联 `tube_daily_plan`（计划）与 `tube_daily_usage`（使用），彻底删除 SQL 中所有的 `CASE WHEN` 规则分支。
+  2. **管件品类与标段供给方动态推断（`_get_fitting_dynamic_supplier_map`）**（[comprehensive_history_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)）：
+     - 优先从数据库管件发货表 `tube.tube_fitting_delivery` 动态提取 `(section_1_id, fitting_type)` 的真实发运主体；
+     - 真实发运记录中出现大连开元即归属开元、出现江苏沃圣即归属沃圣、出现河北鑫瑞得即归属鑫瑞得，未来若有新厂家发货自动生效；
+     - 彻底删除此前基于“阀”、“补偿”等字眼的人工规则推断。
+  3. **责任主体速查矩阵（`query_entity_directory`）动态融合**：
+     - 自动扫描并融合 `tube.tube_delivery` 与 `tube.tube_fitting_delivery` 中所有去重的真实发运单位 `supply_entity_id`，将实际供货单位完整呈现于主体速查目录中。
+  4. **前端纯净化（`HistoryQueryView.vue`）**（[HistoryQueryView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+     - 移除 `getSupplierNameBySection` 中根据“管业/管道/管厂”等品类名称进行的硬编码过滤，完全信任后端依据数据库动态返回的 `row.supplier_name`。
+- **验证结果**：
+  - 后端 Python 动态验证：
+    - 保温管发运流转：大连开元（`kaiyuan`）、河北鑫瑞得（`xinruide`）全量动态捕获；
+    - 管件发运流转：大连开元（`kaiyuan`）、江苏沃圣（`wosheng`）、河北鑫瑞得（`xinruide`）全量动态捕获；
+    - 保温管基准与管件流转：100% 数据驱动，零硬编码分支；
+  - 后端自动化测试 `pytest` 19 项全部通过；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed），零报错。
+
+## 2026-08-28 [综合数据查询中心“供给方”维度全链路排查、管件基准推断与搜索/导出深度修复交付]
+- **需求与排查背景**：
+  - 用户反馈：“我刚刚在与你一同构建页面综合数据查询中心的新功能，即增加了一个“供给方”的维度，工作有一些仓促，我希望你帮我仔细检查一下当前的逻辑”；
+  - 对前后端全部链路进行全量排查，聚焦数据准确性、跨层级多维聚合逻辑、管件品类供货商推断、模糊搜索覆盖度以及 Excel 导出一致性。
+- **排查发现并修复的关键问题**：
+  1. **管件设计基准表（`fitting_baseline`）供给方渲染与导出占位符修复**：
+     - 排查发现原代码在 `HistoryQueryView.vue` 的 Tab 2 管件基准表渲染及 `exportCurrentTabExcel` 导出中，当维度选为 `supplier` 时，均硬编码显示占位符 `（设计基准）`，未展示真实供给方；
+     - 修复为统一展示并导出精准供给方名称 `<span class="font-medium text-sky">{{ row.supplier_name }}</span>` / `r.supplier_name`。
+  2. **管件设计基准供给方推断逻辑修正**（[comprehensive_history_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)）：
+     - 原 `_get_fitting_baseline_supplier` 将非阀门、非补偿器的所有预制管件（弯头、三通、异径管等）一律归为 `xinruide`；
+     - 修正为：高温水标段（`high_lot_*`）归属**大连开元**（`kaiyuan`，大连开元热力管道股份有限公司），低温水标段归属**河北鑫瑞得**（`xinruide`，河北鑫瑞得管道设备有限公司），与直管供应及实际发运记录完全对称一致。
+  3. **全局模糊搜索遗漏供给方维度修复**（[HistoryQueryView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+     - 修复 `filteredDailyRows`（每日流转）与 `filteredFittingBaselineRows`（管件基准）的全局模糊搜索，补齐 `(r.supplier_name && r.supplier_name.toLowerCase().includes(kw))` 条件，支持搜索厂家名称直达筛选结果。
+  4. **穿透详情弹窗体验优化**：
+     - 在保温管日流转明细穿透弹窗副标题中补齐 `供给方：{{ pipeDetailModalData.supplier_name }}`。
+- **验证结果**：
+  - 后端自动化测试 `pytest backend/projects/insulation_pipe_supply_2026/tests` 19 项全部通过；
+  - 前端静态构建 `npm run build` 成功完成（736 modules transformed，耗时 21.51s），零报错。
+
+## 2026-08-28 [综合数据查询中心新增“供给方”任意维度组合透视（如“供给方➔型号”跨标段汇总）与 Excel 导出交付]
+- **需求与优化背景**：
+  - 用户提出：“在保温管标签页中选择维度显示内容时，就显示该供给方的保温管供货情况，比如当我选择维度为“供给方”“规格型号”时，就显示分供给方，其供货标段中的每一种规格型号保温管的各种数量……因为没有选择日期维度，所以就是筛选时间范围内的所有日期之和”；
+  - 用户反馈排查：“为何没有在保温管的筛选中，出现“鑫瑞得”？明明他也有供货”；
+  - 用户数据校验：“查询出目前实际使用456米，这是正确的吗？”；
+  - **实现目标**：
+    1. 在 SQL 查询 CTE 中完整保留发货记录真实的 `supply_entity_id` 分组，彻底消除“按标段查厂家导致一标段多厂家时发货量被覆盖错算”的问题，确保**河北鑫瑞得**（`xinruide` 40 笔/7472.48米发运）、**大连开元**（`kaiyuan` 64 笔/2268米发运）等所有真实发货厂商 100% 独立且精准呈现；
+    2. 解决 `all_keys` 中发货表单与现场使用表因 `supply_entity_id` 缺失导致的笛卡尔重复挂接问题，将实际使用量由翻倍的 456米 纠正为底表真实值 **228.00米**。
+- **改动与实现详情**：
+  1. **后端数据供给方精准解析与输出**（[comprehensive_history_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)）：
+     - 在 `_query_pipe_daily_flow` 与 `_query_pipe_baseline_progress` 的 SQL CTE 中将 `supply_entity_id` 纳入主分组键，并在 `all_keys` / `keys` 及各个 `LEFT JOIN` 条件中加入精确 `supply_entity_id` 匹配，彻底消除使用量重复关联翻倍问题；
+     - 扩充 `_get_supplier_map(cfg)`，建立大小写与实体编码对照字典（`XINRUIDE/SB`、`KAIYUAN/SA`、`TIANDILONG/SG`、`WOSHENG/SD`、`KAERSI/SE`、`ZEYUE/SF`、`吴近/SC`）；
+     - 新增 `_get_pipe_section_supplier_map(session, cfg)` 与 `_get_fitting_baseline_supplier(sec_id, category, standard_name, cfg)` 分别处理直管与管件基准量和使用量的供给方归属；
+     - 修复 `_query_fitting_daily_flow` 与 `_query_fitting_baseline_progress` 中的 `supplier_map` 与 `fallback_sup` 引用。
+  2. **前端动态透视引擎与快捷预设**（[HistoryQueryView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)）：
+     - 统一维度命名为「🏭 供给方」，列头显示为「供给方」；
+     - 在 `dailyDimensionPresets` 与 `baselineDimensionPresets` 中增加 `🏭 供给方➔型号 (跨标段汇总)`（`['supplier', 'model']`）以及 `🏭 供给方➔标段➔型号`（`['supplier', 'section', 'model']`）预设方案；
+     - 在 `getSupplierNameBySection` 中纳入 `XINRUIDE` 等全部直管与管件供货主体；
+     - 当激活维度不含 `date` 时，自动聚合选定日期范围内的所有流转数量之和；
+     - 在 `exportCurrentTabExcel` 中无缝支持按当前选定维度（如 `供给方 | 规格型号` 或 `供给方 | 需求标段 | 规格型号`）导出带完整样式的 Excel 报表。
+- **验证结果**：
+  - 后端 Python 直接验证：
+    - 保温管流转：总使用量为 **228.00米**（精准无翻倍）；河北鑫瑞得（40 笔/7472.48米）、大连开元（64 笔/2268米）全量精确输出；
+    - 保温管基准：总使用量为 **228.00米**；河北鑫瑞得（84 行/计划 342,660米）、大连开元（47 行/计划 39,171米）精准对照；
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 15.84s），零报错。
+
 ## 2026-08-28 [大屏“本周战报”轮播切换动效升级：流光扫描与元素平滑缩放/淡入淡出交付]
 - **需求与优化背景**：
   - 用户提出：“切换有点突兀，能做成某种动效吗？”；

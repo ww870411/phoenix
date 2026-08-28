@@ -2891,6 +2891,31 @@ export async function getComprehensiveEntityDirectory(projectKey) {
   return response.json()
 }
 
+export async function getComprehensiveSupplierLedger(projectKey, params = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const searchParams = new URLSearchParams()
+  if (params.startDate) searchParams.set('start_date', params.startDate)
+  if (params.endDate) searchParams.set('end_date', params.endDate)
+  if (params.supplierIds && params.supplierIds.length) {
+    searchParams.set('supplier_ids', Array.isArray(params.supplierIds) ? params.supplierIds.join(',') : params.supplierIds)
+  }
+  if (params.section1Ids && params.section1Ids.length) {
+    searchParams.set('section_1_ids', Array.isArray(params.section1Ids) ? params.section1Ids.join(',') : params.section1Ids)
+  }
+  if (params.pipeModelIds && params.pipeModelIds.length) {
+    searchParams.set('pipe_model_ids', Array.isArray(params.pipeModelIds) ? params.pipeModelIds.join(',') : params.pipeModelIds)
+  }
+  if (params.materialType) searchParams.set('material_type', params.materialType)
+
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/comprehensive-history/supplier-ledger?${searchParams.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取供给方台账数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
 
 
 
