@@ -262,6 +262,25 @@
                     />
                     <div class="setting-hint">高于此时长剔除(防极端滞留)</div>
                   </div>
+
+                  <!-- 10. 周战报交替切换周期 -->
+                  <div class="setting-item">
+                    <div class="setting-label-row">
+                      <span class="setting-name">📅 周战报轮播周期</span>
+                      <span class="setting-val-tag">{{ bsConfig.weekly_rotation_interval_sec || 10 }} 秒</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="3" 
+                      max="60" 
+                      step="1" 
+                      v-model.number="bsConfig.weekly_rotation_interval_sec" 
+                      @input="applyConfigLocally"
+                      class="setting-slider"
+                      title="本周保温管施工战报与管件施工战报自动交替轮播的停留周期"
+                    />
+                    <div class="setting-hint">保温管与管件双战报轮播周期</div>
+                  </div>
                 </div>
 
                 <!-- 保存与重置操作按钮 (仅限 Global_admin 可点击) -->
@@ -1185,72 +1204,109 @@
           </div>
         </div>
 
-        <!-- 🏆 本周战报：固定信息结构，数据状态仅切换内容 -->
-        <div class="panel-box weekly-report-panel">
+        <!-- 🏆 本周战报：保温管 vs 管件 10 秒自动轮播交替展示（丝滑过渡动效） -->
+        <div
+          class="panel-box weekly-report-panel"
+          :class="{ 'is-switching': isWeeklySwitching, 'tab-pipe': activeWeeklyTab === 'pipe', 'tab-fitting': activeWeeklyTab === 'fitting' }"
+          @mouseenter="isWeeklyHovered = true"
+          @mouseleave="isWeeklyHovered = false"
+        >
           <div class="panel-header">
-            <div class="panel-title">
-              <span class="title-icon">📅</span>
-              <span>本周保温管施工战报</span>
+            <div class="panel-title" :title="activeWeeklyTab === 'pipe' ? `当前展示：本周保温管施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）` : `当前展示：本周管件施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）`">
+              <transition name="weekly-title-anim" mode="out-in">
+                <div :key="activeWeeklyTab" class="panel-title-anim-box">
+                  <span class="title-icon">{{ activeWeeklyTab === 'pipe' ? '📅' : '🧩' }}</span>
+                  <span class="title-text">{{ activeWeeklyTab === 'pipe' ? '本周保温管施工战报' : '本周管件施工战报' }}</span>
+                </div>
+              </transition>
             </div>
-            <div class="header-right-meta">
-              <span class="panel-tag gold" :title="'统计周期: ' + (weeklyReport.date_range_str || '近7日')">
-                {{ weeklyReport.date_range_str || '近7日' }}
+            <div class="header-right-meta" style="display: flex; align-items: center; gap: 6px;">
+              <!-- 轮播倒计时徽章 -->
+              <span
+                class="weekly-countdown-badge"
+                :class="{ paused: isWeeklyHovered }"
+                :title="isWeeklyHovered ? '鼠标悬停中：已暂停交替轮播' : `每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动交替轮播（倒计时 ${weeklyCountdownSec} 秒）`"
+              >
+                <span class="countdown-pulse-dot" :class="{ paused: isWeeklyHovered }"></span>
+                <span class="countdown-text">{{ isWeeklyHovered ? '已暂停' : `${weeklyCountdownSec}s` }}</span>
               </span>
+              <transition name="weekly-fade-fast" mode="out-in">
+                <span :key="currentWeeklyDateRange" class="panel-tag gold" :title="'统计周期: ' + currentWeeklyDateRange">
+                  {{ currentWeeklyDateRange }}
+                </span>
+              </transition>
             </div>
           </div>
 
-          <!-- 1. 顶部固定双 KPI：无数据时保留相同尺寸，仅切换辅助文案 -->
-          <div class="weekly-kpi-grid">
-            <div class="weekly-kpi-card ship-card" title="近7日累计发运保温管总量">
-              <div class="kpi-card-header">
-                <span class="kpi-dot cyan"></span>
-                <span class="kpi-title">7日累计发货量</span>
+          <!-- 1. 顶部固定双 KPI：保温管 (km) vs 管件 (件) 丝滑切换过渡 -->
+          <transition name="weekly-kpi-anim" mode="out-in">
+            <div :key="activeWeeklyTab" class="weekly-kpi-grid">
+              <div class="weekly-kpi-card ship-card" :title="activeWeeklyTab === 'pipe' ? '近7日累计发运保温管总量' : '近7日累计发运管件总量'">
+                <div class="kpi-card-header">
+                  <span class="kpi-dot cyan"></span>
+                  <span class="kpi-title">{{ activeWeeklyTab === 'pipe' ? '7日累计发货量' : '7日累计发运量' }}</span>
+                </div>
+                <div class="kpi-main-val cyan-text">
+                  {{ activeWeeklyTab === 'pipe' ? formatWeeklyKm(weeklyReport.total_shipped_km) : formatWeeklyInt(weeklyFittingReport.total_shipped_pcs) }}
+                  <span class="unit">{{ activeWeeklyTab === 'pipe' ? 'km' : '件' }}</span>
+                </div>
+                <div class="weekly-kpi-note">{{ activeWeeklyTab === 'pipe' ? weeklyShipNote : weeklyFitShipNote }}</div>
               </div>
-              <div class="kpi-main-val cyan-text">
-                {{ formatWeeklyKm(weeklyReport.total_shipped_km) }} <span class="unit">km</span>
-              </div>
-              <div class="weekly-kpi-note">{{ weeklyShipNote }}</div>
-            </div>
 
-            <div class="weekly-kpi-card usage-card" title="近7日现场累计施工使用（敷设）总量">
-              <div class="kpi-card-header">
-                <span class="kpi-dot gold"></span>
-                <span class="kpi-title">7日累计施工量</span>
+              <div
+                class="weekly-kpi-card"
+                :class="activeWeeklyTab === 'pipe' ? 'usage-card' : 'fit-usage-card'"
+                :title="activeWeeklyTab === 'pipe' ? '近7日现场累计施工使用（敷设）总量' : '近7日现场累计安装使用管件总量'"
+              >
+                <div class="kpi-card-header">
+                  <span class="kpi-dot" :class="activeWeeklyTab === 'pipe' ? 'gold' : 'emerald'"></span>
+                  <span class="kpi-title">{{ activeWeeklyTab === 'pipe' ? '7日累计施工量' : '7日累计安装量' }}</span>
+                </div>
+                <div class="kpi-main-val" :class="activeWeeklyTab === 'pipe' ? 'gold-text' : 'emerald-text'">
+                  {{ activeWeeklyTab === 'pipe' ? formatWeeklyKm(weeklyReport.total_usage_km) : formatWeeklyInt(weeklyFittingReport.total_usage_pcs) }}
+                  <span class="unit">{{ activeWeeklyTab === 'pipe' ? 'km' : '件' }}</span>
+                </div>
+                <div class="weekly-kpi-note">{{ activeWeeklyTab === 'pipe' ? weeklyUsageNote : weeklyFitUsageNote }}</div>
               </div>
-              <div class="kpi-main-val gold-text">
-                {{ formatWeeklyKm(weeklyReport.total_usage_km) }} <span class="unit">km</span>
-              </div>
-              <div class="weekly-kpi-note">{{ weeklyUsageNote }}</div>
             </div>
-          </div>
+          </transition>
 
-          <!-- 2. 固定趋势区：始终保留坐标与日期，无数据时叠加明确状态 -->
+          <!-- 2. 固定趋势区：根据 activeWeeklyTab 动态绘制折线 -->
           <div class="weekly-chart-heading">
-            <span>每日趋势 (km)</span>
+            <transition name="weekly-fade-fast" mode="out-in">
+              <span :key="activeWeeklyTab">每日趋势 ({{ activeWeeklyTab === 'pipe' ? 'km' : '件' }})</span>
+            </transition>
+            <transition name="weekly-fade-fast" mode="out-in">
+              <span :key="activeWeeklyTab" style="font-size: 9.5px; opacity: 0.75;">{{ activeWeeklyTab === 'pipe' ? '双轨：发货 vs 施工' : '双轨：发运 vs 安装' }}</span>
+            </transition>
           </div>
           <div class="weekly-chart-box">
             <div ref="weeklyChartRef" class="weekly-echarts-dom"></div>
-            <div v-if="!weeklyHasBusinessData" class="weekly-empty-state">
-              <strong>本周暂无业务数据</strong>
-              <span>累计指标与趋势将在数据同步后自动更新</span>
-            </div>
+            <transition name="weekly-fade-fast">
+              <div v-if="!currentWeeklyHasBusinessData" class="weekly-empty-state">
+                <strong>本周暂无{{ activeWeeklyTab === 'pipe' ? '保温管' : '管件' }}业务数据</strong>
+                <span>累计指标与趋势将在数据同步后自动更新</span>
+              </div>
+            </transition>
           </div>
 
-          <!-- 3. 固定复盘栏：用真实 7 日数据补足“战报”语义 -->
-          <div class="weekly-insight-grid">
-            <div>
-              <span>发货峰值日</span>
-              <strong>{{ weeklyShipPeakText }}</strong>
+          <!-- 3. 固定复盘栏：根据 activeWeeklyTab 展示峰值与今日数据 (带过渡) -->
+          <transition name="weekly-insight-anim" mode="out-in">
+            <div :key="activeWeeklyTab" class="weekly-insight-grid">
+              <div>
+                <span>{{ activeWeeklyTab === 'pipe' ? '发货峰值日' : '发运峰值日' }}</span>
+                <strong>{{ activeWeeklyTab === 'pipe' ? weeklyShipPeakText : weeklyFitShipPeakText }}</strong>
+              </div>
+              <div>
+                <span>{{ activeWeeklyTab === 'pipe' ? '施工峰值日' : '安装峰值日' }}</span>
+                <strong>{{ activeWeeklyTab === 'pipe' ? weeklyUsagePeakText : weeklyFitUsagePeakText }}</strong>
+              </div>
+              <div>
+                <span>{{ activeWeeklyTab === 'pipe' ? '今日发货 / 施工' : '今日发运 / 安装' }}</span>
+                <strong>{{ activeWeeklyTab === 'pipe' ? weeklyTodayText : weeklyFitTodayText }}</strong>
+              </div>
             </div>
-            <div>
-              <span>施工峰值日</span>
-              <strong>{{ weeklyUsagePeakText }}</strong>
-            </div>
-            <div>
-              <span>今日发货 / 施工</span>
-              <strong>{{ weeklyTodayText }}</strong>
-            </div>
-          </div>
+          </transition>
         </div>
       </section>
     </main>
@@ -1289,7 +1345,8 @@ const bsConfig = reactive({
   feed_limit: 40,
   weather_cache_duration_min: 15,
   transit_duration_min_hours: 1.0,
-  transit_duration_max_hours: 36.0
+  transit_duration_max_hours: 36.0,
+  weekly_rotation_interval_sec: 10
 })
 const isSavingConfig = ref(false)
 const configSaveStatus = ref(null)
@@ -1306,6 +1363,7 @@ function showSaveStatus(msg, type = 'success') {
 // 调节滑块时本地即刻动态生效
 function applyConfigLocally() {
   startAnimationLoop()
+  startWeeklyRotation()
   
   if (!isLiveStreamMode.value && !autoDemoRunning.value) {
     if (autoSyncTimer) clearInterval(autoSyncTimer)
@@ -1365,6 +1423,7 @@ async function handleResetConfigToDefault() {
   bsConfig.weather_cache_duration_min = 15
   bsConfig.transit_duration_min_hours = 1.0
   bsConfig.transit_duration_max_hours = 36.0
+  bsConfig.weekly_rotation_interval_sec = 10
   await handleSaveConfigToBackend()
   showSaveStatus('🔄 已恢复出厂默认设定', 'success')
 }
@@ -1872,13 +1931,26 @@ function isLineVisible(line) {
   return false
 }
 
-// --- 🏆 本周战报（连续 7 日保温管发货 vs 施工使用态势） ---
+// --- 🏆 本周战报（连续 7 日保温管 vs 管件 施工使用态势 10秒自动交替轮播） ---
+const activeWeeklyTab = ref('pipe') // 'pipe' | 'fitting'
+const isWeeklyRotating = ref(true)
+const isWeeklyHovered = ref(false)
+const weeklyRotationSeconds = 10
+let weeklyRotationTimer = null
+
 const weeklyReport = ref({
   date_range_str: '近7日',
   total_shipped_km: 0.0,
   total_shipped_m: 0,
   total_usage_km: 0.0,
   total_usage_m: 0,
+  days: []
+})
+
+const weeklyFittingReport = ref({
+  date_range_str: '近7日',
+  total_shipped_pcs: 0,
+  total_usage_pcs: 0,
   days: []
 })
 
@@ -1890,6 +1962,51 @@ function formatWeeklyKm(value) {
   })
 }
 
+function formatWeeklyInt(value) {
+  const amount = Math.round(Number(value) || 0)
+  return amount.toLocaleString('zh-CN')
+}
+
+const weeklyCountdownSec = ref(10)
+let weeklyCountdownTimer = null
+const isWeeklySwitching = ref(false)
+
+function triggerWeeklySwitch(tabKey) {
+  if (activeWeeklyTab.value === tabKey && isWeeklySwitching.value) return
+  isWeeklySwitching.value = true
+  activeWeeklyTab.value = tabKey
+  setTimeout(() => {
+    isWeeklySwitching.value = false
+  }, 450)
+}
+
+function startWeeklyRotation() {
+  if (weeklyCountdownTimer) clearInterval(weeklyCountdownTimer)
+  const initialSec = Math.max(3, Number(bsConfig.weekly_rotation_interval_sec) || 10)
+  weeklyCountdownSec.value = initialSec
+
+  weeklyCountdownTimer = setInterval(() => {
+    if (isWeeklyHovered.value || !isWeeklyRotating.value) {
+      // 鼠标悬停时暂停倒计时
+      return
+    }
+    if (weeklyCountdownSec.value > 1) {
+      weeklyCountdownSec.value -= 1
+    } else {
+      const nextSec = Math.max(3, Number(bsConfig.weekly_rotation_interval_sec) || 10)
+      weeklyCountdownSec.value = nextSec
+      const nextTab = activeWeeklyTab.value === 'pipe' ? 'fitting' : 'pipe'
+      triggerWeeklySwitch(nextTab)
+    }
+  }, 1000)
+}
+
+function switchWeeklyTab(tabKey) {
+  triggerWeeklySwitch(tabKey)
+  startWeeklyRotation()
+}
+
+// 1. 保温管计算属性 (单位: km)
 const weeklyDays = computed(() => (
   Array.isArray(weeklyReport.value?.days) ? weeklyReport.value.days : []
 ))
@@ -1934,6 +2051,61 @@ const weeklyUsageNote = computed(() => (
     : '本周暂无施工记录'
 ))
 
+// 2. 管件计算属性 (单位: 件)
+const weeklyFitDays = computed(() => (
+  Array.isArray(weeklyFittingReport.value?.days) ? weeklyFittingReport.value.days : []
+))
+const weeklyFitHasBusinessData = computed(() => weeklyFitDays.value.some(day => (
+  (Number(day?.shipped_pcs) || 0) > 0 || (Number(day?.usage_pcs) || 0) > 0
+)))
+const weeklyFitToday = computed(() => weeklyFitDays.value.at(-1) || {
+  shipped_pcs: 0,
+  usage_pcs: 0
+})
+
+function getWeeklyFitPeak(metricKey) {
+  if (!weeklyFitHasBusinessData.value || weeklyFitDays.value.length === 0) return null
+  return weeklyFitDays.value.reduce((peak, day) => (
+    (Number(day?.[metricKey]) || 0) > (Number(peak?.[metricKey]) || 0) ? day : peak
+  ), weeklyFitDays.value[0])
+}
+
+const weeklyFitShipPeakText = computed(() => {
+  const peak = getWeeklyFitPeak('shipped_pcs')
+  return peak && Number(peak.shipped_pcs) > 0
+    ? `${peak.date} · ${formatWeeklyInt(peak.shipped_pcs)} 件`
+    : '—'
+})
+const weeklyFitUsagePeakText = computed(() => {
+  const peak = getWeeklyFitPeak('usage_pcs')
+  return peak && Number(peak.usage_pcs) > 0
+    ? `${peak.date} · ${formatWeeklyInt(peak.usage_pcs)} 件`
+    : '—'
+})
+const weeklyFitTodayText = computed(() => (
+  `${formatWeeklyInt(weeklyFitToday.value.shipped_pcs)} / ${formatWeeklyInt(weeklyFitToday.value.usage_pcs)} 件`
+))
+const weeklyFitShipNote = computed(() => (
+  weeklyFitHasBusinessData.value
+    ? `今日 ${formatWeeklyInt(weeklyFitToday.value.shipped_pcs)} 件`
+    : '本周暂无发运记录'
+))
+const weeklyFitUsageNote = computed(() => (
+  weeklyFitHasBusinessData.value
+    ? `今日 ${formatWeeklyInt(weeklyFitToday.value.usage_pcs)} 件`
+    : '本周暂无安装记录'
+))
+
+// 3. 当前展示状态的复合计算
+const currentWeeklyDateRange = computed(() => (
+  activeWeeklyTab.value === 'pipe'
+    ? (weeklyReport.value?.date_range_str || '近7日')
+    : (weeklyFittingReport.value?.date_range_str || '近7日')
+))
+const currentWeeklyHasBusinessData = computed(() => (
+  activeWeeklyTab.value === 'pipe' ? weeklyHasBusinessData.value : weeklyFitHasBusinessData.value
+))
+
 // --- 🏆 本周战报 ECharts 专业工业大屏双轨图表 ---
 const weeklyChartRef = ref(null)
 let weeklyChartInstance = null
@@ -1953,21 +2125,35 @@ function renderWeeklyChart() {
     }
 
     const isLight = currentTheme.value === 'light'
-    const days = weeklyReport.value?.days || []
+    const isPipe = activeWeeklyTab.value === 'pipe'
+
+    const days = isPipe ? (weeklyReport.value?.days || []) : (weeklyFittingReport.value?.days || [])
     const xLabels = days.map(d => `${d.date}\n${d.day_name}`)
-    const shipData = days.map(d => Number(d.shipped_km) || 0)
-    const usageData = days.map(d => Number(d.usage_km) || 0)
+    const series1Data = days.map(d => isPipe ? (Number(d.shipped_km) || 0) : (Number(d.shipped_pcs) || 0))
+    const series2Data = days.map(d => isPipe ? (Number(d.usage_km) || 0) : (Number(d.usage_pcs) || 0))
+
+    const series1Name = isPipe ? '发货量' : '发运量'
+    const series2Name = isPipe ? '施工量' : '安装量'
+    const unitStr = isPipe ? 'km' : '件'
 
     const textColor = isLight ? '#64748b' : '#94a3b8'
     const splitLineColor = isLight ? 'rgba(203, 213, 225, 0.6)' : 'rgba(255, 255, 255, 0.08)'
 
+    const series1Color = isLight ? '#0284c7' : '#00f2fe'
+    const series2Color = isPipe
+      ? (isLight ? '#d97706' : '#fbbf24')
+      : (isLight ? '#059669' : '#34d399')
+
     const option = {
       animation: true,
-      animationDuration: 800,
+      animationDuration: 500,
+      animationDurationUpdate: 650,
+      animationEasing: 'cubicOut',
+      animationEasingUpdate: 'cubicOut',
       tooltip: {
         trigger: 'axis',
         backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(10, 20, 38, 0.96)',
-        borderColor: isLight ? '#cbd5e1' : 'rgba(0, 242, 254, 0.4)',
+        borderColor: isLight ? '#cbd5e1' : (isPipe ? 'rgba(0, 242, 254, 0.4)' : 'rgba(52, 211, 153, 0.4)'),
         borderWidth: 1,
         padding: [8, 12],
         textStyle: {
@@ -1977,7 +2163,7 @@ function renderWeeklyChart() {
         axisPointer: {
           type: 'line',
           lineStyle: {
-            color: isLight ? 'rgba(2, 132, 199, 0.4)' : 'rgba(0, 242, 254, 0.6)',
+            color: isLight ? 'rgba(2, 132, 199, 0.4)' : (isPipe ? 'rgba(0, 242, 254, 0.6)' : 'rgba(52, 211, 153, 0.6)'),
             type: 'dashed',
             width: 1.2
           }
@@ -1987,11 +2173,12 @@ function renderWeeklyChart() {
           const dayObj = days[params[0].dataIndex] || {}
           let html = `<div style="font-weight: 700; border-bottom: 1px solid ${isLight ? '#e2e8f0' : 'rgba(255,255,255,0.12)'}; padding-bottom: 4px; margin-bottom: 6px;">📅 ${dayObj.full_date || ''} (${dayObj.day_name || ''})</div>`
           params.forEach(p => {
-            const isShip = p.seriesName.includes('发货')
-            const color = isShip ? (isLight ? '#0284c7' : '#00f2fe') : (isLight ? '#d97706' : '#fbbf24')
+            const isS1 = p.seriesName === series1Name
+            const color = isS1 ? series1Color : series2Color
+            const valDisplay = isPipe ? `${p.value} km` : `${p.value} 件`
             html += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 11px; line-height: 1.6;">
               <span style="color: ${textColor}; display: flex; align-items: center; gap: 4px;">${p.marker} ${p.seriesName}:</span>
-              <strong style="color: ${color}; font-family: 'JetBrains Mono', monospace;">${p.value} km</strong>
+              <strong style="color: ${color}; font-family: 'JetBrains Mono', monospace;">${valDisplay}</strong>
             </div>`
           })
           return html
@@ -2008,7 +2195,7 @@ function renderWeeklyChart() {
           fontSize: 10.5,
           fontWeight: 500
         },
-        data: ['发货量', '施工量']
+        data: [series1Name, series2Name]
       },
       grid: {
         top: 18,
@@ -2036,6 +2223,7 @@ function renderWeeklyChart() {
       },
       yAxis: {
         type: 'value',
+        minInterval: isPipe ? undefined : 1,
         splitLine: {
           lineStyle: {
             color: splitLineColor,
@@ -2050,19 +2238,19 @@ function renderWeeklyChart() {
       },
       series: [
         {
-          name: '发货量',
+          name: series1Name,
           type: 'line',
           smooth: 0.35,
           symbol: 'circle',
           symbolSize: 5,
           itemStyle: {
-            color: isLight ? '#0284c7' : '#00f2fe',
+            color: series1Color,
             borderColor: isLight ? '#ffffff' : '#090e1a',
             borderWidth: 1.5
           },
           lineStyle: {
             width: 2,
-            color: isLight ? '#0284c7' : '#00f2fe',
+            color: series1Color,
             shadowColor: isLight ? 'rgba(2, 132, 199, 0.25)' : 'rgba(0, 242, 254, 0.4)',
             shadowBlur: 6
           },
@@ -2079,23 +2267,25 @@ function renderWeeklyChart() {
               ]
             }
           },
-          data: shipData
+          data: series1Data
         },
         {
-          name: '施工量',
+          name: series2Name,
           type: 'line',
           smooth: 0.35,
           symbol: 'circle',
           symbolSize: 6,
           itemStyle: {
-            color: isLight ? '#d97706' : '#fbbf24',
+            color: series2Color,
             borderColor: isLight ? '#ffffff' : '#090e1a',
             borderWidth: 2
           },
           lineStyle: {
             width: 2.2,
-            color: isLight ? '#d97706' : '#fbbf24',
-            shadowColor: isLight ? 'rgba(217, 119, 6, 0.3)' : 'rgba(251, 191, 36, 0.4)',
+            color: series2Color,
+            shadowColor: isPipe
+              ? (isLight ? 'rgba(217, 119, 6, 0.3)' : 'rgba(251, 191, 36, 0.4)')
+              : (isLight ? 'rgba(5, 150, 105, 0.3)' : 'rgba(52, 211, 153, 0.4)'),
             shadowBlur: 8
           },
           areaStyle: {
@@ -2105,13 +2295,16 @@ function renderWeeklyChart() {
               y: 0,
               x2: 0,
               y2: 1,
-              colorStops: [
+              colorStops: isPipe ? [
                 { offset: 0, color: isLight ? 'rgba(217, 119, 6, 0.24)' : 'rgba(251, 191, 36, 0.28)' },
                 { offset: 1, color: isLight ? 'rgba(217, 119, 6, 0.0)' : 'rgba(251, 191, 36, 0.0)' }
+              ] : [
+                { offset: 0, color: isLight ? 'rgba(5, 150, 105, 0.24)' : 'rgba(52, 211, 153, 0.28)' },
+                { offset: 1, color: isLight ? 'rgba(5, 150, 105, 0.0)' : 'rgba(52, 211, 153, 0.0)' }
               ]
             }
           },
-          data: usageData
+          data: series2Data
         }
       ]
     }
@@ -2145,8 +2338,20 @@ function handleResizeWeeklyChart() {
   }
 }
 
-watch(weeklyReport, () => {
+watch(activeWeeklyTab, () => {
   nextTick(renderWeeklyChart)
+})
+
+watch(weeklyReport, () => {
+  if (activeWeeklyTab.value === 'pipe') {
+    nextTick(renderWeeklyChart)
+  }
+}, { deep: true })
+
+watch(weeklyFittingReport, () => {
+  if (activeWeeklyTab.value === 'fitting') {
+    nextTick(renderWeeklyChart)
+  }
 }, { deep: true })
 
 watch(currentTheme, () => {
@@ -2327,6 +2532,14 @@ async function pollLiveRealData() {
     // 4. 实时同步管件类型汇总
     if (Array.isArray(res.fitting_type_summary)) {
       fittingTypeSummary.value = res.fitting_type_summary
+    }
+
+    // 5. 实时同步 7 日双战报大盘
+    if (res.weekly_report && typeof res.weekly_report === 'object') {
+      weeklyReport.value = res.weekly_report
+    }
+    if (res.weekly_fitting_report && typeof res.weekly_fitting_report === 'object') {
+      weeklyFittingReport.value = res.weekly_fitting_report
     }
 
   } catch (err) {
@@ -2850,9 +3063,12 @@ async function loadRealData(isForce = false) {
         Object.assign(bsConfig, res.big_screen_config)
       }
 
-      // 6. 真实 7 日战报大盘
+      // 6. 真实 7 日双战报大盘（保温管 + 管件）
       if (res.weekly_report && typeof res.weekly_report === 'object') {
         weeklyReport.value = res.weekly_report
+      }
+      if (res.weekly_fitting_report && typeof res.weekly_fitting_report === 'object') {
+        weeklyFittingReport.value = res.weekly_fitting_report
       }
 
       // 7. 保存底层字典供交互使用
@@ -2891,9 +3107,10 @@ onMounted(() => {
   loadRealData()
   startAnimationLoop()
 
-  // 初始化 ECharts 本周战报图表
+  // 初始化 ECharts 本周战报图表并开启10秒自动交替轮播
   nextTick(() => {
     renderWeeklyChart()
+    startWeeklyRotation()
   })
 
   // 监听尺寸变化自适应重算飞线 (rAF 节流)
@@ -2922,6 +3139,8 @@ onBeforeUnmount(() => {
   if (autoDemoTimer) clearInterval(autoDemoTimer)
   if (autoSyncTimer) clearInterval(autoSyncTimer)
   if (liveStreamTimer) clearInterval(liveStreamTimer)
+  if (weeklyRotationTimer) clearInterval(weeklyRotationTimer)
+  if (weeklyCountdownTimer) clearInterval(weeklyCountdownTimer)
   if (animationCycleTimeout) clearTimeout(animationCycleTimeout)
   if (resizeObserver) resizeObserver.disconnect()
   if (chartResizeObserver) chartResizeObserver.disconnect()
@@ -5983,11 +6202,155 @@ onBeforeUnmount(() => {
   overflow: hidden;
   position: relative;
   padding: 12px 14px 10px;
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+/* 轮播切换瞬间微光流动质感 */
+.weekly-report-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00f2fe, #34d399, transparent);
+  transition: left 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.weekly-report-panel.is-switching::before {
+  left: 100%;
+}
+
+.weekly-report-panel.is-switching {
+  box-shadow: inset 0 0 16px rgba(0, 242, 254, 0.15), 0 0 12px rgba(0, 242, 254, 0.2);
+}
+
+.panel-title-anim-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 标题切换过渡动画 */
+.weekly-title-anim-enter-active,
+.weekly-title-anim-leave-active {
+  transition: all 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.weekly-title-anim-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+  filter: blur(2px);
+}
+
+.weekly-title-anim-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(2px);
+}
+
+/* KPI 卡片组平滑入场与缩放动画 */
+.weekly-kpi-anim-enter-active,
+.weekly-kpi-anim-leave-active {
+  transition: all 0.36s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.weekly-kpi-anim-enter-from {
+  opacity: 0;
+  transform: scale(0.96) translateY(6px);
+  filter: blur(2px);
+}
+
+.weekly-kpi-anim-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-6px);
+  filter: blur(2px);
+}
+
+/* 底部复盘栏平滑过渡 */
+.weekly-insight-anim-enter-active,
+.weekly-insight-anim-leave-active {
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.weekly-insight-anim-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.weekly-insight-anim-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* 轻量文本快速淡入淡出 */
+.weekly-fade-fast-enter-active,
+.weekly-fade-fast-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.weekly-fade-fast-enter-from,
+.weekly-fade-fast-leave-to {
+  opacity: 0;
 }
 
 .weekly-report-panel .panel-header {
   margin-bottom: 8px;
   flex-shrink: 0;
+}
+
+/* 战报自动轮播倒计时徽章 */
+.weekly-countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4.5px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #00f2fe;
+  background: rgba(0, 242, 254, 0.12);
+  border: 1px solid rgba(0, 242, 254, 0.28);
+  padding: 1.5px 7px;
+  border-radius: 12px;
+  line-height: 1.3;
+  user-select: none;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 6px rgba(0, 242, 254, 0.1);
+}
+
+.weekly-countdown-badge.paused {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.25);
+  box-shadow: none;
+}
+
+.countdown-pulse-dot {
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 50%;
+  background: #00f2fe;
+  box-shadow: 0 0 5px #00f2fe;
+  animation: weekly-pulse-dot 1.5s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+.countdown-pulse-dot.paused {
+  background: #94a3b8;
+  box-shadow: none;
+  animation: none;
+}
+
+.countdown-text {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  letter-spacing: 0.2px;
+}
+
+@keyframes weekly-pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 
 /* 1. 顶部固定双 KPI：无数据时仅替换辅助文案 */
@@ -6026,6 +6389,12 @@ onBeforeUnmount(() => {
   border-left: 3px solid #fbbf24;
 }
 
+.weekly-kpi-card.fit-usage-card {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-left: 3px solid #34d399;
+}
+
 .kpi-card-header {
   display: flex;
   align-items: center;
@@ -6042,6 +6411,7 @@ onBeforeUnmount(() => {
 }
 .kpi-dot.cyan { background: #00f2fe; box-shadow: 0 0 4px #00f2fe; }
 .kpi-dot.gold { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
+.kpi-dot.emerald { background: #34d399; box-shadow: 0 0 4px #34d399; }
 
 .kpi-title {
   font-size: 11px;
@@ -6063,6 +6433,7 @@ onBeforeUnmount(() => {
 
 .kpi-main-val.cyan-text { color: #00f2fe; text-shadow: 0 0 6px rgba(0, 242, 254, 0.3); }
 .kpi-main-val.gold-text { color: #fbbf24; text-shadow: 0 0 6px rgba(251, 191, 36, 0.3); }
+.kpi-main-val.emerald-text { color: #34d399; text-shadow: 0 0 6px rgba(52, 211, 153, 0.3); }
 
 .kpi-main-val .unit {
   font-size: 10px;
@@ -7168,6 +7539,24 @@ onBeforeUnmount(() => {
   color: #059669;
 }
 
+.bigscreen-container.light .weekly-countdown-badge {
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
+  border-color: rgba(2, 132, 199, 0.28);
+  box-shadow: none;
+}
+
+.bigscreen-container.light .weekly-countdown-badge.paused {
+  color: #64748b;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.bigscreen-container.light .countdown-pulse-dot {
+  background: #0284c7;
+  box-shadow: 0 0 4px #0284c7;
+}
+
 .bigscreen-container.light .weekly-kpi-card.ship-card {
   background: #ffffff;
   border-color: rgba(2, 132, 199, 0.3);
@@ -7179,6 +7568,14 @@ onBeforeUnmount(() => {
   border-color: rgba(217, 119, 6, 0.3);
   border-left: 3px solid #d97706;
 }
+
+.bigscreen-container.light .weekly-kpi-card.fit-usage-card {
+  background: #ffffff;
+  border-color: rgba(5, 150, 105, 0.3);
+  border-left: 3px solid #059669;
+}
+
+.bigscreen-container.light .kpi-main-val.emerald-text { color: #059669; text-shadow: none; }
 
 .bigscreen-container.light .weekly-chart-box {
   background: #ffffff;

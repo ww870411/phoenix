@@ -2092,6 +2092,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             "weather_cache_duration_min": int(bs_config_raw.get("weather_cache_duration_min") or 15),
             "transit_duration_min_hours": float(bs_config_raw.get("transit_duration_min_hours") if bs_config_raw.get("transit_duration_min_hours") is not None else 1.0),
             "transit_duration_max_hours": float(bs_config_raw.get("transit_duration_max_hours") if bs_config_raw.get("transit_duration_max_hours") is not None else 36.0),
+            "weekly_rotation_interval_sec": int(bs_config_raw.get("weekly_rotation_interval_sec") or 10),
         }
 
         live_feed_list.sort(key=lambda x: x.get("raw_time") or "", reverse=True)
@@ -2315,8 +2316,78 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             weekly_report["total_usage_km"] = tot_usage_km
             weekly_report["total_usage_m"] = int(total_usage_m)
             weekly_report["days"] = days_list
+
+            # 3. 从 tube_fitting_delivery 查询近7日管件每日发运量
+            daily_fit_ship_sql = text("""
+                SELECT 
+                    DATE(shipped_at) AS s_date,
+                    SUM(COALESCE(shipped_qty, 0)) AS ship_pcs
+                FROM tube.tube_fitting_delivery
+                WHERE status != 'cancelled'
+                GROUP BY DATE(shipped_at)
+            """)
+            try:
+                fit_ship_rows = session.execute(daily_fit_ship_sql).mappings().all()
+            except Exception:
+                fit_ship_rows = []
+            fit_ship_by_date = defaultdict(int)
+            for r in fit_ship_rows:
+                if r["s_date"]:
+                    d_str = r["s_date"].strftime("%Y-%m-%d")
+                    fit_ship_by_date[d_str] += int(float(r["ship_pcs"] or 0))
+
+            # 4. 从 tube_fitting_daily_usage 查询近7日管件每日安装使用量
+            daily_fit_usage_sql = text("""
+                SELECT 
+                    usage_date,
+                    SUM(COALESCE(usage_qty, 0)) AS usage_pcs
+                FROM tube.tube_fitting_daily_usage
+                WHERE status = 'active'
+                GROUP BY usage_date
+            """)
+            try:
+                fit_usage_rows = session.execute(daily_fit_usage_sql).mappings().all()
+            except Exception:
+                fit_usage_rows = []
+            fit_usage_by_date = defaultdict(int)
+            for r in fit_usage_rows:
+                if r["usage_date"]:
+                    d_str = r["usage_date"].strftime("%Y-%m-%d")
+                    fit_usage_by_date[d_str] += int(float(r["usage_pcs"] or 0))
+
+            total_fit_ship_pcs = 0
+            total_fit_usage_pcs = 0
+            fit_days_list = []
+
+            for cur_d in seven_days:
+                cur_d_str = cur_d.strftime("%Y-%m-%d")
+                f_s_pcs = int(fit_ship_by_date.get(cur_d_str, 0))
+                f_u_pcs = int(fit_usage_by_date.get(cur_d_str, 0))
+                total_fit_ship_pcs += f_s_pcs
+                total_fit_usage_pcs += f_u_pcs
+
+                fit_days_list.append({
+                    "date": cur_d.strftime("%m/%d"),
+                    "full_date": cur_d_str,
+                    "day_name": day_names_zh[cur_d.weekday()],
+                    "shipped_pcs": f_s_pcs,
+                    "usage_pcs": f_u_pcs
+                })
+
+            weekly_fitting_report = {
+                "date_range_str": f"{start_date_str} ~ {end_date_str}",
+                "total_shipped_pcs": total_fit_ship_pcs,
+                "total_usage_pcs": total_fit_usage_pcs,
+                "days": fit_days_list
+            }
         except Exception as e:
             print("⚠️ 构建本周战报异常:", e)
+            weekly_fitting_report = {
+                "date_range_str": weekly_report.get("date_range_str", "近7日"),
+                "total_shipped_pcs": 0,
+                "total_usage_pcs": 0,
+                "days": []
+            }
 
         return {
             "ok": True,
@@ -2351,6 +2422,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             "demand_nodes": demand_nodes,
             "milestones": milestones,
             "weekly_report": weekly_report,
+            "weekly_fitting_report": weekly_fitting_report,
             "big_screen_config": big_screen_config,
             "pipe_models": [pm.get("pipe_model_name") or pm.get("id") or str(pm) for pm in pipe_models if pm],
             "supply_entities_raw": supply_entities,
@@ -2371,6 +2443,7 @@ class BigScreenConfigUpdatePayload(BaseModel):
     weather_cache_duration_min: Optional[int] = 15
     transit_duration_min_hours: Optional[float] = 1.0
     transit_duration_max_hours: Optional[float] = 36.0
+    weekly_rotation_interval_sec: Optional[int] = 10
 
 
 @router.post("/big-screen/config", summary="更新并持久化保存大屏运行参数与动效设定")
@@ -2396,6 +2469,7 @@ def save_big_screen_config(
         "weather_cache_duration_min": max(1, min(120, int(payload_in.weather_cache_duration_min or 15))),
         "transit_duration_min_hours": round(max(0.0, min(24.0, min_h)), 1),
         "transit_duration_max_hours": round(max(1.0, min(168.0, max_h)), 1),
+        "weekly_rotation_interval_sec": max(3, min(120, int(payload_in.weekly_rotation_interval_sec or 10))),
     }
     payload["big_screen_config"] = new_bs
     save_tube_config(payload)

@@ -1,3 +1,68 @@
+## 2026-08-28 [大屏“本周战报”轮播切换动效升级：流光扫描与元素平滑缩放/淡入淡出交付]
+- **需求与优化背景**：
+  - 用户提出：“切换有点突兀，能做成某种动效吗？”；
+  - **实现目标**：消除战报由保温管切至管件（或反之）时的突兀感，打造富有未来科技感的平滑过渡动画体验。
+- **改动与实现详情**：
+  1. **状态驱动的动效调度机制**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 引入 `isWeeklySwitching` 瞬态响应式标志（每次切换触发 450ms 动效周期），驱动面板外边框产生高科技顶栏激光流光扫描与内阴影脉冲扫过效果（`weekly-report-panel.is-switching::before`）；
+  2. **多层级 Vue `<transition>` 平滑补间**：
+     - **标题栏（`.weekly-title-anim`）**：图标与标题采用 `cubic-bezier(0.2, 0.8, 0.2, 1)` 执行位移模糊出入场；
+     - **KPI 卡片组（`.weekly-kpi-anim`）**：双卡片采用弹性曲线 `cubic-bezier(0.34, 1.3, 0.64, 1)`，伴随 `scale(0.96) translateY(6px)` 缩放微弹入场，数值与单位平滑过渡；
+     - **ECharts 双轨图表**：配置 `animationDurationUpdate: 650` 与 `animationEasingUpdate: 'cubicOut'`，折线轨迹、数据点与填充渐变在不同量程间丝滑形变滑动；
+     - **底部复盘栏（`.weekly-insight-anim`）**：3 栏统计峰值与今日数据平滑淡入交替。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 20.71s），零报错。
+
+## 2026-08-28 [大屏“本周战报”倒计时显现与“调度与大屏控制台”轮播周期参数配置交付]
+- **需求与优化背景**：
+  - 用户要求：“倒计时可以显示，另外，将切换周期写入全网工程实时动态播报”；
+  - **实现目标**：
+    1. 在右下角战报面板顶栏显式呈现倒计时徽章（`weekly-countdown-badge`），以秒级（`10s`、`9s`...）动态跳动显示当前战报剩余停留时长，鼠标悬停时自适应变为 `⏸️ 已暂停`；
+    2. 在“调度与大屏控制台”中新增「📅 周战报轮播周期」滑动调节条（范围 3~60 秒，默认 10 秒），支持 Global_admin 调节后即刻本地生效，并可持久化写入后端 `tube_config.json`。
+- **改动与实现详情**：
+  1. **前端倒计时与秒级定时器重构**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 增加响应式状态 `weeklyCountdownSec`，将原本的固定 10 秒单步定时器重构为 1 秒心跳定时器（`weeklyCountdownTimer`）；
+     - 每秒心跳自动扣减 `weeklyCountdownSec`，归零时触发战报类型交替切换（`pipe` ⇋ `fitting`）并重置为设定的周期时长；
+     - 在面板 Header 增加 `.weekly-countdown-badge` 视觉徽章，实时展示呼吸指示圆点与剩余秒数（或已暂停状态）；
+     - 在控制台浮层增加「📅 周战报轮播周期」滑块控件（绑定 `bsConfig.weekly_rotation_interval_sec`），调节滑块时实时重置倒计时并应用最新周期；
+     - 支持 Dark / Light 双主题的倒计时徽章色彩与呼吸脉冲动画。
+  2. **后端配置持久化支持**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - `BigScreenConfigUpdatePayload` 与 `save_big_screen_config` 中增加 `weekly_rotation_interval_sec` 字段校验与持久化存储；
+     - `getTubeBigScreenData` 接口中聚合输出 `weekly_rotation_interval_sec`。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 19.80s），零报错。
+
+## 2026-08-28 [大屏“本周战报”交互优化：移除切换按钮，保持纯自动10秒交替轮播交付]
+- **需求与优化背景**：
+  - 用户反馈：“不需要显示“保温管”“管件”的切换按钮”；
+  - **实现目标**：移除右下角战报面板 Header 中的微胶囊切换按钮组，恢复纯净大气的大屏视觉风格，仅保留大屏标题与统计周期标签，依靠 10 秒定时器在后台平滑自动轮播。
+- **改动与实现详情**：
+  1. **前端模板精简**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 移除面板 Header 中的 `.weekly-tab-switch` 按钮组；
+     - 标题与图标（`📅 本周保温管施工战报` vs `🧩 本周管件施工战报`）每隔 10 秒自动平滑交替演变；
+     - 保留鼠标悬停面板时自动暂停轮播、移开后继续轮播的静息机制。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 18.57s），零报错。
+
+## 2026-08-28 [大屏“本周战报”升级：保温管(km)与管件(件)双战报10秒自动轮播与手动微胶囊切换交付]
+- **需求与优化背景**：
+  - 用户提出：“我在考虑，大屏中的那个“本周保温管施工战报”，能否在同一位置做一个类似的“本周管件施工战报”？然后每隔10秒钟，两者切换显示”；
+  - **实现目标**：在右下角战报面板中无缝整合“本周保温管施工战报（km）”与“本周管件施工战报（件）”，支持每隔 10 秒自动平滑交替轮播，同时右上角提供直观的微胶囊切换开关（`[管材 (km)] [管件 (件)]`）与 10s 呼吸脉冲指示灯，支持用户随时点击手动切换，鼠标悬停时自动静止以便查看。
+- **改动与实现详情**：
+  1. **后端管件 7 日发运与安装态势聚合**（[workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+     - 从 `tube.tube_fitting_delivery` 查询近 7 日每日管件发运件数（`ship_pcs`）；
+     - 从 `tube.tube_fitting_daily_usage`（`status = 'active'`）查询近 7 日每日管件安装件数（`usage_pcs`）；
+     - 聚合生成 `weekly_fitting_report` 数据结构（包含 `date_range_str`、`total_shipped_pcs`、`total_usage_pcs`、`days` 每日双轨明细），在 `getTubeBigScreenData` 接口中与原 `weekly_report` 并行返回。
+  2. **前端大屏双战报 10 秒轮播与多维度动态渲染**（[BigScreenDashboardView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）：
+     - 状态管理：引入 `activeWeeklyTab`（`'pipe'` | `'fitting'`）、`isWeeklyHovered`、`startWeeklyRotation()`（10 秒定时循环切换）；
+     - 交互微胶囊：在面板 Header 增加 `weekly-tab-switch` 胶囊组件，展示当前活跃标签及 10s 呼吸动画指示器，鼠标移入自动暂停轮播、移出恢复；
+     - 顶部双 KPI 自适应：保温管展示“7日累计发货量 (km)”与“7日累计施工量 (km)”；管件展示“7日累计发运量 (件)”与“7日累计安装量 (件)”；
+     - ECharts 动态双轨图表：切换时平滑更新 X 轴日期、Series 数据与色系（保温管：蓝青发货 vs 暖金施工；管件：天空蓝发运 vs 翡翠绿安装），Tooltip 智能匹配 `km` 与 `件` 单位；
+     - 底部复盘栏：动态输出发货/发运峰值日、施工/安装峰值日及今日发货施工/发运安装对比；
+     - 主题适配：完善 Dark / Light 双主题的微胶囊、卡片与指标色彩。
+- **验证结果**：
+  - 前端静态构建（`npm run build`）成功编译（736 modules transformed，耗时 19.69s），零报错。
+
 ## 2026-08-28 [远程数据拉取模块为下载的备份文件自动添加“远程_”前缀命名交付]
 - **需求与优化背景**：
   - 用户要求：“拉取的远程备份文件，我希望能在名称前添加“远程”字样”；

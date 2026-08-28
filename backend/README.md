@@ -1,3 +1,24 @@
+## 2026-08-28 供暖大屏后端（workspace.py）支持周战报轮播周期（weekly_rotation_interval_sec）持久化交付
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 关联端点：
+    - `POST /api/v1/projects/{project_key}/tubes/big-screen/config`（更新大屏配置）
+    - `GET /api/v1/projects/{project_key}/tubes/big-screen-data`（读取大屏聚合数据）
+- **功能特性与参数支持**：
+  1. 在 `BigScreenConfigUpdatePayload` 与 `save_big_screen_config` 中增加 `weekly_rotation_interval_sec` 字段校验（3~120秒，默认 10秒）并持久化存入 `tube_config.json`；
+  2. 在 `get_big_screen_data` 的 `big_screen_config` 中输出该配置项。
+
+## 2026-08-28 供暖大屏后端（workspace.py）新增本周管件发运与安装双轨聚合服务交付
+
+- **服务模块与接口定义**：
+  - 关联模块：`backend/projects/insulation_pipe_supply_2026/api/workspace.py`
+  - 关联端点：`GET /api/v1/projects/{project_key}/tubes/big-screen-data`
+- **管件 7 日战报聚合算法与响应扩展**：
+  1. **管件发运态势**：从 `tube.tube_fitting_delivery` 查询近 7 日每日发运件数（`ship_pcs`）；
+  2. **管件安装态势**：从 `tube.tube_fitting_daily_usage` 查询近 7 日每日有效施工安装件数（`usage_pcs`）；
+  3. **数据结构输出**：在接口中新增返回 `weekly_fitting_report` 包含近 7 日周期汇总及每日发运与安装明细，供大屏双战报 10 秒轮播与展示。
+
 ## 2026-08-28 数据库远程备份拉取服务增加“远程_”前缀命名规范交付（admin_console.py）
 
 - **服务模块与接口定义**：
