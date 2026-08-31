@@ -280,6 +280,11 @@
         "unit": "low_lot_5"
       },
       {
+        "username": "魏昊南",
+        "password": "weihaonan_0831",
+        "unit": "low_lot_5"
+      },
+      {
         "username": "侯志超",
         "password": "houzhichao_0817",
         "unit": "low_lot_6"
@@ -320,6 +325,21 @@
         "username": "赵学斌",
         "password": "zhaoxuebin_0819",
         "unit": "low_lot_2"
+      },
+      {
+        "username": "张敬东",
+        "password": "zhangjingdong_0831",
+        "unit": "low_lot_4"
+      },
+      {
+        "username": "袁克华",
+        "password": "yuankehua_0831",
+        "unit": "low_lot_5"
+      },
+      {
+        "username": "高玉荣",
+        "password": "gaoyurong_0831",
+        "unit": "low_lot_6"
       }
     ],
     "tube_warehouse_keeper": [

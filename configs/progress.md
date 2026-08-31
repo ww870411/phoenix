@@ -1,3 +1,145 @@
+## 2026-08-31 [需求管理服务：修复保温管历史台账后端函数依赖与前端视觉优化]
+- **需求背景与排查结论**：
+  - 用户反馈：“*奇怪，显示“当前标段尚无保温管使用与损耗填报历史记录。”我看的标段明明有填过使用记录的*”；
+  - **根本原因剖析**：在 [`demand_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py) 中，`list_pipe_usage_history` 函数内部直接引用了 `load_tube_config`，但该函数此前未在文件头部显式导入，导致后端在处理请求时抛出 `NameError: name 'load_tube_config' is not defined` 异常，前端捕获异常后将数据置为空列表。
+- **改动与实现详情**：
+  1. **补齐后端模块依赖**：
+     - 文件：[`demand_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py)
+     - 显式从 `config_service` 导入 `load_tube_config` 与 `get_config_list`，并封装 `_build_pipe_model_map` 与 `_build_section_1_name_map`；
+     - 本地独立脚本实测验证，`low_lot_2`（低温水_标段2）返回 70 条真实填报明细，`high_lot_1`（高温水_标段1）返回 13 条明细。
+  2. **前端视觉与明细下钻优化**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 为有实际施工量或损耗量的规格型号明细行添加高亮背景与【当日施工】徽标，零消耗规格保持柔和灰色字体，使施工重点一目了然。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，接口调用返回 200 OK，标段历史填报记录按日期完整、清晰地展现在表格中。
+
+## 2026-08-31 [需求管理工作台：保温管实际消耗与损耗上报下方新增填报历史台账]
+- **需求背景与目标**：
+  - 用户指令：“*在页面 demand_management?category=pipe&tab=usage 中，将该标段的使用量填报历史显示在当前的“实际消耗与损耗上报”栏目下方*”；
+  - 核心诉求：为现场施工管理人员与调度决策人员提供当前标段完整的保温管实际施工消耗与现场损耗历史流水台账，支持按采集日期回溯各规格型号的消耗量、损耗量、合计米数、填报人与备注。
+- **改动与实现详情**：
+  1. **后端历史台账查询服务与路由接口**：
+     - 文件：[`demand_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 新增 `list_pipe_usage_history` 函数，从 `tube.tube_daily_usage` 中按采集日期倒序与规格型号升序全量拉取历史使用与损耗明细；
+     - 暴露 API 路由：`GET /api/v1/projects/{project_key}/demand-management/pipe-usage/history`。
+  2. **前端 API 契约封装**：
+     - 文件：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+     - 导出 `listTubePipeUsageHistory(projectKey, params)`。
+  3. **现场管理工作台 UI 与交互呈现 (`DemandManagementView.vue`)**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 在 Tab 2 `actual_usage` 填报卡片下方新增【📋 保温管施工使用与损耗历史台账】面板；
+     - 构筑日期聚合主行，直观呈现每日常规填报规模（型号数）、施工消耗总量（米）、现场损耗总量（米）、合计总米数、填报人与填报时间；
+     - 点击日期主行可展开展示该日期下各直管规格型号的施工量、损耗量、合计量、填报人与备注明细；
+     - 顶部操作栏提供【全部展开】、【全部折叠】、【📊 导出使用台账 (Excel)】与【🔄 刷新台账】功能；
+     - 与标段切换、日期切换、提交保存生命周期深度联动，保存提交后毫秒级自动刷新历史台账。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，页面在 `category=pipe&tab=usage` 下完美呈现下半区的历史台账面板，交互流畅舒展。
+
+## 2026-08-31 [全局数字看板：修复标段穿透弹窗过滤空匹配导致展示全局数据问题]
+- **需求背景与排查结论**：
+  - 用户反馈：“*不正确，弹出来的图和表，并非是点击的那个标段的，而是全局的*”；
+  - **根本原因剖析**：此前在 `currentSectionModelRows` 计算属性中，由于同时比较了 `rowSecCode === secCode`，当两者的 `code` 均为空值（`undefined` 或空字符串 `''`）时，`'' === ''` 的比较结果恒为 `true`，导致全网所有标段的型号数据都被错误地判定为匹配成功，使得弹窗内聚合了全局大盘数据。
+- **改动与实现详情**：
+  1. **标段过滤条件精准重构 (`DashboardView.vue`)**：
+     - 文件：[`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)
+     - 剔除无条件的空值比较，严格且互斥地仅按非空的 `secId === rowSecId` 或 `secName === rowSecName` 进行精准比对；
+     - 确保弹窗内的 4 张 KPI 卡片、ECharts 柱状图、明细表格及 Excel 导出数据 **100% 严格限定为当前点击选中的单一边标段**。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，点击各个标段（如“高温水_标段1”、“低温水_标段2”）时，弹窗图表与表格均能准确、纯粹地呈现该标段独立的各型号数据。
+
+## 2026-08-31 [全局数字看板：透视表支持点击标段弹窗穿透各型号供需与库存统计看板]
+- **需求背景与目标**：
+  - 用户指令：“*在全局数字看板的“供需全链路多维穿透透视表”中，点击某标段的记录，也弹窗显示出刚刚我们构建的这张表，用于向用户展示情况*”；
+  - 核心诉求：在大盘宏观透视表与微观标段各型号供需数据之间建立无缝穿透通道，让调度决策人员点击任意标段即可即刻调出该标段完整的 4 大态势卡片、ECharts 供需对照图与全要素明细台账。
+- **改动与实现详情**：
+  1. **透视表交互穿透增强 (`DashboardView.vue`)**：
+     - 文件：[`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)
+     - 在 `pivotMode === 'section_1'`（按需求主体维度）下，为每一行添加悬浮动效与 `🔍 穿透` 徽标，点击任意标段行即触发 `handleOpenSectionDetail(item)`；
+  2. **Teleport 标段全要素穿透模态弹窗 (`sectionDetailModalVisible`)**：
+     - 采用 `<Teleport to="body">` 挂载独立弹窗，具备毛玻璃遮罩、标题头与快捷关闭；
+     - 弹窗顶部呈现 4 张关键态势概览指标卡片（三日需求计划、现场实物库存、运输在途保供、三日净缺口报警脉冲）；
+     - 挂载 ECharts `modalChartRef`，自适应渲染该标段下各型号的【三日需求计划 vs 现场库存 vs 运输在途 vs 三日净缺口】4 轨对比柱状图；
+     - 提供【📋 各型号供需全要素穿透台账】明细表格，支持“⚠️ 仅看存在净缺口型号”一键过滤、型号关键词搜索、表尾合计行与标段专属 Excel 报表导出。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，点击透视表中任意标段均能秒级唤起完整且自适应撑满宽度的供需全景看板弹窗。
+
+## 2026-08-31 [现场管理工作台：供需对照图名称精简与 ECharts 宽度自适应展开修复]
+- **需求背景与问题排查**：
+  - 用户反馈：“*1. 图表名称改为“各型号保温管供需对照图”；2. 目前这个图无法显示出来，全都聚在一起了，没有展开*”；
+  - **根本原因剖析**：此前图表容器绑定了 `v-show="!overviewLoading"`，在数据异步加载期间 DOM 处于 `display: none`（宽度为 0），导致 ECharts 实例初始化时默认回退至 100px 宽度，造成图表柱子被挤压折叠在一起。
+- **改动与实现详情**：
+  1. **图表标题精简 (`DemandManagementView.vue`)**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 将图表标题规范精简为 `📊 各型号保温管供需对照图`；
+  2. **DOM 舞台层级重构**：
+     - 引入 `.overview-chart-stage` 容器，移除 `overviewChartRef` DOM 上的 `v-show="display:none"` 属性，使图表 Canvas 节点始终保持 100% 物理宽度；加载遮罩改用绝对定位覆盖；
+  3. **多级自适应 Resize 与 ResizeObserver 监听**：
+     - 在 `loadDemandInventoryOverview` 完成（`overviewLoading = false`）后的 `nextTick` 及 80ms/300ms 延时中多级显式触发 `overviewChartInstance.resize()`；
+     - 在 `echarts.init` 时为容器绑定 `ResizeObserver`，一旦容器发生尺寸变化或 Tab 展开即刻毫秒级自适应充满 100% 宽度。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，各型号保温管供需对照图 100% 舒展展开，柱状图排列清晰饱满。
+
+## 2026-08-31 [现场管理工作台：需求侧新增“需求与库存信息统计”全景看板]
+- **需求背景与目标**：
+  - 用户指令：“*在现场管理工作台（需求侧）的“实际消耗与损耗上报”标签页前，添加一个新的标签，即“需求与库存信息统计”，用于向用户以图和表的形式展示各型号保温管的三日需求计划量，发货量，施工量，库存量，库存+在途，三日净缺口情况*”；
+  - 核心要求：为需求侧一线施工管理人员与调度人员提供基于当前选定需求主体（标段工区）的供需全景穿透视图，融合 4 大关键 KPI 态势概览卡片、ECharts 各型号多维对比柱状图与全要素明细透视表，提供结构性缺料断料精准预警与快捷联动填报。
+- **改动与实现详情**：
+  1. **子标签导航升级 (`DemandManagementView.vue`)**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 保温管业务大类功能计数升级为 5 项功能，子标签首位（`usage` 前）新增 `📈 需求与库存信息统计` (`overview`)；
+  2. **顶部 4 张态势概览 KPI 卡片**：
+     - 包含：`🕒 三日需求计划总量`、`📦 现场可用实物库存`、`🚚 运输在途保供总量`、`🚨 三日净缺口报警量`；
+     - 净缺口卡片支持动态脉冲光晕与断料风险型号数量预警；
+  3. **ECharts 交互式多维对比图表**：
+     - 挂载 `overviewChartRef`，基于 ECharts 渲染各规格型号的 `三日需求计划` vs `现场库存` vs `运输在途` vs `三日净缺口` 4 系列对比柱状图；
+     - 支持富文本 Tooltip 穿透浮窗与自适应 Resize；
+  4. **各型号供需全要素穿透表格**：
+     - 包含列：`#`、`保温管规格型号`、`三日需求计划(m)`、`累计发货(m)`、`累计施工(m)`、`现场库存(m)`、`运输在途(m)`、`库存+在途(m)`、`三日净缺口(m)`、`保供态势判定`、`快捷联动`（一键跳去填计划/报消耗）；
+     - 支持模糊搜索、一键勾选“⚠️ 仅看存在净缺口型号”、表尾合计行与 Excel 导出；
+  5. **响应式生命周期与联动**：
+     - 切换需求主体或采集日期时自动加载与重新渲染图表，组件卸载时安全释放 ECharts 实例。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，各型号 6 大核心指标计算严密闭环，图表与表格联动顺畅。
+
+## 2026-08-31 [大盘看板：供需全链路穿透透视表分型号独立核算与三日缺口业务逻辑确认]
+- **业务背景与用户咨询**：
+  - 用户咨询与排查：“*1. 高温水_标段1显示三日计划=0、累计发货=888、运输在途=0、现场库存=204，但三日硬缺=三日净缺=684，数字间是什么关系？ 2. 低温水_标段2总体现存与在途充足，三日净缺为什么还有 733.02 米？*”；
+  - **核心业务逻辑与数据关系梳理**：
+    1. **型号不可替代原则**：在实际工程中，不同管径规格型号的保温管物理上无法互相替代（大口径管道不能拿来充当小口径管道敷设），因此系统必须在“单一型号规格”底层独立核算现场库存、硬缺口与净缺口，再向上累加汇总到标段总览行；
+    2. **高温水_标段1的 684 米缺口来源**：大口径型号库存富余 888 米（缺口为 0），而某一小口径型号现场施工上报铺设了 684 米但无对应到货入库（产生 -684 米负库存），导致该单一型号产生了 684 米实物补齐硬缺口；
+    3. **低温水_标段2的 733.02 米净缺来源**：虽然总体现存与在途超 6500 米大于 4000 米总计划，但穿透底层发现 `Φ108`（三日要料 1400m，现存 927m，在途 0m，净缺 **472.92m**）与 `Φ133`（三日要料 1200m，现存 663m，在途 277m，净缺 **260.10m**）面临严重的结构性断料停工风险，两者相加恰为 **733.02m**；
+    4. **数字化保供价值**：有效防止“总量充裕掩盖单一主力规格断料风险”，向调度室发出精准排产与调拨预警。
+- **验证与结论**：
+  - 用户理解并确认了分型号独立核算的业务逻辑，透视表各项公式严格自洽无误。
+
+## 2026-08-31 [智慧大屏：修复管件与保温管全局在途统计口径脱节问题]
+- **需求背景与排查结论**：
+  - 用户反馈：“*目前管件板块显示累计发货总量1050件，在途 776，但在“低温水_标段2”中显示管件908（+42），明显对不上，排查原因*”；
+  - **根本原因剖析**：
+    1. **全局在途 KPI 口径错误（虚高）**：后端在 `workspace.py` 中计算 `fitting_transit_total_pcs` 与 `pipe_transit_total_m` 时，错误地将 `pending_receive`（现场待施工接收）和 `pending_warehouse`（现场待库管确认）也判定成了“在途”；但这两类货物早已物理运抵现场卸车，根本不再处于运输中，导致左侧在途虚高统计到 776 件；
+    2. **标段节点计算口径（真实）**：标段卡片按 `f_transit = max(f_shipped - f_arrived, 0)` 计算，仅将尚未确认到货（`pending_arrival`）的 42 件算作在途（并闪烁 `(+42)`），另外 908 件算作已到货；
+    3. **两端割裂**：左侧与标段卡片公式脱节，导致用户看到左侧在途 776，而全图标段在途闪烁总和只有 42 件。
+- **改动与实现详情**：
+  1. **全局在途 KPI 计算口径修正 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 将 `fitting_transit_total_pcs` 与 `pipe_transit_total_m` 严格约束为仅统计 `status in ('pending_arrival', 'shipped')` 的真实在途运送量；
+     - 确保全局总在途与全网 10 大标段卡片上的 `transitKm` / `transitFittings` 之和 100% 吻合、数出同源。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，智慧大屏左侧管件在途指标与“低温水_标段2”及全网各标段卡片上的在途闪烁完全闭环一致。
+
+## 2026-08-31 [智慧大屏：保温管全网发运情报在途标签颜色与总线主题对齐]
+- **需求背景与目标**：
+  - 用户反馈：“*在“保温管全网发运情报”板块中，考虑到我们目前的连线是保温管为蓝色、管件为黄色，但此处的“在途 X.XX”标签此前为黄色，请将其修改为同“保温管总线”标签相同的颜色*”；
+  - 核心要求：统一大屏全局色彩语义标准，保温管维度统一定义为青蓝色彩系（Cyan/Sky Blue），管件维度统一定义为琥珀金黄色系（Amber/Gold）；将保温管情报卡片内的【在途】胶囊由 `amber-capsule` 替换为 `cyan-capsule`，实现与面板右上角【保温管总线】Tag 完全相同的背景与描边。
+- **改动与实现详情**：
+  1. **大屏卡片在途胶囊色彩对齐 (`BigScreenDashboardView.vue`)**：
+     - 文件：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+     - 将保温管板块中的在途状态标签类名由 `amber-capsule` 调整为 `cyan-capsule`；
+     - 在深色主题样式下定义 `.metric-capsule.cyan-capsule`：`background: rgba(0, 242, 254, 0.12); color: #38bdf8; border: 1px solid rgba(0, 242, 254, 0.3);`；
+     - 在浅色主题样式下定义 `.bigscreen-container.light .metric-capsule.cyan-capsule`：`background: rgba(2, 132, 199, 0.12); color: #0284c7; border: 1px solid rgba(2, 132, 199, 0.35);`。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，大屏左右两侧保温管与管件的各处连线、胶囊与标签色彩逻辑达到严密统一。
+
 ## 2026-08-31 [库管员工作台：保温管台账概览四节点流转卡片与统计小字统一改造]
 - **需求背景与目标**：
   - 用户指令：“*在库管保温管页面的“台账概览”中，上方的小统计卡片，请改为与“管件”相同的样式和文字（及其功能含义），去掉“记录总数”，仿照管件的库管页面，用一行小字描述*”；

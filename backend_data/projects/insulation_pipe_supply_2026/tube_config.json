@@ -464,6 +464,14 @@
       ]
     },
     {
+      "manager_id": "魏昊南",
+      "manager_name": "魏昊南",
+      "contact_phone": "13604263007",
+      "section_1_ids": [
+        "low_lot_5"
+      ]
+    },
+    {
       "manager_id": "侯志超",
       "manager_name": "侯志超",
       "contact_phone": "15242629305",
@@ -533,6 +541,33 @@
       "contact_phone": "15841170444",
       "section_1_ids": [
         "low_lot_2"
+      ]
+    },
+    {
+      "unit_id": "张敬东",
+      "unit_name": "大连明德节能环保工程技术有限公司",
+      "contact_name": "张敬东",
+      "contact_phone": "13898429907",
+      "section_1_ids": [
+        "low_lot_4"
+      ]
+    },
+    {
+      "unit_id": "袁克华",
+      "unit_name": "天津海盛石化建筑安装工程有限公司",
+      "contact_name": "袁克华",
+      "contact_phone": "13009480365",
+      "section_1_ids": [
+        "low_lot_5"
+      ]
+    },
+    {
+      "unit_id": "高玉荣",
+      "unit_name": "大连诚越建设有限公司",
+      "contact_name": "高玉荣",
+      "contact_phone": "13354263157",
+      "section_1_ids": [
+        "low_lot_6"
       ]
     }
   ],

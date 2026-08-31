@@ -1,9 +1,17 @@
-## 2026-08-31 业务主体与人员管辖穿透联动：支撑前端从流转凭证/操作记录直跳责任主体矩阵
+## 2026-08-31 需求管理服务：新增保温管实际施工使用与损耗历史台账查询接口
 
 - **业务协同与模块定位**：
-  - 对应前端页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)、[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)、[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)、[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)、[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
-  - 对应后端服务：[`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)（`query_entity_directory` 责任主体名录接口）、[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)（操作日志记录）
-  - **协同说明**：后端 `query_entity_directory` 接口输出的供货厂家（`suppliers`）、现场负责人（`site_managers`）、施工标段（`demand_sections`）、物资库管（`warehouse_keepers`）以及全局管理（`global_members`）等 5 大主体及其管辖人员与账号信息，为前端从各个订单凭证与操作记录中依据操作人账号/姓名/主体进行智能模糊与精准匹配提供了完整的全景数据底座。
+  - 对应服务逻辑：[`demand_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py)（`list_pipe_usage_history`）
+  - 对应 API 路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /api/v1/projects/insulation_pipe_supply_2026/demand-management/pipe-usage/history`）
+  - 对应前端页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（现场管理工作台 - 实际消耗与损耗上报）
+  - **功能说明**：从 `tube.tube_daily_usage` 中按采集日期倒序与规格型号升序全量拉取该标段历史施工消耗量、现场损耗量、合计施工量、填报人、填报时间与备注，支持日期范围筛选与模糊检索。
+
+## 2026-08-31 智慧大屏服务：修正管件与保温管全局在途统计口径（数出同源）
+
+- **业务协同与模块定位**：
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /api/v1/projects/insulation_pipe_supply_2026/big_screen/data`）
+  - 对应前端看板：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（指挥调度中心大屏）
+  - **协同说明**：将全局指标中的 `fittingTransitPcs` 与 `pipeTransitKm` 统计口径严格修正为仅包含真实处于运输途中未到货的 `pending_arrival` / `shipped` 单据，剔除已运抵现场的 `pending_receive`（待接收）与 `pending_warehouse`（待库管确认），确保全局总在途数值与全网 10 大标段卡片上的在途量（`transitKm` / `transitFittings`）及其动态闪烁总和 100% 严密吻合。
 
 ## 2026-08-31 账号配置更新：新增用户“张文韬”至 tube_data_viewer 用户组
 

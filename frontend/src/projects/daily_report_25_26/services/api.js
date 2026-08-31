@@ -2768,6 +2768,27 @@ export async function submitTubeFittingUsage(projectKey, payload) {
   return response.json()
 }
 
+export async function listTubePipeUsageHistory(projectKey, params = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const query = new URLSearchParams()
+  if (params.section_1_id) query.set('section_1_id', params.section_1_id)
+  if (params.start_date) query.set('start_date', params.start_date)
+  if (params.end_date) query.set('end_date', params.end_date)
+  if (params.keyword) query.set('keyword', params.keyword)
+
+  const url = normalized(
+    `/projects/${encodeURIComponent(normalizedKey)}/demand-management/pipe-usage/history?${query.toString()}`
+  )
+  const response = await authAwareFetch(url, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取保温管使用量历史台账失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
 export async function listTubeFittingUsageHistory(projectKey, params = {}) {
   const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
   const query = new URLSearchParams()

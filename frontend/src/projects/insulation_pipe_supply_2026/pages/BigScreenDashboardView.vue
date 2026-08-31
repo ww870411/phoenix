@@ -512,7 +512,7 @@
             <div class="metric-item highlight-cyan">
               <div class="metric-label-box">
                 <span class="metric-label">累计发货总量</span>
-                <span class="metric-capsule amber-capsule" title="当前运输在途量">
+                <span class="metric-capsule cyan-capsule" title="当前运输在途量">
                   在途 {{ formatNumber(kpiData.pipeTransitKm) }}
                 </span>
               </div>
@@ -4320,6 +4320,12 @@ onBeforeUnmount(() => {
   letter-spacing: 0.2px;
 }
 
+.metric-capsule.cyan-capsule {
+  background: rgba(0, 242, 254, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 242, 254, 0.3);
+}
+
 .metric-capsule.amber-capsule {
   background: rgba(245, 158, 11, 0.15);
   color: #fbbf24;
@@ -6927,6 +6933,12 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .metric-label {
   color: #64748b;
+}
+
+.bigscreen-container.light .metric-capsule.cyan-capsule {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.35);
 }
 
 .bigscreen-container.light .metric-capsule.amber-capsule {

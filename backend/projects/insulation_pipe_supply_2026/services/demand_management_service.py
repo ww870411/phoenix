@@ -12,6 +12,10 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.projects.insulation_pipe_supply_2026.services.config_service import (
+    load_tube_config,
+    get_config_list,
+)
 
 
 def _normalize_text(value: Any) -> str:
@@ -20,6 +24,24 @@ def _normalize_text(value: Any) -> str:
 
 def _normalize_pipe_model_id(value: Any) -> str:
     return _normalize_text(value).upper()
+
+
+def _build_pipe_model_map(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    pipe_models = get_config_list(payload, "pipe_models")
+    return {
+        _normalize_pipe_model_id(item.get("pipe_model_id")): item
+        for item in pipe_models
+        if _normalize_pipe_model_id(item.get("pipe_model_id"))
+    }
+
+
+def _build_section_1_name_map(payload: Dict[str, Any]) -> Dict[str, str]:
+    demand_entities = get_config_list(payload, "demand_entities")
+    return {
+        _normalize_text(item.get("section_1_id")): _normalize_text(item.get("section_1_name"))
+        for item in demand_entities
+        if _normalize_text(item.get("section_1_id"))
+    }
 
 
 _structures_checked = False
@@ -420,3 +442,87 @@ def list_pending_arrivals(section_1_id: str) -> List[Dict[str, Any]]:
         ]
     finally:
         session.close()
+
+
+def list_pipe_usage_history(
+    section_1_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    keyword: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """查询指定标段的直管实际使用与损耗历史流水记录"""
+    payload = load_tube_config()
+    pipe_model_map = _build_pipe_model_map(payload)
+    section_1_name_map = _build_section_1_name_map(payload)
+
+    conditions = ["u.section_1_id = :section_1_id"]
+    params: Dict[str, Any] = {"section_1_id": section_1_id}
+
+    if start_date:
+        conditions.append("u.usage_date >= :start_date")
+        params["start_date"] = start_date
+    if end_date:
+        conditions.append("u.usage_date <= :end_date")
+        params["end_date"] = end_date
+
+    where_clause = " AND ".join(conditions)
+    sql = text(
+        f"""
+        SELECT
+            u.id,
+            u.usage_date,
+            u.section_1_id,
+            u.pipe_model_id,
+            u.usage_qty,
+            u.loss_qty,
+            u.filled_by,
+            u.filled_at,
+            u.remark,
+            u.updated_by,
+            u.updated_at
+        FROM tube.tube_daily_usage u
+        WHERE {where_clause}
+        ORDER BY u.usage_date DESC, u.pipe_model_id ASC, u.id DESC
+        """
+    )
+    session = SessionLocal()
+    try:
+        rows = session.execute(sql, params).mappings().all()
+        results = []
+        for r in rows:
+            pm_id = _normalize_pipe_model_id(r["pipe_model_id"])
+            pm_info = pipe_model_map.get(pm_id) or {}
+            pm_name = pm_info.get("pipe_model_name") or pm_id
+            unit = pm_info.get("unit") or "米"
+
+            usage_qty = float(r["usage_qty"] or 0)
+            loss_qty = float(r["loss_qty"] or 0)
+            total_qty = round(usage_qty + loss_qty, 2)
+
+            item = {
+                "id": r["id"],
+                "usage_date": r["usage_date"].isoformat() if hasattr(r["usage_date"], "isoformat") else str(r["usage_date"]),
+                "section_1_id": r["section_1_id"],
+                "section_1_name": section_1_name_map.get(r["section_1_id"], r["section_1_id"]),
+                "pipe_model_id": pm_id,
+                "pipe_model_name": pm_name,
+                "unit": unit,
+                "usage_qty": usage_qty,
+                "loss_qty": loss_qty,
+                "total_qty": total_qty,
+                "filled_by": r["filled_by"] or "施工现场",
+                "filled_at": r["filled_at"].isoformat() if r["filled_at"] else "",
+                "remark": r["remark"] or "",
+                "updated_by": r["updated_by"] or "",
+                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else "",
+            }
+            if keyword:
+                kw = str(keyword).lower().strip()
+                match_text = f"{item['pipe_model_name']} {item['pipe_model_id']} {item['remark']} {item['filled_by']}".lower()
+                if kw not in match_text:
+                    continue
+            results.append(item)
+        return results
+    finally:
+        session.close()
+

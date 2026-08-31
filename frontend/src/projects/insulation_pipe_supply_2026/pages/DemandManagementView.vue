@@ -106,7 +106,7 @@
             >
               <span class="cat-icon">🔹</span>
               <span class="cat-label">保温管业务</span>
-              <span class="cat-count">4 项功能</span>
+              <span class="cat-count">5 项功能</span>
             </button>
             <button 
               type="button" 
@@ -125,6 +125,13 @@
         <div class="tube-tabs-header-wrap">
           <!-- 保温管子标签 -->
           <div class="tube-tabs-header" v-if="activeCategory === 'pipe'">
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'overview' }" 
+              @click="handleTabClick('overview')"
+            >
+              📈 需求与库存信息统计
+            </button>
             <button 
               type="button" 
               :class="{ active: activeTab === 'usage' }" 
@@ -185,6 +192,260 @@
       <!-- Tab内容区域 -->
       <div class="tube-tab-content-wrap" v-if="selectedSection1Id">
         
+        <!-- Tab 0: 需求与库存信息统计 (图 + 表) -->
+        <div v-if="activeTab === 'overview'" class="tab-pane">
+          <section class="card elevated tab-card demand-overview-pane">
+            <div class="panel-title-row" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h2>📈 保温管需求与库存信息统计</h2>
+                <span class="panel-hint">
+                  统计当前标段各型号保温管的“三日需求计划量、发货量、施工量、库存量、库存+在途、三日净缺口”，提供多维供需图表与精准缺口预警。
+                </span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button
+                  type="button"
+                  class="btn ghost compact-btn"
+                  :disabled="overviewLoading"
+                  @click="loadDemandInventoryOverview"
+                  title="重新同步最新库存与缺口数据"
+                >
+                  🔄 刷新数据
+                </button>
+                <button
+                  v-if="canExtractXlsx"
+                  type="button"
+                  class="btn primary compact-btn"
+                  :disabled="overviewLoading || !overviewRows.length"
+                  @click="exportOverviewToExcel"
+                >
+                  📥 导出统计报表
+                </button>
+              </div>
+            </div>
+
+            <!-- 1. 顶部 4 张关键态势概览指标卡片 (Quick KPI Cards) -->
+            <div class="overview-kpi-grid">
+              <div class="overview-kpi-card kpi-purple">
+                <div class="kpi-card-header">
+                  <span class="kpi-icon">🕒</span>
+                  <span class="kpi-title">三日需求计划总量</span>
+                </div>
+                <div class="kpi-main-val">
+                  <strong class="kpi-number">{{ formatNumber(overviewStats.totalPlan) }}</strong>
+                  <span class="kpi-unit">米</span>
+                </div>
+                <div class="kpi-footer-note">覆盖 {{ overviewStats.planModelsCount }} 种需用规格型号</div>
+              </div>
+
+              <div class="overview-kpi-card kpi-green">
+                <div class="kpi-card-header">
+                  <span class="kpi-icon">📦</span>
+                  <span class="kpi-title">现场可用实物库存</span>
+                </div>
+                <div class="kpi-main-val">
+                  <strong class="kpi-number">{{ formatNumber(overviewStats.totalInventory) }}</strong>
+                  <span class="kpi-unit">米</span>
+                </div>
+                <div class="kpi-footer-note">累计到货 {{ formatNumber(overviewStats.totalArrived) }}m · 消耗 {{ formatNumber(overviewStats.totalUsage) }}m</div>
+              </div>
+
+              <div class="overview-kpi-card kpi-blue">
+                <div class="kpi-card-header">
+                  <span class="kpi-icon">🚚</span>
+                  <span class="kpi-title">运输在途保供总量</span>
+                </div>
+                <div class="kpi-main-val">
+                  <strong class="kpi-number">{{ formatNumber(overviewStats.totalTransit) }}</strong>
+                  <span class="kpi-unit">米</span>
+                </div>
+                <div class="kpi-footer-note">现存+在途合计 {{ formatNumber(overviewStats.totalInventoryPlusTransit) }} 米</div>
+              </div>
+
+              <div class="overview-kpi-card" :class="overviewStats.totalNetGap > 0 ? 'kpi-red is-alert-pulse' : 'kpi-safe'">
+                <div class="kpi-card-header">
+                  <span class="kpi-icon">{{ overviewStats.totalNetGap > 0 ? '🚨' : '🛡️' }}</span>
+                  <span class="kpi-title">三日净缺口报警量</span>
+                </div>
+                <div class="kpi-main-val">
+                  <strong class="kpi-number">{{ formatNumber(overviewStats.totalNetGap) }}</strong>
+                  <span class="kpi-unit">米</span>
+                </div>
+                <div class="kpi-footer-note" :style="{ color: overviewStats.totalNetGap > 0 ? '#b91c1c' : '#15803d', fontWeight: '600' }">
+                  {{ overviewStats.totalNetGap > 0 ? `⚠️ ${overviewStats.gapModelsCount} 个型号存在断料停工风险` : '✅ 各型号现存+在途均满足' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. 可视化图表区 (ECharts) -->
+            <div class="overview-chart-box">
+              <div class="overview-chart-header">
+                <span class="chart-box-title">📊 各型号保温管供需对照图</span>
+                <div class="chart-legend-hint">
+                  <span class="dot purple"></span> 三日需求计划
+                  <span class="dot green"></span> 现场库存
+                  <span class="dot blue"></span> 运输在途
+                  <span class="dot red"></span> 三日净缺口
+                </div>
+              </div>
+              <div class="overview-chart-stage">
+                <div v-if="overviewLoading" class="chart-loading-placeholder">
+                  <div class="loading-spinner"></div>
+                  <span>正在聚合各型号供需与库存数据...</span>
+                </div>
+                <div v-else-if="!overviewRows.length" class="chart-empty-placeholder">
+                  当前需求主体暂无保温管型号数据
+                </div>
+                <div ref="overviewChartRef" class="overview-echarts-dom"></div>
+              </div>
+            </div>
+
+            <!-- 3. 数据明细表格区 (带过滤与搜索) -->
+            <div class="overview-table-section">
+              <div class="overview-table-toolbar">
+                <div class="toolbar-left">
+                  <span class="toolbar-heading">📋 各型号供需全要素穿透台账</span>
+                  <span class="toolbar-count-tag">共 {{ filteredOverviewRows.length }} 种型号规格</span>
+                </div>
+                <div class="toolbar-right">
+                  <label class="gap-filter-checkbox" title="勾选后仅展示存在三日净缺口（断料风险）的型号">
+                    <input type="checkbox" v-model="overviewOnlyShowGap" />
+                    <span>⚠️ 仅看存在净缺口型号 ({{ overviewStats.gapModelsCount }})</span>
+                  </label>
+                  <input
+                    v-model.trim="overviewSearchKeyword"
+                    type="text"
+                    class="overview-search-input"
+                    placeholder="🔍 搜索管径型号规格..."
+                  />
+                </div>
+              </div>
+
+              <div v-if="overviewLoading" class="loading-text">正在加载各型号需求与库存统计...</div>
+              <div v-else-if="overviewError" class="error-box">{{ overviewError }}</div>
+              <div v-else-if="!filteredOverviewRows.length" class="empty-box">未找到符合筛选条件的型号记录。</div>
+              <div v-else class="table-wrap custom-scroll-list" style="max-height: 480px; overflow-y: auto;">
+                <table class="data-table overview-data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 42px; text-align: center;">#</th>
+                      <th style="min-width: 170px; text-align: left;">保温管规格型号</th>
+                      <th style="min-width: 105px; text-align: right; color: #6d28d9;">三日需求计划(m)</th>
+                      <th style="min-width: 95px; text-align: right;">累计发货(m)</th>
+                      <th style="min-width: 95px; text-align: right;">累计施工(m)</th>
+                      <th style="min-width: 105px; text-align: right; color: #047857; background: #f0fdf4;">现场库存(m)</th>
+                      <th style="min-width: 100px; text-align: right; color: #0369a1; background: #f0f9ff;">运输在途(m)</th>
+                      <th style="min-width: 110px; text-align: right; color: #0f766e;">库存+在途(m)</th>
+                      <th style="min-width: 115px; text-align: right; color: #b91c1c; background: #fef2f2;">三日净缺口(m)</th>
+                      <th style="min-width: 110px; text-align: center;">保供态势判定</th>
+                      <th style="min-width: 120px; text-align: center;">快捷联动</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr 
+                      v-for="(row, idx) in filteredOverviewRows" 
+                      :key="row.pipeModelId"
+                      :class="{ 'highlight-gap-row': row.netGapQty > 0 }"
+                    >
+                      <td style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                      <td class="cell-text font-bold" :title="row.pipeModelName">
+                        {{ row.pipeModelName }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #6d28d9;">
+                        {{ formatQtyDisplay(row.futurePlanQty) }}
+                      </td>
+                      <td style="text-align: right; color: #334155;">
+                        {{ formatQtyDisplay(row.totalShippedQty) }}
+                      </td>
+                      <td style="text-align: right; color: #334155;">
+                        {{ formatQtyDisplay(row.totalUsageQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #047857; background: #f0fdf4;">
+                        {{ formatQtyDisplay(row.inventoryQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 600; color: #0369a1; background: #f0f9ff;">
+                        {{ formatQtyDisplay(row.pendingArrivalQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #0f766e;">
+                        {{ formatQtyDisplay(row.inventoryPlusPipeline) }}
+                      </td>
+                      <td 
+                        style="text-align: right; font-weight: 700; background: #fef2f2;" 
+                        :style="{ color: row.netGapQty > 0 ? '#b91c1c' : '#94a3b8' }"
+                      >
+                        <span v-if="row.netGapQty > 0" class="gap-warning-pill">
+                          ⚠️ {{ formatQtyDisplay(row.netGapQty) }}
+                        </span>
+                        <span v-else>0.00</span>
+                      </td>
+                      <td style="text-align: center;">
+                        <span :class="['status-pill', row.statusPillClass]">
+                          {{ row.statusText }}
+                        </span>
+                      </td>
+                      <td style="text-align: center;">
+                        <div class="row-actions-group">
+                          <button
+                            type="button"
+                            class="btn ghost btn-xs"
+                            title="去该型号三日计划填报"
+                            @click="handleTabClick('plan')"
+                          >
+                            🕒 计划
+                          </button>
+                          <button
+                            type="button"
+                            class="btn ghost btn-xs"
+                            title="去该型号施工消耗填报"
+                            @click="handleTabClick('usage')"
+                          >
+                            📊 消耗
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                  <!-- 表尾合计行 -->
+                  <tfoot>
+                    <tr class="summary-total-row">
+                      <td colspan="2" style="text-align: center; font-weight: 700; color: #1e293b;">
+                        合计 ({{ filteredOverviewRows.length }} 种型号)
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #6d28d9;">
+                        {{ formatQtyDisplay(filteredOverviewTotals.futurePlanQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #334155;">
+                        {{ formatQtyDisplay(filteredOverviewTotals.totalShippedQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #334155;">
+                        {{ formatQtyDisplay(filteredOverviewTotals.totalUsageQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #047857; background: #e6f9ed;">
+                        {{ formatQtyDisplay(filteredOverviewTotals.inventoryQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #0369a1; background: #e0f2fe;">
+                        {{ formatQtyDisplay(filteredOverviewTotals.pendingArrivalQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #0f766e;">
+                        {{ formatQtyDisplay(filteredOverviewTotals.inventoryPlusPipeline) }}
+                      </td>
+                      <td 
+                        style="text-align: right; font-weight: 700; background: #fee2e2;" 
+                        :style="{ color: filteredOverviewTotals.netGapQty > 0 ? '#b91c1c' : '#15803d' }"
+                      >
+                        {{ formatQtyDisplay(filteredOverviewTotals.netGapQty) }}
+                      </td>
+                      <td colspan="2" style="text-align: center; font-size: 12px; color: #64748b;">
+                        {{ filteredOverviewTotals.netGapQty > 0 ? `共 ${overviewStats.gapModelsCount} 种型号缺料` : '全型号供需平衡' }}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+
         <!-- Tab 1: 三日计划填报 -->
         <div v-if="activeTab === 'plan'" class="tab-pane">
           <section class="card elevated tab-card">
@@ -371,6 +632,159 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- 下半区：保温管施工使用与损耗历史台账 -->
+            <div style="margin-top: 28px; border-top: 2px dashed #e2e8f0; padding-top: 20px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 16px; color: #1e293b; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                    <span>📋 保温管施工使用与损耗历史台账</span>
+                  </h3>
+                  <span style="font-size: 12px; color: #64748b;">
+                    支持按采集日期追溯该标段所有历史保温管实际施工消耗与现场损耗填报明细。
+                  </span>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button
+                    v-if="groupedPipeUsageHistory.length"
+                    type="button"
+                    class="btn ghost"
+                    style="height: 30px; font-size: 12px; padding: 0 10px;"
+                    @click="expandAllPipeUsageDates"
+                  >
+                    全部展开
+                  </button>
+                  <button
+                    v-if="groupedPipeUsageHistory.length"
+                    type="button"
+                    class="btn ghost"
+                    style="height: 30px; font-size: 12px; padding: 0 10px;"
+                    @click="collapseAllPipeUsageDates"
+                  >
+                    全部折叠
+                  </button>
+                  <button
+                    v-if="canExtractXlsx"
+                    type="button"
+                    class="btn secondary"
+                    style="height: 30px; font-size: 12px; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px;"
+                    @click="exportPipeUsageHistory"
+                  >
+                    📊 导出使用台账
+                  </button>
+                  <button
+                    type="button"
+                    class="btn ghost"
+                    style="height: 30px; font-size: 12px; padding: 0 10px;"
+                    @click="loadPipeUsageHistory"
+                  >
+                    🔄 刷新台账
+                  </button>
+                </div>
+              </div>
+
+              <!-- 历史台账表格 -->
+              <div v-if="pipeUsageHistoryLoading" class="loading-text" style="padding: 16px; text-align: center; color: #64748b;">
+                正在加载保温管使用历史台账...
+              </div>
+              <div v-else-if="!groupedPipeUsageHistory.length" class="empty-box" style="padding: 20px; text-align: center; color: #94a3b8;">
+                当前标段尚无保温管使用与损耗填报历史记录。
+              </div>
+              <div v-else class="table-wrap fitting-baseline-table-wrap" style="max-height: 520px;">
+                <table class="data-table grouped-history-table" style="width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed;">
+                  <thead>
+                    <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                      <th style="width: 38px; padding: 6px 2px; text-align: center; white-space: nowrap;">序号</th>
+                      <th style="width: 110px; text-align: left; padding: 6px 8px; white-space: nowrap;">消耗采集日期</th>
+                      <th style="width: 90px; text-align: center; padding: 6px 4px; white-space: nowrap;">填报规模</th>
+                      <th style="width: 95px; text-align: right; padding: 6px 8px; color: #2563eb; white-space: nowrap;">施工消耗(m)</th>
+                      <th style="width: 85px; text-align: right; padding: 6px 8px; color: #ea580c; white-space: nowrap;">现场损耗(m)</th>
+                      <th style="width: 95px; text-align: right; padding: 6px 8px; color: #047857; white-space: nowrap;">合计总米数</th>
+                      <th style="width: 85px; text-align: center; padding: 6px 4px; white-space: nowrap;">填报人</th>
+                      <th style="width: 100px; text-align: center; padding: 6px 4px; white-space: nowrap;">填报时间</th>
+                      <th style="width: 70px; text-align: center; padding: 6px 2px; white-space: nowrap;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="(group, gIdx) in groupedPipeUsageHistory" :key="group.usage_date">
+                      <!-- 📅 日期聚合主行 -->
+                      <tr 
+                        class="history-group-header-row"
+                        :class="{ 'is-expanded': isPipeUsageDateExpanded(group.usage_date) }"
+                        @click="togglePipeUsageDateExpand(group.usage_date)"
+                      >
+                        <td class="cell-text" style="width: 38px; padding: 6px 2px; text-align: center; color: #94a3b8; font-size: 11px;">
+                          {{ gIdx + 1 }}
+                        </td>
+                        <td class="cell-text font-mono" style="padding: 6px 8px; font-weight: 700; color: #1e293b; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="`消耗采集日期: ${group.usage_date}`">
+                          <span class="group-expand-caret">{{ isPipeUsageDateExpanded(group.usage_date) ? '▼' : '▶' }}</span>
+                          <span>{{ group.usage_date }}</span>
+                        </td>
+                        <td class="cell-text" style="text-align: center; padding: 6px 4px; white-space: nowrap;">
+                          <span class="pill-badge-subtle" style="font-size: 11px; padding: 1px 6px;">共 {{ group.total_types }} 种</span>
+                        </td>
+                        <td class="cell-text font-mono" style="text-align: right; padding: 6px 8px; font-weight: 700; color: #2563eb; white-space: nowrap;">
+                          {{ formatNumber(group.total_usage_qty) }} m
+                        </td>
+                        <td class="cell-text font-mono" style="text-align: right; padding: 6px 8px; font-weight: 600; color: #ea580c; white-space: nowrap;">
+                          {{ formatNumber(group.total_loss_qty) }} m
+                        </td>
+                        <td class="cell-text font-mono" style="text-align: right; padding: 6px 8px; font-weight: 700; color: #047857; white-space: nowrap;">
+                          {{ formatNumber(group.total_sum_qty) }} m
+                        </td>
+                        <td class="cell-text" style="text-align: center; padding: 6px 4px; font-size: 11.5px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="group.filled_by_str">
+                          {{ group.filled_by_str }}
+                        </td>
+                        <td class="cell-text font-mono" style="text-align: center; padding: 6px 4px; font-size: 11px; color: #64748b; white-space: nowrap;">
+                          {{ formatUsageTime(group.latest_filled_at) }}
+                        </td>
+                        <td class="cell-text" style="text-align: center; padding: 6px 2px; white-space: nowrap;">
+                          <button 
+                            type="button" 
+                            class="btn-toggle-expand"
+                            style="padding: 1px 6px; font-size: 10.5px;"
+                            @click.stop="togglePipeUsageDateExpand(group.usage_date)"
+                          >
+                            {{ isPipeUsageDateExpanded(group.usage_date) ? '收起▴' : '明细▾' }}
+                          </button>
+                        </td>
+                      </tr>
+
+                      <!-- 展开的型号明细行 -->
+                      <template v-if="isPipeUsageDateExpanded(group.usage_date)">
+                        <tr
+                          v-for="sub in group.items"
+                          :key="sub.id || sub.pipe_model_id"
+                          class="history-group-sub-row"
+                          :style="(sub.usage_qty > 0 || sub.loss_qty > 0) ? 'background-color: #f0fdf4;' : ''"
+                        >
+                          <td style="text-align: center; color: #cbd5e1; font-size: 11px;">↳</td>
+                          <td colspan="2" class="cell-text font-bold" style="padding-left: 20px; color: #334155;" :title="sub.pipe_model_name">
+                            <span>{{ sub.pipe_model_name }}</span>
+                            <span v-if="sub.usage_qty > 0 || sub.loss_qty > 0" class="pill-badge-subtle" style="margin-left: 6px; font-size: 10px; padding: 0 4px; background: #dcfce7; color: #15803d;">当日施工</span>
+                          </td>
+                          <td class="cell-text font-mono" style="text-align: right;" :style="sub.usage_qty > 0 ? 'color: #2563eb; font-weight: 700;' : 'color: #94a3b8;'">
+                            {{ formatNumber(sub.usage_qty) }} m
+                          </td>
+                          <td class="cell-text font-mono" style="text-align: right;" :style="sub.loss_qty > 0 ? 'color: #ea580c; font-weight: 700;' : 'color: #94a3b8;'">
+                            {{ formatNumber(sub.loss_qty) }} m
+                          </td>
+                          <td class="cell-text font-mono" style="text-align: right;" :style="sub.total_qty > 0 ? 'color: #047857; font-weight: 700;' : 'color: #94a3b8;'">
+                            {{ formatNumber(sub.total_qty) }} m
+                          </td>
+                          <td class="cell-text" style="text-align: center; font-size: 11px; color: #64748b;" :title="sub.filled_by">
+                            {{ sub.filled_by }}
+                          </td>
+                          <td colspan="2" class="cell-text" style="font-size: 11px; color: #64748b;" :title="sub.remark || '无备注'">
+                            {{ sub.remark || '—' }}
+                          </td>
+                        </tr>
+                      </template>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
         </div>
@@ -3511,9 +3925,10 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx-js-style'
+import * as echarts from 'echarts'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, getDeliveryStatus, navigateToUserInDirectory } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
@@ -3539,9 +3954,11 @@ import {
   getTubeFittingInventorySummary,
   submitTubeFittingUsage,
   listTubeFittingUsageHistory,
+  listTubePipeUsageHistory,
   cancelTubeFittingUsage,
   updateTubeFittingUsageItem,
-  updateTubeFittingUsageBatch
+  updateTubeFittingUsageBatch,
+  getTubeSupplyManagementDemandSummary
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -3551,7 +3968,7 @@ const canExtractXlsx = computed(() => auth.canExtractXlsxFor(PROJECT_KEY))
 const route = useRoute()
 const router = useRouter()
 
-const VALID_TABS = ['usage', 'plan', 'logistics', 'baseline', 'fitting', 'fitting_usage', 'fitting_baseline']
+const VALID_TABS = ['overview', 'usage', 'plan', 'logistics', 'baseline', 'fitting', 'fitting_usage', 'fitting_baseline']
 const VALID_CATEGORIES = ['pipe', 'fitting']
 
 // 清理历史残留的 localStorage 缓存，避免跨入口污染
@@ -3617,6 +4034,376 @@ const allPendingRows = ref([])
 
 // 🚚 全标段现场综合督办中心状态
 const pendingSummaryModalVisible = ref(false)
+
+// --- 📈 保温管“需求与库存信息统计”核心状态与方法 ---
+const overviewLoading = ref(false)
+const overviewError = ref('')
+const overviewRows = ref([])
+const overviewSearchKeyword = ref('')
+const overviewOnlyShowGap = ref(false)
+const overviewChartRef = ref(null)
+let overviewChartInstance = null
+
+function formatQtyDisplay(val) {
+  const num = Number(val || 0)
+  if (!Number.isFinite(num)) return '0.00'
+  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const overviewStats = computed(() => {
+  let totalPlan = 0
+  let totalShipped = 0
+  let totalArrived = 0
+  let totalUsage = 0
+  let totalInventory = 0
+  let totalTransit = 0
+  let totalInventoryPlusTransit = 0
+  let totalNetGap = 0
+  let planModelsCount = 0
+  let gapModelsCount = 0
+
+  overviewRows.value.forEach(r => {
+    totalPlan += r.futurePlanQty || 0
+    totalShipped += r.totalShippedQty || 0
+    totalArrived += r.totalArrivedQty || 0
+    totalUsage += r.totalUsageQty || 0
+    totalInventory += r.inventoryQty || 0
+    totalTransit += r.pendingArrivalQty || 0
+    totalInventoryPlusTransit += r.inventoryPlusPipeline || 0
+    totalNetGap += r.netGapQty || 0
+
+    if ((r.futurePlanQty || 0) > 0) {
+      planModelsCount += 1
+    }
+    if ((r.netGapQty || 0) > 0) {
+      gapModelsCount += 1
+    }
+  })
+
+  return {
+    totalPlan: Math.round(totalPlan * 100) / 100,
+    totalShipped: Math.round(totalShipped * 100) / 100,
+    totalArrived: Math.round(totalArrived * 100) / 100,
+    totalUsage: Math.round(totalUsage * 100) / 100,
+    totalInventory: Math.round(totalInventory * 100) / 100,
+    totalTransit: Math.round(totalTransit * 100) / 100,
+    totalInventoryPlusTransit: Math.round(totalInventoryPlusTransit * 100) / 100,
+    totalNetGap: Math.round(totalNetGap * 100) / 100,
+    planModelsCount,
+    gapModelsCount,
+  }
+})
+
+const filteredOverviewRows = computed(() => {
+  let list = overviewRows.value
+
+  if (overviewOnlyShowGap.value) {
+    list = list.filter(r => (r.netGapQty || 0) > 0)
+  }
+
+  if (overviewSearchKeyword.value) {
+    const kw = overviewSearchKeyword.value.toLowerCase().trim()
+    list = list.filter(r => 
+      String(r.pipeModelName || '').toLowerCase().includes(kw) || 
+      String(r.pipeModelId || '').toLowerCase().includes(kw)
+    )
+  }
+
+  return list
+})
+
+const filteredOverviewTotals = computed(() => {
+  let futurePlanQty = 0
+  let totalShippedQty = 0
+  let totalUsageQty = 0
+  let inventoryQty = 0
+  let pendingArrivalQty = 0
+  let inventoryPlusPipeline = 0
+  let netGapQty = 0
+
+  filteredOverviewRows.value.forEach(r => {
+    futurePlanQty += r.futurePlanQty || 0
+    totalShippedQty += r.totalShippedQty || 0
+    totalUsageQty += r.totalUsageQty || 0
+    inventoryQty += r.inventoryQty || 0
+    pendingArrivalQty += r.pendingArrivalQty || 0
+    inventoryPlusPipeline += r.inventoryPlusPipeline || 0
+    netGapQty += r.netGapQty || 0
+  })
+
+  return {
+    futurePlanQty: Math.round(futurePlanQty * 100) / 100,
+    totalShippedQty: Math.round(totalShippedQty * 100) / 100,
+    totalUsageQty: Math.round(totalUsageQty * 100) / 100,
+    inventoryQty: Math.round(inventoryQty * 100) / 100,
+    pendingArrivalQty: Math.round(pendingArrivalQty * 100) / 100,
+    inventoryPlusPipeline: Math.round(inventoryPlusPipeline * 100) / 100,
+    netGapQty: Math.round(netGapQty * 100) / 100,
+  }
+})
+
+async function loadDemandInventoryOverview() {
+  if (!selectedSection1Id.value) return
+  overviewLoading.value = true
+  overviewError.value = ''
+
+  try {
+    const showDate = usageDate.value || undefined
+    const res = await getTubeSupplyManagementDemandSummary(PROJECT_KEY, { show_date: showDate })
+    const allRows = Array.isArray(res?.rows) ? res.rows : []
+    
+    // 过滤当前需求主体
+    const targetSectionId = String(selectedSection1Id.value).trim().toUpperCase()
+    const secRows = allRows.filter(r => String(r.section_1_id || '').trim().toUpperCase() === targetSectionId)
+
+    overviewRows.value = secRows.map(r => {
+      const futurePlanQty = Number(r.future_plan_qty) || 0
+      const totalShippedQty = Number(r.total_shipped_qty) || 0
+      const totalArrivedQty = Number(r.total_arrived_qty) || 0
+      const totalUsageQty = Number(r.total_usage_qty) || 0
+      const inventoryQty = Number(r.section_1_inventory_qty) || 0
+      const pendingArrivalQty = Number(r.pending_arrival_qty) || 0
+      const inventoryPlusPipeline = Math.round((inventoryQty + pendingArrivalQty) * 100) / 100
+      const netGapQty = Number(r.net_gap_qty) || 0
+      const hardGapQty = Number(r.hard_gap_qty) || 0
+
+      // 保供态势判定
+      let statusText = '⚪ 现存安全'
+      let statusPillClass = 'pill-neutral'
+      if (netGapQty > 0) {
+        statusText = '🚨 紧缺待调拨'
+        statusPillClass = 'pill-danger'
+      } else if (futurePlanQty > inventoryQty && futurePlanQty <= inventoryPlusPipeline) {
+        statusText = '🚚 在途可满足'
+        statusPillClass = 'pill-info'
+      } else if (futurePlanQty > 0 && inventoryQty >= futurePlanQty) {
+        statusText = '✅ 现存充足'
+        statusPillClass = 'pill-success'
+      } else if (futurePlanQty === 0 && inventoryQty > 0) {
+        statusText = '📦 现存富余'
+        statusPillClass = 'pill-neutral'
+      }
+
+      return {
+        pipeModelId: r.pipe_model_id,
+        pipeModelName: r.pipe_model_name || r.pipe_model_id,
+        futurePlanQty,
+        totalShippedQty,
+        totalArrivedQty,
+        totalUsageQty,
+        inventoryQty,
+        pendingArrivalQty,
+        inventoryPlusPipeline,
+        netGapQty,
+        hardGapQty,
+        statusText,
+        statusPillClass,
+      }
+    })
+
+    await nextTick()
+    renderOverviewChart()
+  } catch (err) {
+    console.error('加载需求与库存信息统计失败:', err)
+    overviewError.value = err?.message || '读取需求与库存统计失败'
+  } finally {
+    overviewLoading.value = false
+    await nextTick()
+    renderOverviewChart()
+    setTimeout(() => {
+      handleResizeOverviewChart()
+    }, 80)
+    setTimeout(() => {
+      handleResizeOverviewChart()
+    }, 300)
+  }
+}
+
+function renderOverviewChart() {
+  if (!overviewChartRef.value) return
+  if (!overviewChartInstance) {
+    overviewChartInstance = echarts.init(overviewChartRef.value)
+    if (window.ResizeObserver) {
+      try {
+        const ro = new ResizeObserver(() => {
+          handleResizeOverviewChart()
+        })
+        ro.observe(overviewChartRef.value)
+      } catch (e) {}
+    }
+  }
+
+  const dataList = overviewRows.value
+  if (!dataList || dataList.length === 0) {
+    overviewChartInstance.clear()
+    return
+  }
+
+  const modelNames = dataList.map(item => item.pipeModelName)
+  const planData = dataList.map(item => item.futurePlanQty)
+  const invData = dataList.map(item => item.inventoryQty)
+  const transitData = dataList.map(item => item.pendingArrivalQty)
+  const netGapData = dataList.map(item => item.netGapQty)
+
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: function (params) {
+        if (!params || !params.length) return ''
+        const modelName = params[0].name
+        const targetRow = dataList.find(d => d.pipeModelName === modelName) || {}
+        let html = `<div style="font-weight: 700; margin-bottom: 6px; color: #0f172a; font-size: 13px;">📏 ${modelName}</div>`
+        html += `<div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px; font-size: 12px;">`
+        html += `<span style="color: #6d28d9;">🟣 三日需求计划:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.futurePlanQty)} m</strong>`
+        html += `<span style="color: #047857;">🟢 现场实物库存:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.inventoryQty)} m</strong>`
+        html += `<span style="color: #0284c7;">🔵 运输在途保供:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.pendingArrivalQty)} m</strong>`
+        html += `<span style="color: #0f766e;">🌐 现存+在途合计:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.inventoryPlusPipeline)} m</strong>`
+        html += `<span style="color: #475569;">🚚 累计发货总量:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.totalShippedQty)} m</strong>`
+        html += `<span style="color: #475569;">🔨 累计施工消耗:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.totalUsageQty)} m</strong>`
+        const gapColor = (targetRow.netGapQty || 0) > 0 ? '#b91c1c' : '#15803d'
+        const gapText = (targetRow.netGapQty || 0) > 0 ? `⚠️ ${formatQtyDisplay(targetRow.netGapQty)} m` : `0.00 m (安全)`
+        html += `<span style="color: ${gapColor}; font-weight: bold;">🔴 三日净缺口:</span><strong style="text-align: right; color: ${gapColor};">${gapText}</strong>`
+        html += `</div>`
+        return html
+      }
+    },
+    legend: {
+      top: 6,
+      right: 12,
+      data: ['三日需求计划', '现场库存', '运输在途', '三日净缺口'],
+      textStyle: { color: '#475569', fontSize: 12 }
+    },
+    grid: {
+      left: '2%',
+      right: '2%',
+      bottom: '14%',
+      top: '18%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: modelNames,
+      axisLabel: {
+        interval: 0,
+        rotate: modelNames.length > 5 ? 25 : 0,
+        fontSize: 11,
+        color: '#475569'
+      },
+      axisLine: { lineStyle: { color: '#cbd5e1' } }
+    },
+    yAxis: {
+      type: 'value',
+      name: '米 (m)',
+      nameTextStyle: { color: '#64748b', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+    },
+    series: [
+      {
+        name: '三日需求计划',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: planData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#a78bfa' },
+            { offset: 1, color: '#7c3aed' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
+        name: '现场库存',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: invData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#34d399' },
+            { offset: 1, color: '#059669' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
+        name: '运输在途',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: transitData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#38bdf8' },
+            { offset: 1, color: '#0284c7' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
+        name: '三日净缺口',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: netGapData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#f87171' },
+            { offset: 1, color: '#dc2626' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      }
+    ]
+  }
+
+  overviewChartInstance.setOption(option, true)
+  overviewChartInstance.resize()
+}
+
+function handleResizeOverviewChart() {
+  if (overviewChartInstance && activeTab.value === 'overview') {
+    overviewChartInstance.resize()
+  }
+}
+
+function exportOverviewToExcel() {
+  if (!overviewRows.value.length) return
+  const currentSecName = section1Options.value.find(s => s.section_1_id === selectedSection1Id.value)?.section_1_name || selectedSection1Id.value
+
+  const header = [
+    '序号', '保温管规格型号', '未来三日计划(米)', '累计发货量(米)', '累计施工量(米)', 
+    '现场库存量(米)', '运输在途量(米)', '库存+在途(米)', '三日净缺口(米)', '保供态势判定'
+  ]
+  const rows = filteredOverviewRows.value.map((r, idx) => [
+    idx + 1,
+    r.pipeModelName,
+    r.futurePlanQty,
+    r.totalShippedQty,
+    r.totalUsageQty,
+    r.inventoryQty,
+    r.pendingArrivalQty,
+    r.inventoryPlusPipeline,
+    r.netGapQty,
+    r.statusText
+  ])
+
+  rows.push([
+    '合计',
+    `共 ${filteredOverviewRows.value.length} 种型号`,
+    filteredOverviewTotals.value.futurePlanQty,
+    filteredOverviewTotals.value.totalShippedQty,
+    filteredOverviewTotals.value.totalUsageQty,
+    filteredOverviewTotals.value.inventoryQty,
+    filteredOverviewTotals.value.pendingArrivalQty,
+    filteredOverviewTotals.value.inventoryPlusPipeline,
+    filteredOverviewTotals.value.netGapQty,
+    filteredOverviewTotals.value.netGapQty > 0 ? `存在 ${overviewStats.value.gapModelsCount} 种缺料` : '全型号充足'
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '需求与库存统计')
+  XLSX.writeFile(wb, `${currentSecName}_保温管需求与库存统计_${usageDate.value || '最新'}.xlsx`)
+}
 const supervisionActiveTab = ref('governance') // 'governance' (标段填报履约督办) | 'logistics' (在途发货单据督办)
 
 // 标段填报履约大盘状态
@@ -5960,6 +6747,120 @@ const groupedFittingUsageHistory = computed(() => {
   })
 })
 
+// --- 📋 保温管施工使用与损耗历史台账状态与操作 ---
+const pipeUsageHistoryRows = ref([])
+const pipeUsageHistoryLoading = ref(false)
+const expandedPipeUsageDates = ref(new Set())
+
+function togglePipeUsageDateExpand(dateStr) {
+  const nextSet = new Set(expandedPipeUsageDates.value)
+  if (nextSet.has(dateStr)) {
+    nextSet.delete(dateStr)
+  } else {
+    nextSet.add(dateStr)
+  }
+  expandedPipeUsageDates.value = nextSet
+}
+
+function isPipeUsageDateExpanded(dateStr) {
+  return expandedPipeUsageDates.value.has(dateStr)
+}
+
+function expandAllPipeUsageDates() {
+  const nextSet = new Set()
+  groupedPipeUsageHistory.value.forEach(g => nextSet.add(g.usage_date))
+  expandedPipeUsageDates.value = nextSet
+}
+
+function collapseAllPipeUsageDates() {
+  expandedPipeUsageDates.value = new Set()
+}
+
+const groupedPipeUsageHistory = computed(() => {
+  const groupsMap = {}
+  const dateOrder = []
+
+  pipeUsageHistoryRows.value.forEach(row => {
+    const d = row.usage_date || '未知日期'
+    if (!groupsMap[d]) {
+      groupsMap[d] = {
+        usage_date: d,
+        items: [],
+        total_types: 0,
+        total_usage_qty: 0,
+        total_loss_qty: 0,
+        total_sum_qty: 0,
+        filled_by_list: new Set(),
+        latest_filled_at: '',
+      }
+      dateOrder.push(d)
+    }
+    const g = groupsMap[d]
+    g.items.push(row)
+    g.total_usage_qty += Number(row.usage_qty || 0)
+    g.total_loss_qty += Number(row.loss_qty || 0)
+    g.total_sum_qty += Number(row.total_qty || (Number(row.usage_qty || 0) + Number(row.loss_qty || 0)))
+    if (row.filled_by) g.filled_by_list.add(row.filled_by)
+    if (!g.latest_filled_at || (row.filled_at && row.filled_at > g.latest_filled_at)) {
+      g.latest_filled_at = row.filled_at
+    }
+  })
+
+  return dateOrder.map(d => {
+    const g = groupsMap[d]
+    return {
+      usage_date: g.usage_date,
+      items: g.items,
+      total_types: g.items.length,
+      total_usage_qty: Math.round(g.total_usage_qty * 100) / 100,
+      total_loss_qty: Math.round(g.total_loss_qty * 100) / 100,
+      total_sum_qty: Math.round(g.total_sum_qty * 100) / 100,
+      filled_by_str: Array.from(g.filled_by_list).join(', ') || '施工现场',
+      latest_filled_at: g.latest_filled_at
+    }
+  })
+})
+
+async function loadPipeUsageHistory() {
+  if (!selectedSection1Id.value) return
+  pipeUsageHistoryLoading.value = true
+  try {
+    const res = await listTubePipeUsageHistory(PROJECT_KEY, { section_1_id: selectedSection1Id.value })
+    if (res.ok) {
+      pipeUsageHistoryRows.value = res.rows || []
+    }
+  } catch (err) {
+    console.error('加载保温管使用台账失败', err)
+  } finally {
+    pipeUsageHistoryLoading.value = false
+  }
+}
+
+function exportPipeUsageHistory() {
+  const rows = pipeUsageHistoryRows.value
+  if (!rows || !rows.length) return
+  const currentSecName = section1Options.value.find(s => s.section_1_id === selectedSection1Id.value)?.section_1_name || selectedSection1Id.value
+
+  const header = ['序号', '消耗采集日期', '标段名称', '保温管型号', '实际施工消耗(米)', '实际现场损耗(米)', '合计总米数(米)', '填报人', '填报时间', '备注']
+  const dataRows = rows.map((r, idx) => [
+    idx + 1,
+    r.usage_date,
+    currentSecName,
+    r.pipe_model_name,
+    r.usage_qty,
+    r.loss_qty,
+    r.total_qty,
+    r.filled_by || '施工现场',
+    r.filled_at || '',
+    r.remark || ''
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '保温管使用台账')
+  XLSX.writeFile(wb, `${currentSecName}_保温管施工消耗历史台账.xlsx`)
+}
+
 const hasSubmittedFittingUsageToday = computed(() => {
   if (!usageDate.value || !fittingUsageHistoryRows.value.length) return false
   return fittingUsageHistoryRows.value.some(
@@ -6619,10 +7520,12 @@ async function reloadSection1Data() {
   clearActionMessage()
   resetFittingUsageForm()
   await Promise.all([
+    loadDemandInventoryOverview(),
     loadBaseline(),
     loadFittingBaseline(),
     loadPlanMatrix(),
     loadUsageSheet(),
+    loadPipeUsageHistory(),
     loadLogisticsRecords(),
     loadAllPendingLogistics(),
     loadPendingDeliveriesSummary(false),
@@ -6700,7 +7603,7 @@ async function saveUsageSheet() {
       records
     })
     setActionMessage('success', '实际消耗量及损耗数据已成功上报提交！')
-    await loadUsageSheet()
+    await Promise.all([loadUsageSheet(), loadDemandInventoryOverview(), loadPipeUsageHistory()])
   } catch (error) {
     const errorText = getErrorMessage(error, '提交实际使用量失败')
     const parsed = tryParseBlockError(errorText)
@@ -6747,7 +7650,7 @@ async function handleUsageDateChange() {
       data: usageDate.value,
     })
     setActionMessage('success', `消耗采集日期已保存更新为 ${usageDate.value}`)
-    await loadUsageSheet()
+    await Promise.all([loadUsageSheet(), loadPipeUsageHistory()])
   } catch (err) {
     setActionMessage('error', err?.message || '保存消耗采集日期失败')
   }
@@ -6757,7 +7660,7 @@ watch(usageDate, (value, oldValue) => {
   if (!selectedSection1Id.value || !value || value === oldValue) {
     return
   }
-  loadUsageSheet()
+  Promise.all([loadUsageSheet(), loadDemandInventoryOverview(), loadPipeUsageHistory()])
 })
 
 onMounted(async () => {
@@ -6765,6 +7668,7 @@ onMounted(async () => {
     nowTick.value = Date.now()
   }, 60000)
   document.addEventListener('click', closeFittingDropdown)
+  window.addEventListener('resize', handleResizeOverviewChart)
   await refreshRealtimeConfig()
 })
 
@@ -6789,7 +7693,7 @@ function handleCategoryClick(category) {
 
   activeCategory.value = category
   if (category === 'pipe') {
-    activeTab.value = lastPipeTab.value || 'usage'
+    activeTab.value = lastPipeTab.value || 'overview'
   } else if (category === 'fitting') {
     activeTab.value = lastFittingTab.value || 'fitting'
   }
@@ -6798,7 +7702,7 @@ function handleCategoryClick(category) {
 }
 
 function handleTabClick(targetTab) {
-  if (['usage', 'plan', 'logistics', 'baseline'].includes(targetTab)) {
+  if (['overview', 'usage', 'plan', 'logistics', 'baseline'].includes(targetTab)) {
     activeCategory.value = 'pipe'
     lastPipeTab.value = targetTab
   } else if (['fitting', 'fitting_usage', 'fitting_baseline'].includes(targetTab)) {
@@ -6832,10 +7736,13 @@ function handleTabClick(targetTab) {
 }
 
 function refreshCurrentTabData(tab) {
-  if (tab === 'plan') {
+  if (tab === 'overview') {
+    loadDemandInventoryOverview()
+  } else if (tab === 'plan') {
     loadPlanMatrix()
   } else if (tab === 'usage') {
     loadUsageSheet()
+    loadPipeUsageHistory()
   } else if (tab === 'baseline') {
     loadBaseline()
   } else if (tab === 'logistics') {
@@ -6851,6 +7758,11 @@ function refreshCurrentTabData(tab) {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeFittingDropdown)
+  window.removeEventListener('resize', handleResizeOverviewChart)
+  if (overviewChartInstance) {
+    overviewChartInstance.dispose()
+    overviewChartInstance = null
+  }
   if (nowTimer) {
     clearInterval(nowTimer)
     nowTimer = null
@@ -11019,5 +11931,370 @@ function jumpToUsageTab() {
   border-radius: 4px !important;
   text-decoration: underline solid #4f46e5 !important;
   box-shadow: 0 0 0 2px #e0e7ff !important;
+}
+
+/* --- 📈 保温管需求与库存信息统计专有样式 --- */
+.demand-overview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 1. 顶部 4 张关键态势概览指标卡片 */
+.overview-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.overview-kpi-card {
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.overview-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.1);
+}
+
+.overview-kpi-card.kpi-purple {
+  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.overview-kpi-card.kpi-green {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.overview-kpi-card.kpi-blue {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: rgba(2, 132, 199, 0.25);
+}
+
+.overview-kpi-card.kpi-red {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.overview-kpi-card.kpi-safe {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: #cbd5e1;
+}
+
+.overview-kpi-card.is-alert-pulse {
+  animation: pulse-danger-glow 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-danger-glow {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.kpi-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kpi-icon {
+  font-size: 20px;
+}
+
+.kpi-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.kpi-main-val {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.kpi-number {
+  font-size: 26px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+}
+
+.kpi-purple .kpi-number { color: #6d28d9; }
+.kpi-green .kpi-number { color: #047857; }
+.kpi-blue .kpi-number { color: #0369a1; }
+.kpi-red .kpi-number { color: #b91c1c; }
+
+.kpi-unit {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.kpi-footer-note {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* 2. 可视化图表区 */
+.overview-chart-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.overview-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.chart-box-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.chart-legend-hint {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.chart-legend-hint .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.chart-legend-hint .dot.purple { background: #7c3aed; }
+.chart-legend-hint .dot.green { background: #059669; }
+.chart-legend-hint .dot.blue { background: #0284c7; }
+.chart-legend-hint .dot.red { background: #dc2626; }
+
+.overview-chart-stage {
+  position: relative;
+  width: 100%;
+  min-height: 380px;
+  display: block;
+}
+
+.overview-echarts-dom {
+  width: 100% !important;
+  min-width: 100% !important;
+  height: 380px !important;
+  display: block;
+}
+
+.chart-loading-placeholder,
+.chart-empty-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(2px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* 3. 数据表格区 */
+.overview-table-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.overview-table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-heading {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.toolbar-count-tag {
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gap-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #b91c1c;
+  cursor: pointer;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.gap-filter-checkbox:hover {
+  background: #fee2e2;
+}
+
+.overview-search-input {
+  height: 34px;
+  width: 220px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.overview-search-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.overview-data-table th {
+  background: #f8fafc;
+  padding: 10px 8px !important;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.overview-data-table td {
+  padding: 8px 8px !important;
+  font-size: 13px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.highlight-gap-row {
+  background: rgba(254, 242, 242, 0.45) !important;
+}
+
+.gap-warning-pill {
+  display: inline-block;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 700;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill.pill-danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.status-pill.pill-info {
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.status-pill.pill-success {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.status-pill.pill-neutral {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.row-actions-group {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-xs {
+  height: 24px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  border-radius: 4px;
+}
+
+.summary-total-row td {
+  background: #f8fafc;
+  border-top: 2px solid #cbd5e1;
+  font-size: 13px;
+}
+
+@media (max-width: 1024px) {
+  .overview-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

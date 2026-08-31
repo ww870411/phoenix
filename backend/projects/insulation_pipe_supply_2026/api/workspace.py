@@ -45,6 +45,7 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
 from backend.projects.insulation_pipe_supply_2026.services.demand_management_service import (
     build_plan_dates,
     list_pending_arrivals,
+    list_pipe_usage_history,
     list_plan_records,
     list_usage_records,
     save_plan_records,
@@ -1423,7 +1424,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         pipe_shipped_total_m = sum(float(r["total_shipped_m"] or 0) for r in pipe_deliv_rows)
         pipe_transit_total_m = sum(
             float(r["total_shipped_m"] or 0) for r in pipe_deliv_rows 
-            if r["status"] in ("pending_arrival", "pending_receive", "pending_warehouse")
+            if r["status"] in ("pending_arrival", "shipped")
         )
         pipe_delivered_total_m = sum(
             float(r["total_received_m"] or r["total_arrived_m"] or 0) for r in pipe_deliv_rows 
@@ -1477,7 +1478,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         fitting_shipped_total_pcs = sum(int(float(r["total_pcs"] or 0)) for r in fit_deliv_rows)
         fitting_transit_total_pcs = sum(
             int(float(r["total_pcs"] or 0)) for r in fit_deliv_rows 
-            if r["status"] in ("pending_arrival", "pending_receive", "pending_warehouse")
+            if r["status"] in ("pending_arrival", "shipped")
         )
         fitting_arrived_total_pcs = sum(
             int(float(r["arrived_pcs"] or 0)) for r in fit_deliv_rows 
@@ -3631,6 +3632,28 @@ def submit_demand_management_section_1_status(
         "latest_submission_count": len(next_latest_submissions),
         "history_submission_count": len(history_submissions),
     }
+
+
+@router.get("/demand-management/pipe-usage/history", summary="查询保温管实际使用与损耗历史台账")
+@router.get("/demand-management/usage-sheet/history", summary="查询保温管实际使用与损耗历史台账")
+def handle_list_pipe_usage_history(
+    section_1_id: str = Query(..., description="标段ID"),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    keyword: Optional[str] = Query(None, description="搜索关键字"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    config_payload = load_tube_config()
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    _ensure_section_1_access(section_1_id, accessible_section_1_ids)
+
+    rows = list_pipe_usage_history(
+        section_1_id=section_1_id,
+        start_date=start_date,
+        end_date=end_date,
+        keyword=keyword,
+    )
+    return {"ok": True, "rows": rows, "count": len(rows)}
 
 
 @router.get("/demand-management/pending-arrivals", summary="读取待确认到货记录")

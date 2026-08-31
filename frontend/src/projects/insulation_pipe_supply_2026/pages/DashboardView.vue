@@ -427,9 +427,20 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in computedTableData" :key="item.id" class="pivot-row">
-                <td class="left-align text-col font-bold cell-ellipsis" :title="item.name">
-                  {{ item.name || '—' }}
+              <tr 
+                v-for="item in computedTableData" 
+                :key="item.id" 
+                class="pivot-row"
+                :class="{ 'clickable-section-row': pivotMode === 'section_1' }"
+                @click="pivotMode === 'section_1' ? handleOpenSectionDetail(item) : null"
+              >
+                <td 
+                  class="left-align text-col font-bold cell-ellipsis" 
+                  :class="{ 'clickable-name-cell': pivotMode === 'section_1' }"
+                  :title="pivotMode === 'section_1' ? `点击穿透查看 ${item.name} 各型号供需对照图与明细台账` : (item.name || '—')"
+                >
+                  <span class="row-name-text">{{ item.name || '—' }}</span>
+                  <span v-if="pivotMode === 'section_1'" class="drilldown-badge" title="点击穿透查看型号供需与库存明细">🔍 穿透</span>
                 </td>
                 <td class="right-align num-col">{{ formatQty(item.design_qty) }}</td>
                 <td class="right-align num-col">{{ formatQty(item.purchase_plan_qty) }}</td>
@@ -544,6 +555,243 @@
       </Transition>
     </Teleport>
 
+    <!-- 标段多型号需求与库存全要素穿透弹窗 (Teleport 直挂 body) -->
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="sectionDetailModalVisible" class="section-detail-modal-overlay" @click.self="closeSectionDetailModal">
+          <div class="section-detail-modal-card">
+            <!-- 关闭按钮 -->
+            <button class="modal-close-btn" @click="closeSectionDetailModal" title="关闭弹窗">✕</button>
+
+            <!-- 弹窗头部 -->
+            <div class="section-modal-header">
+              <div class="header-left">
+                <span class="header-icon">🏢</span>
+                <div>
+                  <h4>【{{ currentDetailSection?.name }}】各型号保温管供需与库存信息统计</h4>
+                  <span class="header-subtitle">
+                    标段编号：{{ currentDetailSection?.id }} · 统计各型号保温管的三日需求计划量、发货量、施工量、库存量、库存+在途、三日净缺口
+                  </span>
+                </div>
+              </div>
+              <div class="header-right" style="margin-right: 36px;">
+                <button
+                  v-if="canExtractXlsx"
+                  type="button"
+                  class="btn primary compact-btn"
+                  :disabled="!currentSectionModelRows.length"
+                  @click="exportModalSectionToExcel"
+                >
+                  📥 导出标段明细
+                </button>
+              </div>
+            </div>
+
+            <!-- 弹窗主体内容 -->
+            <div class="section-modal-body custom-scroll-list">
+              <!-- 1. 顶部 4 张 KPI 卡片 -->
+              <div class="overview-kpi-grid">
+                <div class="overview-kpi-card kpi-purple">
+                  <div class="kpi-card-header">
+                    <span class="kpi-icon">🕒</span>
+                    <span class="kpi-title">三日需求计划总量</span>
+                  </div>
+                  <div class="kpi-main-val">
+                    <strong class="kpi-number">{{ formatQty(modalOverviewStats.totalPlan) }}</strong>
+                    <span class="kpi-unit">米</span>
+                  </div>
+                  <div class="kpi-footer-note">覆盖 {{ modalOverviewStats.planModelsCount }} 种需用规格型号</div>
+                </div>
+
+                <div class="overview-kpi-card kpi-green">
+                  <div class="kpi-card-header">
+                    <span class="kpi-icon">📦</span>
+                    <span class="kpi-title">现场可用实物库存</span>
+                  </div>
+                  <div class="kpi-main-val">
+                    <strong class="kpi-number">{{ formatQty(modalOverviewStats.totalInventory) }}</strong>
+                    <span class="kpi-unit">米</span>
+                  </div>
+                  <div class="kpi-footer-note">累计到货 {{ formatQty(modalOverviewStats.totalArrived) }}m · 消耗 {{ formatQty(modalOverviewStats.totalUsage) }}m</div>
+                </div>
+
+                <div class="overview-kpi-card kpi-blue">
+                  <div class="kpi-card-header">
+                    <span class="kpi-icon">🚚</span>
+                    <span class="kpi-title">运输在途保供总量</span>
+                  </div>
+                  <div class="kpi-main-val">
+                    <strong class="kpi-number">{{ formatQty(modalOverviewStats.totalTransit) }}</strong>
+                    <span class="kpi-unit">米</span>
+                  </div>
+                  <div class="kpi-footer-note">现存+在途合计 {{ formatQty(modalOverviewStats.totalInventoryPlusTransit) }} 米</div>
+                </div>
+
+                <div class="overview-kpi-card" :class="modalOverviewStats.totalNetGap > 0 ? 'kpi-red is-alert-pulse' : 'kpi-safe'">
+                  <div class="kpi-card-header">
+                    <span class="kpi-icon">{{ modalOverviewStats.totalNetGap > 0 ? '🚨' : '🛡️' }}</span>
+                    <span class="kpi-title">三日净缺口报警量</span>
+                  </div>
+                  <div class="kpi-main-val">
+                    <strong class="kpi-number">{{ formatQty(modalOverviewStats.totalNetGap) }}</strong>
+                    <span class="kpi-unit">米</span>
+                  </div>
+                  <div class="kpi-footer-note" :style="{ color: modalOverviewStats.totalNetGap > 0 ? '#b91c1c' : '#15803d', fontWeight: '600' }">
+                    {{ modalOverviewStats.totalNetGap > 0 ? `⚠️ ${modalOverviewStats.gapModelsCount} 个型号存在断料停工风险` : '✅ 各型号现存+在途均满足' }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. ECharts 各型号供需对照图 -->
+              <div class="overview-chart-box" style="margin-top: 16px;">
+                <div class="overview-chart-header">
+                  <span class="chart-box-title">📊 各型号保温管供需对照图</span>
+                  <div class="chart-legend-hint">
+                    <span class="dot purple"></span> 三日需求计划
+                    <span class="dot green"></span> 现场库存
+                    <span class="dot blue"></span> 运输在途
+                    <span class="dot red"></span> 三日净缺口
+                  </div>
+                </div>
+                <div class="overview-chart-stage">
+                  <div v-if="!currentSectionModelRows.length" class="chart-empty-placeholder">
+                    当前标段暂无保温管型号数据
+                  </div>
+                  <div ref="modalChartRef" class="overview-echarts-dom"></div>
+                </div>
+              </div>
+
+              <!-- 3. 各型号明细穿透表格 -->
+              <div class="overview-table-section" style="margin-top: 16px;">
+                <div class="overview-table-toolbar">
+                  <div class="toolbar-left">
+                    <span class="toolbar-heading">📋 各型号供需全要素穿透台账</span>
+                    <span class="toolbar-count-tag">共 {{ filteredModalRows.length }} 种型号规格</span>
+                  </div>
+                  <div class="toolbar-right">
+                    <label class="gap-filter-checkbox" title="勾选后仅展示存在三日净缺口（断料风险）的型号">
+                      <input type="checkbox" v-model="modalOnlyShowGap" />
+                      <span>⚠️ 仅看存在净缺口型号 ({{ modalOverviewStats.gapModelsCount }})</span>
+                    </label>
+                    <input
+                      v-model.trim="modalSearchKeyword"
+                      type="text"
+                      class="overview-search-input"
+                      placeholder="🔍 搜索管径型号规格..."
+                    />
+                  </div>
+                </div>
+
+                <div v-if="!filteredModalRows.length" class="empty-box">未找到符合筛选条件的型号记录。</div>
+                <div v-else class="table-wrap custom-scroll-list" style="max-height: 380px; overflow-y: auto;">
+                  <table class="data-table overview-data-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 42px; text-align: center;">#</th>
+                        <th style="min-width: 170px; text-align: left;">保温管规格型号</th>
+                        <th style="min-width: 105px; text-align: right; color: #6d28d9;">三日需求计划(m)</th>
+                        <th style="min-width: 95px; text-align: right;">累计发货(m)</th>
+                        <th style="min-width: 95px; text-align: right;">累计施工(m)</th>
+                        <th style="min-width: 105px; text-align: right; color: #047857; background: #f0fdf4;">现场库存(m)</th>
+                        <th style="min-width: 100px; text-align: right; color: #0369a1; background: #f0f9ff;">运输在途(m)</th>
+                        <th style="min-width: 110px; text-align: right; color: #0f766e;">库存+在途(m)</th>
+                        <th style="min-width: 115px; text-align: right; color: #b91c1c; background: #fef2f2;">三日净缺口(m)</th>
+                        <th style="min-width: 110px; text-align: center;">保供态势判定</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr 
+                        v-for="(row, idx) in filteredModalRows" 
+                        :key="row.pipeModelId"
+                        :class="{ 'highlight-gap-row': row.netGapQty > 0 }"
+                      >
+                        <td style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
+                        <td class="cell-text font-bold" :title="row.pipeModelName">
+                          {{ row.pipeModelName }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #6d28d9;">
+                          {{ formatQty(row.futurePlanQty) }}
+                        </td>
+                        <td style="text-align: right; color: #334155;">
+                          {{ formatQty(row.totalShippedQty) }}
+                        </td>
+                        <td style="text-align: right; color: #334155;">
+                          {{ formatQty(row.totalUsageQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #047857; background: #f0fdf4;">
+                          {{ formatQty(row.inventoryQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 600; color: #0369a1; background: #f0f9ff;">
+                          {{ formatQty(row.pendingArrivalQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #0f766e;">
+                          {{ formatQty(row.inventoryPlusPipeline) }}
+                        </td>
+                        <td 
+                          style="text-align: right; font-weight: 700; background: #fef2f2;" 
+                          :style="{ color: row.netGapQty > 0 ? '#b91c1c' : '#94a3b8' }"
+                        >
+                          <span v-if="row.netGapQty > 0" class="gap-warning-pill">
+                            ⚠️ {{ formatQty(row.netGapQty) }}
+                          </span>
+                          <span v-else>0.00</span>
+                        </td>
+                        <td style="text-align: center;">
+                          <span :class="['status-pill', row.statusPillClass]">
+                            {{ row.statusText }}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                    <!-- 表尾合计行 -->
+                    <tfoot>
+                      <tr class="summary-total-row">
+                        <td colspan="2" style="text-align: center; font-weight: 700; color: #1e293b;">
+                          合计 ({{ filteredModalRows.length }} 种型号)
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #6d28d9;">
+                          {{ formatQty(filteredModalTotals.futurePlanQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #334155;">
+                          {{ formatQty(filteredModalTotals.totalShippedQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #334155;">
+                          {{ formatQty(filteredModalTotals.totalUsageQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #047857; background: #e6f9ed;">
+                          {{ formatQty(filteredModalTotals.inventoryQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #0369a1; background: #e0f2fe;">
+                          {{ formatQty(filteredModalTotals.pendingArrivalQty) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 700; color: #0f766e;">
+                          {{ formatQty(filteredModalTotals.inventoryPlusPipeline) }}
+                        </td>
+                        <td 
+                          style="text-align: right; font-weight: 700; background: #fee2e2;" 
+                          :style="{ color: filteredModalTotals.netGapQty > 0 ? '#b91c1c' : '#15803d' }"
+                        >
+                          {{ formatQty(filteredModalTotals.netGapQty) }}
+                        </td>
+                        <td style="text-align: center; font-size: 12px; color: #64748b;">
+                          {{ filteredModalTotals.netGapQty > 0 ? `共 ${modalOverviewStats.gapModelsCount} 种缺料` : '全型号供需平衡' }}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- 弹窗底部 -->
+            <div class="section-modal-footer">
+              <button class="btn btn-secondary" @click="closeSectionDetailModal">确定并返回大盘</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- 导出配置与 XLSX 导出组件 -->
     <ExportSettingsModal
       :show="showExportModal"
@@ -559,6 +807,8 @@
 <script setup>
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import * as echarts from 'echarts'
+import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
 import {
@@ -577,6 +827,372 @@ const canExtractXlsx = computed(() => auth.canExtractXlsxFor(projectKey.value))
 
 function goBigScreen() {
   router.push(`/projects/${encodeURIComponent(projectKey.value)}/pages/big_screen`)
+}
+
+// --- 🏢 标段各型号需求与库存全要素穿透弹窗状态 ---
+const sectionDetailModalVisible = ref(false)
+const currentDetailSection = ref(null)
+const modalSearchKeyword = ref('')
+const modalOnlyShowGap = ref(false)
+const modalChartRef = ref(null)
+let modalChartInstance = null
+
+const currentSectionModelRows = computed(() => {
+  if (!currentDetailSection.value) return []
+  const secId = String(currentDetailSection.value.id || '').trim().toUpperCase()
+  const secName = String(currentDetailSection.value.name || '').trim().toUpperCase()
+
+  const matched = summaryRows.value.filter(r => {
+    const rowSecId = String(r.section_1_id || '').trim().toUpperCase()
+    const rowSecName = String(r.section_1_name || '').trim().toUpperCase()
+
+    if (secId && rowSecId && rowSecId === secId) return true
+    if (secName && rowSecName && rowSecName === secName) return true
+    return false
+  })
+
+  return matched.map(r => {
+    const futurePlanQty = Number(r.future_plan_qty) || 0
+    const totalShippedQty = Number(r.total_shipped_qty) || 0
+    const totalArrivedQty = Number(r.total_arrived_qty) || 0
+    const totalUsageQty = Number(r.total_usage_qty) || 0
+    const inventoryQty = Number(r.section_1_inventory_qty) || 0
+    const pendingArrivalQty = Number(r.pending_arrival_qty) || 0
+    const inventoryPlusPipeline = Math.round((inventoryQty + pendingArrivalQty) * 100) / 100
+    const netGapQty = Number(r.net_gap_qty) || 0
+    const hardGapQty = Number(r.hard_gap_qty) || 0
+
+    let statusText = '⚪ 现存安全'
+    let statusPillClass = 'pill-neutral'
+    if (netGapQty > 0) {
+      statusText = '🚨 紧缺待调拨'
+      statusPillClass = 'pill-danger'
+    } else if (futurePlanQty > inventoryQty && futurePlanQty <= inventoryPlusPipeline) {
+      statusText = '🚚 在途可满足'
+      statusPillClass = 'pill-info'
+    } else if (futurePlanQty > 0 && inventoryQty >= futurePlanQty) {
+      statusText = '✅ 现存充足'
+      statusPillClass = 'pill-success'
+    } else if (futurePlanQty === 0 && inventoryQty > 0) {
+      statusText = '📦 现存富余'
+      statusPillClass = 'pill-neutral'
+    }
+
+    return {
+      pipeModelId: r.pipe_model_id,
+      pipeModelName: r.pipe_model_name || r.pipe_model_id,
+      futurePlanQty,
+      totalShippedQty,
+      totalArrivedQty,
+      totalUsageQty,
+      inventoryQty,
+      pendingArrivalQty,
+      inventoryPlusPipeline,
+      netGapQty,
+      hardGapQty,
+      statusText,
+      statusPillClass,
+    }
+  })
+})
+
+const modalOverviewStats = computed(() => {
+  let totalPlan = 0
+  let totalShipped = 0
+  let totalArrived = 0
+  let totalUsage = 0
+  let totalInventory = 0
+  let totalTransit = 0
+  let totalInventoryPlusTransit = 0
+  let totalNetGap = 0
+  let planModelsCount = 0
+  let gapModelsCount = 0
+
+  currentSectionModelRows.value.forEach(r => {
+    totalPlan += r.futurePlanQty || 0
+    totalShipped += r.totalShippedQty || 0
+    totalArrived += r.totalArrivedQty || 0
+    totalUsage += r.totalUsageQty || 0
+    totalInventory += r.inventoryQty || 0
+    totalTransit += r.pendingArrivalQty || 0
+    totalInventoryPlusTransit += r.inventoryPlusPipeline || 0
+    totalNetGap += r.netGapQty || 0
+
+    if ((r.futurePlanQty || 0) > 0) {
+      planModelsCount += 1
+    }
+    if ((r.netGapQty || 0) > 0) {
+      gapModelsCount += 1
+    }
+  })
+
+  return {
+    totalPlan: Math.round(totalPlan * 100) / 100,
+    totalShipped: Math.round(totalShipped * 100) / 100,
+    totalArrived: Math.round(totalArrived * 100) / 100,
+    totalUsage: Math.round(totalUsage * 100) / 100,
+    totalInventory: Math.round(totalInventory * 100) / 100,
+    totalTransit: Math.round(totalTransit * 100) / 100,
+    totalInventoryPlusTransit: Math.round(totalInventoryPlusTransit * 100) / 100,
+    totalNetGap: Math.round(totalNetGap * 100) / 100,
+    planModelsCount,
+    gapModelsCount,
+  }
+})
+
+const filteredModalRows = computed(() => {
+  let list = currentSectionModelRows.value
+
+  if (modalOnlyShowGap.value) {
+    list = list.filter(r => (r.netGapQty || 0) > 0)
+  }
+
+  if (modalSearchKeyword.value) {
+    const kw = modalSearchKeyword.value.toLowerCase().trim()
+    list = list.filter(r =>
+      String(r.pipeModelName || '').toLowerCase().includes(kw) ||
+      String(r.pipeModelId || '').toLowerCase().includes(kw)
+    )
+  }
+
+  return list
+})
+
+const filteredModalTotals = computed(() => {
+  let futurePlanQty = 0
+  let totalShippedQty = 0
+  let totalUsageQty = 0
+  let inventoryQty = 0
+  let pendingArrivalQty = 0
+  let inventoryPlusPipeline = 0
+  let netGapQty = 0
+
+  filteredModalRows.value.forEach(r => {
+    futurePlanQty += r.futurePlanQty || 0
+    totalShippedQty += r.totalShippedQty || 0
+    totalUsageQty += r.totalUsageQty || 0
+    inventoryQty += r.inventoryQty || 0
+    pendingArrivalQty += r.pendingArrivalQty || 0
+    inventoryPlusPipeline += r.inventoryPlusPipeline || 0
+    netGapQty += r.netGapQty || 0
+  })
+
+  return {
+    futurePlanQty: Math.round(futurePlanQty * 100) / 100,
+    totalShippedQty: Math.round(totalShippedQty * 100) / 100,
+    totalUsageQty: Math.round(totalUsageQty * 100) / 100,
+    inventoryQty: Math.round(inventoryQty * 100) / 100,
+    pendingArrivalQty: Math.round(pendingArrivalQty * 100) / 100,
+    inventoryPlusPipeline: Math.round(inventoryPlusPipeline * 100) / 100,
+    netGapQty: Math.round(netGapQty * 100) / 100,
+  }
+})
+
+function handleOpenSectionDetail(sectionItem) {
+  currentDetailSection.value = sectionItem
+  modalSearchKeyword.value = ''
+  modalOnlyShowGap.value = false
+  sectionDetailModalVisible.value = true
+  nextTick(() => {
+    renderModalChart()
+    setTimeout(() => handleResizeModalChart(), 80)
+    setTimeout(() => handleResizeModalChart(), 300)
+  })
+}
+
+function closeSectionDetailModal() {
+  sectionDetailModalVisible.value = false
+  currentDetailSection.value = null
+  if (modalChartInstance) {
+    modalChartInstance.dispose()
+    modalChartInstance = null
+  }
+}
+
+function renderModalChart() {
+  if (!modalChartRef.value) return
+  if (!modalChartInstance) {
+    modalChartInstance = echarts.init(modalChartRef.value)
+    if (window.ResizeObserver) {
+      try {
+        const ro = new ResizeObserver(() => {
+          handleResizeModalChart()
+        })
+        ro.observe(modalChartRef.value)
+      } catch (e) {}
+    }
+  }
+
+  const dataList = currentSectionModelRows.value
+  if (!dataList || dataList.length === 0) {
+    modalChartInstance.clear()
+    return
+  }
+
+  const modelNames = dataList.map(item => item.pipeModelName)
+  const planData = dataList.map(item => item.futurePlanQty)
+  const invData = dataList.map(item => item.inventoryQty)
+  const transitData = dataList.map(item => item.pendingArrivalQty)
+  const netGapData = dataList.map(item => item.netGapQty)
+
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: function (params) {
+        if (!params || !params.length) return ''
+        const modelName = params[0].name
+        const targetRow = dataList.find(d => d.pipeModelName === modelName) || {}
+        let html = `<div style="font-weight: 700; margin-bottom: 6px; color: #0f172a; font-size: 13px;">📏 ${modelName}</div>`
+        html += `<div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px; font-size: 12px;">`
+        html += `<span style="color: #6d28d9;">🟣 三日需求计划:</span><strong style="text-align: right;">${formatQty(targetRow.futurePlanQty)} m</strong>`
+        html += `<span style="color: #047857;">🟢 现场实物库存:</span><strong style="text-align: right;">${formatQty(targetRow.inventoryQty)} m</strong>`
+        html += `<span style="color: #0284c7;">🔵 运输在途保供:</span><strong style="text-align: right;">${formatQty(targetRow.pendingArrivalQty)} m</strong>`
+        html += `<span style="color: #0f766e;">🌐 现存+在途合计:</span><strong style="text-align: right;">${formatQty(targetRow.inventoryPlusPipeline)} m</strong>`
+        html += `<span style="color: #475569;">🚚 累计发货总量:</span><strong style="text-align: right;">${formatQty(targetRow.totalShippedQty)} m</strong>`
+        html += `<span style="color: #475569;">🔨 累计施工消耗:</span><strong style="text-align: right;">${formatQty(targetRow.totalUsageQty)} m</strong>`
+        const gapColor = (targetRow.netGapQty || 0) > 0 ? '#b91c1c' : '#15803d'
+        const gapText = (targetRow.netGapQty || 0) > 0 ? `⚠️ ${formatQty(targetRow.netGapQty)} m` : `0.00 m (安全)`
+        html += `<span style="color: ${gapColor}; font-weight: bold;">🔴 三日净缺口:</span><strong style="text-align: right; color: ${gapColor};">${gapText}</strong>`
+        html += `</div>`
+        return html
+      }
+    },
+    legend: {
+      top: 6,
+      right: 12,
+      data: ['三日需求计划', '现场库存', '运输在途', '三日净缺口'],
+      textStyle: { color: '#475569', fontSize: 12 }
+    },
+    grid: {
+      left: '2%',
+      right: '2%',
+      bottom: '14%',
+      top: '18%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: modelNames,
+      axisLabel: {
+        interval: 0,
+        rotate: modelNames.length > 5 ? 25 : 0,
+        fontSize: 11,
+        color: '#475569'
+      },
+      axisLine: { lineStyle: { color: '#cbd5e1' } }
+    },
+    yAxis: {
+      type: 'value',
+      name: '米 (m)',
+      nameTextStyle: { color: '#64748b', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+    },
+    series: [
+      {
+        name: '三日需求计划',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: planData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#a78bfa' },
+            { offset: 1, color: '#7c3aed' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
+        name: '现场库存',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: invData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#34d399' },
+            { offset: 1, color: '#059669' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
+        name: '运输在途',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: transitData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#38bdf8' },
+            { offset: 1, color: '#0284c7' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
+        name: '三日净缺口',
+        type: 'bar',
+        barMaxWidth: 22,
+        data: netGapData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#f87171' },
+            { offset: 1, color: '#dc2626' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      }
+    ]
+  }
+
+  modalChartInstance.setOption(option, true)
+  modalChartInstance.resize()
+}
+
+function handleResizeModalChart() {
+  if (modalChartInstance && sectionDetailModalVisible.value) {
+    modalChartInstance.resize()
+  }
+}
+
+function exportModalSectionToExcel() {
+  if (!currentSectionModelRows.value.length) return
+  const currentSecName = currentDetailSection.value?.name || '标段'
+
+  const header = [
+    '序号', '保温管规格型号', '未来三日计划(米)', '累计发货量(米)', '累计施工量(米)',
+    '现场库存量(米)', '运输在途量(米)', '库存+在途(米)', '三日净缺口(米)', '保供态势判定'
+  ]
+  const rows = filteredModalRows.value.map((r, idx) => [
+    idx + 1,
+    r.pipeModelName,
+    r.futurePlanQty,
+    r.totalShippedQty,
+    r.totalUsageQty,
+    r.inventoryQty,
+    r.pendingArrivalQty,
+    r.inventoryPlusPipeline,
+    r.netGapQty,
+    r.statusText
+  ])
+
+  rows.push([
+    '合计',
+    `共 ${filteredModalRows.value.length} 种型号`,
+    filteredModalTotals.value.futurePlanQty,
+    filteredModalTotals.value.totalShippedQty,
+    filteredModalTotals.value.totalUsageQty,
+    filteredModalTotals.value.inventoryQty,
+    filteredModalTotals.value.pendingArrivalQty,
+    filteredModalTotals.value.inventoryPlusPipeline,
+    filteredModalTotals.value.netGapQty,
+    filteredModalTotals.value.netGapQty > 0 ? `存在 ${modalOverviewStats.value.gapModelsCount} 种缺料` : '全型号充足'
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '标段需求与库存统计')
+  XLSX.writeFile(wb, `${currentSecName}_保温管供需与库存透视_${configSummary.value?.show_date || '最新'}.xlsx`)
 }
 
 // 使用 tube 统一页面壳
@@ -1714,6 +2330,7 @@ function renderCharts() {
 function handleResize() {
   chartInstance1?.resize()
   chartInstance2?.resize()
+  handleResizeModalChart()
 }
 
 // 联动重绘 Watcher
@@ -1755,6 +2372,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('click', handleGlobalClick)
   chartInstance1?.dispose()
   chartInstance2?.dispose()
+  if (modalChartInstance) {
+    modalChartInstance.dispose()
+    modalChartInstance = null
+  }
 })
 </script>
 
@@ -3199,6 +3820,487 @@ onBeforeUnmount(() => {
 @media (max-width: 640px) {
   .metric-saas-card.ssr {
     grid-column: span 1;
+  }
+}
+
+/* --- 🏢 透视表标段行点击穿透样式 --- */
+.clickable-section-row {
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.clickable-section-row:hover {
+  background: #f0fdfa !important;
+}
+
+.clickable-name-cell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+}
+
+.clickable-section-row:hover .row-name-text {
+  color: #0284c7 !important;
+  text-decoration: underline !important;
+}
+
+.drilldown-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0284c7;
+  background: #e0f2fe;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #bae6fd;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.clickable-section-row:hover .drilldown-badge {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+}
+
+/* --- 🏢 标段多型号需求与库存全要素穿透弹窗样式 --- */
+.section-detail-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(5px) !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 24px !important;
+  box-sizing: border-box !important;
+}
+
+.section-detail-modal-card {
+  width: 95% !important;
+  max-width: 1200px !important;
+  max-height: 90vh !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.section-modal-header {
+  padding: 18px 24px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  font-size: 28px;
+}
+
+.section-modal-header h4 {
+  margin: 0 0 4px 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.header-subtitle {
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.section-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto !important;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-modal-footer {
+  padding: 12px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  z-index: 20;
+}
+
+.modal-close-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+  border-color: #fca5a5;
+}
+
+/* 1. 顶部 4 张关键态势概览指标卡片 */
+.overview-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.overview-kpi-card {
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.overview-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.overview-kpi-card.kpi-purple {
+  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.overview-kpi-card.kpi-green {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.overview-kpi-card.kpi-blue {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: rgba(2, 132, 199, 0.25);
+}
+
+.overview-kpi-card.kpi-red {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.overview-kpi-card.kpi-safe {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: #cbd5e1;
+}
+
+.overview-kpi-card.is-alert-pulse {
+  animation: pulse-danger-glow 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-danger-glow {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.kpi-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kpi-icon {
+  font-size: 18px;
+}
+
+.kpi-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.kpi-main-val {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.kpi-number {
+  font-size: 24px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+  color: #0f172a;
+}
+
+.kpi-purple .kpi-number { color: #6d28d9; }
+.kpi-green .kpi-number { color: #047857; }
+.kpi-blue .kpi-number { color: #0369a1; }
+.kpi-red .kpi-number { color: #b91c1c; }
+
+.kpi-unit {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.kpi-footer-note {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+/* 2. 可视化图表区 */
+.overview-chart-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.overview-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.chart-box-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.chart-legend-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.chart-legend-hint .dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 3px;
+}
+
+.chart-legend-hint .dot.purple { background: #7c3aed; }
+.chart-legend-hint .dot.green { background: #059669; }
+.chart-legend-hint .dot.blue { background: #0284c7; }
+.chart-legend-hint .dot.red { background: #dc2626; }
+
+.overview-chart-stage {
+  position: relative;
+  width: 100%;
+  min-height: 340px;
+}
+
+.overview-echarts-dom {
+  width: 100% !important;
+  min-width: 100% !important;
+  height: 340px !important;
+  display: block;
+}
+
+.chart-empty-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.88);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* 3. 数据表格区 */
+.overview-table-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.overview-table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.toolbar-count-tag {
+  font-size: 11.5px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gap-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: #b91c1c;
+  cursor: pointer;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.gap-filter-checkbox:hover {
+  background: #fee2e2;
+}
+
+.overview-search-input {
+  height: 32px;
+  width: 200px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12.5px;
+  outline: none;
+}
+
+.overview-search-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.overview-data-table th {
+  background: #f8fafc;
+  padding: 9px 6px !important;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.overview-data-table td {
+  padding: 7px 6px !important;
+  font-size: 12.5px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.highlight-gap-row {
+  background: rgba(254, 242, 242, 0.45) !important;
+}
+
+.gap-warning-pill {
+  display: inline-block;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-weight: 700;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill.pill-danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.status-pill.pill-info {
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.status-pill.pill-success {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.status-pill.pill-neutral {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.summary-total-row td {
+  background: #f8fafc;
+  border-top: 2px solid #cbd5e1;
+  font-size: 12.5px;
+}
+
+@media (max-width: 1024px) {
+  .overview-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-kpi-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
