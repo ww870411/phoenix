@@ -203,10 +203,28 @@ SUPPLY_SUBMISSION_ACTIONS = [
 WAREHOUSE_SUBMISSION_ACTIONS = [
     "CONFIRM_WAREHOUSE", "CONFIRM_FITTING_WAREHOUSE"
 ]
-ALL_SUBMISSION_ACTIONS = DEMAND_SUBMISSION_ACTIONS + SUPPLY_SUBMISSION_ACTIONS + WAREHOUSE_SUBMISSION_ACTIONS
+QUERY_SUBMISSION_ACTIONS = [
+    "QUERY_DAILY_FLOW",
+    "QUERY_BASELINE_PROGRESS",
+    "QUERY_SUPPLIER_LEDGER",
+    "QUERY_ENTITY_DIRECTORY",
+    "QUERY_MATERIAL_PRICES",
+]
+SUBMISSION_ONLY_ACTIONS = (
+    DEMAND_SUBMISSION_ACTIONS
+    + SUPPLY_SUBMISSION_ACTIONS
+    + WAREHOUSE_SUBMISSION_ACTIONS
+)
+ALL_SUBMISSION_ACTIONS = (
+    DEMAND_SUBMISSION_ACTIONS 
+    + SUPPLY_SUBMISSION_ACTIONS 
+    + WAREHOUSE_SUBMISSION_ACTIONS 
+    + QUERY_SUBMISSION_ACTIONS
+)
 
 
 def query_submission_logs(
+    category: Optional[str] = None,
     entity_type: Optional[str] = None,
     action_type: Optional[str] = None,
     operator: Optional[str] = None,
@@ -216,14 +234,30 @@ def query_submission_logs(
     offset: int = 0
 ) -> Dict[str, Any]:
     """
-    专门查询主体数据提交（需求侧/供给侧/库管）的操作行为记录，
-    并计算全网最新数据提交物理时间戳与 24h 内的提交计数。
+    专门查询业务操作记录（含数据提交类与数据查询类两大分类），
+    并计算全网最新操作物理时间戳与 24h 内的提交与查询计数。
     """
     conditions = []
     params: Dict[str, Any] = {}
 
-    # 按主体分类约束 action_type
-    if entity_type == "demand":
+    # 按大类 (category) 与主体分类 (entity_type) 联合约束 action_type
+    if category == "query" or entity_type == "query":
+        conditions.append("action_type = ANY(:allowed_actions)")
+        params["allowed_actions"] = QUERY_SUBMISSION_ACTIONS
+    elif category == "submission":
+        if entity_type == "demand":
+            conditions.append("action_type = ANY(:allowed_actions)")
+            params["allowed_actions"] = DEMAND_SUBMISSION_ACTIONS
+        elif entity_type == "supply":
+            conditions.append("action_type = ANY(:allowed_actions)")
+            params["allowed_actions"] = SUPPLY_SUBMISSION_ACTIONS
+        elif entity_type == "warehouse":
+            conditions.append("action_type = ANY(:allowed_actions)")
+            params["allowed_actions"] = WAREHOUSE_SUBMISSION_ACTIONS
+        else:
+            conditions.append("action_type = ANY(:allowed_actions)")
+            params["allowed_actions"] = SUBMISSION_ONLY_ACTIONS
+    elif entity_type == "demand":
         conditions.append("action_type = ANY(:allowed_actions)")
         params["allowed_actions"] = DEMAND_SUBMISSION_ACTIONS
     elif entity_type == "supply":
@@ -298,6 +332,14 @@ def query_submission_logs(
           AND created_at >= NOW() - INTERVAL '24 HOURS'
         """
     )
+    query_24h_sql = text(
+        """
+        SELECT COUNT(*) 
+        FROM logs.tube_operation_logs 
+        WHERE action_type = ANY(:query_submission_actions) 
+          AND created_at >= NOW() - INTERVAL '24 HOURS'
+        """
+    )
 
     query_params = dict(params)
     query_params["limit"] = limit
@@ -319,6 +361,9 @@ def query_submission_logs(
         ).scalar() or 0
         supply_24h_count = session.execute(
             supply_24h_sql, {"supply_submission_actions": SUPPLY_SUBMISSION_ACTIONS}
+        ).scalar() or 0
+        query_24h_count = session.execute(
+            query_24h_sql, {"query_submission_actions": QUERY_SUBMISSION_ACTIONS}
         ).scalar() or 0
 
         logs = []
@@ -343,6 +388,7 @@ def query_submission_logs(
             "recent_24h_count": recent_24h_count,
             "demand_24h_count": demand_24h_count,
             "supply_24h_count": supply_24h_count,
+            "query_24h_count": query_24h_count,
         }
     finally:
         session.close()

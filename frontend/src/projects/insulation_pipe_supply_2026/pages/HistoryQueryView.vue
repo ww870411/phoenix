@@ -39,6 +39,7 @@
                 <span>🔍 立即查询</span>
               </button>
               <button 
+                v-if="canExtractXlsx"
                 type="button" 
                 class="btn btn-sm btn-export" 
                 :disabled="exportLoading"
@@ -2855,7 +2856,7 @@
           <div class="block-modal-actions flex justify-between items-center">
             <span class="text-xs text-muted font-mono">共穿透 {{ selectedSupplierOrderRow?.order_items?.length || 0 }} 笔真实发货运单记录</span>
             <div class="flex gap-2">
-              <button type="button" class="btn btn-export btn-sm" @click="exportCurrentOrderItemsExcel">
+              <button v-if="canExtractXlsx" type="button" class="btn btn-export btn-sm" @click="exportCurrentOrderItemsExcel">
                 📥 导出此运单明细
               </button>
               <button type="button" class="btn secondary" @click="supplierOrderModalVisible = false">关闭窗口</button>
@@ -2868,43 +2869,75 @@
     <!-- 🔐 弹窗：采购价格访问安全授权验证 Modal -->
     <Transition name="fade">
       <div v-if="priceAuthModalVisible" class="block-modal-overlay" @click.self="closePriceAuthModal">
-        <div class="block-modal-container modal-sm price-auth-modal">
-          <div class="block-modal-header bg-amber-gradient">
-            <span class="modal-header-icon">🔐</span>
+        <div class="block-modal-container price-auth-modal" role="dialog" aria-modal="true">
+          <!-- 头部 Header -->
+          <div class="block-modal-header price-auth-header">
+            <div class="price-auth-header-icon-wrap">
+              <span class="price-auth-icon">🔐</span>
+            </div>
             <div class="modal-header-title-wrap">
               <h3 class="modal-title">
                 {{ pendingAuthTarget === 'pipe_calc' ? '保温管总价核算安全验证' : '采购价格安全访问验证' }}
               </h3>
               <p class="modal-sub">
-                {{ pendingAuthTarget === 'pipe_calc' ? '联动单价字典计算发运与到货总价需验证访问权限' : '查看保温管与管件采购基准价格需验证访问权限' }}
+                {{ pendingAuthTarget === 'pipe_calc' ? '敏感核算数据受限，需验证访问权限' : '敏感价格字典受限，需验证访问权限' }}
               </p>
             </div>
             <button type="button" class="btn-modal-close-icon" @click="closePriceAuthModal" title="关闭窗口">✕</button>
           </div>
 
-          <form class="modal-body auth-modal-body" @submit.prevent="handleVerifyPriceCode">
-            <div class="auth-instruction">
-              <span class="auth-label">请输入 4 位数字访问码：</span>
+          <!-- 表单 Body -->
+          <form class="auth-modal-form" @submit.prevent="handleVerifyPriceCode">
+            <div class="auth-modal-body">
+              <!-- 安全说明卡片 -->
+              <div class="auth-notice-card">
+                <span class="notice-icon">🛡️</span>
+                <div class="notice-content">
+                  <strong>安全保护提示</strong>
+                  <p>{{ pendingAuthTarget === 'pipe_calc' ? '联动单价字典计算发运与到货总价属于敏感数据，请输入 4 位授权访问码解锁。' : '查看保温管及管件采购基准价格属于敏感物资数据，请输入 4 位授权访问码解锁。' }}</p>
+                </div>
+              </div>
+
+              <!-- 密码输入区域 -->
+              <div class="auth-field-group">
+                <label class="auth-input-label" for="price-auth-input">
+                  <span>请输入 4 位数字访问码</span>
+                </label>
+                <div class="auth-input-wrapper">
+                  <span class="auth-input-icon">🔑</span>
+                  <input
+                    id="price-auth-input"
+                    ref="priceInputRef"
+                    v-model="priceAccessCodeInput"
+                    type="password"
+                    maxlength="10"
+                    class="auth-input-field font-mono"
+                    placeholder="••••"
+                    autocomplete="off"
+                    @input="priceAccessErrorMsg = ''"
+                    @keydown.enter.prevent="handleVerifyPriceCode"
+                  />
+                </div>
+              </div>
+
+              <!-- 错误提示 -->
+              <Transition name="fade">
+                <div v-if="priceAccessErrorMsg" class="auth-error-tip">
+                  <span class="error-icon">⚠️</span>
+                  <span>{{ priceAccessErrorMsg }}</span>
+                </div>
+              </Transition>
             </div>
-            <div class="auth-input-wrapper">
-              <input
-                ref="priceInputRef"
-                v-model="priceAccessCodeInput"
-                type="password"
-                maxlength="10"
-                class="auth-input-field font-mono"
-                placeholder="••••"
-                autocomplete="off"
-                @keydown.enter.prevent="handleVerifyPriceCode"
-              />
-            </div>
-            <div v-if="priceAccessErrorMsg" class="auth-error-tip">
-              ⚠️ {{ priceAccessErrorMsg }}
-            </div>
-            <div class="auth-modal-footer">
-              <button type="button" class="btn secondary" @click="closePriceAuthModal">取消</button>
-              <button type="submit" class="btn btn-primary" :disabled="!priceAccessCodeInput.trim()">
-                🔓 验证并进入
+
+            <!-- 底部操作栏 -->
+            <div class="block-modal-actions auth-modal-actions">
+              <button type="button" class="btn secondary modal-cancel-btn" @click="closePriceAuthModal">取消</button>
+              <button
+                type="submit"
+                class="btn btn-unlock-confirm"
+                :disabled="!priceAccessCodeInput.trim()"
+              >
+                <span>🔓 验证并进入</span>
               </button>
             </div>
           </form>
@@ -2919,6 +2952,7 @@ import { ref, computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { AppHeader, Breadcrumbs } from './shared'
 import * as XLSX from 'xlsx-js-style'
+import { useAuthStore } from '@/projects/daily_report_25_26/store/auth'
 import {
   fetchTubeConfig,
   getComprehensiveDailyFlow,
@@ -2929,7 +2963,9 @@ import {
 } from '@/projects/daily_report_25_26/services/api'
 
 const router = useRouter()
+const auth = useAuthStore()
 const projectKey = 'insulation_pipe_supply_2026'
+const canExtractXlsx = computed(() => auth.canExtractXlsxFor(projectKey))
 
 // 面包屑规范化
 const breadcrumbItems = computed(() => [
@@ -8814,84 +8850,259 @@ function exportCurrentOrderItemsExcel() {
   box-shadow: 0 6px 16px rgba(2, 132, 199, 0.35);
 }
 
-/* 🔐 访问码验证弹窗专用样式 */
+/* 🔐 访问码验证弹窗专用精致样式 */
 .price-auth-modal {
-  max-width: 400px;
-  border-radius: 14px;
+  max-width: 440px !important;
+  width: 92%;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  animation: modalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.bg-amber-gradient {
-  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+@keyframes modalPop {
+  0% { transform: scale(0.95) translateY(8px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.price-auth-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #b45309 0%, #d97706 50%, #f59e0b 100%);
   color: #ffffff;
-}
-
-.auth-modal-body {
-  padding: 24px 22px 18px 22px;
+  position: relative;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 14px;
 }
 
-.auth-instruction {
+.price-auth-header-icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.auth-label {
-  font-size: 13.5px;
+.price-auth-icon {
+  font-size: 22px;
+}
+
+.price-auth-header .modal-header-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.price-auth-header .modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.price-auth-header .modal-sub {
+  margin: 3px 0 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auth-modal-form {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.auth-modal-body {
+  padding: 22px 24px 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #ffffff;
+}
+
+/* 安全说明小卡片 */
+.auth-notice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.notice-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.notice-content {
+  flex: 1;
+}
+
+.notice-content strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 2px;
+}
+
+.notice-content p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #b45309;
+}
+
+/* 输入框区域 */
+.auth-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-input-label {
+  font-size: 13px;
   font-weight: 700;
   color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .auth-input-wrapper {
+  position: relative;
   width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.auth-input-icon {
+  position: absolute;
+  left: 14px;
+  font-size: 16px;
+  color: #94a3b8;
+  pointer-events: none;
 }
 
 .auth-input-field {
   width: 100%;
-  height: 44px;
-  font-size: 22px;
-  letter-spacing: 6px;
-  text-align: center;
+  height: 48px;
+  padding: 0 16px 0 42px;
+  font-size: 20px;
+  letter-spacing: 8px;
+  text-align: left;
   font-weight: 800;
   color: #0f172a;
   background: #f8fafc;
   border: 2px solid #cbd5e1;
-  border-radius: 8px;
+  border-radius: 10px;
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
 }
 
 .auth-input-field:focus {
   background: #ffffff;
   border-color: #d97706;
-  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
+  box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.15);
 }
 
+.auth-input-field::placeholder {
+  letter-spacing: 4px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* 错误提示 */
 .auth-error-tip {
   font-size: 12.5px;
-  font-weight: 700;
-  color: #ef4444;
+  font-weight: 600;
+  color: #b91c1c;
   background: #fef2f2;
   border: 1px solid #fecaca;
-  padding: 6px 10px;
-  border-radius: 6px;
-  text-align: center;
-  animation: shake 0.3s ease-in-out;
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: authShake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
+@keyframes authShake {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
+  40%, 60% { transform: translate3d(3px, 0, 0); }
 }
 
-.auth-modal-footer {
+/* 底部操作条 */
+.auth-modal-actions {
+  padding: 14px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 8px;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-cancel-btn {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.btn-unlock-confirm {
+  height: 38px;
+  padding: 0 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.35);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-unlock-confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-unlock-confirm:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(217, 119, 6, 0.3);
+}
+
+.btn-unlock-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  background: #94a3b8;
 }
 
 /* 💰 Tab 3 供给方台账保温管金额核算联动选框与样式 */

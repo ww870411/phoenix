@@ -718,7 +718,7 @@ def _ensure_global_admin(session: AuthSession) -> None:
 
 def _ensure_warehouse_access(session: AuthSession) -> None:
     group = str(session.group or "").strip()
-    if group not in {"Global_admin", "tube_warehouse_keeper", "tube_global_viewer"}:
+    if group not in {"Global_admin", "tube_warehouse_keeper", "tube_global_viewer", "tube_data_viewer"}:
         raise HTTPException(status_code=403, detail="当前账号无库管页面访问权限")
 
 
@@ -1063,7 +1063,7 @@ def _serialize_pipe_options(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _is_admin_or_supplier_admin(group: str) -> bool:
     normalized_group = str(group or "").strip()
-    return normalized_group in ("Global_admin", "tube_global_viewer", "tube_supplier_admin")
+    return normalized_group in ("Global_admin", "tube_supplier_admin")
 
 def _serialize_supply_entity_options(
     payload: Dict[str, Any],
@@ -2538,8 +2538,8 @@ def create_custom_supply_entity(
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
-    if session.group not in ("Global_admin", "tube_global_viewer", "tube_supplier_admin"):
-        raise HTTPException(status_code=403, detail="仅全局管理员或供给方管理员可添加自定义供给主体")
+    if str(session.group or "").strip() != "Global_admin":
+        raise HTTPException(status_code=403, detail="仅全局管理员 Global_admin 可添加自定义供给主体")
 
     raw_name = str(payload.entity_name or "").strip()
     if not raw_name:
@@ -2854,6 +2854,8 @@ def create_supply_management_delivery(
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
+        raise HTTPException(status_code=403, detail="只读账号无权提交发货数据")
     config_payload = load_tube_config()
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
     if payload.supply_entity_id not in accessible_supply_entity_ids and not _is_admin_or_supplier_admin(session.group):
@@ -2914,6 +2916,8 @@ def create_supply_management_delivery_batch(
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
+        raise HTTPException(status_code=403, detail="只读账号无权批量提交发货数据")
     config_payload = load_tube_config()
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
     if payload.supply_entity_id not in accessible_supply_entity_ids and not _is_admin_or_supplier_admin(session.group):
@@ -2987,6 +2991,8 @@ def cancel_supply_management_delivery(
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
+        raise HTTPException(status_code=403, detail="只读账号无权撤销发货数据")
     config_payload = load_tube_config()
     accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
     
@@ -3226,7 +3232,7 @@ def confirm_warehouse_delivery_warehouse(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
-    if str(session.group or "").strip() == "tube_global_viewer":
+    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
         raise HTTPException(status_code=403, detail="只读账号无权提交数据")
     before_val = get_delivery_record_basic(delivery_id)
     update_delivery_warehouse_record(
@@ -4877,8 +4883,9 @@ def _to_json_serializable(snap: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
     return res
 
 
-@router.get("/global-management/submission-logs", summary="读取主体数据提交记录")
+@router.get("/global-management/submission-logs", summary="读取业务操作记录")
 def get_global_management_submission_logs(
+    category: Optional[str] = Query(None, description="操作大类: submission | query"),
     entity_type: Optional[str] = None,
     action_type: Optional[str] = None,
     operator: Optional[str] = None,
@@ -4894,6 +4901,7 @@ def get_global_management_submission_logs(
         
     offset = (page - 1) * limit
     result = query_submission_logs(
+        category=category,
         entity_type=entity_type,
         action_type=action_type,
         operator=operator,
@@ -4913,6 +4921,7 @@ def get_global_management_submission_logs(
         "recent_24h_count": result.get("recent_24h_count", 0),
         "demand_24h_count": result.get("demand_24h_count", 0),
         "supply_24h_count": result.get("supply_24h_count", 0),
+        "query_24h_count": result.get("query_24h_count", 0),
         "rows": result["logs"]
     }
 
@@ -5071,6 +5080,7 @@ def get_global_management_history(
         "tube_construction_unit",
         "tube_warehouse_keeper",
         "tube_global_viewer",
+        "tube_data_viewer",
     }
     if group_lower not in allowed_groups:
         raise HTTPException(status_code=403, detail="无权查看历史数据")
@@ -5131,7 +5141,7 @@ def export_global_management_history(
         "tube_site_manager",
         "tube_construction_unit",
         "tube_warehouse_keeper",
-        "tube_global_viewer",
+        "tube_data_viewer",
     }
     if group_lower not in allowed_groups:
         raise HTTPException(status_code=403, detail="无权导出历史数据")
@@ -5749,7 +5759,7 @@ def handle_list_fitting_deliveries(
         {
             "global_admin", "tube_supplier_admin", "tube_supplier",
             "tube_site_manager", "tube_construction_unit",
-            "tube_warehouse_admin", "tube_warehouse_keeper", "tube_global_viewer",
+            "tube_warehouse_admin", "tube_warehouse_keeper", "tube_global_viewer", "tube_data_viewer",
         },
         "管件发货记录查询",
     )
@@ -5853,7 +5863,7 @@ def handle_get_fitting_inventory_summary(
         {
             "global_admin", "dev_admin", "tube_site_manager",
             "tube_construction_unit", "tube_warehouse_admin",
-            "tube_warehouse_keeper", "tube_global_viewer",
+            "tube_warehouse_keeper", "tube_global_viewer", "tube_data_viewer",
             "tube_supplier_admin", "tube_supplier"
         },
         "管件现场库存查询",
@@ -5904,7 +5914,7 @@ def handle_list_fitting_usage_history(
         {
             "global_admin", "dev_admin", "tube_site_manager",
             "tube_construction_unit", "tube_warehouse_admin",
-            "tube_warehouse_keeper", "tube_global_viewer",
+            "tube_warehouse_keeper", "tube_global_viewer", "tube_data_viewer",
             "tube_supplier_admin", "tube_supplier"
         },
         "管件安装台账查询",
@@ -6005,6 +6015,7 @@ from backend.projects.insulation_pipe_supply_2026.services.comprehensive_history
 
 @router.get("/comprehensive-history/daily-flow", summary="综合历史数据：每日全流程流转台账")
 def handle_comprehensive_daily_flow(
+    request: Request,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     section_1_ids: Optional[str] = Query(None, description="标段ID（逗号分隔）"),
@@ -6014,6 +6025,30 @@ def handle_comprehensive_daily_flow(
 ) -> Dict[str, Any]:
     sec_list = [s.strip() for s in section_1_ids.split(",") if s.strip()] if section_1_ids else None
     model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
+    
+    mat_text = "保温管" if material_type == "pipe" else ("管件" if material_type == "fitting" else material_type)
+    range_text = f"{start_date} ~ {end_date}" if start_date and end_date else (f"{start_date}起" if start_date else "全时段")
+    sec_text = f"{len(sec_list)}个标段" if sec_list else "全部标段"
+    model_text = f"{len(model_list)}个型号" if model_list else "全部型号"
+    desc = f"综合数据查询中心 - 查询【每日历史综合流转台账】(时段: {range_text}，品类: {mat_text}，标段: {sec_text}，型号: {model_text})"
+    
+    save_operation_log(
+        operator=session.username or "GUEST",
+        operator_group=session.group,
+        action_type="QUERY_DAILY_FLOW",
+        action_desc=desc,
+        resource_id="comprehensive_query_daily_flow",
+        after_value={
+            "tab": "daily_flow",
+            "start_date": str(start_date) if start_date else None,
+            "end_date": str(end_date) if end_date else None,
+            "material_type": material_type,
+            "section_1_ids": sec_list,
+            "pipe_model_ids": model_list,
+        },
+        client_ip=_get_client_ip(request),
+    )
+    
     return query_daily_flow_history(
         start_date=start_date,
         end_date=end_date,
@@ -6025,6 +6060,7 @@ def handle_comprehensive_daily_flow(
 
 @router.get("/comprehensive-history/baseline-progress", summary="综合历史数据：设计采购与基准量进度对照")
 def handle_comprehensive_baseline_progress(
+    request: Request,
     section_1_ids: Optional[str] = Query(None, description="标段ID（逗号分隔）"),
     pipe_model_ids: Optional[str] = Query(None, description="保温管型号ID（逗号分隔）"),
     material_type: str = Query("pipe", description="物料类型: pipe | fitting"),
@@ -6032,6 +6068,27 @@ def handle_comprehensive_baseline_progress(
 ) -> Dict[str, Any]:
     sec_list = [s.strip() for s in section_1_ids.split(",") if s.strip()] if section_1_ids else None
     model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
+    
+    mat_text = "保温管" if material_type == "pipe" else ("管件" if material_type == "fitting" else material_type)
+    sec_text = f"{len(sec_list)}个标段" if sec_list else "全部标段"
+    model_text = f"{len(model_list)}个型号" if model_list else "全部型号"
+    desc = f"综合数据查询中心 - 查询【设计量、采购量与采购价格】(品类: {mat_text}，标段: {sec_text}，型号: {model_text})"
+    
+    save_operation_log(
+        operator=session.username or "GUEST",
+        operator_group=session.group,
+        action_type="QUERY_BASELINE_PROGRESS",
+        action_desc=desc,
+        resource_id="comprehensive_query_baseline_progress",
+        after_value={
+            "tab": "baseline_progress",
+            "material_type": material_type,
+            "section_1_ids": sec_list,
+            "pipe_model_ids": model_list,
+        },
+        client_ip=_get_client_ip(request),
+    )
+    
     return query_baseline_progress_history(
         section_1_ids=sec_list,
         pipe_model_ids=model_list,
@@ -6041,6 +6098,7 @@ def handle_comprehensive_baseline_progress(
 
 @router.get("/comprehensive-history/supplier-ledger", summary="综合历史数据：供给方发货订单流转台账")
 def handle_comprehensive_supplier_ledger(
+    request: Request,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     supplier_ids: Optional[str] = Query(None, description="供给方ID（逗号分隔）"),
@@ -6052,6 +6110,31 @@ def handle_comprehensive_supplier_ledger(
     sup_list = [s.strip() for s in supplier_ids.split(",") if s.strip()] if supplier_ids else None
     sec_list = [s.strip() for s in section_1_ids.split(",") if s.strip()] if section_1_ids else None
     model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
+    
+    mat_text = "保温管" if material_type == "pipe" else ("管件" if material_type == "fitting" else material_type)
+    range_text = f"{start_date} ~ {end_date}" if start_date and end_date else (f"{start_date}起" if start_date else "全时段")
+    sup_text = f"{len(sup_list)}家供给方" if sup_list else "全部供给方"
+    sec_text = f"{len(sec_list)}个标段" if sec_list else "全部标段"
+    desc = f"综合数据查询中心 - 查询【供给方发货流转台账】(时段: {range_text}，品类: {mat_text}，供给方: {sup_text}，标段: {sec_text})"
+    
+    save_operation_log(
+        operator=session.username or "GUEST",
+        operator_group=session.group,
+        action_type="QUERY_SUPPLIER_LEDGER",
+        action_desc=desc,
+        resource_id="comprehensive_query_supplier_ledger",
+        after_value={
+            "tab": "supplier_ledger",
+            "start_date": str(start_date) if start_date else None,
+            "end_date": str(end_date) if end_date else None,
+            "material_type": material_type,
+            "supplier_ids": sup_list,
+            "section_1_ids": sec_list,
+            "pipe_model_ids": model_list,
+        },
+        client_ip=_get_client_ip(request),
+    )
+    
     return query_supplier_ledger_history(
         start_date=start_date,
         end_date=end_date,
@@ -6064,8 +6147,19 @@ def handle_comprehensive_supplier_ledger(
 
 @router.get("/comprehensive-history/entity-directory", summary="综合历史数据：责任主体与人员管辖速查矩阵")
 def handle_comprehensive_entity_directory(
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    desc = "综合数据查询中心 - 查询【责任主体与人员管辖速查矩阵】"
+    save_operation_log(
+        operator=session.username or "GUEST",
+        operator_group=session.group,
+        action_type="QUERY_ENTITY_DIRECTORY",
+        action_desc=desc,
+        resource_id="comprehensive_query_entity_directory",
+        after_value={"tab": "directory"},
+        client_ip=_get_client_ip(request),
+    )
     return query_entity_directory(PROJECT_KEY)
 
 
@@ -6080,18 +6174,45 @@ from backend.projects.insulation_pipe_supply_2026.services.price_service import 
 
 @router.get("/material-prices", summary="获取保温管与管件标准物料单价字典列表")
 def handle_get_material_prices(
+    request: Request,
     material_kind: Optional[str] = Query(None, description="物料大类: pipe | fitting"),
     supplier_name: Optional[str] = Query(None, description="供给方名称"),
     category: Optional[str] = Query(None, description="物理品类"),
     keyword: Optional[str] = Query(None, description="规格型号/材料名称搜索关键字"),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    kind_text = "保温管" if material_kind == "pipe" else ("管件" if material_kind == "fitting" else (material_kind or "全品类"))
+    sup_text = supplier_name or "全部供给方"
+    kw_text = f"，关键字: {keyword}" if keyword else ""
+    desc = f"综合数据查询中心 - 调阅【物料采购单价字典】(品类: {kind_text}，供给方: {sup_text}{kw_text})"
+    
+    save_operation_log(
+        operator=session.username or "GUEST",
+        operator_group=session.group,
+        action_type="QUERY_MATERIAL_PRICES",
+        action_desc=desc,
+        resource_id="comprehensive_query_material_prices",
+        after_value={
+            "tab": "material_prices",
+            "material_kind": material_kind,
+            "supplier_name": supplier_name,
+            "category": category,
+            "keyword": keyword,
+        },
+        client_ip=_get_client_ip(request),
+    )
+    
     rows = list_material_prices(
         material_kind=material_kind,
         supplier_name=supplier_name,
         category=category,
         keyword=keyword,
     )
+    return {
+        "success": True,
+        "total": len(rows),
+        "data": rows,
+    }
     return {
         "success": True,
         "total": len(rows),

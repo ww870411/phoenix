@@ -6519,6 +6519,7 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   border-radius: 8px;
   border: 1px solid #e2e8f0;
   box-sizing: border-box;
+  max-width: 100%;
 }
 
 .filter-inputs-grid {
@@ -6527,6 +6528,8 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   align-items: flex-end;
   gap: 12px;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .filter-inputs-grid .field {
@@ -6534,6 +6537,7 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   flex-direction: column;
   gap: 4px;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .filter-inputs-grid .field span {
@@ -6574,7 +6578,10 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   background: #ffffff;
   outline: none;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
+  text-overflow: ellipsis;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -7427,6 +7434,26 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   }
 
   /* 全局卡片头部与按钮组移动端对称对齐 */
+  .top-shell {
+    padding: 12px 10px !important;
+    border-radius: 8px !important;
+  }
+
+  .audit-main-card {
+    padding: 12px 10px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  .audit-search-filter-card {
+    padding: 10px !important;
+    margin-top: 10px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
   .section-header {
     flex-direction: column !important;
     align-items: stretch !important;
@@ -7443,7 +7470,10 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   .header-action-btn {
     width: 100% !important;
     height: 36px !important;
-    font-size: 13px !important;
+    font-size: 12px !important;
+    padding: 0 6px !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
   }
 
   /* 4. 操作日志 Tab 移动端专属卡片流与双模切换 */
@@ -7459,8 +7489,18 @@ async function togglePermission(group_name, project_key, type, key, current_val)
 
   .filter-inputs-grid {
     display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .filter-inputs-grid .field {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .filter-field-time,
@@ -7468,20 +7508,36 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   .filter-field-category,
   .filter-field-user {
     width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
   }
 
   .filter-field-keyword {
-    grid-column: span 2 !important;
+    grid-column: 1 / -1 !important;
     width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+
+  .filter-inputs-grid select,
+  .filter-inputs-grid input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    text-overflow: ellipsis !important;
   }
 
   .filter-actions-inline {
-    grid-column: span 2 !important;
+    grid-column: 1 / -1 !important;
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 8px !important;
     width: 100% !important;
+    max-width: 100% !important;
     height: auto !important;
+    box-sizing: border-box !important;
   }
 
   .filter-actions-inline .btn {
@@ -7489,11 +7545,27 @@ async function togglePermission(group_name, project_key, type, key, current_val)
     justify-content: center !important;
     font-size: 13px !important;
     width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 
   .audit-grid {
-    grid-template-columns: 1fr 1fr !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
+  }
+
+  @media (max-width: 480px) {
+    .header-actions-group {
+      grid-template-columns: 1fr !important;
+    }
+
+    .filter-inputs-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .audit-grid {
+      grid-template-columns: 1fr !important;
+    }
   }
 
   /* 5. 数据库备份与恢复 Tab 移动端自适应 */

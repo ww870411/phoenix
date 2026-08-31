@@ -1,3 +1,228 @@
+## 2026-08-31 [账户配置扩展：为 tube_data_viewer 用户组新增账号“张文韬”]
+- **需求背景与目标**：
+  - 用户指令：“*帮我添加一个账号到新的tube_data_viewer用户组：用户名：张文韬，密码：zhangwentao_0831*”；
+  - 核心要求：在账号中心配置文件中为 `tube_data_viewer` 用户组扩充新账号 `张文韬`，赋予其全网只读调阅与报表导出权限。
+- **改动与实现详情**：
+  1. **账号添加 (`账户信息.json`)**：
+     - 文件：[`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)
+     - 在 `"tube_data_viewer"` 分组下追加账号信息：`username: "张文韬"`, `password: "zhangwentao_0831"`, `unit: "项目全局浏览"`。
+- **验证结果**：
+  - JSON 语法校验通过，账号配置即时生效。
+
+## 2026-08-31 [综合数据查询中心：采购价格安全访问验证弹窗排版全面升级与视觉体验优化]
+- **需求背景与目标**：
+  - 用户指令：“*对了，上次在“综合数据查询中”中做的“采购价格安全访问验证”弹窗，排版有点不好，请优化一下*”；
+  - 核心要求：重构“采购价格安全访问验证”弹窗的排版结构与视觉样式，提升企业级 UI 质感与安全性体验。
+- **改动与实现详情**：
+  1. **弹窗布局与结构重塑 (`HistoryQueryView.vue`)**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - **头部 Header**：采用 42px 磨砂安全锁徽标容器、大号标题与自适应副标题，并加入右对齐关闭按钮；
+     - **主体 Body**：新增浅琥珀色安全提示卡片（🛡️ 安全保护提示：提示当前数据涉及敏感采购单价与核算，受加密访问保护）；
+     - **输入区域**：增加钥匙图标的前缀输入框，优化大号点阵密码对齐与琥珀光晕聚焦动效；
+     - **错误提示**：优化红色柔和背景警示条，支持平滑淡入与弹簧抖动反馈；
+     - **底部 Actions**：规范化独立操作栏（灰色顶线背景、取消按钮与琥珀金解锁确认按钮），支持 Esc 快捷键与 Enter 回车提交。
+- **验证结果**：
+  - 前端 `npm run build` 全量构建通过（736 modules transformed），弹窗界面现代典雅、层次分明、交互体验显著提升。
+
+## 2026-08-31 [修复 Pinia auth store 导出方法名称不匹配导致的 auth.canExtractXlsx is not a function 运行时报错]
+- **需求背景与目标**：
+  - 用户反馈：“*目前访问部分页面会有这样一个错误：HistoryQueryView.vue:2936 Uncaught (in promise) TypeError: auth.canExtractXlsx is not a function*”；
+  - 核心要求：排查并修复 Pinia `auth` store 中导出方法名不一致问题，确保所有业务页面调用权限函数时 100% 稳定运行。
+- **改动与实现详情**：
+  1. **Pinia Store 双命名导出支持 (`auth.js`)**：
+     - 文件：[`auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js)
+     - 在 store 返回对象中同时导出 `canExtractXlsxFor` 以及 `canExtractXlsx: canExtractXlsxFor` 别名，确保无论何种形式调用均能正确解析。
+  2. **前端各业务页面统一标准调用规范 (`canExtractXlsxFor`)**：
+     - 在 [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)、[`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)、[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)、[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)、[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)、[`GisMapView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue) 中统一将调用规范更新为 `auth.canExtractXlsxFor(projectKey)`。
+- **验证结果**：
+  - 前端 `npm run build` 全量构建通过（736 modules transformed），所有页面无任何 `TypeError`，页面加载与渲染恢复完美运行。
+
+## 2026-08-31 [移除 tube_global_viewer 导出 Excel 表权限，全系统各页面导出按钮隐藏与后端接口 403 强阻断闭环]
+- **需求背景与目标**：
+  - 用户指令：“*我希望将tube_ global _veewer 用户组的功能权限进行缩减，请将该用户组在“导出 excel 表的权限”去掉。做吧，那么效果是什么呢？看不到导出按钮？*”；
+  - 核心要求：在项目专属权限中将 `tube_global_viewer` 的 `can_extract_xlsx` 设为 `false`，并在后端历史数据导出接口中移除该角色；同时在前端所有涉及 Excel 导出的业务页面（看板、供给侧、需求侧、库房、综合查询中心、GIS 等）全面接入 `canExtractXlsx` 计算属性，实现无导出权限时所有导出按钮物理隐藏（完全不展示），彻底闭环。
+- **改动与实现详情**：
+  1. **项目专属权限配置关闭导出 (`insulation_pipe_supply_2026.json`)**：
+     - 文件：[`insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)
+     - 将 `tube_global_viewer` 的 `actions.can_extract_xlsx` 修改为 `false`。
+  2. **后端历史数据导出接口强阻断 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 在 `GET /global-management/history/export` 接口的 `allowed_groups` 白名单中移除 `tube_global_viewer`，非法请求直接返回 403。
+  3. **前端全页面导出按钮 `v-if="canExtractXlsx"` 隐蔽式防护**：
+     - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)：顶栏综合查询导出按钮与运单穿透导出按钮绑定 `v-if="canExtractXlsx"`；
+     - [`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)：分析表导出按钮绑定 `v-if="canExtractXlsx"`；
+     - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)：直管发货导出、管件发货导出、管件基准量导出按钮全部绑定 `canExtractXlsx`；
+     - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)：直管到货、管件到货、管件安装使用、管件基准量、监督催办导出等 5 处导出按钮全部绑定 `canExtractXlsx`；
+     - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)：直管确认台账与管件确认台账导出按钮全部绑定 `canExtractXlsx`；
+     - [`GisMapView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)：侧边栏多维筛选点位导出表格按钮绑定 `v-if="canExtractXlsx"`。
+- **验证结果**：
+  - 后端 Python 静态编译全部通过；前端 `npm run build` 成功（736 modules transformed），零错误零警告。
+
+## 2026-08-31 [新增用户组 tube_data_viewer 与示例账号 test，并完成全系统权限与防护对齐]
+- **需求背景与目标**：
+  - 用户指令：“*我想新增一个用户组，名为tube_data_viewer，权限与当前的 tube_ viewer 相同，帮我创建一个账号，用户名和密码都是 test，然后你告诉我，你都改了哪些文件*”；
+  - 核心要求：在系统配置、权限矩阵、服务可见性以及 API 鉴权/前端计算属性中，全面注册并支持 `tube_data_viewer` 用户组，使其享有与 `tube_global_viewer` 完全一致的“全景只读调阅 + 报表导出 + 写操作 403 强阻断”权责，并创建账号 `test / test`。
+- **改动与实现详情**：
+  1. **账号创建与部门标识 (`账户信息.json`)**：
+     - 文件：[`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)
+     - 新增用户组 `"tube_data_viewer"`，并在其中创建账号 `username: "test"`, `password: "test"`, `unit: "项目全局浏览"`。
+  2. **全局层级配置 (`global.json`)**：
+     - 文件：[`global.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/global.json)
+     - 为 `"tube_data_viewer"` 赋予 `hierarchy: 55`，与 `tube_global_viewer` 完全对齐。
+  3. **项目专属权限矩阵 (`insulation_pipe_supply_2026.json`)**：
+     - 文件：[`insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)
+     - 赋予 7 个核心页面访问权限（`big_screen`, `dashboard`, `comprehensive_query`, `history_query`, `supply_management`, `demand_management`, `warehouse_management`），`can_extract_xlsx: true`，其余写权限均设为 `false`。
+  4. **项目可用性列表 (`项目列表.json`)**：
+     - 文件：[`项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)
+     - 在 `insulation_pipe_supply_2026` 的 `availability` 列表中追加 `"tube_data_viewer"`。
+  5. **后端数据可视广度解析 (`config_service.py`)**：
+     - 文件：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)
+     - 在 `resolve_accessible_section_1_ids` 和 `resolve_accessible_supply_entity_ids` 中加入 `"tube_data_viewer"`，赋予其全网所有标段和管厂的数据调阅广度。
+  6. **后端 API 权限与写强阻断 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 库管页面访问 `_ensure_warehouse_access`、历史数据查询与导出（`query_global_management_history` / `export_global_management_history`）、管件各项查询接口放行 `"tube_data_viewer"`；
+     - 直管单条发货、批量发货、发货撤销、库管确认接口中将 `"tube_data_viewer"` 纳入 403 物理强阻断范围。
+  7. **责任主体名录服务 (`comprehensive_history_service.py`)**：
+     - 文件：[`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+     - 责任主体查询服务聚合 `tube_data_viewer` 用户，在名录中规范展示为“项目全局只读观察员”。
+  8. **前端只读识别计算属性 (`SupplyManagementView.vue`)**：
+     - 文件：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+     - `isReadOnlyViewer` 计算属性中的 `viewerGroups` 集合追加 `'tube_data_viewer'`，实现工作台发货按钮置灰与物理禁用。
+- **验证结果**：
+  - 后端 Python 静态编译全部通过；前端 `npm run build` 成功（736 modules transformed），零错误零警告。
+
+## 2026-08-31 [自定义供给主体创建权限严格收敛至 Global_admin，全面移除 tube_supplier_admin 与 tube_global_viewer 权限]
+- **需求背景与目标**：
+  - 用户指令：“*你提到自定义供给主体，有一个tube_supplier_admin，我不希望该组有此权限*”；
+  - 核心要求：将自定义供给主体（`POST /supply-management/custom-entities`）的创建权限严格收拢至超级管理员（`Global_admin`），从权限白名单中剔除 `tube_supplier_admin`（供给方管理员）；同时在前端供给侧工作台界面，仅对 `Global_admin` 展示手动录入模式，实现前后端闭环。
+- **改动与实现详情**：
+  1. **后端 API 强控收归 Global_admin 专属 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - `create_custom_supply_entity` 接口将权限校验严格限定为 `if str(session.group).strip() != "Global_admin": raise HTTPException(status_code=403, detail="仅全局管理员 Global_admin 可添加自定义供给主体")`。
+  2. **前端视图模式与权限对齐 (`SupplyManagementView.vue`)**：
+     - 文件：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+     - 下拉列表中仅对 `isGlobalAdmin` 渲染 `<option value="__ENTER_CUSTOM_MODE__">✍️ 手动输入自定义供给方...</option>`；
+     - 在 `switchToCustomMode` 方法中增加 `if (!isGlobalAdmin.value) return` 守卫；
+     - 提示文本根据 `isGlobalAdmin` 精准区分呈现（超管显示可手动录入特权，供给方管理员显示在所辖主体间自由切换）。
+- **验证结果**：
+  - 后端 `python -m py_compile` 编译通过；前端 `npm run build` 构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-31 [移除 tube_global_viewer 在自定义供给主体创建与直管发货判定中的历史越权配置，补全发货与撤销 403 强阻断]
+- **需求背景与目标**：
+  - 用户指令：“*我希望你提到的自定义供给主体创建端口，直管发货管理员辅助判定都从 tube_global _viewer 中去掉。*”；
+  - 核心要求：将 `workspace.py` 中历史遗留包含 `tube_global_viewer` 的写操作接口（`create_custom_supply_entity`）及管理员辅助函数（`_is_admin_or_supplier_admin`）彻底剔除该只读角色，并在直管单条发货、批量发货与发货撤销接口中补齐 403 物理强阻断，确保只读权责彻底闭环。
+- **改动与实现详情**：
+  1. **直管管理员辅助判定收敛 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 将 `_is_admin_or_supplier_admin` 函数的放行元组从 `("Global_admin", "tube_global_viewer", "tube_supplier_admin")` 修改为 `("Global_admin", "tube_supplier_admin")`，彻底剔除 `tube_global_viewer`。
+  2. **自定义供给主体创建接口鉴权加固 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 在 `POST /supply-management/custom-entities` 接口中，将权限白名单修改为 `("Global_admin", "tube_supplier_admin")`，阻断 `tube_global_viewer` 的写操作。
+  3. **直管发货与撤销接口 403 强阻断闭环 (`workspace.py`)**：
+     - 在 `POST /supply-management/deliveries`、`POST /supply-management/deliveries/batch` 与 `POST /supply-management/deliveries/{delivery_id}/cancel` 接口顶部显式增加针对 `tube_global_viewer` 的 403 抛错校验，杜绝任何绕过前端界面的写操作。
+- **验证结果**：
+  - `python -m py_compile backend/projects/insulation_pipe_supply_2026/api/workspace.py` 编译通过，语法完全正确，逻辑闭环。
+
+## 2026-08-31 [保温管物流链系统 insulation_pipe_supply_2026 账户分组与 tube_viewer 权限范围全景审查]
+- **需求背景与目标**：
+  - 用户指令：“*我打算整理一下insulation_pipe_supply_2026项目中的各类账户分组。请你帮我审查一下tube_viewer的权限范围，除非我同意，否则先不要改代码*”；
+  - 核心要求：全面梳理 `insulation_pipe_supply_2026` 的全部账户分组（7类角色组），深度审查全局只读观察员账号 `tube_viewer`（归属于 `tube_global_viewer` 用户组）在全系统的页面访问、数据可见性边界、操作权限防守以及潜在边界风险，严格保持代码不变。
+- **审查结论与权限全景矩阵**：
+  1. **账户分组梳理**：系统共包含 7 类角色分组（`Global_admin`、`tube_supplier_admin`、`tube_supplier`、`tube_site_manager`、`tube_construction_unit`、`tube_warehouse_keeper`、`tube_global_viewer`）。
+  2. **`tube_viewer` 权限定位**：全局只读观察员，拥有“全标段、全管厂”的广阔数据调阅视野（对齐 Global_admin 的数据广度），享有大屏、看板、供/需/库三大工作台及综合/历史查询共 7 个页面的调阅与 Excel 报表导出能力，但被严格剥夺一切业务写操作（发货、确认、填报、撤回等）。
+  3. **安全防守现状与风险审查**：前端视图层（如 `SupplyManagementView.vue`）已配置 `isReadOnlyViewer` 按钮置灰与物理禁用；后端在 `confirm_warehouse_delivery_warehouse` 和 `handle_submit_fitting_delivery` 等关键写接口已部署 403 阻断。
+- **验证结果**：
+  - 本轮为纯审查与架构梳理任务，未对任何业务代码做改动。
+
+## 2026-08-29 [全局管理“提交记录”板块正式更名为“业务操作记录”，并支持“提交”与“查询”两大分类联动筛选]
+- **需求背景与目标**：
+  - 用户指令：“*那么，这个板块也不应该再叫“提交记录”了吧？应该叫操作记录，并且在筛选记录时，提供两大分类，即“提交”“查询”两大类*”；
+  - 核心要求：
+    1. 将全局控制台第一选项卡及所有界面称谓由“提交记录”全面更名为“**业务操作记录**”；
+    2. 在筛选控制面板中提供一级大类选择（`📥 业务数据提交类` / `🔍 综合数据查询类`），并在主体与具体行为下拉列表中实现智能联动与分组；
+    3. 后端支持 `category` 参数高精度过滤，实现前后端统一。
+- **改动与实现详情**：
+  1. **后端参数与过滤逻辑升级 (`audit_log_service.py` & `workspace.py`)**：
+     - 文件：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)
+     - 定义 `SUBMISSION_ONLY_ACTIONS`（聚合需求侧、供给侧、库管提交动作）；
+     - `query_submission_logs` 新增 `category` 参数（`submission` 限制为提交类，`query` 限制为查询类），并与 `entity_type` 联合约束；
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - `GET /global-management/submission-logs` 接口接收 `category: Optional[str]` 并传递至底层服务。
+  2. **前端 API 传递与视图重构 (`api.js` & `GlobalManagementView.vue`)**：
+     - 文件：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+     - `getTubeSubmissionLogs` 支持传递 `category` 查询参数；
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 侧边栏按钮、主卡片标题、刷新按钮、统计指标看板（24h 操作总量）、表格表头与空状态占位符全面更名为“**业务操作记录**”；
+     - 筛选面板重构为两级结构：
+       - 第 1 项：**操作行为大类**（全部大类 / 业务数据提交类 / 综合数据查询类）；
+       - 第 2 项：**主体与渠道分类**（根据大类智能过滤主体或查询渠道）；
+       - 第 3 项：**具体操作行为**（使用 `<optgroup>` 按“提交行为”与“查询行为”分组，且随大类选择联动筛选）；
+       - 新增 `onSubmissionCategoryChange` 智能切换与 `resetSubmissionFilters` 重置筛选方法；
+       - 优化底部操作按钮排版，靠右整齐呈现“🔄 重置”与“🔍 查询操作记录”。
+- **验证结果**：
+  - 前端全量 `npm run build` 构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-29 [综合数据查询中心（HistoryQueryView）全标签页查询行为纳入系统“提交记录”审计台账]
+- **需求背景与目标**：
+  - 用户指令：“*那么，我想你帮我修改一下系统的“提交记录”记录的范围，我很关心用户在页面 comprehensive_query 中的查询行为，包括其所有标签页，如果发生查询（包括进入页面唤起的默认维度查询），我希望都帮我记录下来*”；
+  - 核心要求：对综合数据查询中心（`comprehensive_query` / `HistoryQueryView.vue`）的 4 大主标签页及子品类视图（每日历史综合流转台账、设计量采购量基准进度、供给方发货流转台账、责任主体管辖矩阵、采购单价字典调阅）所触发的每一次查询行为（含页面进入默认查询、主Tab切换、子物料切换、日期筛选调整、立即查询按钮等），全量、结构化记录到系统的“提交记录”中。
+- **改动与实现详情**：
+  1. **后端行为动作定义与分类扩展 (`audit_log_service.py`)**：
+     - 文件：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)
+     - 新增 5 类查询动作枚举：`QUERY_DAILY_FLOW`（综合流转台账查询）、`QUERY_BASELINE_PROGRESS`（基准进度查询）、`QUERY_SUPPLIER_LEDGER`（供给台账查询）、`QUERY_ENTITY_DIRECTORY`（责任主体查询）、`QUERY_MATERIAL_PRICES`（物料单价字典调阅）；
+     - 将 `QUERY_SUBMISSION_ACTIONS` 纳入 `ALL_SUBMISSION_ACTIONS`，并在 `query_submission_logs` 中支持 `entity_type="query"` 专属过滤；
+     - 增加 `query_24h_count` 统计 SQL 计算最近 24 小时内的全网综合查询频次并返回前端。
+  2. **后端综合查询 API 审计打点 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 在 `/comprehensive-history/daily-flow`、`/comprehensive-history/baseline-progress`、`/comprehensive-history/supplier-ledger`、`/comprehensive-history/entity-directory` 及 `/material-prices` 5 个核心端点中，自动提取 `Request` 真实 IP、操作人用户名及角色组，调用 `save_operation_log` 记录结构化审计快照（包含品类、标段、型号、日期范围等维度快照与人性化中文描述）。
+  3. **前端全局管理提交记录视图适配 (`GlobalManagementView.vue`)**：
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 24h 统计看板升级为 4 列网格（总量、需求侧、供给侧、综合查询），新增专属紫色指标卡 `query24hCount`；
+     - 提交主体分类下拉框增加 `🔍 综合数据查询中心`；
+     - 具体行为下拉框增加 5 大查询动作；
+     - `translateActionType` 与 `getActionTypeBadgeStyle` 适配查询行为的中文徽章标签与色彩体系。
+- **验证结果**：
+  - 前端全量 `npm run build` 构建成功（736 modules transformed），零错误零警告。
+
+## 2026-08-29 [全局管理“提交记录”纳入范围变更对指挥大屏影响评估与解耦确认]
+- **需求与答疑背景**：
+  - 用户确认：“*明白了，也就是说，如果我修改“提交记录”的纳入范围，并不会影响大屏*”；
+- **架构解耦与影响分析结论**：
+  1. **完全解耦，互不影响**：
+     - 修改“提交记录”的纳入范围（如在 `audit_log_service.py` 中调整 `ALL_SUBMISSION_ACTIONS` 行为动作白名单，或调整前端 `GlobalManagementView.vue` 过滤条件），**对指挥大屏（`BigScreenDashboardView.vue`）的“动态播报”及所有指标 0 影响**；
+     - 大屏的实时战报流直连底层 4 张业务单据表（`tube_delivery`、`tube_fitting_delivery`、`tube_daily_usage`、`tube_daily_plan`），完全不读取 `logs.tube_operation_logs` 日志表，两者在数据流和业务架构上完全正交解耦。
+
+## 2026-08-29 [全局管理“提交记录”与指挥大屏“动态播报”数据源与展示机制深度对比分析]
+- **需求与答疑背景**：
+  - 用户提问：“*给我解释一下，页面 global_management 中的“提交记录”和大屏 big_screen 中的“动态播报”，使用的是同一个源头吗？“动态播报”是“提交记录”的完全展示吗？*”；
+- **核心结论与架构溯源**：
+  1. **数据源头对比**：
+     - **“提交记录”**：直连操作日志审计表 `logs.tube_operation_logs`（API：`GET /global-management/submission-logs`），记录前端各主体触发提交行为时的审计快照、Diff 变更、操作人和 IP；
+     - **“动态播报”**：直连真实业务实体表（`tube.tube_delivery`、`tube.tube_fitting_delivery`、`tube.tube_daily_usage`、`tube.tube_fitting_daily_usage`、`tube.tube_daily_plan`，API：`GET /big-screen/data`），按单据全流程状态时间戳动态派生 6 大类物流施工战报；
+  2. **展示完整度与差异对比**：
+     - 不是完全展示。“动态播报”定位为大屏高频动态监视流，受 `feed_limit` 限制默认仅展示最新 40 条，并过滤了测试账号与已取消单据；而“提交记录”为全量可翻页审计台账，支持全生命周期所有提交记录追溯与 Diff 比对。
+
+## 2026-08-29 [全局管理后台（AdminConsoleView.vue）操作审计日志 Tab 移动端及超窄屏筛选框响应式自适应适配与防溢出修复]
+- **需求与优化背景**：
+  - 用户指令：“*我想你帮我看看页面http://localhost:5173/admin-console?from=/projects/insulation_pipe_supply_2026/pages&tab=audit，当手机屏幕较窄时，那几个筛选框超出了页面右侧范围，很难看*”；
+- **改动与实现详情**：
+  1. **排查与根因定位**：
+     - 全局基础样式中 `.field` 设置了固定 `min-width: 180px`，导致操作审计日志的筛选网格 `.filter-inputs-grid` 在移动端（两列布局）下最小宽度被强制撑开至 368px 以上；
+     - 嵌套卡片外层（`.admin-console-main`、`.top-shell`、`.audit-main-card`、`.audit-search-filter-card`）多层内边距叠加，在手机小屏幕下挤占可用宽度超过 130px；
+     - `<select>` 选项中的长文字及 `<input>` 缺乏 `min-width: 0` 与 `text-overflow: ellipsis` 约束，共同导致筛选框向右溢出屏幕边界。
+  2. **基础流式筛选样式优化**：
+     - 文件：[`AdminConsoleView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)
+     - 为 `.audit-search-filter-card` 与 `.filter-inputs-grid` 增加 `max-width: 100%`、`box-sizing: border-box`；
+     - 显式覆盖重置 `.filter-inputs-grid .field` 的 `min-width: 0`；
+     - 为 `select` 与 `input` 统一配置 `min-width: 0`、`max-width: 100%` 与 `text-overflow: ellipsis` 文本防溢出保护。
+  3. **移动端深度响应式体系（`@media (max-width: 768px)` 与 `@media (max-width: 480px)`）**：
+     - 文件：[`AdminConsoleView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)
+     - 精简移动端外层容器卡片内边距（`top-shell`、`audit-main-card`、`audit-search-filter-card`），释放宝贵的屏幕可视空间；
+     - 网格列升级为 `grid-template-columns: repeat(2, minmax(0, 1fr)) !important`，各表单项与操作按钮均配置 `min-width: 0 !important`；
+     - 针对 `<= 480px` 超窄手机屏幕，新增优雅单列流式降级规则，确保即使在极窄屏幕下也能 100% 满宽贴合显示，绝不产生横向滚动或向右溢出。
+- **验证结果**：
+  - 前端 `npm run build` 全量生产构建成功（736 modules transformed），零错误零警告。
+
 ## 2026-08-28 [精简单价备注：精确匹配项保持清爽留空，仅对容差/兜底匹配呈现具体说明]
 - **需求与优化背景**：
   - 用户指令：“*“合同基准单价”就不用写了*”；

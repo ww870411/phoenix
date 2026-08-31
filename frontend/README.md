@@ -1,3 +1,114 @@
+## 2026-08-31 账号体系同步：支持新账号“张文韬”以 tube_data_viewer 角色登录
+
+- **关联前端页面与组件**：
+  - 全局登录入口 [`LoginView.vue`](file:///D:/编程项目/phoenix/frontend/src/pages/LoginView.vue) 与权限路由
+- **功能特性说明**：账号 `张文韬` 登录后将自动继承 `tube_data_viewer` 权限角色，享有保温管项目 7 大页面的只读查看与各业务报表的 Excel 导出能力。
+
+## 2026-08-31 采购价格安全访问验证弹窗排版与交互体验优化
+
+- **关联前端页面与组件**：
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（`price-auth-modal` 密码验证弹窗）
+- **功能特性说明**：全面重构了采购价格安全验证弹窗的视觉排版。增加了 42px 毛玻璃锁形徽标、安全提示卡片（🛡️）、带钥匙前缀的数字访问码输入框与琥珀金发光聚焦动效、抖动淡入错误条、以及独立的操作底栏，兼顾安全性与美观度。
+
+## 2026-08-31 权限 Store 方法名称统一与多形式调用兼容
+
+- **关联前端页面与组件**：
+  - [`auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js)（Pinia 用户与权限状态管理）
+  - 全部保温管子系统业务页面（`HistoryQueryView.vue`、`DashboardView.vue`、`SupplyManagementView.vue`、`DemandManagementView.vue`、`WarehouseManagementView.vue`、`GisMapView.vue`）
+- **功能特性说明**：在 Pinia `auth` store 中，将带参项目权限函数规范统一为 `canExtractXlsxFor(projectKey)`，并同时导出 `canExtractXlsx: canExtractXlsxFor` 别名。在所有业务页面中统一调用 `auth.canExtractXlsxFor(...)`，彻底解决未定义函数报错问题。
+
+## 2026-08-31 导出按钮权限联动：全系统 Excel 导出入口接入 canExtractXlsx 隐蔽控制
+
+- **关联前端页面与组件**：
+  - [`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)（数据看板）
+  - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧工作台）
+  - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（需求侧工作台）
+  - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库房工作台）
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（历史数据与综合查询中心）
+  - [`GisMapView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)（GIS 空间调度系统）
+- **功能特性说明**：所有业务页面上的 Excel 导出按钮统一接入 `v-if="canExtractXlsx"`。当用户所属角色组（如 `tube_global_viewer`）的 `can_extract_xlsx` 配置为 `false` 时，界面上所有导出按钮将被**完全物理隐藏**，不给用户呈现任何可点击的导出入口。
+
+## 2026-08-31 只读角色识别扩展：新增 tube_data_viewer 用户组支持
+
+- **关联前端页面与组件**：
+  - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（`isReadOnlyViewer` 只读观察员计算属性）
+- **功能特性说明**：在 `isReadOnlyViewer` 计算属性的 `viewerGroups` 集合中扩充了 `'tube_data_viewer'`。当使用 `test` 或其他 `tube_data_viewer` 用户组账号登录时，前端自动识别为全局只读模式，对发货提交等写操作按钮启用置灰与物理禁用。
+
+## 2026-08-31 供给主体手动录入模式严格收归 Global_admin 专属
+
+- **关联前端页面与组件**：
+  - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧工作台主体切换与自定义主体录入控制行）
+- **功能特性与交互说明**：
+  1. 供给主体下拉框中的“✍️ 手动输入自定义供给方...”选项仅在当前登录角色为 `Global_admin` 时展示（`v-if="isGlobalAdmin"`），`tube_supplier_admin`（供给方管理员）无法查看及进入手动输入模式；
+  2. 模式切换函数 `switchToCustomMode` 增加 `isGlobalAdmin` 守卫防护；
+  3. 控制栏右侧提示文字根据 `isGlobalAdmin` 动态展示（区分全局管理员录入特权与供给方管理员自由切换）。
+
+## 2026-08-31 后端鉴权加固协同：配合后端彻底收敛 tube_global_viewer 写操作权限
+
+- **关联前端页面与组件**：
+  - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧工作台发货与自定义主体操作）
+- **协同说明**：后端已从 `create_custom_supply_entity` 与 `_is_admin_or_supplier_admin` 中剔除 `tube_global_viewer`，并在发货与撤销接口实施物理 403 强阻断，与前端 `isReadOnlyViewer` 按钮置灰机制形成双层闭环。
+
+## 2026-08-31 前端视图权限审查：insulation_pipe_supply_2026 账户分组与 tube_viewer 只读交互
+
+- **关联前端页面与组件**：
+  - [`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)（路由层页面鉴权）
+  - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧工作台发货按钮只读物理禁用与 `isReadOnlyViewer` 计算属性）
+  - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（需求侧工作台全标段调阅）
+  - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库管工作台全标段调阅）
+- **审查结论**：`tube_viewer` 作为全局只读账号，在前端享有 7 个业务页面的路由访问权限；在操作交互上，发货提交等写操作已被 `isReadOnlyViewer` 计算属性置灰并附带悬浮提示与指针禁用。
+
+## 2026-08-29 全局管理中心“业务操作记录”升级：支持“提交”与“查询”两大分类联动筛选
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理中心 - 业务操作记录 Tab 0）
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（`getTubeSubmissionLogs` 增加 `category` 参数透传）
+- **功能特性与交互升级**：
+  1. **称谓全面规范化**：原“提交记录”板块正式更名为“**业务操作记录**”，涵盖数据提交与数据查询两大核心业务行为；
+  2. **双大类智能筛选面板**：
+     - 一级大类选择：`全部大类 (提交与查询)` / `📥 业务数据提交类` / `🔍 综合数据查询类`；
+     - 主体与渠道联动：选提交类时仅呈现需求/供给/库管主体，选查询类时定位为综合查询中心；
+     - 具体行为联动分组：使用 `<optgroup>` 清晰呈现提交行为与查询行为，切换大类时智能过滤与重置不匹配项；
+     - 操作区新增“🔄 重置”与“🔍 查询操作记录”按钮。
+
+## 2026-08-29 全局管理中心提交记录支持综合数据查询行为追踪与过滤
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理中心 - 提交记录 Tab 0）
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心）
+- **功能特性与交互升级**：
+  1. **24h 看板扩展**：提交记录看板升级为 4 列网格，新增【综合查询行为】紫光卡片实时呈现 24h 内的查询行为总数；
+  2. **筛选器与动作映射扩展**：在提交主体分类中增加“🔍 综合数据查询中心”，具体行为下拉框与徽章体系适配 5 大综合查询动作（每日流转、基准进度、供给台账、责任主体、采购单价字典）。
+
+## 2026-08-29 全局管理“提交记录”与指挥大屏“动态播报”解耦特性确认
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 与 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+- **架构特性**：
+  - 两者接口与数据通路完全独立；修改全局管理端“提交记录”的纳入范围或过滤规则，不会对数字指挥大屏“动态播报”产生任何连锁影响。
+
+## 2026-08-29 全局管理“提交记录”与指挥大屏“动态播报”架构数据源映射与业务机制说明
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理中心 - 提交记录 Tab 0）
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（数字指挥大屏 - 实时动态播报）
+- **功能特性与业务定位**：
+  1. **全局管理“提交记录”**：基于 `logs.tube_operation_logs` 审计表，提供分页追溯、操作人/行为过滤、前后 Diff 快照比对与 IP 归属地解析，属于审计管理系统；
+  2. **指挥大屏“动态播报”**：基于 `tube_delivery`、`tube_fitting_delivery` 等真实业务单据表，动态解构为 6 类工程物流/施工实时战报（默认截取最新 40 条），驱动大屏飞线动效与拓扑联动，属于实时监控系统。
+
+## 2026-08-29 全局管理后台（AdminConsoleView.vue）操作审计日志移动端与超窄屏筛选框深度响应式适配
+
+- **关联前端页面与组件**：
+  - [`AdminConsoleView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)（全局管理后台与系统控制台）
+- **功能特性与交互升级**：
+  1. **筛选框防溢出与自适应重构**：
+     - 重置筛选网格 `.filter-inputs-grid .field` 的全局 `min-width: 180px` 约束为 `min-width: 0`，防止在移动端小屏下撑破布局；
+     - 控件全部加入 `min-width: 0`、`max-width: 100%`、`text-overflow: ellipsis` 文本超长保护；
+  2. **多级断点精细化排版（768px / 480px）**：
+     - 精简移动端卡片内外边距，释放有效可视宽度；
+     - 在 `<= 768px` 采用等比自适应双列 `repeat(2, minmax(0, 1fr))` 网格；
+     - 在 `<= 480px` 超窄手机屏幕下自动平滑过渡为单列流式排版，彻底解决手机窄屏下筛选框超出页面右侧的问题。
+
 ## 2026-08-28 综合数据查询中心（HistoryQueryView.vue）精简单价核算备注：精确匹配保持留空，突出异常容差与兜底说明
 
 - **关联前端页面与组件**：

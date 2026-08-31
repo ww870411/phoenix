@@ -550,6 +550,7 @@ export async function getTubeGlobalManagementConfig(projectKey = 'insulation_pip
 
 export async function getTubeSubmissionLogs(projectKey, params = {}) {
   const query = new URLSearchParams()
+  if (params.category) query.append('category', params.category)
   if (params.entityType) query.append('entity_type', params.entityType)
   if (params.actionType) query.append('action_type', params.actionType)
   if (params.operator) query.append('operator', params.operator)

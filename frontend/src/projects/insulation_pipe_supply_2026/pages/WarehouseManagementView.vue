@@ -232,7 +232,7 @@
           <button class="btn primary" type="button" :disabled="loading" @click="loadDeliveries">查询</button>
           <button class="btn ghost" type="button" :disabled="loading" @click="resetFilters">重置</button>
           <button 
-            v-if="activeTab === 'pipe' && deliveries.length > 0" 
+            v-if="canExtractXlsx && activeTab === 'pipe' && deliveries.length > 0" 
             class="btn primary" 
             type="button" 
             style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" 
@@ -857,6 +857,7 @@
                 🔄 刷新台账
               </button>
               <button
+                v-if="canExtractXlsx"
                 type="button"
                 class="btn ghost"
                 :disabled="fittingExportLoading || !fittingRows.length"
@@ -1245,6 +1246,7 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const projectKey = 'insulation_pipe_supply_2026'
+const canExtractXlsx = computed(() => auth.canExtractXlsxFor(projectKey))
 
 const VALID_TABS = ['pipe', 'fitting']
 

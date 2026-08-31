@@ -382,6 +382,7 @@
 
           <button class="btn link-btn" @click="resetFilters">重置过滤</button>
           <button 
+            v-if="canExtractXlsx"
             class="btn primary compact-btn export-pivot-btn" 
             style="margin-left: auto; height: 36px; padding: 0 16px;" 
             type="button" 
@@ -558,6 +559,7 @@
 <script setup>
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
 import {
   getTubeSupplyManagementDemandSummary,
@@ -567,9 +569,11 @@ import {
 import ExportSettingsModal from './ExportSettingsModal.vue'
 
 // 获取路由与当前项目 Key
+const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const projectKey = computed(() => String(route.params.projectKey || 'insulation_pipe_supply_2026'))
+const canExtractXlsx = computed(() => auth.canExtractXlsxFor(projectKey.value))
 
 function goBigScreen() {
   router.push(`/projects/${encodeURIComponent(projectKey.value)}/pages/big_screen`)

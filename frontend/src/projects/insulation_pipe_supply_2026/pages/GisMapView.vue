@@ -199,6 +199,7 @@
 
               <!-- 导出当前筛选表格 XLSX 按钮 -->
               <button 
+                v-if="canExtractXlsx"
                 class="btn ghost small-btn control-action-btn" 
                 type="button" 
                 :disabled="filteredMarkers.length === 0"
@@ -540,9 +541,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs } from './shared.js'
 import { getAuthToken } from '../../daily_report_25_26/services/api.js'
 
+const auth = useAuthStore()
+const projectKey = 'insulation_pipe_supply_2026'
+const canExtractXlsx = computed(() => auth.canExtractXlsxFor(projectKey))
 const router = useRouter()
 const selectedMarkerId = ref(null)
 

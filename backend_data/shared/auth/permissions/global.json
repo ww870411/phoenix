@@ -46,6 +46,9 @@
     },
     "tube_global_viewer": {
       "hierarchy": 55
+    },
+    "tube_data_viewer": {
+      "hierarchy": 55
     }
   }
 }

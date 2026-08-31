@@ -139,7 +139,8 @@
       "tube_site_manager",
       "tube_construction_unit",
       "tube_warehouse_keeper",
-      "tube_global_viewer"
+      "tube_global_viewer",
+      "tube_data_viewer"
     ],
     "project_name": "2026年度保温管、管件物流链管理系统",
     "pages": {

@@ -1313,7 +1313,7 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
     # 5. 全局管理与观察员
     global_members = []
     g_admins = users_map.get("Global_admin", [])
-    g_viewers = users_map.get("tube_global_viewer", [])
+    g_viewers = users_map.get("tube_global_viewer", []) + users_map.get("tube_data_viewer", [])
     for u in g_admins:
         global_members.append({
             "category": "系统管理员",

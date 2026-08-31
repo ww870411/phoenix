@@ -35,11 +35,11 @@
                 <option v-for="entity in allSupplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
                   {{ entity.entity_name }} {{ entity.isCustom ? '（自定义）' : (entity.entity_id ? `(${entity.entity_id})` : '') }}
                 </option>
-                <option value="__ENTER_CUSTOM_MODE__">✍️ 手动输入自定义供给方...</option>
+                <option v-if="isGlobalAdmin" value="__ENTER_CUSTOM_MODE__">✍️ 手动输入自定义供给方...</option>
               </select>
             </template>
 
-            <template v-else>
+            <template v-else-if="isGlobalAdmin">
               <input
                 v-model="customEntityInput"
                 type="text"
@@ -66,7 +66,7 @@
               </button>
             </template>
           </div>
-          <span style="font-size: 12px; color: #64748b;">(全局管理员特权：可选择预设主体或直接手动录入临时供给主体)</span>
+          <span style="font-size: 12px; color: #64748b;">{{ isGlobalAdmin ? '(全局管理员特权：可选择预设主体或直接手动录入临时供给主体)' : '(供给方管理员：可在所辖供给主体间自由切换)' }}</span>
         </div>
 
         <section class="card elevated quick-dashboard-card">
@@ -467,7 +467,7 @@
               </div>
               <div style="display: flex; gap: 8px;">
                 <button type="button" class="btn ghost" :disabled="deliveriesLoading" @click="loadDeliveries">刷新发货台账</button>
-                <button v-if="deliveryRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
+                <button v-if="canExtractXlsx && deliveryRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
               </div>
             </div>
 
@@ -702,7 +702,7 @@
                 </select>
                 <input v-model.trim="fittingSearchKw" type="text" placeholder="搜索车牌号/单号/管件类型..." class="input" style="min-width: 160px; flex: 1;" @keyup.enter="loadFittingDeliveries" />
                 <button type="button" class="btn ghost" :disabled="fittingLoading" @click="loadFittingDeliveries">刷新列表</button>
-                <button v-if="fittingDeliveries.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="downloadFittingHistoryExcel">📥 导出台账 (.xlsx)</button>
+                <button v-if="canExtractXlsx && fittingDeliveries.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="downloadFittingHistoryExcel">📥 导出台账 (.xlsx)</button>
               </div>
             </div>
 
@@ -922,6 +922,7 @@
                   🔄 刷新数据
                 </button>
                 <button
+                  v-if="canExtractXlsx"
                   type="button"
                   class="baseline-action-btn"
                   :disabled="!fittingBaselineRows.length"
@@ -3541,19 +3542,21 @@ const draftDeliveryItems = ref([])
 const deliveryForm = ref(createDefaultDeliveryForm())
 
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
+const canExtractXlsx = computed(() => auth.canExtractXlsxFor(PROJECT_KEY))
 const canSwitchSupplyEntity = computed(() => ['Global_admin', 'tube_supplier_admin'].includes(currentGroup.value))
 const isReadOnlyViewer = computed(() => {
   const g1 = String(currentGroup.value || '').trim().toLowerCase()
   const g2 = String(auth.user?.group || auth.session?.group || '').trim().toLowerCase()
   const u1 = String(auth.user?.username || auth.session?.username || '').trim().toLowerCase()
   
-  const viewerGroups = new Set(['tube_global_viewer', 'tube_viewer', 'group_viewer', 'viewer'])
+  const viewerGroups = new Set(['tube_global_viewer', 'tube_data_viewer', 'tube_viewer', 'group_viewer', 'viewer'])
   const viewerUsers = new Set(['tube_viewer', 'viewer', 'guest'])
   
   return viewerGroups.has(g1) || viewerGroups.has(g2) || viewerUsers.has(u1)
 })
 
 const switchToCustomMode = () => {
+  if (!isGlobalAdmin.value) return
   isCustomInputMode.value = true
   customEntityInput.value = ''
 }

@@ -433,7 +433,7 @@
                 <button type="button" class="primary-button" :disabled="pendingLoading || !selectedSection1Id" @click="applyPendingFilters">
                   {{ pendingLoading ? '查询中...' : '筛选记录' }}
                 </button>
-                <button v-if="pendingRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
+                <button v-if="canExtractXlsx && pendingRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
               </div>
             </div>
 
@@ -648,6 +648,7 @@
                   🔄 刷新
                 </button>
                 <button
+                  v-if="canExtractXlsx"
                   type="button"
                   class="btn ghost"
                   :disabled="fittingExportLoading || !fittingRows.length"
@@ -1255,6 +1256,7 @@
                     全部折叠
                   </button>
                   <button
+                    v-if="canExtractXlsx"
                     type="button"
                     class="btn secondary"
                     style="height: 30px; font-size: 12px; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px;"
@@ -1472,6 +1474,7 @@
                   🔄 刷新数据
                 </button>
                 <button
+                  v-if="canExtractXlsx"
                   type="button"
                   class="btn ghost"
                   :disabled="!fittingBaselineRows.length"
@@ -2748,6 +2751,7 @@
                 <span>刷新</span>
               </button>
               <button
+                v-if="canExtractXlsx"
                 type="button"
                 class="btn-clean-export"
                 :disabled="supervisionActiveTab === 'governance' ? (governanceLoading || !filteredGovernanceSections.length) : (pendingSummaryLoading || !sortedPendingSummaryRows.length)"
@@ -3543,6 +3547,7 @@ import {
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
 
 const auth = useAuthStore()
+const canExtractXlsx = computed(() => auth.canExtractXlsxFor(PROJECT_KEY))
 const route = useRoute()
 const router = useRouter()
 

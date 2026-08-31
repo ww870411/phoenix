@@ -433,6 +433,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     canPublishFor,
     canManageValidationFor,
     canManageAiSettingsFor,
+    canExtractXlsx: canExtractXlsxFor,
     canExtractXlsxFor,
     canApproveUnit,
     canRevokeUnit,

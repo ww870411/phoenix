@@ -1,3 +1,85 @@
+## 2026-08-31 账号配置更新：新增用户“张文韬”至 tube_data_viewer 用户组
+
+- **业务协同与模块定位**：
+  - 对应配置文件：[`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)
+  - **改动详情**：在 `tube_data_viewer` 用户组中新增账号 `张文韬 / zhangwentao_0831`，部门为 `项目全局浏览`，具备该组的全网只读与报表导出权限。
+
+## 2026-08-31 导出权限收紧：移除 tube_global_viewer 导出历史数据权限
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 对应配置文件：[`insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)
+  - **改动详情**：在 `insulation_pipe_supply_2026.json` 中将 `tube_global_viewer` 的 `can_extract_xlsx` 设为 `false`；在 `GET /global-management/history/export` 接口的 `allowed_groups` 白名单中移除 `tube_global_viewer`，非法导出直接阻断返回 403。
+
+## 2026-08-31 后端用户组扩展：新增 tube_data_viewer 只读用户组与 test 账号
+
+- **业务协同与模块定位**：
+  - 对应配置文件：[`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)、[`global.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/global.json)、[`insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)、[`项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)
+  - 对应后端服务：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - **改动详情**：
+    1. 在 `账户信息.json` 中增加 `tube_data_viewer` 用户组与示例账号 `test / test`；
+    2. 在 `global.json` 中配置层级 55；在 `insulation_pipe_supply_2026.json` 中配置 7 大页面只读权限与 Excel 导出权限；在 `项目列表.json` 中追加可用性名单；
+    3. 在 `config_service.py` 中赋予全网标段和管厂数据可见性；在 `workspace.py` 中放行库管与历史/管件查询，并部署发货与确认的 403 强阻断。
+
+## 2026-08-31 自定义供给主体创建接口权限收拢：仅限 Global_admin 专属
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - **改动详情**：在 `POST /supply-management/custom-entities` 接口中，移除 `tube_supplier_admin`，将操作权限严格收敛至超级管理员 `Global_admin`（`if str(session.group).strip() != "Global_admin": 403`）。
+
+## 2026-08-31 后端鉴权加固：移除 tube_global_viewer 写权限辅助判定与补齐发货 403 强阻断
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - **改动详情**：
+    1. 在 `_is_admin_or_supplier_admin` 判定函数中移除 `tube_global_viewer`，仅保留 `Global_admin` 和 `tube_supplier_admin`；
+    2. 在 `POST /supply-management/custom-entities`（自定义供给主体添加）中将放行列表收敛为 `("Global_admin", "tube_supplier_admin")`；
+    3. 在 `POST /supply-management/deliveries`、`POST /supply-management/deliveries/batch` 和 `POST /supply-management/deliveries/{delivery_id}/cancel` 顶部增加物理 403 阻断，彻底封禁只读角色的写请求。
+
+## 2026-08-31 后端账户体系审查：insulation_pipe_supply_2026 账户分组与 tube_viewer 权限边界
+
+- **业务协同与模块定位**：
+  - 对应配置文件：[`backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json) 与 [`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)
+  - 对应后端服务：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py) 与 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - **审查结论**：`tube_viewer` 账号归属于 `tube_global_viewer`（层级 55）。其在数据解析层享有全量标段与供给主体可见性；在 API 路由层放行了历史查询与导出（`/global-management/history`），但在发货提交与库管确认等关键写接口中受 403 阻断保护。
+
+## 2026-08-29 业务操作记录接口升级：支持 category 大类过滤（提交类 / 查询类）
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+  - 对应后端服务：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py) 与 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - `GET /global-management/submission-logs` 端点支持接收 `category` 参数（`submission` | `query`），底层 `query_submission_logs` 结合 `SUBMISSION_ONLY_ACTIONS` 与 `QUERY_SUBMISSION_ACTIONS` 实现精准大类与主体二级穿透过滤。
+
+## 2026-08-29 综合数据查询中心全标签页查询行为纳入提交记录审计台账
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue) 与 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+  - 对应后端服务：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py) 与 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 在综合查询中心 5 个 API 处理函数中（`/daily-flow`、`/baseline-progress`、`/supplier-ledger`、`/entity-directory`、`/material-prices`）接入客户端 IP 提取与 `save_operation_log` 审计打点；
+  - 扩展 `ALL_SUBMISSION_ACTIONS` 纳入 5 大查询行为，`query_submission_logs` 增加 `entity_type="query"` 筛选支持并计算返回 `query_24h_count` 统计。
+
+## 2026-08-29 全局管理“提交记录”与指挥大屏后端服务解耦确认
+
+- **业务协同与前端映射**：
+  - 对应后端模块：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py) 与 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 确认操作日志审计查询（`query_submission_logs`）与指挥大屏聚合接口（`get_big_screen_dashboard_data`）数据表及逻辑完全正交解耦，任意一侧的过滤规则变更互不干扰。
+
+## 2026-08-29 全局管理“提交记录”与指挥大屏“动态播报”后端服务与数据表映射说明
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 与 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 对应后端服务：
+    - 提交记录接口：`GET /global-management/submission-logs`（基于 `audit_log_service.py`，查询 `logs.tube_operation_logs` 审计表）；
+    - 大屏数据接口：`GET /big-screen/data`（基于 `workspace.py`，聚合 `tube_delivery`、`tube_fitting_delivery`、`tube_daily_usage`、`tube_fitting_daily_usage`、`tube_daily_plan` 业务单据表）；
+  - 明确系统管理审计系统与指挥大屏实时监控系统在数据源、条数截断与展示粒度上的架构分工。
+
+## 2026-08-29 全局管理后台操作审计日志移动端筛选排版深度适配
+
+- **业务协同与前端映射**：
+  - 对应前端模块：[`AdminConsoleView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)
+  - 对应后端审计服务：`backend/services/audit_logger.py` 与审计日志检索接口
+  - 前端重构操作审计日志在手机移动端（尤其是窄屏设备）下的筛选输入框网格排版，消除宽度溢出，保障各端日志检索与管理体验一致。
+
 ## 2026-08-28 综合查询中心对接：精简单价核算备注，保持正常精确匹配项留白
 
 - **业务协同与前端映射**：

@@ -380,6 +380,18 @@
         "password": "tube_viewer123",
         "unit": "项目全局浏览"
       }
+    ],
+    "tube_data_viewer": [
+      {
+        "username": "test",
+        "password": "test",
+        "unit": "项目全局浏览"
+      },
+      {
+        "username": "张文韬",
+        "password": "zhangwentao_0831",
+        "unit": "项目全局浏览"
+      }
     ]
   }
 }

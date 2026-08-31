@@ -57,7 +57,7 @@
             :class="['sidebar-tab-btn', { active: activeTab === 'submissions' }]"
             @click="activeTab = 'submissions'; fetchSubmissionLogs(1)"
           >
-            📥 提交记录
+            📋 业务操作记录
           </button>
           <button
             type="button"
@@ -127,16 +127,16 @@
         <!-- 右侧当前选中的配置主卡片 -->
         <div class="admin-content-pane">
           
-          <!-- Tab 0: 提交记录 (放在第一个位置) -->
+          <!-- Tab 0: 业务操作记录 (放在第一个位置) -->
           <div v-if="activeTab === 'submissions'" class="pane-content-wrapper">
             <section class="card elevated section-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">📥 提交记录</div>
+                  <div class="card-header">📋 业务操作记录</div>
                 </div>
                 <div class="section-actions">
                   <button class="btn ghost compact-btn" type="button" @click="fetchSubmissionLogs(1)">
-                    🔄 刷新提交记录
+                    🔄 刷新操作记录
                   </button>
                 </div>
               </div>
@@ -146,9 +146,9 @@
                 <div class="submission-overview__lead">
                   <div class="submission-overview__icon" aria-hidden="true">⏱️</div>
                   <div class="submission-overview__copy">
-                    <div class="submission-overview__label">数据库最新提交物理时间</div>
+                    <div class="submission-overview__label">数据库最新操作物理时间</div>
                     <div class="submission-overview__time">
-                      <span>{{ submissionLatestTime ? formatDateTime(submissionLatestTime) : '尚无提交记录' }}</span>
+                      <span>{{ submissionLatestTime ? formatDateTime(submissionLatestTime) : '尚无操作记录' }}</span>
                       <span
                         v-if="submissionLatestTime"
                         class="submission-overview__age"
@@ -160,10 +160,10 @@
                   </div>
                 </div>
 
-                <!-- 24h 提交小计数看板 -->
+                <!-- 24h 操作小计数看板 -->
                 <div class="submission-metrics">
                   <div class="submission-metric submission-metric--total">
-                    <div class="submission-metric__label">24h 提交总量</div>
+                    <div class="submission-metric__label">24h 操作总量</div>
                     <div class="submission-metric__value">{{ recent24hCount }} <span>笔</span></div>
                   </div>
                   <div class="submission-metric submission-metric--demand">
@@ -174,41 +174,68 @@
                     <div class="submission-metric__label">供给侧发货</div>
                     <div class="submission-metric__value">{{ supply24hCount }} <span>笔</span></div>
                   </div>
+                  <div class="submission-metric submission-metric--query">
+                    <div class="submission-metric__label">综合查询行为</div>
+                    <div class="submission-metric__value">{{ query24hCount }} <span>笔</span></div>
+                  </div>
                 </div>
               </div>
 
-              <!-- 两行三列过滤控制面板，避免日期控件挤出卡片边界 -->
+              <!-- 结构化过滤控制面板：提供“提交”和“查询”两大分类联动 -->
               <div class="submission-filter-panel">
                 <label class="submission-filter-item">
-                  <span>提交主体分类</span>
+                  <span>操作行为大类</span>
+                  <select v-model="submissionFilters.category" class="select" @change="onSubmissionCategoryChange">
+                    <option value="">全部大类 (提交与查询)</option>
+                    <option value="submission">📥 业务数据提交类</option>
+                    <option value="query">🔍 综合数据查询类</option>
+                  </select>
+                </label>
+
+                <label class="submission-filter-item">
+                  <span>主体与渠道分类</span>
                   <select v-model="submissionFilters.entityType" class="select" @change="fetchSubmissionLogs(1)">
-                    <option value="">全部主体</option>
-                    <option value="demand">📍 需求主体 (施工队)</option>
-                    <option value="supply">🚚 供给主体 (厂家)</option>
-                    <option value="warehouse">🏢 库管主体</option>
+                    <option value="">全部主体与渠道</option>
+                    <template v-if="submissionFilters.category !== 'query'">
+                      <option value="demand">📍 需求主体 (施工队)</option>
+                      <option value="supply">🚚 供给主体 (厂家)</option>
+                      <option value="warehouse">🏢 库管主体</option>
+                    </template>
+                    <template v-if="submissionFilters.category !== 'submission'">
+                      <option value="query">🔍 综合数据查询中心</option>
+                    </template>
                   </select>
                 </label>
 
                 <label class="submission-filter-item">
-                  <span>具体提交行为</span>
+                  <span>具体操作行为</span>
                   <select v-model="submissionFilters.actionType" class="select">
-                    <option value="">全部提交行为</option>
-                    <option value="SAVE_PLAN">📅 保存三日计划</option>
-                    <option value="SUBMIT_USAGE">🔋 上报施工消耗</option>
-                    <option value="SUBMIT_STATUS">✅ 提交填报完成</option>
-                    <option value="CONFIRM_ARRIVAL">👷 到货签收</option>
-                    <option value="CONFIRM_CONSTRUCTION">👷 施工接收</option>
-                    <option value="CREATE_DELIVERY">🚚 厂家发货</option>
-                    <option value="CREATE_DELIVERY_BATCH">🚚 批量发货</option>
-                    <option value="CANCEL_DELIVERY">❌ 撤销发货</option>
-                    <option value="CONFIRM_WAREHOUSE">🏢 库管确认</option>
-                    <option value="SUBMIT_FITTING_DELIVERY">🔩 管件发货</option>
-                    <option value="DELETE_FITTING_DELIVERY">🗑️ 撤销管件发货</option>
+                    <option value="">全部具体行为</option>
+                    <optgroup v-if="submissionFilters.category !== 'query'" label="📥 业务数据提交行为">
+                      <option value="SAVE_PLAN">📅 保存三日计划</option>
+                      <option value="SUBMIT_USAGE">🔋 上报施工消耗</option>
+                      <option value="SUBMIT_STATUS">✅ 提交填报完成</option>
+                      <option value="CONFIRM_ARRIVAL">👷 到货签收</option>
+                      <option value="CONFIRM_CONSTRUCTION">👷 施工接收</option>
+                      <option value="CREATE_DELIVERY">🚚 厂家发货</option>
+                      <option value="CREATE_DELIVERY_BATCH">🚚 批量发货</option>
+                      <option value="CANCEL_DELIVERY">❌ 撤销发货</option>
+                      <option value="CONFIRM_WAREHOUSE">🏢 库管确认</option>
+                      <option value="SUBMIT_FITTING_DELIVERY">🔩 管件发货</option>
+                      <option value="DELETE_FITTING_DELIVERY">🗑️ 撤销管件发货</option>
+                    </optgroup>
+                    <optgroup v-if="submissionFilters.category !== 'submission'" label="🔍 综合数据查询行为">
+                      <option value="QUERY_DAILY_FLOW">📅 查询每日流转台账</option>
+                      <option value="QUERY_BASELINE_PROGRESS">📐 查询设计采购进度</option>
+                      <option value="QUERY_MATERIAL_PRICES">💰 调阅采购单价字典</option>
+                      <option value="QUERY_SUPPLIER_LEDGER">🏭 查询供给方发货台账</option>
+                      <option value="QUERY_ENTITY_DIRECTORY">🏢 查询责任主体矩阵</option>
+                    </optgroup>
                   </select>
                 </label>
 
                 <label class="submission-filter-item">
-                  <span>提交账号/操作人</span>
+                  <span>操作账号/操作人</span>
                   <input v-model.trim="submissionFilters.operator" class="input" type="text" placeholder="搜索账号或姓名" />
                 </label>
 
@@ -223,15 +250,18 @@
                 </label>
 
                 <div class="submission-filter-actions">
+                  <button class="btn ghost submission-reset-btn" type="button" @click="resetSubmissionFilters">
+                    🔄 重置
+                  </button>
                   <button class="btn primary submission-query-btn" type="button" @click="fetchSubmissionLogs(1)">
-                    🔍 查询记录
+                    🔍 查询操作记录
                   </button>
                 </div>
               </div>
 
-              <!-- 提交记录明细列表 -->
-              <div v-if="submissionLoading" class="loading-placeholder" style="padding: 40px; text-align: center; color: #64748b;">数据提交记录加载中...</div>
-              <div v-else-if="submissionLogs.length === 0" class="empty-placeholder" style="padding: 40px; text-align: center; color: #777;">未查询到任何主体提交的数据记录。</div>
+              <!-- 操作记录明细列表 -->
+              <div v-if="submissionLoading" class="loading-placeholder" style="padding: 40px; text-align: center; color: #64748b;">业务操作记录加载中...</div>
+              <div v-else-if="submissionLogs.length === 0" class="empty-placeholder" style="padding: 40px; text-align: center; color: #777;">未查询到任何业务操作记录。</div>
               <div v-else>
                 <div class="submission-table-wrap">
                   <table class="table editor-table submission-log-table">
@@ -243,10 +273,10 @@
                     </colgroup>
                     <thead>
                       <tr>
-                        <th>提交时间与来源 IP</th>
-                        <th>提交主体 / 操作人</th>
+                        <th>操作时间与来源 IP</th>
+                        <th>操作主体 / 操作人</th>
                         <th>行为类型</th>
-                        <th>数据提交内容与详情说明</th>
+                        <th>业务操作内容与详情说明</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -257,7 +287,7 @@
                           </div>
                           <div class="submission-time-meta">
                             <span v-if="isRecent24h(log.created_at)" class="submission-recent-badge">
-                              🔥 新提交
+                              🔥 新操作
                             </span>
                             <button 
                               v-if="log.client_ip" 
@@ -285,7 +315,7 @@
                         </td>
                         <td class="submission-detail-cell">
                           <div class="submission-detail-text">
-                            <span v-if="getSection1NameFromLog(log)" class="submission-section-chip" :title="`发货对应需求主体: ${getSection1NameFromLog(log)}`">
+                            <span v-if="getSection1NameFromLog(log)" class="submission-section-chip" :title="`关联需求主体: ${getSection1NameFromLog(log)}`">
                               📍 {{ getSection1NameFromLog(log) }}
                             </span>
                             <span>{{ getCleanActionDesc(log) }}</span>
@@ -298,7 +328,7 @@
 
                 <!-- 分页栏 -->
                 <div class="submission-pagination">
-                  <span class="submission-pagination__summary">共计 <strong>{{ submissionTotal }}</strong> 条数据提交记录</span>
+                  <span class="submission-pagination__summary">共计 <strong>{{ submissionTotal }}</strong> 条业务操作记录</span>
                   <div class="submission-pagination__controls">
                     <button class="btn ghost compact-btn submission-page-btn" type="button" :disabled="submissionPage <= 1" @click="fetchSubmissionLogs(submissionPage - 1)">上一页</button>
                     <span>第 <strong>{{ submissionPage }}</strong> 页 / 共 <strong>{{ Math.ceil(submissionTotal / submissionLimit) || 1 }}</strong> 页</span>
@@ -1853,7 +1883,9 @@ const submissionLatestTime = ref(null)
 const recent24hCount = ref(0)
 const demand24hCount = ref(0)
 const supply24hCount = ref(0)
+const query24hCount = ref(0)
 const submissionFilters = ref({
+  category: '', // '' (全部) | 'submission' (提交类) | 'query' (查询类)
   entityType: '',
   actionType: '',
   operator: '',
@@ -3384,13 +3416,57 @@ onMounted(async () => {
   }
 })
 
-// ==================== 📥 主体数据提交记录 JS 业务逻辑 ====================
+// ==================== 📋 业务操作记录 JS 业务逻辑 ====================
+
+function onSubmissionCategoryChange() {
+  const cat = submissionFilters.value.category
+  if (cat === 'submission') {
+    if (submissionFilters.value.entityType === 'query') {
+      submissionFilters.value.entityType = ''
+    }
+    const queryActions = [
+      'QUERY_DAILY_FLOW',
+      'QUERY_BASELINE_PROGRESS',
+      'QUERY_MATERIAL_PRICES',
+      'QUERY_SUPPLIER_LEDGER',
+      'QUERY_ENTITY_DIRECTORY',
+    ]
+    if (queryActions.includes(submissionFilters.value.actionType)) {
+      submissionFilters.value.actionType = ''
+    }
+  } else if (cat === 'query') {
+    submissionFilters.value.entityType = 'query'
+    const submissionActions = [
+      'SAVE_PLAN', 'SUBMIT_USAGE', 'SUBMIT_STATUS',
+      'CONFIRM_ARRIVAL', 'CONFIRM_CONSTRUCTION', 'CREATE_DELIVERY',
+      'CREATE_DELIVERY_BATCH', 'CANCEL_DELIVERY', 'CONFIRM_WAREHOUSE',
+      'SUBMIT_FITTING_DELIVERY', 'DELETE_FITTING_DELIVERY',
+    ]
+    if (submissionActions.includes(submissionFilters.value.actionType)) {
+      submissionFilters.value.actionType = ''
+    }
+  }
+  fetchSubmissionLogs(1)
+}
+
+function resetSubmissionFilters() {
+  submissionFilters.value = {
+    category: '',
+    entityType: '',
+    actionType: '',
+    operator: '',
+    startDate: '',
+    endDate: '',
+  }
+  fetchSubmissionLogs(1)
+}
 
 async function fetchSubmissionLogs(page = 1) {
   submissionLoading.value = true
   submissionPage.value = page
   try {
     const res = await getTubeSubmissionLogs(PROJECT_KEY, {
+      category: submissionFilters.value.category,
       entityType: submissionFilters.value.entityType,
       actionType: submissionFilters.value.actionType,
       operator: submissionFilters.value.operator,
@@ -3405,8 +3481,9 @@ async function fetchSubmissionLogs(page = 1) {
     recent24hCount.value = res.recent_24h_count || 0
     demand24hCount.value = res.demand_24h_count || 0
     supply24hCount.value = res.supply_24h_count || 0
+    query24hCount.value = res.query_24h_count || 0
   } catch (error) {
-    console.error('加载主体提交数据记录失败:', error)
+    console.error('加载业务操作记录失败:', error)
   } finally {
     submissionLoading.value = false
   }
@@ -3858,6 +3935,11 @@ function translateActionType(type) {
     CONFIRM_FITTING_CONSTRUCTION: '🏗️ 管件施工接收',
     CONFIRM_FITTING_WAREHOUSE: '🏢 管件库管确认',
     CANCEL_FITTING_DELIVERY: '❌ 撤销管件发货',
+    QUERY_DAILY_FLOW: '📅 综合流转查询',
+    QUERY_BASELINE_PROGRESS: '📐 基准进度查询',
+    QUERY_MATERIAL_PRICES: '💰 采购单价查询',
+    QUERY_SUPPLIER_LEDGER: '🏭 供给台账查询',
+    QUERY_ENTITY_DIRECTORY: '🏢 责任主体查询',
   }
   return dict[type] || type || '—'
 }
@@ -3881,6 +3963,11 @@ function getActionTypeBadgeStyle(type) {
     CONFIRM_FITTING_CONSTRUCTION: { bg: '#e8f7f0', color: '#059669', border: '1px solid #a7f3d0' },
     CONFIRM_FITTING_WAREHOUSE: { bg: '#f4eafc', color: '#7c3aed', border: '1px solid #ddd6fe' },
     CANCEL_FITTING_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
+    QUERY_DAILY_FLOW: { bg: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' },
+    QUERY_BASELINE_PROGRESS: { bg: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4' },
+    QUERY_MATERIAL_PRICES: { bg: '#fefce8', color: '#a16207', border: '1px solid #fef08a' },
+    QUERY_SUPPLIER_LEDGER: { bg: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' },
+    QUERY_ENTITY_DIRECTORY: { bg: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1' },
   }
   const match = colors[type] || { bg: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' }
   return {
@@ -4632,7 +4719,7 @@ async function handleExportLogs() {
 }
 .submission-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -4664,6 +4751,7 @@ async function handleExportLogs() {
 }
 .submission-metric--demand .submission-metric__value { color: #059669; }
 .submission-metric--supply .submission-metric__value { color: #d97706; }
+.submission-metric--query .submission-metric__value { color: #7c3aed; }
 
 .submission-filter-panel {
   display: grid;
@@ -4708,19 +4796,37 @@ async function handleExportLogs() {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 .submission-filter-actions {
-  grid-column: span 2;
+  grid-column: span 6;
   display: flex;
-  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
   min-width: 0;
+  margin-top: 4px;
+}
+.submission-reset-btn {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.submission-reset-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
 }
 .submission-query-btn {
-  width: 100%;
   min-height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 18px;
+  padding: 0 22px;
   border-radius: 7px;
   font-size: 13px;
   white-space: nowrap;
