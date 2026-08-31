@@ -2069,7 +2069,8 @@
                   <div 
                     v-for="(sup, idx) in filteredSuppliers" 
                     :key="`sup-${idx}`" 
-                    class="compact-entity-card"
+                    :id="`entity-card-sup-${sup.entity_id}`"
+                    :class="['compact-entity-card', { 'highlight-target-card': highlightedCardId === `entity-card-sup-${sup.entity_id}` }]"
                   >
                     <div class="card-header-row">
                       <div class="card-title-group">
@@ -2144,7 +2145,8 @@
                   <div 
                     v-for="(m, idx) in filteredSiteManagers" 
                     :key="`mgr-${idx}`" 
-                    class="compact-entity-card"
+                    :id="`entity-card-mgr-${m.person_name}`"
+                    :class="['compact-entity-card', { 'highlight-target-card': highlightedCardId === `entity-card-mgr-${m.person_name}` }]"
                   >
                     <div class="card-header-row">
                       <div class="card-title-group">
@@ -2219,7 +2221,8 @@
                   <div 
                     v-for="(sec, idx) in filteredDemandSections" 
                     :key="`sec-${idx}`" 
-                    class="compact-entity-card"
+                    :id="`entity-card-sec-${sec.section_1_id || idx}`"
+                    :class="['compact-entity-card', { 'highlight-target-card': highlightedCardId === `entity-card-sec-${sec.section_1_id || idx}` }]"
                   >
                     <div class="card-header-row">
                       <div class="card-title-group">
@@ -2285,7 +2288,8 @@
                   <div 
                     v-for="(wh, idx) in filteredWarehouseKeepers" 
                     :key="`wh-${idx}`" 
-                    class="compact-entity-card"
+                    :id="`entity-card-wh-${wh.username || idx}`"
+                    :class="['compact-entity-card', { 'highlight-target-card': highlightedCardId === `entity-card-wh-${wh.username || idx}` }]"
                   >
                     <div class="card-header-row">
                       <div class="card-title-group">
@@ -2359,7 +2363,8 @@
                   <div 
                     v-for="(gm, idx) in filteredGlobalMembers" 
                     :key="`gm-${idx}`" 
-                    class="compact-entity-card"
+                    :id="`entity-card-gm-${gm.username || idx}`"
+                    :class="['compact-entity-card', { 'highlight-target-card': highlightedCardId === `entity-card-gm-${gm.username || idx}` }]"
                   >
                     <div class="card-header-row">
                       <div class="card-title-group">
@@ -2948,8 +2953,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, reactive, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { AppHeader, Breadcrumbs } from './shared'
 import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '@/projects/daily_report_25_26/store/auth'
@@ -2962,6 +2967,7 @@ import {
   getTubeMaterialPrices,
 } from '@/projects/daily_report_25_26/services/api'
 
+const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const projectKey = 'insulation_pipe_supply_2026'
@@ -3342,6 +3348,149 @@ function collapseAllSections() {
   sectionEntityMatrix.value.forEach(s => {
     sectionCollapseState[s.section_1_id] = true
   })
+}
+
+// -----------------------------------------------------------------------------
+// 🎯 责任主体与人员管辖矩阵：智能定位与高亮动效
+// -----------------------------------------------------------------------------
+const highlightedCardId = ref('')
+let highlightTimer = null
+
+async function locateAndHighlightUser(targetStr) {
+  if (!targetStr) return
+  const rawTarget = String(targetStr).trim()
+  if (!rawTarget) return
+  const targetLower = rawTarget.toLowerCase()
+
+  // 1. 切换主 Tab 与视图模式为“🏢 按主体类别分组”
+  activeTab.value = 'directory'
+  directoryViewMode.value = 'by_category'
+  directoryCategory.value = 'all'
+  // 重置可能过滤掉目标卡片的搜索框与标段过滤
+  globalSearchKeyword.value = ''
+  selectedSectionIds.value = []
+
+  // 2. 确保已拉取矩阵数据
+  if (!entityDirectoryData.value || !entityDirectoryData.value.suppliers) {
+    tabLoading.value = true
+    try {
+      const res = await getComprehensiveEntityDirectory(projectKey)
+      entityDirectoryData.value = res || {}
+    } catch (err) {
+      console.error('加载主体目录数据失败:', err)
+    } finally {
+      tabLoading.value = false
+    }
+  }
+
+  let foundCardId = ''
+
+  // 3. 智能多维度匹配目标人员/主体
+  // (A) 供货厂家匹配 (账号、厂家名称、实体ID、联系人)
+  const supList = entityDirectoryData.value?.suppliers || []
+  const matchedSup = supList.find(s => {
+    const accs = (s.accounts || []).map(a => String(a).toLowerCase())
+    const entId = String(s.entity_id || '').toLowerCase()
+    const entName = String(s.entity_name || '').toLowerCase()
+    const contact = String(s.contact_name || '').toLowerCase()
+    return accs.includes(targetLower) ||
+      entId === targetLower ||
+      entName.includes(targetLower) ||
+      targetLower.includes(entName) ||
+      contact.includes(targetLower) ||
+      targetLower.includes(contact)
+  })
+  if (matchedSup) {
+    groupCollapseState.suppliers = false
+    foundCardId = `entity-card-sup-${matchedSup.entity_id}`
+  }
+
+  // (B) 物资库管匹配 (账号、库管姓名、联系人)
+  if (!foundCardId) {
+    const whList = entityDirectoryData.value?.warehouse_keepers || []
+    const matchedWh = whList.find(w => {
+      const u = String(w.username || '').toLowerCase()
+      const p = String(w.person_name || '').toLowerCase()
+      const c = String(w.contact_name || '').toLowerCase()
+      return u === targetLower || p.includes(targetLower) || targetLower.includes(p) || c.includes(targetLower)
+    })
+    if (matchedWh) {
+      groupCollapseState.warehouse_keepers = false
+      foundCardId = `entity-card-wh-${matchedWh.username || 0}`
+    }
+  }
+
+  // (C) 现场负责人匹配 (姓名、联系人)
+  if (!foundCardId) {
+    const mgrList = entityDirectoryData.value?.site_managers || []
+    const matchedMgr = mgrList.find(m => {
+      const p = String(m.person_name || '').toLowerCase()
+      const c = String(m.contact_name || '').toLowerCase()
+      return p.includes(targetLower) || targetLower.includes(p) || c.includes(targetLower)
+    })
+    if (matchedMgr) {
+      groupCollapseState.site_managers = false
+      foundCardId = `entity-card-mgr-${matchedMgr.person_name}`
+    }
+  }
+
+  // (D) 施工单位匹配 (账号、施工单位名称、标段名称、联系人)
+  if (!foundCardId) {
+    const conList = entityDirectoryData.value?.demand_sections || []
+    const matchedCon = conList.find(c => {
+      const accs = (c.accounts || []).map(a => String(a).toLowerCase())
+      const unit = String(c.construction_unit_name || '').toLowerCase()
+      const secName = String(c.section_1_name || '').toLowerCase()
+      const contact = String(c.contact_name || '').toLowerCase()
+      return accs.includes(targetLower) ||
+        unit.includes(targetLower) ||
+        targetLower.includes(unit) ||
+        secName.includes(targetLower) ||
+        contact.includes(targetLower)
+    })
+    if (matchedCon) {
+      groupCollapseState.demand_sections = false
+      foundCardId = `entity-card-sec-${matchedCon.section_1_id || 0}`
+    }
+  }
+
+  // (E) 系统管理 / 全局调度观察员匹配 (账号、角色名、人员姓名)
+  if (!foundCardId) {
+    const gmList = entityDirectoryData.value?.global_members || []
+    const matchedGm = gmList.find(g => {
+      const u = String(g.username || '').toLowerCase()
+      const p = String(g.person_name || '').toLowerCase()
+      const role = String(g.role_name || '').toLowerCase()
+      const contact = String(g.contact_name || '').toLowerCase()
+      return u === targetLower || p.includes(targetLower) || role.includes(targetLower) || contact.includes(targetLower)
+    })
+    if (matchedGm) {
+      groupCollapseState.global_members = false
+      foundCardId = `entity-card-gm-${matchedGm.username || 0}`
+    }
+  }
+
+  // (F) 兜底：若未精确匹配，展开全部手风琴
+  if (!foundCardId) {
+    expandAllGroups()
+  }
+
+  // 4. DOM 居中平滑滚动与脉冲高亮特效
+  if (foundCardId) {
+    highlightedCardId.value = foundCardId
+    if (highlightTimer) clearTimeout(highlightTimer)
+    highlightTimer = setTimeout(() => {
+      highlightedCardId.value = ''
+    }, 4500)
+
+    await nextTick()
+    setTimeout(() => {
+      const el = document.getElementById(foundCardId)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 200)
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -5032,13 +5181,42 @@ onMounted(async () => {
     loading.value = true
     const cfg = await fetchTubeConfig(projectKey)
     configSummary.value = cfg
+    
+    // 如果 URL 路由已直接指定了 directory 或高亮人员，优先初始化
+    if (route.query.tab === 'directory' || route.query.highlight_user) {
+      activeTab.value = 'directory'
+      directoryViewMode.value = 'by_category'
+      directoryCategory.value = 'all'
+    }
+
     await fetchActiveTabData()
+
+    if (route.query.highlight_user) {
+      await locateAndHighlightUser(route.query.highlight_user)
+    }
   } catch (err) {
     errorMessage.value = err.message || '加载配置失败'
   } finally {
     loading.value = false
   }
 })
+
+// 监听路由参数动态变化（例如从同一项目其他页面跳转穿透）
+watch(
+  () => [route.query.tab, route.query.highlight_user, route.query._t],
+  async ([newTab, newHighlightUser]) => {
+    if (newTab === 'directory' || newHighlightUser) {
+      activeTab.value = 'directory'
+      directoryViewMode.value = 'by_category'
+      directoryCategory.value = 'all'
+      if (newHighlightUser) {
+        await locateAndHighlightUser(newHighlightUser)
+      } else {
+        fetchActiveTabData()
+      }
+    }
+  }
+)
 
 function setDateRangeByCapsule(capsule) {
   activeDateCapsule.value = capsule
@@ -9157,6 +9335,33 @@ function exportCurrentOrderItemsExcel() {
   font-size: 12px;
   margin-top: 2px;
   opacity: 0.95;
+}
+
+/* 🎯 责任主体与人员管辖矩阵：目标卡片高亮呼吸发光特效 */
+@keyframes userCardPulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.7), 0 4px 14px rgba(79, 70, 229, 0.35);
+    border-color: #4f46e5;
+    transform: scale(1.015);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(79, 70, 229, 0), 0 8px 24px rgba(79, 70, 229, 0.55);
+    border-color: #6366f1;
+    transform: scale(1.025);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(79, 70, 229, 0), 0 4px 14px rgba(79, 70, 229, 0.35);
+    border-color: #4f46e5;
+    transform: scale(1.015);
+  }
+}
+
+.highlight-target-card {
+  animation: userCardPulseGlow 1.2s infinite ease-in-out !important;
+  border: 2px solid #4f46e5 !important;
+  background: linear-gradient(180deg, #f5f3ff 0%, #ede9fe 100%) !important;
+  z-index: 10 !important;
+  position: relative !important;
 }
 </style>
 

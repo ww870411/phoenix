@@ -66,219 +66,243 @@
         </div>
       </div>
 
-      <section class="card elevated">
-        <div class="card-header">
-          <span>库管台账筛选</span>
-          <span class="muted">展示日期：{{ options?.show_date || options?.biz_date || '--' }}</span>
-        </div>
-        <div class="filter-grid">
-          <div class="field custom-multi-select-container" ref="section1DropdownRef">
-            <span>需求主体</span>
-            <div class="custom-multi-select">
-              <div class="select-trigger" @click="toggleDropdown('section1')" :class="{ active: activeDropdown === 'section1' }">
-                <span class="trigger-text" :class="{ placeholder: filters.section1Ids.length === 0 }">
-                  {{ displaySelectedSection1s }}
-                </span>
-                <span class="trigger-arrow">▼</span>
-              </div>
-              <transition name="dropdown-fade">
-                <div v-if="activeDropdown === 'section1'" class="select-dropdown">
-                  <div class="dropdown-actions">
-                    <button type="button" class="action-btn" @click="selectAllSection1s">全选</button>
-                    <button type="button" class="action-btn" @click="clearAllSection1s">清空</button>
-                  </div>
-                  <div class="dropdown-list">
-                    <div 
-                      v-for="item in section1Options" 
-                      :key="item.section_1_id" 
-                      class="dropdown-item"
-                      :class="{ selected: filters.section1Ids.includes(item.section_1_id) }"
-                      @click="toggleSection1(item.section_1_id)"
-                    >
-                      <input type="checkbox" :checked="filters.section1Ids.includes(item.section_1_id)" @click.stop="toggleSection1(item.section_1_id)" />
-                      <span class="item-label">{{ item.section_1_name }}（{{ item.section_1_id }}）</span>
-                    </div>
-                  </div>
-                </div>
-              </transition>
-            </div>
-          </div>
-
-          <div class="field custom-multi-select-container" ref="supplyDropdownRef">
-            <span>供给主体</span>
-            <div class="custom-multi-select">
-              <div class="select-trigger" @click="toggleDropdown('supplier')" :class="{ active: activeDropdown === 'supplier' }">
-                <span class="trigger-text" :class="{ placeholder: filters.supplyEntityIds.length === 0 }">
-                  {{ displaySelectedSupplyEntities }}
-                </span>
-                <span class="trigger-arrow">▼</span>
-              </div>
-              <transition name="dropdown-fade">
-                <div v-if="activeDropdown === 'supplier'" class="select-dropdown">
-                  <div class="dropdown-actions">
-                    <button type="button" class="action-btn" @click="selectAllSupplyEntities">全选</button>
-                    <button type="button" class="action-btn" @click="clearAllSupplyEntities">清空</button>
-                  </div>
-                  <div class="dropdown-list">
-                    <div 
-                      v-for="item in supplyEntityOptions" 
-                      :key="item.entity_id" 
-                      class="dropdown-item"
-                      :class="{ selected: filters.supplyEntityIds.includes(item.entity_id) }"
-                      @click="toggleSupplyEntity(item.entity_id)"
-                    >
-                      <input type="checkbox" :checked="filters.supplyEntityIds.includes(item.entity_id)" @click.stop="toggleSupplyEntity(item.entity_id)" />
-                      <span class="item-label">{{ item.entity_name }}（{{ item.entity_id }}）</span>
-                    </div>
-                  </div>
-                </div>
-              </transition>
-            </div>
-          </div>
-
-          <div class="field custom-multi-select-container" ref="pipeDropdownRef">
-            <span>型号</span>
-            <div class="custom-multi-select">
-              <div 
-                class="select-trigger" 
-                :class="{ active: activeDropdown === 'pipeModel', disabled: activeTab === 'fitting' }"
-                :style="activeTab === 'fitting' ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7, borderColor: '#e2e8f0' } : {}"
-                @click="toggleDropdown('pipeModel')"
-              >
-                <span class="trigger-text" :class="{ placeholder: filters.pipeModelIds.length === 0 || activeTab === 'fitting' }">
-                  {{ displaySelectedPipeModels }}
-                </span>
-                <span class="trigger-arrow">{{ activeTab === 'fitting' ? '🔒' : '▼' }}</span>
-              </div>
-              <transition name="dropdown-fade">
-                <div v-if="activeDropdown === 'pipeModel' && activeTab !== 'fitting'" class="select-dropdown">
-                  <div class="dropdown-actions">
-                    <button type="button" class="action-btn" @click="selectAllPipeModels">全选</button>
-                    <button type="button" class="action-btn" @click="clearAllPipeModels">清空</button>
-                  </div>
-                  <div class="dropdown-list">
-                    <template v-for="group in groupedPipeModelOptions" :key="group.name">
-                      <div class="dropdown-group-header" style="padding: 6px 10px; background: #f8fafc; font-size: 11px; font-weight: bold; color: #4f46e5; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; user-select: none;">
-                        <span>♨️ {{ group.name }}</span>
-                        <span style="font-size: 10px; color: #64748b; font-weight: normal;">共 {{ group.items.length }} 种规格</span>
-                      </div>
-                      <div 
-                        v-for="item in group.items" 
-                        :key="item.pipe_model_id" 
-                        class="dropdown-item"
-                        :class="{ selected: filters.pipeModelIds.includes(item.pipe_model_id) }"
-                        @click="togglePipeModel(item.pipe_model_id)"
-                      >
-                        <input type="checkbox" :checked="filters.pipeModelIds.includes(item.pipe_model_id)" @click.stop="togglePipeModel(item.pipe_model_id)" />
-                        <span class="item-label">{{ item.pipe_model_name }}</span>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-              </transition>
-            </div>
-          </div>
-
-          <div class="field custom-multi-select-container" ref="statusDropdownRef">
-            <span>状态</span>
-            <div class="custom-multi-select">
-              <div 
-                class="select-trigger" 
-                :class="{ active: activeDropdown === 'status', disabled: activeTab === 'fitting' }"
-                :style="activeTab === 'fitting' ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.7, borderColor: '#e2e8f0' } : {}"
-                @click="toggleDropdown('status')"
-              >
-                <span class="trigger-text" :class="{ placeholder: filters.statuses.length === 0 || activeTab === 'fitting' }">
-                  {{ displaySelectedStatuses }}
-                </span>
-                <span class="trigger-arrow">{{ activeTab === 'fitting' ? '🔒' : '▼' }}</span>
-              </div>
-              <transition name="dropdown-fade">
-                <div v-if="activeDropdown === 'status' && activeTab !== 'fitting'" class="select-dropdown">
-                  <div class="dropdown-actions">
-                    <button type="button" class="action-btn" @click="selectAllStatuses">全选</button>
-                    <button type="button" class="action-btn" @click="clearAllStatuses">清空</button>
-                  </div>
-                  <div class="dropdown-list">
-                    <div 
-                      v-for="item in deliveryStatusOptions" 
-                      :key="item.value" 
-                      class="dropdown-item"
-                      :class="{ selected: filters.statuses.includes(item.value) }"
-                      @click="toggleStatus(item.value)"
-                    >
-                      <input type="checkbox" :checked="filters.statuses.includes(item.value)" @click.stop="toggleStatus(item.value)" />
-                      <span class="item-label">{{ item.label }}</span>
-                    </div>
-                  </div>
-                </div>
-              </transition>
-            </div>
-          </div>
-          <label class="field">
-            <span>运输车次号</span>
-            <input v-model.trim="filters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" />
-          </label>
-          <label class="field">
-            <span>单号</span>
-            <input v-model.trim="filters.orderNo" class="input" type="text" placeholder="输入订单号筛选" />
-          </label>
-          <label class="field">
-            <span>车牌号</span>
-            <input v-model.trim="filters.vehiclePlateNo" class="input" type="text" placeholder="输入车牌号筛选" />
-          </label>
-        </div>
-        <div class="filter-actions" style="display: flex; gap: 8px;">
-          <button class="btn primary" type="button" :disabled="loading" @click="loadDeliveries">查询</button>
-          <button class="btn ghost" type="button" :disabled="loading" @click="resetFilters">重置</button>
-          <button 
-            v-if="canExtractXlsx && activeTab === 'pipe' && deliveries.length > 0" 
-            class="btn primary" 
-            type="button" 
-            style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" 
-            @click="showExportModal = true"
-          >
-            📥 导出 Excel
-          </button>
-        </div>
-      </section>
-
       <!-- Tab 1: 保温管发货记录 -->
       <div v-if="activeTab === 'pipe'">
-        <section class="card elevated stats-card">
-          <div class="card-header">台账概览</div>
-        <div class="stats-grid">
-          <div class="stat-box">
-            <span>记录总数</span>
-            <strong>{{ deliverySummary.total }}</strong>
+        <section class="card elevated">
+          <div class="card-header">
+            <span>库管台账筛选</span>
+            <span class="muted">展示日期：{{ options?.show_date || options?.biz_date || '--' }}</span>
           </div>
-          <div class="stat-box">
-            <span>待到货</span>
-            <strong>{{ deliverySummary.pendingArrival }}</strong>
-          </div>
-          <div class="stat-box">
-            <span>待接收</span>
-            <strong>{{ deliverySummary.pendingReceive }}</strong>
-          </div>
-          <div class="stat-box">
-            <span>待库管确认</span>
-            <strong>{{ deliverySummary.pendingWarehouse }}</strong>
-          </div>
-          <div class="stat-box">
-            <span>库管已确认</span>
-            <strong>{{ deliverySummary.completed }}</strong>
-          </div>
-        </div>
-      </section>
+          <div class="filter-grid">
+            <div class="field custom-multi-select-container" ref="section1DropdownRef">
+              <span>需求主体</span>
+              <div class="custom-multi-select">
+                <div class="select-trigger" @click="toggleDropdown('section1')" :class="{ active: activeDropdown === 'section1' }">
+                  <span class="trigger-text" :class="{ placeholder: filters.section1Ids.length === 0 }">
+                    {{ displaySelectedSection1s }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'section1'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllSection1s">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllSection1s">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <div 
+                        v-for="item in section1Options" 
+                        :key="item.section_1_id" 
+                        class="dropdown-item"
+                        :class="{ selected: filters.section1Ids.includes(item.section_1_id) }"
+                        @click="toggleSection1(item.section_1_id)"
+                      >
+                        <input type="checkbox" :checked="filters.section1Ids.includes(item.section_1_id)" @click.stop="toggleSection1(item.section_1_id)" />
+                        <span class="item-label">{{ item.section_1_name }}（{{ item.section_1_id }}）</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
 
-      <section class="card elevated">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-weight: 700; font-size: 15px;">库管发货台账</span>
-            <span class="muted" style="font-size: 12px;">
-              共 {{ groupedPipeDeliveries.length }} 个车次 · {{ deliveries.length }} 项订单明细
-            </span>
+            <div class="field custom-multi-select-container" ref="supplyDropdownRef">
+              <span>供给主体</span>
+              <div class="custom-multi-select">
+                <div class="select-trigger" @click="toggleDropdown('supplier')" :class="{ active: activeDropdown === 'supplier' }">
+                  <span class="trigger-text" :class="{ placeholder: filters.supplyEntityIds.length === 0 }">
+                    {{ displaySelectedSupplyEntities }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'supplier'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllSupplyEntities">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllSupplyEntities">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <div 
+                        v-for="item in supplyEntityOptions" 
+                        :key="item.entity_id" 
+                        class="dropdown-item"
+                        :class="{ selected: filters.supplyEntityIds.includes(item.entity_id) }"
+                        @click="toggleSupplyEntity(item.entity_id)"
+                      >
+                        <input type="checkbox" :checked="filters.supplyEntityIds.includes(item.entity_id)" @click.stop="toggleSupplyEntity(item.entity_id)" />
+                        <span class="item-label">{{ item.entity_name }}（{{ item.entity_id }}）</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
+            <div class="field custom-multi-select-container" ref="pipeDropdownRef">
+              <span>型号</span>
+              <div class="custom-multi-select">
+                <div 
+                  class="select-trigger" 
+                  :class="{ active: activeDropdown === 'pipeModel' }"
+                  @click="toggleDropdown('pipeModel')"
+                >
+                  <span class="trigger-text" :class="{ placeholder: filters.pipeModelIds.length === 0 }">
+                    {{ displaySelectedPipeModels }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'pipeModel'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllPipeModels">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllPipeModels">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <template v-for="group in groupedPipeModelOptions" :key="group.name">
+                        <div class="dropdown-group-header" style="padding: 6px 10px; background: #f8fafc; font-size: 11px; font-weight: bold; color: #4f46e5; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+                          <span>♨️ {{ group.name }}</span>
+                          <span style="font-size: 10px; color: #64748b; font-weight: normal;">共 {{ group.items.length }} 种规格</span>
+                        </div>
+                        <div 
+                          v-for="item in group.items" 
+                          :key="item.pipe_model_id" 
+                          class="dropdown-item"
+                          :class="{ selected: filters.pipeModelIds.includes(item.pipe_model_id) }"
+                          @click="togglePipeModel(item.pipe_model_id)"
+                        >
+                          <input type="checkbox" :checked="filters.pipeModelIds.includes(item.pipe_model_id)" @click.stop="togglePipeModel(item.pipe_model_id)" />
+                          <span class="item-label">{{ item.pipe_model_name }}</span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
+            <div class="field custom-multi-select-container" ref="statusDropdownRef">
+              <span>状态</span>
+              <div class="custom-multi-select">
+                <div 
+                  class="select-trigger" 
+                  :class="{ active: activeDropdown === 'status' }"
+                  @click="toggleDropdown('status')"
+                >
+                  <span class="trigger-text" :class="{ placeholder: filters.statuses.length === 0 }">
+                    {{ displaySelectedStatuses }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'status'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllStatuses">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllStatuses">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <div 
+                        v-for="item in deliveryStatusOptions" 
+                        :key="item.value" 
+                        class="dropdown-item"
+                        :class="{ selected: filters.statuses.includes(item.value) }"
+                        @click="toggleStatus(item.value)"
+                      >
+                        <input type="checkbox" :checked="filters.statuses.includes(item.value)" @click.stop="toggleStatus(item.value)" />
+                        <span class="item-label">{{ item.label }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+            <label class="field">
+              <span>运输车次号</span>
+              <input v-model.trim="filters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" />
+            </label>
+            <label class="field">
+              <span>单号</span>
+              <input v-model.trim="filters.orderNo" class="input" type="text" placeholder="输入订单号筛选" />
+            </label>
+            <label class="field">
+              <span>车牌号</span>
+              <input v-model.trim="filters.vehiclePlateNo" class="input" type="text" placeholder="输入车牌号筛选" />
+            </label>
           </div>
+          <div class="filter-actions" style="display: flex; gap: 8px;">
+            <button class="btn primary" type="button" :disabled="loading" @click="loadDeliveries">查询</button>
+            <button class="btn ghost" type="button" :disabled="loading" @click="resetFilters">重置</button>
+            <button 
+              v-if="canExtractXlsx && deliveries.length > 0" 
+              class="btn primary" 
+              type="button" 
+              style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" 
+              @click="showExportModal = true"
+            >
+              📥 导出 Excel
+            </button>
+          </div>
+        </section>
+
+        <section class="card elevated stats-card" style="padding: 0; overflow: hidden; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; background: #ffffff;">
+            <div>
+              <div style="font-weight: 700; font-size: 15px; color: #0f172a;">📊 保温管发货记录台账</div>
+              <div style="margin-top: 3px; font-size: 12.5px; color: #64748b;">
+                共 {{ groupedPipeDeliveries.length }} 个车次 · {{ deliveries.length }} 项明细 · 合计发货 {{ formatAmount(pipeTotalShippedMeters) }} 米保温管
+              </div>
+            </div>
+          </div>
+
+          <!-- 保温管透视概览指标（与管件四节点流转 100% 相同样式与文字） -->
+          <div class="fitting-summary-grid">
+            <div 
+              class="fitting-summary-item is-arrival"
+              :class="{ 'is-active-filter': pipeStatusFilter === 'pending_arrival' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="togglePipeStatusFilter('pending_arrival')"
+            >
+              <span>🚚 待现场到货</span>
+              <strong>{{ deliverySummary.pendingArrival }} 项</strong>
+            </div>
+            <div 
+              class="fitting-summary-item is-construction"
+              :class="{ 'is-active-filter': pipeStatusFilter === 'pending_receive' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="togglePipeStatusFilter('pending_receive')"
+            >
+              <span>🏗️ 待施工接收</span>
+              <strong>{{ deliverySummary.pendingReceive }} 项</strong>
+            </div>
+            <div 
+              class="fitting-summary-item is-warehouse"
+              :class="{ 'is-active-filter': pipeStatusFilter === 'pending_warehouse' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="togglePipeStatusFilter('pending_warehouse')"
+            >
+              <span>🏢 待库管确认</span>
+              <strong>{{ deliverySummary.pendingWarehouse }} 项</strong>
+            </div>
+            <div 
+              class="fitting-summary-item is-completed"
+              :class="{ 'is-active-filter': pipeStatusFilter === 'completed' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="togglePipeStatusFilter('completed')"
+            >
+              <span>✅ 库管已确认</span>
+              <strong>{{ deliverySummary.completed }} 项</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="card elevated">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-weight: 700; font-size: 15px;">📜 保温管发货台账列表</span>
+            </div>
           
           <!-- 🔀 视图切换与批量展开折叠按钮区 -->
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -328,7 +352,7 @@
         <div v-else-if="deliveries.length === 0" class="page-state">当前筛选条件下没有记录。</div>
 
         <!-- 模式 1：按车次合并折叠卡片列表 -->
-        <div v-else-if="pipeViewMode === 'grouped'" class="pipe-shipment-group-list" style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;">
+        <div v-else-if="pipeViewMode === 'grouped'" class="pipe-shipment-group-list custom-scroll-list" style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; max-height: 480px; overflow-y: auto;">
           <div
             v-for="group in groupedPipeDeliveries"
             :key="group.groupKey"
@@ -397,6 +421,16 @@
                 <span v-if="group.hasAbnormal" class="status-pill status-abnormal" style="font-size: 11px;">
                   含异常
                 </span>
+
+                <button 
+                  type="button" 
+                  class="btn ghost btn-sm"
+                  style="height: 26px; padding: 0 8px; font-size: 11.5px; color: #4f46e5; border-color: #c7d2fe; display: inline-flex; align-items: center; gap: 4px;"
+                  title="查看整车全生命周期流转凭证"
+                  @click.stop="openDeliveryDetailModal(group)"
+                >
+                  📜 流转凭证
+                </button>
               </div>
             </div>
 
@@ -413,7 +447,7 @@
                     <th class="cell-number" style="width: 110px;">接收量 (米)</th>
                     <th class="cell-status" style="width: 110px;">状态</th>
                     <th style="width: 120px;">在途时长</th>
-                    <th style="width: 80px; text-align: center;">操作</th>
+                    <th style="width: 90px; text-align: center;">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -422,9 +456,10 @@
                     :key="row.id"
                     :class="{ checked: isDeliverySelected(row.id), active: String(row.id) === selectedDeliveryId }"
                     style="cursor: pointer;"
+                    title="点击在下方查看流转轨迹"
                     @click="toggleDeliverySelection(row)"
                   >
-                    <td class="cell-checkbox" style="text-align: center;">
+                    <td class="cell-checkbox" style="text-align: center;" @click.stop>
                       <input
                         v-if="row.status === 'pending_warehouse'"
                         type="checkbox"
@@ -457,10 +492,11 @@
                       <button
                         type="button"
                         class="btn ghost btn-sm"
-                        style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5;"
-                        @click.stop="selectDelivery(row)"
+                        style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px;"
+                        title="查看单据流转凭证"
+                        @click.stop="openDeliveryDetailModal(row)"
                       >
-                        查看轨迹
+                        📜 凭证
                       </button>
                     </td>
                   </tr>
@@ -471,7 +507,7 @@
         </div>
 
         <!-- 模式 2：扁平明细表格（原有表格） -->
-        <div v-else class="table-wrap">
+        <div v-else class="table-wrap custom-scroll-list">
           <table class="table">
             <colgroup>
               <col class="col-checkbox" />
@@ -487,6 +523,7 @@
               <col class="col-status" />
               <col class="col-time" />
               <col class="col-elapsed" />
+              <col style="width: 85px;" />
             </colgroup>
             <thead>
               <tr>
@@ -510,6 +547,7 @@
                 <th class="cell-status">状态</th>
                 <th class="cell-datetime">发货时间</th>
                 <th class="cell-elapsed">在途时长</th>
+                <th style="text-align: center;">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -517,9 +555,11 @@
                 v-for="row in deliveries"
                 :key="row.id"
                 :class="{ checked: isDeliverySelected(row.id), active: String(row.id) === selectedDeliveryId }"
+                style="cursor: pointer;"
+                title="点击在下方查看流转轨迹"
                 @click="toggleDeliverySelection(row)"
               >
-                <td class="cell-checkbox">
+                <td class="cell-checkbox" @click.stop>
                   <input
                     v-if="row.status === 'pending_warehouse'"
                     type="checkbox"
@@ -555,6 +595,17 @@
                 </td>
                 <td class="cell-datetime">{{ formatDateTime(row.shipped_at) }}</td>
                 <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
+                <td style="text-align: center;">
+                  <button
+                    type="button"
+                    class="btn ghost btn-sm"
+                    style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px;"
+                    title="查看单据流转凭证"
+                    @click.stop="openDeliveryDetailModal(row)"
+                  >
+                    📜 凭证
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -666,7 +717,7 @@
                     </div>
                     <div style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>发货量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.shipped_qty) }} 米</strong></div>
-                      <div>操作账号：<span>{{ selectedDelivery.created_by || '供给端系统' }}</span></div>
+                      <div>操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(selectedDelivery.created_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.created_by || '供给端系统' }}</span></div>
                       <div>经办人：<span>{{ selectedDelivery.ship_contact_name || '—' }}</span></div>
                       <div style="grid-column: span 2;">联系电话：<span>{{ selectedDelivery.ship_contact_phone || '—' }}</span></div>
                       <div style="grid-column: span 2;">供给主体：<span>{{ selectedDelivery.supply_entity_name || '—' }} ({{ selectedDelivery.supply_entity_id || '—' }})</span></div>
@@ -692,7 +743,7 @@
                     </div>
                     <div v-if="selectedDelivery.arrived_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>到货量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.arrived_qty) }} 米</strong></div>
-                      <div>操作账号：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.arrived_confirm_by || '—' }}</span></div>
+                      <div>操作账号：<span class="user-matrix-link" style="font-weight: 500; color: #0f766e;" @click="handleGoToUserDirectory(selectedDelivery.arrived_confirm_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.arrived_confirm_by || '—' }}</span></div>
                       <div>经办人：<span>{{ selectedDelivery.arrived_confirm_name || '—' }}</span></div>
                       <div style="grid-column: span 2;" v-if="selectedDelivery.arrived_confirm_phone">联系电话：<span>{{ selectedDelivery.arrived_confirm_phone }}</span></div>
                       <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
@@ -719,7 +770,7 @@
                     </div>
                     <div v-if="selectedDelivery.received_confirm_at || selectedDelivery.status === 'pending_diff_approve'" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>接收量：<strong style="color: #0f172a;">{{ formatAmount(selectedDelivery.received_qty) }} 米</strong></div>
-                      <div>操作账号：<span style="font-weight: 500; color: #6d28d9;">{{ selectedDelivery.received_confirm_by || '—' }}</span></div>
+                      <div>操作账号：<span class="user-matrix-link" style="font-weight: 500; color: #6d28d9;" @click="handleGoToUserDirectory(selectedDelivery.received_confirm_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.received_confirm_by || '—' }}</span></div>
                       <div>经办人：<span>{{ selectedDelivery.received_confirm_name || '—' }}</span></div>
                       <div style="grid-column: span 2;" v-if="selectedDelivery.received_confirm_phone">联系电话：<span>{{ selectedDelivery.received_confirm_phone }}</span></div>
                       <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
@@ -747,7 +798,7 @@
                       <span v-else style="font-size: 11px; color: #f97316; font-weight: bold; font-style: italic;">⚠️ 挂起待审批...</span>
                     </div>
                     <div v-if="selectedDelivery.diff_approve_by" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
-                      <div>审批人：<strong style="color: #0f172a;">{{ selectedDelivery.diff_approve_by }}</strong></div>
+                      <div>审批人：<strong class="user-matrix-link" style="color: #0f172a;" @click="handleGoToUserDirectory(selectedDelivery.diff_approve_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.diff_approve_by }}</strong></div>
                       <div>审批时间：<span>{{ formatDateTime(selectedDelivery.diff_approve_at) }}</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.diff_approve_remark">审批意见：<span style="color: #ea580c; font-weight: 500;">{{ selectedDelivery.diff_approve_remark }}</span></div>
                     </div>
@@ -771,7 +822,7 @@
                     </div>
                     <div v-if="selectedDelivery.warehouse_confirm_at" style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
                       <div>确认状态：<strong style="color: #0f766e;">✅ 库管已确认</strong></div>
-                      <div>操作账号：<span style="font-weight: 500; color: #0f766e;">{{ selectedDelivery.warehouse_confirm_by || '—' }}</span></div>
+                      <div>操作账号：<span class="user-matrix-link" style="font-weight: 500; color: #0f766e;" @click="handleGoToUserDirectory(selectedDelivery.warehouse_confirm_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.warehouse_confirm_by || '—' }}</span></div>
                       <div>经办人：<span>{{ selectedDelivery.warehouse_confirm_name || '—' }}</span></div>
                       <div style="grid-column: span 2;" v-if="selectedDelivery.warehouse_confirm_phone">联系电话：<span>{{ selectedDelivery.warehouse_confirm_phone }}</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.warehouse_remark">确认备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.warehouse_remark }}”</span></div>
@@ -788,7 +839,7 @@
                       <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(selectedDelivery.updated_at || selectedDelivery.shipped_at) }}</span>
                     </div>
                     <div style="font-size: 12px; color: #475569; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; background: #fafafa; padding: 8px; border-radius: 6px; box-sizing: border-box; width: 100%;">
-                      <div>修正人：<strong style="color: #0f172a;">{{ selectedDelivery.updated_by || '超级管理员' }}</strong></div>
+                      <div>修正人：<strong class="user-matrix-link" style="color: #0f172a;" @click="handleGoToUserDirectory(selectedDelivery.updated_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.updated_by || '超级管理员' }}</strong></div>
                       <div>修改时间：<span>{{ formatDateTime(selectedDelivery.updated_at) }}</span></div>
                       <div style="grid-column: span 2; word-break: break-all;">修正轨迹及批注：
                         <span style="color: #475569; font-style: italic; font-weight: 500;">
@@ -870,26 +921,50 @@
 
           <!-- 管件透视概览指标（四节点流转） -->
           <div class="fitting-summary-grid">
-            <div class="fitting-summary-item is-arrival">
+            <div 
+              class="fitting-summary-item is-arrival" 
+              :class="{ 'is-active-filter': fittingSubTab === 'pending_arrival' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="fittingSubTab = fittingSubTab === 'pending_arrival' ? 'all' : 'pending_arrival'"
+            >
               <span>🚚 待现场到货</span>
               <strong>{{ fittingSummary.pendingArrival }} 项</strong>
             </div>
-            <div class="fitting-summary-item is-construction">
+            <div 
+              class="fitting-summary-item is-construction" 
+              :class="{ 'is-active-filter': fittingSubTab === 'pending_construction' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="fittingSubTab = fittingSubTab === 'pending_construction' ? 'all' : 'pending_construction'"
+            >
               <span>🏗️ 待施工接收</span>
               <strong>{{ fittingSummary.pendingConstruction }} 项</strong>
             </div>
-            <div class="fitting-summary-item is-warehouse">
+            <div 
+              class="fitting-summary-item is-warehouse" 
+              :class="{ 'is-active-filter': fittingSubTab === 'pending_warehouse' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="fittingSubTab = fittingSubTab === 'pending_warehouse' ? 'all' : 'pending_warehouse'"
+            >
               <span>🏢 待库管确认</span>
               <strong>{{ fittingSummary.pendingWarehouse }} 项</strong>
             </div>
-            <div class="fitting-summary-item is-completed">
+            <div 
+              class="fitting-summary-item is-completed" 
+              :class="{ 'is-active-filter': fittingSubTab === 'completed' }"
+              style="cursor: pointer;"
+              title="点击按此状态筛选/取消筛选"
+              @click="fittingSubTab = fittingSubTab === 'completed' ? 'all' : 'completed'"
+            >
               <span>✅ 库管已确认</span>
               <strong>{{ fittingSummary.completed }} 项</strong>
             </div>
           </div>
 
-          <!-- 折叠车次列表 (默认收起) -->
-          <div class="fitting-ledger-body">
+          <!-- 折叠车次列表 (默认收起，超出高度限制自动垂直滚动) -->
+          <div class="fitting-ledger-body custom-scroll-list">
             <div v-if="fittingActionMsg" :class="['alert', fittingActionMsg.type === 'error' ? 'alert-danger' : 'alert-success']" style="margin-bottom: 12px;">
               {{ fittingActionMsg.text }}
             </div>
@@ -1118,7 +1193,8 @@
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>发货总数：<strong>{{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit || '个' }}</strong></div>
-                  <div>调度经办：<span>{{ deliveryDetailModalData.shipContactName || deliveryDetailModalData.createdBy }}</span></div>
+                  <div>操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.createdBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div style="grid-column: span 2;">调度经办：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipContactPhone">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone }}</span></div>
                 </div>
               </div>
@@ -1138,7 +1214,7 @@
                 </div>
                 <div v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #475569; background: #ecfdf5; padding: 6px 10px; border-radius: 6px; border: 1px solid #a7f3d0;">
                   <div>实际到货总数：<strong style="color: #047857;">{{ deliveryDetailModalData.arrivedQty }} {{ deliveryDetailModalData.unit || '个' }}</strong></div>
-                  <div>现场确认人：<span>{{ deliveryDetailModalData.arrivedBy || '现场负责人' }}</span></div>
+                  <div>现场操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.arrivedBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.arrivedBy || '—' }}</span></div>
                   <div v-if="deliveryDetailModalData.arrivalRemark">到货备注：<span style="color: #047857;">“{{ deliveryDetailModalData.arrivalRemark }}”</span></div>
                 </div>
               </div>
@@ -1157,7 +1233,7 @@
                   <span v-else style="font-size: 11px; color: #94a3b8;">(待施工接收)</span>
                 </div>
                 <div v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #475569; background: #eff6ff; padding: 6px 10px; border-radius: 6px; border: 1px solid #bfdbfe;">
-                  <div>施工领用接收人：<span>{{ deliveryDetailModalData.constructionConfirmedBy || '施工人员' }}</span></div>
+                  <div>施工领用操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.constructionConfirmedBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.constructionConfirmedBy || '—' }}</span></div>
                   <div v-if="deliveryDetailModalData.constructionRemark">接收备注：<span>“{{ deliveryDetailModalData.constructionRemark }}”</span></div>
                 </div>
               </div>
@@ -1176,7 +1252,7 @@
                   <span v-else style="font-size: 11px; color: #94a3b8;">(待库管确认)</span>
                 </div>
                 <div v-if="deliveryDetailModalData.warehouseConfirmedAt" style="font-size: 11px; color: #475569; background: #f0fdf4; padding: 6px 10px; border-radius: 6px; border: 1px solid #bbf7d0;">
-                  <div>库管确认经办人：<span>{{ deliveryDetailModalData.warehouseConfirmedBy || '库管员' }}</span></div>
+                  <div>库管确认操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.warehouseConfirmedBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.warehouseConfirmedBy || '—' }}</span></div>
                   <div v-if="deliveryDetailModalData.warehouseRemark">确认备注：<span>“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
                 </div>
               </div>
@@ -1191,7 +1267,7 @@
                   <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span>
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fef2f2; padding: 6px 10px; border-radius: 6px; border: 1px solid #fecaca; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>撤销操作人：<strong style="color: #b91c1c;">{{ deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by || '供给端操作员' }}</strong></div>
+                  <div>撤销操作人：<strong class="user-matrix-link" style="color: #b91c1c;" @click="handleGoToUserDirectory(deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by || '供给端操作员' }}</strong></div>
                   <div>撤销时间：<span>{{ formatDateTime(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span></div>
                   <div style="grid-column: span 2; word-break: break-all;">撤销原因：
                     <strong style="color: #b91c1c; font-weight: 600;">{{ deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason || '供给侧主动撤销发货' }}</strong>
@@ -1232,7 +1308,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, DELIVERY_STATUS_DICT, getDeliveryStatus } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, DELIVERY_STATUS_DICT, getDeliveryStatus, navigateToUserInDirectory } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   confirmTubeWarehouseDeliveryWarehouse,
@@ -1315,7 +1391,8 @@ function getModalUnitLabel(modalData) {
 const isFittingDeliveryModal = computed(() => {
   if (!deliveryDetailModalData.value) return false
   const data = deliveryDetailModalData.value
-  if (data.isFittingDelivery || data.fitting_type || data.fittingType) return true
+  if (data.isFittingDelivery !== undefined) return Boolean(data.isFittingDelivery)
+  if (data.fitting_type || data.fittingType) return true
   if (data.itemsList && data.itemsList.length && (data.itemsList[0].fitting_type || data.itemsList[0].fittingType)) return true
   if (data.pipe_model_id || data.pipe_model_name || data.pipeModelId) return false
   return false
@@ -1327,7 +1404,9 @@ function showDeliveryDetail(input) {
   const itemsList = isGroup ? input.items : [input]
   const mainRow = itemsList[0] || input
 
-  const isFitting = isGroup || Boolean(mainRow.fitting_type || mainRow.fittingType || input.fitting_type || input.fittingType)
+  const isFitting = isGroup
+    ? itemsList.some(it => Boolean(it.fitting_type || it.fittingType))
+    : Boolean(mainRow.fitting_type || mainRow.fittingType || input.fitting_type || input.fittingType)
   const shipmentNo = input.shipmentNo || input.shipment_no || mainRow.shipment_no || mainRow.shipmentNo || mainRow.order_no || mainRow.orderNo || String(mainRow.id || '')
   const vehiclePlateNo = input.vehiclePlateNo || input.vehicle_plate_no || mainRow.vehicle_plate_no || mainRow.vehiclePlateNo || '—'
   const shippedAt = input.shippedAt || input.shipped_at || mainRow.shipped_at || mainRow.shippedAt || ''
@@ -1371,7 +1450,9 @@ function showDeliveryDetail(input) {
     shippedQty: totalShippedQty,
     arrivedQty: totalArrivedQty,
     unit: mainRow.unit || (isFitting ? '个' : '米'),
-    pipeModelName: isFitting ? (itemsList.length === 1 ? `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})` : `多规格组合管件车次 (${itemsList.length} 种规模型号卡块)`) : (mainRow.pipe_model_name || mainRow.pipeModelName || '保温管'),
+    pipeModelName: isFitting 
+      ? (itemsList.length === 1 ? `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})` : `多规格组合管件车次 (${itemsList.length} 种规模型号卡块)`) 
+      : (itemsList.length === 1 ? (mainRow.pipe_model_name || mainRow.pipeModelName || '保温管') : `保温管组合装车 (${itemsList.length} 种规格)`),
     supplyEntityName,
     section1Name,
     shipContactName,
@@ -1405,6 +1486,12 @@ function openDeliveryDetailModal(row) {
   showDeliveryDetail(row)
 }
 
+function handleGoToUserDirectory(target) {
+  if (!target || target === '—' || target === '供给端系统') return
+  deliveryDetailModalVisible.value = false
+  navigateToUserInDirectory(router, target, projectKey)
+}
+
 const toggleFittingGroup = (groupKey) => {
   const next = new Set(expandedWarehouseFittingGroupKeys.value)
   if (next.has(groupKey)) {
@@ -1427,9 +1514,26 @@ const toggleAllFittingGroups = (expandAll = true) => {
   }
 }
 
+const filteredFittingRows = computed(() => {
+  const validRows = fittingRows.value.filter(r => r.status !== 'cancelled')
+  if (fittingSubTab.value === 'pending_arrival') {
+    return validRows.filter(r => (r.status || 'shipped') === 'shipped' || r.status === 'pending_arrival')
+  }
+  if (fittingSubTab.value === 'pending_construction') {
+    return validRows.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
+  }
+  if (fittingSubTab.value === 'pending_warehouse') {
+    return validRows.filter(r => r.status === 'construction_confirmed' || r.status === 'pending_warehouse' || r.status === 'received')
+  }
+  if (fittingSubTab.value === 'completed') {
+    return validRows.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
+  }
+  return validRows
+})
+
 const groupedWarehouseFittingRows = computed(() => {
   const map = new Map()
-  for (const item of fittingRows.value) {
+  for (const item of filteredFittingRows.value) {
     const groupKey = item.shipment_key || item.shipment_no || item.order_no || `${item.vehicle_plate_no}_${item.shipped_at}_${item.id}`
     if (!map.has(groupKey)) {
       map.set(groupKey, {
@@ -1525,11 +1629,16 @@ const fittingSummary = computed(() => {
   let completed = 0
 
   for (const r of fittingRows.value) {
-    const st = r.status || 'shipped'
-    if (st === 'shipped') pendingArrival++
-    else if (st === 'arrived') pendingConstruction++
-    else if (st === 'construction_confirmed') pendingWarehouse++
-    else if (st === 'warehouse_confirmed') completed++
+    const st = r.status || 'pending_arrival'
+    if (st === 'shipped' || st === 'pending_arrival') {
+      pendingArrival++
+    } else if (st === 'arrived' || st === 'pending_receive') {
+      pendingConstruction++
+    } else if (st === 'construction_confirmed' || st === 'pending_warehouse' || st === 'received') {
+      pendingWarehouse++
+    } else if (st === 'warehouse_confirmed' || st === 'completed') {
+      completed++
+    }
   }
 
   return {
@@ -1539,23 +1648,6 @@ const fittingSummary = computed(() => {
     pendingWarehouse,
     completed,
   }
-})
-
-const filteredFittingRows = computed(() => {
-  const validRows = fittingRows.value.filter(r => r.status !== 'cancelled')
-  if (fittingSubTab.value === 'pending_arrival') {
-    return validRows.filter(r => (r.status || 'shipped') === 'shipped' || r.status === 'pending_arrival')
-  }
-  if (fittingSubTab.value === 'pending_construction') {
-    return validRows.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
-  }
-  if (fittingSubTab.value === 'pending_warehouse') {
-    return validRows.filter(r => r.status === 'construction_confirmed' || r.status === 'pending_warehouse')
-  }
-  if (fittingSubTab.value === 'completed') {
-    return validRows.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
-  }
-  return validRows
 })
 
 const loadWarehouseFittingDeliveries = async () => {
@@ -2121,21 +2213,45 @@ function togglePipeShipmentSelectAll(group, event) {
 }
 
 const deliverySummary = computed(() => {
+  const source = allDeliveries.value.length ? allDeliveries.value : deliveries.value
   const summary = {
-    total: deliveries.value.filter(r => r.status !== 'cancelled').length,
+    total: source.filter(r => r.status !== 'cancelled').length,
     pendingArrival: 0,
     pendingReceive: 0,
     pendingWarehouse: 0,
     completed: 0,
   }
-  for (const row of deliveries.value) {
-    if (row.status === 'pending_arrival') summary.pendingArrival += 1
-    else if (row.status === 'pending_receive') summary.pendingReceive += 1
-    else if (row.status === 'pending_warehouse') summary.pendingWarehouse += 1
-    else if (row.status === 'completed') summary.completed += 1
+  for (const row of source) {
+    if (row.status === 'pending_arrival' || row.status === 'shipped') summary.pendingArrival += 1
+    else if (row.status === 'pending_receive' || row.status === 'arrived') summary.pendingReceive += 1
+    else if (row.status === 'pending_warehouse' || row.status === 'construction_confirmed' || row.status === 'received') summary.pendingWarehouse += 1
+    else if (row.status === 'completed' || row.status === 'warehouse_confirmed') summary.completed += 1
   }
   return summary
 })
+
+const pipeTotalShippedMeters = computed(() => {
+  const source = allDeliveries.value.length ? allDeliveries.value : deliveries.value
+  return source
+    .filter(r => r.status !== 'cancelled')
+    .reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
+})
+
+const pipeStatusFilter = computed(() => {
+  if (filters.statuses.length === 1) {
+    return filters.statuses[0]
+  }
+  return ''
+})
+
+function togglePipeStatusFilter(statusVal) {
+  if (filters.statuses.length === 1 && filters.statuses[0] === statusVal) {
+    filters.statuses = []
+  } else {
+    filters.statuses = [statusVal]
+  }
+  loadDeliveries()
+}
 
 function formatAmount(value) {
   const num = Number(value)
@@ -2613,6 +2729,8 @@ onBeforeUnmount(() => {
 }
 .table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 480px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 14px;
   background: #fff;
@@ -2624,11 +2742,39 @@ onBeforeUnmount(() => {
   min-width: 1400px;
   table-layout: fixed;
 }
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8fafc !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
 .table th, .table td {
   padding: 14px 12px !important;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
   vertical-align: middle !important;
+}
+
+/* 优雅滚动条 */
+.custom-scroll-list::-webkit-scrollbar,
+.table-wrap::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scroll-list::-webkit-scrollbar-track,
+.table-wrap::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 4px;
+}
+.custom-scroll-list::-webkit-scrollbar-thumb,
+.table-wrap::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.custom-scroll-list::-webkit-scrollbar-thumb:hover,
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* colgroup 列宽物理比例控制 */
@@ -2917,9 +3063,16 @@ th.cell-number {
 .fitting-summary-item.is-warehouse { color: #7e22ce; }
 .fitting-summary-item.is-completed { color: #16a34a; }
 
+.fitting-summary-item.is-active-filter {
+  box-shadow: 0 0 0 2px currentColor, 0 4px 12px rgba(0, 0, 0, 0.08);
+  background: #f8fafc;
+}
+
 .fitting-ledger-body {
   position: relative;
   min-height: 160px;
+  max-height: 520px;
+  overflow-y: auto;
   padding: 16px 20px 20px;
 }
 
@@ -2946,7 +3099,7 @@ th.cell-number {
 
 .fitting-shipment-toggle {
   display: grid;
-  grid-template-columns: 18px minmax(210px, 0.8fr) minmax(320px, 1.3fr);
+  grid-template-columns: 18px minmax(180px, auto) minmax(240px, 1fr);
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -3495,5 +3648,25 @@ th.cell-number {
   white-space: nowrap !important;
   word-break: keep-all !important;
   box-sizing: border-box !important;
+}
+
+.user-matrix-link {
+  cursor: pointer !important;
+  color: #4f46e5 !important;
+  font-weight: 600 !important;
+  text-decoration: underline dotted #818cf8 !important;
+  text-underline-offset: 3px !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+.user-matrix-link:hover {
+  color: #312e81 !important;
+  background: #eef2ff !important;
+  border-radius: 4px !important;
+  text-decoration: underline solid #4f46e5 !important;
+  box-shadow: 0 0 0 2px #e0e7ff !important;
 }
 </style>

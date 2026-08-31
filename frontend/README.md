@@ -1,3 +1,27 @@
+## 2026-08-31 库管员工作台：保温管台账概览四节点流转卡片与统计小字统一改造
+
+- **关联前端页面与组件**：
+  - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（物资库管工作台）
+- **功能特性与交互升级**：
+  1. **台账概览结构统一**：去掉保温管页面原本独立的“记录总数”大方块，改为在头部以小字形式优雅呈现 `共 X 个车次 · Y 项明细 · 合计发货 Z 米保温管`；
+  2. **四节点流转指标卡片对齐**：采用与管件相同的 `.fitting-summary-grid` 样式布局，展示 `🚚 待现场到货`、`🏗️ 待施工接收`、`🏢 待库管确认`、`✅ 库管已确认` 四张指标卡片并带有项数统计；
+  3. **快捷点击筛选联动**：支持点击任意指标卡片按该状态即时筛选台账列表，并呈现激活光晕。
+
+## 2026-08-31 责任主体矩阵穿透联动：操作人账号智能跳转定位（精准收敛）
+
+- **关联前端页面与组件**：
+  - [`shared.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js)（导出通用穿透跳转函数 `navigateToUserInDirectory`）
+  - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合数据查询中心 - 责任主体与人员管辖矩阵卡片智能匹配、折叠手风琴自动展开、居中平滑滚动与 4.5s 脉冲发光动效）
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理中心 - 业务操作记录表格操作人单元格穿透链接 `.clickable-user-link`）
+  - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（需求侧工作台 - 保温管/管件订单全生命周期流转凭证时光轴节点仅保留**操作账号/审批人/修正人/撤销人**为穿透链接 `.user-matrix-link`，经办人与主体为普通文本）
+  - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧工作台 - 订单全生命周期流转凭证时光轴节点仅保留**操作账号**为穿透链接）
+  - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库管工作台 - 订单流转凭证时光轴节点仅保留**操作账号**为穿透链接）
+- **功能特性与交互说明**：
+  1. 用户在“业务操作记录”或各个工作台的“订单全生命周期流转凭证”弹窗中，点击任意**操作人账号**；
+  2. 经办人、联系电话、需求/供给主体等均作为普通纯文本排版展示，避免多余干扰；
+  3. 系统通过统一的 `navigateToUserInDirectory` 构造携带 `tab: 'directory'`, `view_mode: 'by_category'`, `highlight_user` 的路由参数完成跨页面穿透跳转；
+  4. 目标落地页 [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue) 接收参数后，自动切换至“责任主体与人员管辖矩阵”下的“🏢 按主体类别分组”模式，多级模糊/精准匹配 5 大类别责任主体与具体人员卡片，自动展开包含该人员的手风琴分组，平滑居中滚动至当前屏幕并施加持续 4.5 秒的呼吸发光高亮特效（`highlight-target-card`）。
+
 ## 2026-08-31 账号体系同步：支持新账号“张文韬”以 tube_data_viewer 角色登录
 
 - **关联前端页面与组件**：

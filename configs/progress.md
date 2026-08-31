@@ -1,3 +1,171 @@
+## 2026-08-31 [库管员工作台：保温管台账概览四节点流转卡片与统计小字统一改造]
+- **需求背景与目标**：
+  - 用户指令：“*在库管保温管页面的“台账概览”中，上方的小统计卡片，请改为与“管件”相同的样式和文字（及其功能含义），去掉“记录总数”，仿照管件的库管页面，用一行小字描述*”；
+  - 核心要求：将保温管发货记录的概览区域全面对齐管件设计风格：去掉旧式独立的“记录总数”大方块，改为在卡片头部展示 `共 X 个车次 · Y 项明细 · 合计发货 Z 米保温管` 的精致小字描述；下方 4 张小统计卡片全面采用管件相同的 `.fitting-summary-grid` 样式、左侧颜色竖条、emoji 标识及标准文字（`🚚 待现场到货`、`🏗️ 待施工接收`、`🏢 待库管确认`、`✅ 库管已确认`），并支持点击任意卡片作为状态快捷过滤。
+- **改动与实现详情**：
+  1. **台账概览模板全面统一 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 将原有的 `stats-card` 改造为 `fitting-ledger-card` 风格排版；
+     - 头部展示 `共 {{ groupedPipeDeliveries.length }} 个车次 · {{ deliveries.length }} 项明细 · 合计发货 {{ formatAmount(pipeTotalShippedMeters) }} 米保温管`；
+     - 四张卡片绑定 `deliverySummary.pendingArrival`、`pendingReceive`、`pendingWarehouse`、`completed` 并附加项数单位；
+     - 绑定 `@click="togglePipeStatusFilter(...)"` 实现单点快捷筛选与 `is-active-filter` 激活光晕联动。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，保温管与管件两大 Tab 的统计卡片、排版文字与交互逻辑 100% 达成统一。
+
+## 2026-08-31 [库管员工作台：底部运输单流转轨迹操作账号矩阵穿透跳转补齐]
+- **需求背景与目标**：
+  - 用户指令：“*在库管页面中，保温管的 运输单全生命周期流转轨迹 也应能点击“操作账号”*”；
+  - 核心要求：此前在居中凭证 Modal 弹窗中已支持点击操作账号跳转责任主体矩阵，但在库管员工作台页面底部常驻的【⏳ 运输单全生命周期流转轨迹】证据链面板中，发货、到货确认、施工接收、差异审批、库管确认、覆盖修正等节点的“操作账号 / 审批人 / 修正人”尚未绑定穿透跳转；现全面补齐绑定，使常驻轨迹与弹窗凭证交互保持 100% 统一。
+- **改动与实现详情**：
+  1. **常驻轨迹节点人员穿透绑定 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 为发货节点 `created_by`、到货确认节点 `arrived_confirm_by`、施工接收节点 `received_confirm_by`、差异审批节点 `diff_approve_by`、库管确认节点 `warehouse_confirm_by` 以及覆盖修正节点 `updated_by` 统一添加 `class="user-matrix-link"` 与 `@click="handleGoToUserDirectory(...)"`；
+     - 鼠标悬停显示手型指针、微光下划线与“点击在责任主体矩阵中定位”提示气泡，点击瞬间平滑跳转至综合查询中心对应的责任主体卡片并高亮脉冲闪烁 4.5s。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，用户在库管页面底部查看任何单据证据链时，点击任意节点的操作账号均可秒级穿透定位至该人员与管辖标段。
+
+## 2026-08-31 [库管员工作台：管件四节点状态卡片计数修复与列表高度限制滚动条协同]
+- **需求背景与目标**：
+  - 用户指令：“*这个也帮我做成与保温管页面相同的限制高度的方案。另外，上方的四张状态卡片怎么没有计数呢？全是0*”；
+  - 核心排查与根因：
+    1. **状态卡片计数为 0 的根因**：后端管件发货记录返回的流转状态主要为 `pending_arrival`、`pending_receive`、`pending_warehouse`、`completed`，而前端此前 `fittingSummary` 仅硬编码匹配了部分历史别名（如 `shipped`、`arrived`、`construction_confirmed`），导致条件全部落空、计数全为 0；
+    2. **管件列表滚动容器优化**：为管件卡片列表区域 `.fitting-ledger-body` 增加 `max-height: 520px; overflow-y: auto;` 与 `custom-scroll-list` 样式，使车次卡片过多或明细展开时在固定高度内滚动，与保温管页面形成完全统一的紧凑视口交互；同时优化车次卡片头部网格为 `minmax(180px, auto)` 弹性自适应，避免滚动条出现时挤压车牌号与流向。
+- **改动与实现详情**：
+  1. **管件流转状态别名全覆盖与动态计数 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 在 `fittingSummary` 中完善四节点状态映射：
+       - `待现场到货`：`shipped`、`pending_arrival`；
+       - `待施工接收`：`arrived`、`pending_receive`；
+       - `待库管确认`：`construction_confirmed`、`pending_warehouse`、`received`；
+       - `库管已确认`：`warehouse_confirmed`、`completed`。
+     - 将 `groupedWarehouseFittingRows` 计算源绑定至 `filteredFittingRows`，支持点击四张状态卡片作为快捷交互筛选，并添加 `is-active-filter` 高亮边框。
+  2. **管件列表高度限制与自适应滚动 (`WarehouseManagementView.vue`)**：
+     - 在 `.fitting-ledger-body` 设置 `max-height: 520px; overflow-y: auto;`，当车次或明细展开较长时内部滚动，界面紧凑规整。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，四张状态卡片精准显示各项状态统计数字，点击可联动过滤，车次列表在 520px 高度内优雅滚动。
+
+## 2026-08-31 [库管员工作台：修复管件 Tab 独立卡片排布与保温管筛选隔离]
+- **需求背景与目标**：
+  - 用户反馈：“*页面http://localhost:5173/projects/insulation_pipe_supply_2026/pages/warehouse_management?tab=fitting怎么完全乱掉了？*”；
+  - 核心排查与根因：
+    1. 此前保温管专属的“库管台账筛选”卡片放置在 `activeTab === 'pipe'` 的外层，导致切到管件 Tab 时，顶部依然悬挂着直管筛选卡片（型号/状态被强锁、查询按钮只查直管），并将管件台账挤到下方造成严重布局割裂；
+    2. 上一轮在管件车次列表外层也误套了最大高度限制，导致管件手风琴车次卡片在展开明细时被强制裁剪挤压、宽度网格变形换行。
+- **改动与实现详情**：
+  1. **保温管专属筛选下沉隔离 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 将“库管台账筛选”卡片完整包裹移入 `<div v-if="activeTab === 'pipe'">` 内部；
+     - 在保温管 Tab 下保留完整的直管多维筛选、指标概览、车次/扁平明细与底部证据链；
+     - 在管件 Tab 下直接纯净呈现【🔧 管件发货记录台账】独立大卡片（含操作按钮组、四节点流转指标、车次折叠卡片）。
+  2. **管件车次列表恢复自然舒展布局 (`WarehouseManagementView.vue`)**：
+     - 移除管件车次卡片列表的 `max-height` 强制约束，恢复原本流畅的自适应手风琴展开与表格渲染。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，直管与管件两大 Tab 结构各自闭环、彻底解耦、排版清爽规整。
+
+## 2026-08-31 [库管员工作台：移除底部证据链面板头部冗余的“弹窗凭证”按钮]
+- **需求背景与目标**：
+  - 用户指令：“*那么下方的“弹窗凭证”按钮也不需要显示了*”；
+  - 核心要求：在直管发货台账列表高度已实现自适应限制并与底部面板在视口内紧凑联动后，下方右侧【⏳ 运输单全生命周期流转轨迹】面板已完整直接展示当前选中单据的全生命周期证据链，无需再在底部右侧头部额外放置“弹窗凭证”按钮，仅保留 ID 徽标展示，界面更加整洁干净。
+- **改动与实现详情**：
+  1. **移除底部头部按钮 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 移除右侧流转轨迹头部卡片的【📜 弹窗凭证】按钮与无用代码声明，恢复原有的纯净 ID 徽标布局。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，界面简洁清爽。
+
+## 2026-08-31 [库管员工作台：列表固定高度限制、自适应垂直滚动条与紧凑视口协同]
+- **需求背景与目标**：
+  - 用户指令：“*这样吧，去掉点击记录弹窗的功能，但是，要做一个记录列表的高度限制，超出高度后，自动出现垂直滚动条*”；
+  - 核心要求：取消点击记录行自动弹窗的行为，恢复点击记录行即时选中并联动底部面板的证据链流转轨迹；同时为直管发货列表（车次折叠卡片列表与扁平明细表格）以及管件车次列表设置最大高度限制（480px / 520px），超出时容器内部自适应出现美化垂直滚动条，表格滚动时表头吸顶悬浮固定；彻底避免长表格撑开整页导致底部面板掉落到视口外的问题，实现紧凑舒适的单屏交互。
+- **改动与实现详情**：
+  1. **直管与管件列表容器高度限制与滚动条美化 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 为 `.table-wrap`、`.pipe-shipment-group-list`、`.fitting-group-list` 添加 `max-height: 480px / 520px` 与 `overflow-y: auto`；
+     - 添加 `custom-scroll-list` 优雅 6px 半透明滚动条样式（`.table-wrap::-webkit-scrollbar` 等）；
+     - 为 `.table th` 添加 `position: sticky; top: 0; z-index: 5;` 实现表格内部滚动时表头吸顶。
+  2. **记录行点击行为精准收敛 (`WarehouseManagementView.vue`)**：
+     - 车次明细行与扁平表格行均恢复为 `@click="toggleDeliverySelection(row)"`，点击行即时在底部【⏳ 运输单全生命周期流转轨迹】面板中渲染该条明细的证据链；
+     - 车次卡片头部与表格操作列的【📜 凭证】按钮独立保留，仅在用户主动点击按钮时呼出全局弹窗。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，列表无论包含多少条数据均在固定高度内滚动，底部的批量确认与流转轨迹紧邻下方，点击行即刻在视野内看到轨迹更新。
+
+## 2026-08-31 [库管员工作台：点击任意记录行即时弹出流转凭证（免拉底）与批量勾选分离]
+- **需求背景与目标**：
+  - 用户指令：“*你的想法……有点问题，应该点击记录就弹窗，而不是还要拉到底下，再点击弹窗*”；
+  - 核心要求：彻底消除点击记录后需要手动滑动到底部面板的冗余步骤，**将所有表格行点击事件统一升级为“即时居中弹出订单全生命周期流转凭证 Modal”**；同时将多选勾选操作严格隔离在行首的复选框（Checkbox）上（`@click.stop` 阻止行事件冒泡），确保“点击行=看凭证”、“点击勾选框=批量确认”，职责清晰极致丝滑。
+- **改动与实现详情**：
+  1. **行点击事件封装与弹窗接入 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 新增 `handleRowClick(row)`：点击行时选中该记录并立即执行 `openDeliveryDetailModal(row)` 弹出流转凭证弹窗；
+     - 在直管车次明细行、扁平明细表格行均绑定 `@click="handleRowClick(row)"` 与 `cursor: pointer`；
+     - 在管件明细表格行绑定 `@click="openDeliveryDetailModal(item)"`；
+     - 在所有行的复选框 `<td>` 与 `<input>` 上添加 `@click.stop`，批量勾选时绝不误触发弹窗。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，用户在任何表格中点中记录行即可瞬时在屏幕中央调出流转凭证弹窗。
+
+## 2026-08-31 [库管员工作台：直管全生命周期流转凭证弹窗统一与交互体验升级]
+- **需求背景与目标**：
+  - 用户反馈：“*关于页面 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/warehouse_management，我发现当用户点记录某条记录之后，需要将页面滚动至最底部，才能看到详细信息，是这样吗？方案A，这样一来，就跟其他页面统一了吧。当然，还要保留库管批量确认的现有功能*”；
+  - 核心要求：解决库管员工作台直管发货台账中点击单条记录无法在当前视口直接查看流转轨迹、必须手动滑动到底部面板的割裂体验；将保温管列表（车次卡片头部、展开明细表格、扁平明细表格）的流转轨迹查看方式全面升级为全局居中浮层弹窗（Modal），与管件台账、需求侧工作台、供给侧工作台 100% 统一；同时完整保留底部的【批量库管确认】统计汇总、备注输入与批量提交功能。
+- **改动与实现详情**：
+  1. **直管车次卡片头部流转凭证弹窗 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 在直管车次汇总行右侧新增【📜 流转凭证】按钮（`@click.stop="openDeliveryDetailModal(group)"`），点击瞬间弹出整车多规格装载及全生命周期凭证 Modal。
+  2. **直管车次明细与扁平表格操作列 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 将明细表格操作列的【查看轨迹】升级为【📜 凭证】按钮，并在扁平明细表格中新增操作列【📜 凭证】按钮（`@click.stop="openDeliveryDetailModal(row)"`），点击直接居中弹出该条记录的全生命周期流转凭证。
+  3. **凭证弹窗直管/管件精准识别与解析优化 (`WarehouseManagementView.vue`)**：
+     - 精准区分直管组合装车与管件多规格车次，直管车次展示米数与保温管规格描述，管件车次展示件数与管件规格。
+  4. **底部批量库管确认面板与放大弹窗联动 (`WarehouseManagementView.vue`)**：
+     - 完整保留勾选汇总指标、整车勾选全选、备注录入与批量提交确认功能；
+     - 在底部右侧轨迹面板右上角新增【📜 弹窗凭证】放大查看按钮，支持一键调起全局弹窗。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，直管与管件流转凭证均可在当前视口一键调起弹窗，批量确认业务机制运转完好。
+
+## 2026-08-31 [流转凭证穿透交互精简优化：严格限定仅“操作账号”可点击穿透]
+- **需求背景与目标**：
+  - 用户反馈：“*挺好，但是有些过火了。举个例子，以流转凭证中的发货信息为例……目前，可点击的对象有：操作账号，经办人，供给主体。我希望仅有“操作账号”可以点击跳转，其他不需要提供点击。后续流程也是一样，仅“操作账号”可以点击*”；
+  - 核心要求：对需求侧、供给侧、库房侧所有保温管与管件“订单全生命周期流转凭证”时光轴中的可点击字段进行精简收敛。经办人、供给主体、需求主体等非账号字段全部恢复为纯文本展示；全流程严格仅保留“操作账号”（以及各环节对应的审批人/修正人/撤销人操作账号）保留 `.user-matrix-link` 穿透跳转能力。
+- **改动与实现详情**：
+  1. **需求侧管理流转凭证精简 (`DemandManagementView.vue`)**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 发货、到货确认、施工接收、库管确认各阶段的经办人与供给/需求主体恢复为普通 `span` 纯文本；仅保留 `createdBy`、`arrivedConfirmBy`、`receivedConfirmBy`、`diffApproveBy`、`warehouseConfirmBy`、`updatedBy`、`cancelBy` 7 处操作账号/人员可点击。
+  2. **供给侧管理流转凭证精简 (`SupplyManagementView.vue`)**：
+     - 文件：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+     - 经办人、经办电话、供给主体、需求主体统一恢复为纯文本展示，仅保留各阶段操作账号可点击穿透。
+  3. **库管管理流转凭证精简 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 调度经办恢复为普通文本展示，规范拆分出“操作账号”并仅保留发货、到货、施工领用、库管确认、撤销操作账号可点击。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功，流转凭证视觉更清爽聚焦，点击行为精准对应责任主体人员账号。
+
+## 2026-08-31 [订单全生命周期流转凭证与业务操作记录：用户名/操作人智能穿透责任主体矩阵]
+- **需求背景与目标**：
+  - 用户指令：“*在各个页面的保温管、管件的“订单全生命周期流转凭证”中，以及在 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/global_management 页面的“业务操作记录”中，我希望可以通过点击信息中用户名的方式，进入“http://localhost:5173/projects/insulation_pipe_supply_2026/pages/comprehensive_query”的“责任主体与人员管辖矩阵”中的“🏢 按主体类别分组”的相应人员位置。*”；
+  - 核心要求：在全局管理业务操作记录表格以及全系统（需求侧、供给侧、库房侧）保温管/管件“订单全生命周期流转凭证”时光轴中，将所有操作人/经办人/主体名称改造为可点击的高亮链接；点击后跨页面穿透跳转至综合数据查询中心，自动切换到“责任主体与人员管辖矩阵”Tab，锁定“按主体类别分组”模式，精准匹配供货厂家、现场负责人、施工单位、物资库管、系统管理等卡片并自动展开对应折叠手风琴分组，平滑居中滚动至视口中央并触发 4.5 秒的呼吸发光特效。
+- **改动与实现详情**：
+  1. **通用路由穿透定位工具函数 (`shared.js`)**：
+     - 文件：[`shared.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js)
+     - 导出 `navigateToUserInDirectory(router, userTarget, projectKey)`，清洗并提取目标用户名/姓名/主体名称，构造携带 `tab: 'directory', view_mode: 'by_category', highlight_user: queryVal, _t: Date.now()` 参数的路由跳转。
+  2. **目标落地页智能匹配与高亮动效 (`HistoryQueryView.vue`)**：
+     - 文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+     - 为 5 大主体类别卡片（供货厂家 `entity-card-sup-*`、现场负责人 `entity-card-mgr-*`、施工单位 `entity-card-sec-*`、物资库管 `entity-card-wh-*`、系统管理 `entity-card-gm-*`）绑定动态 DOM ID 与高亮样式类；
+     - 编写多层级匹配定位函数 `locateAndHighlightUser(targetStr)`，智能穿透匹配账号名、姓名或主体名，自动清空可能屏蔽卡片的筛选条件并展开目标分组；
+     - 添加 smooth 居中平滑滚动以及 `@keyframes userCardPulseGlow` 脉冲呼吸发光动画（持续 4.5 秒）。
+  3. **全局管理页面业务操作记录穿透集成 (`GlobalManagementView.vue`)**：
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 在“业务操作记录”表格的“操作主体 / 操作人”列添加 `@click="handleGoToUserDirectory(log.operator)"` 与可点击徽标样式 `.clickable-user-link`。
+  4. **需求侧管理页面流转凭证穿透集成 (`DemandManagementView.vue`)**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 在保温管与管件订单流转凭证时光轴（发货操作账号/经办人/供给主体、卸车到货操作账号/经办人/需求主体、施工领用操作账号/经办人/需求主体、差异审批人、库管确认账号/经办人、管理员覆盖修正人、撤销发货人）绑定 `@click="handleGoToUserDirectory(...)"` 与 `.user-matrix-link`。
+  5. **供给侧管理页面流转凭证穿透集成 (`SupplyManagementView.vue`)**：
+     - 文件：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+     - 在发货、到货确认、施工接收、差异审批、库管确认、管理员修正、撤销发货等各个时光轴节点的操作人员/经办人/主体处接入穿透事件与样式。
+  6. **物资库管管理页面流转凭证穿透集成 (`WarehouseManagementView.vue`)**：
+     - 文件：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+     - 在发货调度经办、现场确认人、施工领用接收人、库管确认经办人、撤销操作人处全面接入穿透跳转事件与样式。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功通过，各页面间穿透路由与手风琴自动展开、居中平滑滚动与呼吸发光特效顺畅无缝。
+
 ## 2026-08-31 [账户配置扩展：为 tube_data_viewer 用户组新增账号“张文韬”]
 - **需求背景与目标**：
   - 用户指令：“*帮我添加一个账号到新的tube_data_viewer用户组：用户名：张文韬，密码：zhangwentao_0831*”；

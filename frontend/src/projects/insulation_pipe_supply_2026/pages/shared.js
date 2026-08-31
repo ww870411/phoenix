@@ -180,3 +180,33 @@ export function getDeliveryStatus(status, isTimeout = false) {
     color: '#94a3b8'
   }
 }
+
+/**
+ * 穿透跳转至“综合数据查询中心”的“责任主体与人员管辖矩阵”对应人员位置
+ * @param {import('vue-router').Router} router Vue Router 实例
+ * @param {string|object} userTarget 用户名、经办人姓名、主体名称或包含相关字段的对象
+ * @param {string} [projectKey='insulation_pipe_supply_2026'] 项目代号
+ */
+export function navigateToUserInDirectory(router, userTarget, projectKey = 'insulation_pipe_supply_2026') {
+  if (!userTarget || !router) return
+  let queryVal = ''
+  if (typeof userTarget === 'string') {
+    queryVal = userTarget.trim()
+  } else if (typeof userTarget === 'object') {
+    queryVal = userTarget.username || userTarget.operator || userTarget.contact_name || userTarget.person_name || userTarget.name || ''
+  }
+  if (!queryVal || queryVal === '—' || queryVal === 'GUEST' || queryVal === '供给端系统' || queryVal === '系统管理员') {
+    if (queryVal !== '系统管理员') return
+  }
+
+  router.push({
+    path: `/projects/${encodeURIComponent(projectKey)}/pages/comprehensive_query`,
+    query: {
+      tab: 'directory',
+      view_mode: 'by_category',
+      highlight_user: queryVal,
+      _t: Date.now()
+    }
+  })
+}
+

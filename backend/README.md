@@ -1,3 +1,10 @@
+## 2026-08-31 业务主体与人员管辖穿透联动：支撑前端从流转凭证/操作记录直跳责任主体矩阵
+
+- **业务协同与模块定位**：
+  - 对应前端页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)、[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)、[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)、[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)、[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - 对应后端服务：[`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)（`query_entity_directory` 责任主体名录接口）、[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)（操作日志记录）
+  - **协同说明**：后端 `query_entity_directory` 接口输出的供货厂家（`suppliers`）、现场负责人（`site_managers`）、施工标段（`demand_sections`）、物资库管（`warehouse_keepers`）以及全局管理（`global_members`）等 5 大主体及其管辖人员与账号信息，为前端从各个订单凭证与操作记录中依据操作人账号/姓名/主体进行智能模糊与精准匹配提供了完整的全景数据底座。
+
 ## 2026-08-31 账号配置更新：新增用户“张文韬”至 tube_data_viewer 用户组
 
 - **业务协同与模块定位**：

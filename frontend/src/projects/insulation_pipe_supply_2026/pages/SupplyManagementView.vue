@@ -1669,7 +1669,7 @@
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} {{ deliveryDetailModalData.unit || '米' }}</strong></div>
-                  <div>操作账号：<span>{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
+                  <div>操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.createdBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
                   <div style="grid-column: span 2;">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
                   <div style="grid-column: span 2;">供给主体：<span>{{ deliveryDetailModalData.supplyEntityName || '—' }} ({{ deliveryDetailModalData.supplyEntityId || '—' }})</span></div>
@@ -1694,7 +1694,7 @@
                 </div>
                 <div v-if="deliveryDetailModalData.arrivedConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>到货确认：<strong>{{ formatNumber(deliveryDetailModalData.arrivedQty) }} {{ deliveryDetailModalData.unit || '米' }}</strong></div>
-                  <div>操作账号：<span>{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
+                  <div>操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.arrivedConfirmBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.arrivedConfirmBy || '—' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.arrivedConfirmName || '—' }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.arrivedConfirmPhone }}</span></div>
                   <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section1Name || '—' }} ({{ deliveryDetailModalData.section1Id || '—' }})</span></div>
@@ -1719,7 +1719,7 @@
                 </div>
                 <div v-if="deliveryDetailModalData.receivedConfirmAt || deliveryDetailModalData.status === 'pending_diff_approve'" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>实收数量：<strong>{{ formatNumber(deliveryDetailModalData.receivedQty) }} 米</strong></div>
-                  <div>操作账号：<span>{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
+                  <div>操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.receivedConfirmBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.receivedConfirmBy || '—' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.receivedConfirmName || '—' }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.receivedConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.receivedConfirmPhone }}</span></div>
                   <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section1Name || '—' }} ({{ deliveryDetailModalData.section1Id || '—' }})</span></div>
@@ -1746,7 +1746,7 @@
                   <span v-else style="font-size: 11px; color: #f97316; font-weight: bold; font-style: italic;">⚠️ 挂起待审批...</span>
                 </div>
                 <div v-if="deliveryDetailModalData.diffApproveBy" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>审批人：<strong>{{ deliveryDetailModalData.diffApproveBy }}</strong></div>
+                  <div>审批人：<strong class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.diffApproveBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.diffApproveBy }}</strong></div>
                   <div>审批时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.diffApproveAt) }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.diffApproveRemark">审批意见：<span style="color: #ea580c; font-weight: 500;">{{ deliveryDetailModalData.diffApproveRemark }}</span></div>
                 </div>
@@ -1769,7 +1769,7 @@
                 </div>
                 <div v-if="deliveryDetailModalData.warehouseConfirmAt" style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>确认时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.warehouseConfirmAt) }}</span></div>
-                  <div>操作账号：<strong>{{ deliveryDetailModalData.warehouseConfirmBy || '—' }}</strong></div>
+                  <div>操作账号：<strong class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.warehouseConfirmBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.warehouseConfirmBy || '—' }}</strong></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.warehouseConfirmName || '—' }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseConfirmPhone">联系电话：<span>{{ deliveryDetailModalData.warehouseConfirmPhone }}</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.warehouseRemark">确认备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.warehouseRemark }}”</span></div>
@@ -1786,7 +1786,7 @@
                   <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.updatedAt || deliveryDetailModalData.shippedAt) }}</span>
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #f1f5f9; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>修正人：<strong>{{ deliveryDetailModalData.updatedBy || '超级管理员' }}</strong></div>
+                  <div>修正人：<strong class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.updatedBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.updatedBy || '超级管理员' }}</strong></div>
                   <div>修改时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.updatedAt) }}</span></div>
                   <div style="grid-column: span 2; word-break: break-all;">修正轨迹及批注：
                     <span style="color: #475569; font-style: italic; font-weight: 500;">
@@ -1810,7 +1810,7 @@
                   <span style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTimeDisplay(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span>
                 </div>
                 <div style="font-size: 11px; color: #475569; background: #fef2f2; padding: 6px 10px; border-radius: 6px; border: 1px solid #fecaca; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
-                  <div>撤销操作人：<strong style="color: #b91c1c;">{{ deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by || '供给端操作员' }}</strong></div>
+                  <div>撤销操作人：<strong class="user-matrix-link" style="color: #b91c1c;" @click="handleGoToUserDirectory(deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.cancelBy || deliveryDetailModalData.cancel_by || '供给端操作员' }}</strong></div>
                   <div>撤销时间：<span>{{ formatDateTimeDisplay(deliveryDetailModalData.cancelledAt || deliveryDetailModalData.cancelAt || deliveryDetailModalData.updatedAt) }}</span></div>
                   <div style="grid-column: span 2; word-break: break-all;">撤销原因：
                     <strong style="color: #b91c1c; font-weight: 600;">{{ deliveryDetailModalData.cancelReason || deliveryDetailModalData.cancel_reason || '供给侧主动撤销发货' }}</strong>
@@ -2060,7 +2060,7 @@ import { useRoute, useRouter } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, getDeliveryStatus } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, getDeliveryStatus, navigateToUserInDirectory } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import {
   cancelTubeSupplyManagementDelivery,
@@ -2530,6 +2530,12 @@ function showDeliveryDetail(input) {
     cancelBy: mainRow.cancelled_by || mainRow.cancel_by || mainRow.cancelBy || input.cancel_by || input.cancelled_by || input.cancelBy || '',
   }
   deliveryDetailModalVisible.value = true
+}
+
+function handleGoToUserDirectory(target) {
+  if (!target || target === '—' || target === '供给端系统') return
+  deliveryDetailModalVisible.value = false
+  navigateToUserInDirectory(router, target, PROJECT_KEY)
 }
 
 const downloadFittingTemplate = () => {
@@ -6630,6 +6636,26 @@ async function saveSuperEditFitting() {
 .baseline-table-footer .footer-right {
   color: #94a3b8;
   font-size: 11.5px;
+}
+
+.user-matrix-link {
+  cursor: pointer !important;
+  color: #4f46e5 !important;
+  font-weight: 600 !important;
+  text-decoration: underline dotted #818cf8 !important;
+  text-underline-offset: 3px !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+.user-matrix-link:hover {
+  color: #312e81 !important;
+  background: #eef2ff !important;
+  border-radius: 4px !important;
+  text-decoration: underline solid #4f46e5 !important;
+  box-shadow: 0 0 0 2px #e0e7ff !important;
 }
 </style>
 

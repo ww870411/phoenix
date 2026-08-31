@@ -301,7 +301,14 @@
                           </div>
                         </td>
                         <td class="submission-operator-cell">
-                          <div class="submission-operator-name">{{ log.operator }}</div>
+                          <div 
+                            class="submission-operator-name clickable-user-link" 
+                            title="点击在责任主体矩阵中定位该人员/主体"
+                            @click="handleGoToUserDirectory(log.operator)"
+                          >
+                            <span class="user-name-text">{{ log.operator }}</span>
+                            <span class="link-hint-icon">↗</span>
+                          </div>
                           <div v-if="log.operator_group" class="submission-operator-meta">
                             <span class="submission-group-chip">
                               {{ log.operator_group }}
@@ -1844,9 +1851,10 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx-js-style'
-import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, navigateToUserInDirectory } from './shared'
 import {
   getTubeGlobalManagementConfig,
   saveTubeGlobalManagementConfig,
@@ -1860,6 +1868,7 @@ import {
   getTubeIpLocation,
 } from '../../daily_report_25_26/services/api'
 
+const router = useRouter()
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
 
 const {
@@ -3417,6 +3426,11 @@ onMounted(async () => {
 })
 
 // ==================== 📋 业务操作记录 JS 业务逻辑 ====================
+
+function handleGoToUserDirectory(operator) {
+  if (!operator) return
+  navigateToUserInDirectory(router, operator, PROJECT_KEY)
+}
 
 function onSubmissionCategoryChange() {
   const cat = submissionFilters.value.category
@@ -6400,5 +6414,35 @@ async function handleExportLogs() {
   font-size: 11px;
   color: #0284c7;
   font-weight: 600;
+}
+
+.clickable-user-link {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4f46e5 !important;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.clickable-user-link:hover {
+  background: #eef2ff;
+  color: #3730a3 !important;
+  text-decoration: underline;
+}
+
+.clickable-user-link .link-hint-icon {
+  font-size: 11px;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.clickable-user-link:hover .link-hint-icon {
+  opacity: 1;
+  transform: translate(1px, -1px);
 }
 </style>
