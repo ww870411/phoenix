@@ -810,7 +810,7 @@ import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
-import { AppHeader, Breadcrumbs, useTubePageShell } from './shared'
+import { AppHeader, Breadcrumbs, useTubePageShell, sortPipeModelsByDiameterDesc } from './shared'
 import {
   getTubeSupplyManagementDemandSummary,
   getTubeSupplyManagementDeliveries,
@@ -851,7 +851,7 @@ const currentSectionModelRows = computed(() => {
     return false
   })
 
-  return matched.map(r => {
+  const mapped = matched.map(r => {
     const futurePlanQty = Number(r.future_plan_qty) || 0
     const totalShippedQty = Number(r.total_shipped_qty) || 0
     const totalArrivedQty = Number(r.total_arrived_qty) || 0
@@ -894,6 +894,8 @@ const currentSectionModelRows = computed(() => {
       statusPillClass,
     }
   })
+
+  return sortPipeModelsByDiameterDesc(mapped)
 })
 
 const modalOverviewStats = computed(() => {
@@ -955,7 +957,7 @@ const filteredModalRows = computed(() => {
     )
   }
 
-  return list
+  return sortPipeModelsByDiameterDesc(list)
 })
 
 const filteredModalTotals = computed(() => {

@@ -210,3 +210,43 @@ export function navigateToUserInDirectory(router, userTarget, projectKey = 'insu
   })
 }
 
+/**
+ * 解析保温管型号规格的主径 DN 与外护管径 (如 DN1400/1600 -> { main: 1400, outer: 1600 })
+ * @param {string} modelCode 型号字符串
+ * @returns {{ main: number, outer: number }}
+ */
+export function parsePipeModelDiameters(modelCode) {
+  if (!modelCode) return { main: 0, outer: 0 }
+  const str = String(modelCode).trim()
+  const parts = str.split('/')
+  const leftStr = parts[0] || ''
+  const rightStr = parts[1] || ''
+  const leftMatch = leftStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const rightMatch = rightStr.match(/(?:[ΦφDN])?\s*(\d+(?:\.\d+)?)/i)
+  const main = leftMatch ? parseFloat(leftMatch[1]) || 0 : 0
+  const outer = rightMatch ? parseFloat(rightMatch[1]) || 0 : 0
+  return { main, outer }
+}
+
+/**
+ * 按照保温管口径大小进行严格降序排序 (大管径在前，小管径在后)
+ * @param {Array} modelList 包含 pipe_model_id / pipeModelId / pipe_model_name / pipeModelName 的数组
+ * @returns {Array} 降序排列后的新数组
+ */
+export function sortPipeModelsByDiameterDesc(modelList) {
+  return [...(modelList || [])].sort((a, b) => {
+    const codeA = a?.pipe_model_id || a?.pipeModelId || a?.pipe_model_name || a?.pipeModelName || a
+    const codeB = b?.pipe_model_id || b?.pipeModelId || b?.pipe_model_name || b?.pipeModelName || b
+    const dA = parsePipeModelDiameters(codeA)
+    const dB = parsePipeModelDiameters(codeB)
+    if (dB.main !== dA.main) {
+      return dB.main - dA.main
+    }
+    if (dB.outer !== dA.outer) {
+      return dB.outer - dA.outer
+    }
+    return String(codeA || '').localeCompare(String(codeB || ''))
+  })
+}
+
+

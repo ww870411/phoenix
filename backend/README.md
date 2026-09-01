@@ -1,3 +1,17 @@
+## 2026-09-01 气象评估服务：全面融合气温因子与多气象要素智能研判
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)（`evaluate_construction_impact`、`get_live_weather_for_dashboard`）
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /api/v1/projects/insulation_pipe_supply_2026/big_screen/data`）
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（今日天气与施工条件板块）
+  - **功能升级**：
+    1. **气温全量融合**：`evaluate_construction_impact` 扩展支持 `temperature` 参数解析；
+    2. **梯次研判规则**：
+       - **受到明显影响 (danger)**：极寒严冻（$T < -5^\circ\text{C}$）、极端酷热（$T \ge 38^\circ\text{C}$）、强对流/恶劣降水或 $\ge 7$ 级大风；
+       - **受到轻微影响 (warning)**：低温环境（$-5^\circ\text{C} \le T < 5^\circ\text{C}$）、高温天气（$32^\circ\text{C} \le T < 38^\circ\text{C}$）、常规降水/雾霾或 $4 \sim 6$ 级风；
+       - **适宜施工 (success)**：黄金温区（$5^\circ\text{C} \le T < 32^\circ\text{C}$）、$\le 3$ 级风且无恶劣天气；
+    3. **场景化调度建议**：针对严寒保温、高温防暑、低温管口预热、防雨遮盖及防风等不同成因动态生成专属调度建议。
+
 ## 2026-08-31 需求管理服务：新增保温管实际施工使用与损耗历史台账查询接口
 
 - **业务协同与模块定位**：

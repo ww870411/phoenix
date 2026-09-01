@@ -1,3 +1,14 @@
+## 2026-09-01 需求管理与数字看板：各型号供需全要素穿透台账统一按口径降序排列
+
+- **关联前端页面与组件**：
+  - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（现场管理工作台 - 直管各型号需求与库存全要素穿透台账）
+  - [`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)（全局数字看板 - 标段各型号供需穿透弹窗台账）
+  - [`shared.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js)（导出通用 `parsePipeModelDiameters` 与 `sortPipeModelsByDiameterDesc`）
+- **功能特性与交互升级**：
+  1. **型号降序排列**：在 `demand_management?category=pipe&tab=overview` 页面下方的《各型号供需全要素穿透台账》中，按保温管主径与外护管径从大到小严格降序排列（如 DN1400/1600 $\rightarrow$ DN1200 $\rightarrow$ ... $\rightarrow$ DN50）；
+  2. **大盘穿透弹窗同步降序**：在 `dashboard` 页面点击《供需全链路多维穿透透视表》中的标段记录后，弹出的《各型号供需全要素穿透台账》及其 ECharts 柱状图、Excel 导出均同步按型号口径严格降序呈现；
+  3. **过滤与搜索实时维持降序**：在勾选“仅看存在净缺口型号”或输入关键词检索时，过滤后的列表与图表依然 100% 保持口径降序排列。
+
 ## 2026-08-31 现场管理工作台（需求侧）：保温管实际消耗与损耗上报下方新增填报历史台账
 
 - **关联前端页面与组件**：

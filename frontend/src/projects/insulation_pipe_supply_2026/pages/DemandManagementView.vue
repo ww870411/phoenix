@@ -4109,7 +4109,7 @@ const filteredOverviewRows = computed(() => {
     )
   }
 
-  return list
+  return sortPipeModelsByDiameterDesc(list)
 })
 
 const filteredOverviewTotals = computed(() => {
@@ -4156,7 +4156,7 @@ async function loadDemandInventoryOverview() {
     const targetSectionId = String(selectedSection1Id.value).trim().toUpperCase()
     const secRows = allRows.filter(r => String(r.section_1_id || '').trim().toUpperCase() === targetSectionId)
 
-    overviewRows.value = secRows.map(r => {
+    const mappedRows = secRows.map(r => {
       const futurePlanQty = Number(r.future_plan_qty) || 0
       const totalShippedQty = Number(r.total_shipped_qty) || 0
       const totalArrivedQty = Number(r.total_arrived_qty) || 0
@@ -4200,6 +4200,8 @@ async function loadDemandInventoryOverview() {
         statusPillClass,
       }
     })
+
+    overviewRows.value = sortPipeModelsByDiameterDesc(mappedRows)
 
     await nextTick()
     renderOverviewChart()

@@ -1,3 +1,79 @@
+## 2026-09-01 [需求管理与数字看板：各型号供需全要素穿透台账统一按口径降序排列]
+- **需求背景与目标**：
+  - 用户指令：“*在页面 demand_management?category=pipe&tab=overview 中，下方的各型号供需全要素穿透台账请按降序排列型号。dashboard 中的下方的供需全链路多维穿透透视表，点击记录显示的各型号供需全要素穿透台账也按降序排列型号*”；
+  - 核心诉求：统一直管需求与库存全要素穿透台账的型号排列次序，按主口径/外护管径从大到小严格降序展示（如 DN1400/1600 $\rightarrow$ DN1200 $\rightarrow$ ... $\rightarrow$ DN50）。
+- **改动与实现详情**：
+  1. **通用排序工具封装 (`shared.js`)**：
+     - 文件：[`shared.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js)
+     - 导出 `parsePipeModelDiameters`（正则提取左主径与右外径）与 `sortPipeModelsByDiameterDesc`（多级数值降序比较）；
+  2. **现场管理工作台全要素穿透台账 (`DemandManagementView.vue`)**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 在 `loadDemandInventoryOverview` 中对聚合好的型号数组应用 `sortPipeModelsByDiameterDesc` 降序排列；
+     - 在 `filteredOverviewRows` 计算属性中实时维持降序，保证搜索与缺口筛选时顺序始终自洽；
+  3. **全局数字看板穿透弹窗台账 (`DashboardView.vue`)**：
+     - 文件：[`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)
+     - 引入 `sortPipeModelsByDiameterDesc`，在 `currentSectionModelRows` 与 `filteredModalRows` 计算属性中严格按型号口径数值降序排列，弹窗内 ECharts 柱状图与 Excel 导出同步保持降序。
+- **验证结果**：
+  - 前端 `npm run build` 全量打包构建 100% 成功；
+  - 页面 `demand_management?category=pipe&tab=overview` 与 `dashboard` 标段穿透弹窗的《各型号供需全要素穿透台账》表格、柱状图与导出文件均严格按型号口径降序渲染。
+
+## 2026-09-01 [气象评估服务：全面融合实时气温判定因子与精准场景化调度建议]
+- **需求背景与目标**：
+  - 用户询问：“*气温也加进去了吗？*”；
+  - 核心诉求：正式将设计方案中的实时气温判定逻辑全量实装至后端 [`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)，与天气现象、风力等级共同参与大屏施工影响评级。
+- **改动与实现详情**：
+  1. **函数签名与参数提取**：
+     - 文件：[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)（`evaluate_construction_impact`、`get_live_weather_for_dashboard`）
+     - 扩展 `evaluate_construction_impact(weather, wind_power, temperature)` 支持解析带单位与符号的各类温度字符串/浮点数；
+     - 在 `get_live_weather_for_dashboard` 主流程与 fallback 保底流程中分别传入实时气温 `temp_val`。
+  2. **多因子梯次研判与场景化调度建议输出**：
+     - **明显影响（Danger 红色）**：极寒严冻（$T < -5^\circ\text{C}$）、极端酷热（$T \ge 38^\circ\text{C}$）、强对流恶劣降水、$\ge 7$ 级大风；
+     - **轻微影响（Warning 金色）**：低温环境（$-5^\circ\text{C} \le T < 5^\circ\text{C}$）、高温天气（$32^\circ\text{C} \le T < 38^\circ\text{C}$）、常规降水/雾霾、4~6 级风；
+     - **适宜施工（Success 绿色）**：黄金温区（$5^\circ\text{C} \le T < 32^\circ\text{C}$）、$\le 3$ 级风且无恶劣天气；
+     - 根据具体触发出因（严寒、酷暑、低温预热、防雨遮盖、大风防风等）定制精细化调度指引话术。
+- **验证结果**：
+  - 本地单元多场景实测：
+    - `-8℃` 严寒 $\rightarrow$ `danger`（【受到明显影响】严禁露天聚氨酯发泡与注水试压...）；
+    - `0℃` 低温 $\rightarrow$ `warning`（【受到轻微影响】聚氨酯发泡前须对管口预热加温...）；
+    - `25℃` 黄金温区 $\rightarrow$ `success`（【适宜施工】当前气象与气温条件良好（25.0℃黄金施工期）...）；
+    - `34℃` 高温 $\rightarrow$ `warning`（【受到轻微影响】建议采取错峰施工，控制发泡物料搅拌反应时间...）；
+    - `39℃` 极热 $\rightarrow$ `danger`（【受到明显影响】极端高温易引发中暑，建议暂停户外重度施工作业...）；
+    - `6级风` $\rightarrow$ `warning`；`7级风` $\rightarrow$ `danger`；
+  - `pytest backend/projects/insulation_pipe_supply_2026/tests` 19 项测试用例全部通过（100% PASS）。
+
+## 2026-09-01 [气象评估服务：将 6 级风研判分类调整为“轻微影响”]
+- **需求背景与目标**：
+  - 用户指令：“*将6级风调整为“轻微影响”*”；
+  - 将 6 级风从“受到明显影响 (Danger)”降档移入“受到轻微影响 (Warning)”，明显影响风力阈值收敛为 7 级及以上强风。
+- **改动与实现详情**：
+  1. **研判算法阈值调整**：
+     - 文件：[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)（`evaluate_construction_impact`）
+     - 第一级（明显影响 danger）：将风力判定条件由 `["6", "7", "8", "9"]` 调整为 `["7", "8", "9", "10", "11", "12"]`（>= 7 级大风）；
+     - 第二级（轻微影响 warning）：将风力判定条件由 `["4", "5"]` 扩充为 `["4", "5", "6"]`（4~6 级风）；
+     - 第三级（适宜施工 success）：保持 <= 3 级风与无恶劣天气。
+- **验证结果**：
+  - 本地 Python 执行测试：
+    - 6 级风 + 多云 -> 输出 `status_tag: '户外施工受到轻微影响'`, `status_level: 'warning'`；
+    - 7 级风 + 多云 -> 输出 `status_tag: '户外施工受到明显影响'`, `status_level: 'danger'`；
+    - 3 级风 + 多云 -> 输出 `status_tag: '适宜施工'`, `status_level: 'success'`；
+  - `pytest backend/projects/insulation_pipe_supply_2026/tests` 19 项测试全部通过（100% PASS）。
+
+## 2026-09-01 [数字大屏：梳理与说明今日天气与施工条件板块的施工影响研判逻辑]
+- **咨询与响应内容**：
+  - 用户询问：在 `/projects/insulation_pipe_supply_2026/pages/big_screen` 页面中，【今日天气与施工条件】板块对施工影响的判断分类逻辑。
+  - **核心逻辑与研判规则说明**：
+    - **作用模块与函数**：后端 [`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py) 中的 [`evaluate_construction_impact(weather: str, wind_power: str)`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py#L756-L780) 函数，结合高德天气 API 实时传回的中文天气描述与风力等级，进行优先级研判并输出评级与调度建议：
+      1. **第一级（Danger 红色/户外施工受到明显影响）**：
+         - 触发条件：天气包含 `暴雨`、`大雨`、`特大暴雨`、`雷阵雨`、`雷暴`、`大雪`、`暴雪`、`冰雹`、`冻雨`，或风力等级包含 `6`、`7`、`8`、`9`（>= 6 级大风）；
+         - 建议提示：“【受到明显影响】当前强对流/降水天气不利于户外作业，建议暂停露天吊装与高空作业，加强基坑排涝与现场用电防汛安全。”
+      2. **第二级（Warning 金色/户外施工受到轻微影响）**：
+         - 触发条件：天气包含 `小雨`、`中雨`、`阵雨`、`毛毛雨`、`雨`、`雪`、`雾`、`霾`，或风力等级包含 `4`、`5`（4~5 级风）；
+         - 建议提示：“【受到轻微影响】户外施工受到轻微影响，建议做好露天焊接防雨棚遮盖与保温管端口防水密封，并注意路面防滑。”
+      3. **第三级（Success 绿色/适宜施工）**：
+         - 触发条件：晴、多云、少云、阴天等无恶劣气象且风力 <= 3 级；
+         - 建议提示：“【适宜施工】当前气象条件良好，可正常组织管网吊装下沟与沟槽焊接作业。”
+    - **前端大屏呈现**：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 实时绑定 `liveWeatherData.status_tag`、`status_level` 与 `advice`，动态渲染对应色系的徽章标签、参数指标及 SVG 动态天气图标。
+
 ## 2026-08-31 [需求管理服务：修复保温管历史台账后端函数依赖与前端视觉优化]
 - **需求背景与排查结论**：
   - 用户反馈：“*奇怪，显示“当前标段尚无保温管使用与损耗填报历史记录。”我看的标段明明有填过使用记录的*”；

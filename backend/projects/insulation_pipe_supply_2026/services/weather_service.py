@@ -753,30 +753,84 @@ _LIVE_WEATHER_CACHE: Dict[str, Any] = {
 }
 
 
-def evaluate_construction_impact(weather: str, wind_power: str = "") -> Dict[str, str]:
-    """根据天气状况与风力智能推导施工影响与建议"""
+def evaluate_construction_impact(
+    weather: str,
+    wind_power: str = "",
+    temperature: Optional[Any] = None
+) -> Dict[str, str]:
+    """
+    结合天气现象、风力等级与实时气温智能推导施工影响与精准调度建议：
+    1. 明显影响 (danger):
+       - 强对流/恶劣降水（暴雨、大雨、特大暴雨、雷阵雨、雷暴、大雪、暴雪、冰雹、冻雨）
+       - 7 级及以上大风
+       - 极端严寒 (T < -5℃) 或 极端酷热 (T >= 38℃)
+    2. 轻微影响 (warning):
+       - 常规降水与雾霾（小雨、中雨、阵雨、毛毛雨、雨、雪、雾、霾）
+       - 4~6 级风
+       - 低温环境 (-5℃ <= T < 5℃) 或 高温天气 (32℃ <= T < 38℃)
+    3. 适宜施工 (success):
+       - 黄金温区 (5℃ <= T < 32℃)，≤3 级风且无恶劣天气
+    """
     w = str(weather or "").strip()
-    # 受到明显影响 (大雨、暴雨、雷阵雨、雷暴、大雪、暴雪、冰雹、冻雨、6级及以上大风)
-    if any(k in w for k in ["暴雨", "大雨", "特大暴雨", "雷阵雨", "雷暴", "大雪", "暴雪", "冰雹", "冻雨"]) or any(str(p) in str(wind_power) for p in ["6", "7", "8", "9"]):
+    wp = str(wind_power or "").strip()
+
+    # 解析气温数值
+    temp_val: Optional[float] = None
+    if temperature is not None and str(temperature).strip() != "":
+        try:
+            temp_val = float(str(temperature).replace("°C", "").replace("℃", "").strip())
+        except (ValueError, TypeError):
+            temp_val = None
+
+    # --- 1. 明显影响 (Danger 红色) ---
+    is_severe_weather = any(k in w for k in ["暴雨", "大雨", "特大暴雨", "雷阵雨", "雷暴", "大雪", "暴雪", "冰雹", "冻雨"])
+    is_severe_wind = any(str(p) in wp for p in ["7", "8", "9", "10", "11", "12"])
+    is_extreme_cold = (temp_val is not None and temp_val < -5.0)
+    is_extreme_heat = (temp_val is not None and temp_val >= 38.0)
+
+    if is_severe_weather or is_severe_wind or is_extreme_cold or is_extreme_heat:
+        if is_extreme_cold:
+            advice = f"【受到明显影响】当前气温极低（{temp_val}℃低于-5℃），严禁露天聚氨酯发泡与注水试压，露天焊接须落实焊前预热与焊后保温。"
+        elif is_extreme_heat:
+            advice = f"【受到明显影响】当前出现极端高温（{temp_val}℃≥38℃），露天深基坑与管沟焊接易引发中暑，建议暂停户外重度施工作业。"
+        elif is_severe_wind:
+            advice = f"【受到明显影响】当前现场风力达 {wp} 级（≥7级大风），严禁露天吊管与高空作业，加强基坑排涝与用电防风避险。"
+        else:
+            advice = f"【受到明显影响】当前出现强对流/降水天气（{w}），不利于户外作业，建议暂停露天吊装与焊接，做好现场防汛排水。"
         return {
             "status_tag": "户外施工受到明显影响",
             "status_level": "danger",
-            "advice": "【受到明显影响】当前强对流/降水天气不利于户外作业，建议暂停露天吊装与高空作业，加强基坑排涝与现场用电防汛安全。"
+            "advice": advice
         }
-    # 受到轻微影响 (小雨、中雨、阵雨、毛毛雨、小雪、中雪、雨夹雪、4-5级风)
-    elif any(k in w for k in ["小雨", "中雨", "阵雨", "毛毛雨", "雨", "雪", "雾", "霾"]) or any(str(p) in str(wind_power) for p in ["4", "5"]):
+
+    # --- 2. 轻微影响 (Warning 金色) ---
+    is_mild_weather = any(k in w for k in ["小雨", "中雨", "阵雨", "毛毛雨", "雨", "雪", "雾", "霾"])
+    is_mild_wind = any(str(p) in wp for p in ["4", "5", "6"])
+    is_low_temp = (temp_val is not None and -5.0 <= temp_val < 5.0)
+    is_high_temp = (temp_val is not None and 32.0 <= temp_val < 38.0)
+
+    if is_mild_weather or is_mild_wind or is_low_temp or is_high_temp:
+        if is_low_temp:
+            advice = f"【受到轻微影响】当前气温较低（{temp_val}℃），聚氨酯发泡前须对管口预热加温，水压试验须做好防冻与彻底排空。"
+        elif is_high_temp:
+            advice = f"【受到轻微影响】当前气温偏高（{temp_val}℃），建议采取错峰施工，控制发泡物料搅拌反应时间并做好防暑降温。"
+        elif is_mild_wind:
+            advice = f"【受到轻微影响】现场风力达 {wp} 级（4~6级），露天焊接须搭设防风棚，管口做好封堵遮盖以防杂物落入。"
+        else:
+            advice = f"【受到轻微影响】当前出现轻微降水/雾霾（{w}），建议做好露天焊接防雨棚遮盖与保温管端口防水密封，注意路面防滑。"
         return {
             "status_tag": "户外施工受到轻微影响",
             "status_level": "warning",
-            "advice": "【受到轻微影响】户外施工受到轻微影响，建议做好露天焊接防雨棚遮盖与保温管端口防水密封，并注意路面防滑。"
+            "advice": advice
         }
-    # 适宜施工 (晴、多云、少云、阴)
-    else:
-        return {
-            "status_tag": "适宜施工",
-            "status_level": "success",
-            "advice": "【适宜施工】当前气象条件良好，可正常组织管网吊装下沟与沟槽焊接作业。"
-        }
+
+    # --- 3. 适宜施工 (Success 绿色) ---
+    temp_desc = f"（{temp_val}℃黄金施工期）" if temp_val is not None else ""
+    return {
+        "status_tag": "适宜施工",
+        "status_level": "success",
+        "advice": f"【适宜施工】当前气象与气温条件良好{temp_desc}，可正常组织管网吊装下沟与沟槽焊接作业。"
+    }
 
 
 def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any]:
@@ -822,7 +876,7 @@ def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any
             humidity_val = live.get("humidity") or "65"
             report_time_str = live.get("reporttime") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            impact = evaluate_construction_impact(weather_text, wind_pwr)
+            impact = evaluate_construction_impact(weather_text, wind_pwr, temp_val)
 
             day_weather = today_cast.get("dayweather") or weather_text
             night_weather = today_cast.get("nightweather") or weather_text
@@ -864,7 +918,7 @@ def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any
     if _LIVE_WEATHER_CACHE["data"]:
         return _LIVE_WEATHER_CACHE["data"]
 
-    impact = evaluate_construction_impact("多云", "≤3")
+    impact = evaluate_construction_impact("多云", "≤3", "26")
     fallback_obj = {
         "city": "主城区施工现场",
         "weather": "多云",
