@@ -1,3 +1,108 @@
+## 2026-09-01 [单据识别：移除表格顶部工具栏的合计数量/单价/金额汇总胶囊标签]
+- **需求与优化目标**：
+  - 响应用户诉求，从单据明细台账表格顶部工具栏中彻底移除 `∑ 合计数量: xx，合计单价: xx，合计金额: xx` 汇总胶囊展示；
+  - 页面仅保留客观的行数统计（如 `共 12 行`），让工作台视觉更加清爽开阔；
+  - 清理 `numericTotalsText` 冗余计算属性与 `.grid-total-pill` 样式。
+- **改动文件**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
+## 2026-09-01 [单据识别：全链路彻底移除流式模式，回归标准整包高精度识别架构]
+- **需求与优化目标**：
+  - 响应用户诉求，彻底废除系统中的 AI 视觉流式模式（SSE 流式传输与前端打字机回填），恢复为最稳健、最纯粹的标准整包单据识别架构；
+  - **后端清理**：
+    1. 移除 `POST /tools/ocr-delivery-bill-stream` SSE 接口路由；
+    2. 从 `OcrConfigPayload` 及 `config_service.py` 中彻底删除 `stream_mode` 字段；
+    3. 从 [`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py) 中彻底删除 `stream_extract_delivery_bill_data` 异步流式生成器。
+  - **前端清理**：
+    1. 从 [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js) 中删除 `fetchOcrDeliveryBillStream` 请求函数；
+    2. 从 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 中彻底移除流式模式切换配置卡片及 `ocrStreamMode` 变量；
+    3. 从 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中彻底删除 `isStreamMode`、`isStreaming`、`streamStatusText`、`streamTokensCount` 与 `executeStreamOcrRecognition` 函数及流式 CSS。
+- **改动文件**：
+  - 后端：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+  - 前端：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)、[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)、[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
+## 2026-09-01 [单据识别：彻底移除整包模式下的虚假模拟进度与标签墙，回归真实纯粹加载状态]
+- **需求与优化目标**：
+  - 响应用户诉求，在非流式（标准整包传输）状态下，彻底移除任何模拟的虚假识别播报（如“识别到了发货单位”、“识别到了车牌号码”等定时假标签）；
+  - 将加载状态全面回归为真实、专业、克制的标准加载指示（旋转环 Spinner + 客观说明：“正在调用 AI 视觉模型提取单据明细，请稍候...”）；
+  - 彻底清理 `RECOGNITION_STAGES` 静态数组、`loadingElapsedSeconds` 计时器以及对应的 CSS 样式。
+- **改动文件**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
+## 2026-09-01 [单据识别：从工作台顶栏移除传输模式切换按钮，模式选择完全收敛至全局管理]
+- **需求与优化目标**：
+  - 响应用户诉求，不在单据识别工作台（`DeliveryBillOcrTool.vue`）顶栏暴露 `🌊 实时流式回填` 与 `📦 标准整包传输` 切换按钮，保持工作台界面极致干净清爽；
+  - 模式切换由后台全局配置（[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 的【⚡ 单据识别模型与 API 配置】）统一管控与驱动；
+  - `DeliveryBillOcrTool.vue` 在组件挂载时自动读取后台配置的 `stream_mode`，静默分流执行流式回填或标准整包解析。
+- **改动文件**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
+## 2026-09-01 [单据识别：全链路接入真·流式传输 (SSE 流式输出与逐行回填)，保留双模式自由切换]
+- **架构升级与业务实现**：
+  1. **全链路 SSE 实时流式传输**：
+     - 后端服务 [`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py) 接入 Google Gemini `:streamGenerateContent?alt=sse`；
+     - 边接收大模型 Token 流，边实时进行轻量局部 JSON 语法修复与字段提取，并通过 `StreamingResponse` 实时向前端派发 `delta_token`、`delta_title`、`delta_metadata`、`delta_columns`、`delta_rows` 与 `complete` 事件；
+  2. **前端打字机式逐行实时回填**：
+     - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 采用 `fetch` + `response.body.getReader()` 读取流；
+     - 大模型边吐出数据，单据抬头即时显现，RevoGrid 电子表格像活的一样逐行动态生长并自适应滚动；
+  3. **双模式无缝共存与自由切换**：
+     - 在 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 的【⚡ 单据识别模型与 API 配置】中增加【传输模式切换】选项卡；
+     - 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 顶栏提供快捷切换胶囊（`🌊 实时流式回填` / `📦 标准整包传输`），满足不同业务场景需求。
+- **改动文件**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)、[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)、[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端单测：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项测试全量 PASS。
+
+## 2026-09-01 [单据识别：修复计算属性未定义变量导致识别结果返回后页面卡死在 Loading 的缺陷]
+- **问题根源与排查定位**：
+  - 用户在“复制完整日志”中能看到大模型已正常返回识别结果，但前端界面却始终卡在 `[WAIT] ... (已等待 6.0s)...` 状态卡片；
+  - **根本原因**：`computeTotals` 计算属性中错误引用了未声明的变量 `tableColumnsList.value`，导致在 `extractedResult.value` 赋值后立即触发 Vue 响应式计算并抛出 `ReferenceError: tableColumnsList is not defined`，进而中断了后续的 `loading.value = false` 与 RevoGrid 渲染；
+- **修复方案与优化**：
+  1. **修正变量引用**：将 `computeTotals` 中列头数据源修正为 `extractedResult.value.table_columns || gridColumns.value.map(c => c.prop)`；
+  2. **添加生命周期 finally 强保障**：在 `executeOcrRecognition` 中将 `loading.value = false`、`stopLoadingTimer()` 与 `clearInterval(heartbeatTimer)` 统一移入 `finally` 块，确保无论发生任何情况均 100% 解除页面遮罩；
+- **改动文件**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端单测：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项测试全量 PASS。
+
+## 2026-09-01 [单据识别：将兜底与主模型重试改为显式策略]
+- **需求与结论**：取消识别链路内置的隐式重试、隐式模型池与自动兜底。全局管理页新增两个可独立勾选的策略：是否执行兜底、主模型报错/繁忙时是否重试；两项均不勾选时，每次识别只调用主模型一次。
+- **改动范围与运行流程**：
+  - 前端 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)：在“单据识别模型与 API 密钥配置”页新增策略卡片、主模型重试次数（1～5 次）选择器，以及保存后回显。
+  - 后端 [`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)：新增 `enable_fallback`、`retry_primary_on_error`、`primary_retry_count` 配置字段，旧配置默认均关闭；全局配置保存与专用 OCR 配置接口口径一致。
+  - 后端 [`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)：单次模型调用不再自行重试；主模型仅在已启用重试时按所选次数重试，耗尽后仅在已启用兜底时才尝试管理员手填的模型 2/模型 3；不再自动注入额外官方模型。
+- **验证结果**：`python -m pytest backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py` 12 项通过；`npm --prefix frontend run build` 通过；`git diff --check` 通过。浏览器登录态下的真实 API/UI 操作仍待人工验收。
+
+## 2026-09-01 [单据识别：彻底清理冗余双阶段伪智能体与同义词篡改逻辑，回归秒级精准识别]
+- **问题根源与优化目标**：
+  1. **废黜冗余低效的双阶段串联复核**：此前强行在后端进行两轮大模型视觉推理（阶段1初次提取 + 阶段2质检复核），不仅导致响应时间暴增至 30~50 秒并加剧 API 503 繁忙风险，且阶段 2 脆弱的字典覆盖逻辑容易破坏已提取正确的表格；现重构为单阶段一步到位的高精度结构化提取，大幅提升响应速度；
+  2. **剔除同义词模糊匹配对表格数据的篡改**：移除了 `_match_row_value` 中跨列同义词模糊替换逻辑（避免把“发货数量”与“实收数量”混淆并相互覆盖），坚持“所见即所得、忠于原件”提取；
+  3. **前端去冗降噪与体验升级**：
+     - 移除了顶栏冗余的双阶段开关，移除虚假写死的加载阶段轮播文案与质检抽屉；
+     - 将庞大的调试面板精简为默认折叠的开发者面板，不干扰普通业务操作；
+     - 保持 RevoGrid 电子表格编辑、自动计算数值列合计、Excel 导出与全屏高清灯箱的流畅体验。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（单阶段高精度提取、移除同义词跨列覆盖）、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端单测：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项测试全量 PASS。
+
 ## 2026-09-01 [单据识别：增加识别中动态秒表与分步进度轮播、极速模式切换与执行诊断分析]
 - **问题分析与体验优化**：
   1. **解析耗时与日志同步机理分析**：

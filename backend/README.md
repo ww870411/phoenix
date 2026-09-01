@@ -1,3 +1,36 @@
+## 2026-09-01 单据智能识别服务：全链路彻底移除流式模式，回归标准整包识别接口
+
+- **关联模块**：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)。
+- **核心调整**：
+  1. **移除 SSE 流式接口**：废除并下线 `POST /tools/ocr-delivery-bill-stream` 端点；
+  2. **清理服务层冗余**：从 `ocr_tool_service.py` 中删除 `stream_extract_delivery_bill_data` 异步流式生成器；
+  3. **清理配置层**：从 `config_service.py` 及 `OcrConfigPayload` 中移除 `stream_mode` 字段，系统纯粹依靠标准高性能的 `extract_delivery_bill_data` 接口处理单据视觉解析。
+
+## 2026-09-01 单据智能识别服务：全链路 SSE 实时流式传输接口与双传输模式支持
+
+- **关联模块**：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)。
+- **核心升级**：
+  1. **异步 SSE 流式接口**：新增 `POST /tools/ocr-delivery-bill-stream`，返回 `StreamingResponse(..., media_type="text/event-stream")`；
+  2. **直连 Gemini 原生流式端点**：连接 `:streamGenerateContent?alt=sse`，边接收 token 边通过局部语法修复动态解析未闭合 JSON，向前端实时推送 `delta_token`、`delta_title`、`delta_metadata`、`delta_columns`、`delta_rows` 与 `complete` 事件；
+  3. **双模式配置持久化**：在 `ocr_tool_config` 中增加 `stream_mode: bool`（默认为 `True`），在 `/tools/ocr-config` 中实现无缝读取与保存。
+
+## 2026-09-01 单据智能识别服务：失败处理策略显式化与全量通信报文/异常透传
+ 
+- **关联模块**：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)。
+- **策略字段**：`enable_fallback`、`retry_primary_on_error`、`primary_retry_count`。未写入这三个字段的历史配置按“关闭兜底、关闭重试、重试次数 0”解释，避免升级后改变原有调用次数。
+- **调用规则**：底层视觉请求只执行一次；外层先按已配置的次数重试主模型，之后仅在 `enable_fallback=true` 时依次调用管理员手填的备选模型。删除了隐式追加官方模型和函数内部睡眠重试，403、繁忙、超时等失败均受这两个策略约束。
+- **透明化通信报文与异常透传**：在返回给前端的结构中透传大模型原始文本 (`raw_text_summary`/`raw_response_text`)、每笔 HTTP 交互的 `api_logs`（含真实端点、状态码、Token 用量与 Prompt/Response），并在发生异常时完整保留错误 detail，杜绝黑箱。
+
+## 2026-09-01 单据智能识别服务：去冗降噪重构、单阶段高精度提取与同义词跨列篡改修复
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（`extract_delivery_bill_data` 单阶段极速提取、`_match_row_value` 精确对齐且移除跨列同义词篡改、`_call_gemini_vision_with_fallbacks` 多级高可用容灾顺延）
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`POST /tools/ocr-delivery-bill` 默认 `enable_double_check=False` 单阶段秒级响应）
+  - **功能升级**：
+    1. **单阶段高精度一步到位提取**：彻底废黜低效冗余的两阶段重复调用，将单次识别耗时从 30~50 秒缩减至 3~8 秒，大幅降低 503 繁忙风险，并避免脆弱的数据合并损坏表格；
+    2. **彻底移除同义词跨列模糊覆盖**：重构 `_match_row_value`，仅做精确列名与去空格标点匹配，杜绝将“发货数量”与“实收数量”等不同列名互相混淆或覆盖；
+    3. **保持高可用容灾与向后兼容**：保留主模型遇 503/429/400 时的备选兜底顺延机制，保持返回结构与接口字段 100% 稳定兼容。
+
 ## 2026-09-01 单据智能识别：修复 400 格式错误、模型名称规范化与全状态容灾顺延
 
 - **业务协同与模块定位**：

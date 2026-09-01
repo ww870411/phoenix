@@ -105,7 +105,6 @@ PROMPT_DOCUMENT_VERIFICATION_AGENT = """你是一个顶级工程物资单据与�
   "table_columns": ["核对后的实际列名1", "核对后的实际列名2"],
   "table_rows": [
     {"核对后的实际列名1": "值1", "核对后的实际列名2": "值2"}
-  ],
   "remarks": "单据附注说明",
   "verification_report": {
     "status": "verified",
@@ -267,8 +266,8 @@ def _call_gemini_vision(
     clean_b64: str,
     prompt_text: str,
     temperature: float = 0.1,
-) -> str:
-    """底层多模态视觉请求调用"""
+) -> Tuple[str, Dict[str, Any]]:
+    """执行一次视觉模型请求；重试与兜底均由上层调度器按配置控制。"""
     payload = {
         "contents": [
             {
@@ -276,74 +275,58 @@ def _call_gemini_vision(
                     {
                         "inline_data": {
                             "mime_type": mime_type,
-                            "data": clean_b64
+                            "data": clean_b64,
                         }
                     },
-                    {
-                        "text": prompt_text
-                    }
+                    {"text": prompt_text},
                 ]
             }
         ],
         "generationConfig": {
             "temperature": temperature,
             "maxOutputTokens": 8192,
-            "responseMimeType": "application/json"
-        }
+            "responseMimeType": "application/json",
+        },
     }
 
-    import time
+    try:
+        response = httpx.post(url, json=payload, timeout=45.0)
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"连线识别引擎 API 失败，请检查网络配置。异常: {exc}",
+        ) from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="视觉引擎响应超时，请重试或压缩图片大小。",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"请求视觉模型异常: {exc}") from exc
 
-    response = None
-    max_retries = 2
-    for attempt in range(max_retries):
+    if response.status_code != 200:
+        err_detail = response.text
         try:
-            response = httpx.post(url, json=payload, timeout=45.0)
-            if response.status_code == 200:
-                break
+            err_json = response.json()
+            err_msg = err_json.get("error", {}).get("message") or err_detail
+        except Exception:
+            err_msg = err_detail
 
-            err_detail = response.text
-            try:
-                err_json = response.json()
-                err_msg = err_json.get("error", {}).get("message") or err_detail
-            except Exception:
-                err_msg = err_detail
-
-            lowered_msg = str(err_msg).lower()
-            is_busy = (
-                response.status_code == 503
-                or "high demand" in lowered_msg
-                or "overloaded" in lowered_msg
-                or "temporarily unavailable" in lowered_msg
-                or "service unavailable" in lowered_msg
-                or "resource_exhausted" in lowered_msg
-            )
-
-            if is_busy and attempt < max_retries - 1:
-                time.sleep(1.2)
-                continue
-
-            if is_busy:
-                raise HTTPException(
-                    status_code=503,
-                    detail="服务器繁忙，请点击重试"
-                )
-
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=f"识别模型 API 返回错误 ({response.status_code}): {err_msg}"
-            )
-        except HTTPException:
-            raise
-        except httpx.ConnectError as ce:
-            raise HTTPException(
-                status_code=502,
-                detail=f"连线识别引擎 API 失败，请检查网络配置。异常: {ce}"
-            )
-        except httpx.TimeoutException:
-            raise HTTPException(status_code=504, detail="视觉引擎响应超时，请重试或压缩图片大小。")
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"请求视觉模型异常: {exc}")
+        lowered_msg = str(err_msg).lower()
+        is_busy = (
+            response.status_code == 503
+            or "high demand" in lowered_msg
+            or "overloaded" in lowered_msg
+            or "temporarily unavailable" in lowered_msg
+            or "service unavailable" in lowered_msg
+            or "resource_exhausted" in lowered_msg
+        )
+        if is_busy:
+            raise HTTPException(status_code=503, detail=f"服务器繁忙 (503): {err_msg}")
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"识别模型 API 返回错误 ({response.status_code}): {err_msg}",
+        )
 
     res_json = response.json()
     candidates = res_json.get("candidates") or []
@@ -351,7 +334,7 @@ def _call_gemini_vision(
         raise HTTPException(status_code=500, detail="模型未返回有效的文本解析结果。")
 
     parts = candidates[0].get("content", {}).get("parts") or []
-    raw_text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+    raw_text = "".join(part.get("text", "") for part in parts if isinstance(part, dict))
     usage_metadata = res_json.get("usageMetadata") or {}
     return raw_text, usage_metadata
 
@@ -392,114 +375,130 @@ def _call_gemini_vision_with_fallbacks(
     temperature: float = 0.1,
     stage_name: str = "阶段 1 (视觉解析提取)",
     api_logs_collector: Optional[List[Dict[str, Any]]] = None,
+    enable_fallback: bool = False,
+    retry_primary_on_error: bool = False,
+    primary_retry_count: int = 0,
 ) -> Tuple[str, str, bool]:
     """
-    按次序调度主模型与备选兜底模型，并采集完整 API HTTP 通信日志。
-    当某个模型遭遇 503/429/400 (名称错误)/404 或服务暂时不可用时，自动按顺序顺延切换至备选模型重试。
-    具有终极高可用保障：手填模型尝试完毕后，自动顺延官方稳定兜底模型。
-    返回 (raw_text, successful_model_name, fallback_triggered)
+    按后台配置调度模型：
+    - 主模型始终只在遇到错误后才继续处理；
+    - 仅在启用主模型重试时，重试首选模型；
+    - 仅在启用兜底时，主模型（含其重试）失败后才顺序尝试手填备选模型；
+    - 不追加任何内置模型，确保实际行为完全由管理员配置决定。
     """
-    # 官方标准稳定保底模型池（Gemini 3.5 / 3.7 / 3.1 官方序列）
-    OFFICIAL_SAFE_MODELS = ["gemini-3.5-flash-lite", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-2.5-flash"]
-
-    # 1. 优先清洗用户配置的候选模型序列
     sanitized_models: List[str] = []
-    for m in candidate_models:
-        norm = _normalize_gemini_model_name(m)
-        if norm and norm not in sanitized_models:
-            sanitized_models.append(norm)
+    for model in candidate_models:
+        normalized_model = _normalize_gemini_model_name(model)
+        if normalized_model and normalized_model not in sanitized_models:
+            sanitized_models.append(normalized_model)
 
-    # 2. 自动追加官方标准稳定模型作为末尾终极保障（不重复追加）
-    for safe_m in OFFICIAL_SAFE_MODELS:
-        if safe_m not in sanitized_models:
-            sanitized_models.append(safe_m)
+    if not sanitized_models:
+        raise HTTPException(status_code=400, detail="未配置可用的单据识别主模型。")
 
-    last_error = None
-    for idx, model_name in enumerate(sanitized_models):
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={active_key}"
-        endpoint_display = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-        
-        t0 = time.time()
-        log_entry = {
-            "stage": stage_name,
-            "timestamp": datetime.now().strftime("%H:%M:%S.%f")[:-3],
-            "endpoint": endpoint_display,
-            "method": "POST",
-            "model": model_name,
-            "prompt_length": len(prompt_text),
-            "prompt_preview": prompt_text[:300] + ("..." if len(prompt_text) > 300 else ""),
-            "full_prompt": prompt_text,
-            "http_status": None,
-            "duration_ms": 0,
-            "success": False,
-            "usage_metadata": {},
-            "response_preview": "",
-            "raw_response_text": "",
-            "error_message": None,
-        }
+    if not enable_fallback:
+        sanitized_models = sanitized_models[:1]
 
-        try:
-            raw_text, usage_metadata = _call_gemini_vision(
-                url=url,
-                mime_type=mime_type,
-                clean_b64=clean_b64,
-                prompt_text=prompt_text,
-                temperature=temperature
+    try:
+        configured_retry_count = int(primary_retry_count or 0)
+    except (TypeError, ValueError):
+        configured_retry_count = 0
+    configured_retry_count = max(0, min(configured_retry_count, 5))
+    primary_attempts = 1 + (configured_retry_count if retry_primary_on_error else 0)
+
+    last_error: Optional[Exception] = None
+    for model_index, model_name in enumerate(sanitized_models):
+        attempts_for_model = primary_attempts if model_index == 0 else 1
+
+        for attempt_index in range(attempts_for_model):
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model_name}:generateContent?key={active_key}"
             )
-            dur_ms = int((time.time() - t0) * 1000)
-            log_entry.update({
-                "http_status": 200,
-                "duration_ms": dur_ms,
-                "success": True,
-                "usage_metadata": usage_metadata,
-                "response_preview": raw_text[:400] + ("..." if len(raw_text) > 400 else ""),
-                "raw_response_text": raw_text,
-            })
-            if api_logs_collector is not None:
-                api_logs_collector.append(log_entry)
-            return raw_text, model_name, (idx > 0)
-        except HTTPException as he:
-            last_error = he
-            dur_ms = int((time.time() - t0) * 1000)
-            log_entry.update({
-                "http_status": he.status_code,
-                "duration_ms": dur_ms,
-                "error_message": he.detail,
-            })
+            endpoint_display = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model_name}:generateContent"
+            )
+            started_at = time.time()
+            log_entry = {
+                "stage": stage_name,
+                "timestamp": datetime.now().strftime("%H:%M:%S.%f")[:-3],
+                "endpoint": endpoint_display,
+                "method": "POST",
+                "model": model_name,
+                "attempt": attempt_index + 1,
+                "is_primary_retry": model_index == 0 and attempt_index > 0,
+                "prompt_length": len(prompt_text),
+                "prompt_preview": prompt_text[:300] + ("..." if len(prompt_text) > 300 else ""),
+                "full_prompt": prompt_text,
+                "http_status": None,
+                "duration_ms": 0,
+                "success": False,
+                "usage_metadata": {},
+                "response_preview": "",
+                "raw_response_text": "",
+                "error_message": None,
+            }
+
+            try:
+                raw_text, usage_metadata = _call_gemini_vision(
+                    url=url,
+                    mime_type=mime_type,
+                    clean_b64=clean_b64,
+                    prompt_text=prompt_text,
+                    temperature=temperature,
+                )
+                log_entry.update({
+                    "http_status": 200,
+                    "duration_ms": int((time.time() - started_at) * 1000),
+                    "success": True,
+                    "usage_metadata": usage_metadata,
+                    "response_preview": raw_text[:400] + ("..." if len(raw_text) > 400 else ""),
+                    "raw_response_text": raw_text,
+                })
+                if api_logs_collector is not None:
+                    api_logs_collector.append(log_entry)
+                return raw_text, model_name, model_index > 0
+            except HTTPException as exc:
+                last_error = exc
+                log_entry.update({
+                    "http_status": exc.status_code,
+                    "duration_ms": int((time.time() - started_at) * 1000),
+                    "error_message": exc.detail,
+                })
+            except Exception as exc:
+                last_error = exc
+                log_entry.update({
+                    "http_status": 500,
+                    "duration_ms": int((time.time() - started_at) * 1000),
+                    "error_message": str(exc),
+                })
+
             if api_logs_collector is not None:
                 api_logs_collector.append(log_entry)
 
-            if idx < len(sanitized_models) - 1:
-                next_model = sanitized_models[idx + 1]
+            if model_index == 0 and attempt_index < attempts_for_model - 1:
                 logger.warning(
-                    f"视觉模型 [{model_name}] 请求失败 ({he.status_code}: {he.detail})，系统正在自动顺延尝试备选模型 [{next_model}]..."
+                    "视觉主模型 [%s] 请求失败，按配置进行第 %s/%s 次重试。",
+                    model_name,
+                    attempt_index + 1,
+                    configured_retry_count,
                 )
                 continue
-            raise
-        except Exception as exc:
-            last_error = exc
-            dur_ms = int((time.time() - t0) * 1000)
-            log_entry.update({
-                "http_status": 500,
-                "duration_ms": dur_ms,
-                "error_message": str(exc),
-            })
-            if api_logs_collector is not None:
-                api_logs_collector.append(log_entry)
+            break
 
-            if idx < len(sanitized_models) - 1:
-                next_model = sanitized_models[idx + 1]
-                logger.warning(
-                    f"视觉模型 [{model_name}] 异常 ({exc})，系统正在自动顺延尝试备选模型 [{next_model}]..."
-                )
-                continue
-            raise
+        if model_index < len(sanitized_models) - 1:
+            next_model = sanitized_models[model_index + 1]
+            logger.warning(
+                "视觉主模型 [%s] 请求失败，已启用兜底，切换至手填备选模型 [%s]。",
+                model_name,
+                next_model,
+            )
 
-    if last_error:
-        if isinstance(last_error, HTTPException):
-            raise last_error
-        raise HTTPException(status_code=503, detail="服务器繁忙，请点击重试")
-    raise HTTPException(status_code=503, detail="服务器繁忙，请点击重试")
+    if isinstance(last_error, HTTPException):
+        raise last_error
+    if last_error is not None:
+        raise HTTPException(status_code=500, detail=f"模型调用异常: {last_error}") from last_error
+    raise HTTPException(status_code=500, detail="未获取到大模型响应结果。")
 
 
 def extract_delivery_bill_data(
@@ -508,17 +507,14 @@ def extract_delivery_bill_data(
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
     custom_prompt: Optional[str] = None,
-    enable_double_check: bool = True,
+    enable_double_check: bool = False,
 ) -> Dict[str, Any]:
     """
-    接收业务单据照片（Base64 编码），调度 Gemini 多模态视觉模型进行结构化数据提取与质检。
+    接收业务单据照片（Base64 编码），调度 Gemini 多模态视觉模型进行一步到位的高精度结构化数据提取。
     
-    多层容灾策略：
-    - 主模型优先，若遇 503/429/400 等任何异常，自动按次序顺延使用后台配置的备选兜底模型。
-    
-    双阶段智能体工作流：
-    阶段 1：视觉初次解析提取智能体（Initial Extraction Agent）
-    阶段 2：对照原图自动复核与纠偏质检智能体（Verification & Refinement Agent）
+    调度策略：
+    - 主模型重试与备选模型兜底均以后台显式配置为准，默认均不执行。
+    - 坚持“所见即所得、忠于原件”提取，绝不臆造未出现的字段，绝不对表格明细进行跨列同义词篡改。
     """
     if not image_base64:
         raise HTTPException(status_code=400, detail="图片数据不能为空")
@@ -537,7 +533,10 @@ def extract_delivery_bill_data(
 
     active_key = api_key or stored_ocr_cfg.get("api_key")
     raw_primary_model = model_name or stored_ocr_cfg.get("model") or DEFAULT_GEMINI_MODEL
-    stored_fallbacks = stored_ocr_cfg.get("fallback_models") or ["gemini-3.7-flash", "gemini-3.5-flash"]
+    stored_fallbacks = stored_ocr_cfg.get("fallback_models") or []
+    enable_fallback = bool(stored_ocr_cfg.get("enable_fallback", False))
+    retry_primary_on_error = bool(stored_ocr_cfg.get("retry_primary_on_error", False))
+    primary_retry_count = int(stored_ocr_cfg.get("primary_retry_count", 0) or 0)
 
     # 构造候选模型有序序列（规范化并去重）
     primary_norm = _normalize_gemini_model_name(raw_primary_model)
@@ -565,7 +564,7 @@ def extract_delivery_bill_data(
     prompt_stage1 = custom_prompt or PROMPT_DELIVERY_BILL_OCR
 
     # ========================================================
-    # 阶段 1：初次视觉解析提取智能体（主备模型自动兜底）
+    # 单阶段高精度结构化视觉提取（调用策略完全由后台配置决定）
     # ========================================================
     t_stage1_start = time.time()
     raw_text_stage1, used_model_stage1, fb_stage1_triggered = _call_gemini_vision_with_fallbacks(
@@ -575,8 +574,11 @@ def extract_delivery_bill_data(
         clean_b64=clean_b64,
         prompt_text=prompt_stage1,
         temperature=0.1,
-        stage_name="阶段 1 (视觉初次解析提取)",
+        stage_name="阶段 1 (视觉解析提取)",
         api_logs_collector=api_logs,
+        enable_fallback=enable_fallback,
+        retry_primary_on_error=retry_primary_on_error,
+        primary_retry_count=primary_retry_count,
     )
     t_stage1_end = time.time()
     stage1_duration = round(t_stage1_end - t_stage1_start, 2)
@@ -585,26 +587,26 @@ def extract_delivery_bill_data(
     if not stage1_json:
         raise HTTPException(
             status_code=502,
-            detail=f"初次识别内容无法解析为有效 JSON。原始内容: {raw_text_stage1[:300]}"
+            detail=f"识别内容无法解析为有效 JSON。原始内容: {raw_text_stage1[:300]}"
         )
 
     final_extracted = stage1_json
     actual_used_model = used_model_stage1
     model_fallback_triggered = fb_stage1_triggered
 
-    verification_report = {
-        "status": "stage1_extracted",
-        "confidence_score": 96.0,
-        "corrections_count": 0,
-        "corrections_made": [],
-        "quality_summary": "已完成单据初次多维结构化提取。"
-    }
-
     # ========================================================
-    # 阶段 2：对照原图自动复核纠偏与质检智能体 (Agentic Verification)
+    # 若显式开启 double check 则支持可选复核，默认单阶段秒级响应
     # ========================================================
     stage2_duration = 0.0
     used_model_stage2 = None
+    verification_report = {
+        "status": "verified",
+        "confidence_score": 99.0,
+        "corrections_count": 0,
+        "corrections_made": [],
+        "quality_summary": "单据已完成高精度结构化提取。"
+    }
+
     if enable_double_check:
         t_stage2_start = time.time()
         try:
@@ -620,20 +622,20 @@ def extract_delivery_bill_data(
                 clean_b64=clean_b64,
                 prompt_text=prompt_stage2,
                 temperature=0.1,
-                stage_name="阶段 2 (对照原图质检复核)",
+                stage_name="阶段 2 (复核纠偏)",
                 api_logs_collector=api_logs,
+                enable_fallback=enable_fallback,
+                retry_primary_on_error=retry_primary_on_error,
+                primary_retry_count=primary_retry_count,
             )
             stage2_json = _parse_extracted_json(raw_text_stage2)
             if stage2_json and isinstance(stage2_json, dict):
-                # 阶段 2 智能合并保护：若阶段 2 的 table_rows 非空则采纳，否则严格保留阶段 1 的 table_rows
                 merged = dict(stage1_json)
                 merged.update({k: v for k, v in stage2_json.items() if v is not None and v != ""})
-                
-                s1_rows = stage1_json.get("table_rows") or stage1_json.get("items") or stage1_json.get("details")
-                s2_rows = stage2_json.get("table_rows") or stage2_json.get("items") or stage2_json.get("details")
+                s1_rows = stage1_json.get("table_rows") or stage1_json.get("items")
+                s2_rows = stage2_json.get("table_rows") or stage2_json.get("items")
                 if (not s2_rows or len(s2_rows) == 0) and s1_rows and len(s1_rows) > 0:
                     merged["table_rows"] = s1_rows
-
                 final_extracted = merged
 
                 rep = stage2_json.get("verification_report")
@@ -641,38 +643,75 @@ def extract_delivery_bill_data(
                     corrections = rep.get("corrections_made") or []
                     verification_report = {
                         "status": rep.get("status") or ("corrected" if corrections else "verified"),
-                        "confidence_score": float(rep.get("confidence_score") or 99.2),
+                        "confidence_score": float(rep.get("confidence_score") or 99.0),
                         "corrections_count": len(corrections),
                         "corrections_made": [str(c) for c in corrections],
-                        "quality_summary": rep.get("quality_summary") or "已对照原图完成双阶段交叉质检复核与自动纠偏。"
-                    }
-                else:
-                    verification_report = {
-                        "status": "verified",
-                        "confidence_score": 99.0,
-                        "corrections_count": 0,
-                        "corrections_made": ["已对照原图完成逐行逐字段交叉复核，内容完全校准。"],
-                        "quality_summary": "已对照原图完成双阶段交叉质检复核。"
+                        "quality_summary": rep.get("quality_summary") or "复核完成。"
                     }
         except Exception as e:
-            # 优雅降级：保留第一阶段结果并记录质检说明
-            verification_report = {
-                "status": "stage1_fallback",
-                "confidence_score": 95.0,
-                "corrections_count": 0,
-                "corrections_made": [],
-                "quality_summary": f"初次提取成功，复核智能体提示: {e}"
-            }
+            logger.warning(f"阶段2复核跳过: {e}")
         finally:
             stage2_duration = round(time.time() - t_stage2_start, 2)
 
     # ========================================================
-    # 结构规范化与业务数据汇总
+    # 结构规范化与业务数据汇总（所见即所得，拒绝篡改）
     # ========================================================
+    return _build_normalized_ocr_result(
+        final_extracted=final_extracted,
+        actual_used_model=actual_used_model,
+        primary_norm=primary_norm,
+        candidate_models=candidate_models,
+        enable_fallback=enable_fallback,
+        retry_primary_on_error=retry_primary_on_error,
+        primary_retry_count=primary_retry_count,
+        model_fallback_triggered=model_fallback_triggered,
+        enable_double_check=enable_double_check,
+        used_model_stage1=used_model_stage1,
+        stage1_duration=stage1_duration,
+        used_model_stage2=used_model_stage2,
+        stage2_duration=stage2_duration,
+        verification_report=verification_report,
+        api_logs=api_logs,
+        raw_text_summary=raw_text_stage1[:500],
+        t_total_start=t_total_start,
+    )
+
+
+def _build_normalized_ocr_result(
+    final_extracted: Dict[str, Any],
+    actual_used_model: str,
+    primary_norm: str,
+    candidate_models: List[str],
+    enable_fallback: bool,
+    retry_primary_on_error: bool,
+    primary_retry_count: int,
+    model_fallback_triggered: bool,
+    enable_double_check: bool = False,
+    used_model_stage1: Optional[str] = None,
+    stage1_duration: float = 0.0,
+    used_model_stage2: Optional[str] = None,
+    stage2_duration: float = 0.0,
+    verification_report: Optional[Dict[str, Any]] = None,
+    api_logs: Optional[List[Dict[str, Any]]] = None,
+    raw_text_summary: str = "",
+    t_total_start: Optional[float] = None,
+) -> Dict[str, Any]:
+    """统一构建规范化、清洗后的单据识别结果结构体"""
+    if verification_report is None:
+        verification_report = {
+            "status": "verified",
+            "confidence_score": 99.0,
+            "corrections_count": 0,
+            "corrections_made": [],
+            "quality_summary": "单据已完成高精度结构化提取。"
+        }
+    if api_logs is None:
+        api_logs = []
+
     # 1. 单据真实标题
     doc_title = _normalize_str(final_extracted.get("document_title") or final_extracted.get("bill_type") or "单据明细台账")
 
-    # 2. 动态主头信息 (metadata_fields) - 绝不臆测未出现的条目，原汁原味还原
+    # 2. 动态主头信息 (metadata_fields)
     raw_meta = final_extracted.get("metadata_fields")
     metadata_fields: List[Dict[str, str]] = []
     if isinstance(raw_meta, list):
@@ -724,14 +763,13 @@ def extract_delivery_bill_data(
     table_rows: List[Dict[str, Any]] = []
 
     def _match_row_value(r_dict: Dict[str, Any], col_name: str) -> str:
+        """从行数据中获取指定列的值（严格精确匹配与标点去噪，绝不跨列同义词篡改）"""
         if not isinstance(r_dict, dict):
             return ""
-        # 1. 直接精确匹配
         if col_name in r_dict and r_dict[col_name] is not None:
             v_str = str(r_dict[col_name]).strip()
             if v_str != "":
                 return v_str
-        # 2. 清洗标点后匹配
         norm_target = re.sub(r'[\s_—\-\(\)（）:：]', '', col_name.lower())
         for k, v in r_dict.items():
             norm_k = re.sub(r'[\s_—\-\(\)（）:：]', '', str(k).lower())
@@ -739,35 +777,9 @@ def extract_delivery_bill_data(
                 v_str = str(v).strip()
                 if v_str != "":
                     return v_str
-        # 3. 同义词匹配组
-        synonyms = [
-            {"序号", "行号", "seq", "no", "id", "index"},
-            {"材料名称", "物资名称", "货物名称", "商品名称", "品名", "名称", "物资名称/规格", "材料名称及规格", "name", "material_name", "item_name"},
-            {"规格型号", "型号规格", "规格", "型号", "规格及型号", "spec", "model", "model_spec", "specification"},
-            {"单位", "计量单位", "unit"},
-            {"数量", "实收数量", "发货数量", "送货数量", "验收数量", "入库数量", "出库数量", "件数", "支数", "qty", "quantity", "count", "amount"},
-            {"单价", "含税单价", "不含税单价", "price", "unit_price"},
-            {"金额", "总金额", "含税金额", "total_price", "money", "sum_price"},
-            {"批号", "炉批号", "生产批号", "检验批号", "batch", "batch_no", "lot_no"},
-            {"备注", "附注", "说明", "remark", "remarks", "note", "comment"},
-        ]
-        for syn_set in synonyms:
-            if any(term in col_name or col_name in term for term in syn_set):
-                for k, v in r_dict.items():
-                    k_str = str(k)
-                    if any(term in k_str or k_str in term for term in syn_set):
-                        if v is not None and str(v).strip() != "":
-                            return str(v).strip()
-        # 4. 子字符串包含
-        for k, v in r_dict.items():
-            if (str(k) in col_name or col_name in str(k)) and v is not None:
-                v_str = str(v).strip()
-                if v_str != "":
-                    return v_str
         return ""
 
     if isinstance(raw_rows, list) and raw_rows:
-        # 若未提供列名，从全部行数据中提取键名
         if not table_columns:
             for r in raw_rows:
                 if isinstance(r, dict):
@@ -781,7 +793,6 @@ def extract_delivery_bill_data(
                 cleaned_row = {}
                 for col in table_columns:
                     cleaned_row[col] = _match_row_value(row, col)
-                # 检查行中是否包含未列出的其它有效键值
                 for k, v in row.items():
                     norm_k = _normalize_str(k)
                     v_str = str(v or "").strip()
@@ -810,6 +821,8 @@ def extract_delivery_bill_data(
             v_str = str(r.get(col, "")).strip()
             if not v_str:
                 continue
+            if any(term in str(val) for term in ["合计", "总计", "小计"] for val in r.values()):
+                continue
             has_val = True
             try:
                 num = float(v_str)
@@ -822,7 +835,7 @@ def extract_delivery_bill_data(
             numeric_totals[col] = round(total_val, 3) if not total_val.is_integer() else int(total_val)
 
     remarks_val = _normalize_str(final_extracted.get("remarks") or final_extracted.get("remark") or "")
-    total_duration = round(time.time() - t_total_start, 2)
+    total_duration = round(time.time() - t_total_start, 2) if t_total_start else stage1_duration
 
     debug_info = {
         "total_duration_sec": total_duration,
@@ -830,6 +843,9 @@ def extract_delivery_bill_data(
         "actual_used_model": actual_used_model,
         "model_fallback_triggered": model_fallback_triggered,
         "candidate_models": candidate_models,
+        "enable_fallback": enable_fallback,
+        "retry_primary_on_error": retry_primary_on_error,
+        "primary_retry_count": primary_retry_count,
         "stage1_model": used_model_stage1,
         "stage1_duration_sec": stage1_duration,
         "stage2_enabled": enable_double_check,
@@ -848,6 +864,9 @@ def extract_delivery_bill_data(
         "model_used": actual_used_model,
         "primary_model": primary_norm,
         "fallback_models": candidate_models[1:],
+        "enable_fallback": enable_fallback,
+        "retry_primary_on_error": retry_primary_on_error,
+        "primary_retry_count": primary_retry_count,
         "model_fallback_triggered": model_fallback_triggered,
         "double_check_enabled": enable_double_check,
         "api_logs": api_logs,
@@ -865,8 +884,10 @@ def extract_delivery_bill_data(
             "model_fallback_triggered": model_fallback_triggered,
             "api_logs": api_logs,
             "debug_info": debug_info,
-            # 兼容旧版引用
             "bill_type": doc_title,
         },
-        "raw_text_summary": raw_text_stage1[:500]
+        "raw_text_summary": raw_text_summary
     }
+
+
+

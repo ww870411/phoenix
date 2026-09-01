@@ -1216,85 +1216,252 @@
           </div>
 
           <!-- Tab: 单据识别模型与 API 密钥配置 (Gemini Config) -->
-          <div v-if="activeTab === 'gemini_config'" class="pane-content-wrapper">
-            <section class="card elevated section-card">
-              <div class="card-header-row">
-                <div>
-                  <div class="card-header">⚡ 单据识别模型与 API 密钥配置</div>
-                  <p class="sub block-sub">
-                    按调用次序手填 3 个识别模型名称（首选模型与 2 个备选兜底模型），以及 Gemini API Key。
+          <div v-if="activeTab === 'gemini_config'" class="pane-content-wrapper ocr-admin-workbench">
+            <!-- 1. 顶部状态概要 Banner -->
+            <section class="card elevated ocr-banner-card">
+              <div class="ocr-banner-inner">
+                <div class="ocr-banner-left">
+                  <div class="ocr-banner-badge">AI 视觉推理中枢</div>
+                  <h3 class="ocr-banner-title">⚡ 单据识别模型与高可用调度引擎</h3>
+                  <p class="ocr-banner-desc">
+                    集中管理业务单据结构化提取的主力模型、备选容灾梯队与容错重试策略。所有 API Key 均采用 <code>enc_v1</code> 密文加密落盘，保障企业级数据资产安全。
                   </p>
                 </div>
-                <div class="section-actions">
-                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('ocr_tool_config')" @click="saveSection('ocr_tool_config')">
-                    {{ isSaving('ocr_tool_config') ? '保存中…' : '💾 保存配置' }}
+                <div class="ocr-banner-right">
+                  <button
+                    class="btn primary shadow-accent btn-save-large"
+                    type="button"
+                    :disabled="isSaving('ocr_tool_config')"
+                    @click="saveSection('ocr_tool_config')"
+                  >
+                    {{ isSaving('ocr_tool_config') ? '💾 正在同步保存…' : '💾 保存单据识别配置' }}
                   </button>
                 </div>
               </div>
 
-              <div class="field-grid core-field-grid">
-                <!-- 1. 模型列表（3个手填型号输入框） -->
-                <div class="field field-span-2" style="display: flex; flex-direction: column; gap: 14px;">
-                  <span style="font-weight: 600; color: #334155; font-size: 14px;">识别模型列表（按先后次序自动兜底）：</span>
-                  
-                  <label class="field" style="margin: 0;">
-                    <span style="font-size: 13px; font-weight: 600; color: #1e293b;">模型 1 (首选主力)</span>
-                    <input
-                      v-model="ocrModel1"
-                      type="text"
-                      class="input"
-                      placeholder="手填首选模型名称，例如: gemini-3.5-flash-lite"
-                    />
-                  </label>
+              <!-- 实时调用策略可视化流水线 -->
+              <div class="ocr-flow-pipeline">
+                <div class="pipeline-title">🚀 实时调度执行流预览：</div>
+                <div class="pipeline-track">
+                  <div class="pipeline-step step-primary">
+                    <span class="step-tag">1️⃣ 主力模型</span>
+                    <strong class="step-name font-mono">{{ ocrModel1 || '未指定' }}</strong>
+                  </div>
+                  <div v-if="ocrRetryPrimaryOnError" class="pipeline-connector connector-retry">
+                    <span class="connector-arrow">➔</span>
+                    <span class="connector-pill pill-retry">重试 {{ ocrPrimaryRetryCount }} 次</span>
+                  </div>
+                  <div v-if="ocrEnableFallback && (ocrModel2 || ocrModel3)" class="pipeline-connector">
+                    <span class="connector-arrow">➔</span>
+                    <span class="connector-pill pill-fallback">触发备选兜底</span>
+                  </div>
+                  <div v-if="ocrEnableFallback && ocrModel2" class="pipeline-step step-fallback">
+                    <span class="step-tag">2️⃣ 备选兜底 #1</span>
+                    <strong class="step-name font-mono">{{ ocrModel2 }}</strong>
+                  </div>
+                  <div v-if="ocrEnableFallback && ocrModel3" class="pipeline-connector">
+                    <span class="connector-arrow">➔</span>
+                  </div>
+                  <div v-if="ocrEnableFallback && ocrModel3" class="pipeline-step step-fallback">
+                    <span class="step-tag">3️⃣ 备选兜底 #2</span>
+                    <strong class="step-name font-mono">{{ ocrModel3 }}</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
 
-                  <label class="field" style="margin: 0;">
-                    <span style="font-size: 13px; font-weight: 600; color: #475569;">模型 2 (第 1 备选兜底)</span>
-                    <input
-                      v-model="ocrModel2"
-                      type="text"
-                      class="input"
-                      placeholder="手填第 1 备选模型名称，例如: gemini-3.7-flash"
-                    />
-                  </label>
+            <!-- 2. 中部双栏：左侧模型梯度卡片 + 右侧调用策略工坊 -->
+            <div class="ocr-config-grid">
+              
+              <!-- 模块 1：🤖 视觉识别模型梯队 (三级卡片) -->
+              <section class="card elevated ocr-module-card">
+                <div class="module-card-header">
+                  <div class="module-title">
+                    <span class="module-icon">🤖</span>
+                    <strong>视觉模型梯队配置</strong>
+                  </div>
+                  <span class="module-badge">自由手填</span>
+                </div>
+                <p class="module-desc">
+                  按先后优先级调用。首选模型未能响应时，系统将根据右侧策略自动顺延调用备选模型。
+                </p>
 
-                  <label class="field" style="margin: 0;">
-                    <span style="font-size: 13px; font-weight: 600; color: #475569;">模型 3 (第 2 备选兜底)</span>
+                <div class="model-tiers-stack">
+                  <!-- 模型 1 -->
+                  <div class="model-tier-item tier-primary">
+                    <div class="tier-badge-label">
+                      <span class="crown-icon">👑</span>
+                      <span>模型 1（首选主力）</span>
+                      <span class="tier-status-tag">默认首选</span>
+                    </div>
+                    <div class="tier-input-wrap">
+                      <span class="input-prefix-icon">🔮</span>
+                      <input
+                        v-model.trim="ocrModel1"
+                        type="text"
+                        class="input ocr-model-input font-mono"
+                        placeholder="例如: gemini-3.5-flash-lite"
+                      />
+                    </div>
+                    <div class="tier-quick-chips">
+                      <span class="quick-label">⚡ 常用：</span>
+                      <button type="button" class="chip-btn" @click="ocrModel1 = 'gemini-3.5-flash-lite'">gemini-3.5-flash-lite</button>
+                      <button type="button" class="chip-btn" @click="ocrModel1 = 'gemini-2.5-flash-lite'">gemini-2.5-flash-lite</button>
+                      <button type="button" class="chip-btn" @click="ocrModel1 = 'gemini-3.7-flash'">gemini-3.7-flash</button>
+                    </div>
+                  </div>
+
+                  <!-- 模型 2 -->
+                  <div class="model-tier-item tier-secondary">
+                    <div class="tier-badge-label">
+                      <span class="tier-seq">02</span>
+                      <span>模型 2（第 1 备选兜底）</span>
+                      <span class="tier-role-tag">容灾第 1 顺位</span>
+                    </div>
+                    <div class="tier-input-wrap">
+                      <span class="input-prefix-icon">🛡️</span>
+                      <input
+                        v-model.trim="ocrModel2"
+                        type="text"
+                        class="input ocr-model-input font-mono"
+                        placeholder="手填第 1 备选模型，例如: gemini-3.7-flash"
+                      />
+                    </div>
+                    <div class="tier-quick-chips">
+                      <span class="quick-label">⚡ 常用：</span>
+                      <button type="button" class="chip-btn" @click="ocrModel2 = 'gemini-3.7-flash'">gemini-3.7-flash</button>
+                      <button type="button" class="chip-btn" @click="ocrModel2 = 'gemini-2.5-flash'">gemini-2.5-flash</button>
+                      <button type="button" class="chip-btn" @click="ocrModel2 = 'gemini-3.5-flash'">gemini-3.5-flash</button>
+                    </div>
+                  </div>
+
+                  <!-- 模型 3 -->
+                  <div class="model-tier-item tier-tertiary">
+                    <div class="tier-badge-label">
+                      <span class="tier-seq">03</span>
+                      <span>模型 3（第 2 备选兜底）</span>
+                      <span class="tier-role-tag">终极容灾</span>
+                    </div>
+                    <div class="tier-input-wrap">
+                      <span class="input-prefix-icon">🛡️</span>
+                      <input
+                        v-model.trim="ocrModel3"
+                        type="text"
+                        class="input ocr-model-input font-mono"
+                        placeholder="手填第 2 备选模型，例如: gemini-3.5-flash"
+                      />
+                    </div>
+                    <div class="tier-quick-chips">
+                      <span class="quick-label">⚡ 常用：</span>
+                      <button type="button" class="chip-btn" @click="ocrModel3 = 'gemini-3.5-flash'">gemini-3.5-flash</button>
+                      <button type="button" class="chip-btn" @click="ocrModel3 = 'gemini-2.5-pro'">gemini-2.5-pro</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 模块 2：🛡️ 调用失败处理策略工坊 (Strategy Settings) -->
+              <section class="card elevated ocr-module-card">
+                <div class="module-card-header">
+                  <div class="module-title">
+                    <span class="module-icon">⚙️</span>
+                    <strong>调用失败与容灾策略</strong>
+                  </div>
+                  <span class="module-badge">显式策略</span>
+                </div>
+                <p class="module-desc">
+                  独立配置重试机制与备选兜底规则，未勾选的项目系统绝不隐式自动执行。
+                </p>
+
+                <div class="strategy-cards-stack">
+                  <!-- 策略 1：主模型遇到报错/繁忙时重试 -->
+                  <div class="strategy-card-box" :class="{ active: ocrRetryPrimaryOnError }">
+                    <label class="strategy-card-label">
+                      <input v-model="ocrRetryPrimaryOnError" type="checkbox" class="strategy-checkbox" />
+                      <div class="strategy-text-wrap">
+                        <div class="strategy-title-row">
+                          <strong>🔄 主模型遇到报错或繁忙时自动重试</strong>
+                          <span v-if="ocrRetryPrimaryOnError" class="strategy-active-pill">已启用</span>
+                        </div>
+                        <p class="strategy-desc">
+                          当模型 1 遇到 Google 官方 503 (high demand) 繁忙或瞬时网络抖动时，在原地重新尝试指定的次数。
+                        </p>
+                      </div>
+                    </label>
+                    <div class="strategy-sub-setting" v-if="ocrRetryPrimaryOnError">
+                      <span class="sub-setting-label">最大重试次数：</span>
+                      <select v-model.number="ocrPrimaryRetryCount" class="input strategy-select">
+                        <option :value="1">额外重试 1 次 (共调 2 次)</option>
+                        <option :value="2">额外重试 2 次 (共调 3 次)</option>
+                        <option :value="3">额外重试 3 次 (共调 4 次)</option>
+                        <option :value="4">额外重试 4 次 (共调 5 次)</option>
+                        <option :value="5">额外重试 5 次 (共调 6 次)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- 策略 2：失败后切换手填备选模型 -->
+                  <div class="strategy-card-box" :class="{ active: ocrEnableFallback }">
+                    <label class="strategy-card-label">
+                      <input v-model="ocrEnableFallback" type="checkbox" class="strategy-checkbox" />
+                      <div class="strategy-text-wrap">
+                        <div class="strategy-title-row">
+                          <strong>🛡️ 主模型失败后自动切换备选模型</strong>
+                          <span v-if="ocrEnableFallback" class="strategy-active-pill pill-green">已启用</span>
+                        </div>
+                        <p class="strategy-desc">
+                          当模型 1 尝试耗尽仍未能成功返回数据时，调度器将按顺序依次尝试调用模型 2 与模型 3 进行容灾提取。
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <!-- 极简提示卡片 -->
+                  <div class="strategy-info-alert">
+                    <span class="alert-icon">💡</span>
+                    <div class="alert-content">
+                      <strong>纯净调度原则：</strong>两个策略默认均可关闭。关闭时系统仅发起一次主力模型调用，绝无隐式模型池。
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <!-- 3. 底部：🔑 Google Gemini API 密钥与安全认证 -->
+            <section class="card elevated ocr-module-card ocr-key-section">
+              <div class="module-card-header">
+                <div class="module-title">
+                  <span class="module-icon">🔑</span>
+                  <strong>Google Gemini API 密钥认证</strong>
+                </div>
+                <div class="key-status-badge" :class="ocrApiKey ? 'key-configured' : 'key-empty'">
+                  {{ ocrApiKey ? '🟢 独立 API Key 已配置' : '🟡 暂未配置（将使用系统共享密钥）' }}
+                </div>
+              </div>
+
+              <div class="ocr-key-form">
+                <div class="key-input-row">
+                  <div class="key-input-box">
+                    <span class="key-prefix-tag">API_KEY</span>
                     <input
-                      v-model="ocrModel3"
-                      type="text"
-                      class="input"
-                      placeholder="手填第 2 备选模型名称，例如: gemini-3.5-flash"
+                      v-model.trim="ocrApiKey"
+                      :type="showOcrKeys ? 'text' : 'password'"
+                      class="input key-secret-input font-mono"
+                      placeholder="请输入 Google AI Studio 申请的 Gemini API Key (例如: AIzaSy...)"
                     />
-                  </label>
+                  </div>
+                  <button type="button" class="btn ghost btn-toggle-key" @click="showOcrKeys = !showOcrKeys">
+                    {{ showOcrKeys ? '🔒 隐藏明文' : '👁️ 查看明文' }}
+                  </button>
                 </div>
 
-                <!-- 2. Gemini API Key -->
-                <label class="field field-span-2">
-                  <span style="font-weight: 600; color: #334155; font-size: 14px;">Gemini API Key (api_key)</span>
-                  <div class="input-with-action" style="display: flex; gap: 8px; width: 100%;">
-                    <input 
-                      v-model="ocrApiKey" 
-                      :type="showOcrKeys ? 'text' : 'password'" 
-                      class="input" 
-                      placeholder="请输入 Google Gemini API Key (如: AIzaSy...)" 
-                    />
-                    <button class="btn ghost compact-btn" type="button" @click="showOcrKeys = !showOcrKeys">
-                      {{ showOcrKeys ? '🔒 隐藏' : '👁️ 显示' }}
-                    </button>
-                  </div>
-                </label>
+                <div class="key-meta-bar">
+                  <span class="meta-item">🔒 加密存储规范：<code>enc_v1 (XOR+Base64 密文落盘)</code></span>
+                  <span class="meta-item">🌐 官方入口：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="link-external">Google AI Studio 获取免费 Key ↗</a></span>
+                </div>
               </div>
 
-              <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
-                <span class="status-indicator" v-if="ocrApiKey">
-                  🟢 当前已配置独立密钥
-                </span>
-                <span class="status-indicator warning" v-else>
-                  🟡 尚未配置独立密钥（系统将自动尝试读取全局共享密钥）
-                </span>
-              </div>
-
-              <p v-if="sectionMessage('ocr_tool_config')" :class="['section-tip', sectionMessage('ocr_tool_config').type]">
+              <p v-if="sectionMessage('ocr_tool_config')" :class="['section-tip', sectionMessage('ocr_tool_config').type]" style="margin-top: 12px;">
                 {{ sectionMessage('ocr_tool_config').text }}
               </p>
             </section>
@@ -2050,6 +2217,9 @@ const ocrModel2 = ref('gemini-3.7-flash')
 const ocrModel3 = ref('gemini-3.5-flash')
 const ocrApiKey = ref('')
 const showOcrKeys = ref(false)
+const ocrEnableFallback = ref(false)
+const ocrRetryPrimaryOnError = ref(false)
+const ocrPrimaryRetryCount = ref(1)
 
 // 🔩 管件基础参数与校验配置 Ref 变量
 const fittingAllowedUnitsText = ref('个, 套')
@@ -2451,6 +2621,9 @@ function applyConfig(config) {
       ocrModel2.value = 'gemini-3.7-flash'
       ocrModel3.value = 'gemini-3.5-flash'
     }
+    ocrEnableFallback.value = Boolean(config.ocr_tool_config.enable_fallback)
+    ocrRetryPrimaryOnError.value = Boolean(config.ocr_tool_config.retry_primary_on_error)
+    ocrPrimaryRetryCount.value = Math.min(5, Math.max(1, Number(config.ocr_tool_config.primary_retry_count) || 1))
   }
   
   loadWeatherConfig()
@@ -3119,6 +3292,9 @@ function buildSectionPayload(section) {
       model: m1,
       fallback_models: fallbacks,
       api_key: ocrApiKey.value || '',
+      enable_fallback: Boolean(ocrEnableFallback.value),
+      retry_primary_on_error: Boolean(ocrRetryPrimaryOnError.value),
+      primary_retry_count: Math.min(5, Math.max(1, Number(ocrPrimaryRetryCount.value) || 1)),
     }
   }
   if (section === 'fitting_config') {
@@ -3237,6 +3413,9 @@ async function loadConfig() {
         ocrModel2.value = dec.fallback_models[0] || ''
         ocrModel3.value = dec.fallback_models[1] || ''
       }
+      ocrEnableFallback.value = Boolean(dec.enable_fallback)
+      ocrRetryPrimaryOnError.value = Boolean(dec.retry_primary_on_error)
+      ocrPrimaryRetryCount.value = Math.min(5, Math.max(1, Number(dec.primary_retry_count) || 1))
       ocrApiKey.value = dec.api_key || ''
     }
 
@@ -3276,6 +3455,9 @@ async function saveSection(section) {
         ocrModel2.value = dec.fallback_models[0] || ''
         ocrModel3.value = dec.fallback_models[1] || ''
       }
+      ocrEnableFallback.value = Boolean(dec.enable_fallback)
+      ocrRetryPrimaryOnError.value = Boolean(dec.retry_primary_on_error)
+      ocrPrimaryRetryCount.value = Math.min(5, Math.max(1, Number(dec.primary_retry_count) || 1))
       ocrApiKey.value = dec.api_key || ''
     }
     if (response.amap_config_decrypted) {
@@ -6597,5 +6779,552 @@ async function handleExportLogs() {
 .clickable-user-link:hover .link-hint-icon {
   opacity: 1;
   transform: translate(1px, -1px);
+}
+
+/* ========================================================
+   ⚡ 单据识别模型与高可用调度工坊高颜值样式 (OCR Workbench)
+   ======================================================== */
+.ocr-admin-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 顶部状态概要 Banner */
+.ocr-banner-card {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid #334155;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);
+}
+
+.ocr-banner-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.ocr-banner-left {
+  flex: 1;
+  min-width: 280px;
+}
+
+.ocr-banner-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.ocr-banner-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ocr-banner-desc {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.ocr-banner-desc code {
+  color: #38bdf8;
+  background: #020617;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btn-save-large {
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
+/* 调度执行流水线可视化条 */
+.ocr-flow-pipeline {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pipeline-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.pipeline-track {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: rgba(2, 6, 23, 0.6);
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pipeline-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.pipeline-step.step-primary {
+  background: linear-gradient(135deg, #1e3a8a, #1e40af);
+  border: 1px solid #3b82f6;
+  color: #eff6ff;
+}
+
+.pipeline-step.step-fallback {
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px dashed #64748b;
+  color: #cbd5e1;
+}
+
+.step-tag {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.step-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pipeline-connector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-weight: bold;
+}
+
+.connector-arrow {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.connector-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.connector-pill.pill-retry {
+  background: #78350f;
+  color: #fef08a;
+  border: 1px solid #d97706;
+}
+
+.connector-pill.pill-fallback {
+  background: #065f46;
+  color: #a7f3d0;
+  border: 1px solid #059669;
+}
+
+/* 中部双栏网格 */
+.ocr-config-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .ocr-config-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ocr-module-card {
+  padding: 20px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.module-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.module-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.module-icon {
+  font-size: 18px;
+}
+
+.module-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.module-desc {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+/* 视觉模型梯队卡片栈 */
+.model-tiers-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.model-tier-item {
+  padding: 12px 14px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.model-tier-item.tier-primary {
+  background: #f8fbff;
+  border: 1.5px solid #93c5fd;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
+}
+
+.model-tier-item.tier-secondary,
+.model-tier-item.tier-tertiary {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.tier-badge-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.crown-icon {
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.tier-seq {
+  font-size: 11px;
+  font-family: monospace;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+}
+
+.tier-status-tag {
+  font-size: 11px;
+  font-weight: 700;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.tier-role-tag {
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #64748b;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.tier-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-prefix-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.ocr-model-input {
+  padding-left: 34px !important;
+  font-size: 13.5px;
+  font-weight: 600;
+  width: 100%;
+}
+
+.tier-quick-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.chip-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 11px;
+  font-family: Consolas, Monaco, monospace;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  background: #f1f5f9;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* 调用策略工坊卡片 */
+.strategy-cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.strategy-card-box {
+  padding: 14px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.strategy-card-box.active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.08);
+}
+
+.strategy-card-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.strategy-checkbox {
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.strategy-text-wrap {
+  flex: 1;
+}
+
+.strategy-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.strategy-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.strategy-active-pill {
+  font-size: 10px;
+  font-weight: 700;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.strategy-active-pill.pill-green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.strategy-sub-setting {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sub-setting-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.strategy-select {
+  width: 220px !important;
+  font-size: 12.5px !important;
+}
+
+.strategy-info-alert {
+  display: flex;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.alert-icon {
+  font-size: 15px;
+}
+
+/* 底部 API Key 模块 */
+.ocr-key-section {
+  background: #ffffff;
+}
+
+.key-status-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.key-status-badge.key-configured {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.key-status-badge.key-empty {
+  background: #fefce8;
+  color: #854d0e;
+  border: 1px solid #fef08a;
+}
+
+.ocr-key-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.key-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.key-input-box {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.key-prefix-tag {
+  position: absolute;
+  left: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.key-secret-input {
+  padding-left: 72px !important;
+  font-size: 13.5px;
+  width: 100%;
+}
+
+.btn-toggle-key {
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+.key-meta-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.key-meta-bar code {
+  color: #0f172a;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.link-external {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link-external:hover {
+  text-decoration: underline;
 }
 </style>

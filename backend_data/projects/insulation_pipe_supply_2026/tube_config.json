@@ -684,7 +684,10 @@
       "gemini-3.1-flash-lite",
       "gemini-3.7-flash"
     ],
+    "enable_fallback": false,
+    "retry_primary_on_error": true,
+    "primary_retry_count": 1,
     "api_key": "enc_v1:MSEVBD0QPAAmORAZEDJIFxx9HUZ1JysWJkMLHB0QXw8kNychIw1d",
-    "updated_at": "2026-09-01 13:42:09"
+    "updated_at": "2026-09-01 16:29:55"
   }
 }

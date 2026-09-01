@@ -827,7 +827,8 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         if isinstance(raw_fallbacks, list):
             fallback_models_val = [str(m).strip() for m in raw_fallbacks if str(m).strip()]
         else:
-            fallback_models_val = ["gemini-3.7-flash", "gemini-3.5-flash"]
+            # 未显式配置时不注入隐式兜底模型，是否切换由管理员策略开关决定。
+            fallback_models_val = []
         
         current_cfg = payload.get("ocr_tool_config", {})
         if not isinstance(current_cfg, dict):
@@ -842,10 +843,33 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
                 saved_key = ""
         else:
             saved_key = current_cfg.get("api_key", "")
+
+        enable_fallback_val = (
+            bool(data.get("enable_fallback"))
+            if "enable_fallback" in data
+            else bool(current_cfg.get("enable_fallback", False))
+        )
+        retry_primary_on_error_val = (
+            bool(data.get("retry_primary_on_error"))
+            if "retry_primary_on_error" in data
+            else bool(current_cfg.get("retry_primary_on_error", False))
+        )
+        try:
+            primary_retry_count_val = int(
+                data.get("primary_retry_count")
+                if "primary_retry_count" in data
+                else current_cfg.get("primary_retry_count", 0)
+            )
+        except (TypeError, ValueError):
+            primary_retry_count_val = 0
+        primary_retry_count_val = max(0, min(primary_retry_count_val, 5))
             
         payload[normalized_section] = {
             "model": model_val,
             "fallback_models": fallback_models_val,
+            "enable_fallback": enable_fallback_val,
+            "retry_primary_on_error": retry_primary_on_error_val,
+            "primary_retry_count": primary_retry_count_val,
             "api_key": saved_key,
             "updated_at": datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -6199,11 +6223,6 @@ def handle_get_material_prices(
         "total": len(rows),
         "data": rows,
     }
-    return {
-        "success": True,
-        "total": len(rows),
-        "data": rows,
-    }
 
 
 @router.post("/material-prices/import", summary="从默认 Excel 重新导入/更新物料单价字典")
@@ -6212,6 +6231,9 @@ def handle_import_material_prices(
 ) -> Dict[str, Any]:
     res = import_prices_from_excel(operator=session.username or "ADMIN")
     return res
+
+
+from fastapi.responses import StreamingResponse
 
 
 class OcrDeliveryBillPayload(BaseModel):
@@ -6227,6 +6249,9 @@ class OcrConfigPayload(BaseModel):
     model: Optional[str] = "gemini-3.5-flash-lite"
     fallback_models: Optional[List[str]] = None
     api_key: Optional[str] = None
+    enable_fallback: Optional[bool] = None
+    retry_primary_on_error: Optional[bool] = None
+    primary_retry_count: Optional[int] = None
 
 
 @router.post("/tools/ocr-delivery-bill", summary="发货单/随车单单据快速识别解析")
@@ -6242,7 +6267,7 @@ def handle_ocr_delivery_bill(
         api_key=payload.api_key,
         model_name=payload.model_name,
         custom_prompt=payload.custom_prompt,
-        enable_double_check=True if payload.enable_double_check is None else payload.enable_double_check,
+        enable_double_check=False if payload.enable_double_check is None else bool(payload.enable_double_check),
     )
 
     # 记录至业务操作记录（综合数据查询大类）
@@ -6293,7 +6318,10 @@ def handle_get_ocr_config(
     is_admin = (session.group or "").lower() in ("global_admin", "admin") or session.username.lower() == "admin"
     return {
         "model": cfg.get("model") or "gemini-3.5-flash-lite",
-        "fallback_models": cfg.get("fallback_models") or ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
+        "fallback_models": cfg.get("fallback_models") or [],
+        "enable_fallback": cfg.get("enable_fallback", False),
+        "retry_primary_on_error": cfg.get("retry_primary_on_error", False),
+        "primary_retry_count": cfg.get("primary_retry_count", 0),
         "has_custom_key": cfg.get("has_custom_key", False),
         "api_key": cfg.get("api_key") if is_admin else "",
     }
@@ -6311,13 +6339,11 @@ def handle_save_ocr_config(
     return save_configured_ocr_tool_config(
         model=payload.model or "gemini-3.5-flash-lite",
         fallback_models=payload.fallback_models,
-        api_key=payload.api_key
+        api_key=payload.api_key,
+        enable_fallback=payload.enable_fallback,
+        retry_primary_on_error=payload.retry_primary_on_error,
+        primary_retry_count=payload.primary_retry_count,
     )
-
-
-
-
-
 
 
 

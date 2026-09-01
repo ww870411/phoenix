@@ -1,3 +1,117 @@
+## 2026-09-01 业务单据智能识别：移除明细表格顶部合计汇总胶囊标签
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互优化**：
+  1. **移除表格顶部合计胶囊**：从明细表格工具栏中删除了 `∑ 合计数量: xx，合计单价: xx...` 浮动标签展示；
+  2. **界面视线聚焦**：仅保留客观准确的 `共 N 行` 明细行数指示，保持工作台工具栏整洁大方。
+
+## 2026-09-01 业务单据智能识别：全链路彻底移除流式模式，全面回归标准整包识别
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理 - 单据识别模型与 API 配置）
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（接口服务）
+- **功能特性与架构精简**：
+  1. **全链路移除流式模式**：删除 `fetchOcrDeliveryBillStream` 请求函数及全局管理中的流式切换卡片；
+  2. **极简工作台状态机**：工作台仅保留未识别（上传）、识别中（标准 Spinner）、识别完成（渲染表格与图片对比）3 个确定性状态，逻辑极度清晰稳定。
+
+## 2026-09-01 业务单据智能识别：移除整包模式虚假模拟播报，回归标准克制加载态
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **彻底移除假进度播报**：非流式模式下全面废除模拟的“识别到了发货单位”、“识别到了车牌号码”等虚假阶段播报与定时标签墙；
+  2. **回归真实客观加载态**：采用简洁专业的旋转环 Spinner + “正在调用 AI 视觉模型提取单据明细，请稍候...”标准等待指示，杜绝不真实的模拟干扰。
+
+## 2026-09-01 业务单据智能识别：移除页面顶栏模式按钮，模式选择完全收敛至全局管理
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理 - 单据识别模型与 API 配置）
+- **功能特性与交互升级**：
+  1. **移除工作台顶栏模式按钮**：工作台顶栏彻底移除 `🌊 实时流式回填` 与 `📦 标准整包传输` 切换胶囊，页面只保留纯粹的拍摄/上传/导出核心工具链，界面极简干净；
+  2. **后台全局配置统一驱动**：模式完全由全局管理后台中的【⚡ 单据识别模型与 API 配置】统一配置并持久化，工作台组件在初始化时自动静默加载并执行对应的数据流。
+
+## 2026-09-01 业务单据智能识别：接入真·流式传输 (SSE 流式输出与逐行回填)，支持双模式无缝切换
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理 - 单据识别模型与 API 配置）
+- **功能特性与交互升级**：
+  1. **真·SSE 流式实时回填**：利用 `fetch` + `response.body.getReader()` 接收大模型实时流事件（`event: delta_title`、`event: delta_metadata`、`event: delta_rows` 等），单据抬头即时出现，RevoGrid 电子表格像打字机一样逐行动态生长并自适应滚动；
+  2. **双模式无缝共存与切换**：在顶栏与全局管理中均提供 `🌊 实时流式回填` 与 `📦 标准整包传输` 切换开关，兼顾极致流畅体验与离线静态稳定性。
+
+## 2026-09-01 业务单据智能识别：移除已耗时秒表，升级为动态识别播报流水线与成果标签墙
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **移除枯燥的已耗时秒表**：彻底替换原本生硬单调的 `⏱️ 已耗时: 6.2s` 计数条；
+  2. **多阶段生命感识别播报**：随着识别时间推进，动态播报当前正在执行的具体视觉提取任务（`“正在扫描单据边缘轮廓与印章...”` ➔ `“识别到了发货单位与车牌号码...”` ➔ `“识别到了单据流水号与开单日期...”` ➔ `“识别到了保温管型号 (DN规格)、发货数量与单位...”` ➔ `“识别到了多行物资台账明细，正在核验合计...”` ➔ `“识别到了经手人签名与附注说明...”`）；
+  3. **要素动态弹出标签墙**：实时以微动画弹出 `[🏢 发货单位]`、`[🚚 车辆号牌]`、`[📏 保温管规格]`、`[🔢 发货数量]`、`[∑ 合计行]`、`[✍️ 签名附注]` 动态勋章，让用户在等待时清晰直观地感知 AI 正在高效干活。
+
+## 2026-09-01 业务单据智能识别：移除单据抬头“添加”功能，保持识别回显纯粹
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **移除添加抬头与条目入口**：彻底删除抬头区域的【➕ 添加抬头字段】与网格内嵌的【➕ 添加条目】按钮，清理冗余的 `addMetadataField` 函数；
+  2. **保持纯粹客观**：单据抬头信息专注于展现大模型视觉提取出的客观条目，支持用户直接针对既有项目修改或剔除。
+
+## 2026-09-01 业务单据智能识别：清除 Excel 导出虚假质检表头，彻底移除底部冗余按钮栏
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **清除 Excel 导出虚假质检信息**：导出的 `.xlsx` 文件彻底移除“质检状态”、“自动交叉质检完成 (置信度 99%)”等冗余字段，仅保留单据名称、客观导出时间、抬头参数与材料明细；
+  2. **删除底部冗余操作栏**：排查并确认页面上的“导出 Excel”与底部的“导出完整台账 (Excel .xlsx)”在逻辑与功能上完全一致，底部的“清空重新拍照”与顶部的“重新拍摄”完全一致；彻底删除页面底部的 `result-action-footer` 重复按钮栏。
+
+## 2026-09-01 全局管理单据识别：高颜值企业级排版重构与调度流水线可视化
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理控制台 - 侧边栏【⚡ 单据识别模型与 API 配置】标签面板）
+- **功能特性与交互升级**：
+  1. **深色科技感状态 Banner & 实时调度流水线**：直观视觉化呈现 `[1️⃣ 主力模型] ➔ (重试 N 次) ➔ [2️⃣ 备选兜底 #1] ➔ [3️⃣ 备选兜底 #2]` 的实时执行逻辑；
+  2. **三级视觉模型梯队卡片 (Model Tiers)**：首选主力（金色光晕）、备选兜底（蓝紫容灾）分级呈现，支持任意手填并提供常用模型胶囊一键快捷填入；
+  3. **调用策略工坊 (Strategy Settings)**：交互式激活卡片、最大重试次数下拉选择、纯净调度原则说明；
+  4. **API Key 安全认证卡片**：带 API_KEY 勋章前缀、明文切换、加密存储规范与官方申请入口。
+
+## 2026-09-01 业务单据智能识别：彻底移除响应日志与调试面板，极简纯净交付
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **完全删除调试日志面板**：彻底移除“AI 大模型通信与响应日志”调试控制台卡片、原始返回文本卡片、Google Gemini API 通信记录折叠层与终端流水日志；
+  2. **极简纯净生产工作台**：页面仅保留核心业务模块——单据原件影像比对灯箱、单据抬头条目卡片、RevoGrid 电子表格明细编辑及 Excel 导出，界面视觉清爽无冗余。
+
+## 2026-09-01 全局管理单据识别：显式控制兜底与主模型重试
+
+- **关联页面**：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 的“单据识别模型与 API 密钥配置”标签页。
+- **配置能力**：
+  1. “调用失败后执行兜底”独立控制 403、503、超时等主模型调用失败后，是否按手填的模型 2、模型 3 顺序继续尝试；未勾选时不调用备选模型。
+  2. “主模型报错或繁忙时重试”独立控制主模型重试，并可选择额外重试 1～5 次；未勾选时次数选择器禁用。
+  3. 两项均未勾选时仅发起一次主模型请求；保存、重新载入全局配置后完整回显策略状态。旧配置首次读取默认关闭两项策略。
+
+## 2026-09-01 业务单据智能识别：大模型调用全透明化、动态等待心跳流水与异常详情卡片
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **请求等待心跳流水 (Wait Heartbeat)**：在向后端发出识别请求后，开启定时心跳流水（每 2 秒输出 `[WAIT] 大模型正在进行视觉理解与表格结构化提取中 (已等待 X.Xs)...`），直观反馈大模型推理中的实时进度，消除长时间停顿的“黑箱感”；
+  2. **大模型返回原始文本直观展示 (Raw Model Output Card)**：日志面板默认展开，在首屏卡片中渲染大模型传来的第一手完整文本，并提供字符统计与一键 `📋 复制大模型返回` 功能；
+  3. **通信报文与 Token 审计 (API Interactions & Tokens)**：完整展示与 Google Gemini 官方交互的每一笔 HTTP 请求细节，包括端点、状态码、耗时、Token 用量、Request Prompt 及 Response Raw Text；
+  4. **异常诊断一目了然 (Error Card)**：当大模型或网络调用不顺利（如 503 繁忙或解析异常）时，将大模型传来的具体报错报文或异常详情以醒目红底卡片高亮展示在日志面板顶部，便于秒级精准排障。
+
+## 2026-09-01 业务单据智能识别：去冗降噪重构、移除双阶段开关与质检抽屉、秒级清爽交互
+
+- **关联前端页面与组件**：
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **清爽交互与去除垃圾流程**：移除顶栏“开启双阶段原图交叉质检”冗余复选框，移除虚假的加载文案轮播与质检纠偏抽屉，实现一步到位单阶段秒级结构化提取；
+  2. **开发者面板折叠收敛**：将底层 API 交互报文和控制台日志收敛为默认折叠的“🛠️ 运行诊断与日志（开发者选项）”，还给业务用户清爽纯净的核对工作台；
+  3. **RevoGrid 与原图灯箱极致顺畅**：保留高清原图灯箱平移放大、抬头条目动态增删改、RevoGrid 电子表格明细自由编辑与一键导出标准 Excel。
+
 ## 2026-09-01 全局管理单据识别配置：全面精简为手填 3 模型极简列表
 
 - **关联前端页面与组件**：

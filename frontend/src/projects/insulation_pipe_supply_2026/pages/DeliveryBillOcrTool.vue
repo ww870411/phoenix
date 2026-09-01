@@ -5,15 +5,10 @@
       <div>
         <h2 style="display: flex; align-items: center; gap: 8px;">
           <span>📷 业务单据智能识别</span>
-          <span class="badge-beta">BETA</span>
+          <span class="badge-beta">PRO</span>
         </h2>
       </div>
       <div class="top-actions-bar">
-        <label class="double-check-toggle-chip" title="开启后将由大模型对照原图进行第二阶段质检纠偏与合计行核验；若追求5~8秒极速识别可取消勾选">
-          <input type="checkbox" v-model="enableDoubleCheck" />
-          <span>🛡️ 开启双阶段原图交叉质检与合计行核验</span>
-        </label>
-
         <button
           v-if="extractedResult"
           type="button"
@@ -34,12 +29,21 @@
           v-if="extractedResult"
           type="button"
           class="btn primary compact-btn"
+          :disabled="isExporting"
           @click="exportExtractedExcel"
         >
-          📥 导出识别表格 (Excel)
+          {{ isExporting ? '⏳ 正在导出…' : '📥 导出 Excel' }}
         </button>
       </div>
     </div>
+
+    <!-- 导出成功轻提示 Toast -->
+    <transition name="fade">
+      <div v-if="exportSuccessToast" class="ocr-toast-notification">
+        <span class="toast-icon">🎉</span>
+        <span class="toast-msg">Excel 文件已生成并触发下载，请查看浏览器下载栏！</span>
+      </div>
+    </transition>
 
     <!-- 隐藏式文件与相机拍照输入控件 -->
     <input
@@ -88,24 +92,14 @@
       </div>
     </div>
 
-    <!-- 2. 识别加载中状态 (带实时秒表、动态进度与阶段提示) -->
+    <!-- 2. 识别加载中状态 (真实、克制的标准加载提示) -->
     <div v-if="loading" class="ocr-loading-card">
-      <div class="loading-spinner-ring"></div>
-      <h3 class="loading-title">{{ dynamicLoadingTitle }}</h3>
+      <div class="loading-visual-area">
+        <div class="loading-spinner-ring"></div>
+      </div>
       
-      <div class="loading-timer-pill">
-        <span>⏱️ 已耗时: <strong>{{ loadingElapsedSeconds.toFixed(1) }}s</strong></span>
-      </div>
-
-      <p class="loading-subtitle">{{ dynamicLoadingSubtitle }}</p>
-
-      <div class="loading-progress-track">
-        <div class="loading-progress-bar" :style="{ width: `${loadingProgressPercent}%` }"></div>
-      </div>
-
-      <div class="loading-tip-hint">
-        <span>💡 模式提示：{{ enableDoubleCheck ? '已开启双阶段质检复核（保障 100% 还原精度）。若需 5~8 秒极速识别可在顶栏关闭此项。' : '当前为单阶段极速模式，预计 5~8 秒内返回结果。' }}</span>
-      </div>
+      <h3 class="loading-title">正在调用 AI 视觉模型提取单据明细...</h3>
+      <p class="loading-sub-desc">已提交单据图像至大模型进行全图识别与表格提取，请稍候...</p>
     </div>
 
     <!-- 错误警告提示 -->
@@ -120,7 +114,7 @@
       </button>
     </div>
 
-    <!-- 3. 识别完成：上下分段现代工作台（上部单据原件影像核对，下部结构化台账与明细） -->
+    <!-- 3. 上下分段现代工作台（识别完成呈现） -->
     <div v-if="extractedResult && !loading" class="extracted-workspace-stack">
       <!-- 上半部分：单据原图核对区 -->
       <div class="doc-preview-panel">
@@ -191,53 +185,23 @@
                 title="点击可直接修改单据名称"
               />
             </div>
-            <div
-              v-if="extractedResult?.verification_report"
-              class="verification-badge-pill"
-              :class="extractedResult.verification_report.status"
-            >
-              <span class="badge-icon">
-                {{ extractedResult.verification_report.status === 'corrected' ? '🛠️' : '🛡️' }}
-              </span>
-              <span class="badge-text">
-                {{ extractedResult.verification_report.status === 'corrected' ? '已自动校准纠偏' : '质检核对通过' }}
-                <span class="score-tag">({{ extractedResult.verification_report.confidence_score }}%)</span>
-              </span>
+            
+            <div class="verification-badge-pill verified">
+              <span class="badge-icon">✅</span>
+              <span class="badge-text">解析完成</span>
             </div>
           </div>
 
           <div class="doc-header-right">
             <button
-              v-if="extractedResult?.verification_report?.corrections_made?.length"
               type="button"
-              class="btn-action-ghost"
-              @click="showVerificationDetails = !showVerificationDetails"
+              class="btn-action-primary"
+              :disabled="isExporting"
+              @click="exportExtractedExcel"
             >
-              {{ showVerificationDetails ? '收起质检明细 ▲' : `质检与纠偏明细 (${extractedResult.verification_report.corrections_made.length}) ▼` }}
-            </button>
-            <button type="button" class="btn-action-primary" @click="exportExtractedExcel">
-              📥 导出 Excel
+              {{ isExporting ? '⏳ 正在生成…' : '📥 导出 Excel' }}
             </button>
           </div>
-        </div>
-
-        <!-- 展开的逐项质检纠偏记录抽屉 -->
-        <div
-          v-if="showVerificationDetails && extractedResult?.verification_report?.corrections_made?.length"
-          class="verification-details-drawer"
-        >
-          <div class="drawer-header">
-            <span class="drawer-title">📋 数据核对与纠偏明细清单</span>
-            <span class="drawer-summary">{{ extractedResult.verification_report.quality_summary }}</span>
-          </div>
-          <ul class="drawer-list">
-            <li
-              v-for="(item, cIdx) in extractedResult.verification_report.corrections_made"
-              :key="cIdx"
-            >
-              {{ item }}
-            </li>
-          </ul>
         </div>
 
         <!-- 单据主头信息区 (原汁原味动态提取卡片网格) -->
@@ -247,9 +211,6 @@
               <span>📌 单据抬头信息</span>
               <span class="section-count-tag">{{ extractedResult.metadata_fields?.length || 0 }} 项</span>
             </div>
-            <button type="button" class="btn-add-meta" @click="addMetadataField">
-              ➕ 添加抬头字段
-            </button>
           </div>
 
           <div class="master-badges-grid">
@@ -280,11 +241,6 @@
                 placeholder="—"
               />
             </div>
-
-            <!-- 网格内嵌快捷添加按钮 -->
-            <button type="button" class="btn-add-chip-inline" @click="addMetadataField">
-              <span>➕ 添加条目</span>
-            </button>
           </div>
 
           <div v-if="extractedResult.remarks !== undefined" class="master-remark-row">
@@ -303,7 +259,6 @@
             <div class="toolbar-left">
               <span class="grid-title">📊 单据明细台账</span>
               <span class="grid-badge-pill">共 <strong>{{ extractedResult?.table_rows?.length || 0 }}</strong> 行</span>
-              <span v-if="numericTotalsText" class="grid-total-pill">∑ {{ numericTotalsText }}</span>
             </div>
             <div class="toolbar-right">
               <button type="button" class="btn-grid-action" @click="addGridRow">
@@ -344,182 +299,10 @@
           </div>
         </div>
 
-        <!-- 底部快捷动作条 -->
-        <div class="result-action-footer">
-          <div class="footer-left">
-            <button type="button" class="btn secondary" @click="handleReset">
-              🔄 清空重新拍照
-            </button>
-          </div>
-          <div class="footer-right">
-            <button type="button" class="btn primary btn-export-highlight" @click="exportExtractedExcel">
-              📥 导出完整台账 (Excel .xlsx)
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 
-    <!-- 4. 实时模型调用与调试日志面板 (Debug Console Panel) -->
-    <div class="debug-console-card">
-      <div class="debug-header" @click="isDebugCollapsed = !isDebugCollapsed">
-        <div class="debug-header-left">
-          <span class="debug-icon">🛠️</span>
-          <span class="debug-title">AI 模型调用与执行日志（调试面板）</span>
-          <span v-if="lastDebugInfo?.actual_used_model" class="debug-badge model-badge">
-            🤖 {{ lastDebugInfo.actual_used_model }}
-          </span>
-          <span v-if="lastDebugInfo?.total_duration_sec" class="debug-badge time-badge">
-            ⏱️ {{ lastDebugInfo.total_duration_sec }}s
-          </span>
-          <span v-if="lastDebugInfo?.model_fallback_triggered" class="debug-badge warning-badge">
-            ⚠️ 触发备选兜底
-          </span>
-        </div>
-        <div class="debug-header-right">
-          <button type="button" class="btn-debug-action" @click.stop="copyDebugLogs">
-            📋 复制日志
-          </button>
-          <button type="button" class="btn-debug-action" @click.stop="clearDebugLogs">
-            🗑️ 清空
-          </button>
-          <span class="collapse-toggle">{{ isDebugCollapsed ? '展开 ▼' : '收起 ▲' }}</span>
-        </div>
-      </div>
-
-      <div v-show="!isDebugCollapsed" class="debug-body">
-        <!-- 核心调用指标栏 -->
-        <div v-if="lastDebugInfo" class="debug-metrics-grid">
-          <div class="metric-item">
-            <span class="metric-label">首选配置模型</span>
-            <span class="metric-val font-mono">{{ lastDebugInfo.primary_model || '—' }}</span>
-          </div>
-          <div class="metric-item highlight">
-            <span class="metric-label">实际响应模型</span>
-            <span class="metric-val font-mono font-bold">{{ lastDebugInfo.actual_used_model || '—' }}</span>
-          </div>
-          <div class="metric-item">
-            <span class="metric-label">阶段1耗时 / 阶段2耗时</span>
-            <span class="metric-val font-mono">{{ lastDebugInfo.stage1_duration_sec || 0 }}s / {{ lastDebugInfo.stage2_duration_sec || 0 }}s</span>
-          </div>
-          <div class="metric-item">
-            <span class="metric-label">提取数据规模</span>
-            <span class="metric-val">{{ lastDebugInfo.parsed_columns_count || 0 }}列 × {{ lastDebugInfo.parsed_rows_count || 0 }}行 / 抬头{{ lastDebugInfo.parsed_metadata_count || 0 }}项</span>
-          </div>
-        </div>
-
-        <!-- 🤖 AI 调用诊断与全链路分析 -->
-        <div v-if="apiLogsList?.length" class="diagnostic-summary-card">
-          <div class="diag-header">
-            <span>💡 本次识别执行全链路分析</span>
-          </div>
-          <div class="diag-content">
-            <div class="diag-item">
-              <span class="diag-dot dot-green"></span>
-              <span><strong>阶段 1 (视觉初次提取)</strong>: 耗时 {{ lastDebugInfo?.stage1_duration_sec || 0 }}s，采用 {{ lastDebugInfo?.stage1_model || lastDebugInfo?.actual_used_model }}，成功提取 {{ lastDebugInfo?.parsed_columns_count }} 列 × {{ lastDebugInfo?.parsed_rows_count }} 行数据。</span>
-            </div>
-            <div v-if="lastDebugInfo?.stage2_enabled" class="diag-item">
-              <span class="diag-dot" :class="hasStage2Fallback ? 'dot-yellow' : 'dot-green'"></span>
-              <span v-if="hasStage2Fallback">
-                <strong>阶段 2 (质检复核与容灾)</strong>: 首次尝试遭遇 Google API 繁忙 (503)，系统自动无缝切换至备选模型 <strong>{{ lastDebugInfo?.stage2_model }}</strong> 成功完成复核 (阶段2总耗时 {{ lastDebugInfo?.stage2_duration_sec }}s)。
-              </span>
-              <span v-else>
-                <strong>阶段 2 (质检复核)</strong>: 耗时 {{ lastDebugInfo?.stage2_duration_sec || 0 }}s，对照原图完成全量核对与纠偏。
-              </span>
-            </div>
-            <div class="diag-item diag-tip">
-              <span>🚀 <strong>提速建议</strong>: 本次总耗时 {{ lastDebugInfo?.total_duration_sec }}s。若单据为标准打印单且追求 5~8 秒极速解析，可在顶栏取消勾选“开启双阶段原图交叉质检”。</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 终端控制台实时流水日志 -->
-        <div class="terminal-log-window">
-          <div v-if="!debugLogs.length" class="terminal-empty">
-            <span>[等待操作] 请上传单据图片发起识别，系统将在此实时打印客户端与后端 API 调用流水...</span>
-          </div>
-          <div
-            v-for="(log, lIdx) in debugLogs"
-            :key="lIdx"
-            class="terminal-line"
-            :class="`level-${log.level.toLowerCase()}`"
-          >
-            <span class="log-time">[{{ log.time }}]</span>
-            <span class="log-tag">[{{ log.tag }}]</span>
-            <span class="log-msg">{{ log.msg }}</span>
-          </div>
-        </div>
-
-        <!-- 📡 Google Gemini API 真实网络交互日志 (API Logs) -->
-        <div v-if="apiLogsList?.length" class="api-interactions-section">
-          <div class="api-section-title">
-            <span>📡 Google Gemini API 网络请求与响应报文 (共 {{ apiLogsList.length }} 次模型交互)</span>
-          </div>
-          <div class="api-logs-accordion">
-            <details
-              v-for="(apiLog, aIdx) in apiLogsList"
-              :key="aIdx"
-              class="api-log-card"
-              :open="aIdx === 0"
-            >
-              <summary class="api-log-summary">
-                <div class="summary-left">
-                  <span class="http-method-tag">POST</span>
-                  <span class="http-url-text">{{ apiLog.endpoint }}</span>
-                  <span
-                    class="http-status-pill"
-                    :class="apiLog.http_status === 200 ? 'status-200' : 'status-error'"
-                  >
-                    {{ apiLog.http_status || 'ERR' }}
-                  </span>
-                  <span class="api-stage-tag">{{ apiLog.stage }}</span>
-                </div>
-                <div class="summary-right">
-                  <span class="api-time-text">⏱️ {{ apiLog.duration_ms }}ms</span>
-                  <span v-if="apiLog.usage_metadata?.totalTokenCount" class="api-token-text">
-                    🪙 {{ apiLog.usage_metadata.totalTokenCount }} Tokens
-                  </span>
-                </div>
-              </summary>
-
-              <div class="api-log-content">
-                <!-- 请求 Prompt -->
-                <div class="api-block">
-                  <div class="api-block-header">
-                    <span>📤 发送给模型的 Request Prompt (长度: {{ apiLog.prompt_length }} 字符)</span>
-                    <button type="button" class="btn-copy-mini" @click="copyText(apiLog.full_prompt)">📋 复制 Prompt</button>
-                  </div>
-                  <pre class="api-code-pre">{{ apiLog.full_prompt }}</pre>
-                </div>
-
-                <!-- 响应报文 / 错误信息 -->
-                <div class="api-block" v-if="apiLog.success">
-                  <div class="api-block-header">
-                    <span>📥 模型返回的 Response Raw Text / JSON (长度: {{ apiLog.raw_response_text?.length || 0 }} 字符)</span>
-                    <button type="button" class="btn-copy-mini" @click="copyText(apiLog.raw_response_text)">📋 复制返回文本</button>
-                  </div>
-                  <pre class="api-code-pre response-success">{{ apiLog.raw_response_text }}</pre>
-                </div>
-                <div class="api-block" v-else>
-                  <div class="api-block-header">
-                    <span style="color: #f87171;">⚠️ API 报错响应 (Error Message)</span>
-                  </div>
-                  <pre class="api-code-pre response-error">{{ apiLog.error_message }}</pre>
-                </div>
-              </div>
-            </details>
-          </div>
-        </div>
-
-        <!-- 原始后端返回 JSON (折叠查看) -->
-        <details v-if="lastRawResponse" class="raw-response-details">
-          <summary>🔍 查看后端返回的原始完整 JSON (Raw Payload)</summary>
-          <pre class="raw-json-pre">{{ JSON.stringify(lastRawResponse, null, 2) }}</pre>
-        </details>
-      </div>
-    </div>
-
-    <!-- 5. 单据原图全屏放大灯箱 / 缩放查看器 -->
+    <!-- 4. 单据原图全屏放大灯箱 / 缩放查看器 -->
     <div
       v-if="isLightboxOpen"
       class="image-lightbox-backdrop"
@@ -545,7 +328,7 @@
           <button type="button" class="btn-lightbox" title="适应窗口" @click="fitZoom">
             🖼️ 适应
           </button>
-          <button type="button" class="btn-lightbox" title="顺时针旋转 90°" @click="rotateLightbox(90)">
+          <button type="button" class="btn-lightbox" title="顺时针旋转 90°" @click="rotateImage(90)">
             🔄 旋转
           </button>
           <button type="button" class="btn-lightbox btn-close" title="关闭 (Esc)" @click="closeLightbox">
@@ -558,10 +341,10 @@
         class="lightbox-canvas-viewport"
         :class="{ 'is-dragging': isDraggingImage }"
         @wheel.prevent="handleWheelZoom"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
-        @mouseleave="handleMouseUp"
+        @mousedown="startImageDrag"
+        @mousemove="onImageDrag"
+        @mouseup="stopImageDrag"
+        @mouseleave="stopImageDrag"
       >
         <img
           :src="previewDataUrl"
@@ -581,10 +364,12 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx-js-style'
-import { ocrDeliveryBill } from '../../daily_report_25_26/services/api'
+import {
+  ocrDeliveryBill,
+} from '../../daily_report_25_26/services/api'
 
 const props = defineProps({
   projectKey: {
@@ -616,114 +401,16 @@ const currentBase64 = ref('')
 const imageRotation = ref(0)
 const compressedInfo = ref(null)
 
-// 双阶段智能体与自动质检状态
-const showVerificationDetails = ref(false)
-const enableDoubleCheck = ref(true)
+const isExporting = ref(false)
+const exportSuccessToast = ref(false)
 
-// 加载中秒表与分步进度
-const loadingElapsedSeconds = ref(0)
-let timerId = null
 
-const dynamicLoadingTitle = computed(() => {
-  if (loadingElapsedSeconds.value < 8) {
-    return '正在请求视觉大模型进行初次结构化提取...'
-  } else if (enableDoubleCheck.value && loadingElapsedSeconds.value < 25) {
-    return '正在启动第二阶段质检智能体对照原图复核纠偏...'
-  } else if (enableDoubleCheck.value) {
-    return '正在进行高可用容灾与备选模型自动重试，请稍候...'
-  }
-  return '正在解析单据数据...'
-})
-
-const dynamicLoadingSubtitle = computed(() => {
-  if (loadingElapsedSeconds.value < 8) {
-    return '正在提取单据抬头、7项元数据及多列明细表格...'
-  } else if (enableDoubleCheck.value && loadingElapsedSeconds.value < 25) {
-    return '正在逐行逐字段核验规格型号、数量，并校验表格末行合计汇总...'
-  } else if (enableDoubleCheck.value) {
-    return '大模型响应负载较高，系统正在自动管理候选模型序列以确保提取成功...'
-  }
-  return '即将完成...'
-})
-
-const loadingProgressPercent = computed(() => {
-  if (!enableDoubleCheck.value) {
-    return Math.min(95, Math.round((loadingElapsedSeconds.value / 8) * 90))
-  }
-  return Math.min(95, Math.round((loadingElapsedSeconds.value / 35) * 90))
-})
-
-function startLoadingTimer() {
-  loadingElapsedSeconds.value = 0
-  if (timerId) clearInterval(timerId)
-  timerId = setInterval(() => {
-    loadingElapsedSeconds.value += 0.2
-  }, 200)
-}
-
-function stopLoadingTimer() {
-  if (timerId) {
-    clearInterval(timerId)
-    timerId = null
-  }
-}
 
 // 提取结果与表格数据模型
 const extractedResult = ref(null)
 const gridRef = ref(null)
 const gridColumns = ref([])
 const gridSource = ref([])
-
-// 调试日志面板状态
-const isDebugCollapsed = ref(false)
-const lastDebugInfo = ref(null)
-const lastRawResponse = ref(null)
-const debugLogs = ref([])
-
-function addLog(tag, msg, level = 'INFO') {
-  const now = new Date()
-  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`
-  debugLogs.value.push({
-    time: timeStr,
-    tag,
-    msg,
-    level
-  })
-}
-
-function clearDebugLogs() {
-  debugLogs.value = []
-  lastDebugInfo.value = null
-  lastRawResponse.value = null
-}
-
-function copyDebugLogs() {
-  const content = {
-    logs: debugLogs.value,
-    debugInfo: lastDebugInfo.value,
-    apiLogs: apiLogsList.value,
-    rawResponse: lastRawResponse.value
-  }
-  navigator.clipboard.writeText(JSON.stringify(content, null, 2))
-    .then(() => alert('已成功复制完整调试日志、API通信记录与响应体 JSON 到剪贴板！'))
-    .catch(() => alert('复制失败，请手动选择复制'))
-}
-
-const apiLogsList = computed(() => {
-  return lastRawResponse.value?.api_logs || lastRawResponse.value?.extracted_data?.api_logs || []
-})
-
-const hasStage2Fallback = computed(() => {
-  const s2Logs = apiLogsList.value.filter(l => l.stage && l.stage.includes('阶段 2'))
-  return s2Logs.length > 1 || s2Logs.some(l => !l.success)
-})
-
-function copyText(text) {
-  if (!text) return
-  navigator.clipboard.writeText(String(text))
-    .then(() => alert('已复制到剪贴板！'))
-    .catch(() => alert('复制失败，请手动选择复制'))
-}
 
 // 灯箱放大图片状态
 const isLightboxOpen = ref(false)
@@ -764,15 +451,19 @@ function syncToGrid(columns, rows) {
   })
 
   gridSource.value = rawRows.map(r => ({ ...r }))
-  if (gridRef.value && typeof gridRef.value.refresh === 'function') {
-    gridRef.value.refresh()
-  }
+  nextTick(() => {
+    if (gridRef.value && typeof gridRef.value.refresh === 'function') {
+      gridRef.value.refresh()
+    }
+  })
 }
 
 // 自动计算所有数值型列的合计
 const computeTotals = computed(() => {
   if (!extractedResult.value || !extractedResult.value.table_rows) return {}
-  const cols = tableColumnsList.value
+  const cols = (Array.isArray(extractedResult.value.table_columns) && extractedResult.value.table_columns.length)
+    ? extractedResult.value.table_columns
+    : (gridColumns.value.map(c => c.prop) || [])
   const rows = extractedResult.value.table_rows || []
   const totals = {}
 
@@ -802,12 +493,7 @@ const computeTotals = computed(() => {
   return totals
 })
 
-const numericTotalsText = computed(() => {
-  const totals = computeTotals.value
-  const entries = Object.entries(totals)
-  if (!entries.length) return ''
-  return entries.map(([col, val]) => `合计${col}: ${val}`).join('，')
-})
+
 
 function triggerUpload() {
   if (fileInputRef.value) {
@@ -901,16 +587,12 @@ function compressImageFile(file, maxWidth = 1600, maxHeight = 1600, quality = 0.
 async function processFile(file) {
   if (!file || !file.type.startsWith('image/')) {
     errorMessage.value = '请选择或拍摄有效的图片格式（JPG / PNG / WEBP）'
-    addLog('UPLOAD', '文件类型错误: ' + (file?.name || '未知文件'), 'ERROR')
     return
   }
 
   loading.value = true
   errorMessage.value = ''
-  startLoadingTimer()
   loadingStatusText.value = '正在处理照片并解析单据条目与表格数据...'
-
-  addLog('IMAGE', `载入照片: ${file.name} (${formatFileSize(file.size)}, ${file.type})`)
 
   try {
     const comp = await compressImageFile(file)
@@ -919,55 +601,29 @@ async function processFile(file) {
     currentBase64.value = comp.base64
     imageRotation.value = 0
 
-    addLog('IMAGE', `图片预处理完成: 规格 ${comp.width}×${comp.height}px, 压缩后体积 ${formatFileSize(comp.compressedSize)}`)
-
     loadingStatusText.value = '正在解析单据内容并核对条目与表格数据...'
     await executeOcrRecognition(comp.mimeType)
   } catch (err) {
     console.error('单据识别处理异常:', err)
-    addLog('IMAGE', `图片处理异常: ${err?.message}`, 'ERROR')
     errorMessage.value = err?.message || '解析单据照片失败'
     loading.value = false
-    stopLoadingTimer()
   }
 }
 
 async function executeOcrRecognition(mimeType = 'image/jpeg') {
   try {
-    addLog('API', `发起单据识别请求 -> POST /api/v1/projects/${props.projectKey}/ocr_delivery_bill (二次复核: ${enableDoubleCheck.value ? '开启' : '关闭'})`)
-    
     const payload = {
       image_base64: currentBase64.value,
       mime_type: mimeType || 'image/jpeg',
-      enable_double_check: enableDoubleCheck.value,
+      enable_double_check: false,
     }
 
     const res = await ocrDeliveryBill(props.projectKey, payload)
-    lastRawResponse.value = res
-    lastDebugInfo.value = res.debug_info || res.extracted_data?.debug_info || {
-      actual_used_model: res.model_used || '未知',
-      primary_model: res.primary_model || '未知',
-      model_fallback_triggered: res.model_fallback_triggered || false,
-      stage1_model: res.model_used,
-    }
-
     const rawData = res.extracted_data || res || {}
-    
-    if (res.model_fallback_triggered) {
-      addLog('MODEL', `⚠️ 首选模型未能响应，已自动触发备选池并命中模型: ${res.model_used}`, 'WARN')
-    } else {
-      addLog('MODEL', `✅ 视觉大模型调用成功: ${res.model_used || 'gemini-3.5-flash-lite'}`, 'SUCCESS')
-    }
 
-    if (res.debug_info) {
-      addLog('TIMING', `执行总耗时: ${res.debug_info.total_duration_sec}s (阶段1提取: ${res.debug_info.stage1_duration_sec}s, 阶段2复核: ${res.debug_info.stage2_duration_sec}s)`)
-    }
-
-    // 重置抽屉状态
-    showVerificationDetails.value = false
-
-    // 确保数据结构完整客观
-    const tableCols = Array.isArray(rawData.table_columns) && rawData.table_columns.length ? rawData.table_columns : ['序号', '材料名称', '规格型号', '单位', '数量', '备注']
+    const tableCols = Array.isArray(rawData.table_columns) && rawData.table_columns.length
+      ? rawData.table_columns
+      : ['序号', '材料名称', '规格型号', '单位', '数量', '备注']
     const tableRows = Array.isArray(rawData.table_rows) ? rawData.table_rows : []
 
     extractedResult.value = {
@@ -976,38 +632,28 @@ async function executeOcrRecognition(mimeType = 'image/jpeg') {
       table_columns: tableCols,
       table_rows: tableRows,
       remarks: rawData.remarks || '',
-      verification_report: rawData.verification_report || {
-        status: 'verified',
-        confidence_score: 99.0,
-        corrections_count: 0,
-        corrections_made: ['已完成原图与数据的全量交叉比对，条目与明细完全吻合。'],
-        quality_summary: '已对照原图完成全量数据核对与纠偏。'
-      }
     }
-
-    addLog('PARSE', `解析完成: 标题 "${extractedResult.value.document_title}", 抬头信息 ${extractedResult.value.metadata_fields.length} 项, 表格 ${tableCols.length} 列 × ${tableRows.length} 行`, 'SUCCESS')
 
     syncToGrid(tableCols, tableRows)
-    addLog('GRID', `RevoGrid 电子表格渲染完毕 (列: [${tableCols.join(', ')}])`, 'SUCCESS')
-
-    loading.value = false
-    stopLoadingTimer()
   } catch (err) {
     console.error('单据识别请求失败:', err)
-    let rawMsg = err?.message || '单据识别解析失败，请检查网络或更换清晰照片后重试'
+    const detailMsg = err?.response?.data?.detail || err?.detail || err?.message || String(err)
+    const formattedDetail = typeof detailMsg === 'object' ? JSON.stringify(detailMsg, null, 2) : String(detailMsg)
+    
+    let userMsg = formattedDetail
     if (
-      rawMsg.includes('503') ||
-      rawMsg.toLowerCase().includes('high demand') ||
-      rawMsg.toLowerCase().includes('overloaded') ||
-      rawMsg.toLowerCase().includes('temporarily unavailable') ||
-      rawMsg.includes('服务器繁忙')
+      userMsg.includes('503') ||
+      userMsg.toLowerCase().includes('high demand') ||
+      userMsg.toLowerCase().includes('overloaded') ||
+      userMsg.toLowerCase().includes('temporarily unavailable') ||
+      userMsg.includes('服务器繁忙')
     ) {
-      rawMsg = '服务器繁忙，请点击重试'
+      userMsg = '服务器繁忙，请点击重试'
     }
-    addLog('ERROR', `识别请求失败: ${rawMsg}`, 'ERROR')
-    errorMessage.value = rawMsg
+    
+    errorMessage.value = userMsg
+  } finally {
     loading.value = false
-    stopLoadingTimer()
   }
 }
 
@@ -1071,17 +717,6 @@ function deleteLastGridRow() {
   }
 }
 
-function addMetadataField() {
-  if (!extractedResult.value) return
-  if (!extractedResult.value.metadata_fields) {
-    extractedResult.value.metadata_fields = []
-  }
-  extractedResult.value.metadata_fields.push({
-    label: '新项目',
-    value: ''
-  })
-}
-
 function removeMetadataField(index) {
   if (extractedResult.value?.metadata_fields) {
     extractedResult.value.metadata_fields.splice(index, 1)
@@ -1102,11 +737,11 @@ function closeLightbox() {
 }
 
 function zoomIn() {
-  lightboxScale.value = Math.min(5, Number((lightboxScale.value + 0.25).toFixed(2)))
+  lightboxScale.value = Math.min(lightboxScale.value + 0.25, 4)
 }
 
 function zoomOut() {
-  lightboxScale.value = Math.max(0.2, Number((lightboxScale.value - 0.25).toFixed(2)))
+  lightboxScale.value = Math.max(lightboxScale.value - 0.25, 0.5)
 }
 
 function resetZoom() {
@@ -1119,18 +754,19 @@ function fitZoom() {
   lightboxTranslate.value = { x: 0, y: 0 }
 }
 
-function rotateLightbox(deg = 90) {
-  lightboxRotate.value = (lightboxRotate.value + deg) % 360
-  imageRotation.value = lightboxRotate.value
+function rotateImage(deg = 90) {
+  imageRotation.value = (imageRotation.value + deg) % 360
+  lightboxRotate.value = imageRotation.value
 }
 
 function handleWheelZoom(e) {
-  const delta = e.deltaY < 0 ? 0.15 : -0.15
-  const nextScale = Math.min(5, Math.max(0.2, lightboxScale.value + delta))
-  lightboxScale.value = Number(nextScale.toFixed(2))
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.15 : 0.15
+  const newScale = Math.min(Math.max(lightboxScale.value + delta, 0.4), 4.5)
+  lightboxScale.value = Number(newScale.toFixed(2))
 }
 
-function handleMouseDown(e) {
+function startImageDrag(e) {
   isDraggingImage.value = true
   dragStartPos.value = {
     x: e.clientX - lightboxTranslate.value.x,
@@ -1138,7 +774,7 @@ function handleMouseDown(e) {
   }
 }
 
-function handleMouseMove(e) {
+function onImageDrag(e) {
   if (!isDraggingImage.value) return
   lightboxTranslate.value = {
     x: e.clientX - dragStartPos.value.x,
@@ -1146,7 +782,7 @@ function handleMouseMove(e) {
   }
 }
 
-function handleMouseUp() {
+function stopImageDrag() {
   isDraggingImage.value = false
 }
 
@@ -1164,25 +800,26 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
 
-function handleFileSelected(event) {
-  const file = event.target?.files?.[0]
+function handleFileSelected(e) {
+  const file = e?.target?.files?.[0]
   if (file) {
     processFile(file)
   }
 }
 
-function handleFileDrop(event) {
+function handleFileDrop(e) {
   isDragging.value = false
-  const file = event.dataTransfer?.files?.[0]
+  const file = e?.dataTransfer?.files?.[0]
   if (file) {
     processFile(file)
   }
 }
 
-function handlePaste(event) {
-  const items = event.clipboardData?.items || []
+function handlePaste(e) {
+  const items = e?.clipboardData?.items
+  if (!items) return
   for (const item of items) {
-    if (item.type.startsWith('image/')) {
+    if (item.type && item.type.startsWith('image/')) {
       const file = item.getAsFile()
       if (file) {
         processFile(file)
@@ -1192,10 +829,6 @@ function handlePaste(event) {
   }
 }
 
-function rotateImage(deg = 90) {
-  imageRotation.value = (imageRotation.value + deg) % 360
-}
-
 function handleReset() {
   extractedResult.value = null
   previewDataUrl.value = ''
@@ -1203,7 +836,6 @@ function handleReset() {
   compressedInfo.value = null
   errorMessage.value = ''
   imageRotation.value = 0
-  showVerificationDetails.value = false
 }
 
 function retryLastRecognition() {
@@ -1223,7 +855,6 @@ function copyJsonResult() {
     table_columns: extractedResult.value.table_columns,
     table_rows: extractedResult.value.table_rows,
     remarks: extractedResult.value.remarks,
-    verification_report: extractedResult.value.verification_report,
   }
   const str = JSON.stringify(exportPayload, null, 2)
   navigator.clipboard.writeText(str).then(() => {
@@ -1234,90 +865,101 @@ function copyJsonResult() {
 }
 
 function exportExtractedExcel() {
-  if (!extractedResult.value) return
+  if (!extractedResult.value || isExporting.value) return
 
-  const wb = XLSX.utils.book_new()
-  const res = extractedResult.value || {}
-  const title = res.document_title || '单据提取识别台账'
-  const metaFields = res.metadata_fields || []
-  const cols = res.table_columns || []
-  const rows = res.table_rows || []
-  const vRep = res.verification_report
+  isExporting.value = true
 
-  // 1. 构造 Excel 主体数据
-  const wsData = [
-    [title],
-    [
-      '导出时间',
-      new Date().toLocaleString(),
-      '',
-      '质检状态',
-      vRep ? `自动交叉质检完成 (置信度 ${vRep.confidence_score}%)` : '已完成提取'
-    ],
-  ]
+  // 使用 setTimeout(..., 20) 将耗时计算移入微任务队列，确保浏览器先完成按钮“正在导出”的点击动画与视觉反馈
+  setTimeout(() => {
+    try {
+      const wb = XLSX.utils.book_new()
+      const res = extractedResult.value || {}
+      const title = res.document_title || '单据提取识别台账'
+      const metaFields = res.metadata_fields || []
+      const cols = res.table_columns || []
+      const rows = res.table_rows || []
 
-  // 添加 metadata_fields (按每行 2 组排版)
-  for (let i = 0; i < metaFields.length; i += 2) {
-    const f1 = metaFields[i]
-    const f2 = metaFields[i + 1]
-    const r = [f1.label || '', f1.value || '']
-    if (f2) {
-      r.push('', f2.label || '', f2.value || '')
-    }
-    wsData.push(r)
-  }
+      // 1. 构造 Excel 主体数据 (干净纯粹，无虚假质检字段)
+      const wsData = [
+        [title],
+        ['导出时间', new Date().toLocaleString()],
+      ]
 
-  if (res.remarks) {
-    wsData.push(['单据附注/备注', res.remarks])
-  }
-
-  wsData.push([]) // 空行隔开
-
-  // 表格列头
-  wsData.push(cols)
-
-  // 表格行
-  rows.forEach((row) => {
-    const rData = cols.map(c => {
-      const v = row[c]
-      if (v == null) return ''
-      // 若为纯数字且非序号，转为数字类型导出
-      if (c !== '序号' && !isNaN(Number(v)) && String(v).trim() !== '') {
-        return Number(v)
+      // 添加 metadata_fields (按每行 2 组排版)
+      for (let i = 0; i < metaFields.length; i += 2) {
+        const f1 = metaFields[i]
+        const f2 = metaFields[i + 1]
+        const r = [f1.label || '', f1.value || '']
+        if (f2) {
+          r.push('', f2.label || '', f2.value || '')
+        }
+        wsData.push(r)
       }
-      return v
-    })
-    wsData.push(rData)
-  })
 
-  // 合计行（若表格行中未包含合计行，则自动追加计算合计行）
-  const hasTotalRowAlready = rows.some(r => Object.values(r).some(v => String(v).includes('合计') || String(v).includes('总计')))
-  if (!hasTotalRowAlready) {
-    const totals = computeTotals.value
-    if (Object.keys(totals).length > 0) {
-      const totalRow = cols.map((c, idx) => {
-        if (idx === 0) return '合计'
-        if (totals[c] !== undefined) return totals[c]
-        return ''
+      if (res.remarks) {
+        wsData.push(['单据附注/备注', res.remarks])
+      }
+
+      wsData.push([]) // 空行隔开
+
+      // 表格列头
+      wsData.push(cols)
+
+      // 表格行
+      rows.forEach((row) => {
+        const rData = cols.map(c => {
+          const v = row[c]
+          if (v == null) return ''
+          // 若为纯数字且非序号，转为数字类型导出
+          if (c !== '序号' && !isNaN(Number(v)) && String(v).trim() !== '') {
+            return Number(v)
+          }
+          return v
+        })
+        wsData.push(rData)
       })
-      wsData.push(totalRow)
+
+      // 合计行（若表格行中未包含合计行，则自动追加计算合计行）
+      const hasTotalRowAlready = rows.some(r => Object.values(r).some(v => String(v).includes('合计') || String(v).includes('总计')))
+      if (!hasTotalRowAlready) {
+        const totals = computeTotals.value
+        if (Object.keys(totals).length > 0) {
+          const totalRow = cols.map((c, idx) => {
+            if (idx === 0) return '合计'
+            if (totals[c] !== undefined) return totals[c]
+            return ''
+          })
+          wsData.push(totalRow)
+        }
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+      // 动态列宽
+      ws['!cols'] = cols.map(c => {
+        if (c === '序号') return { wch: 8 }
+        if (c.includes('名称') || c.includes('品名') || c.includes('规格') || c.includes('型号')) return { wch: 24 }
+        if (c.includes('单位')) return { wch: 10 }
+        if (c.includes('量') || c.includes('数') || c.includes('重') || c.includes('额')) return { wch: 14 }
+        return { wch: 18 }
+      })
+
+      const safeFileName = `${title.replace(/[\/\\?%*:|"<>]/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`
+      XLSX.utils.book_append_sheet(wb, ws, '单据明细台账')
+      XLSX.writeFile(wb, safeFileName)
+
+      // 弹出轻量成功 Toast 提示
+      exportSuccessToast.value = true
+      setTimeout(() => {
+        exportSuccessToast.value = false
+      }, 3000)
+    } catch (err) {
+      console.error('导出 Excel 失败:', err)
+      alert('导出 Excel 失败: ' + (err?.message || String(err)))
+    } finally {
+      isExporting.value = false
     }
-  }
-
-  const ws = XLSX.utils.aoa_to_sheet(wsData)
-
-  // 动态列宽
-  ws['!cols'] = cols.map(c => {
-    if (c === '序号') return { wch: 8 }
-    if (c.includes('名称') || c.includes('品名') || c.includes('规格') || c.includes('型号')) return { wch: 24 }
-    if (c.includes('单位')) return { wch: 10 }
-    if (c.includes('量') || c.includes('数') || c.includes('重') || c.includes('额')) return { wch: 14 }
-    return { wch: 18 }
-  })
-
-  const safeFileName = `${title.replace(/[\/\\?%*:|"<>]/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`
-  XLSX.utils.book_append_sheet(wb, ws, '单据明细台账')
-  XLSX.writeFile(wb, safeFileName)
+  }, 20)
 }
 </script>
 
@@ -1354,6 +996,7 @@ function exportExtractedExcel() {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .compact-btn {
@@ -1428,22 +1071,31 @@ function exportExtractedExcel() {
   border-radius: 8px;
 }
 
-/* 加载卡片 */
+/* 加载卡片：动态识别流水线工作台 */
 .ocr-loading-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 24px;
+  padding: 48px 24px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  gap: 14px;
+  border: 1.5px solid #dbeafe;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.08);
+  gap: 16px;
+  text-align: center;
+}
+
+.loading-visual-area {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .loading-spinner-ring {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border: 4px solid #e2e8f0;
   border-top-color: #2563eb;
   border-radius: 50%;
@@ -1457,10 +1109,19 @@ function exportExtractedExcel() {
 }
 
 .loading-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
   margin: 0;
+  transition: all 0.2s ease;
+}
+
+/* 动态干活播报胶囊 */
+.loading-sub-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  max-width: 480px;
 }
 
 .error-banner {
@@ -1715,6 +1376,8 @@ function exportExtractedExcel() {
   color: #1d4ed8;
   border-color: #bfdbfe;
 }
+
+
 
 .score-tag {
   font-weight: 600;
@@ -2040,15 +1703,7 @@ function exportExtractedExcel() {
   border-radius: 999px;
 }
 
-.grid-total-pill {
-  background: #f0fdf4;
-  color: #166534;
-  border: 1px solid #dcfce7;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
+
 
 .toolbar-right {
   display: flex;
@@ -2336,507 +1991,45 @@ function exportExtractedExcel() {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* 调试控制台面板 (Debug Console) */
-.debug-console-card {
-  margin-top: 16px;
+/* 导出轻提示 Toast 悬浮胶囊 */
+.ocr-toast-notification {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
   background: #0f172a;
   color: #f8fafc;
-  border-radius: 8px;
+  padding: 12px 24px;
+  border-radius: 999px;
   border: 1px solid #334155;
-  overflow: hidden;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
-}
-
-.debug-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  background: #1e293b;
-  border-bottom: 1px solid #334155;
-  cursor: pointer;
-  user-select: none;
-}
-
-.debug-header-left {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  animation: toastSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.debug-icon {
+.toast-icon {
   font-size: 16px;
 }
 
-.debug-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #f1f5f9;
-}
-
-.debug-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.debug-badge.model-badge {
-  background: #065f46;
-  color: #a7f3d0;
-  border: 1px solid #059669;
-}
-
-.debug-badge.time-badge {
-  background: #1e3a8a;
-  color: #bfdbfe;
-  border: 1px solid #2563eb;
-}
-
-.debug-badge.warning-badge {
-  background: #78350f;
-  color: #fde68a;
-  border: 1px solid #d97706;
-}
-
-.debug-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-debug-action {
-  background: #334155;
-  border: 1px solid #475569;
-  color: #e2e8f0;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-debug-action:hover {
-  background: #475569;
-  color: #ffffff;
-}
-
-.collapse-toggle {
-  font-size: 12px;
-  color: #94a3b8;
-  margin-left: 4px;
-}
-
-.debug-body {
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.debug-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 8px;
-  background: #1e293b;
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid #334155;
-}
-
-.metric-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.metric-label {
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-.metric-val {
-  font-size: 13px;
-  color: #f1f5f9;
-}
-
-.metric-item.highlight .metric-val {
-  color: #34d399;
-}
-
-.terminal-log-window {
-  background: #020617;
-  border: 1px solid #1e293b;
-  border-radius: 6px;
-  padding: 10px 14px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.terminal-empty {
-  color: #64748b;
-  font-style: italic;
-}
-
-.terminal-line {
-  display: flex;
-  gap: 8px;
-  word-break: break-all;
-}
-
-.log-time {
-  color: #64748b;
-  white-space: nowrap;
-}
-
-.log-tag {
+.toast-msg {
   color: #38bdf8;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.log-msg {
-  color: #e2e8f0;
-}
-
-.terminal-line.level-success .log-msg {
-  color: #4ade80;
-}
-
-.terminal-line.level-warn .log-msg {
-  color: #fbbf24;
-}
-
-.terminal-line.level-error .log-msg {
-  color: #f87171;
-  font-weight: 600;
-}
-
-.raw-response-details {
-  background: #1e293b;
-  border-radius: 6px;
-  border: 1px solid #334155;
-  padding: 8px 12px;
-  font-size: 12px;
-}
-
-.raw-response-details summary {
-  cursor: pointer;
-  color: #93c5fd;
-  font-weight: 600;
-  user-select: none;
-}
-
-.raw-json-pre {
-  margin-top: 8px;
-  padding: 8px;
-  background: #020617;
-  color: #e2e8f0;
-  border-radius: 4px;
-  max-height: 260px;
-  overflow-y: auto;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-/* 📡 Google Gemini API 交互日志模块样式 */
-.api-interactions-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.api-section-title {
-  font-size: 12px;
   font-weight: 700;
-  color: #93c5fd;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
-.api-logs-accordion {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.api-log-card {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.api-log-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: #1e293b;
-  cursor: pointer;
-  user-select: none;
-  font-size: 12px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.api-log-summary:hover {
-  background: #334155;
-}
-
-.summary-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.http-method-tag {
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-
-.http-url-text {
-  color: #f1f5f9;
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.http-status-pill {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
-.http-status-pill.status-200 {
-  background: #065f46;
-  color: #34d399;
-  border: 1px solid #059669;
-}
-
-.http-status-pill.status-error {
-  background: #7f1d1d;
-  color: #f87171;
-  border: 1px solid #dc2626;
-}
-
-.api-stage-tag {
-  background: #0f172a;
-  color: #cbd5e1;
-  border: 1px solid #334155;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-
-.summary-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-.api-token-text {
-  color: #fbbf24;
-  font-weight: 600;
-}
-
-.api-log-content {
-  padding: 12px;
-  border-top: 1px solid #334155;
-  background: #0b1120;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.api-block {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.api-block-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: #94a3b8;
-}
-
-.btn-copy-mini {
-  background: #1e293b;
-  border: 1px solid #334155;
-  color: #cbd5e1;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-copy-mini:hover {
-  background: #334155;
-  color: #ffffff;
-}
-
-.api-code-pre {
-  margin: 0;
-  padding: 10px 12px;
-  background: #020617;
-  border: 1px solid #1e293b;
-  color: #e2e8f0;
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  max-height: 240px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.api-code-pre.response-success {
-  border-left: 3px solid #10b981;
-}
-
-.api-code-pre.response-error {
-  border-left: 3px solid #ef4444;
-  color: #f87171;
-}
-
-/* 顶栏二次质检复核开关 */
-.double-check-toggle-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #334155;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.15s ease;
-}
-
-.double-check-toggle-chip:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-}
-
-.double-check-toggle-chip input[type="checkbox"] {
-  cursor: pointer;
-}
-
-/* 加载遮罩动态秒表与进度条 */
-.loading-timer-pill {
-  margin-top: 8px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
-  padding: 4px 14px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-family: ui-monospace, monospace;
-}
-
-.loading-progress-track {
-  width: 280px;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 14px;
-}
-
-.loading-progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #10b981);
-  border-radius: 999px;
-  transition: width 0.3s ease;
-}
-
-.loading-tip-hint {
-  margin-top: 12px;
-  font-size: 12px;
-  color: #64748b;
-  text-align: center;
-  max-width: 480px;
-}
-
-/* 🤖 AI 调用诊断与全链路分析卡片 */
-.diagnostic-summary-card {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.diag-header {
-  font-size: 12px;
-  font-weight: 700;
-  color: #38bdf8;
-}
-
-.diag-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 12px;
-  color: #e2e8f0;
-  line-height: 1.5;
-}
-
-.diag-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.diag-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-top: 5px;
-  flex-shrink: 0;
-}
-
-.diag-dot.dot-green {
-  background: #10b981;
-  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
-}
-
-.diag-dot.dot-yellow {
-  background: #f59e0b;
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
-}
-
-.diag-item.diag-tip {
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px dashed #334155;
-  color: #94a3b8;
-  font-size: 11px;
+@keyframes toastSlideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 </style>

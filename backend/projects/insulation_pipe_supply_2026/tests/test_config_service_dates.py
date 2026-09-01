@@ -131,6 +131,9 @@ class OcrToolConfigSaveTest(unittest.TestCase):
         self.assertEqual(decrypted["model"], "gemini-3.5-flash-lite")
         self.assertEqual(decrypted["api_key"], "AIzaSyTestApiKey123")
         self.assertTrue(decrypted["has_custom_key"])
+        self.assertFalse(decrypted["enable_fallback"])
+        self.assertFalse(decrypted["retry_primary_on_error"])
+        self.assertEqual(decrypted["primary_retry_count"], 0)
 
     @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service.extract_delivery_bill_data")
     @patch("backend.projects.insulation_pipe_supply_2026.api.workspace.save_operation_log")
@@ -198,7 +201,7 @@ class OcrToolConfigSaveTest(unittest.TestCase):
             )
 
         self.assertEqual(cm.exception.status_code, 503)
-        self.assertEqual(cm.exception.detail, "服务器繁忙，请点击重试")
+        self.assertIn("服务器繁忙", cm.exception.detail)
 
     @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service._call_gemini_vision")
     def test_call_gemini_vision_with_fallbacks_recovers(self, mock_call):
@@ -218,12 +221,59 @@ class OcrToolConfigSaveTest(unittest.TestCase):
             candidate_models=["gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"],
             mime_type="image/jpeg",
             clean_b64="dGVzdA==",
-            prompt_text="prompt"
+            prompt_text="prompt",
+            enable_fallback=True,
         )
 
         self.assertIn("备选模型识别成功", raw_text)
         self.assertEqual(used_model, "gemini-2.5-flash-lite")
         self.assertTrue(fb_triggered)
+
+    @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service._call_gemini_vision")
+    def test_ocr_model_failure_does_not_fallback_when_disabled(self, mock_call):
+        from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import _call_gemini_vision_with_fallbacks
+        from fastapi import HTTPException
+
+        mock_call.side_effect = HTTPException(status_code=403, detail="API Key 无权限")
+
+        with self.assertRaises(HTTPException) as cm:
+            _call_gemini_vision_with_fallbacks(
+                active_key="test_key",
+                candidate_models=["gemini-primary", "gemini-fallback"],
+                mime_type="image/jpeg",
+                clean_b64="dGVzdA==",
+                prompt_text="prompt",
+                enable_fallback=False,
+            )
+
+        self.assertEqual(cm.exception.status_code, 403)
+        self.assertEqual(mock_call.call_count, 1)
+
+    @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service._call_gemini_vision")
+    def test_ocr_primary_retry_happens_before_fallback(self, mock_call):
+        from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import _call_gemini_vision_with_fallbacks
+        from fastapi import HTTPException
+
+        mock_call.side_effect = [
+            HTTPException(status_code=503, detail="服务器繁忙，请点击重试"),
+            ('{"document_title": "主模型重试成功"}', {"totalTokenCount": 100}),
+        ]
+
+        raw_text, used_model, fallback_triggered = _call_gemini_vision_with_fallbacks(
+            active_key="test_key",
+            candidate_models=["gemini-primary", "gemini-fallback"],
+            mime_type="image/jpeg",
+            clean_b64="dGVzdA==",
+            prompt_text="prompt",
+            enable_fallback=True,
+            retry_primary_on_error=True,
+            primary_retry_count=1,
+        )
+
+        self.assertIn("主模型重试成功", raw_text)
+        self.assertEqual(used_model, "gemini-primary")
+        self.assertFalse(fallback_triggered)
+        self.assertEqual(mock_call.call_count, 2)
 
     @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service._call_gemini_vision")
     def test_extract_delivery_bill_data_complete_structure(self, mock_call):
@@ -258,6 +308,4 @@ class OcrToolConfigSaveTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
 
