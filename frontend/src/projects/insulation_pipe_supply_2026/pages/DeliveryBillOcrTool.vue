@@ -5,7 +5,6 @@
       <div>
         <h2 style="display: flex; align-items: center; gap: 8px;">
           <span>📷 业务单据智能识别</span>
-          <span class="badge-beta">PRO</span>
         </h2>
       </div>
       <div class="top-actions-bar">
@@ -98,8 +97,8 @@
         <div class="loading-spinner-ring"></div>
       </div>
       
-      <h3 class="loading-title">正在调用 AI 视觉模型提取单据明细...</h3>
-      <p class="loading-sub-desc">已提交单据图像至大模型进行全图识别与表格提取，请稍候...</p>
+      <h3 class="loading-title">正在识别单据并提取明细台账...</h3>
+      <p class="loading-sub-desc">已提交单据图像进行版面分析与表格结构提取，请稍候...</p>
     </div>
 
     <!-- 错误警告提示 -->
@@ -981,16 +980,7 @@ function exportExtractedExcel() {
   align-items: center;
 }
 
-.badge-beta {
-  font-size: 11px;
-  font-weight: 700;
-  color: #2563eb;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 999px;
-  padding: 2px 8px;
-  letter-spacing: 0.5px;
-}
+
 
 .top-actions-bar {
   display: flex;

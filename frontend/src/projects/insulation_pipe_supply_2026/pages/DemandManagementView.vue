@@ -106,7 +106,6 @@
             >
               <span class="cat-icon">🔹</span>
               <span class="cat-label">保温管业务</span>
-              <span class="cat-count">5 项功能</span>
             </button>
             <button 
               type="button" 
@@ -116,7 +115,6 @@
             >
               <span class="cat-icon">🔩</span>
               <span class="cat-label">管件业务</span>
-              <span class="cat-count">3 项功能</span>
             </button>
             <button 
               type="button" 
@@ -125,8 +123,7 @@
               @click="handleCategoryClick('tools')"
             >
               <span class="cat-icon">🛠️</span>
-              <span class="cat-label">实用工具（BETA）</span>
-              <span class="cat-count">单据快速识别</span>
+              <span class="cat-label">实用工具</span>
             </button>
           </div>
         </div>
@@ -204,7 +201,7 @@
               :class="{ active: activeTab === 'ocr_tool' }" 
               @click="handleTabClick('ocr_tool')"
             >
-              📷 业务单据智能识别（BETA）
+              📷 业务单据智能识别
             </button>
           </div>
         </div>
@@ -2377,7 +2374,7 @@
           </section>
         </div>
 
-        <!-- Tab 8: 实用工具（BETA）- 发货单 / 随车单快速识别 -->
+        <!-- Tab 8: 实用工具 - 业务单据智能识别 -->
         <div v-if="activeTab === 'ocr_tool'" class="tab-pane">
           <section class="card elevated tab-card">
             <DeliveryBillOcrTool
@@ -8579,6 +8576,50 @@ function jumpToUsageTab() {
 @media (max-width: 720px) {
   .tube-page-main {
     padding-bottom: 16px;
+  }
+
+  /* 📱 移动端一级与二级导航栏排版优化 */
+  .category-segment-wrapper {
+    padding: 3px !important;
+    border-radius: 10px !important;
+  }
+
+  .category-segment-bar {
+    gap: 4px !important;
+  }
+
+  .category-segment-btn {
+    padding: 7px 4px !important;
+    font-size: 13px !important;
+    gap: 4px !important;
+  }
+
+  .category-segment-btn .cat-label {
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+  }
+
+  .tube-tabs-header-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 3px !important;
+    border-radius: 10px !important;
+  }
+
+  .tube-tabs-header {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    width: max-content !important;
+    min-width: 100% !important;
+    gap: 4px !important;
+  }
+
+  .tube-tabs-header button {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    padding: 8px 12px !important;
+    font-size: 12.5px !important;
+    gap: 4px !important;
   }
 
   .topbar,

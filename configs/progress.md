@@ -1,3 +1,28 @@
+## 2026-09-01 [界面去术语化：全面移除“AI”、“大模型”与“PRO”生硬文案，回归纯粹业务表达]
+- **需求与优化目标**：
+  - 响应用户诉求，不在界面（尤其是手机模式与日常填报场景）体现“AI”、“大模型”等生硬的技术术语，让业务人员交互更自然沉稳；
+  - **文案净化**：
+    1. 加载提示从 `正在调用 AI 视觉模型提取单据明细...` 优化为 `正在识别单据并提取明细台账...`；
+    2. 说明文字从 `已提交单据图像至大模型进行全图识别与表格提取，请稍候...` 优化为 `已提交单据图像进行版面分析与表格结构提取，请稍候...`；
+    3. 顶栏标题彻底移除 `PRO` 徽章与 `.badge-beta` 样式。
+- **改动文件**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
+## 2026-09-01 [需求填报页：移动端导航栏排版体验优化，移除项数与 BETA 标识]
+- **需求与优化目标**：
+  - 响应用户在移动端使用反馈，优化 `demand_management` 页面在手机模式下的排版与视觉层级；
+  - **标签去冗余**：彻底移除一级大类标签中的“5项功能”、“3项功能”、“单据快速识别”等冗长徽标；
+  - **去 BETA 化**：将“实用工具（BETA）”与“业务单据智能识别（BETA）”中的“（BETA）”标识完全移除，恢复标准正式命名；
+  - **移动端响应式升级**：针对手机窄屏（<=720px）新增自适应横向滑块与等比分段控制器样式，二级选项卡单行不折断，支持平滑横滑手势。
+- **改动文件**：
+  - 前端：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
 ## 2026-09-01 [单据识别：移除表格顶部工具栏的合计数量/单价/金额汇总胶囊标签]
 - **需求与优化目标**：
   - 响应用户诉求，从单据明细台账表格顶部工具栏中彻底移除 `∑ 合计数量: xx，合计单价: xx，合计金额: xx` 汇总胶囊展示；
