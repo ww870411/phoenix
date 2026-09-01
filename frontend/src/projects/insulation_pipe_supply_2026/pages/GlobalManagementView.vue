@@ -1217,11 +1217,48 @@
 
           <!-- Tab: 单据识别模型与 API 密钥配置 (Gemini Config) -->
           <div v-if="activeTab === 'gemini_config'" class="pane-content-wrapper ocr-admin-workbench">
+            <!-- 0. 单据识别服务状态与维护模式切换卡片 -->
+            <section class="card elevated ocr-service-status-card" :class="ocrEnabled ? 'status-online' : 'status-maintenance'">
+              <div class="status-card-inner">
+                <div class="status-indicator-box">
+                  <div class="status-pulse-wrapper">
+                    <span class="status-pulse-dot"></span>
+                  </div>
+                  <div class="status-text-meta">
+                    <div class="status-badge-row">
+                      <span class="status-mode-tag" :class="ocrEnabled ? 'tag-online' : 'tag-maintenance'">
+                        {{ ocrEnabled ? '🟢 正常服务模式' : '🛠️ 功能维护中模式' }}
+                      </span>
+                      <span class="status-hint-tag">
+                        {{ ocrEnabled ? '全体用户正常可用' : '前台已阻断识别入口' }}
+                      </span>
+                    </div>
+                    <strong class="status-title">
+                      {{ ocrEnabled ? '业务单据智能识别服务正常提供中' : '业务单据智能识别处于维护状态' }}
+                    </strong>
+                    <p class="status-desc">
+                      {{ ocrEnabled ? '各单位与施工现场可正常拍照、上传单据并进行表格明细与抬头的自动解析。' : '前台单据识别工作台将统一显示“功能维护中”并暂停拍照识别，接口层同步阻断请求。' }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="status-switch-action">
+                  <label class="toggle-switch-control">
+                    <input type="checkbox" v-model="ocrEnabled" class="toggle-switch-input" />
+                    <span class="toggle-switch-track">
+                      <span class="toggle-switch-thumb"></span>
+                    </span>
+                    <span class="toggle-switch-text">{{ ocrEnabled ? '服务正常开启' : '设为维护中 (暂停服务)' }}</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+
             <!-- 1. 顶部状态概要 Banner -->
             <section class="card elevated ocr-banner-card">
               <div class="ocr-banner-inner">
                 <div class="ocr-banner-left">
-                  <div class="ocr-banner-badge">AI 视觉推理中枢</div>
+                  <div class="ocr-banner-badge">单据识别调度中枢</div>
                   <h3 class="ocr-banner-title">⚡ 单据识别模型与高可用调度引擎</h3>
                   <p class="ocr-banner-desc">
                     集中管理业务单据结构化提取的主力模型、备选容灾梯队与容错重试策略。所有 API Key 均采用 <code>enc_v1</code> 密文加密落盘，保障企业级数据资产安全。
@@ -2212,6 +2249,7 @@ const amapSecurityCode = ref('')
 const showAmapKeys = ref(false)
 
 // ⚡ 单据识别引擎与 API 配置 Ref 变量（手填3个模型列表）
+const ocrEnabled = ref(true)
 const ocrModel1 = ref('gemini-3.5-flash-lite')
 const ocrModel2 = ref('gemini-3.7-flash')
 const ocrModel3 = ref('gemini-3.5-flash')
@@ -2609,6 +2647,7 @@ function applyConfig(config) {
   fittingStandardTypesText.value = listToText(fittingCfg.standard_types || ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
   
   if (config.ocr_tool_config) {
+    ocrEnabled.value = config.ocr_tool_config.enabled !== false
     ocrModel1.value = config.ocr_tool_config.model || 'gemini-3.5-flash-lite'
     const rawFb = config.ocr_tool_config.fallback_models
     if (Array.isArray(rawFb)) {
@@ -3289,6 +3328,7 @@ function buildSectionPayload(section) {
     const m3 = String(ocrModel3.value || '').trim()
     const fallbacks = [m2, m3].filter(Boolean)
     return {
+      enabled: Boolean(ocrEnabled.value),
       model: m1,
       fallback_models: fallbacks,
       api_key: ocrApiKey.value || '',
@@ -3408,6 +3448,7 @@ async function loadConfig() {
 
     if (response.ocr_tool_config_decrypted) {
       const dec = response.ocr_tool_config_decrypted
+      ocrEnabled.value = dec.enabled !== undefined ? Boolean(dec.enabled) : true
       ocrModel1.value = dec.model || 'gemini-3.5-flash-lite'
       if (Array.isArray(dec.fallback_models)) {
         ocrModel2.value = dec.fallback_models[0] || ''
@@ -3450,6 +3491,7 @@ async function saveSection(section) {
     applyConfig(response.config || {})
     if (response.ocr_tool_config_decrypted) {
       const dec = response.ocr_tool_config_decrypted
+      ocrEnabled.value = dec.enabled !== undefined ? Boolean(dec.enabled) : true
       ocrModel1.value = dec.model || 'gemini-3.5-flash-lite'
       if (Array.isArray(dec.fallback_models)) {
         ocrModel2.value = dec.fallback_models[0] || ''
@@ -6788,6 +6830,181 @@ async function handleExportLogs() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* 0. 运行服务状态与维护模式卡片 */
+.ocr-service-status-card {
+  padding: 16px 20px;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  border: 1.5px solid #e2e8f0;
+}
+
+.ocr-service-status-card.status-online {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border-color: #86efac;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.08);
+}
+
+.ocr-service-status-card.status-maintenance {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #fcd34d;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.08);
+}
+
+.status-card-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.status-indicator-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.status-pulse-wrapper {
+  margin-top: 4px;
+}
+
+.status-pulse-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  position: relative;
+}
+
+.status-online .status-pulse-dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+  animation: pulse-green 2s infinite ease-in-out;
+}
+
+.status-maintenance .status-pulse-dot {
+  background: #d97706;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+  animation: pulse-amber 2s infinite ease-in-out;
+}
+
+@keyframes pulse-green {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.7; }
+}
+
+@keyframes pulse-amber {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.7; }
+}
+
+.status-text-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-mode-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.status-mode-tag.tag-online {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.status-mode-tag.tag-maintenance {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.status-hint-tag {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.status-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.status-desc {
+  font-size: 12.5px;
+  color: #475569;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* 现代滑动 Switch 控件 */
+.status-switch-action {
+  flex-shrink: 0;
+}
+
+.toggle-switch-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.toggle-switch-input {
+  display: none;
+}
+
+.toggle-switch-track {
+  width: 48px;
+  height: 26px;
+  background: #cbd5e1;
+  border-radius: 999px;
+  position: relative;
+  transition: background-color 0.25s ease;
+  display: inline-block;
+}
+
+.toggle-switch-thumb {
+  width: 20px;
+  height: 20px;
+  background: #ffffff;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch-input:checked + .toggle-switch-track {
+  background: #16a34a;
+}
+
+.toggle-switch-input:checked + .toggle-switch-track .toggle-switch-thumb {
+  transform: translateX(22px);
+}
+
+.toggle-switch-text {
+  font-size: 13.5px;
+  font-weight: 700;
 }
 
 /* 顶部状态概要 Banner */

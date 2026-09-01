@@ -679,6 +679,7 @@
   },
   "usage_collection_date": "2026-08-19",
   "ocr_tool_config": {
+    "enabled": false,
     "model": "gemini-3.5-flash-lite",
     "fallback_models": [
       "gemini-3.1-flash-lite",
@@ -688,6 +689,6 @@
     "retry_primary_on_error": true,
     "primary_retry_count": 1,
     "api_key": "enc_v1:MSEVBD0QPAAmORAZEDJIFxx9HUZ1JysWJkMLHB0QXw8kNychIw1d",
-    "updated_at": "2026-09-01 16:29:55"
+    "updated_at": "2026-09-01 21:00:09"
   }
 }

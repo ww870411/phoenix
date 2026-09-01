@@ -1,3 +1,18 @@
+## 2026-09-01 单据智能识别服务：彻底禁止全局 AI 兜底，严格依赖 tube_config.json 专属配置
+
+- **关联模块**：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)。
+- **核心调整**：
+  1. **禁止全局隐式兜底**：彻底移除 `load_gemini_settings` 依赖及降级读取系统共享 `ai_settings.json` 的行为；
+  2. **严格依赖项目配置**：单据智能识别（OCR）必须 100% 显式读取 `tube_config.json` 的 `ocr_tool_config`。若未配置 API Key 或其值为空，接口直接抛出 HTTP 400 明确阻断提示，杜绝任何隐式或非预期的跨模块密钥借用。
+
+## 2026-09-01 单据智能识别服务：支持“正常服务”与“功能维护中”模式全局开关控制
+
+- **关联模块**：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)。
+- **核心升级**：
+  1. **配置层增加服务开关**：在 `ocr_tool_config` 中增加 `enabled: bool`（默认 `True` 代表“正常服务模式”，`False` 代表“功能维护中模式”）；
+  2. **接口层硬阻断防护**：在 `extract_delivery_bill_data` 识别入口处增加硬阻断检查，当 `enabled=False` 时直接抛出 `HTTPException(status_code=503, detail="业务单据智能识别功能维护中，暂不可用...")`；
+  3. **配置接口扩展**：`GET/POST /tools/ocr-config` 同步支持 `enabled` 字段的读取与写入。
+
 ## 2026-09-01 单据智能识别服务：全链路彻底移除流式模式，回归标准整包识别接口
 
 - **关联模块**：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)。

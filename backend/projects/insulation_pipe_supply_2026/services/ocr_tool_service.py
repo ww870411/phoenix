@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 工程发货单 / 随车送货单 AI 视觉智能解析服务。
@@ -23,7 +24,6 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     get_config_list,
     get_configured_ocr_tool_config,
 )
-from backend.services.ai_runtime import load_gemini_settings
 
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
@@ -44,6 +44,7 @@ def _normalize_gemini_model_name(model_name: Optional[str]) -> str:
         clean = clean[7:].strip()
 
     return clean or "gemini-3.5-flash-lite"
+
 
 PROMPT_UNIVERSAL_DOCUMENT_OCR = """你是一个高精度的各类工程物资单据与业务表格视觉提取专家。
 请仔细阅读并分析上传的单据/表格照片（可能为入库单、验收单、发货单、送货单、调拨单、过磅单、检验单、领料单等任意纸质或电子单据）。
@@ -531,13 +532,19 @@ def extract_delivery_bill_data(
     tube_config = load_tube_config()
     stored_ocr_cfg = get_configured_ocr_tool_config(tube_config)
 
+    # 检查是否处于“功能维护中”模式
+    if not stored_ocr_cfg.get("enabled", True):
+        raise HTTPException(
+            status_code=503,
+            detail="业务单据智能识别功能维护中，暂不可用。请稍后再试或联系系统管理员开启服务。"
+        )
+
     active_key = api_key or stored_ocr_cfg.get("api_key")
     raw_primary_model = model_name or stored_ocr_cfg.get("model") or DEFAULT_GEMINI_MODEL
     stored_fallbacks = stored_ocr_cfg.get("fallback_models") or []
     enable_fallback = bool(stored_ocr_cfg.get("enable_fallback", False))
     retry_primary_on_error = bool(stored_ocr_cfg.get("retry_primary_on_error", False))
     primary_retry_count = int(stored_ocr_cfg.get("primary_retry_count", 0) or 0)
-
     # 构造候选模型有序序列（规范化并去重）
     primary_norm = _normalize_gemini_model_name(raw_primary_model)
     candidate_models = [primary_norm]
@@ -546,17 +553,11 @@ def extract_delivery_bill_data(
         if fb_norm and fb_norm not in candidate_models:
             candidate_models.append(fb_norm)
 
-    if not active_key:
-        try:
-            gemini_cfg = load_gemini_settings()
-            active_key = gemini_cfg.get("api_key")
-        except Exception:
-            pass
-
+    # 严格校验 tube_config.json 中的专属 API Key，严禁任何外部全局隐式兜底
     if not active_key:
         raise HTTPException(
             status_code=400,
-            detail="系统配置文件中尚未配置单据识别 API Key。请管理员在后台配置并保存后重试。"
+            detail="系统配置文件 tube_config.json 中尚未配置单据识别专属 API Key。请管理员在后台【单据识别模型与 API 配置】中配置专属 API Key 并保存后使用。"
         )
 
     t_total_start = time.time()

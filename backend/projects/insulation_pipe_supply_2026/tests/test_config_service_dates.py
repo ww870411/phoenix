@@ -114,6 +114,7 @@ class OcrToolConfigSaveTest(unittest.TestCase):
         }
 
         data_to_save = {
+            "enabled": False,
             "model": "gemini-3.5-flash-lite",
             "api_key": "AIzaSyTestApiKey123",
         }
@@ -122,12 +123,14 @@ class OcrToolConfigSaveTest(unittest.TestCase):
 
         self.assertIn("ocr_tool_config", updated_payload)
         cfg = updated_payload["ocr_tool_config"]
+        self.assertFalse(cfg["enabled"])
         self.assertEqual(cfg["model"], "gemini-3.5-flash-lite")
         self.assertTrue(cfg["api_key"].startswith("enc_v1:"))
         self.assertIn("updated_at", cfg)
 
         # 校验解密
         decrypted = config_service.get_configured_ocr_tool_config(updated_payload)
+        self.assertFalse(decrypted["enabled"])
         self.assertEqual(decrypted["model"], "gemini-3.5-flash-lite")
         self.assertEqual(decrypted["api_key"], "AIzaSyTestApiKey123")
         self.assertTrue(decrypted["has_custom_key"])
@@ -275,9 +278,16 @@ class OcrToolConfigSaveTest(unittest.TestCase):
         self.assertFalse(fallback_triggered)
         self.assertEqual(mock_call.call_count, 2)
 
+    @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service.load_tube_config")
     @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service._call_gemini_vision")
-    def test_extract_delivery_bill_data_complete_structure(self, mock_call):
+    def test_extract_delivery_bill_data_complete_structure(self, mock_call, mock_load_cfg):
         from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import extract_delivery_bill_data
+        mock_load_cfg.return_value = {
+            "ocr_tool_config": {
+                "enabled": True,
+                "api_key": "enc_v1:dummy",
+            }
+        }
         mock_call.return_value = (
             json.dumps({
                 "document_title": "测试发货单",
@@ -304,6 +314,27 @@ class OcrToolConfigSaveTest(unittest.TestCase):
         self.assertEqual(len(res["api_logs"]), 1)
         self.assertEqual(res["extracted_data"]["document_title"], "测试发货单")
         self.assertEqual(len(res["extracted_data"]["table_rows"]), 1)
+
+    @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service.load_tube_config")
+    def test_extract_delivery_bill_data_raises_when_no_api_key_in_tube_config(self, mock_load_cfg):
+        from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import extract_delivery_bill_data
+        from fastapi import HTTPException
+
+        mock_load_cfg.return_value = {
+            "ocr_tool_config": {
+                "enabled": True,
+                "api_key": "",
+            }
+        }
+
+        with self.assertRaises(HTTPException) as ctx:
+            extract_delivery_bill_data(
+                image_base64="data:image/jpeg;base64,dGVzdA==",
+                api_key="",
+                model_name="gemini-3.5-flash-lite"
+            )
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("tube_config.json", ctx.exception.detail)
 
 
 if __name__ == "__main__":

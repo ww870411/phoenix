@@ -1,3 +1,12 @@
+## 2026-09-01 业务单据智能识别：支持“正常服务”与“功能维护中”模式全局开关控制
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理 - 单据识别模型与 API 配置）
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（实用工具 - 业务单据智能识别工作台）
+- **功能特性与交互升级**：
+  1. **全局服务状态控制开关**：在全局管理控制台增加滑动 Switch 控件与服务状态卡片，支持实时在 `🟢 正常服务模式` 与 `🛠️ 功能维护中模式` 间自由切换并落盘；
+  2. **工作台维护中优雅兜底**：当处于维护中模式时，单据识别工作台呈现友好的“🛠️ 业务单据智能识别功能维护中”提示卡，自动禁用拍照与本地上传，提供明确的运维说明。
+
 ## 2026-09-01 业务单据智能识别：文案去术语化，移除“AI”、“大模型”与“PRO”
 
 - **关联前端页面与组件**：

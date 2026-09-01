@@ -1,3 +1,50 @@
+## 2026-09-01 [单据识别：彻底禁止全局 AI 配置隐式兜底，实现 100% 严格依赖 tube_config.json]
+- **需求与架构规范**：
+  - 响应用户明确指令：“禁止这些兜底设置，应完全依赖 tube_config.json”；
+  - 彻底剔除单据智能识别底层服务对全局系统级 `ai_settings.json`（`load_gemini_settings`）的隐式 API Key 兜底行为；
+  - **改造要点**：
+    1. 从 [`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py) 中彻底移除 `load_gemini_settings` 依赖及降级读取代码；
+    2. 当 `tube_config.json` 中未配置 `ocr_tool_config.api_key` 或 key 为空时，后端直接返回 HTTP 400 明确错误：“系统配置文件 tube_config.json 中尚未配置单据识别专属 API Key。请管理员在后台【单据识别模型与 API 配置】中配置专属 API Key 并保存后使用。”；
+    3. 确保所有识别请求、模型选择、备选梯队与密钥管理均 100% 严格由当前项目目录的 `tube_config.json` 显式驱动；
+    4. 扩充自动化测试用例 `test_extract_delivery_bill_data_raises_when_no_api_key_in_tube_config`，锁定无 key 阻断校验契约。
+- **改动文件**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`test_config_service_dates.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)
+- **验证结果**：
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 27 项单测全量 PASS；
+  - 前端构建：`npm run build` 100% 成功。
+
+## 2026-09-01 [单据识别：修复全局管理区块保存时服务模式（enabled）字段落盘遗漏问题]
+- **排查与修复**：
+  - **根因定位**：在 `workspace.py` 的 `_save_config_section`（单区块保存端点 `POST /global-management/config-section`）中，重构 `payload["ocr_tool_config"]` 字典时未提取并写入传入的 `enabled` 字段，导致从前端“保存单据识别配置”按钮提交时，`enabled` 丢失并被重置；
+  - **修复措施**：
+    1. 在 `workspace.py` 的 `_save_config_section` 中加入 `enabled_val` 解析（`data.get("enabled")`），并写入落盘字典；
+    2. 在 `test_config_service_dates.py` 自动化测试中增加保存 `enabled=False` 并读取验证的完整单测断言。
+- **改动文件**：
+  - 后端：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`test_config_service_dates.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
+## 2026-09-01 [单据识别：支持“正常服务”与“功能维护中”模式全局开关控制]
+- **需求与优化目标**：
+  - 响应用户诉求，在【单据识别模型与 API 配置】中增加服务运行状态开关，支持管理员一键在“正常服务模式”与“功能维护中模式”之间无缝切换；
+  - **后端实现**：
+    1. 在 `config_service.py` 的 `ocr_tool_config` 结构中新增 `enabled: bool`（默认 `True` 代表正常服务，`False` 代表功能维护中）；
+    2. 在 `workspace.py` 中更新 `OcrConfigPayload` 及保存/读取接口；
+    3. 在 `ocr_tool_service.py` 的 `extract_delivery_bill_data` 中增加硬阻断校验：若 `enabled=False`，直接抛出 `HTTPException(status_code=503, detail="业务单据智能识别功能维护中，暂不可用...")`。
+  - **前端管理控制台**：
+    1. 在 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 的单据配置页顶部新增现代高颜值服务状态卡片与滑动 Switch 开关，实时呈现 `🟢 正常服务模式` 或 `🛠️ 功能维护中模式`；
+    2. 保存配置时自动同步持久化 `enabled` 状态。
+  - **前端单据识别工作台**：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中自动拉取服务状态；
+    2. 当处于维护中时，前台优雅展示“🛠️ 业务单据智能识别功能维护中”占位卡片，并禁用拍照与上传触发，给予用户沉稳明确的指引。
+- **改动文件**：
+  - 后端：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+  - 前端：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)、[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 26 项单测全量 PASS。
+
 ## 2026-09-01 [界面去术语化：全面移除“AI”、“大模型”与“PRO”生硬文案，回归纯粹业务表达]
 - **需求与优化目标**：
   - 响应用户诉求，不在界面（尤其是手机模式与日常填报场景）体现“AI”、“大模型”等生硬的技术术语，让业务人员交互更自然沉稳；

@@ -844,6 +844,11 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         else:
             saved_key = current_cfg.get("api_key", "")
 
+        enabled_val = (
+            bool(data.get("enabled"))
+            if "enabled" in data
+            else bool(current_cfg.get("enabled", True))
+        )
         enable_fallback_val = (
             bool(data.get("enable_fallback"))
             if "enable_fallback" in data
@@ -865,6 +870,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         primary_retry_count_val = max(0, min(primary_retry_count_val, 5))
             
         payload[normalized_section] = {
+            "enabled": enabled_val,
             "model": model_val,
             "fallback_models": fallback_models_val,
             "enable_fallback": enable_fallback_val,
@@ -6246,6 +6252,7 @@ class OcrDeliveryBillPayload(BaseModel):
 
 
 class OcrConfigPayload(BaseModel):
+    enabled: Optional[bool] = None
     model: Optional[str] = "gemini-3.5-flash-lite"
     fallback_models: Optional[List[str]] = None
     api_key: Optional[str] = None
@@ -6317,6 +6324,7 @@ def handle_get_ocr_config(
     cfg = get_configured_ocr_tool_config(tube_config)
     is_admin = (session.group or "").lower() in ("global_admin", "admin") or session.username.lower() == "admin"
     return {
+        "enabled": cfg.get("enabled", True),
         "model": cfg.get("model") or "gemini-3.5-flash-lite",
         "fallback_models": cfg.get("fallback_models") or [],
         "enable_fallback": cfg.get("enable_fallback", False),
@@ -6337,6 +6345,7 @@ def handle_save_ocr_config(
     if not is_admin:
         raise HTTPException(status_code=403, detail="权限受限：仅限 Global_admin 管理员保存单据识别系统配置。")
     return save_configured_ocr_tool_config(
+        enabled=payload.enabled,
         model=payload.model or "gemini-3.5-flash-lite",
         fallback_models=payload.fallback_models,
         api_key=payload.api_key,

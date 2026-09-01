@@ -139,6 +139,7 @@ def get_configured_ocr_tool_config(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(raw_config, dict):
         raw_config = {}
 
+    enabled = bool(raw_config.get("enabled", True) if "enabled" in raw_config else True)
     model = str(raw_config.get("model") or "gemini-3.5-flash-lite").strip()
 
     raw_fallbacks = raw_config.get("fallback_models")
@@ -160,6 +161,7 @@ def get_configured_ocr_tool_config(payload: Dict[str, Any]) -> Dict[str, Any]:
     api_key = simple_decrypt(api_key_cipher) if api_key_cipher else ""
 
     return {
+        "enabled": enabled,
         "model": model,
         "fallback_models": fallback_models,
         "enable_fallback": bool(raw_config.get("enable_fallback", False)),
@@ -177,14 +179,21 @@ def save_configured_ocr_tool_config(
     enable_fallback: Optional[bool] = None,
     retry_primary_on_error: Optional[bool] = None,
     primary_retry_count: Optional[int] = None,
+    enabled: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
-    保存单据识别模型、API Key 与显式调用策略至 tube_config.json。
+    保存单据识别模型、API Key、显式调用策略与服务可用状态（正常服务 vs 维护中）至 tube_config.json。
     未传入策略字段时保留既有值，保证历史接口调用兼容。
     """
     payload = load_tube_config()
     current_cfg = get_configured_ocr_tool_config(payload)
     clean_model = str(model or current_cfg.get("model") or "gemini-3.5-flash-lite").strip()
+
+    resolved_enabled = (
+        bool(enabled)
+        if enabled is not None
+        else bool(current_cfg.get("enabled", True))
+    )
 
     if fallback_models is not None:
         clean_fallbacks = [str(item).strip() for item in fallback_models if str(item).strip()]
@@ -220,6 +229,7 @@ def save_configured_ocr_tool_config(
     )
 
     payload["ocr_tool_config"] = {
+        "enabled": resolved_enabled,
         "model": clean_model,
         "fallback_models": clean_fallbacks,
         "enable_fallback": resolved_enable_fallback,
@@ -231,6 +241,7 @@ def save_configured_ocr_tool_config(
     save_tube_config(payload)
     return {
         "ok": True,
+        "enabled": resolved_enabled,
         "model": clean_model,
         "fallback_models": clean_fallbacks,
         "enable_fallback": resolved_enable_fallback,

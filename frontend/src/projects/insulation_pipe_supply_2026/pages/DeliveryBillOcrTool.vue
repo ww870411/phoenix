@@ -61,9 +61,25 @@
       @change="handleFileSelected"
     />
 
+    <!-- 0. 功能维护中状态提示卡片 -->
+    <div
+      v-if="serviceChecked && !isServiceEnabled && !extractedResult"
+      class="ocr-maintenance-card"
+    >
+      <div class="maintenance-icon">🛠️</div>
+      <h3 class="maintenance-title">业务单据智能识别功能维护中</h3>
+      <p class="maintenance-desc">
+        当前单据智能识别服务正在进行系统维护与升级，暂不提供在线拍照与单据结构化解析服务。<br />
+        如有紧急单据录入需求，请联系系统管理员或稍后再试。
+      </p>
+      <div class="maintenance-status-badge">
+        <span>维护模式生效中 · 暂停拍照与图片识别</span>
+      </div>
+    </div>
+
     <!-- 1. 未识别状态：拍照/上传引导卡片 -->
     <div
-      v-if="!extractedResult && !loading"
+      v-if="isServiceEnabled && !extractedResult && !loading"
       class="upload-dropzone-card"
       :class="{ 'is-dragging': isDragging }"
       @dragover.prevent="isDragging = true"
@@ -368,6 +384,7 @@ import RevoGrid from '@revolist/vue3-datagrid'
 import * as XLSX from 'xlsx-js-style'
 import {
   ocrDeliveryBill,
+  getOcrToolConfig,
 } from '../../daily_report_25_26/services/api'
 
 const props = defineProps({
@@ -394,6 +411,26 @@ const isDragging = ref(false)
 const loading = ref(false)
 const loadingStatusText = ref('')
 const errorMessage = ref('')
+
+// 服务可用状态（正常服务 vs 功能维护中）
+const isServiceEnabled = ref(true)
+const serviceChecked = ref(false)
+
+async function checkServiceStatus() {
+  try {
+    const cfg = await getOcrToolConfig(props.projectKey)
+    isServiceEnabled.value = cfg.enabled !== false
+  } catch (err) {
+    console.warn('获取单据识别服务状态失败，默认允许使用:', err)
+    isServiceEnabled.value = true
+  } finally {
+    serviceChecked.value = true
+  }
+}
+
+onMounted(() => {
+  checkServiceStatus()
+})
 
 const previewDataUrl = ref('')
 const currentBase64 = ref('')
@@ -495,6 +532,11 @@ const computeTotals = computed(() => {
 
 
 function triggerUpload() {
+  if (!isServiceEnabled.value) {
+    errorMessage.value = '业务单据智能识别功能维护中，暂不可用。'
+    return
+  }
+  errorMessage.value = ''
   if (fileInputRef.value) {
     fileInputRef.value.value = ''
     fileInputRef.value.click()
@@ -502,6 +544,11 @@ function triggerUpload() {
 }
 
 function triggerCamera() {
+  if (!isServiceEnabled.value) {
+    errorMessage.value = '业务单据智能识别功能维护中，暂不可用。'
+    return
+  }
+  errorMessage.value = ''
   if (cameraInputRef.value) {
     cameraInputRef.value.value = ''
     cameraInputRef.value.click()
@@ -640,7 +687,10 @@ async function executeOcrRecognition(mimeType = 'image/jpeg') {
     const formattedDetail = typeof detailMsg === 'object' ? JSON.stringify(detailMsg, null, 2) : String(detailMsg)
     
     let userMsg = formattedDetail
-    if (
+    if (userMsg.includes('维护中')) {
+      isServiceEnabled.value = false
+      userMsg = '业务单据智能识别功能维护中，暂不可用。请稍后再试或联系系统管理员开启服务。'
+    } else if (
       userMsg.includes('503') ||
       userMsg.toLowerCase().includes('high demand') ||
       userMsg.toLowerCase().includes('overloaded') ||
@@ -972,6 +1022,57 @@ function exportExtractedExcel() {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+/* 0. 维护中状态提示卡片 */
+.ocr-maintenance-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 2px dashed #fcd34d;
+  border-radius: 16px;
+  padding: 48px 24px;
+  gap: 14px;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.06);
+  margin-top: 8px;
+}
+
+.ocr-maintenance-card .maintenance-icon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.ocr-maintenance-card .maintenance-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #92400e;
+  margin: 0;
+}
+
+.ocr-maintenance-card .maintenance-desc {
+  font-size: 13.5px;
+  color: #78350f;
+  margin: 0;
+  line-height: 1.6;
+  max-width: 520px;
+}
+
+.ocr-maintenance-card .maintenance-status-badge {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  padding: 5px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b45309;
+  box-shadow: 0 2px 4px rgba(180, 83, 9, 0.08);
 }
 
 .panel-title-row {
