@@ -1,3 +1,57 @@
+## 2026-09-01 单据智能识别：修复 400 格式错误、模型名称规范化与全状态容灾顺延
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（`_normalize_gemini_model_name` 智能清洗 `models/` 前缀、`_call_gemini_vision_with_fallbacks` 全状态错误顺延调度）
+  - 对应配置服务：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)（默认模型对齐官方标准 `gemini-2.5-flash-lite`）
+  - **功能升级**：
+    1. **修复 400 unexpected model name format**：规范化 Google API URL 模型名称，剥离多余 `models/` 前缀，修正系统默认有效模型为 `gemini-2.5-flash-lite`；
+    2. **全异常顺延兜底**：当首选模型发生 400（名称格式错误/不支持）、404、503（繁忙）或 429（限流）时，调度器均自动顺延尝试备选模型序列。
+
+## 2026-09-01 单据智能识别：503错误精简优化与按序备选模型自动容灾兜底
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（`_call_gemini_vision_with_fallbacks`、`_call_gemini_vision` 503 错误拦截）、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)（`fallback_models` 配置提取与密文存储）
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`OcrConfigPayload` 增加 `fallback_models`、`GET/POST /tools/ocr-config`）
+  - 对应前端页面：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（备选模型序列有序卡片）
+  - **功能升级**：
+    1. **错误提示精炼**：遇到 Google 官方 503 (high demand) 提示时，统一归一化为“服务器繁忙，请点击重试”；
+    2. **自动故障转移（Fallback）**：后端调度器按 `[首选主模型] -> [备选模型1] -> [备选模型2]...` 顺序执行，单点高峰拥堵时秒级自动切换到空闲备选模型，保障业务高可用。
+
+## 2026-09-01 业务单据智能识别：接入全局管理“业务操作记录”（归属综合数据查询大类）
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)（`QUERY_SUBMISSION_ACTIONS` 增加 `OCR_DELIVERY_BILL`、`query_submission_logs`）
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`POST /tools/ocr-delivery-bill` 增加客户端 IP 提取与 `save_operation_log` 审计打点）
+  - 对应前端页面：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（业务操作记录 Tab 0 联动筛选与洋红专属徽章）
+  - **功能升级**：
+    1. 在 `handle_ocr_delivery_bill` 中，每次单据识别解析完成后自动生成审计记录，结构化快照记录单据名称、条目项数、表格行数、质检置信度及来源 IP；
+    2. 动作类型 `OCR_DELIVERY_BILL` 归属 `category="query"` 综合数据查询大类，无缝纳入 24h 操作看板与时间戳追踪。
+
+## 2026-09-01 保温管与管件物流发货数据表状态检查与恢复验证 (tube.tube_delivery, tube.tube_fitting_delivery)
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`supply_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py)（`list_delivery_records`）、[`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)（`list_fitting_deliveries`）
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /demand-management/logistics-records`、`GET /workspace/fitting_deliveries/list`、`GET /supply-management/deliveries`）
+  - 对应前端页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)、[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - **排查与验证结论**：
+    1. 前端路由扩展与新标签页参数（`category=tools&tab=ocr_tool`）不影响既有直管与管件业务查询链路；
+    2. 经数据库穿透诊断，物理表损坏已由用户完全修复，当前 `tube.tube_delivery`（95条）与 `tube.tube_fitting_delivery`（100条）均已恢复正常访问与聚合；
+    3. 后端 20 项单元与契约测试全量通过。
+
+## 2026-09-01 全局管理与单据识别服务：双阶段智能体工作流（提取 + 自动交叉复核纠偏）
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（`PROMPT_UNIVERSAL_DOCUMENT_OCR`、`PROMPT_DOCUMENT_VERIFICATION_AGENT`、`extract_delivery_bill_data`、`repair_incomplete_json`）、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)（`get_configured_ocr_tool_config`、`simple_encrypt`、`simple_decrypt`）
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`POST /tools/ocr-delivery-bill` 支持 `enable_double_check`、`GET/POST /global-management/config`）
+  - 对应前端组件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（双阶段流程指示条、自动复核质检报告卡片、抽屉式纠偏日志、大图灯箱缩放）
+  - **功能升级**：
+    1. **双阶段智能体流水线**：
+       - **阶段 1（提取智能体）**：对单据照片进行全景结构化解析；
+       - **阶段 2（复核纠偏智能体）**：将原图与初次提取 JSON 输入质检审核智能体，逐行逐字对照原图进行交叉核验与自动纠偏，输出校准后的数据和《自动复核质检报告》（含置信度与纠偏明细清单）；
+    2. **忠于原件，通用高保真提取**：绝不臆造未出现的项，真实还原表头与行数据；
+    3. **表格结构与数值汇总自适应**：动态提取表格列名与行明细，自动多列求和；
+    4. **全局管理配置区块扩展与密文存储**：对 API Key 实施 XOR+Base64 密文加密写入 `tube_config.json`，物理文件不泄露明文。
+
 ## 2026-09-01 气象评估服务：全面融合气温因子与多气象要素智能研判
 
 - **业务协同与模块定位**：

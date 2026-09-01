@@ -118,6 +118,16 @@
               <span class="cat-label">管件业务</span>
               <span class="cat-count">3 项功能</span>
             </button>
+            <button 
+              type="button" 
+              class="category-segment-btn" 
+              :class="{ active: activeCategory === 'tools' }" 
+              @click="handleCategoryClick('tools')"
+            >
+              <span class="cat-icon">🛠️</span>
+              <span class="cat-label">实用工具（BETA）</span>
+              <span class="cat-count">单据快速识别</span>
+            </button>
           </div>
         </div>
 
@@ -184,6 +194,17 @@
               @click="handleTabClick('fitting_baseline')"
             >
               📋 设计量与采购量
+            </button>
+          </div>
+
+          <!-- 实用工具子标签 -->
+          <div class="tube-tabs-header" v-else-if="activeCategory === 'tools'">
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'ocr_tool' }" 
+              @click="handleTabClick('ocr_tool')"
+            >
+              📷 业务单据智能识别（BETA）
             </button>
           </div>
         </div>
@@ -2356,6 +2377,19 @@
           </section>
         </div>
 
+        <!-- Tab 8: 实用工具（BETA）- 发货单 / 随车单快速识别 -->
+        <div v-if="activeTab === 'ocr_tool'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <DeliveryBillOcrTool
+              :project-key="PROJECT_KEY"
+              :selected-section1-id="selectedSection1Id"
+              :section1-options="section1Options"
+              :is-global-admin="isGlobalAdmin"
+              @navigate-tab="handleTabClick"
+            />
+          </section>
+        </div>
+
       </div>
 
       <!-- 初始未选择提示卡 -->
@@ -3932,6 +3966,7 @@ import * as echarts from 'echarts'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, getDeliveryStatus, navigateToUserInDirectory } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
+import DeliveryBillOcrTool from './DeliveryBillOcrTool.vue'
 import {
   confirmTubeDemandManagementDeliveryArrival,
   confirmTubeDemandManagementDeliveryReceipt,
@@ -3968,8 +4003,8 @@ const canExtractXlsx = computed(() => auth.canExtractXlsxFor(PROJECT_KEY))
 const route = useRoute()
 const router = useRouter()
 
-const VALID_TABS = ['overview', 'usage', 'plan', 'logistics', 'baseline', 'fitting', 'fitting_usage', 'fitting_baseline']
-const VALID_CATEGORIES = ['pipe', 'fitting']
+const VALID_TABS = ['overview', 'usage', 'plan', 'logistics', 'baseline', 'fitting', 'fitting_usage', 'fitting_baseline', 'ocr_tool']
+const VALID_CATEGORIES = ['pipe', 'fitting', 'tools']
 
 // 清理历史残留的 localStorage 缓存，避免跨入口污染
 try {
@@ -3984,7 +4019,12 @@ const getInitialCategoryAndTab = () => {
   const queryCategory = String(route?.query?.category || '').trim()
 
   if (VALID_TABS.includes(queryTab)) {
-    const inferredCategory = ['fitting', 'fitting_usage', 'fitting_baseline'].includes(queryTab) ? 'fitting' : 'pipe'
+    let inferredCategory = 'pipe'
+    if (['fitting', 'fitting_usage', 'fitting_baseline'].includes(queryTab)) {
+      inferredCategory = 'fitting'
+    } else if (['ocr_tool'].includes(queryTab)) {
+      inferredCategory = 'tools'
+    }
     return {
       category: VALID_CATEGORIES.includes(queryCategory) ? queryCategory : inferredCategory,
       tab: queryTab,
@@ -7698,6 +7738,8 @@ function handleCategoryClick(category) {
     activeTab.value = lastPipeTab.value || 'overview'
   } else if (category === 'fitting') {
     activeTab.value = lastFittingTab.value || 'fitting'
+  } else if (category === 'tools') {
+    activeTab.value = 'ocr_tool'
   }
   syncTabStateToUrl(activeCategory.value, activeTab.value)
   refreshCurrentTabData(activeTab.value)
@@ -7710,6 +7752,8 @@ function handleTabClick(targetTab) {
   } else if (['fitting', 'fitting_usage', 'fitting_baseline'].includes(targetTab)) {
     activeCategory.value = 'fitting'
     lastFittingTab.value = targetTab
+  } else if (['ocr_tool'].includes(targetTab)) {
+    activeCategory.value = 'tools'
   }
 
   if (activeTab.value === targetTab) {

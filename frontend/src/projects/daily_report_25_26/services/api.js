@@ -2955,6 +2955,49 @@ export async function getTubeMaterialPrices(projectKey = 'insulation_pipe_supply
   return response.json()
 }
 
+export async function ocrDeliveryBill(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/tools/ocr-delivery-bill`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '单据识别解析失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getOcrToolConfig(projectKey = 'insulation_pipe_supply_2026') {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/tools/ocr-config`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取单据识别配置失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function saveOcrToolConfig(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/tools/ocr-config`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '保存单据识别配置失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+
+
 
 
 

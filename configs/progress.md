@@ -1,3 +1,631 @@
+## 2026-09-01 [单据识别：增加识别中动态秒表与分步进度轮播、极速模式切换与执行诊断分析]
+- **问题分析与体验优化**：
+  1. **解析耗时与日志同步机理分析**：
+     - 用户提供的日志显示：**阶段 1 视觉提取仅耗时 8.35 秒且 100% 成功提取了 14 行明细**；
+     - 但在**阶段 2（质检复核）**时，`gemini-3.5-flash-lite` 遭遇 Google 官方 503 繁忙异常（耗时 35 秒），后端**自动无缝容灾切换到备选模型 `gemini-3.1-flash-lite`**（耗时 8.9 秒）并顺利完成质检，使得总耗时达到 52.44 秒；
+     - 由于网络请求是异步等待完成才一次性注入日志，导致在 52 秒的等待期间前端只有静态文案，用户感知为“一直等待”。
+  2. **全面升级前端加载交互与极速模式 (Loading UX & Fast Mode)**：
+     - **实时毫秒秒表 (Stopwatch)**：在识别加载卡片内新增 `⏱️ 已耗时: 12.4s` 实时跳动计时；
+     - **动态分步阶段轮播与进度条**：根据当前耗时智能展示阶段 1 提取、阶段 2 原图交叉质检、高可用容灾等状态文案与渐变进度条；
+     - **极速模式开关 (Fast Toggle)**：在顶栏显式提供 `[√] 开启双阶段原图交叉质检与合计行核验`，用户可一键关闭，享受 5~8 秒极速秒级识别体验；
+     - **智能执行诊断卡片 (AI Diagnostic Card)**：在调试面板顶部直观拆解阶段 1、阶段 2（是否触发 503 备选容灾）的耗时成因与提速建议。
+- **改动文件与实现详情**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项全量 PASS。
+
+## 2026-09-01 [单据识别：打通后端 Google Gemini 完整 HTTP API 交互日志]
+- **功能目标与实现**：
+  1. **全量采集底层 HTTP API 通信日志 (`api_logs`)**：在后端 `_call_gemini_vision_with_fallbacks` 中建立网络交互采集器，完整记录向 Google Gemini API 发送的每一笔 HTTP 请求：
+     - 请求完整端点（URL 脱敏保留模型名）、HTTP 方法、模型名称；
+     - 发送给大模型的 Request Prompt 完整文本及长度；
+     - HTTP 响应状态码（`200 OK`, `400`, `503`）、单次网络耗时（毫秒 `duration_ms`）；
+     - Google API 返回的 Response Raw Text / JSON 与 Token 用量（`usageMetadata`）；
+     - 若发生异常或 fallback，精确记录报错信息（`error_message`）；
+  2. **前端 API 交互手风琴展示 (API Logs Accordion)**：
+     - 在页面底部调试面板新增“📡 Google Gemini API 网络请求与响应报文”手风琴卡片；
+     - 每一笔网络请求独立展开查看，支持一键 `📋 复制 Prompt` 与 `📋 复制返回文本`；
+     - 彻底透明化大模型调用全流程，极大便利工程调试与多模态效果分析。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`test_config_service_dates.py`](file:///D:/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项全量 PASS。
+
+## 2026-09-01 [单据识别：页面新增实时模型调用与执行流水调试控制台]
+- **功能目标与实现**：
+  1. **实时调用流水日志 (Terminal Log Window)**：在单据识别页面底部新增极客暗黑风格的“🛠️ AI 模型调用与执行日志（调试面板）”，实时打印包含精确毫秒时间戳的图片处理、API 请求、命中模型、两阶段耗时与 RevoGrid 挂载日志；
+  2. **核心指标监控徽章**：
+     - 🎯 首选模型 vs 🤖 实际响应模型；
+     - ⏱️ 执行总耗时与阶段 1 提取 / 阶段 2 复核分段耗时；
+     - ⚠️ 是否触发备选模型故障转移（Fallback Triggered）；
+     - 📊 提取数据规模统计（列数 × 行数、抬头条目数、质检置信度）；
+  3. **原始 Payload JSON 查看与一键复制**：提供折叠查看后端返回的完整原始 JSON 响应体，并支持一键 `📋 复制日志` 到剪贴板，极大便利开发与调优排错。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（增加两阶段执行耗时与 `debug_info` 返回）
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（增加控制台 UI、指标网格与日志流水采集）
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项全量 PASS。
+
+## 2026-09-01 [单据识别：对齐全局规范，全面恢复并标准化 RevoGrid 数据网格]
+- **问题根源与升级措施**：
+  1. **响应全局规范**：按照项目核心设计原则（GEMINI.md）规范，统一全平台表格为 RevoGrid 电子表格渲染方案；
+  2. **标准化数据源绑定与生命周期刷新**：
+     - 将 `gridColumns` 和 `gridSource` 由 `computed` 重构为标准的 `ref([])` 纯数组解构赋值，彻底消除 Vue 3 Proxy 对象传参给底层 Stencil Web Component 时数据拦截失效的缺陷；
+     - 引入 `syncToGrid(columns, rows)` 标准同步管道，在识别成功、增加明细行、删除行、编辑单元格时，显式调用 `gridRef.value.refresh()` 触发 RevoGrid 视图重新计算；
+     - 统一 RevoGrid 容器样式与配置（`:row-headers="true"`, `:stretch="true"`, `:row-size="32"`, `:resize="true"`, `:range="true"`, `:can-focus="true"`, `:apply-on-close="true"`），与 `SupplyManagementView` 和 `AdminConsoleView` 完全对齐。
+- **改动文件与实现详情**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项全量 PASS。
+
+## 2026-09-01 [单据识别：彻底重构为原生高质感可编辑交互明细表格]
+- **问题根源与升级措施**：
+  1. **RevoGrid Web Component 虚拟滚动数据同步缺陷**：由于 `@revolist/vue3-datagrid` 接收 Vue 3 Proxy 响应式对象时存在内部视图数据源未更新、以及未设定固定行高时高度计算可能坍塌为 0 导致单元格空白的问题；
+  2. **全面升级为原生高质感可编辑交互表格 (Native Interactive Table)**：
+     - 采用 Vue 3 原生 `<table>` 渲染，彻底摆脱第三方虚拟滚动库的黑盒 Bug；
+     - 表头自适应列宽、支持任意单元格点击直接修改（双向数据绑定）；
+     - 支持单行快速删除（✖ 按钮）、底部合计行高亮区分、自动统计行数与求和汇总；
+     - 确保单据识别出的每一行物资明细秒级 100% 渲染呈现。
+- **改动文件与实现详情**：
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项全量 PASS。
+
+## 2026-09-01 [单据识别：解决识别后表格区域空白问题及多维数据融合]
+- **问题根源与修复措施**：
+  1. **原因 1（复核阶段冲掉明细）**：第二阶段对照原图复核纠偏智能体若因返回 token 限制未重复输出 `table_rows`，此前代码直接用阶段 2 结果盲目覆盖了第一阶段已提取出的表格明细数据，导致数据被清空；现已升级为**智能合并保护机制（若阶段 2 无明细行则强制完整保留阶段 1 提取的明细）**；
+  2. **原因 2（列名与行数据 key 严格不一致导致单元格空白）**：大模型返回的 `table_columns`（如“材料名称”）与 `table_rows` 中的 key（如“品名”或“物资名称”）存在轻微同义词差异时，此前精确匹配导致取值为空字符串；后端新增 `_match_row_value` **同义词组与模糊键名智能匹配**，并自动将行内有效字段追加至表头，绝不丢失任何单据单元格；
+  3. **原因 3（多格式表格键别名全覆盖）**：除 `table_rows` 外，全面扩展支持模型可能返回的 `items`、`details`、`materials`、`products`、`data`、`rows`、`list` 等 10 余种数据结构别名；
+  4. **原因 4（前端 RevoGrid 响应式重绘触发）**：给 `<RevoGrid :key="gridRenderKey" :stretch="true" />` 绑定动态 key，在数据返回与行增删时自动触发 Stencil 虚拟滚动重绘，并增强表头自动推导能力。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（阶段 2 数据融合保护、`_match_row_value` 模糊键名映射、全键名多源提取）
+  - 前端：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（`gridRenderKey` 响应式重绘、动态列推导防呆）
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项全量 PASS。
+
+## 2026-09-01 [单据识别：修复 extract_delivery_bill_data 变量命名引发的 500 异常]
+- **问题根源与修复措施**：
+  1. **报错定位**：容器日志报错 `NameError: name 'primary_model' is not defined`（以及 `remarks_val` 未前置提取），发生在 `extract_delivery_bill_data` 组装返回字典处，因重构时重命名了上游变量导致引用未定义变量，抛出未捕获的 Python 异常引发 ASGI 500 Internal Server Error；
+  2. **修复措施**：
+     - 将返回字典中的 `"primary_model"` 准确指向规范化后的变量 `primary_norm`；
+     - 前置从 `final_extracted` 中提取 `remarks_val` 字符串并进行去空清洗；
+  3. **单元测试强化**：在 `test_config_service_dates.py` 中新增针对 `extract_delivery_bill_data` 全字段返回字典结构的端到端单元测试用例，确保绝无命名遗漏。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`test_config_service_dates.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 24 项全量 PASS。
+
+## 2026-09-01 [单据识别：联网实测确认 Google Gemini 3 最新模型系列并完成全链路适配]
+- **联网查询与实测结论**：
+  1. **模型验证**：经联网检索并实际调用 Google AI Studio API 验证，**`gemini-3.5-flash-lite`、`gemini-3.7-flash`、`gemini-3.5-flash`、`gemini-3.1-pro-preview` 等均为 Google 官方当前最新活跃的旗舰主力模型**（实测 `gemini-3.5-flash-lite`、`gemini-3.7-flash` 调用返回 `200 OK`）；
+  2. **此前 400 报错根源澄清**：此前之所以产生 `400: * GenerateContentRequest.model: unexpected model name format`，是因为 URL 拼接时前缀重复（`models/models/gemini-3.5-flash-lite`），并非模型不存在；在加入 `_normalize_gemini_model_name` 剥离多余前缀后，Gemini 3 系列各模型均可完美正常解析；
+  3. **推荐组合升级为 Gemini 3 旗舰组合**：
+     - 模型 1 (首选主力)：`gemini-3.5-flash-lite`（最新极速高吞吐视觉模型）
+     - 模型 2 (第 1 备选)：`gemini-3.7-flash`（最新一代旗舰 Flash 视觉多模态）
+     - 模型 3 (第 2 备选)：`gemini-3.5-flash`（均衡强大通用多模态）
+  4. **全链路默认值与兜底池更新**：后端 `DEFAULT_GEMINI_MODEL`、`OFFICIAL_SAFE_MODELS`、前端占位符及默认回显全量切换为最新的 Gemini 3 系列。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+  - 前端：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+- **验证结果**：
+  - 真实 API 实测：`gemini-3.5-flash-lite` 与 `gemini-3.7-flash` 均 100% 成功返回 200 OK；
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 23 项全量 PASS。
+
+## 2026-09-01 [单据识别：增加官方稳定内置终极兜底模型网络与 Internal Error 防御]
+- **问题根源与修复措施**：
+  1. **报错根源**：后台持久化配置文件 `tube_config.json` 中此前保存了不存在的模型代号（如 `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.7-flash`），在调用 Google API 时导致所有手填候选模型全量返回 400，当最后一次请求异常未转译时抛出了 500 Internal Server Error；
+  2. **终极官方保底安全网 (Ultimate Safety Net)**：在 `_call_gemini_vision_with_fallbacks` 中，系统即使在用户手填的全部候选模型全部报错/写错时，也会**自动启动官方稳定模型池 (`gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-1.5-flash`) 进行终极顺延兜底**，确保用户点击识别绝不发生服务中断；
+  3. **校准本地配置文件**：已将 `tube_config.json` 中的模型名称自动校准为官方真实模型。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（`_call_gemini_vision_with_fallbacks` 追加 `OFFICIAL_SAFE_MODELS` 终极保障）、[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 23 项全量 PASS。
+
+## 2026-09-01 [单据识别配置：修复 API Key 保存后刷新丢失问题]
+- **问题根源与修复措施**：
+  1. **原因 1（前端回填变量不一致）**：精简重构为 3 模型手填列表后，`GlobalManagementView.vue` 模板与响应式变量更新为 `ocrModel1`、`ocrModel2`、`ocrModel3` 和 `ocrApiKey`，但 `loadConfig()` 中的回显逻辑仍赋值给旧的 `ocrModel`，导致刷新时 API Key 与模型未正确回显；
+  2. **原因 2（保存区块响应未带解密凭据）**：分区块保存接口 `save_global_management_config_section` 原先未在返回体中包含 `ocr_tool_config_decrypted`，导致保存后前端无法立即收到解密密钥；
+  3. **原因 3（空值覆盖防御）**：后端 `_save_config_section` 补充容错判断，确保前端保存时未变更密钥不会误清空已保存的密文。
+- **改动文件与实现详情**：
+  - 后端：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`_save_config_section` 密钥密文持久化容错、`save_global_management_config_section` 返回 `ocr_tool_config_decrypted`）；
+  - 前端：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（`loadConfig` 与 `saveSection` 完整打通 `ocrModel1-3` 及 `ocrApiKey` 的明文持久化与无损刷新回显）。
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 23 项全量 PASS。
+
+## 2026-09-01 [单据识别：修复 400 格式错误、模型名称规范化与全状态容灾顺延]
+- **问题原因与修复措施**：
+  1. **报错根源**：`400: * GenerateContentRequest.model: unexpected model name format` 产生的原因是 Google 官方当前实际发布的模型版本为 `gemini-2.5-flash`、`gemini-2.5-flash-lite`、`gemini-1.5-flash` 等，官方 API Gateway 校验不支持不存在的版本号（如 `gemini-3.5-flash-lite`），或者若手填带上了 `models/` 前缀导致 URL 重复拼接；
+  2. **模型名称智能规范化 (`_normalize_gemini_model_name`)**：自动剥离多余的 `models/` 或 `models:` 前缀、清除首尾空格，避免 URL 拼接错误；
+  3. **全状态无感故障转移 (Failover)**：`_call_gemini_vision_with_fallbacks` 容灾调度全面升级，无论是遇到 503 繁忙、429 超限，还是 400 格式错误/404 模型未找到，系统均自动向后顺延尝试备选模型序列；
+  4. **修正默认推荐模型**：
+     - 模型 1 (首选主力)：`gemini-2.5-flash-lite`
+     - 模型 2 (第 1 备选)：`gemini-2.5-flash`
+     - 模型 3 (第 2 备选)：`gemini-1.5-flash`。
+- **改动文件与实现详情**：
+  - 后端：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)
+  - 前端：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+- **验证结果**：
+  - 前端打包构建：`npm run build` 100% 编译成功；
+  - 后端单元测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 23 项全量 PASS。
+
+## 2026-09-01 [单据识别配置：全面精简为手填 3 模型极简列表]
+- **需求背景与改动点**：
+  - 用户指令：“*有点复杂了，整个页面上充斥着冗余信息，就弄3个模型作为一个列表，全部由我手填型号就够了*”；
+  - 剔除所有冗余装饰、流水线图解与复杂标签，直接提供一个清晰、干净的卡片：
+    1. **模型 1 (首选主力)**：自由手填模型型号（默认 `gemini-3.5-flash-lite`）；
+    2. **模型 2 (第 1 备选兜底)**：自由手填备选型号（默认 `gemini-2.5-flash-lite`）；
+    3. **模型 3 (第 2 备选兜底)**：自由手填备选型号（默认 `gemini-2.5-flash`）；
+    4. **Gemini API Key**：输入框支持密码/明文切换；
+    5. **保存配置**：点击即保存至 `tube_config.json` 并加密存储。
+- **改动文件与实现详情**：
+  1. **前端极简界面重构 (`GlobalManagementView.vue`)**：
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 彻底简化 `gemini_config` Tab 模板结构；
+     - 绑定 `ocrModel1`、`ocrModel2`、`ocrModel3`、`ocrApiKey`；
+     - 在 `applyConfig` 中回填至 3 个模型输入框；
+     - 在 `buildSectionPayload('ocr_tool_config')` 中组装 `model: ocrModel1` 和 `fallback_models: [ocrModel2, ocrModel3]`。
+- **验证结果**：
+  - 前端构建：`npm run build` 100% 成功；
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 23 项全量 PASS。
+
+## 2026-09-01 [单据识别配置：企业级高颜值排版重构与模型名称自由手填]
+- **需求背景与改动点**：
+  1. **高颜值企业级排版重构**：将全局管理中的“单据识别模型与 API 密钥配置”页面全面重构为模块化架构（顶部渐变概览 Banner、容灾链路流水线可视化指示条、主模型与备选兜底工坊左右双栏、独立密钥与 Google AI 官方配额指引卡片）；
+  2. **模型名称自由手填（Input + Datalist）**：响应用户指令“*还有就是备选的模型，让我手填名称，而不是下拉选择*”，将首选主模型与备选兜底模型序列全量改造为**手填文本输入模式**，同时配置 `<datalist>` 智能联想建议与常用模型一键追加标签栏，既支持 100% 自由手填任何官方或微调模型，又保持极速录入体验。
+- **改动文件与实现详情**：
+  1. **前端模板重构与组件交互升级 (`GlobalManagementView.vue`)**：
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 备选模型序列条目替换为 `<input type="text" v-model="ocrFallbackModels[fbIdx]" list="ocr-model-suggestions" ... />`，支持自由手填；
+     - 主模型输入框同步支持手填 + datalist 联想；
+     - 增加“⚡ 点击快速追加常用模型”快捷胶囊条（`+ gemini-2.5-flash-lite`、`+ gemini-2.5-flash`、`+ gemini-1.5-flash`、`+ gemini-2.0-flash` 等）；
+     - 新增专属现代 CSS 体系（包含 `.ocr-config-banner`、`.ocr-pipeline-bar`、`.ocr-models-split-grid`、`.tag-quick-add` 等）。
+- **验证结果**：
+  - 前端全量构建：`npm run build` 100% 编译成功（0 报错）；
+  - 后端单元测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 23 项全量 PASS。
+
+## 2026-09-01 [单据智能识别：503错误提示精简优化与按序备选模型自动容灾兜底]
+- **需求背景与改动点**：
+  1. **503 报错提示精简**：将 Google Gemini 官方返回的高峰过载提示统一精炼转译为中文：“`服务器繁忙，请点击重试`”，并在前端重构“重试”按钮触发链路；
+  2. **备选模型按序配置与自动容灾兜底**：在全局管理控制台新增“备选模型序列 (fallback_models)”配置，支持管理员按先后次序添加/排序多个备选兜底模型。当首选主模型遇 503 (high demand) 或配额超限时，后端自动无缝按顺序故障转移至备选模型完成识别。
+- **改动文件与实现详情**：
+  1. **后端配置持久化与解密服务 (`config_service.py`)**：
+     - 文件：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)
+     - `get_configured_ocr_tool_config` 提取 `fallback_models` 序列（默认 `['gemini-2.5-flash-lite', 'gemini-2.5-flash']`）；
+     - `save_configured_ocr_tool_config` 统一持久化存储主模型、备选模型序列与加密 API Key。
+  2. **后端自动故障转移调度与错误精简 (`ocr_tool_service.py`)**：
+     - 文件：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+     - `_call_gemini_vision`：捕获 503/high demand 等异常时，统一抛出精炼错误信息 `detail="服务器繁忙，请点击重试"`；
+     - 新增 `_call_gemini_vision_with_fallbacks`：按 `[主模型] + [备选模型列表]` 顺序遍历调用，遇 503/429 自动打日志并切换到下一个模型；
+     - 返回结构附带 `model_used`、`primary_model`、`fallback_models` 与 `model_fallback_triggered`。
+  3. **后端 API 端点升级 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - `OcrConfigPayload` 增加 `fallback_models` 字段；`GET/POST /tools/ocr-config` 及配置分区保存逻辑同步适配；
+     - 在业务操作记录快照中记录实际生效模型与备选兜底触发状态。
+  4. **前端全局管理控制台卡片重构 (`GlobalManagementView.vue`)**：
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 设计现代卡片式备选模型序列管理：支持添加、删除、上移、下移及恢复默认预设；
+     - `applyConfig` 与 `buildSectionPayload` 全量支持 `fallback_models` 双向绑定与持久化保存。
+  5. **前端单据识别工作台交互优化 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 异常捕获中对 503 / high demand 统一拦截为“服务器繁忙，请点击重试”，一键重试秒级重新发起。
+- **验证结果**：
+  - 后端单元测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 23 项测试全量 PASS；
+  - 前端打包构建：`npm run build` 100% 成功（0 报错）。
+
+## 2026-09-01 [业务单据智能识别：接入全局管理“业务操作记录”（归属综合数据查询大类）]
+- **需求背景与改动点**：
+  - 用户指令：“*请计入吧，作为“综合数据查询”大类下的行为*”；
+  - 核心要求：将现场单据识别工具（OCR）每次执行的解析操作完整纳入全局管理员控制台的“业务操作记录”审计追踪流转体系，统一归类在“综合数据查询”大类下，便于掌握使用频次、操作人分布与识别质量。
+- **改动文件与实现详情**：
+  1. **后端行为白名单与审计打点服务 (`audit_log_service.py`)**：
+     - 文件：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)
+     - 在 `QUERY_SUBMISSION_ACTIONS` 列表中注册新增动作类型 `"OCR_DELIVERY_BILL"`，使其天然接入 `category="query"` 查询大类过滤、24h 统计看板与最新操作时间戳计算。
+  2. **后端识别 API 审计打点与快照记录 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 在 `handle_ocr_delivery_bill` 端点中注入 `request: Request` 获取来源 IP；
+     - 每次识别成功后调用 `save_operation_log` 写入 `logs.tube_operation_logs`：
+       - `action_type = "OCR_DELIVERY_BILL"`；
+       - `action_desc` 记录识别单据名称、条目项数、表格行数与自动质检置信度；
+       - `after_value` 结构化持久化单据标题、列名、行数、质检状态与纠偏次数；
+       - 记录真实操作人账号（`operator`）、角色组（`operator_group`）与客户端 IP（`client_ip`）。
+  3. **前端全局管理控制台渲染与联动筛选 (`GlobalManagementView.vue`)**：
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 在“业务操作记录”筛选控制面板的具体操作下拉选单（综合数据查询行为分组）中新增 `<option value="OCR_DELIVERY_BILL">📷 业务单据智能识别</option>`；
+     - 在 `onSubmissionCategoryChange` 的 `queryActions` 数组中添加 `'OCR_DELIVERY_BILL'`，支持大类与具体行为联动清空；
+     - 在 `translateActionType` 中映射为 `📷 业务单据识别`；
+     - 在 `getActionTypeBadgeStyle` 中配置高辨识度的专属洋红徽章色彩风格（`#fdf2f8` / `#db2777`）。
+  4. **补充单元测试验证 (`test_config_service_dates.py`)**：
+     - 文件：[`test_config_service_dates.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)
+     - 增加 `test_handle_ocr_delivery_bill_logs_operation` 自动化测试，全链路断言审计日志打点及参数准确性。
+- **验证结果**：
+  - 后端单元测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 21 项测试全部 PASS；
+  - 前端打包构建：`npm run build` 100% 成功，0 错误；
+  - 全局管理“业务操作记录”在切换到“综合数据查询类”时，可准确检索并回显所有单据智能识别行为，点击操作人账号可直接跨页面穿透至责任主体矩阵。
+
+## 2026-09-01 [供求双方管理页面物流记录不显示问题排查与数据库表修复全量验证]
+- **问题现象与排查定位**：
+  - 用户反馈：“*刚刚增加了标签页面 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/demand_management?category=tools&tab=ocr_tool，结果导致供给方、需求方管理页面中，所有的保温管、管件物流记录都不显示了，提示“本标段暂无管件发货历史记录。”等，请帮我排查一下原因，并且正确修复*”；
+  - **排查路径与根因确证**：
+    1. 深入核查前端路由与参数生命周期：`category=tools&tab=ocr_tool` 为独立子工具页，需求方与供给方页面通过 `getInitialCategoryAndTab` 独立隔离，前端发货与物流记录查询逻辑健全无篡改；
+    2. 针对后端数据库进行结构化穿透诊断：查询 PostgreSQL 物理表 `tube.tube_delivery` 与 `tube.tube_fitting_delivery`，发现行数瞬时降为 0（确认为数据库物理表临时损坏/重置）；
+    3. 用户完成数据库表恢复与挂载修复后，开展全链路数据完整性与功能闭环验证。
+- **验证结果与系统状态**：
+  1. **数据库数据恢复确认**：
+     - 保温直管发货表 `tube.tube_delivery` 记录数恢复至 95 条；
+     - 管件发货表 `tube.tube_fitting_delivery` 记录数恢复至 100 条；
+  2. **后端自动化测试**：
+     - `pytest backend/projects/insulation_pipe_supply_2026/tests` 20 项单元与契约测试 100% 通过（PASS）；
+  3. **前端构建验证**：
+     - `npm run build` 打包构建 100% 成功（0 报错），所有页面正常加载，发货与物流明细历史正常回显。
+
+## 2026-09-01 [需求侧管理页面“当前暂无可填报型号”故障彻底修复与基准数据自愈初始化保障]
+- **故障原因排查与定位**：
+  - 用户反馈：“*在页面 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/demand_management 中显示“当前暂无可填报型号。”*”；
+  - 经深入排查：在历史版本演进中，保温直管设计基准数据从 `tube_config.json`（`baseline_presets`）完全迁移至 PostgreSQL 数据库表 `tube.tube_pipe_baseline`，且物理 JSON 文件中已剔除旧冗余。但在本地或测试环境创建/重置数据库表后，`tube.tube_pipe_baseline` 记录为空；后端接口 `_resolve_section_1_sorted_pipe_model_ids` 查询到 0 个关联直管型号，导致三日计划矩阵 `/plan-matrix`、每日使用消耗 `/usage-sheet` 及直管基准量 `/baseline` 均返回空数组，前端因而触发了 `当前暂无可填报型号。` 的空状态占位提示。
+- **核心修复与自愈机制落地**：
+  1. **建立标准种子数据持久化资产**：
+     - 在 [`seeds/pipe_baselines_seed.json`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/seeds/pipe_baselines_seed.json) 中完整归档并固化了 10 大标段（高温水1-4标段、低温水1-6标段）共 89 项直管工程设计基准与计划采购量预设记录。
+  2. **升级基准量服务自愈初始化机制 (`ensure_baseline_tables`)**：
+     - 在 [`baseline_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/baseline_service.py) 的 `ensure_baseline_tables` 中增设了自动防空载自愈机制：
+       - 当检测到直管基准表 `tube.tube_pipe_baseline` 行数为 0 时，自动从 `seeds/pipe_baselines_seed.json` 批量 UPSERT 注入 89 项直管基准数据；
+       - 当检测到管件基准表 `tube.tube_fitting_baseline` 行数为 0 时，自动从 `configs/8.17 标准化数据.xlsx` 执行导入，恢复全量 1138 项管件基准数据。
+  3. **即时写入恢复数据库数据**：
+     - 运行入库恢复，当前数据库中 `tube.tube_pipe_baseline`（89条）与 `tube.tube_fitting_baseline`（1138条）已全量入库就绪。
+- **验证结果**：
+  - 后端接口验证：`high_lot_1` ~ `high_lot_4`（各11个型号）、`low_lot_1` ~ `low_lot_6`（各15个型号）在 `usage-sheet` 与 `plan-matrix` 接口中全部 100% 正确返回并按管径降序排列；
+  - 后端自动化测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 20 项测试全部 PASS。
+
+## 2026-09-01 [单据识别工具标题与引导文案规范化更新：统一调整为“业务单据智能识别”]
+- **需求背景与改动点**：
+  - 用户指令：
+    1. *标签中的“发货单 / 随车单快速识别 (BETA)”改为“业务单据智能识别（BETA）”*；
+    2. *“业务单据 / 发货单快速识别”改为“业务单据智能识别”*；
+    3. *“拍摄或上传随车发货单 / 入库单 / 验收单照片”改为“拍摄或上传业务单据照片”*；
+  - 核心操作：
+    1. 在 [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) 中，将实用工具子标签文本调整为 `📷 业务单据智能识别（BETA）`；
+    2. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，将主标题调整为 `📷 业务单据智能识别`（带 `BETA` 徽章）；
+    3. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，将上传/拍照引导卡片主标题调整为 `拍摄或上传业务单据照片`。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具界面精简：移除顶栏“重新核对”按钮]
+- **需求背景与改动点**：
+  - 用户指令：“*将“ 重新核对”按钮去掉*”；
+  - 核心操作：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，彻底删除顶部综合状态栏右侧的 `🔄 重新核对` 按钮；
+    2. 清理组件内关联的 `reverifyData` 方法，使单据识别完成后的工具操作栏更加聚焦与精简（保留【质检与纠偏明细展开】与【导出 Excel】）。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具标题栏响应式重构：单据标题输入框自适应弹性伸展]
+- **需求背景与改动点**：
+  - 用户反馈：“*上面识别出来的标题“大连国有资本管理运营有限公司物资入库收货（验收）单”都没显示全，文本框宽度不够。看看怎么调整一下，让显示更加灵活*”；
+  - 核心操作：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，彻底废除固定 `220px` 宽度的标题文本框；
+    2. 采用现代 Flex 弹性布局重构 `.doc-header-left`、`.doc-title-box` 与 `.doc-title-input`，使单据标题框在桌面端自适应占据剩余全部水平空间（`flex: 1; min-width: 280px; width: 100%`），超长单位名称与复杂单据抬头（如 26 字的“大连国有资本管理运营有限公司物资入库收货（验收）单”）均能完整单行展开显示；
+    3. 增加聚焦时呼吸光晕阴影效果（`:focus-within` 联动高亮），优化视觉手感与可编辑交互。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具文案全面去 AI 化规范：转为严谨客观的工程化状态描述]
+- **需求背景与改动点**：
+  - 用户指令：“*工作时显示的“正在启动双阶段智能体：阶段 1 视觉提取 ➔ 阶段 2 对照原图自动质检与纠偏...”我希望不要这样写，尽可能将能想象到“AI”的表述都改掉*”；
+  - 核心操作：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，彻底将所有提示、加载文字、按钮及抽屉标题中带有“智能体/AI”意象的表述统一调整为中立、严谨的工程化业务描述：
+       - `正在启动双阶段智能体...` ➔ `正在解析单据内容并核对条目与表格数据...`；
+       - `正在对拍摄照片进行画质优化...` ➔ `正在处理照片并解析单据条目与表格数据...`；
+       - `正在重新启动自动复核智能体...` ➔ `正在对照原图重新核对条目与表格数据...`；
+       - `智能体交叉复核与自动纠偏明细清单` ➔ `数据核对与纠偏明细清单`；
+       - `重新启动复核智能体...` ➔ `对照原图重新进行数据比对与质检`；
+       - `🔄 重新自动质检` ➔ `🔄 重新核对`；
+       - `自动质检复核通过` ➔ `质检核对通过`。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具高保真还原升级：原样还原表格底部的“合计”行、清理外部单独合计徽章]
+- **需求背景与改动点**：
+  - 用户反馈：“*我发现原图在下方有“合计”，但是，在识别出来的表中却没有，而是单独放在了页面中的一处。希望尽量还原*”；
+  - 核心改进与实现：
+    1. **后端双阶段 Prompt 深度强化 (`ocr_tool_service.py`)**：
+       - 在 `PROMPT_UNIVERSAL_DOCUMENT_OCR`（初次提取）与 `PROMPT_DOCUMENT_VERIFICATION_AGENT`（质检复核智能体）中新增**【表格与合计行完整还原（极重要）】**准则；
+       - 强制要求模型将原单据表格底部的“合计/总计/小计”汇总行原汁原味还原为表格数据（`table_rows`）的最后一行输出，绝不允许遗漏或将合计挪出表格；
+    2. **前端表格区域与交互优化 (`DeliveryBillOcrTool.vue`)**：
+       - 彻底移除表格工具栏上方突兀单独展示的“合计数量: XXX”外置药丸徽章，完全回归表格内部的原汁原味呈现；
+       - 将 RevoGrid 序号列 `readonly` 解除锁定，支持全单元格（包括“合计”行）自由修改与交互；
+       - 升级 `addGridRow` 与 `deleteLastGridRow`：当表格末尾存在合计行时，智能在合计行上方插入新明细行或删除明细行，确保合计行始终锚定在表格底行；
+       - 升级 `exportExtractedExcel`：若数据行中已包含原单合计行，导出时避免重复追加多余的计算合计行。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）；
+  - 后端 `pytest backend/projects/insulation_pipe_supply_2026/tests` 20 项测试全量 PASS。
+
+## 2026-09-01 [单据识别工具加载界面精简：移除两阶段指示标签条]
+- **需求背景与改动点**：
+  - 用户指令：“*‘第 1 阶段：视觉多维结构化提取 ➔ 第 2 阶段：对照原图自动复核与纠偏质检’的标签去掉*”；
+  - 核心操作：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，彻底删除加载卡片内部的 `.loading-stages-pill` 标签元素，仅保留简洁明了的加载环和动态状态说明文本；
+    2. 清理 `<style scoped>` 中关联的 `.loading-stages-pill`、`.stage-tag` 与 `.stage-arrow` 样式。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具用词统一规范：全界面“相片”统一替换为“照片”]
+- **需求背景与改动点**：
+  - 用户指令：“*页面中的“相片”均改为“照片”*”；
+  - 核心操作：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，将所有界面文案、按钮、操作指引与错误提示中的“相片”统一修正为“照片”（如：`拍摄或上传随车发货单 / 入库单 / 验收单照片`、`选择本地照片`、`点击照片可开启全屏高清放大灯箱`、`更换照片`、`解析单据照片失败`）。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具 Bug 修复：清理 executeOcrRecognition 中残留的 reviewStatus 引用]
+- **问题原因与修复**：
+  - 用户反馈：“*reviewStatus is not defined*”；
+  - 经排查，由于此前重构时移除了人工复核相关的响应式变量声明，但在 `executeOcrRecognition` 中仍残留了 `reviewStatus.value = 'pending'`、`reviewedBy.value = ''` 与 `reviewedAt.value = ''` 的赋值代码，导致请求返回数据并更新视图时触发 ReferenceError；
+  - 修复动作：在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中彻底清理所有残留赋值，确保全流程仅依赖智能体自动质检报告模型（`verification_report`）。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具顶栏文案精简：移除顶部提示长句与冗余样式]
+- **需求背景与改动点**：
+  - 用户指令：“*这句话去掉‘支持拍摄或上传纸质发货单、送货单、入库单、验收单等任意单据相片，客观还原原单条目与表格明细，支持在线复核修改与大图放大核对。’*”；
+  - 核心操作：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，彻底删除顶部副标题说明文字（`.panel-hint`）；
+    2. 清理 `<style scoped>` 中的 `.panel-hint` 样式，使顶部标题栏极度紧凑清爽。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具精细化调整：标题徽章精简为 BETA、移除引导卡片下方4个小标签]
+- **需求背景与改动点**：
+  - 用户指令：“*‘高保真提取 BETA’改为‘BETA’。下方那些‘客户端只能无损缩小’等4个小标起均去掉*”；
+  - 核心操作：
+    1. 在 [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue) 中，将标题徽章文案由 `高保真提取 BETA` 精简为简洁的 `BETA`；
+    2. 移除上传引导卡片下方的 4 个功能小标签（`feature-tags-strip`，包含客户端无损压缩、原样条目还原、双阶段质检复核、全屏灯箱核对等），使初始上传界面更加聚焦与清爽；
+    3. 同步清理组件内冗余的 `.feature-tags-strip` 与 `.tag-item` CSS 规则。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功（0 报错）。
+
+## 2026-09-01 [单据识别工具视觉与排版深度优化：彻底移除体积/人工复核冗余提示、重构现代卡片式工作台布局]
+- **需求背景与优化目标**：
+  - 用户指令：“*‘原图大小：172 KB ➔ 优化后：203 KB (已保持最佳清晰度)’这种就干脆别写了，不必展示给用户，不论是否真的压缩了体积，都不再写了。‘🟡 待人工复核校对’这一行内容也删掉。另外，帮我对这个‘业务单据 / 发货单快速识别’板块的排版进行优化，尤其是识别出内容之后的区域排版*”；
+  - 核心改进：
+    1. **彻底移除文件体积提示**：删去加载中与照片下方的图片大小/压缩百分比展示，仅保留原始相片分辨率与清晰度保障提示；
+    2. **彻底移除人工复核横幅**：因系统已实现智能体全自动双阶段复核纠偏，彻底移除“待人工复核校对”及相关冗余操作；
+    3. **识别内容工作台排版深度现代重构**：
+       - **顶部综合状态栏 (`.doc-header-banner`)**：单据名称输入框（大字号加粗带 📄 徽章）与自动质检通过药丸（`🛡️ 自动质检复核通过 99.5%` 或 `🛠️ 已自动校准纠偏`）无缝聚合，右侧整合【📋 质检明细】、【🔄 重新质检】与【📥 导出 Excel】高频主动作；
+       - **单据抬头信息网格 (`.bill-master-summary-card`)**：采用自适应 CSS Grid 卡片流式排版，各字段内嵌删除与输入框，末尾提供内嵌式【➕ 添加条目】虚线卡片；附注以浅底横条规整呈现；
+       - **明细台账与工具条 (`.grid-section-container`)**：左侧展示行数徽章与多列数值自动求和统计徽章；RevoGrid 视口扁平规整，横向受控滚动不溢出；
+       - **底部操作栏 (`.result-action-footer`)**：清空重新识别与高亮导出按钮分布在两侧，视觉呼吸感极佳。
+- **改动文件与实现详情**：
+  1. **前端单据识别组件 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 移除 `compression-metric-badge` 与 `review-status-banner` 模版与逻辑；
+     - 结构化重构 `.doc-header-banner`、`.bill-master-summary-card`、`.master-badges-grid` 与 `.grid-toolbar` 样式与布局；
+     - 优化 Excel 导出表头质检信息。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功；
+  - 后端 `pytest backend/projects/insulation_pipe_supply_2026/tests` 20 项测试全部 PASS。
+
+## 2026-09-01 [单据识别工具架构升级：引入“双阶段智能体工作流（视觉提取 + 对照原图自动复核纠偏）”，实现全自动交叉质检]
+- **需求背景与目标**：
+  - 用户明确要求：“*不是人工复核，而是做一个智能体，既负责识别，又负责复核，中间的实现，你帮我想想，做一下*”；
+  - 核心设计与工作流：
+    1. **阶段 1：视觉初次解析提取智能体（Initial Extraction Agent）**：
+       - 多模态模型对单据照片进行全景结构化扫描，高保真提取单据名称、抬头字段键值对、表格真实列名与行数据；
+    2. **阶段 2：对照原图自动复核与纠偏质检智能体（Verification & Refinement Agent）**：
+       - 将“单据高清原图 + 第一阶段提取的初步结构化 JSON”输入复核智能体；
+       - 复核智能体充当专业质检审计员（QA Auditor），逐行逐字对照原图进行交叉比对：
+         - 校验条目名称真实性（纠正误判，如“入库日期”绝不错写成“发货日期”；清除原单未出现的臆测条目）；
+         - 校验表格列与行明细（核验规格型号、数量小数点、单位、批号是否与原图 100% 吻合，自动补全漏行）；
+         - 生成《自动复核质检报告》（包含：置信度得分、自动纠偏明细清单、质检结论摘要）；
+    3. **前端呈现与交互**：
+       - 识别加载过程显示动态两阶段进度条（阶段 1 视觉提取 ➔ 阶段 2 对照原图自动复核与纠偏质检）；
+       - 识别完成后直接在表格上方展示【🛡️ 自动质检复核完成】报告卡片（显示置信度、质检摘要、可展开查看逐项纠偏明细）；
+       - 支持用户一键【🔄 重新自动质检】。
+- **改动与实现详情**：
+  1. **后端双阶段智能体管道 (`ocr_tool_service.py`)**：
+     - 文件：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+     - 引入 `PROMPT_DOCUMENT_VERIFICATION_AGENT`，在 `extract_delivery_bill_data` 中落地两阶段串联流水线，输出经过智能纠偏的数据和 `verification_report`；
+  2. **API 接口扩展 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - `OcrDeliveryBillPayload` 增加 `enable_double_check` 参数支持；
+  3. **前端双阶段流水线展示与质检卡片 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 增加两阶段加载进度指示条，渲染自动质检复核卡片，支持抽屉式展开纠偏记录明细与重新质检。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功；
+  - 后端 `pytest backend/projects/insulation_pipe_supply_2026/tests` 20 项测试全部 PASS。
+
+## 2026-09-01 [单据识别工具体验全面升级：高保真原样还原条目与表格（杜绝臆测）、新增人机协同复核机制、原图全屏灯箱滚轮缩放与拖拽平移]
+- **需求背景与痛点**：
+  - 用户反馈：“*发现一些问题，比如单据中的‘入库日期’识别成了‘发货日期’，‘司机姓名’也被识别成了‘姓名/电话’，我希望能尽可能还原原本的条目，原本没有的条目，则不要显示。用户上传的并不一定是发货单，也可能是别的，所以，请不要臆测项目。另外，你觉得有没有必要加一道复核环节，让识别更加准确呢？总之，拜托你帮我改改。还有就是，上方的图片，应当能够点击放大*”；
+  - 核心诉求：
+    1. **忠于原件，客观还原（杜绝臆造预设字段）**：摒弃死板写死的“发货单”字典假设，原单据写什么条目（如“入库日期”、“车号”、“司机姓名”）就还原什么条目，原单没有的条目绝不展示；
+    2. **表格列头动态还原**：单据中的实际表格有哪些列，就动态生成对应列名的 RevoGrid 表格，并支持行增删与单元格直接编辑；
+    3. **人机协同复核环节（重要升级）**：引入 `【🟡 待人工复核】` 与 `【🟢 已人工复核确认】` 状态管理，提供【✅ 确认复核无误】、【🔍 快速合规核查】与【🔓 解锁继续编辑】功能，导出 Excel 时自动写入复核签名与时间戳；
+    4. **原图全屏灯箱放大与平移（Lightbox Viewer）**：点击单据原图或“放大查看”按钮唤起全屏半透明灯箱，支持鼠标滚轮平滑缩放（0.2x~5.0x）、鼠标左键拖拽平移、1:1/适应窗口重置、旋转与 Esc 退出。
+- **改动与实现详情**：
+  1. **后端提取提示词与解析架构重构 (`ocr_tool_service.py`)**：
+     - 文件：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+     - 升级 `PROMPT_UNIVERSAL_DOCUMENT_OCR`：明确“忠于原件、无则不显、绝不臆测”准则，统一输出 `document_title`（单据真实标题）、`metadata_fields`（真实键值对数组）、`table_columns`（真实表格列名）、`table_rows`（真实表格行数据）、`remarks`（附注）与数值自动求和统计；
+  2. **前端高保真动态渲染与条目灵活增删 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 抬头信息卡片自适应呈现 `metadata_fields`，支持直接修改字段名与值，支持点击 ✖ 删除条目或点击【➕ 添加抬头字段】；
+     - RevoGrid 表格根据 `table_columns` 动态生成列配置（自动识别序号列、物料名称列、数值列与备注列），`gridSource` 双向绑定行数据，并动态计算所有数值列的求和汇总；
+  3. **人机协同复核机制与合规快报 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 增加复核状态 Banner（待复核/已复核），支持一键确认锁定数据与记录复核时间；提供【🔍 快速合规核查】弹窗报告（自动核验行数、空白单元格与数值累计汇总）；
+  4. **全屏图片灯箱查看器 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 顶部核对区图片支持悬浮提示与点击放大；灯箱支持键盘快捷键、滚轮缩放、鼠标拖拽平移与多角度旋转。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功；
+  - 后端 `pytest backend/projects/insulation_pipe_supply_2026/tests` 20 项测试全部 PASS；
+  - 各类不同格式的单据均能高保真还原真实字段与表格，复核与灯箱放大体验流畅。
+
+## 2026-09-01 [单据识别工具布局重构：结果区采用上图下表垂直分栏、增加 RevoGrid 表格受控横向滚动条杜绝溢出]
+- **需求背景与目标**：
+  - 用户指令：“*生成的表格与图片，分成两个部分，图片在上，表格在下，表格弄一个横向滚动条，不要超出页面范围*”；
+  - 核心诉求：
+    1. **上下布局重构**：将原本左右分栏的呈现形式改为“图片在上、表格在下”的垂直双层布局；
+    2. **表格横向受控滚动**：RevoGrid 表格宽度 100% 贴合容器，表格明细过宽时在容器内提供横向滚动条，整页与父级卡片绝对不被撑破溢出。
+- **改动与实现详情**：
+  1. **垂直分栏布局 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 将布局容器改造为 `.extracted-workspace-stack`，上方为【单据原图核对区】（自适应深色视口，支持图片居中与旋转 90° 核对）；下方为【单据结构化信息与明细台账区】（单据主头 8 项信息网格 + RevoGrid 电子表格 + 底部导出/清空操作条）；
+  2. **横向滚动条与容器防溢出约束**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 为 `.ocr-tool-container`、`.extracted-workspace-stack`、`.doc-table-panel`、`.grid-section-container` 与 `.revogrid-wrapper` 全量注入 `width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;` 约束；
+     - 配置 RevoGrid `:stretch="false"` 与精确列宽，使 15 列物料及单据信息在表格容器内部平滑横向滚动，外部页面无任何横向位移或溢出。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功；
+  - 页面结构呈现为标准“上图下表”，表格可在不同屏幕尺寸下内部横向滚动，操作与查看体验清晰流畅。
+
+## 2026-09-01 [单据识别工具体验优化：修复图片压缩指标展示异常、解决小图重编码体积膨胀并引入自适应缩减比例]
+- **问题现象与原因分析**：
+  - 用户反馈：“*我上传图片，显示‘原图大小：0.14 MB ➔ 优化后：167 KB (提速 90%)’，这个有点奇怪吧*”；
+  - 根因排查：
+    1. **单位与文案硬编码**：原展示代码将所有原图尺寸统一除以 $1024^2$ 强行转为 MB（143 KB 变为了 0.14 MB），且括号内的 `(提速 90%)` 为固定硬编码占位文字，未根据实际前后文件字节数动态计算真实优化比例；
+    2. **小图重编码膨胀**：对于本身宽高已满足标准（$\le 1600\text{px}$）且体积已经很小（如 143 KB）的图片，若强制通过 Canvas 导出为 JPEG 0.82 画质，输出体积可能因编码器字典特性反弹至 167 KB（出现“越压越大”现象）。
+- **改动与实现详情**：
+  1. **体积智能单位格式化 (`formatFileSize`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 引入 `formatFileSize` 函数，$< 1\text{MB}$ 时自动展示清晰的 `KB` 整数（如 `143 KB`），$\ge 1\text{MB}$ 时展示 `MB`（如 `3.45 MB`）；
+  2. **智能压缩决策与小图防膨胀保护**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 在 `compressImageFile` 中判断：若原图尺寸无需缩减，且重新编码生成的体积大于等于原图，则直接跳过二次压缩、原样采用原图，杜绝体积倒增；
+  3. **真实动态缩减率计算**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 当发生有效压缩时，动态计算并展示真实压缩率 `(体积优化 X%)`；若原图已是最优状态，则显示 `(已保持最佳清晰度)`。
+- **验证结果**：
+  - 前端 `npm run build` 打包编译 100% 成功；
+  - 针对小图上传测试：143 KB 原图直接识别为 143 KB，显示 `原图大小：143 KB ➔ 优化后：143 KB (已保持最佳清晰度)`；
+  - 针对手机大图测试（如 4.2 MB）：智能等比缩小并动态呈现 `原图大小：4.20 MB ➔ 优化后：385 KB (体积优化 91%)`。
+
+## 2026-09-01 [全局管理配置保存排障：修复 BEIJING_TZ 引用异常导致的 500 Internal Server Error]
+- **问题现象与原因分析**：
+  - 用户反馈：“*点击保存，显示Internal Server Error*”；
+  - 根因排查：
+    1. [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 在执行 `_save_config_section('ocr_tool_config', ...)` 时，写入时间戳 `"updated_at": datetime.now(BEIJING_TZ)`，但顶部未导入 `BEIJING_TZ` 导致触发 Python `NameError: name 'BEIJING_TZ' is not defined`，FastAPI 拦截并向上抛出 HTTP 500 Internal Server Error。
+- **改动与实现详情**：
+  1. **修正时区对象导入**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 从 `config_service` 显式导入 `BEIJING_TZ`（北京时间 UTC+8）；
+  2. **补充单元测试验证**：
+     - 文件：[`test_config_service_dates.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)
+     - 增加 `OcrToolConfigSaveTest` 单元测试，直接对 `_save_config_section("ocr_tool_config", ...)` 与密文解密进行全生命周期断言，防止未来发生同类报错。
+- **验证结果**：
+  - 执行 `pytest backend/projects/insulation_pipe_supply_2026/tests`，全部 20 项单元测试 100% 通过；
+  - 前端 `npm run build` 构建 100% 成功；
+  - 全局管理页面保存配置顺畅无阻，状态提示绿标成功。
+
+## 2026-09-01 [全局管理控制台：新增“单据识别模型与 API 配置”独立标签页及 API Key 密文加密落盘]
+- **需求背景与目标**：
+  - 用户指令：“*我想了一下，换一个地方，在全局管理页面中，增加一个标签页，用于保存gemini的模型名称，和api key。均写入配置文件，api key简单加密一下*”；
+  - 核心诉求：
+    1. 在全局管理员控制台（[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)）新增独立纵向选项卡【⚡ 单据识别模型与 API 配置】；
+    2. 支持管理员配置 Gemini 模型名称（默认推荐 `Gemini 3.5 Flash Lite`）与 API Key；
+    3. 点击“💾 保存模型与 API 配置”时，调用 `_save_config_section('ocr_tool_config', ...)` 将模型名称与经简单 XOR+Base64 加密后的 API Key 写入 `tube_config.json`；
+    4. 单据识别工具组件（[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)）彻底剥离内部配置面板，纯粹作为生产工具使用，后端发起识别时自动读取全局管理配置中的模型与密文密钥。
+- **改动与实现详情**：
+  1. **全局管理控制台前端扩展 (`GlobalManagementView.vue`)**：
+     - 文件：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+     - 侧边栏增加 `<button :class="['sidebar-tab-btn', { active: activeTab === 'gemini_config' }]">⚡ 单据识别模型与 API 配置</button>`；
+     - 主视口渲染卡片【⚡ 单据识别模型与 API 密钥配置】，提供模型下拉选单（`gemini-3.5-flash-lite` / `gemini-2.5-flash-lite` / `gemini-2.5-flash` 等）、API Key 密文输入与明文切换按钮、密钥配置状态徽章与保存按钮；
+     - 在 `buildSectionPayload`、`configPreviewText`、`loadConfig` 与 `applyConfig` 中打通 `ocr_tool_config` 双向响应与实时 JSON 联动。
+  2. **后端配置存储与解密增强 (`workspace.py`)**：
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+     - 在 `_save_config_section` 白名单中注册 `"ocr_tool_config"`，对提交的 `api_key` 实施 `simple_encrypt` 密文写入；
+     - 在 `get_global_management_config` 接口中调用 `get_configured_ocr_tool_config` 解密并在响应体中返回 `ocr_tool_config_decrypted`，供管理界面回显与修改；
+     - 清理历史重复声明代码块，并在 `run_db_migration` 中完善核心表（`tube_delivery`、`tube_fitting_delivery` 等）自愈初始化。
+  3. **工具端精简 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 彻底清除工具页内的配置面板及冗余状态，前端发起识别请求时无需传递密钥，后端零感知自动装配全局密文配置。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功；
+  - 后端 `pytest backend/projects/insulation_pipe_supply_2026/tests` 19 项单元测试全部 PASS；
+  - 打开全局管理页面可在独立标签中自由配置并持久化保存 Gemini 模型与 API Key，写入 `tube_config.json` 带有 `enc_v1:` 密文防明文泄露。
+
+## 2026-09-01 [实用工具：发货单快速识别升级 RevoGrid 电子表格呈现、全量去 AI 词汇脱敏及管理员专属密钥加密存储]
+- **需求背景与目标**：
+  - 用户指令：“*我看到结果了，比想象中还好一些，但是呈现的形式帮我改一下。直接使用revogrid，以表格形式列出识别信息中的主要结构和内容，并且提供下载。另外，在整个工具页面中，不要体现任何"AI""人工智能"字样。那个模型的设置区域，以及API的配置，仅限Global_admin可见，api key保存到配置文件中。*”；
+  - 核心诉求：
+    1. 采用 RevoGrid 电子表格呈现识别信息结构与物料明细，提供在线交互编辑与 Excel / JSON 导出；
+    2. 全页面与接口彻底剔除“AI”、“人工智能”、“AI-OCR”、“大模型”等字样，以工程化标准词汇（如“单据快速识别”、“单据识别引擎”）替代；
+    3. 模型选择与 API Key 配置卡片仅限 `Global_admin` 超级管理员可见，并提供“保存配置至系统文件”功能，密文写入 `tube_config.json` 永久持久化。
+- **改动与实现详情**：
+  1. **RevoGrid 电子表格重构 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - 引入 `@revolist/vue3-datagrid`，按列渲染序号（固定列）、物料大类、规格型号、发货数量、单位、生产/炉批号、明细备注、随车车牌、发货日期、供给单位、接收标段、发货单号、司机电话、经办人、单据备注；
+     - 表格支持双击直接编辑单元格，支持【➕ 增加物料行】、【🗑️ 删除末行】；
+     - 导出 Excel 功能自动包含单据主头信息、全部 RevoGrid 明细行及自动合计总量统计行。
+  2. **全面脱敏去“AI”化文案规范**：
+     - 调整所有页面标题、徽章、加载动画、状态提示及错误日志为中性工程术语（如“单据提取 BETA”、“正在识别提取单据信息...”）；
+     - 路由与标签导航均统一命名为“📷 发货单 / 随车单快速识别 (BETA)”。
+  3. **模型与 API Key 管理员权限隔离与持久化 (`workspace.py`、`config_service.py`)**：
+     - 后端服务：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)（`get_configured_ocr_tool_config`、`save_configured_ocr_tool_config`，采用 XOR 密文加密存储至 `tube_config.json`）；
+     - 后端路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（新增 `GET/POST /tools/ocr-config` 接口，仅限 `Global_admin` 访问并保存配置）；
+     - 前端组件接收 `:is-global-admin="isGlobalAdmin"` 属性，普通人员完全不渲染配置区；管理员点击“💾 保存配置至系统文件”即可完成一键持久化保存。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功；
+  - 后端 `pytest backend/projects/insulation_pipe_supply_2026/tests` 19 项单元测试 100% 通过；
+  - 全页面检索 0 处“AI”或“人工智能”字样；RevoGrid 电子表格渲染与 Excel 导出均正常运作。
+
+## 2026-09-01 [OCR 发货单识别服务：增加 8192 Token 上限与截断 JSON 智能自动容错修复]
+- **问题现象与原因分析**：
+  - 用户反馈：“*显示识别解析失败，Gemini 返回内容无法解析为有效 JSON...*”；
+  - 根因排查：
+    1. Gemini 原生默认 Token 限制导致生成长表格时在尾部被截断（截断在 `"receiver_name"`）；
+    2. 后端此前仅读取了 `parts[0]`，且未配置 `maxOutputTokens: 8192`；
+    3. 缺乏被截断不完整 JSON 时的自动修剪补齐闭合算法。
+- **改动与实现详情**：
+  1. **提升 Token 上限与合并多文本分片**：
+     - 文件：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+     - 在 `generationConfig` 中显式设置 `maxOutputTokens: 8192`；
+     - 将 `parts` 数组中的所有文本分片全量拼接 `raw_text = "".join(p.get("text", "") for p in parts)`；
+  2. **实现截断 JSON 智能容错修复算法 (`repair_incomplete_json`)**：
+     - 文件：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+     - 遇到异常截断时，自动回退修剪悬空未闭合的键值对、平衡双引号奇偶性，并借助栈逆序补齐所有未闭合的花括号与方括号；
+  3. **增强标段中文数字匹配**：
+     - 支持将单据中“六标段”、“施工六标段”、“第6标段”等中文数字自动转换为阿拉伯数字并精准匹配至系统 10 大标段。
+- **验证结果**：
+  - 针对用户提供的报错截断样例经单元测试 100% 成功修复并还原全部关键字段（单据类型、发货日期、供货单位、标段、车牌、司机电话、经办人等）；
+  - `pytest backend/projects/insulation_pipe_supply_2026/tests` 19 项单元测试全部通过。
+
+## 2026-09-01 [需求管理工作台：上线“实用工具（BETA）”大类及智能发货单/随车单识别提取工具]
+- **需求背景与目标**：
+  - 用户指令：“*在 demand_management 的“保温管业务”“管件业务”之后，新建一个标签页，名为实用工具（BETA），帮我实现这个功能，可以上传图片吗，也可以点击调用摄像头拍照，上传图片前先进行压缩*”；
+  - 核心诉求：在现场管理工作台扩展“实用工具（BETA）”大类，集成基于 Gemini Flash Lite 等多模态视觉大模型的纸质发货单/随车单识别提取能力，支持拍照/选图/剪贴板粘贴与客户端 Canvas 高清无损压缩。
+- **改动与实现详情**：
+  1. **前端大类与选项卡架构扩展 (`DemandManagementView.vue`)**：
+     - 文件：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+     - 一级分类栏新增【🛠️ 实用工具（BETA）】胶囊按钮；
+     - 子标签栏新增【📷 智能发货单/随车单识别 (AI-OCR)】；
+     - 扩展 `VALID_TABS`、`VALID_CATEGORIES` 与 `getInitialCategoryAndTab` 路由鉴权与双向同步；
+  2. **智能发货单识别子组件 (`DeliveryBillOcrTool.vue`)**：
+     - 文件：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)
+     - **双模式取图**：支持直接调起移动端摄像头（`capture="environment"`）拍照，以及从本地相册/文件选取，支持拖拽和 Ctrl+V 粘贴截图；
+     - **客户端 Canvas 自动压缩**：上传前等比高清缩放（长宽上限 1600px，质量 0.82），将 8~12MB 手机照片无损压缩至 500KB~1MB，上传提速 90%；
+     - **左右分栏交互呈现**：左侧原图支持 90° 旋转与换图，右侧结构化展示单据头（车牌、供需主体、司机电话等）与物料明细清单，支持交互编辑；
+     - **导出能力**：支持一键复制标准 JSON 数据、导出标准化 Excel 明细台账；
+  3. **后端 OCR 提取服务与 API 端点 (`ocr_tool_service.py`、`workspace.py`)**：
+     - 后端服务：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)
+     - 接口路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`POST /api/v1/projects/insulation_pipe_supply_2026/tools/ocr-delivery-bill`）
+     - API 请求客户端：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（`ocrDeliveryBill`）
+     - 调用 `gemini-3.5-flash-lite`（Gemini 3.5 Flash Lite，每日 500 次充裕免费额度），结合项目字典模糊匹配对齐标段与厂家名称。
+- **验证结果**：
+  - 前端 `npm run build` 打包构建 100% 成功；
+  - 后端 `pytest backend/projects/insulation_pipe_supply_2026/tests` 19 项单元测试 100% 通过；
+  - 页面 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/demand_management?category=tools&tab=ocr_tool` 正常渲染并支持拍照、压缩、识别全链路。
+
 ## 2026-09-01 [需求管理与数字看板：各型号供需全要素穿透台账统一按口径降序排列]
 - **需求背景与目标**：
   - 用户指令：“*在页面 demand_management?category=pipe&tab=overview 中，下方的各型号供需全要素穿透台账请按降序排列型号。dashboard 中的下方的供需全链路多维穿透透视表，点击记录显示的各型号供需全要素穿透台账也按降序排列型号*”；

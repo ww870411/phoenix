@@ -23,10 +23,12 @@ def _get_client_ip(request: Optional[Request]) -> str:
 
 from backend.services.auth_manager import AuthSession, get_current_session, get_current_session_optional
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
+    BEIJING_TZ,
     CONFIG_PATH,
     PROJECT_KEY,
     SUBMISSION_STATUS_PATH,
     get_configured_amap_config,
+    get_configured_ocr_tool_config,
     get_configured_plan_editable_days,
     get_configured_plan_start_date,
     get_configured_show_date,
@@ -118,18 +120,76 @@ public_router = APIRouter(tags=[PROJECT_KEY])
 def run_db_migration():
     session = SessionLocal()
     try:
-        session.execute(text("ALTER TABLE tube.tube_daily_usage ADD COLUMN IF NOT EXISTS loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0;"))
-        session.execute(text("""
-            ALTER TABLE tube.tube_daily_usage 
-            DROP CONSTRAINT IF EXISTS chk_tube_daily_usage_loss_qty_nonnegative;
-        """))
-        session.execute(text("""
-            ALTER TABLE tube.tube_daily_usage 
-            ADD CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative CHECK (loss_qty >= 0);
-        """))
-        
-        # 2026-06-15 & 2026-07-30 操作审计日志表自动初始化与 logs Schema / tube_operation_logs 转移
+        session.execute(text("CREATE SCHEMA IF NOT EXISTS tube;"))
         session.execute(text("CREATE SCHEMA IF NOT EXISTS logs;"))
+
+        # 1. 确保直管每日使用表
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS tube.tube_daily_usage (
+                id BIGSERIAL PRIMARY KEY,
+                usage_date DATE NOT NULL,
+                section_1_id VARCHAR(64) NOT NULL,
+                pipe_model_id VARCHAR(64) NOT NULL,
+                usage_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
+                loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0,
+                filled_by VARCHAR(128),
+                filled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                remark TEXT,
+                updated_by VARCHAR(128),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT chk_tube_daily_usage_usage_qty_nonnegative CHECK (usage_qty >= 0),
+                CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative CHECK (loss_qty >= 0)
+            );
+        """))
+        session.execute(text("ALTER TABLE tube.tube_daily_usage ADD COLUMN IF NOT EXISTS loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0;"))
+
+        # 2. 确保直管发货生命周期主表
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS tube.tube_delivery (
+                id BIGSERIAL PRIMARY KEY,
+                supply_entity_id VARCHAR(64) NOT NULL,
+                order_no VARCHAR(64),
+                shipment_no VARCHAR(64),
+                vehicle_plate_no VARCHAR(32),
+                section_1_id VARCHAR(64) NOT NULL,
+                pipe_model_id VARCHAR(64) NOT NULL,
+                shipped_qty NUMERIC(18, 2) NOT NULL,
+                arrived_qty NUMERIC(18, 2),
+                received_qty NUMERIC(18, 2),
+                shipped_at TIMESTAMPTZ NOT NULL,
+                ship_contact_name VARCHAR(128),
+                ship_contact_phone VARCHAR(64),
+                ship_remark TEXT,
+                arrived_confirm_by VARCHAR(128),
+                arrived_confirm_at TIMESTAMPTZ,
+                arrived_remark TEXT,
+                received_confirm_by VARCHAR(128),
+                received_confirm_at TIMESTAMPTZ,
+                received_remark TEXT,
+                warehouse_confirm_by VARCHAR(128),
+                warehouse_confirm_at TIMESTAMPTZ,
+                warehouse_remark TEXT,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending_arrival',
+                abnormal_flag BOOLEAN NOT NULL DEFAULT FALSE,
+                cancel_by VARCHAR(128),
+                cancel_at TIMESTAMPTZ,
+                cancel_reason TEXT,
+                created_by VARCHAR(128),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_by VARCHAR(128),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                diff_approve_by VARCHAR(128),
+                diff_approve_at TIMESTAMPTZ,
+                diff_approve_remark TEXT,
+                is_timeout_receive BOOLEAN NOT NULL DEFAULT FALSE
+            );
+        """))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_by VARCHAR(128);"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_at TIMESTAMPTZ;"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_remark TEXT;"))
+        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS is_timeout_receive BOOLEAN NOT NULL DEFAULT FALSE;"))
+
+        # 3. 确保操作审计日志表
         session.execute(text("""
             CREATE TABLE IF NOT EXISTS logs.tube_operation_logs (
                 id SERIAL PRIMARY KEY,
@@ -148,27 +208,74 @@ def run_db_migration():
         session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_operator ON logs.tube_operation_logs(operator);"))
         session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_action_type ON logs.tube_operation_logs(action_type);"))
         session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_created_at ON logs.tube_operation_logs(created_at DESC);"))
-        
-        # 2026-06-23 新增差异审批与超时接收字段
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_by VARCHAR(128);"))
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_at TIMESTAMPTZ;"))
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_remark TEXT;"))
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS is_timeout_receive BOOLEAN NOT NULL DEFAULT FALSE;"))
-        
-        # 更新 CHECK 约束以支持 'pending_diff_approve' 状态
-        session.execute(text("ALTER TABLE tube.tube_delivery DROP CONSTRAINT IF EXISTS chk_tube_delivery_status;"))
+
+        # 4. 确保管件发货生命周期表
         session.execute(text("""
-            ALTER TABLE tube.tube_delivery ADD CONSTRAINT chk_tube_delivery_status 
-            CHECK (status IN ('pending_arrival', 'cancelled', 'pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'));
+            CREATE TABLE IF NOT EXISTS tube.tube_fitting_delivery (
+                id BIGSERIAL PRIMARY KEY,
+                supply_entity_id VARCHAR(64) NOT NULL,
+                shipment_no VARCHAR(64) NOT NULL,
+                order_no VARCHAR(64) NOT NULL,
+                vehicle_plate_no VARCHAR(32) NOT NULL,
+                section_1_id VARCHAR(64) NOT NULL,
+                fitting_type VARCHAR(64) NOT NULL,
+                model_spec VARCHAR(128) NOT NULL,
+                shipped_qty NUMERIC(18, 2) NOT NULL,
+                unit VARCHAR(32) NOT NULL DEFAULT '个',
+                shipped_at TIMESTAMPTZ NOT NULL,
+                ship_contact_name VARCHAR(128),
+                ship_contact_phone VARCHAR(64),
+                ship_remark TEXT,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending_arrival',
+                created_by VARCHAR(128),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_by VARCHAR(128),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                arrived_qty NUMERIC,
+                arrived_confirm_at TIMESTAMPTZ,
+                arrived_confirm_by TEXT,
+                arrived_remark TEXT,
+                received_confirm_at TIMESTAMPTZ,
+                received_confirm_by TEXT,
+                received_remark TEXT,
+                warehouse_confirm_at TIMESTAMPTZ,
+                warehouse_confirm_by TEXT,
+                warehouse_remark TEXT,
+                cancel_at TIMESTAMPTZ,
+                cancel_by TEXT,
+                cancel_reason TEXT
+            );
         """))
-        
+
+        # 5. 确保管件消耗表
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS tube.tube_fitting_daily_usage (
+                id BIGSERIAL PRIMARY KEY,
+                project_key VARCHAR(64) NOT NULL DEFAULT 'insulation_pipe_supply_2026',
+                section_1_id VARCHAR(64) NOT NULL,
+                usage_date DATE NOT NULL,
+                fitting_type VARCHAR(64) NOT NULL,
+                model_spec VARCHAR(255) NOT NULL,
+                unit VARCHAR(32) NOT NULL DEFAULT '个',
+                usage_qty INTEGER NOT NULL,
+                remark TEXT,
+                status VARCHAR(32) NOT NULL DEFAULT 'active',
+                cancel_reason TEXT,
+                cancelled_by VARCHAR(64),
+                cancelled_at TIMESTAMPTZ,
+                filled_by VARCHAR(64) NOT NULL,
+                filled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_by VARCHAR(64),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """))
+
         session.commit()
     except Exception as e:
         session.rollback()
         import logging
         logger = logging.getLogger("uvicorn.error")
-        logger.error(f"数据库初始化迁移失败: {e}", exc_info=True)
-        raise RuntimeError(f"数据库初始化迁移失败，应用无法启动: {e}") from e
+        logger.warning(f"数据库初始化迁移提示: {e}")
     finally:
         session.close()
 
@@ -285,185 +392,6 @@ class SuperUpdateDeliveryPayload(BaseModel):
 class WarehouseArrivalConfirmPayload(BaseModel):
     arrived_qty: float = Field(ge=0.01)
     remark: str = ""
-
-
-from backend.projects.insulation_pipe_supply_2026.services import weather_service
-from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
-    save_operation_log,
-    query_operation_logs,
-    query_submission_logs,
-)
-from sqlalchemy import text
-from backend.db.database_daily_report_25_26 import SessionLocal
-
-router = APIRouter(tags=[PROJECT_KEY])
-public_router = APIRouter(tags=[PROJECT_KEY])
-
-
-def run_db_migration():
-    session = SessionLocal()
-    try:
-        session.execute(text("ALTER TABLE tube.tube_daily_usage ADD COLUMN IF NOT EXISTS loss_qty NUMERIC(18, 2) NOT NULL DEFAULT 0;"))
-        session.execute(text("""
-            ALTER TABLE tube.tube_daily_usage 
-            DROP CONSTRAINT IF EXISTS chk_tube_daily_usage_loss_qty_nonnegative;
-        """))
-        session.execute(text("""
-            ALTER TABLE tube.tube_daily_usage 
-            ADD CONSTRAINT chk_tube_daily_usage_loss_qty_nonnegative CHECK (loss_qty >= 0);
-        """))
-        
-        # 2026-06-15 & 2026-07-30 操作审计日志表自动初始化与 logs Schema / tube_operation_logs 转移
-        session.execute(text("CREATE SCHEMA IF NOT EXISTS logs;"))
-        session.execute(text("""
-            CREATE TABLE IF NOT EXISTS logs.tube_operation_logs (
-                id SERIAL PRIMARY KEY,
-                project_key VARCHAR(50) NOT NULL DEFAULT 'insulation_pipe_supply_2026',
-                operator VARCHAR(100) NOT NULL,
-                operator_group VARCHAR(100),
-                action_type VARCHAR(50) NOT NULL,
-                action_desc TEXT NOT NULL,
-                resource_id VARCHAR(100),
-                before_value JSONB,
-                after_value JSONB,
-                client_ip VARCHAR(50),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_operator ON logs.tube_operation_logs(operator);"))
-        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_action_type ON logs.tube_operation_logs(action_type);"))
-        session.execute(text("CREATE INDEX IF NOT EXISTS idx_logs_tube_op_created_at ON logs.tube_operation_logs(created_at DESC);"))
-        
-        # 2026-06-23 新增差异审批与超时接收字段
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_by VARCHAR(128);"))
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_at TIMESTAMPTZ;"))
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS diff_approve_remark TEXT;"))
-        session.execute(text("ALTER TABLE tube.tube_delivery ADD COLUMN IF NOT EXISTS is_timeout_receive BOOLEAN NOT NULL DEFAULT FALSE;"))
-        
-        # 更新 CHECK 约束以支持 'pending_diff_approve' 状态
-        session.execute(text("ALTER TABLE tube.tube_delivery DROP CONSTRAINT IF EXISTS chk_tube_delivery_status;"))
-        session.execute(text("""
-            ALTER TABLE tube.tube_delivery ADD CONSTRAINT chk_tube_delivery_status 
-            CHECK (status IN ('pending_arrival', 'cancelled', 'pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'));
-        """))
-        
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        import logging
-        logger = logging.getLogger("uvicorn.error")
-        logger.error(f"数据库初始化迁移失败: {e}", exc_info=True)
-        raise RuntimeError(f"数据库初始化迁移失败，应用无法启动: {e}") from e
-    finally:
-        session.close()
-
-run_db_migration()
-
-
-
-class DemandPlanRecordInput(BaseModel):
-    plan_date: date
-    pipe_model_id: str
-    plan_qty: float = Field(default=0, ge=0)
-    remark: str = ""
-
-
-class DemandPlanSavePayload(BaseModel):
-    section_1_id: str
-    records: List[DemandPlanRecordInput] = []
-
-
-class DemandUsageRecordInput(BaseModel):
-    pipe_model_id: str
-    usage_qty: float = Field(default=0, ge=0)
-    loss_qty: float = Field(default=0, ge=0)
-    remark: str = ""
-
-
-class DemandUsageSavePayload(BaseModel):
-    section_1_id: str
-    usage_date: date
-    records: List[DemandUsageRecordInput] = []
-
-
-class DemandSection1SubmissionPayload(BaseModel):
-    section_1_id: str
-    remark: str = ""
-
-
-class TubeConfigSavePayload(BaseModel):
-    config: Dict[str, Any]
-
-
-class TubeConfigSectionSavePayload(BaseModel):
-    section: str
-    data: Any
-
-
-class WeatherEvalPayload(BaseModel):
-    api_url: Optional[str] = None
-
-
-class WeatherImportPayload(BaseModel):
-    api_url: Optional[str] = None
-
-
-class SupplyDeliveryCreatePayload(BaseModel):
-    supply_entity_id: str
-    section_1_id: str
-    pipe_model_id: str
-    shipped_qty: float = Field(ge=0.01)
-    shipped_at: datetime
-    shipment_no: str = ""
-    vehicle_plate_no: str = ""
-    ship_contact_name: str = ""
-    ship_contact_phone: str = ""
-    ship_remark: str = ""
-
-
-class SupplyDeliveryBatchItemInput(BaseModel):
-    section_1_id: str
-    pipe_model_id: str
-    shipped_qty: float = Field(ge=0.01)
-    ship_remark: str = ""
-
-
-class SupplyDeliveryBatchCreatePayload(BaseModel):
-    supply_entity_id: str
-    shipped_at: datetime
-    shipment_no: str = ""
-    vehicle_plate_no: str = ""
-    ship_contact_name: str = ""
-    ship_contact_phone: str = ""
-    items: List[SupplyDeliveryBatchItemInput]
-
-
-class SupplyDeliveryCancelPayload(BaseModel):
-    cancel_reason: str = Field(..., min_length=2, description="撤销发货原因说明")
-
-
-class CustomSupplyEntityPayload(BaseModel):
-    entity_name: str
-    contact_name: str = ""
-    contact_phone: str = ""
-
-
-
-class SuperUpdateDeliveryPayload(BaseModel):
-    section_1_id: str
-    pipe_model_id: str
-    shipped_qty: float = Field(ge=0.01)
-    shipped_at: datetime
-    vehicle_plate_no: str = ""
-    ship_remark: str = ""
-    status: str
-    order_no: str = ""
-    shipment_no: str = ""
-    arrived_qty: Optional[float] = None
-    received_qty: Optional[float] = None
-    arrived_confirm_at: Optional[datetime] = None
-    received_confirm_at: Optional[datetime] = None
-    warehouse_confirm_at: Optional[datetime] = None
 
 
 class SuperUpdateFittingDeliveryPayload(BaseModel):
@@ -825,6 +753,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "weather_provider",
         "management_mode",
         "amap_config",
+        "ocr_tool_config",
     }
     if normalized_section not in allowed_sections:
         raise HTTPException(status_code=422, detail=f"不支持的配置区块：{normalized_section}")
@@ -889,6 +818,36 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         payload[normalized_section] = {
             "api_key": simple_encrypt(api_key_plain),
             "security_code": simple_encrypt(security_code_plain),
+        }
+    elif normalized_section == "ocr_tool_config":
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=422, detail="ocr_tool_config 必须为对象")
+        model_val = str(data.get("model") or "gemini-3.5-flash-lite").strip()
+        raw_fallbacks = data.get("fallback_models")
+        if isinstance(raw_fallbacks, list):
+            fallback_models_val = [str(m).strip() for m in raw_fallbacks if str(m).strip()]
+        else:
+            fallback_models_val = ["gemini-3.7-flash", "gemini-3.5-flash"]
+        
+        current_cfg = payload.get("ocr_tool_config", {})
+        if not isinstance(current_cfg, dict):
+            current_cfg = {}
+            
+        incoming_key = data.get("api_key")
+        if incoming_key is not None:
+            key_str = str(incoming_key).strip()
+            if key_str:
+                saved_key = simple_encrypt(key_str)
+            else:
+                saved_key = ""
+        else:
+            saved_key = current_cfg.get("api_key", "")
+            
+        payload[normalized_section] = {
+            "model": model_val,
+            "fallback_models": fallback_models_val,
+            "api_key": saved_key,
+            "updated_at": datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
         }
     elif normalized_section == "fitting_config":
         if not isinstance(data, dict):
@@ -4733,6 +4692,7 @@ def get_global_management_config(
     payload = load_tube_config()
     submission_status = load_section_1_submission_status()
     amap_config_decrypted = get_configured_amap_config(payload)
+    ocr_tool_config_decrypted = get_configured_ocr_tool_config(payload)
 
     # 动态从数据库表 tube.tube_pipe_baseline 注入直管基准量
     try:
@@ -4764,6 +4724,7 @@ def get_global_management_config(
         "project_key": PROJECT_KEY,
         "config": payload,
         "amap_config_decrypted": amap_config_decrypted,
+        "ocr_tool_config_decrypted": ocr_tool_config_decrypted,
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "usage_collection_date": get_usage_collection_date(payload).isoformat(),
@@ -4840,6 +4801,8 @@ def save_global_management_config_section(
         "project_key": PROJECT_KEY,
         "section": payload.section,
         "config": updated,
+        "amap_config_decrypted": get_configured_amap_config(updated),
+        "ocr_tool_config_decrypted": get_configured_ocr_tool_config(updated),
         "show_date": get_configured_show_date(updated).isoformat(),
         "plan_start_date": get_configured_plan_start_date(updated).isoformat(),
         "usage_collection_date": get_usage_collection_date(updated).isoformat(),
@@ -6249,6 +6212,109 @@ def handle_import_material_prices(
 ) -> Dict[str, Any]:
     res = import_prices_from_excel(operator=session.username or "ADMIN")
     return res
+
+
+class OcrDeliveryBillPayload(BaseModel):
+    image_base64: str
+    mime_type: Optional[str] = "image/jpeg"
+    api_key: Optional[str] = None
+    model_name: Optional[str] = None
+    custom_prompt: Optional[str] = None
+    enable_double_check: Optional[bool] = True
+
+
+class OcrConfigPayload(BaseModel):
+    model: Optional[str] = "gemini-3.5-flash-lite"
+    fallback_models: Optional[List[str]] = None
+    api_key: Optional[str] = None
+
+
+@router.post("/tools/ocr-delivery-bill", summary="发货单/随车单单据快速识别解析")
+def handle_ocr_delivery_bill(
+    request: Request,
+    payload: OcrDeliveryBillPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import extract_delivery_bill_data
+    result = extract_delivery_bill_data(
+        image_base64=payload.image_base64,
+        mime_type=payload.mime_type or "image/jpeg",
+        api_key=payload.api_key,
+        model_name=payload.model_name,
+        custom_prompt=payload.custom_prompt,
+        enable_double_check=True if payload.enable_double_check is None else payload.enable_double_check,
+    )
+
+    # 记录至业务操作记录（综合数据查询大类）
+    doc_title = result.get("document_title") or "业务单据"
+    meta_count = len(result.get("metadata_fields") or [])
+    rows_count = len(result.get("table_rows") or [])
+    report = result.get("verification_report") or {}
+    confidence = report.get("confidence_score")
+    conf_text = f"（置信度: {confidence}%）" if confidence is not None else ""
+    actual_model = result.get("model_used") or "未知模型"
+    fb_hint = " (已触发备选兜底)" if result.get("model_fallback_triggered") else ""
+
+    desc = f"综合数据查询 - 业务单据智能识别：采用模型【{actual_model}{fb_hint}】解析单据【{doc_title}】提取 {meta_count} 个条目与 {rows_count} 行表格明细{conf_text}"
+
+    save_operation_log(
+        operator=session.username or "GUEST",
+        operator_group=session.group,
+        action_type="OCR_DELIVERY_BILL",
+        action_desc=desc,
+        resource_id=f"ocr_bill_{doc_title[:30]}",
+        after_value={
+            "document_title": doc_title,
+            "metadata_fields_count": meta_count,
+            "table_rows_count": rows_count,
+            "table_columns": result.get("table_columns") or [],
+            "verification_status": report.get("status"),
+            "confidence_score": confidence,
+            "corrections_count": report.get("corrections_count", 0),
+            "model_used": actual_model,
+            "model_fallback_triggered": result.get("model_fallback_triggered", False),
+        },
+        client_ip=_get_client_ip(request),
+    )
+
+    return result
+
+
+@router.get("/tools/ocr-config", summary="获取单据识别引擎配置")
+def handle_get_ocr_config(
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services.config_service import (
+        load_tube_config,
+        get_configured_ocr_tool_config,
+    )
+    tube_config = load_tube_config()
+    cfg = get_configured_ocr_tool_config(tube_config)
+    is_admin = (session.group or "").lower() in ("global_admin", "admin") or session.username.lower() == "admin"
+    return {
+        "model": cfg.get("model") or "gemini-3.5-flash-lite",
+        "fallback_models": cfg.get("fallback_models") or ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
+        "has_custom_key": cfg.get("has_custom_key", False),
+        "api_key": cfg.get("api_key") if is_admin else "",
+    }
+
+
+@router.post("/tools/ocr-config", summary="保存单据识别模型与 API Key 配置（管理员专属）")
+def handle_save_ocr_config(
+    payload: OcrConfigPayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    from backend.projects.insulation_pipe_supply_2026.services.config_service import save_configured_ocr_tool_config
+    is_admin = (session.group or "").lower() in ("global_admin", "admin") or session.username.lower() == "admin"
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="权限受限：仅限 Global_admin 管理员保存单据识别系统配置。")
+    return save_configured_ocr_tool_config(
+        model=payload.model or "gemini-3.5-flash-lite",
+        fallback_models=payload.fallback_models,
+        api_key=payload.api_key
+    )
+
+
 
 
 

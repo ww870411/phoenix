@@ -129,6 +129,80 @@ def get_configured_amap_config(payload: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
+def get_configured_ocr_tool_config(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    从 tube_config.json 提取单据识别引擎配置、备选兜底模型序列与解密后的 API Key
+    """
+    raw_config = payload.get("ocr_tool_config")
+    if not isinstance(raw_config, dict):
+        raw_config = {}
+
+    model = str(raw_config.get("model") or "gemini-3.5-flash-lite").strip()
+    
+    # 提取按次序配置的备选兜底模型列表
+    raw_fallbacks = raw_config.get("fallback_models")
+    fallback_models: List[str] = []
+    if isinstance(raw_fallbacks, list):
+        for item in raw_fallbacks:
+            m_str = str(item or "").strip()
+            if m_str and m_str not in fallback_models:
+                fallback_models.append(m_str)
+    elif isinstance(raw_fallbacks, str) and raw_fallbacks.strip():
+        fallback_models = [raw_fallbacks.strip()]
+    else:
+        fallback_models = ["gemini-3.7-flash", "gemini-3.5-flash"]
+
+    api_key_cipher = str(raw_config.get("api_key") or "").strip()
+    api_key = simple_decrypt(api_key_cipher) if api_key_cipher else ""
+
+    return {
+        "model": model,
+        "fallback_models": fallback_models,
+        "api_key": api_key,
+        "has_custom_key": bool(api_key),
+    }
+
+
+def save_configured_ocr_tool_config(
+    model: str,
+    fallback_models: Optional[List[str]] = None,
+    api_key: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    保存单据识别模型配置、备选兜底模型列表与 API Key（密文存储）至 tube_config.json
+    """
+    payload = load_tube_config()
+    current_cfg = get_configured_ocr_tool_config(payload)
+    clean_model = str(model or current_cfg.get("model") or "gemini-3.5-flash-lite").strip()
+    
+    if fallback_models is not None:
+        clean_fallbacks = [str(m).strip() for m in fallback_models if str(m).strip()]
+    else:
+        clean_fallbacks = current_cfg.get("fallback_models") or ["gemini-3.7-flash", "gemini-3.5-flash"]
+
+    if api_key is not None and str(api_key).strip():
+        saved_key_cipher = simple_encrypt(str(api_key).strip())
+    elif api_key == "":
+        saved_key_cipher = ""
+    else:
+        saved_key_cipher = payload.get("ocr_tool_config", {}).get("api_key", "")
+
+    payload["ocr_tool_config"] = {
+        "model": clean_model,
+        "fallback_models": clean_fallbacks,
+        "api_key": saved_key_cipher,
+        "updated_at": datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    }
+    save_tube_config(payload)
+    return {
+        "ok": True,
+        "model": clean_model,
+        "fallback_models": clean_fallbacks,
+        "has_custom_key": bool(saved_key_cipher)
+    }
+
+
+
 def load_tube_config() -> Dict[str, Any]:
     if not CONFIG_PATH.exists():
         raise HTTPException(status_code=404, detail="tube_config.json 不存在")

@@ -1,3 +1,81 @@
+## 2026-09-01 全局管理单据识别配置：全面精简为手填 3 模型极简列表
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理控制台 - 侧边栏【⚡ 单据识别模型与 API 配置】）
+- **功能特性与交互升级**：
+  1. **极简纯粹列表排版**：剔除所有冗余装饰与图表，保留最核心的单个卡片；
+  2. **3 个手填模型输入框**：
+     - `模型 1 (首选主力)`：自由输入首选模型型号（默认 `gemini-3.5-flash-lite`）；
+     - `模型 2 (第 1 备选兜底)`：自由输入第 1 备选模型型号（默认 `gemini-2.5-flash-lite`）；
+     - `模型 3 (第 2 备选兜底)`：自由输入第 2 备选模型型号（默认 `gemini-2.5-flash`）；
+  3. **Gemini API Key 输入与保存**：支持密码/明文切换与即时加密保存。
+
+## 2026-09-01 全局管理单据识别配置：企业级高颜值排版重构与模型名称自由手填
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理控制台 - 侧边栏【⚡ 单据识别模型与 API 配置】）
+- **功能特性与交互升级**：
+  1. **现代企业级排版体系**：
+     - 顶部渐变状态 Banner，展示密文加密规范（`XOR 密文安全防脱敏`）与一键保存主操作；
+     - 视觉化容灾链路流水线指示条（`👑 首选主力 ➔ 🛡️ 兜底 #01 ➔ 🛡️ 兜底 #02 ➔ ✨ 自动复核`）；
+     - 左右双栏：主识别模型卡片 + 备选兜底序列工坊；
+     - API Key 输入区与 Google AI 官方免费层配额概览卡片。
+  2. **模型自由手填（Input + Datalist）**：
+     - 主模型与备选模型序列全量改造为文本输入框（`<input type="text">`），支持 100% 自由手填任何官方或私有模型名称；
+     - 集成 `<datalist>` 原生智能联想补全；
+     - 提供“⚡ 常用模型一键快速追加”胶囊标签栏，兼顾自由度与极速录入。
+
+## 2026-09-01 全局管理单据识别配置：备选模型序列有序卡片与503提示精简
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理控制台 - 侧边栏【⚡ 单据识别模型与 API 配置】标签面板）
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（现场管理单据识别工作台 - 错误捕获与一键重试）
+- **功能特性与交互升级**：
+  1. **备选模型序列有序管理**：
+     - 在全局管理中可为单据识别设置“首选主模型 (Primary Model)”与“备选兜底序列 (Fallback Models)”；
+     - 支持动态新增备选（如 `Gemini 2.5 Flash Lite`、`Gemini 2.5 Flash` 等预设或自定义）、上下调整调用优先级次序、一键恢复推荐预设及删除；
+  2. **报错文案精简与一键重试**：
+     - 识别遇到 503 / 高并发拥堵时，统一归一化为“`服务器繁忙，请点击重试`”，错误横幅右侧一键秒级发起重试。
+
+## 2026-09-01 业务单据智能识别：接入全局管理“业务操作记录”（归属综合数据查询大类）
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理控制台 - Tab 0 业务操作记录）
+- **功能特性与交互升级**：
+  1. **筛选联动支持**：在“综合数据查询类”下拉筛选中新增【📷 业务单据智能识别】独立行为筛选项；
+  2. **专属视觉标识**：为单据识别行为配置专属洋红徽章（`📷 业务单据识别`，样式 `#fdf2f8` / `#db2777`）；
+  3. **责任人穿透联动**：操作记录中点击操作人姓名，可自动穿透至综合数据查询中心的责任主体矩阵对应人员位置。
+
+## 2026-09-01 需求方与供给方物流台账视图完整性与数据回显联动验证
+
+- **关联前端页面与组件**：
+  - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（需求侧管理页面 - 保温管与管件物流台账与到货确认）
+  - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧管理页面 - 保温管与管件发货历史与物流跟踪）
+- **功能特性与交互验证**：
+  1. **路由与标签参数隔离**：新增实用工具分类（`category=tools&tab=ocr_tool`）不影响直管（`category=pipe`）与管件（`category=fitting`）既有业务子标签的数据生命周期；
+  2. **数据流完整性验证**：在后端数据表修复恢复后，直管到货记录（`loadLogisticsRecords`）与管件发货历史（`handleFittingQuery`）均已 100% 正确拉取数据并回填渲染，空状态提示与数据表格按真实数据动态切换；
+  3. **构建验证**：全量 `npm run build` 打包构建 100% 成功。
+
+## 2026-09-01 系统单据识别工作台：现代企业级排版重构、双阶段智能体自动质检复核与高保真条目还原
+
+- **关联前端页面与组件**：
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（系统全局控制台 - 侧边栏【⚡ 单据识别模型与 API 配置】标签面板）
+  - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（现场管理工作台 - 一级分类“实用工具（BETA）”及子标签“业务单据智能识别（BETA）”）
+  - [`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)（“业务单据智能识别”现代卡片式排版工作台、双阶段自动质检两步流、自适应抬头元数据网格、动态 RevoGrid 电子表格、原图全屏灯箱缩放平移、Excel 导出）
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（导出 `ocrDeliveryBill`、`getTubeGlobalManagementConfig`、`saveTubeGlobalManagementConfigSection` 接口）
+- **功能特性与交互升级**：
+  1. **现代工作台排版深度重构与界面精简**：
+     - 标题徽章精简为 `BETA`，移除上传卡片下方的功能小标签；
+     - 彻底移除冗余的图片体积优化提示与“待人工复核校对”横幅；
+     - 移除外部单独展示的合计徽章，将单据底部的“合计”行原样还原在表格内部最底行；
+     - 顶部综合状态栏无缝整合单据名称、自动质检置信度药丸徽章与常用动作；
+     - 抬头条目网格化自适应呈现，支持内嵌快捷添加新项与逐项删除；
+     - 表格区规整内嵌虚拟横向与纵向滚动条，支持合计行智能定位与全表格单元格自由编辑；
+  2. **双阶段智能体工作流（识别 + 自动质检复核）**：第 1 阶段初次视觉多维提取；第 2 阶段复核智能体对照原图逐行逐字交叉核验并自动纠偏，生成《自动复核质检报告》（含置信度与纠偏明细）；
+  3. **忠于原件，高保真无臆测**：原单写的“入库日期”就是“入库日期”，“车号”就是“车号”，原单没有的条目绝不臆造；
+  4. **原图全屏灯箱放大与平移（Lightbox Viewer）**：点击单据原图或右上角“放大查看”进入全屏半透明灯箱，支持鼠标滚轮缩放、左键按住拖拽平移、1:1/适应屏幕与多角度旋转；
+  5. **全局管理控制台专属配置页与密文加密存储**：超级管理员可在后台维护视觉模型与 API Key，密钥采用密文保存至 `tube_config.json`。
+
 ## 2026-09-01 需求管理与数字看板：各型号供需全要素穿透台账统一按口径降序排列
 
 - **关联前端页面与组件**：

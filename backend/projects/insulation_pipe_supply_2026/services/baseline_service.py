@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import json
 from typing import Any, Dict, List, Optional
 import openpyxl
 from sqlalchemy import text
@@ -192,6 +193,28 @@ def ensure_baseline_tables() -> None:
 
         session.commit()
         _baseline_tables_checked = True
+
+        # 自愈自动载入种子数据（当表中记录数为 0 时自动初始化，防止页面空载）
+        try:
+            pipe_count = session.execute(text("SELECT COUNT(*) FROM tube.tube_pipe_baseline;")).scalar() or 0
+            if pipe_count == 0:
+                seed_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "seeds", "pipe_baselines_seed.json"))
+                if os.path.exists(seed_file):
+                    with open(seed_file, "r", encoding="utf-8") as f:
+                        presets = json.load(f)
+                    if presets:
+                        save_pipe_baselines(presets, operator_name="system_auto_seed")
+        except Exception:
+            pass
+
+        try:
+            fitting_count = session.execute(text("SELECT COUNT(*) FROM tube.tube_fitting_baseline;")).scalar() or 0
+            if fitting_count == 0:
+                excel_seed = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../configs/8.17 标准化数据.xlsx"))
+                if os.path.exists(excel_seed):
+                    import_fitting_baselines_from_excel(excel_seed, operator_name="system_auto_seed")
+        except Exception:
+            pass
     except Exception:
         session.rollback()
         raise

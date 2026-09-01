@@ -110,6 +110,13 @@
           </button>
           <button 
             type="button" 
+            :class="['sidebar-tab-btn', { active: activeTab === 'gemini_config' }]" 
+            @click="activeTab = 'gemini_config'"
+          >
+            ⚡ 单据识别模型与 API 配置
+          </button>
+          <button 
+            type="button" 
             :class="['sidebar-tab-btn', { active: activeTab === 'json' }]" 
             @click="activeTab = 'json'"
           >
@@ -230,6 +237,7 @@
                       <option value="QUERY_MATERIAL_PRICES">💰 调阅采购单价字典</option>
                       <option value="QUERY_SUPPLIER_LEDGER">🏭 查询供给方发货台账</option>
                       <option value="QUERY_ENTITY_DIRECTORY">🏢 查询责任主体矩阵</option>
+                      <option value="OCR_DELIVERY_BILL">📷 业务单据智能识别</option>
                     </optgroup>
                   </select>
                 </label>
@@ -1207,6 +1215,91 @@
             </section>
           </div>
 
+          <!-- Tab: 单据识别模型与 API 密钥配置 (Gemini Config) -->
+          <div v-if="activeTab === 'gemini_config'" class="pane-content-wrapper">
+            <section class="card elevated section-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">⚡ 单据识别模型与 API 密钥配置</div>
+                  <p class="sub block-sub">
+                    按调用次序手填 3 个识别模型名称（首选模型与 2 个备选兜底模型），以及 Gemini API Key。
+                  </p>
+                </div>
+                <div class="section-actions">
+                  <button class="btn primary shadow-accent" type="button" :disabled="isSaving('ocr_tool_config')" @click="saveSection('ocr_tool_config')">
+                    {{ isSaving('ocr_tool_config') ? '保存中…' : '💾 保存配置' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="field-grid core-field-grid">
+                <!-- 1. 模型列表（3个手填型号输入框） -->
+                <div class="field field-span-2" style="display: flex; flex-direction: column; gap: 14px;">
+                  <span style="font-weight: 600; color: #334155; font-size: 14px;">识别模型列表（按先后次序自动兜底）：</span>
+                  
+                  <label class="field" style="margin: 0;">
+                    <span style="font-size: 13px; font-weight: 600; color: #1e293b;">模型 1 (首选主力)</span>
+                    <input
+                      v-model="ocrModel1"
+                      type="text"
+                      class="input"
+                      placeholder="手填首选模型名称，例如: gemini-3.5-flash-lite"
+                    />
+                  </label>
+
+                  <label class="field" style="margin: 0;">
+                    <span style="font-size: 13px; font-weight: 600; color: #475569;">模型 2 (第 1 备选兜底)</span>
+                    <input
+                      v-model="ocrModel2"
+                      type="text"
+                      class="input"
+                      placeholder="手填第 1 备选模型名称，例如: gemini-3.7-flash"
+                    />
+                  </label>
+
+                  <label class="field" style="margin: 0;">
+                    <span style="font-size: 13px; font-weight: 600; color: #475569;">模型 3 (第 2 备选兜底)</span>
+                    <input
+                      v-model="ocrModel3"
+                      type="text"
+                      class="input"
+                      placeholder="手填第 2 备选模型名称，例如: gemini-3.5-flash"
+                    />
+                  </label>
+                </div>
+
+                <!-- 2. Gemini API Key -->
+                <label class="field field-span-2">
+                  <span style="font-weight: 600; color: #334155; font-size: 14px;">Gemini API Key (api_key)</span>
+                  <div class="input-with-action" style="display: flex; gap: 8px; width: 100%;">
+                    <input 
+                      v-model="ocrApiKey" 
+                      :type="showOcrKeys ? 'text' : 'password'" 
+                      class="input" 
+                      placeholder="请输入 Google Gemini API Key (如: AIzaSy...)" 
+                    />
+                    <button class="btn ghost compact-btn" type="button" @click="showOcrKeys = !showOcrKeys">
+                      {{ showOcrKeys ? '🔒 隐藏' : '👁️ 显示' }}
+                    </button>
+                  </div>
+                </label>
+              </div>
+
+              <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                <span class="status-indicator" v-if="ocrApiKey">
+                  🟢 当前已配置独立密钥
+                </span>
+                <span class="status-indicator warning" v-else>
+                  🟡 尚未配置独立密钥（系统将自动尝试读取全局共享密钥）
+                </span>
+              </div>
+
+              <p v-if="sectionMessage('ocr_tool_config')" :class="['section-tip', sectionMessage('ocr_tool_config').type]">
+                {{ sectionMessage('ocr_tool_config').text }}
+              </p>
+            </section>
+          </div>
+
           <!-- Tab 6: 原始 JSON 预览 -->
           <div v-if="activeTab === 'json'" class="pane-content-wrapper">
             <section class="card elevated section-card">
@@ -1951,6 +2044,13 @@ const amapApiKey = ref('')
 const amapSecurityCode = ref('')
 const showAmapKeys = ref(false)
 
+// ⚡ 单据识别引擎与 API 配置 Ref 变量（手填3个模型列表）
+const ocrModel1 = ref('gemini-3.5-flash-lite')
+const ocrModel2 = ref('gemini-3.7-flash')
+const ocrModel3 = ref('gemini-3.5-flash')
+const ocrApiKey = ref('')
+const showOcrKeys = ref(false)
+
 // 🔩 管件基础参数与校验配置 Ref 变量
 const fittingAllowedUnitsText = ref('个, 套')
 const fittingStandardTypesText = ref('弯头, 三通, 大小头, 封头, 直缝弯管, 补偿器, 固定节')
@@ -2337,6 +2437,21 @@ function applyConfig(config) {
   const fittingCfg = config.fitting_config || {}
   fittingAllowedUnitsText.value = listToText(fittingCfg.allowed_units || ['个', '套'])
   fittingStandardTypesText.value = listToText(fittingCfg.standard_types || ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节'])
+  
+  if (config.ocr_tool_config) {
+    ocrModel1.value = config.ocr_tool_config.model || 'gemini-3.5-flash-lite'
+    const rawFb = config.ocr_tool_config.fallback_models
+    if (Array.isArray(rawFb)) {
+      ocrModel2.value = rawFb[0] || ''
+      ocrModel3.value = rawFb[1] || ''
+    } else if (typeof rawFb === 'string' && rawFb.trim()) {
+      ocrModel2.value = rawFb.trim()
+      ocrModel3.value = ''
+    } else {
+      ocrModel2.value = 'gemini-3.7-flash'
+      ocrModel3.value = 'gemini-3.5-flash'
+    }
+  }
   
   loadWeatherConfig()
   syncSelectedBaselineSection1()
@@ -2995,6 +3110,17 @@ function buildSectionPayload(section) {
       security_code: amapSecurityCode.value || '',
     }
   }
+  if (section === 'ocr_tool_config') {
+    const m1 = String(ocrModel1.value || '').trim() || 'gemini-3.5-flash-lite'
+    const m2 = String(ocrModel2.value || '').trim()
+    const m3 = String(ocrModel3.value || '').trim()
+    const fallbacks = [m2, m3].filter(Boolean)
+    return {
+      model: m1,
+      fallback_models: fallbacks,
+      api_key: ocrApiKey.value || '',
+    }
+  }
   if (section === 'fitting_config') {
     return {
       allowed_units: textToList(fittingAllowedUnitsText.value),
@@ -3024,6 +3150,7 @@ const configPreviewText = computed(() =>
       baseline_presets: buildSectionPayload('baseline_presets'),
       weather_api_url: weatherApiUrl.value || '',
       amap_config: buildSectionPayload('amap_config'),
+      ocr_tool_config: buildSectionPayload('ocr_tool_config'),
     },
     null,
     2,
@@ -3103,6 +3230,16 @@ async function loadConfig() {
       amapSecurityCode.value = response.amap_config_decrypted.security_code || ''
     }
 
+    if (response.ocr_tool_config_decrypted) {
+      const dec = response.ocr_tool_config_decrypted
+      ocrModel1.value = dec.model || 'gemini-3.5-flash-lite'
+      if (Array.isArray(dec.fallback_models)) {
+        ocrModel2.value = dec.fallback_models[0] || ''
+        ocrModel3.value = dec.fallback_models[1] || ''
+      }
+      ocrApiKey.value = dec.api_key || ''
+    }
+
     if (response.show_date) {
       showDate.value = response.show_date
     }
@@ -3132,6 +3269,19 @@ async function saveSection(section) {
       data: buildSectionPayload(section),
     })
     applyConfig(response.config || {})
+    if (response.ocr_tool_config_decrypted) {
+      const dec = response.ocr_tool_config_decrypted
+      ocrModel1.value = dec.model || 'gemini-3.5-flash-lite'
+      if (Array.isArray(dec.fallback_models)) {
+        ocrModel2.value = dec.fallback_models[0] || ''
+        ocrModel3.value = dec.fallback_models[1] || ''
+      }
+      ocrApiKey.value = dec.api_key || ''
+    }
+    if (response.amap_config_decrypted) {
+      amapApiKey.value = response.amap_config_decrypted.api_key || ''
+      amapSecurityCode.value = response.amap_config_decrypted.security_code || ''
+    }
     if (response.show_date) {
       showDate.value = response.show_date
     }
@@ -3444,6 +3594,7 @@ function onSubmissionCategoryChange() {
       'QUERY_MATERIAL_PRICES',
       'QUERY_SUPPLIER_LEDGER',
       'QUERY_ENTITY_DIRECTORY',
+      'OCR_DELIVERY_BILL',
     ]
     if (queryActions.includes(submissionFilters.value.actionType)) {
       submissionFilters.value.actionType = ''
@@ -3954,6 +4105,7 @@ function translateActionType(type) {
     QUERY_MATERIAL_PRICES: '💰 采购单价查询',
     QUERY_SUPPLIER_LEDGER: '🏭 供给台账查询',
     QUERY_ENTITY_DIRECTORY: '🏢 责任主体查询',
+    OCR_DELIVERY_BILL: '📷 业务单据识别',
   }
   return dict[type] || type || '—'
 }
@@ -3982,6 +4134,7 @@ function getActionTypeBadgeStyle(type) {
     QUERY_MATERIAL_PRICES: { bg: '#fefce8', color: '#a16207', border: '1px solid #fef08a' },
     QUERY_SUPPLIER_LEDGER: { bg: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' },
     QUERY_ENTITY_DIRECTORY: { bg: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1' },
+    OCR_DELIVERY_BILL: { bg: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8' },
   }
   const match = colors[type] || { bg: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' }
   return {
