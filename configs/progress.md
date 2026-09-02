@@ -1,3 +1,25 @@
+## 2026-09-02 [需求管理：每日施工消耗与损耗填报增加“损耗量真实性核对”确认弹窗]
+- **需求与业务对齐**：
+  - 响应用户反馈：“在 `/projects/insulation_pipe_supply_2026/pages/demand_management?category=pipe&tab=usage` 中填报每日使用量的时候，可能会误填到‘损耗量’字段中，导致现场库存的错误；增加一项功能：当用户提交每日使用量与损耗量时，如果提交的数据中各型号的损耗量不全为0，则弹出一个确认窗口，提示用户‘您填写了xx型号的损耗量xx米，请确认其为真实施工损耗（报废不能再用）’，并提供‘仅上报消耗量’‘返回重新填报’及‘确认真实损耗并上报’选项”；
+- **全链路架构与改动点**：
+  1. **响应式状态设计与生命周期防护（前端）**：
+     - 在 [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) 中新增 `lossConfirmModalVisible`（弹窗显隐控制）与 `lossConfirmModalRows`（非零损耗型号明细队列）；
+     - 在 `reloadSection1Data` 与 `refreshRealtimeConfig` 的阻塞条件中加入 `lossConfirmModalVisible.value`，防止用户在弹窗核对过程中因轮询定时器刷新界面造成状态重置；
+  2. **提交流程重构与非零损耗智能拦截（前端）**：
+     - 重构 `saveUsageSheet()`：提交前自动遍历各型号行 `usageRows`，筛选出 `Number(row.lossQty || 0) > 0` 的非零损耗记录；
+     - 若存在非零损耗，则自动组装规格型号名称、使用量、损耗量及备注，唤起二次确认弹窗并中断直接提交；
+     - 若损耗量全为 0，则无感直接执行保存逻辑 `executeSaveUsageSheet(false)`；
+  3. **高品质二次确认弹窗与三元操作分支（前端）**：
+     - 弹窗采用醒目的琥珀警示渐变（`#f59e0b` $\to$ `#d97706`）配合精致玻璃拟态卡片；
+     - 智能区分单型号与多型号提示文案（如单型号：“您填写了【DN200】型号的损耗量 10 米，请确认其为真实施工损耗（报废不能再用）”）；
+     - 呈现明细对照表与清晰的现场库存扣减风险说明；
+     - 提供三大操作选项：
+       - **【✅ 仅上报消耗量 (损耗置0)】**：触发 `handleLossConfirmOnlyUsage()`，自动将界面与提交载荷中的 `loss_qty` 清零，仅上报消耗量，防止误填损耗扣减库存；
+       - **【⚠️ 确认真实损耗并上报】**：触发 `handleLossConfirmSubmitWithLoss()`，携带真实损耗量正常提交入库；
+       - **【↩️ 返回重新填报】**：触发 `handleLossConfirmCancel()`，关闭弹窗并保留输入，便于施工人员回到表格调整错位填写的数值；
+- **改动文件**：
+  - 前端：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+
 ## 2026-09-02 [业务审计：将“查看展示大屏”行为纳入业务操作记录（归属“综合数据查询类”）]
 - **需求与业务对齐**：
   - 响应用户指令：“‘业务操作记录’中，也记录点击查看‘展示大屏’的记录吧，作为‘综合数据查询类’中的项目”；

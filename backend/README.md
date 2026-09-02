@@ -1,3 +1,14 @@
+## 2026-09-02 需求管理：每日施工使用与损耗填报“损耗量真实性核对”机制（协同记录）
+
+- **业务协同与模块定位**：
+  - 对应前端页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（Tab `usage` 直管实际消耗与损耗填报）
+  - 对应后端接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`POST /api/v1/projects/{project_key}/tubes/demand-management/usage-sheet`）
+  - 对应后端服务：[`demand_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/demand_service.py)（`save_usage_sheet`、`check_and_block_negative_inventory`）
+- **协同说明**：
+  - 后端接口入参 `records: [{ pipe_model_id, usage_qty, loss_qty, remark }]` 保持原有标准协议不变；
+  - 前端在提交时增加了对非零损耗（`loss_qty > 0`）的前置真实性拦截确认弹窗，防止用户误将日常使用量填入损耗字段导致现场库存异常报废；
+  - 用户可在弹窗中选择【仅上报消耗量 (损耗置0)】、【确认真实损耗并上报】或【返回重新填报】。
+
 ## 2026-09-02 业务审计服务：将“查看展示大屏”纳入业务操作记录（归属“综合数据查询类”）
 
 - **关联模块与接口**：

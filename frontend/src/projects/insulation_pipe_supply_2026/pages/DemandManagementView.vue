@@ -2415,6 +2415,91 @@
       <span class="toast-text">{{ toastText }}</span>
     </div>
 
+    <!-- 施工损耗量二次确认弹窗 (Loss Confirm Modal) -->
+    <Transition name="fade">
+      <div v-if="lossConfirmModalVisible && lossConfirmModalRows.length" class="block-modal-overlay" @click.self="handleLossConfirmCancel">
+        <div class="block-modal-container" style="max-width: 580px;">
+          <!-- 头部警示区 -->
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;">
+            <span class="block-warning-icon">⚠️</span>
+            <h3 style="margin-top: 5px; color: #fff;">施工损耗量真实性核对</h3>
+            <p class="block-warning-desc" style="color: rgba(255,255,255,0.92);">请核对填写的损耗量是否为真实报废损耗，避免误将消耗量填入损耗字段</p>
+          </div>
+
+          <!-- 提示文案与说明 -->
+          <div style="padding: 16px 20px 0 20px; text-align: left;">
+            <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; color: #92400e;">
+              <template v-if="lossConfirmModalRows.length === 1">
+                您填写了 <strong>【{{ lossConfirmModalRows[0].pipeModelName }}】</strong> 型号的损耗量 <strong style="color: #dc2626; font-size: 15px;">{{ lossConfirmModalRows[0].lossQty }} 米</strong>，请确认其为<strong>真实施工损耗（报废不能再用）</strong>。
+              </template>
+              <template v-else>
+                您填写了以下 <strong style="color: #dc2626;">{{ lossConfirmModalRows.length }}</strong> 个型号的现场损耗量，请确认其均为<strong>真实施工损耗（报废不能再用）</strong>：
+              </template>
+            </div>
+          </div>
+
+          <!-- 损耗型号明细表格 -->
+          <div style="padding: 12px 20px; width: 100%; box-sizing: border-box;">
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
+                <thead>
+                  <tr style="background: #f8fafc; color: #475569; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 8px 10px; font-weight: 600;">型号名称</th>
+                    <th style="padding: 8px 10px; text-align: right; font-weight: 600;">实际使用量</th>
+                    <th style="padding: 8px 10px; text-align: right; font-weight: 600; color: #dc2626;">填写损耗量</th>
+                    <th style="padding: 8px 10px; font-weight: 600;">备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in lossConfirmModalRows" :key="item.pipeModelId" style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 8px 10px; font-weight: 600; color: #1e293b;">{{ item.pipeModelName }}</td>
+                    <td style="padding: 8px 10px; text-align: right; font-family: monospace; color: #2563eb; font-weight: 600;">{{ item.usedQty }} 米</td>
+                    <td style="padding: 8px 10px; text-align: right; font-family: monospace; color: #dc2626; font-weight: bold; background: #fff1f2;">{{ item.lossQty }} 米</td>
+                    <td style="padding: 8px 10px; color: #64748b; font-size: 11.5px;">{{ item.remarks || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 业务风险提示 -->
+          <div style="padding: 0 20px 12px 20px; text-align: left; font-size: 12px; color: #64748b; line-height: 1.5;">
+            💡 <strong>说明</strong>：损耗量上报后将作为<strong>报废</strong>直接扣减现场库存。若您本意仅为日常管道安装施工，请选择<strong>【仅上报消耗量】</strong>（损耗量将自动置0）或选择<strong>【返回重新填报】</strong>。
+          </div>
+
+          <!-- 底部操作按钮 -->
+          <div class="block-modal-actions" style="display: flex; flex-direction: column; gap: 8px; padding: 12px 20px 20px 20px; border-top: 1px solid #e2e8f0; background: #fafafa;">
+            <div style="display: flex; gap: 10px; width: 100%;">
+              <button 
+                type="button" 
+                class="btn primary" 
+                style="flex: 1; background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; border: none; font-weight: 600; font-size: 13.5px;"
+                @click="handleLossConfirmOnlyUsage"
+              >
+                ✅ 仅上报消耗量 (损耗置0)
+              </button>
+              <button 
+                type="button" 
+                class="btn primary" 
+                style="flex: 1; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; border: none; font-weight: 600; font-size: 13.5px;"
+                @click="handleLossConfirmSubmitWithLoss"
+              >
+                ⚠️ 确认真实损耗并上报
+              </button>
+            </div>
+            <button 
+              type="button" 
+              class="btn ghost" 
+              style="width: 100%; border: 1px solid #cbd5e1; background: #fff;"
+              @click="handleLossConfirmCancel"
+            >
+              ↩️ 返回重新填报
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 负库存硬性拦截磨砂玻璃警告弹窗 (Premium Glassmorphism Usage Block Modal) -->
     <Transition name="fade">
       <div v-if="blockModalVisible && blockModalData" class="block-modal-overlay">
@@ -4067,6 +4152,8 @@ const activeTab = ref(initialSelection.tab)
 const showExportModal = ref(false)
 const blockModalVisible = ref(false)
 const blockModalData = ref(null)
+const lossConfirmModalVisible = ref(false)
+const lossConfirmModalRows = ref([])
 const allPendingRows = ref([])
 
 // 🚚 全标段现场综合督办中心状态
@@ -7552,7 +7639,8 @@ async function reloadSection1Data() {
     receiptRemarkModalVisible.value ||
     deliveryDetailModalVisible.value ||
     showExportModal.value ||
-    blockModalVisible.value
+    blockModalVisible.value ||
+    lossConfirmModalVisible.value
   ) {
     return
   }
@@ -7578,7 +7666,8 @@ async function refreshRealtimeConfig() {
     receiptRemarkModalVisible.value ||
     deliveryDetailModalVisible.value ||
     showExportModal.value ||
-    blockModalVisible.value
+    blockModalVisible.value ||
+    lossConfirmModalVisible.value
   ) {
     return
   }
@@ -7623,17 +7712,58 @@ async function savePlanMatrix() {
   }
 }
 
+function handleLossConfirmOnlyUsage() {
+  lossConfirmModalVisible.value = false
+  executeSaveUsageSheet(true)
+}
+
+function handleLossConfirmSubmitWithLoss() {
+  lossConfirmModalVisible.value = false
+  executeSaveUsageSheet(false)
+}
+
+function handleLossConfirmCancel() {
+  lossConfirmModalVisible.value = false
+}
+
 async function saveUsageSheet() {
+  if (!selectedSection1Id.value || !usageDate.value) {
+    return
+  }
+
+  // 校验是否存在填报了大于 0 的损耗量
+  const nonZeroLossRows = usageRows.value.filter((row) => Number(row.lossQty || 0) > 0)
+  if (nonZeroLossRows.length > 0) {
+    lossConfirmModalRows.value = nonZeroLossRows.map((row) => ({
+      pipeModelId: row.pipeModelId,
+      pipeModelName: row.pipeModelName || row.pipeModelId,
+      usedQty: Number(row.usedQty || 0),
+      lossQty: Number(row.lossQty || 0),
+      remarks: row.remarks || ''
+    }))
+    lossConfirmModalVisible.value = true
+    return
+  }
+
+  await executeSaveUsageSheet(false)
+}
+
+async function executeSaveUsageSheet(ignoreLoss = false) {
   if (!selectedSection1Id.value || !usageDate.value) {
     return
   }
   saveUsageLoading.value = true
   clearActionMessage()
   try {
+    if (ignoreLoss) {
+      usageRows.value.forEach((row) => {
+        row.lossQty = 0
+      })
+    }
     const records = usageRows.value.map((row) => ({
       pipe_model_id: row.pipeModelId,
       usage_qty: Number(row.usedQty || 0),
-      loss_qty: Number(row.lossQty || 0),
+      loss_qty: ignoreLoss ? 0 : Number(row.lossQty || 0),
       remark: row.remarks || ''
     }))
     await saveTubeDemandManagementUsageSheet(PROJECT_KEY, {
@@ -7641,7 +7771,7 @@ async function saveUsageSheet() {
       usage_date: usageDate.value,
       records
     })
-    setActionMessage('success', '实际消耗量及损耗数据已成功上报提交！')
+    setActionMessage('success', ignoreLoss ? '已按实际消耗量提交上报（损耗量已置零）！' : '实际消耗量及损耗数据已成功上报提交！')
     await Promise.all([loadUsageSheet(), loadDemandInventoryOverview(), loadPipeUsageHistory()])
   } catch (error) {
     const errorText = getErrorMessage(error, '提交实际使用量失败')
