@@ -1,3 +1,32 @@
+## 2026-09-02 数字指挥大屏：全量面板标题图标矢量化升级（协同记录）
+
+- **业务协同与模块定位**：
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（各看板面板标题与指标卡片）
+  - **协同说明**：前端已将大屏中所有面板标题图标及指标卡片图标由易缺失的 Emoji 字符全面升级为原生内联矢量 SVG，彻底解决不同操作系统和客户端环境下的字符乱码与方框问题。
+
+## 2026-09-02 智慧大屏气象服务：调整风力研判阈值（6级及以下风力不影响施工状态）
+
+- **业务协同与模块定位**：
+  - 对应后端服务：[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)（`evaluate_construction_impact`、`get_live_weather_for_dashboard`）
+  - 对应 API 接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /api/v1/projects/insulation_pipe_supply_2026/big_screen/data`）
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（今日天气与施工条件板块）
+- **核心升级**：
+  1. **风力影响门槛调整**：移除 $4 \sim 6$ 级风作为轻微影响的触发逻辑，使 6 级（含）及以下常规风力均不影响状态研判；
+  2. **研判规则梯次更新**：
+     - **受到明显影响 (danger)**：极寒严冻（$T < -5^\circ\text{C}$）、极端酷热（$T \ge 38^\circ\text{C}$）、强对流/恶劣降水或 $\ge 7$ 级大风；
+     - **受到轻微影响 (warning)**：低温环境（$-5^\circ\text{C} \le T < 5^\circ\text{C}$）、高温天气（$32^\circ\text{C} \le T < 38^\circ\text{C}$）、常规降水/雾霾（小雨、中雨、阵雨、毛毛雨、雪、雾、霾）；
+     - **适宜施工 (success)**：黄金温区（$5^\circ\text{C} \le T < 32^\circ\text{C}$）、$\le 6$ 级风且无恶劣天气/降水。
+
+## 2026-09-02 单据智能识别服务：直径符号统一修正为大写 Φ + 系统提示词解耦与表单混淆纠偏
+
+- **关联模块**：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)。
+- **核心升级**：
+  1. **结构化出厂默认提示词**：在 `config_service.py` 中定义 `DEFAULT_OCR_SYSTEM_PROMPT`，内置“核心提取准则”、“供应商文字容错纠偏专区”、“表单印刷混淆清洗”以及【重点专项：直径符号标准写法规范】，明确要求识别时一律使用标准正规大写「Φ」符号（如「Φ1020*10」、「Φ300」、「Φ1400/1600」）；
+  2. **提示词配置化与解耦**：在 `ocr_tool_config` 结构中新增 `system_prompt` 字段，持久化于 `tube_config.json`，支持管理员在全局管理后台在线热更新；
+  3. **直径符号全局精准修正**：在 `ocr_tool_service.py` 中实现 `_normalize_phi_symbol` 并嵌入 `_normalize_str`，自动将识别结果中的各类非标准直径符号（小写 `φ`、全角 `Ф`、`⌀` 等）精准替换为标准大写 `Φ`（`\u03a6`），且不触碰其他任何字符；
+  4. **表单嵌套引导词纯进化后处理**：在 `_build_normalized_ocr_result` 中增加正则清洗器，自动将混入值中的“姓名 满仓”、“牌照 辽B12345”剥离为纯净实体并规范化 label；
+  5. **完备单测保障**：在 `test_config_service_dates.py` 中增加对 `system_prompt` 读写、编辑距离 1 字纠偏、表单标签值清洗以及直径符号大写 Φ 规范化的 30 项自动化单元测试全量 PASS。
+
 ## 2026-09-01 单据智能识别服务：彻底禁止全局 AI 兜底，严格依赖 tube_config.json 专属配置
 
 - **关联模块**：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)。

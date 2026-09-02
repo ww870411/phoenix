@@ -1,3 +1,47 @@
+## 2026-09-02 [数字大屏：全量面板标题图标矢量 SVG 升级（彻底解决跨终端乱码/方框问题）]
+- **需求与优化目标**：
+  - 响应用户反馈：“大屏幕上有一些条目的图标在一些电脑上不能正确显示，包括‘今日天气与施工条件’‘保供效能与履约保障’‘本周管件施工战报’‘本周保温管施工战报’前”；
+  - **根因分析**：部分 Windows 客户端（如 Windows 7/8/旧版 Windows 10 LTSC/未更新 Segoe UI Emoji 字体库）缺乏 Unicode 11+ / 特殊 Emoji（如 `🌤️`、`🛡️`、`🧩`、`📅` 等）渲染字形，导致在非标准环境显示为豆腐块 `□`、问号或黑白破损字形；
+  - **前端全面矢量重构**：
+    1. **今日天气与施工条件**：采用晴雨云双色矢量 SVG（金黄太阳 `#fbbf24` + 天蓝浮云 `#38bdf8`），并同步将位置标点及预报图标矢量化；
+    2. **保供效能与履约保障**：采用安全盾牌+验证勾矢量 SVG（翡翠绿 `#10b981`），并将其下 4 个关键指标卡片（核心制造管厂、施工标段现场、库管确认率、平均在途时长）全面重构为内联 SVG 矢量图标；
+    3. **本周保温管 vs 管件施工战报**：在 10 秒轮播切换动画中，保温管战报采用青蓝日历图表 SVG（`#00f2fe`），管件战报采用金色构件积木矩阵 SVG（`#fbbf24`）；
+    4. **全网工程动态播报/保温管情报/管件情报**：同步全面矢量化为专属科技感 SVG 图标；
+    5. **样式与响应式布局**：配置 `.title-svg-icon`、`.safety-svg-icon` 配合 `inline-flex` 弹性居中对齐，确保在任何分辨率、操作系统、浅色/深色主题下 100% 清晰呈现，零系统字体依赖。
+- **改动文件**：
+  - 前端：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+- **验证结果**：
+  - 前端构建：`npm run build` 耗时 15.68s 成功构建（0 Error）。
+
+## 2026-09-02 [指挥大屏：优化今日天气与施工条件研判逻辑（6级及以下风力不影响状态判断）]
+- **需求与优化目标**：
+  - 响应用户指令：“修改‘今日天气与施工条件’板块条件，将‘户外施工受到轻微影响’这类提示的逻辑进行修改，使 6 级（含）以下的风力均不会影响状态判断”；
+  - **研判逻辑优化**：
+    1. **风力影响解耦与阈值提升**：将原先 $4 \sim 6$ 级风触发“户外施工受到轻微影响（warning）”的规则移除，$\le 6$ 级（含 1~6 级、微风等）风力均判定为对施工无影响，只要无恶劣降水/极端气温，即归入【适宜施工（success）】；
+    2. **高风力风险保留**：仍保持 $\ge 7$ 级大风作为【户外施工受到明显影响（danger）】的硬性风险预警因子；
+    3. **风力等级正则解析升级**：引入正则提取风力数值（`\d+`），智能兼容高德返回的各类格式（如 `"≤3"`、`"4-5"`、`"5-6"`、`"6"`、`"7-8"` 等），确保 $\le 6$ 级风不误报；
+- **改动文件**：
+  - 后端：[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)
+- **验证结果**：
+  - 本地 Python 执行测试：覆盖 4 级风（适宜施工）、5-6 级风（适宜施工）、7-8 级风（明显影响）、小雨+5级风（轻微影响）等场景，断言全部符合预期。
+
+## 2026-09-02 [单据识别：直径符号统一规范化为大写 Φ + 系统提示词解耦与表单混淆纠偏]
+- **需求与架构设计**：
+  - 响应用户指令：“关于规格型号识别到的小写 φ 等异体符号，统一修正为系统/数据库标准的大写 Φ 写法，其他字符原样保留”；同时完成系统提示词抽离配置、供应商 1 字容错与表单标签混淆纠偏；
+  - **后端实现**：
+    1. 在 [`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py) 与 [`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 的 `DEFAULT_OCR_SYSTEM_PROMPT` 中，新增【重点专项：直径符号标准写法规范】，明确要求识别时一律使用标准正规大写「Φ」符号（如「Φ1020*10」、「Φ300」、「Φ1400/1600」）；
+    2. 在 [`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py) 中实现 `_normalize_phi_symbol` 并嵌入 `_normalize_str`，自动将提取结果中所有出现的小写 `φ`、全角 `Ф`、`⌀` 等统一修正为标准大写 `Φ`（`\u03a6`），且不触碰其他任何文字或字母；
+    3. 升级 `_parse_extracted_json` 与 `repair_incomplete_json`，使用 `strict=False` 模式彻底解决多行与控制字符导致的 JSON 解析中断问题。
+  - **前端管理控制台**：
+    1. 在 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 的【单据识别模型与 API 密钥配置 (gemini_config)】面板中，新增【📝 单据识别系统提示词 (System Prompt) 定制】卡片；
+    2. 提供等宽大文本编辑框、实时字符统计、定制状态标签（`✨ 已自定义提示词` vs `📦 官方出厂预设`）及【🔄 恢复出厂默认提示词】一键重置功能。
+- **改动文件**：
+  - 后端：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)、[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)、[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)、[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)、[`test_config_service_dates.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)
+  - 前端：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+- **验证结果**：
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 30 项单测全量 PASS；
+  - 前端构建：`npm run build` 成功。
+
 ## 2026-09-01 [单据识别：彻底禁止全局 AI 配置隐式兜底，实现 100% 严格依赖 tube_config.json]
 - **需求与架构规范**：
   - 响应用户明确指令：“禁止这些兜底设置，应完全依赖 tube_config.json”；

@@ -762,15 +762,16 @@ def evaluate_construction_impact(
     结合天气现象、风力等级与实时气温智能推导施工影响与精准调度建议：
     1. 明显影响 (danger):
        - 强对流/恶劣降水（暴雨、大雨、特大暴雨、雷阵雨、雷暴、大雪、暴雪、冰雹、冻雨）
-       - 7 级及以上大风
+       - 7 级及以上大风 (>= 7 级)
        - 极端严寒 (T < -5℃) 或 极端酷热 (T >= 38℃)
     2. 轻微影响 (warning):
        - 常规降水与雾霾（小雨、中雨、阵雨、毛毛雨、雨、雪、雾、霾）
-       - 4~6 级风
        - 低温环境 (-5℃ <= T < 5℃) 或 高温天气 (32℃ <= T < 38℃)
+       - 注：6 级（含）及以下风力视为正常/不影响状态判断
     3. 适宜施工 (success):
-       - 黄金温区 (5℃ <= T < 32℃)，≤3 级风且无恶劣天气
+       - 黄金温区 (5℃ <= T < 32℃)，<= 6 级风且无恶劣天气/降水
     """
+    import re
     w = str(weather or "").strip()
     wp = str(wind_power or "").strip()
 
@@ -784,7 +785,8 @@ def evaluate_construction_impact(
 
     # --- 1. 明显影响 (Danger 红色) ---
     is_severe_weather = any(k in w for k in ["暴雨", "大雨", "特大暴雨", "雷阵雨", "雷暴", "大雪", "暴雪", "冰雹", "冻雨"])
-    is_severe_wind = any(str(p) in wp for p in ["7", "8", "9", "10", "11", "12"])
+    wind_nums = [int(n) for n in re.findall(r"\d+", wp)]
+    is_severe_wind = any(n >= 7 for n in wind_nums)
     is_extreme_cold = (temp_val is not None and temp_val < -5.0)
     is_extreme_heat = (temp_val is not None and temp_val >= 38.0)
 
@@ -804,18 +806,16 @@ def evaluate_construction_impact(
         }
 
     # --- 2. 轻微影响 (Warning 金色) ---
+    # 6 级（含）及以下风力不影响状态判断，不再作为轻微影响的触发条件
     is_mild_weather = any(k in w for k in ["小雨", "中雨", "阵雨", "毛毛雨", "雨", "雪", "雾", "霾"])
-    is_mild_wind = any(str(p) in wp for p in ["4", "5", "6"])
     is_low_temp = (temp_val is not None and -5.0 <= temp_val < 5.0)
     is_high_temp = (temp_val is not None and 32.0 <= temp_val < 38.0)
 
-    if is_mild_weather or is_mild_wind or is_low_temp or is_high_temp:
+    if is_mild_weather or is_low_temp or is_high_temp:
         if is_low_temp:
             advice = f"【受到轻微影响】当前气温较低（{temp_val}℃），聚氨酯发泡前须对管口预热加温，水压试验须做好防冻与彻底排空。"
         elif is_high_temp:
             advice = f"【受到轻微影响】当前气温偏高（{temp_val}℃），建议采取错峰施工，控制发泡物料搅拌反应时间并做好防暑降温。"
-        elif is_mild_wind:
-            advice = f"【受到轻微影响】现场风力达 {wp} 级（4~6级），露天焊接须搭设防风棚，管口做好封堵遮盖以防杂物落入。"
         else:
             advice = f"【受到轻微影响】当前出现轻微降水/雾霾（{w}），建议做好露天焊接防雨棚遮盖与保温管端口防水密封，注意路面防滑。"
         return {

@@ -23,6 +23,7 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     load_tube_config,
     get_config_list,
     get_configured_ocr_tool_config,
+    DEFAULT_OCR_SYSTEM_PROMPT,
 )
 
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
@@ -46,35 +47,7 @@ def _normalize_gemini_model_name(model_name: Optional[str]) -> str:
     return clean or "gemini-3.5-flash-lite"
 
 
-PROMPT_UNIVERSAL_DOCUMENT_OCR = """你是一个高精度的各类工程物资单据与业务表格视觉提取专家。
-请仔细阅读并分析上传的单据/表格照片（可能为入库单、验收单、发货单、送货单、调拨单、过磅单、检验单、领料单等任意纸质或电子单据）。
-
-【核心提取准则】：
-1. 【忠于原件，原样还原】：原单据中写的什么条目名称就提取什么条目名称（例如单据上写的是“入库日期”，label必须是“入库日期”，绝不要修改成“发货日期”；若写的是“车号”，label必须是“车号”；若写的是“司机姓名”，label必须是“司机姓名”）。
-2. 【无则不显，绝不臆测】：如果单据原图中未出现某些信息（例如没有司机电话、没有发货单号、没有批号等），绝对不要在输出中编造或添加该项！
-3. 【表格与合计行完整还原（极重要）】：
-   - 提取表格的所有实际表头列名（如 ["序号", "物资名称", "规格型号", "计量单位", "实收数量", "炉批号", "备注"] 等），不要遗漏任何列，也不要添加不存在的列。
-   - 提取表格中的全部行数据，每一行的 key 严格对应提取的表头列名。
-   - 【极其关键 - 表格合计行还原】：若原图单据表格底部有“合计”、“总计”、“小计”等汇总行（例如原表中印制或手写的“合计：120.5 米”），**必须完整还原并作为 table_rows 的最后一行输出**（例如 `{"序号": "合计", "物资名称": "—", "规格型号": "—", "计量单位": "米", "实收数量": "120.5", "备注": ""}` 或原单对应的实际列位置），切勿将原图表格底部的“合计”行遗漏或挪出表格！
-
-【输出 JSON 字段结构】：
-{
-  "document_title": "单据上方的实际名称（如'物资入库收货（验收）单'、'随车发货单'等）",
-  "metadata_fields": [
-    {"label": "原单据中的实际字段名称1", "value": "实际文字内容1"},
-    {"label": "原单据中的实际字段名称2", "value": "实际文字内容2"}
-  ],
-  "table_columns": ["实际列名1", "实际列名2", "实际列名3"],
-  "table_rows": [
-    {"实际列名1": "值1", "实际列名2": "值2", "实际列名3": "值3"}
-  ],
-  "remarks": "单据底部或其他区域的补充备注（若无则为空字符串\"\"）"
-}
-
-【输出规范】：
-请直接输出纯 JSON 对象，不要包含 markdown 代码块反引号，不要有多余修饰语。
-"""
-
+PROMPT_UNIVERSAL_DOCUMENT_OCR = DEFAULT_OCR_SYSTEM_PROMPT
 PROMPT_DELIVERY_BILL_OCR = PROMPT_UNIVERSAL_DOCUMENT_OCR
 
 
@@ -123,8 +96,16 @@ PROMPT_DOCUMENT_VERIFICATION_AGENT = """你是一个顶级工程物资单据与�
 """
 
 
+def _normalize_phi_symbol(s: str) -> str:
+    """将各类非标准/小写直径符号（如 φ、ϕ、Ф、⌀、ø 等）统一修正为标准大写「Φ」符号"""
+    if not s:
+        return ""
+    return re.sub(r'[\u03c6\u03d5\u0424\u0444\u2300\u00f8\u00d8]', 'Φ', s)
+
+
 def _normalize_str(s: Any) -> str:
-    return str(s or "").strip()
+    res = str(s or "").strip()
+    return _normalize_phi_symbol(res)
 
 
 def _match_section_name(raw_name: str, payload: Dict[str, Any]) -> tuple[Optional[str], str]:
@@ -163,21 +144,67 @@ def _match_section_name(raw_name: str, payload: Dict[str, Any]) -> tuple[Optiona
     return None, raw_name
 
 
-def _match_supplier_name(raw_name: str, payload: Dict[str, Any]) -> tuple[Optional[str], str]:
-    """将 OCR 识别出的发货厂家与系统供给主体进行模糊匹配对齐"""
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """计算两个字符串的 Levenshtein 编辑距离（动态规划）"""
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    return previous_row[-1]
+
+
+def _match_supplier_name(raw_name: str, payload: Dict[str, Any]) -> Tuple[Optional[str], str, bool]:
+    """
+    将 OCR 识别出的发货厂家/供货单位与系统供给主体进行对齐：
+    1. 精确匹配与子串包含匹配（完全匹配）
+    2. 针对仅差 1 个字（编辑距离 = 1 或长名称相似度高）的同音/形近/错字，自动纠偏为系统标准企业全称
+    返回: (supply_entity_id, supply_entity_name, is_corrected)
+    """
     if not raw_name:
-        return None, ""
-    clean = re.sub(r'[\s_—\-\(\)（）]', '', raw_name.lower())
+        return None, "", False
+    clean = re.sub(r'[\s_—\-\(\)（）:：]', '', raw_name.lower())
     suppliers = get_config_list(payload, "supply_entities")
 
+    # 1. 第一优先级：精确匹配或包含匹配
     for sup in suppliers:
-        sup_id = _normalize_str(sup.get("supply_entity_id"))
-        sup_name = _normalize_str(sup.get("supply_entity_name"))
-        clean_sup = re.sub(r'[\s_—\-\(\)（）]', '', sup_name.lower())
-        if clean_sup in clean or clean in clean_sup or sup_id.lower() in clean:
-            return sup_id, sup_name
+        sup_id = _normalize_str(sup.get("supply_entity_id") or sup.get("entity_id"))
+        sup_name = _normalize_str(sup.get("supply_entity_name") or sup.get("entity_name"))
+        clean_sup = re.sub(r'[\s_—\-\(\)（）:：]', '', sup_name.lower())
+        if clean_sup and (clean_sup in clean or clean in clean_sup or (sup_id and sup_id.lower() in clean)):
+            return sup_id, sup_name, False
 
-    return None, raw_name
+    # 2. 第二优先级：针对 >=4 字符的企业全称，进行编辑距离 = 1 的智能容错纠偏
+    if len(clean) >= 4:
+        best_match = None
+        min_distance = 999
+        for sup in suppliers:
+            sup_id = _normalize_str(sup.get("supply_entity_id") or sup.get("entity_id"))
+            sup_name = _normalize_str(sup.get("supply_entity_name") or sup.get("entity_name"))
+            clean_sup = re.sub(r'[\s_—\-\(\)（）:：]', '', sup_name.lower())
+            if not clean_sup or len(clean_sup) < 4:
+                continue
+
+            dist = _levenshtein_distance(clean, clean_sup)
+            # 若仅差 1 个字，或长度>=8时差<=2个字
+            if dist == 1 or (len(clean) >= 8 and dist <= 2):
+                if dist < min_distance:
+                    min_distance = dist
+                    best_match = (sup_id, sup_name, True)
+
+        if best_match:
+            return best_match
+
+    return None, raw_name, False
 
 
 def repair_incomplete_json(json_str: str) -> Optional[Dict[str, Any]]:
@@ -252,7 +279,7 @@ def repair_incomplete_json(json_str: str) -> Optional[Dict[str, Any]]:
                     closing += ']'
 
             try:
-                parsed = json.loads(c + closing)
+                parsed = json.loads(c + closing, strict=False)
                 if isinstance(parsed, dict):
                     return parsed
             except Exception:
@@ -341,30 +368,68 @@ def _call_gemini_vision(
 
 
 def _parse_extracted_json(raw_text: str) -> Optional[Dict[str, Any]]:
-    """鲁棒解析 JSON 字符串"""
-    cleaned_json_str = raw_text.strip()
+    """
+    超强容错解析视觉模型返回的 JSON 字符串：
+    1. 剥离 markdown 反引号前缀与尾随字符
+    2. 允许非严格控制字符（strict=False）
+    3. 智能截取首尾花括号子串
+    4. 针对被截断或引号未闭合的 JSON 进行自动补全自愈
+    """
+    if not raw_text or not str(raw_text).strip():
+        return None
+
+    cleaned_json_str = str(raw_text).strip()
     if cleaned_json_str.startswith("```json"):
         cleaned_json_str = cleaned_json_str[7:]
-    if cleaned_json_str.startswith("```"):
+    elif cleaned_json_str.startswith("```"):
         cleaned_json_str = cleaned_json_str[3:]
     if cleaned_json_str.endswith("```"):
         cleaned_json_str = cleaned_json_str[:-3]
     cleaned_json_str = cleaned_json_str.strip()
 
-    extracted = None
+    # 阶段 1：直接尝试非严格模式反序列化
     try:
-        extracted = json.loads(cleaned_json_str)
-    except json.JSONDecodeError:
-        json_match = re.search(r'\{[\s\S]*\}', cleaned_json_str)
-        if json_match:
-            try:
-                extracted = json.loads(json_match.group(0))
-            except Exception:
-                pass
-        if extracted is None:
-            extracted = repair_incomplete_json(cleaned_json_str)
+        extracted = json.loads(cleaned_json_str, strict=False)
+        if isinstance(extracted, dict):
+            return extracted
+        if isinstance(extracted, list):
+            return {"table_rows": extracted}
+    except Exception:
+        pass
 
-    return extracted if isinstance(extracted, dict) else None
+    # 阶段 2：截取首个 '{' 到最后一个 '}' 之间的核心内容
+    first_brace = cleaned_json_str.find('{')
+    last_brace = cleaned_json_str.rfind('}')
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        sub_json = cleaned_json_str[first_brace:last_brace + 1]
+        try:
+            extracted = json.loads(sub_json, strict=False)
+            if isinstance(extracted, dict):
+                return extracted
+        except Exception:
+            pass
+
+    # 阶段 3：截取首个 '[' 到最后一个 ']' 之间的数组内容并包装
+    first_bracket = cleaned_json_str.find('[')
+    last_bracket = cleaned_json_str.rfind(']')
+    if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
+        sub_arr = cleaned_json_str[first_bracket:last_bracket + 1]
+        try:
+            arr_extracted = json.loads(sub_arr, strict=False)
+            if isinstance(arr_extracted, list):
+                return {"table_rows": arr_extracted}
+        except Exception:
+            pass
+
+    # 阶段 4：智能修复可能被截断的 JSON 结构
+    try:
+        extracted = repair_incomplete_json(cleaned_json_str)
+        if isinstance(extracted, dict):
+            return extracted
+    except Exception:
+        pass
+
+    return None
 
 
 def _call_gemini_vision_with_fallbacks(
@@ -562,7 +627,8 @@ def extract_delivery_bill_data(
 
     t_total_start = time.time()
     api_logs: List[Dict[str, Any]] = []
-    prompt_stage1 = custom_prompt or PROMPT_DELIVERY_BILL_OCR
+    stored_prompt = stored_ocr_cfg.get("system_prompt")
+    prompt_stage1 = custom_prompt or stored_prompt or PROMPT_DELIVERY_BILL_OCR
 
     # ========================================================
     # 单阶段高精度结构化视觉提取（调用策略完全由后台配置决定）
@@ -743,6 +809,53 @@ def _build_normalized_ocr_result(
             if val:
                 metadata_fields.append({"label": cn_label, "value": val})
 
+    # 2.1 针对 metadata_fields 进行表单印刷混淆清洗、系统级主体对齐与 1 字差异智能纠偏
+    try:
+        current_tube_cfg = load_tube_config()
+        prefix_clean_patterns = [
+            (r'^(?:姓名|名字|人名)[:：\s]+', "姓名"),
+            (r'^(?:牌照|车号|车牌)[:：\s]+', "车牌号"),
+            (r'^(?:电话|手机|联系电话)[:：\s]+', "联系电话"),
+            (r'^(?:单位全称|单位名称|厂家名称)[:：\s]+', "单位名称"),
+            (r'^(?:时间|日期)[:：\s]+', "日期"),
+        ]
+
+        for meta_item in metadata_fields:
+            m_lbl = meta_item.get("label", "")
+            m_val = meta_item.get("value", "")
+
+            # 2.1.1 消除混入 value 的嵌套引导词（如单据写“司机：姓名 满仓”导致 value 为“姓名 满仓”）
+            if m_val:
+                for pat, clean_tag in prefix_clean_patterns:
+                    if re.search(pat, m_val):
+                        cleaned_v = re.sub(pat, '', m_val).strip()
+                        if cleaned_v:
+                            correction_msg = f"【单据排版混淆清洗】：已剥离「{m_lbl}」值中的冗余引导词「{m_val}」->「{cleaned_v}」"
+                            meta_item["value"] = cleaned_v
+                            m_val = cleaned_v
+                            # 若原 label 仅为“司机”，规范为“司机姓名”
+                            if m_lbl in ("司机", "驾驶员") and clean_tag == "姓名":
+                                meta_item["label"] = "司机姓名"
+                                m_lbl = "司机姓名"
+                            if correction_msg not in verification_report["corrections_made"]:
+                                verification_report["corrections_made"].append(correction_msg)
+                                verification_report["corrections_count"] = len(verification_report["corrections_made"])
+                                verification_report["status"] = "corrected"
+                        break
+
+            # 2.1.2 若字段标签包含供货、发料、单位、厂家等关键词，执行 1 字容错纠偏
+            if m_val and any(k in m_lbl for k in ["供", "发料", "发货", "厂家", "出库", "制造", "单位", "生产"]):
+                _, matched_sup_name, is_corrected = _match_supplier_name(m_val, current_tube_cfg)
+                if is_corrected and matched_sup_name and matched_sup_name != m_val:
+                    correction_msg = f"【供应商名称自动纠偏】：检测到「{m_val}」与系统登记主体仅差1字，已自动校正为「{matched_sup_name}」"
+                    meta_item["value"] = matched_sup_name
+                    if correction_msg not in verification_report["corrections_made"]:
+                        verification_report["corrections_made"].append(correction_msg)
+                        verification_report["corrections_count"] = len(verification_report["corrections_made"])
+                        verification_report["status"] = "corrected"
+    except Exception as match_err:
+        logger.warning(f"单据抬头主体对齐处理跳过: {match_err}")
+
     # 3. 动态表格列与行 (table_columns & table_rows)
     raw_cols = final_extracted.get("table_columns") or final_extracted.get("columns") or final_extracted.get("headers")
     table_columns: List[str] = []
@@ -768,14 +881,14 @@ def _build_normalized_ocr_result(
         if not isinstance(r_dict, dict):
             return ""
         if col_name in r_dict and r_dict[col_name] is not None:
-            v_str = str(r_dict[col_name]).strip()
+            v_str = _normalize_str(r_dict[col_name])
             if v_str != "":
                 return v_str
         norm_target = re.sub(r'[\s_—\-\(\)（）:：]', '', col_name.lower())
         for k, v in r_dict.items():
             norm_k = re.sub(r'[\s_—\-\(\)（）:：]', '', str(k).lower())
             if norm_target == norm_k and v is not None:
-                v_str = str(v).strip()
+                v_str = _normalize_str(v)
                 if v_str != "":
                     return v_str
         return ""
@@ -793,10 +906,10 @@ def _build_normalized_ocr_result(
             if isinstance(row, dict):
                 cleaned_row = {}
                 for col in table_columns:
-                    cleaned_row[col] = _match_row_value(row, col)
+                    cleaned_row[col] = _normalize_str(_match_row_value(row, col))
                 for k, v in row.items():
                     norm_k = _normalize_str(k)
-                    v_str = str(v or "").strip()
+                    v_str = _normalize_str(v)
                     if norm_k and v_str and norm_k not in table_columns:
                         table_columns.append(norm_k)
                         cleaned_row[norm_k] = v_str

@@ -397,7 +397,15 @@
         <div class="panel-box weather-kpi-panel">
           <div class="panel-header">
             <div class="panel-title">
-              <span class="title-icon">🌤️</span>
+              <span class="title-icon title-icon-weather">
+                <svg class="title-svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="7" r="3.5" fill="#fbbf24" fill-opacity="0.35" stroke="#fbbf24" stroke-width="2"/>
+                  <line x1="12" y1="1" x2="12" y2="2.5" stroke="#fbbf24" stroke-width="2"/>
+                  <line x1="16.5" y1="2.5" x2="15.5" y2="3.8" stroke="#fbbf24" stroke-width="2"/>
+                  <line x1="18" y1="7" x2="19.5" y2="7" stroke="#fbbf24" stroke-width="2"/>
+                  <path d="M18.5 19H7a4.5 4.5 0 0 1-.8-8.9 5.5 5.5 0 0 1 10.6-1.5A3.5 3.5 0 0 1 18.5 19z" fill="#38bdf8" fill-opacity="0.35" stroke="#38bdf8" stroke-width="2"/>
+                </svg>
+              </span>
               <span>今日天气与施工条件</span>
             </div>
             <span class="panel-tag" :class="liveWeatherData.status_level === 'danger' ? 'danger' : (liveWeatherData.status_level === 'warning' ? 'gold' : 'green')">
@@ -408,7 +416,12 @@
           <div class="weather-panel-body">
             <!-- 施工现场位置与报告时间 -->
             <div class="weather-loc-bar">
-              <span class="loc-pin">📍</span>
+              <span class="loc-pin">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle;">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+              </span>
               <span class="loc-text">{{ liveWeatherData.city || '主城区施工现场' }}</span>
               <span class="loc-dot">·</span>
               <span class="loc-time">{{ liveWeatherData.is_live_source === false ? '仿真' : '实况' }}</span>
@@ -477,7 +490,14 @@
 
               <!-- 同一框体下方的全天预报条 -->
               <div class="weather-forecast-subrow">
-                <span class="fc-icon">📅</span>
+                <span class="fc-icon">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle;">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                </span>
                 <span class="fc-range">全天 {{ liveWeatherData.forecast?.temp_range || '24°C ~ 29°C' }}</span>
                 <span class="fc-dot">·</span>
                 <span class="fc-dn">白天 {{ liveWeatherData.forecast?.day_weather || '阴' }} / 夜间 {{ liveWeatherData.forecast?.night_weather || '阴' }}</span>
@@ -490,7 +510,14 @@
         <div class="panel-box pipe-kpi-panel">
           <div class="panel-header">
             <div class="panel-title">
-              <span class="title-icon">📐</span>
+              <span class="title-icon title-icon-pipe">
+                <svg class="title-svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 7h18M3 17h18" stroke="#38bdf8" stroke-width="2"/>
+                  <circle cx="7" cy="12" r="2.8" fill="rgba(56, 189, 248, 0.3)" stroke="#38bdf8" stroke-width="1.8"/>
+                  <circle cx="17" cy="12" r="2.8" fill="rgba(56, 189, 248, 0.3)" stroke="#38bdf8" stroke-width="1.8"/>
+                  <line x1="9.8" y1="12" x2="14.2" y2="12" stroke="#00f2fe" stroke-width="2" stroke-dasharray="2 2"/>
+                </svg>
+              </span>
               <span>保温管全网发运情报</span>
             </div>
             <span class="panel-tag cyan">保温管总线</span>
@@ -576,7 +603,13 @@
         <div class="panel-box fitting-kpi-panel">
           <div class="panel-header">
             <div class="panel-title">
-              <span class="title-icon">🔩</span>
+              <span class="title-icon title-icon-fitting">
+                <svg class="title-svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="4.5" fill="rgba(251, 191, 36, 0.25)" stroke="#fbbf24" stroke-width="2"/>
+                  <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="#fbbf24" stroke-width="2"/>
+                  <circle cx="12" cy="12" r="1.5" fill="#fbbf24"/>
+                </svg>
+              </span>
               <span>管件全网发运情报</span>
             </div>
             <span class="panel-tag gold">10个大类</span>
@@ -648,35 +681,62 @@
         <div class="panel-box safety-panel">
           <div class="panel-header">
             <div class="panel-title">
-              <span class="title-icon">🛡️</span>
+              <span class="title-icon title-icon-shield">
+                <svg class="title-svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(16, 185, 129, 0.25)" stroke="#10b981" stroke-width="2"/>
+                  <path d="M9 12l2 2 4-4" stroke="#10b981" stroke-width="2.2"/>
+                </svg>
+              </span>
               <span>保供效能与履约保障</span>
             </div>
             <span class="panel-tag green">100% 履约受控</span>
           </div>
           <div class="safety-grid">
             <div class="safety-card">
-              <div class="safety-icon">🏭</div>
+              <div class="safety-icon">
+                <svg class="safety-svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 20h20M4 20V9l5 3.5V9l5 3.5V4h6v16" stroke="#10b981" stroke-width="2" fill="rgba(16, 185, 129, 0.15)"/>
+                </svg>
+              </div>
               <div class="safety-info">
                 <div class="safety-val">{{ supplyNodes.length }} 家</div>
                 <div class="safety-desc">核心制造管厂</div>
               </div>
             </div>
             <div class="safety-card">
-              <div class="safety-icon">🎯</div>
+              <div class="safety-icon">
+                <svg class="safety-svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9" stroke="#10b981" stroke-width="2" fill="rgba(16, 185, 129, 0.15)"/>
+                  <circle cx="12" cy="12" r="5" stroke="#10b981" stroke-width="1.8"/>
+                  <circle cx="12" cy="12" r="2" fill="#10b981"/>
+                </svg>
+              </div>
               <div class="safety-info">
                 <div class="safety-val">{{ sectionProgressList.length }} 个</div>
                 <div class="safety-desc">施工标段现场</div>
               </div>
             </div>
             <div class="safety-card">
-              <div class="safety-icon">📦</div>
+              <div class="safety-icon">
+                <svg class="safety-svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="#10b981" stroke-width="2" fill="rgba(16, 185, 129, 0.15)"/>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" stroke="#10b981" stroke-width="2"/>
+                  <line x1="12" y1="22.08" x2="12" y2="12" stroke="#10b981" stroke-width="2"/>
+                </svg>
+              </div>
               <div class="safety-info">
                 <div class="safety-val">{{ kpiData.warehouseConfirmRate !== undefined ? kpiData.warehouseConfirmRate + '%' : '100%' }}</div>
                 <div class="safety-desc">库管确认率</div>
               </div>
             </div>
             <div class="safety-card">
-              <div class="safety-icon">⏱️</div>
+              <div class="safety-icon">
+                <svg class="safety-svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="13" r="8" stroke="#10b981" stroke-width="2" fill="rgba(16, 185, 129, 0.15)"/>
+                  <path d="M12 9v4l2.5 2.5" stroke="#10b981" stroke-width="2"/>
+                  <path d="M10 2h4M12 2v3" stroke="#10b981" stroke-width="2"/>
+                </svg>
+              </div>
               <div class="safety-info">
                 <div class="safety-val">{{ kpiData.avgTransitHours !== undefined ? kpiData.avgTransitHours + ' 小时' : '16.4 小时' }}</div>
                 <div class="safety-desc">平均在途时长</div>
@@ -1058,7 +1118,13 @@
         <div class="panel-box live-feed-panel">
           <div class="panel-header">
             <div class="panel-title">
-              <span class="title-icon">📢</span>
+              <span class="title-icon title-icon-broadcast">
+                <svg class="title-svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 11l13-4.5v11L3 13v-2z" fill="rgba(56, 189, 248, 0.25)" stroke="#38bdf8" stroke-width="2"/>
+                  <path d="M6 14v4a2 2 0 0 0 2 2h1" stroke="#38bdf8" stroke-width="2"/>
+                  <path d="M19 8c1.5 1 2.2 2.3 2.2 4s-.7 3-2.2 4" stroke="#00f2fe" stroke-width="2"/>
+                </svg>
+              </span>
               <span>全网工程实时动态播报</span>
             </div>
             <div 
@@ -1215,7 +1281,22 @@
             <div class="panel-title" :title="activeWeeklyTab === 'pipe' ? `当前展示：本周保温管施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）` : `当前展示：本周管件施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）`">
               <transition name="weekly-title-anim" mode="out-in">
                 <div :key="activeWeeklyTab" class="panel-title-anim-box">
-                  <span class="title-icon">{{ activeWeeklyTab === 'pipe' ? '📅' : '🧩' }}</span>
+                  <span class="title-icon">
+                    <svg v-if="activeWeeklyTab === 'pipe'" class="title-svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="rgba(0, 242, 254, 0.15)" stroke="#00f2fe" stroke-width="2"/>
+                      <line x1="16" y1="2" x2="16" y2="6" stroke="#00f2fe" stroke-width="2"/>
+                      <line x1="8" y1="2" x2="8" y2="6" stroke="#00f2fe" stroke-width="2"/>
+                      <line x1="3" y1="10" x2="21" y2="10" stroke="#00f2fe" stroke-width="2"/>
+                      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" stroke="#00f2fe" stroke-width="2.5"/>
+                    </svg>
+                    <svg v-else class="title-svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="2"/>
+                      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="2"/>
+                      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="2"/>
+                      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="1.8" fill="#fbbf24"/>
+                    </svg>
+                  </span>
                   <span class="title-text">{{ activeWeeklyTab === 'pipe' ? '本周保温管施工战报' : '本周管件施工战报' }}</span>
                 </div>
               </transition>
@@ -3176,7 +3257,9 @@ onBeforeUnmount(() => {
 }
 
 .title-svg-globe,
-.tab-svg-icon {
+.title-svg-icon,
+.tab-svg-icon,
+.safety-svg-icon {
   display: inline-block;
   vertical-align: middle;
   flex-shrink: 0;
@@ -3895,7 +3978,11 @@ onBeforeUnmount(() => {
 }
 
 .left-col .safety-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 16px;
+  flex-shrink: 0;
 }
 
 .left-col .safety-val {
@@ -4086,7 +4173,12 @@ onBeforeUnmount(() => {
 }
 
 .title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .panel-tag {
@@ -4604,7 +4696,11 @@ onBeforeUnmount(() => {
 }
 
 .safety-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 17px;
+  flex-shrink: 0;
 }
 
 .safety-val {

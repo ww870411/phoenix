@@ -128,7 +128,7 @@ class OcrToolConfigSaveTest(unittest.TestCase):
         self.assertTrue(cfg["api_key"].startswith("enc_v1:"))
         self.assertIn("updated_at", cfg)
 
-        # 校验解密
+        # 校验解密与提示词
         decrypted = config_service.get_configured_ocr_tool_config(updated_payload)
         self.assertFalse(decrypted["enabled"])
         self.assertEqual(decrypted["model"], "gemini-3.5-flash-lite")
@@ -137,6 +137,88 @@ class OcrToolConfigSaveTest(unittest.TestCase):
         self.assertFalse(decrypted["enable_fallback"])
         self.assertFalse(decrypted["retry_primary_on_error"])
         self.assertEqual(decrypted["primary_retry_count"], 0)
+        self.assertIn("系统已知合法供给方", decrypted["system_prompt"])
+        self.assertIn("文字容错纠偏规则", decrypted["system_prompt"])
+
+    def test_supplier_name_levenshtein_1_char_correction(self):
+        from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import _match_supplier_name
+        test_payload = {
+            "supply_entities": [
+                {"entity_id": "kaiyuan", "entity_name": "大连开元热力管道股份有限公司"},
+                {"entity_id": "xinruide", "entity_name": "河北鑫瑞得管道设备有限公司"},
+                {"entity_id": "tiandilong", "entity_name": "天津天地龙管业股份有限公司"},
+            ]
+        }
+        # 1. 精确匹配
+        _, name, is_corr = _match_supplier_name("大连开元热力管道股份有限公司", test_payload)
+        self.assertEqual(name, "大连开元热力管道股份有限公司")
+        self.assertFalse(is_corr)
+
+        # 2. 差1个字（鑫瑞德 -> 鑫瑞得）
+        _, name_corr1, is_corr1 = _match_supplier_name("河北鑫瑞德管道设备有限公司", test_payload)
+        self.assertEqual(name_corr1, "河北鑫瑞得管道设备有限公司")
+        self.assertTrue(is_corr1)
+
+        # 3. 差1个字（天津天地隆 -> 天津天地龙）
+        _, name_corr2, is_corr2 = _match_supplier_name("天津天地隆管业股份有限公司", test_payload)
+        self.assertEqual(name_corr2, "天津天地龙管业股份有限公司")
+        self.assertTrue(is_corr2)
+
+    def test_metadata_label_value_deconfusion_cleaning(self):
+        from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import _build_normalized_ocr_result
+        raw_extracted = {
+            "document_title": "物资发货单",
+            "metadata_fields": [
+                {"label": "司机", "value": "姓名 满仓"},
+                {"label": "车号", "value": "牌照 辽B88888"},
+                {"label": "联系方式", "value": "电话 13912345678"},
+            ],
+            "table_columns": ["序号", "物资名称", "数量"],
+            "table_rows": [{"序号": "1", "物资名称": "直管", "数量": "10"}],
+        }
+        res = _build_normalized_ocr_result(
+            final_extracted=raw_extracted,
+            actual_used_model="gemini-3.5-flash-lite",
+            primary_norm="gemini-3.5-flash-lite",
+            candidate_models=["gemini-3.5-flash-lite"],
+            enable_fallback=False,
+            retry_primary_on_error=False,
+            primary_retry_count=0,
+            model_fallback_triggered=False,
+        )
+        meta = res["extracted_data"]["metadata_fields"]
+        meta_dict = {item["label"]: item["value"] for item in meta}
+        self.assertEqual(meta_dict.get("司机姓名"), "满仓")
+        self.assertEqual(meta_dict.get("车号"), "辽B88888")
+        self.assertEqual(meta_dict.get("联系方式"), "13912345678")
+        corrections = res["extracted_data"]["verification_report"]["corrections_made"]
+        self.assertTrue(any("满仓" in c for c in corrections))
+
+    def test_normalize_phi_symbol_in_ocr_result(self):
+        from backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service import _normalize_phi_symbol, _build_normalized_ocr_result
+        self.assertEqual(_normalize_phi_symbol("φ1020*10"), "Φ1020*10")
+        self.assertEqual(_normalize_phi_symbol("90°φ1100 R=1.5DN"), "90°Φ1100 R=1.5DN")
+        self.assertEqual(_normalize_phi_symbol("Ф325*8"), "Φ325*8")
+        self.assertEqual(_normalize_phi_symbol("⌀1400/1600"), "Φ1400/1600")
+
+        raw_extracted = {
+            "document_title": "物资发货单",
+            "metadata_fields": [{"label": "规格", "value": "φ1020*10"}],
+            "table_columns": ["序号", "物资名称", "规格型号", "数量"],
+            "table_rows": [{"序号": "1", "物资名称": "直管", "规格型号": "φ1400/1600", "数量": "10"}],
+        }
+        res = _build_normalized_ocr_result(
+            final_extracted=raw_extracted,
+            actual_used_model="gemini-3.5-flash-lite",
+            primary_norm="gemini-3.5-flash-lite",
+            candidate_models=["gemini-3.5-flash-lite"],
+            enable_fallback=False,
+            retry_primary_on_error=False,
+            primary_retry_count=0,
+            model_fallback_triggered=False,
+        )
+        self.assertEqual(res["extracted_data"]["metadata_fields"][0]["value"], "Φ1020*10")
+        self.assertEqual(res["extracted_data"]["table_rows"][0]["规格型号"], "Φ1400/1600")
 
     @patch("backend.projects.insulation_pipe_supply_2026.services.ocr_tool_service.extract_delivery_bill_data")
     @patch("backend.projects.insulation_pipe_supply_2026.api.workspace.save_operation_log")

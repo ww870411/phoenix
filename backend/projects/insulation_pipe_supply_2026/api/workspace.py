@@ -867,8 +867,12 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
             )
         except (TypeError, ValueError):
             primary_retry_count_val = 0
-        primary_retry_count_val = max(0, min(primary_retry_count_val, 5))
-            
+        incoming_prompt = data.get("system_prompt")
+        if incoming_prompt is not None and str(incoming_prompt).strip():
+            saved_system_prompt = str(incoming_prompt).strip()
+        else:
+            saved_system_prompt = str(current_cfg.get("system_prompt") or "").strip()
+
         payload[normalized_section] = {
             "enabled": enabled_val,
             "model": model_val,
@@ -877,6 +881,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
             "retry_primary_on_error": retry_primary_on_error_val,
             "primary_retry_count": primary_retry_count_val,
             "api_key": saved_key,
+            "system_prompt": saved_system_prompt,
             "updated_at": datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
         }
     elif normalized_section == "fitting_config":

@@ -129,6 +129,62 @@ def get_configured_amap_config(payload: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
+DEFAULT_OCR_SYSTEM_PROMPT = """你是一个高精度的各类工程物资单据与业务表格视觉提取专家。
+请仔细阅读并分析上传的单据/表格照片（可能为入库单、验收单、发货单、送货单、调拨单、过磅单、检验单、领料单等任意纸质或电子单据）。
+
+【核心提取准则】：
+1. 【忠于原件，原样还原】：原单据中写的什么条目名称就提取什么条目名称（例如单据上写的是“入库日期”，label必须是“入库日期”，绝不要修改成“发货日期”；若写的是“车号”，label必须是“车号”；若写的是“司机姓名”，label必须是“司机姓名”）。
+2. 【无则不显，绝不臆测】：如果单据原图中未出现某些信息（例如没有司机电话、没有发货单号、没有批号等），绝对不要在输出中编造或添加该项！
+3. 【表格与合计行完整还原（极重要）】：
+   - 提取表格的所有实际表头列名（如 ["序号", "物资名称", "规格型号", "计量单位", "实收数量", "炉批号", "备注"] 等），不要遗漏任何列，也不要添加不存在的列。
+   - 提取表格中的全部行数据，每一行的 key 严格对应提取的表头列名。
+   - 【极其关键 - 表格合计行还原】：若原图单据表格底部有“合计”、“总计”、“小计”等汇总行（例如原表中印制或手写的“合计：120.5 米”），必须完整还原并作为 table_rows 的最后一行输出，切勿将原图表格底部的“合计”行遗漏或挪出表格！
+
+【重点专项：供货/发料单位与主体名称智能对齐纠偏】：
+- 系统已知合法供给方/生产厂家名录包括：
+  1. 大连开元热力管道股份有限公司
+  2. 河北鑫瑞得管道设备有限公司
+  3. 江苏沃圣阀业有限公司
+  4. 天津卡尔斯阀门股份有限公司
+  5. 河北泽悦节能设备科技有限公司
+  6. 天津天地龙管业股份有限公司
+  7. 能源集团保温管厂
+- 【文字容错纠偏规则】：
+  当单据中的“供货单位”、“发货单位”、“生产厂家”、“出库单位”等字迹因盖章遮挡、连笔手写或字迹模糊导致识别出现微小偏差（如仅有 1 个字不同、同音字或形近字，例如“鑫瑞德”与“鑫瑞得”、“开源”与“开元”、“天地隆”与“天地龙”），必须自动纠偏并统一输出为上述系统标准企业全称。
+
+【重点专项：表单印刷混淆与值纯净化逻辑纠偏（极重要）】：
+- 【消除值中的嵌套/冗余标签词】：
+  当单据排版出现多重引导词混淆（例如：“司机：姓名 满仓”、“车号：牌照 辽B12345”、“供方：单位全称 河北鑫瑞得...”、“联系人：电话 139xxxx”、“日期：时间 2026-08-10”）时：
+  * 必须进行常识性逻辑纠偏，坚决剥离混入 value 中的属性引导词！
+  * 纠偏示例：
+    1. 单据写【司机：姓名 满仓】 -> label 提取为 "司机姓名"，value 提取为纯净人名 "满仓"（坚决剔除“姓名”二字）。
+    2. 单据写【车号：牌照 辽B88888】 -> label 提取为 "车牌号"，value 提取为纯净车牌 "辽B88888"。
+    3. 单据写【联系人：电话 13800000000】 -> label 提取为 "联系电话"，value 提取为 "13800000000"。
+- 【数据纯度原则】：
+  保证 metadata_fields 中每一个 value 均为纯粹的业务实体（纯姓名、纯车牌、纯号码、纯单位全称、纯日期），不带前置冗余属性前缀与多余冒号。
+
+【重点专项：直径符号标准写法规范】：
+- 当单据中的规格型号、物资名称等包含直径符号时，一律使用标准正规的大写「Φ」符号（例如将小写「φ」、全角「Ф」或「⌀」等统一书写为标准大写「Φ」，如「Φ1020*10」、「Φ300」、「Φ1400/1600」），禁止输出希腊小写「φ」或其他非标准符号。
+
+【输出 JSON 字段结构】：
+{
+  "document_title": "单据上方的实际名称（如'物资入库收货（验收）单'、'随车发货单'等）",
+  "metadata_fields": [
+    {"label": "原单据中的实际字段名称1", "value": "实际文字内容1"},
+    {"label": "原单据中的实际字段名称2", "value": "实际文字内容2"}
+  ],
+  "table_columns": ["实际列名1", "实际列名2", "实际列名3"],
+  "table_rows": [
+    {"实际列名1": "值1", "实际列名2": "值2", "实际列名3": "值3"}
+  ],
+  "remarks": "单据底部或其他区域的补充备注（若无则为空字符串）"
+}
+
+【输出规范】：
+请直接输出标准纯 JSON 对象，不要包含 markdown 代码块反引号，不要有多余修饰语。
+"""
+
+
 def get_configured_ocr_tool_config(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     从 tube_config.json 提取单据识别引擎配置、调度策略与解密后的 API Key。
@@ -159,6 +215,8 @@ def get_configured_ocr_tool_config(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     api_key_cipher = str(raw_config.get("api_key") or "").strip()
     api_key = simple_decrypt(api_key_cipher) if api_key_cipher else ""
+    raw_system_prompt = raw_config.get("system_prompt")
+    system_prompt = str(raw_system_prompt).strip() if raw_system_prompt is not None and str(raw_system_prompt).strip() else DEFAULT_OCR_SYSTEM_PROMPT
 
     return {
         "enabled": enabled,
@@ -169,6 +227,8 @@ def get_configured_ocr_tool_config(payload: Dict[str, Any]) -> Dict[str, Any]:
         "primary_retry_count": max(0, min(primary_retry_count, 5)),
         "api_key": api_key,
         "has_custom_key": bool(api_key),
+        "system_prompt": system_prompt,
+        "default_system_prompt": DEFAULT_OCR_SYSTEM_PROMPT,
     }
 
 
@@ -180,9 +240,10 @@ def save_configured_ocr_tool_config(
     retry_primary_on_error: Optional[bool] = None,
     primary_retry_count: Optional[int] = None,
     enabled: Optional[bool] = None,
+    system_prompt: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    保存单据识别模型、API Key、显式调用策略与服务可用状态（正常服务 vs 维护中）至 tube_config.json。
+    保存单据识别模型、API Key、显式调用策略、系统提示词与服务可用状态（正常服务 vs 维护中）至 tube_config.json。
     未传入策略字段时保留既有值，保证历史接口调用兼容。
     """
     payload = load_tube_config()
@@ -206,6 +267,11 @@ def save_configured_ocr_tool_config(
         saved_key_cipher = ""
     else:
         saved_key_cipher = payload.get("ocr_tool_config", {}).get("api_key", "")
+
+    if system_prompt is not None:
+        clean_system_prompt = str(system_prompt).strip()
+    else:
+        clean_system_prompt = str(payload.get("ocr_tool_config", {}).get("system_prompt") or "").strip() or DEFAULT_OCR_SYSTEM_PROMPT
 
     try:
         resolved_retry_count = int(
@@ -236,6 +302,7 @@ def save_configured_ocr_tool_config(
         "retry_primary_on_error": resolved_retry_primary,
         "primary_retry_count": resolved_retry_count,
         "api_key": saved_key_cipher,
+        "system_prompt": clean_system_prompt,
         "updated_at": datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S"),
     }
     save_tube_config(payload)
@@ -248,6 +315,8 @@ def save_configured_ocr_tool_config(
         "retry_primary_on_error": resolved_retry_primary,
         "primary_retry_count": resolved_retry_count,
         "has_custom_key": bool(saved_key_cipher),
+        "system_prompt": clean_system_prompt,
+        "default_system_prompt": DEFAULT_OCR_SYSTEM_PROMPT,
     }
 
 

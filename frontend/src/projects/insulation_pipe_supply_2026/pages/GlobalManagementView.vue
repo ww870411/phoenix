@@ -1464,7 +1464,50 @@
               </section>
             </div>
 
-            <!-- 3. 底部：🔑 Google Gemini API 密钥与安全认证 -->
+            <!-- 3. 📝 视觉识别系统提示词（System Prompt）定制 -->
+            <section class="card elevated ocr-module-card ocr-prompt-section">
+              <div class="module-card-header">
+                <div class="module-title">
+                  <span class="module-icon">📝</span>
+                  <strong>单据识别系统提示词 (System Prompt)</strong>
+                </div>
+                <div class="prompt-status-badge" :class="ocrSystemPrompt !== ocrDefaultSystemPrompt ? 'badge-custom' : 'badge-default'">
+                  {{ ocrSystemPrompt !== ocrDefaultSystemPrompt ? '✨ 已自定义提示词' : '📦 官方出厂预设' }}
+                </div>
+              </div>
+              <p class="module-desc">
+                定义视觉大模型提取单据和明细表格的核心指导准则。已内置合法供给方名录、文字容错纠偏规则及输出规范，支持在此直接定制。
+              </p>
+
+              <div class="ocr-prompt-form">
+                <textarea
+                  v-model="ocrSystemPrompt"
+                  class="input ocr-prompt-textarea font-mono"
+                  rows="12"
+                  placeholder="请输入视觉解析系统提示词..."
+                  spellcheck="false"
+                ></textarea>
+
+                <div class="prompt-meta-bar">
+                  <div class="prompt-meta-left">
+                    <span class="meta-item">📏 当前字数：<strong>{{ (ocrSystemPrompt || '').length }}</strong> 字符</span>
+                    <span class="meta-item text-muted">💡 提示：点击右上角【💾 保存单据识别配置】后生效</span>
+                  </div>
+                  <div class="prompt-meta-right">
+                    <button
+                      type="button"
+                      class="btn ghost btn-reset-prompt"
+                      title="重置为官方出厂标准提示词"
+                      @click="resetOcrSystemPromptToDefault"
+                    >
+                      🔄 恢复出厂默认提示词
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 4. 底部：🔑 Google Gemini API 密钥与安全认证 -->
             <section class="card elevated ocr-module-card ocr-key-section">
               <div class="module-card-header">
                 <div class="module-title">
@@ -2258,6 +2301,16 @@ const showOcrKeys = ref(false)
 const ocrEnableFallback = ref(false)
 const ocrRetryPrimaryOnError = ref(false)
 const ocrPrimaryRetryCount = ref(1)
+const ocrSystemPrompt = ref('')
+const ocrDefaultSystemPrompt = ref('')
+
+function resetOcrSystemPromptToDefault() {
+  if (ocrDefaultSystemPrompt.value) {
+    if (confirm('确认将系统提示词恢复为官方出厂默认预设吗？当前未保存的修改将被覆盖。')) {
+      ocrSystemPrompt.value = ocrDefaultSystemPrompt.value
+    }
+  }
+}
 
 // 🔩 管件基础参数与校验配置 Ref 变量
 const fittingAllowedUnitsText = ref('个, 套')
@@ -2663,6 +2716,9 @@ function applyConfig(config) {
     ocrEnableFallback.value = Boolean(config.ocr_tool_config.enable_fallback)
     ocrRetryPrimaryOnError.value = Boolean(config.ocr_tool_config.retry_primary_on_error)
     ocrPrimaryRetryCount.value = Math.min(5, Math.max(1, Number(config.ocr_tool_config.primary_retry_count) || 1))
+    if (config.ocr_tool_config.system_prompt !== undefined) {
+      ocrSystemPrompt.value = config.ocr_tool_config.system_prompt || ''
+    }
   }
   
   loadWeatherConfig()
@@ -3332,6 +3388,7 @@ function buildSectionPayload(section) {
       model: m1,
       fallback_models: fallbacks,
       api_key: ocrApiKey.value || '',
+      system_prompt: ocrSystemPrompt.value || '',
       enable_fallback: Boolean(ocrEnableFallback.value),
       retry_primary_on_error: Boolean(ocrRetryPrimaryOnError.value),
       primary_retry_count: Math.min(5, Math.max(1, Number(ocrPrimaryRetryCount.value) || 1)),
@@ -3458,6 +3515,12 @@ async function loadConfig() {
       ocrRetryPrimaryOnError.value = Boolean(dec.retry_primary_on_error)
       ocrPrimaryRetryCount.value = Math.min(5, Math.max(1, Number(dec.primary_retry_count) || 1))
       ocrApiKey.value = dec.api_key || ''
+      if (dec.system_prompt !== undefined) {
+        ocrSystemPrompt.value = dec.system_prompt || ''
+      }
+      if (dec.default_system_prompt !== undefined) {
+        ocrDefaultSystemPrompt.value = dec.default_system_prompt || ''
+      }
     }
 
     if (response.show_date) {
@@ -3501,6 +3564,12 @@ async function saveSection(section) {
       ocrRetryPrimaryOnError.value = Boolean(dec.retry_primary_on_error)
       ocrPrimaryRetryCount.value = Math.min(5, Math.max(1, Number(dec.primary_retry_count) || 1))
       ocrApiKey.value = dec.api_key || ''
+      if (dec.system_prompt !== undefined) {
+        ocrSystemPrompt.value = dec.system_prompt || ''
+      }
+      if (dec.default_system_prompt !== undefined) {
+        ocrDefaultSystemPrompt.value = dec.default_system_prompt || ''
+      }
     }
     if (response.amap_config_decrypted) {
       amapApiKey.value = response.amap_config_decrypted.api_key || ''
@@ -7543,5 +7612,81 @@ async function handleExportLogs() {
 
 .link-external:hover {
   text-decoration: underline;
+}
+
+/* 📝 提示词配置模块 */
+.ocr-prompt-section {
+  background: #ffffff;
+}
+
+.prompt-status-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.prompt-status-badge.badge-custom {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.prompt-status-badge.badge-default {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.ocr-prompt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ocr-prompt-textarea {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  background: #f8fafc;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  resize: vertical;
+  min-height: 220px;
+}
+
+.ocr-prompt-textarea:focus {
+  background: #ffffff;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.prompt-meta-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.prompt-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.btn-reset-prompt {
+  font-size: 12px;
+  padding: 4px 10px;
+  color: #64748b;
+}
+
+.btn-reset-prompt:hover {
+  color: #b45309;
+  background: #fffbe3;
 }
 </style>
