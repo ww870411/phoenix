@@ -238,6 +238,7 @@
                       <option value="QUERY_SUPPLIER_LEDGER">🏭 查询供给方发货台账</option>
                       <option value="QUERY_ENTITY_DIRECTORY">🏢 查询责任主体矩阵</option>
                       <option value="OCR_DELIVERY_BILL">📷 业务单据智能识别</option>
+                      <option value="VIEW_BIG_SCREEN">🖥️ 查看展示大屏</option>
                     </optgroup>
                   </select>
                 </label>
@@ -3888,6 +3889,7 @@ function onSubmissionCategoryChange() {
       'QUERY_SUPPLIER_LEDGER',
       'QUERY_ENTITY_DIRECTORY',
       'OCR_DELIVERY_BILL',
+      'VIEW_BIG_SCREEN',
     ]
     if (queryActions.includes(submissionFilters.value.actionType)) {
       submissionFilters.value.actionType = ''
@@ -4399,6 +4401,7 @@ function translateActionType(type) {
     QUERY_SUPPLIER_LEDGER: '🏭 供给台账查询',
     QUERY_ENTITY_DIRECTORY: '🏢 责任主体查询',
     OCR_DELIVERY_BILL: '📷 业务单据识别',
+    VIEW_BIG_SCREEN: '🖥️ 调阅展示大屏',
   }
   return dict[type] || type || '—'
 }
@@ -4428,6 +4431,7 @@ function getActionTypeBadgeStyle(type) {
     QUERY_SUPPLIER_LEDGER: { bg: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' },
     QUERY_ENTITY_DIRECTORY: { bg: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1' },
     OCR_DELIVERY_BILL: { bg: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8' },
+    VIEW_BIG_SCREEN: { bg: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc' },
   }
   const match = colors[type] || { bg: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' }
   return {

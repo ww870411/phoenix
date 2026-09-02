@@ -1,3 +1,20 @@
+## 2026-09-02 业务审计服务：将“查看展示大屏”纳入业务操作记录（归属“综合数据查询类”）
+
+- **关联模块与接口**：
+  - 核心服务：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)（`QUERY_SUBMISSION_ACTIONS` 行为分类与审计过滤）
+  - API 路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`POST /api/v1/projects/{project_key}/tubes/big-screen/access-log`）
+  - 自动化单测：[`test_config_service_dates.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_config_service_dates.py)（`BigScreenAccessLogTest`）
+- **核心实现与架构**：
+  1. **查询行为分类扩展**：
+     - 在 `QUERY_SUBMISSION_ACTIONS` 中追加 `"VIEW_BIG_SCREEN"`，使得大屏查看行为与流转台账、基准进度、采购单价、供给台账、主体矩阵及单据识别共同归入“综合数据查询类”（`category="query"`）；
+     - 当管理员在全局管理中心按“综合数据查询类”筛选时，系统将通过 `allowed_actions` 自动包含并精确统计大屏调阅流水；
+  2. **访问上报接口实现**：
+     - 在 `workspace.py` 中新增 `handle_record_big_screen_access` 端点，支持带 Token 会话及可选会话解析；
+     - 自动提取操作者（`operator`）、所属分组（`operator_group`）、客户端真实 IP，并生成标准化操作描述（如 `综合数据查询中心 - 调阅【数字指挥展示大屏】(入口: 调度工作台)`）；
+     - 记录 resource_id 为 `big_screen_dashboard`，并将入口上下文持久化写入 `logs.tube_operation_logs` 表；
+  3. **单元测试与验证**：
+     - 新增 `BigScreenAccessLogTest` 覆盖日志写入与参数验证，31 项测试全量 PASS。
+
 ## 2026-09-02 数字指挥大屏：供需拓扑优化为经典流光专线 + 1.6px 醒目静止虚线（协同记录）
 
 - **业务协同与模块定位**：

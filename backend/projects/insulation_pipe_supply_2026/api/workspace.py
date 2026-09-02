@@ -2471,6 +2471,38 @@ def save_big_screen_config(
     return {"ok": True, "big_screen_config": new_bs}
 
 
+class BigScreenAccessLogPayload(BaseModel):
+    entry_source: Optional[str] = "展示大屏"
+    remark: Optional[str] = None
+
+
+@router.post("/big-screen/access-log", summary="记录点击查看展示大屏业务操作日志")
+@public_router.post("/big-screen/access-log", summary="记录点击查看展示大屏业务操作日志 (公开路由兼容)")
+def handle_record_big_screen_access(
+    request: Request,
+    payload: Optional[BigScreenAccessLogPayload] = None,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+) -> Dict[str, Any]:
+    op_name = (session.username if session and session.username else None) or "GUEST"
+    op_group = (session.group if session and session.group else None) or "访客"
+    src = (payload.entry_source if payload and payload.entry_source else None) or "展示大屏"
+    desc = f"综合数据查询中心 - 调阅【数字指挥展示大屏】(入口: {src})"
+
+    save_operation_log(
+        operator=op_name,
+        operator_group=op_group,
+        action_type="VIEW_BIG_SCREEN",
+        action_desc=desc,
+        resource_id="big_screen_dashboard",
+        after_value={
+            "module": "big_screen",
+            "entry_source": src,
+        },
+        client_ip=_get_client_ip(request),
+    )
+    return {"success": True, "message": "展示大屏查看记录已成功记录至业务操作日志"}
+
+
 @router.get("/demand-management/options", summary="读取需求侧页面选项")
 def get_demand_management_options(
     session: AuthSession = Depends(get_current_session),

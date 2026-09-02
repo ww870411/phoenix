@@ -1,3 +1,20 @@
+## 2026-09-02 业务操作记录：新增“查看展示大屏”审计上报与全局日志筛选联动
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（数字指挥大屏 - 访问生命周期钩子审计调用）
+  - [`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)（综合调度工作台 - 大屏跳转入口传参）
+  - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理中心 - Tab 0 业务操作记录筛选与徽章渲染）
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（API 服务层 - `recordTubeBigScreenAccess` 封装）
+- **功能特性与交互升级**：
+  1. **访问自动埋点上报**：
+     - 用户在进入数字指挥大屏时（`onMounted`），前端自动提取来源（`from: 调度工作台` 或直连），调用 `recordTubeBigScreenAccess` 向后端发送审计日志上报；
+     - 采用安全静默上报策略，即使网络异常也不会打断大屏组件的渲染与动效。
+  2. **综合数据查询分类归属**：
+     - 在全局管理中心（Tab 0 业务操作记录）中，将“查看展示大屏（`VIEW_BIG_SCREEN`）”纳入【🔍 综合数据查询行为】；
+     - 选择“综合数据查询类”时，自动联动展示该行为；选择“填报/修改操作类”时智能清空互斥项。
+  3. **表格展示与视觉徽章**：
+     - 在操作流水表格中，行为类型格式化为 `🖥️ 调阅展示大屏`，配置清爽天蓝配色徽章（`#e0f2fe` 底色、`#0369a1` 文字、`#7dd3fc` 边框），与其它查询行为风格高度一致。
+
 ## 2026-09-02 数字指挥大屏：供需拓扑优化为经典流光专线 + 加粗静止虚线（动静分层极致体验）
 
 - **关联前端页面与组件**：

@@ -1,3 +1,25 @@
+## 2026-09-02 [业务审计：将“查看展示大屏”行为纳入业务操作记录（归属“综合数据查询类”）]
+- **需求与业务对齐**：
+  - 响应用户指令：“‘业务操作记录’中，也记录点击查看‘展示大屏’的记录吧，作为‘综合数据查询类’中的项目”；
+- **全链路架构与改动点**：
+  1. **审计分类规则注册（后端）**：
+     - 在 [`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py) 中，将 `VIEW_BIG_SCREEN` 注册进 `QUERY_SUBMISSION_ACTIONS` 列表，与每日流转、基准进度、供给台账、单价字典、主体矩阵及单据识别共同归入“综合数据查询类”（`category="query"`）；
+  2. **大屏调阅上报 API 与日志写入（后端）**：
+     - 在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中新增 `POST /big-screen/access-log` 接口，定义 `BigScreenAccessLogPayload`（包含 `entry_source`），自动注入用户会话（`username`、`group`）与客户端 IP，并调用 `save_operation_log(action_type="VIEW_BIG_SCREEN", action_desc=f"综合数据查询中心 - 调阅【数字指挥展示大屏】(入口: {src})", resource_id="big_screen_dashboard")` 写入操作日志；
+  3. **前端 API 封装与静默上报（前端）**：
+     - 在 [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js) 中封装并导出 `recordTubeBigScreenAccess`；
+     - 在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 的 `onMounted` 钩子中自动解析来源（`route.query.from`）并调用上报；
+     - 在 [`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue) 的 `goBigScreen` 中携带来源参数 `query: { from: '调度工作台' }`；
+  4. **全局管理控制台筛选与徽章渲染（前端）**：
+     - 在 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) Tab 0 业务操作记录中：
+       - 下拉菜单 `<optgroup label="🔍 综合数据查询行为">` 增加 `<option value="VIEW_BIG_SCREEN">🖥️ 查看展示大屏</option>`；
+       - `queryActions` 联动切换列表增加 `'VIEW_BIG_SCREEN'`；
+       - `getActionTypeName` 增加映射 `VIEW_BIG_SCREEN: '🖥️ 调阅展示大屏'`；
+       - `getActionTypeBadgeStyle` 配置天蓝色徽章标签（`bg: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc'`）。
+- **验证结果**：
+  - 后端测试：`pytest backend/projects/insulation_pipe_supply_2026/tests` 31 项单元测试全量 PASS（新增 `BigScreenAccessLogTest`）；
+  - 前端构建：`npm run build` 耗时 16.78s，738 个模块全量编译通过（0 Error）。
+
 ## 2026-09-02 [数字大屏：供需拓扑优化为经典流光专线 + 1.6px 醒目静止虚线（动静分层黄金比例）]
 - **需求与设计理念**：
   - 响应用户指令：“恢复原来的经典流动光带效果；并将未发货的规划连线精确微调为 1.6px 静止虚线”；

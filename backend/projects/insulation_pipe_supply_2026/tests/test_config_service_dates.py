@@ -419,6 +419,38 @@ class OcrToolConfigSaveTest(unittest.TestCase):
         self.assertIn("tube_config.json", ctx.exception.detail)
 
 
+class BigScreenAccessLogTest(unittest.TestCase):
+    @patch("backend.projects.insulation_pipe_supply_2026.api.workspace.save_operation_log")
+    def test_record_big_screen_access_success(self, mock_save_log):
+        from backend.projects.insulation_pipe_supply_2026.api.workspace import (
+            handle_record_big_screen_access,
+            BigScreenAccessLogPayload,
+        )
+
+        mock_request = MagicMock()
+        mock_request.headers = {}
+        mock_request.client.host = "127.0.0.1"
+
+        session = MagicMock(username="admin_user", group="Global_admin", unit="总调度室")
+        payload = BigScreenAccessLogPayload(entry_source="调度工作台")
+
+        res = handle_record_big_screen_access(
+            request=mock_request,
+            payload=payload,
+            session=session,
+        )
+
+        self.assertTrue(res["success"])
+        mock_save_log.assert_called_once()
+        kwargs = mock_save_log.call_args.kwargs
+        self.assertEqual(kwargs["operator"], "admin_user")
+        self.assertEqual(kwargs["operator_group"], "Global_admin")
+        self.assertEqual(kwargs["action_type"], "VIEW_BIG_SCREEN")
+        self.assertIn("调度工作台", kwargs["action_desc"])
+        self.assertEqual(kwargs["resource_id"], "big_screen_dashboard")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

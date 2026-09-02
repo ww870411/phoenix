@@ -1410,7 +1410,8 @@ import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import {
   getTubeWorkspaceConfigSummary,
   getTubeBigScreenData,
-  updateTubeBigScreenConfig
+  updateTubeBigScreenConfig,
+  recordTubeBigScreenAccess
 } from '../../daily_report_25_26/services/api'
 
 const router = useRouter()
@@ -3237,6 +3238,10 @@ onMounted(() => {
   timerClock = setInterval(updateClock, 1000)
   loadRealData()
   startAnimationLoop()
+
+  // 记录查看展示大屏审计日志（归属于综合数据查询类）
+  const sourceLabel = route.query.from ? `调度工作台 (${route.query.from})` : '数字指挥展示大屏'
+  recordTubeBigScreenAccess(projectKey.value, { entry_source: sourceLabel }).catch(() => {})
 
   // 初始化 ECharts 本周战报图表并开启10秒自动交替轮播
   nextTick(() => {

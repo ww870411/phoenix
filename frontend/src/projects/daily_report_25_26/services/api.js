@@ -323,6 +323,23 @@ export async function updateTubeBigScreenConfig(projectKey = 'insulation_pipe_su
   return response.json()
 }
 
+export async function recordTubeBigScreenAccess(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  try {
+    const response = await authAwareFetch(`${projectPath(projectKey)}/big-screen/access-log`, {
+      method: 'POST',
+      headers: {
+        ...attachAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+    if (!response.ok) return null
+    return await response.json()
+  } catch (e) {
+    return null
+  }
+}
+
 export async function getTubeDemandManagementOptions(projectKey = 'insulation_pipe_supply_2026') {
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/options`, {
     headers: attachAuthHeaders(),

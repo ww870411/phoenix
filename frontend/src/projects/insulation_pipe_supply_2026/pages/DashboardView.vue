@@ -826,7 +826,10 @@ const projectKey = computed(() => String(route.params.projectKey || 'insulation_
 const canExtractXlsx = computed(() => auth.canExtractXlsxFor(projectKey.value))
 
 function goBigScreen() {
-  router.push(`/projects/${encodeURIComponent(projectKey.value)}/pages/big_screen`)
+  router.push({
+    path: `/projects/${encodeURIComponent(projectKey.value)}/pages/big_screen`,
+    query: { from: '调度工作台' }
+  })
 }
 
 // --- 🏢 标段各型号需求与库存全要素穿透弹窗状态 ---
