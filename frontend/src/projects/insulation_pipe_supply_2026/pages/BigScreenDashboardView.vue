@@ -790,26 +790,56 @@
                 </linearGradient>
               </defs>
 
-              <!-- 专供运输管道与流光组合 (默认无发货在途时完全隐藏，出现时根据发货材质动态渲染青蓝或琥珀金) -->
+              <!-- 专供运输管道与流光组合 (默认无发货在途时完全隐藏，出现时根据发货材质与实绩发货状态动态渲染) -->
               <g class="flylines-layer">
                 <g 
                   v-for="line in flylines" 
                   :key="line.id"
                   class="flyline-group"
+                  :class="{
+                    'is-shipped': isLineShipped(line),
+                    'is-unshipped': !isLineShipped(line)
+                  }"
                   v-show="isLineVisible(line)"
                 >
-                  <!-- 管道基础轨迹 -->
+                  <!-- 管道基础轨迹：已发货实线/微发光，未发货柔和静息虚线 -->
                   <path 
                     :d="line.d" 
                     class="flyline-base"
-                    :class="activeMaterialType || 'pipe'"
+                    :class="[
+                      getLineMaterialType(line),
+                      isLineShipped(line) ? 'shipped' : 'unshipped'
+                    ]"
                   />
-                  <!-- 在途动态光带 -->
+                  <!-- 在途动态光带（仅实际已发货标段专线展示） -->
                   <path 
+                    v-if="isLineShipped(line)"
                     :d="line.d" 
                     class="flyline-stream"
-                    :class="activeMaterialType || 'pipe'"
+                    :class="getLineMaterialType(line)"
                   />
+                  <!-- 强劲动态脉冲波激光光斑（仅实际已发货标段专线脉冲循环） -->
+                  <path 
+                    v-if="isLineShipped(line)"
+                    :d="line.d" 
+                    class="flyline-pulse"
+                    :class="getLineMaterialType(line)"
+                  />
+                  <!-- 实际已发货标段：持续流动的顺向激光脉冲粒子球 (Pulse Orb) -->
+                  <circle 
+                    v-if="isLineShipped(line)"
+                    r="3.5" 
+                    :fill="getLineMaterialType(line) === 'fitting' ? '#fbbf24' : '#00f2fe'"
+                    class="flyline-pulse-orb"
+                    :class="getLineMaterialType(line)"
+                  >
+                    <animateMotion 
+                      :path="line.d" 
+                      dur="1.8s" 
+                      begin="0s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
                 </g>
               </g>
 
@@ -859,7 +889,13 @@
 
                     <!-- 物理对齐连接端口 (右锚点) -->
                     <div class="node-port port-out" :id="'port-out-' + sup.id" title="发运输出端口">
-                      <span class="port-dot"></span>
+                      <span 
+                        class="port-dot" 
+                        :class="{ 
+                          'pulse-active': (hoveredSupplierId === sup.id) || 
+                                          (hoveredSectionId && isSupplierOfSection(sup.id, hoveredSectionId) && isSectionShipped(hoveredSectionId))
+                        }"
+                      ></span>
                     </div>
                   </div>
                 </div>
@@ -903,7 +939,12 @@
                       >
                         <!-- 物理对齐连接端口 (左锚点) -->
                         <div class="node-port port-in" :id="'port-in-sec_' + sec.id" title="标段签收入口">
-                          <span class="port-dot"></span>
+                          <span 
+                            class="port-dot" 
+                            :class="{ 
+                              'pulse-active': isSectionShipped(sec.id) && ((hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)) || hoveredSectionId === sec.id)
+                            }"
+                          ></span>
                         </div>
 
                         <div class="sec-card-header">
@@ -1018,7 +1059,12 @@
                       >
                         <!-- 物理对齐连接端口 (左锚点) -->
                         <div class="node-port port-in" :id="'port-in-sec_' + sec.id" title="标段签收入口">
-                          <span class="port-dot"></span>
+                          <span 
+                            class="port-dot" 
+                            :class="{ 
+                              'pulse-active': isSectionShipped(sec.id) && ((hoveredSupplierId && isSuppliedBy(sec.id, hoveredSupplierId)) || hoveredSectionId === sec.id)
+                            }"
+                          ></span>
                         </div>
 
                         <div class="sec-card-header">
@@ -1846,6 +1892,46 @@ function isSuppliedBy(secId, supId) {
 
 function isSupplierOfSection(supId, secId) {
   return isSuppliedBy(secId, supId)
+}
+
+// 判断指定标段是否有实际发货/到货履约流水（发货实绩 > 0）
+function isSectionShipped(secId) {
+  if (!secId) return false
+  const cleanId = String(secId).replace(/^sec_/, '')
+  const sec = sectionProgressList.value.find(s => s.id === cleanId)
+  if (!sec) return false
+  const shippedKm = Number(sec.shippedKm) || 0
+  const shippedFittings = Number(sec.shippedFittings) || 0
+  const arrivedKm = Number(sec.arrivedKm) || 0
+  const arrivedFittings = Number(sec.arrivedFittings) || 0
+  return shippedKm > 0 || shippedFittings > 0 || arrivedKm > 0 || arrivedFittings > 0
+}
+
+// 判断指定连线是否属于实际发生发货的活跃通道
+function isLineShipped(line) {
+  if (!line) return false
+  // 实时战报发货播报或临时激光粒子激活
+  if (activeShipmentLineIds.value.has(line.id)) return true
+  if (isAnimationRunning.value && activeEventCategory.value === 'dispatch' && activeSupplierId.value && activeSectionId.value) {
+    if (line.fromId === activeSupplierId.value && line.toId === 'sec_' + activeSectionId.value) {
+      return true
+    }
+  }
+  return isSectionShipped(line.secId || line.toId)
+}
+
+// 获取指定连线的主材质色彩类型 ('pipe' | 'fitting')
+function getLineMaterialType(line) {
+  if (activeMaterialType.value) return activeMaterialType.value
+  if (!line) return 'pipe'
+  const cleanId = String(line.secId || line.toId || '').replace(/^sec_/, '')
+  const sec = sectionProgressList.value.find(s => s.id === cleanId)
+  if (!sec) return 'pipe'
+  const shippedKm = Number(sec.shippedKm) || 0
+  const shippedFittings = Number(sec.shippedFittings) || 0
+  if (shippedKm > 0) return 'pipe'
+  if (shippedFittings > 0) return 'fitting'
+  return 'pipe'
 }
 
 function getSupplierStats(sup) {
@@ -2691,6 +2777,8 @@ function recalculateFlylines() {
               id: `flyline-${sup.id}-${sec.id}`,
               fromId: sup.id,
               toId: 'sec_' + sec.id,
+              supId: sup.id,
+              secId: sec.id,
               type: 'pipe',
               d
             })
@@ -4859,23 +4947,44 @@ onBeforeUnmount(() => {
 
 .flyline-base {
   fill: none;
-  stroke-width: 1.5;
-  opacity: 0.45;
+  stroke-width: 1.8;
+  opacity: 0.85;
+  transition: all 0.3s ease;
 }
 
-.flyline-base.pipe {
+.flyline-base.shipped.pipe {
   stroke: #00f2fe;
+  stroke-width: 2.2;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 5px rgba(0, 242, 254, 0.55));
 }
 
-.flyline-base.fitting {
+.flyline-base.shipped.fitting {
   stroke: #fbbf24;
+  stroke-width: 2.2;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.55));
+}
+
+.flyline-base.unshipped {
+  stroke-width: 1.8;
+  stroke-dasharray: 6 5;
+  opacity: 0.85;
+}
+
+.flyline-base.unshipped.pipe {
+  stroke: rgba(56, 189, 248, 0.55);
+}
+
+.flyline-base.unshipped.fitting {
+  stroke: rgba(251, 191, 36, 0.55);
 }
 
 .flyline-stream {
   fill: none;
-  stroke-width: 2.5;
+  stroke-width: 2.6;
   stroke-linecap: round;
-  stroke-dasharray: 6 10;
+  stroke-dasharray: 6 12;
   opacity: 0.95;
   animation: flow-travel 1.4s linear infinite;
   will-change: stroke-dashoffset;
@@ -4883,18 +4992,70 @@ onBeforeUnmount(() => {
 
 .flyline-stream.pipe {
   stroke: url(#grad-pipe-line);
+  filter: drop-shadow(0 0 4px rgba(0, 242, 254, 0.6));
 }
 
 .flyline-stream.fitting {
   stroke: url(#grad-fitting-line);
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.6));
+}
+
+/* 强劲脉冲激光波 (实绩发货专线独享) */
+.flyline-pulse {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 18 70;
+  opacity: 0.9;
+  animation: pulse-travel 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: stroke-dashoffset;
+}
+
+.flyline-pulse.pipe {
+  stroke: #00f2fe;
+  filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.95));
+}
+
+.flyline-pulse.fitting {
+  stroke: #fbbf24;
+  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.95));
+}
+
+.flyline-pulse-orb {
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.flyline-pulse-orb.pipe {
+  fill: #00f2fe;
+  filter: drop-shadow(0 0 8px #00f2fe);
+}
+
+.flyline-pulse-orb.fitting {
+  fill: #fbbf24;
+  filter: drop-shadow(0 0 8px #fbbf24);
 }
 
 @keyframes flow-travel {
   from {
-    stroke-dashoffset: 32;
+    stroke-dashoffset: 36;
   }
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulse-travel {
+  0% {
+    stroke-dashoffset: 88;
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.35;
   }
 }
 
@@ -5583,6 +5744,27 @@ onBeforeUnmount(() => {
   height: 3px;
   border-radius: 50%;
   background: #00ff87;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.port-dot.pulse-active {
+  width: 4px;
+  height: 4px;
+  background: #00f2fe;
+  box-shadow: 0 0 8px #00f2fe, 0 0 16px rgba(0, 242, 254, 0.85);
+  animation: port-beacon 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes port-beacon {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 1;
+    box-shadow: 0 0 12px #00f2fe, 0 0 20px rgba(0, 242, 254, 1);
+  }
 }
 
 /* --- 右侧栏：实时战报流 Live Feed --- */
@@ -7178,14 +7360,30 @@ onBeforeUnmount(() => {
   border-color: rgba(203, 213, 225, 0.8);
 }
 
-.bigscreen-container.light .flyline-base.pipe {
+.bigscreen-container.light .flyline-base.shipped.pipe {
   stroke: #0284c7;
-  opacity: 0.25;
+  stroke-width: 2.2;
+  opacity: 0.85;
 }
 
-.bigscreen-container.light .flyline-base.fitting {
-  stroke: #ea580c;
-  opacity: 0.25;
+.bigscreen-container.light .flyline-base.shipped.fitting {
+  stroke: #d97706;
+  stroke-width: 2.2;
+  opacity: 0.85;
+}
+
+.bigscreen-container.light .flyline-base.unshipped {
+  stroke-width: 1.8;
+  stroke-dasharray: 6 5;
+  opacity: 0.85;
+}
+
+.bigscreen-container.light .flyline-base.unshipped.pipe {
+  stroke: rgba(2, 132, 199, 0.65);
+}
+
+.bigscreen-container.light .flyline-base.unshipped.fitting {
+  stroke: rgba(217, 119, 6, 0.65);
 }
 
 .bigscreen-container.light .flyline-stream.pipe {
@@ -7194,6 +7392,26 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .flyline-stream.fitting {
   stroke: #ea580c;
+}
+
+.bigscreen-container.light .flyline-pulse.pipe {
+  stroke: #0284c7;
+  filter: drop-shadow(0 0 6px rgba(2, 132, 199, 0.7));
+}
+
+.bigscreen-container.light .flyline-pulse.fitting {
+  stroke: #d97706;
+  filter: drop-shadow(0 0 6px rgba(217, 119, 6, 0.7));
+}
+
+.bigscreen-container.light .flyline-pulse-orb.pipe {
+  fill: #0284c7;
+  filter: drop-shadow(0 0 6px #0284c7);
+}
+
+.bigscreen-container.light .flyline-pulse-orb.fitting {
+  fill: #d97706;
+  filter: drop-shadow(0 0 6px #d97706);
 }
 
 .bigscreen-container.light .system-sub-col {

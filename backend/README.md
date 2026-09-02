@@ -1,3 +1,9 @@
+## 2026-09-02 数字指挥大屏：供需拓扑实绩发货脉冲流光与双向探查升级（协同记录）
+
+- **业务协同与模块定位**：
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（供需流向拓扑中枢）
+  - **协同说明**：前端拓扑图在鼠标悬停管厂或施工标段时，自动结合后端返回的标段累计发运量（`shippedKm` / `shippedFittings`）进行实绩履约判定；实际发生过发货的连线呈现高亮动态脉冲波与激光粒子光球，未发货连线保持静息虚线。
+
 ## 2026-09-02 数字指挥大屏：全量面板标题图标矢量化升级（协同记录）
 
 - **业务协同与模块定位**：
