@@ -1,3 +1,16 @@
+## 2026-09-03 数字指挥大屏：标段实体扩充保温管现场库存量字段（`stockKm` / `stockM`）
+
+- **业务协同与模块定位**：
+  - 核心接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /api/v1/projects/{project_key}/tubes/big-screen/data`）
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（标段现场库存微核算条）
+- **核心调整与字段契约**：
+  1. **保温管现场库存量动态计算**：在 `section_progress_list` 组装循环中，根据各标段累计到货量（`p_arrived_km`）减去累计施工量（`u_km`），计算现场可用保温管库存：
+     ```python
+     p_stock_km = round(max(p_arrived_km - u_km, 0.0), 2)
+     p_stock_m = max(0.0, pipe_arrived_by_sec.get(sid, 0.0) - u_m)
+     ```
+  2. **协议扩充**：在标段字典中新增 `"stockKm": p_stock_km` 与 `"stockM": int(p_stock_m)`，协同原有的 `"stockFittings"`，为大屏各标段提供完备的保温管与管件双轨库存数据支撑。
+
 ## 2026-09-03 数字指挥大屏：标段卡片施工量等三轨标签图标矢量化升级（协同说明）
 
 - **业务协同与模块定位**：

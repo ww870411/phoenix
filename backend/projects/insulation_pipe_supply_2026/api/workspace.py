@@ -1591,6 +1591,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             u_m = float(sec_usage_map.get(sid, 0.0))
             u_km = round(u_m / 1000, 2)
             u_percent = round((u_m / (pipe_design_by_sec.get(sid, 0.0) or 1)) * 100, 1) if pipe_design_by_sec.get(sid, 0.0) > 0 else 0.0
+            p_stock_km = round(max(p_arrived_km - u_km, 0.0), 2)
+            p_stock_m = max(0.0, pipe_arrived_by_sec.get(sid, 0.0) - u_m)
 
             f_total = fit_purchase_by_sec.get(sid, 0)
             f_shipped = fit_shipped_by_sec.get(sid, 0)
@@ -1633,6 +1635,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "installedM": int(u_m),
                 "installedKm": u_km,
                 "installedPercent": min(u_percent, 100.0),
+                "stockKm": p_stock_km,
+                "stockM": int(p_stock_m),
                 "totalFittings": f_total,
                 "shippedFittings": f_shipped,
                 "arrivedFittings": f_arrived,

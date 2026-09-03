@@ -1017,6 +1017,21 @@
                               ></div>
                             </div>
                           </div>
+
+                          <!-- 4. 现场存量微核算条 (方案三) -->
+                          <div class="sec-stock-strip">
+                            <div class="stock-item pipe-stock" :title="`保温管现场可用库存: ${sec.stockKm !== undefined ? sec.stockKm : Math.max(0, Math.round(((sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm) - (sec.installedKm || 0)) * 100) / 100)} km (到货 - 施工)`">
+                              <span class="stock-dot green"></span>
+                              <span class="stock-label">保温管库存量:</span>
+                              <strong class="stock-val green-text">{{ sec.stockKm !== undefined ? sec.stockKm : Math.max(0, Math.round(((sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm) - (sec.installedKm || 0)) * 100) / 100) }}<span class="stock-unit">km</span></strong>
+                            </div>
+                            <span class="stock-divider">/</span>
+                            <div class="stock-item fitting-stock" :title="`管件现场可用库存: ${sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0))} 件 (到货 - 安装)`">
+                              <span class="stock-dot gold"></span>
+                              <span class="stock-label">管件库存量:</span>
+                              <strong class="stock-val gold-text">{{ sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0)) }}<span class="stock-unit">件</span></strong>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1153,6 +1168,21 @@
                                 }"
                                 :title="`管件在途运送: ${sec.transitFittings} 件`"
                               ></div>
+                            </div>
+                          </div>
+
+                          <!-- 4. 现场存量微核算条 (方案三) -->
+                          <div class="sec-stock-strip">
+                            <div class="stock-item pipe-stock" :title="`保温管现场可用库存: ${sec.stockKm !== undefined ? sec.stockKm : Math.max(0, Math.round(((sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm) - (sec.installedKm || 0)) * 100) / 100)} km (到货 - 施工)`">
+                              <span class="stock-dot green"></span>
+                              <span class="stock-label">保温管库存量:</span>
+                              <strong class="stock-val green-text">{{ sec.stockKm !== undefined ? sec.stockKm : Math.max(0, Math.round(((sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm) - (sec.installedKm || 0)) * 100) / 100) }}<span class="stock-unit">km</span></strong>
+                            </div>
+                            <span class="stock-divider">/</span>
+                            <div class="stock-item fitting-stock" :title="`管件现场可用库存: ${sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0))} 件 (到货 - 安装)`">
+                              <span class="stock-dot gold"></span>
+                              <span class="stock-label">管件库存量:</span>
+                              <strong class="stock-val gold-text">{{ sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0)) }}<span class="stock-unit">件</span></strong>
                             </div>
                           </div>
                         </div>
@@ -5248,12 +5278,12 @@ onBeforeUnmount(() => {
   background: #0f192b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 7px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   box-sizing: border-box;
@@ -5471,20 +5501,85 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 5px #ff4d4f;
 }
 
-/* 双轨微进度条 (高清晰度、紧凑内聚与饱满进度条) */
+/* 三轨微进度条与存量微条 (高清晰度、紧凑内聚与饱满进度条) */
 .sec-metrics-body {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-top: 2px;
+  gap: 3.5px;
+  margin-top: 1px;
   min-height: 0;
 }
 
 .sec-metric-line {
   display: flex;
   flex-direction: column;
-  gap: 2.5px;
+  gap: 2px;
   flex-shrink: 0;
+}
+
+/* 标段卡片现场存量微核算条 (方案三) */
+.sec-stock-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 1.5px 6px;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.stock-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.stock-dot {
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.stock-dot.green {
+  background: #10b981;
+  box-shadow: 0 0 4px #10b981;
+}
+
+.stock-dot.gold {
+  background: #f59e0b;
+  box-shadow: 0 0 4px #f59e0b;
+}
+
+.stock-label {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.stock-val {
+  font-family: 'DIN Alternate', 'JetBrains Mono', 'Helvetica Neue', Arial, monospace;
+  font-weight: 700;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.stock-unit {
+  font-size: 9px;
+  font-weight: 500;
+  margin-left: 1.5px;
+  color: #94a3b8;
+}
+
+.stock-divider {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 9px;
+  margin: 0 2px;
 }
 
 .line-info {
@@ -7478,6 +7573,20 @@ onBeforeUnmount(() => {
   background: rgba(245, 158, 11, 0.15);
   border: 1px solid rgba(245, 158, 11, 0.4);
   color: #b45309;
+}
+
+.bigscreen-container.light .sec-stock-strip {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.bigscreen-container.light .stock-label,
+.bigscreen-container.light .stock-unit {
+  color: #64748b;
+}
+
+.bigscreen-container.light .stock-divider {
+  color: rgba(0, 0, 0, 0.2);
 }
 
 .bigscreen-container.light .micro-bar-bg {

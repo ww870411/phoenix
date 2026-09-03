@@ -1,3 +1,27 @@
+## 2026-09-03 [数字指挥大屏：标段卡片现场存量微核算条落地（“保温管库存量”与“管件库存量”双轨核算）]
+- **需求与业务对齐**：
+  - 响应用户诉求：“方案三也不错啊，试试看呢”——在各标段卡片中优雅呈现保温管与管件的现场可用库存；
+  - 响应用户指令：“表述上‘直管存量’改为‘保温管存量’”；
+  - 响应用户指令：“‘保温管存量’‘管件存量’均改为‘xx库存量’”；
+- **业务逻辑与数据契约**：
+  1. **保温管现场库存量口径**：$\text{现场可用保温管库存} = \max(0, \text{累计确认到货量} - \text{累计施工消耗量})$；
+  2. **管件现场库存量口径**：$\text{现场可用管件库存} = \max(0, \text{累计确认到货件数} - \text{累计安装消耗件数})$；
+- **全链路架构与改动点**：
+  1. **后端数据聚合与下发（后端）**：
+     - 在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `section_progress_list` 组装循环中，新增 `p_stock_km` 与 `p_stock_m` 计算；
+     - 标段输出实体正式扩展 `stockKm` 与 `stockM` 字段，协同既有 `stockFittings`，形成完整的保温管与管件现场库存数据契约；
+  2. **前端标段卡片现场库存微核算条（前端）**：
+     - 在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 的两列标段卡片底部（`sec-metrics-body` 内），新增 `.sec-stock-strip` 微核算条；
+     - 左侧配置翡翠绿呼吸指示灯与“保温管库存量: x.xx km”，右侧配置琥珀金呼吸指示灯与“管件库存量: xxx 件”；
+     - 前端带有防御性计算兜底（优先取 `sec.stockKm`，无则实时计算 `arrivedKm - installedKm`），100% 保障不留白；
+  3. **紧凑排版与视口高度平衡（前端）**：
+     - 将卡片内边距从 `6px 10px` 微调为 `5px 8px`，指标行间距从 `5px` 微调为 `3.5px`；
+     - 完美消化新增存量条所需的 16px 垂直高度，标段矩阵总高度分毫不增，彻底杜绝大屏滚动条产生；
+     - 同步适配深色高对比科技模式与浅色模式。
+- **改动文件**：
+  - 后端：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+
 ## 2026-09-03 [数字指挥大屏：标段卡片施工量等指标微图标升级为原生内联矢量SVG（彻底解决图标不可见问题）]
 - **需求与业务对齐**：
   - 响应用户反馈：“发现在 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen 页面中，各个标段的卡片中，‘施工量’前面的小图标没有显示出来”；
