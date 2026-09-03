@@ -1,3 +1,21 @@
+## 2026-09-03 [数字指挥大屏：本周战报末日指标文案校正为“昨日发货/施工”（厘清统计期口径）]
+- **需求与业务对齐**：
+  - 响应用户确认与改动诉求：“在 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen 页面中的‘本周管件施工战报’和‘本周保温管施工战报’板块中，均有一处‘今日发货 / 施工’，考虑到其实统计期是到昨日吧？这个‘今日发货 / 施工’的数据是真的今日，还是指其实是昨日？我想确认这一点”；
+- **业务底层逻辑与口径论证**：
+  1. **统计基准日判定**：后端 `workspace.py` 生成 7 日战报（`weekly_report` 与 `weekly_fitting_report`）时，以系统当前展示基准日 `show_date` 为基准生成 7 日连续区间 `[show_date - 6天, ..., show_date]`；在系统自动滚动规则下（`config_service.py`），`show_date` 严格定义为 `北京时间当日 - 1天`（即**昨日**）；
+  2. **工程日报填报实际**：现场各标段施工下沟与焊接安装量（`tube_daily_usage` 和 `tube_fitting_daily_usage`）均按工程惯例在日终或次日早间汇总核算“昨日施工实绩”，今日施工仍在进行尚未结转；
+  3. **确认结论**：该数据 **100% 为统计期末日（即昨日）数据**，并非自然日历的“今日”；前端原先使用 `weeklyDays.at(-1)` 直接冠以“今日”属于历史文案口径偏差；
+- **全链路架构与改动点**：
+  1. **前端看板复盘栏文案修正（前端）**：
+     - 在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 第 3 项复盘栏中，将原 `今日发货 / 施工` 与 `今日发运 / 安装` 明确更正为 `昨日发货 / 施工` 与 `昨日发运 / 安装`；
+  2. **顶部 KPI 卡片副标题说明同步（前端）**：
+     - 同步更新 `weeklyShipNote` 与 `weeklyUsageNote`：由 `今日 xx km` 修正为 `昨日 xx km`；
+     - 同步更新 `weeklyFitShipNote` 与 `weeklyFitUsageNote`：由 `今日 xx 件` 修正为 `昨日 xx 件`；
+  3. **代码业务注释规范化（前端）**：
+     - 为 `weeklyToday` 与 `weeklyFitToday` 补充明确的中文业务说明注释，标明其取值语义为“统计期末日（对应业务基准日/昨日）”，彻底消除歧义。
+- **改动文件**：
+  - 前端：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+
 ## 2026-09-02 [需求管理：每日施工消耗与损耗填报增加“损耗量真实性核对”确认弹窗]
 - **需求与业务对齐**：
   - 响应用户反馈：“在 `/projects/insulation_pipe_supply_2026/pages/demand_management?category=pipe&tab=usage` 中填报每日使用量的时候，可能会误填到‘损耗量’字段中，导致现场库存的错误；增加一项功能：当用户提交每日使用量与损耗量时，如果提交的数据中各型号的损耗量不全为0，则弹出一个确认窗口，提示用户‘您填写了xx型号的损耗量xx米，请确认其为真实施工损耗（报废不能再用）’，并提供‘仅上报消耗量’‘返回重新填报’及‘确认真实损耗并上报’选项”；

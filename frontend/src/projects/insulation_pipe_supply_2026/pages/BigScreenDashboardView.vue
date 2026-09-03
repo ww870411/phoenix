@@ -1379,7 +1379,7 @@
             </transition>
           </div>
 
-          <!-- 3. 固定复盘栏：根据 activeWeeklyTab 展示峰值与今日数据 (带过渡) -->
+          <!-- 3. 固定复盘栏：根据 activeWeeklyTab 展示峰值与昨日数据 (带过渡) -->
           <transition name="weekly-insight-anim" mode="out-in">
             <div :key="activeWeeklyTab" class="weekly-insight-grid">
               <div>
@@ -1391,7 +1391,7 @@
                 <strong>{{ activeWeeklyTab === 'pipe' ? weeklyUsagePeakText : weeklyFitUsagePeakText }}</strong>
               </div>
               <div>
-                <span>{{ activeWeeklyTab === 'pipe' ? '今日发货 / 施工' : '今日发运 / 安装' }}</span>
+                <span>{{ activeWeeklyTab === 'pipe' ? '昨日发货 / 施工' : '昨日发运 / 安装' }}</span>
                 <strong>{{ activeWeeklyTab === 'pipe' ? weeklyTodayText : weeklyFitTodayText }}</strong>
               </div>
             </div>
@@ -2143,6 +2143,7 @@ const weeklyDays = computed(() => (
 const weeklyHasBusinessData = computed(() => weeklyDays.value.some(day => (
   (Number(day?.shipped_km) || 0) > 0 || (Number(day?.usage_km) || 0) > 0
 )))
+// 统计期末日（对应业务基准日/昨日）发货与施工数据
 const weeklyToday = computed(() => weeklyDays.value.at(-1) || {
   shipped_km: 0,
   usage_km: 0
@@ -2172,12 +2173,12 @@ const weeklyTodayText = computed(() => (
 ))
 const weeklyShipNote = computed(() => (
   weeklyHasBusinessData.value
-    ? `今日 ${formatWeeklyKm(weeklyToday.value.shipped_km)} km`
+    ? `昨日 ${formatWeeklyKm(weeklyToday.value.shipped_km)} km`
     : '本周暂无发货记录'
 ))
 const weeklyUsageNote = computed(() => (
   weeklyHasBusinessData.value
-    ? `今日 ${formatWeeklyKm(weeklyToday.value.usage_km)} km`
+    ? `昨日 ${formatWeeklyKm(weeklyToday.value.usage_km)} km`
     : '本周暂无施工记录'
 ))
 
@@ -2188,6 +2189,7 @@ const weeklyFitDays = computed(() => (
 const weeklyFitHasBusinessData = computed(() => weeklyFitDays.value.some(day => (
   (Number(day?.shipped_pcs) || 0) > 0 || (Number(day?.usage_pcs) || 0) > 0
 )))
+// 统计期末日（对应业务基准日/昨日）发运与安装数据
 const weeklyFitToday = computed(() => weeklyFitDays.value.at(-1) || {
   shipped_pcs: 0,
   usage_pcs: 0
@@ -2217,12 +2219,12 @@ const weeklyFitTodayText = computed(() => (
 ))
 const weeklyFitShipNote = computed(() => (
   weeklyFitHasBusinessData.value
-    ? `今日 ${formatWeeklyInt(weeklyFitToday.value.shipped_pcs)} 件`
+    ? `昨日 ${formatWeeklyInt(weeklyFitToday.value.shipped_pcs)} 件`
     : '本周暂无发运记录'
 ))
 const weeklyFitUsageNote = computed(() => (
   weeklyFitHasBusinessData.value
-    ? `今日 ${formatWeeklyInt(weeklyFitToday.value.usage_pcs)} 件`
+    ? `昨日 ${formatWeeklyInt(weeklyFitToday.value.usage_pcs)} 件`
     : '本周暂无安装记录'
 ))
 

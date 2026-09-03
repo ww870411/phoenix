@@ -1,3 +1,17 @@
+## 2026-09-03 数字指挥大屏：本周施工战报末日指标更正为“昨日发货/施工”（口径对齐）
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（数字指挥大屏 - 本周施工战报保温管与管件轮播板块）
+- **功能特性与交互升级**：
+  1. **统计末日指标口径校正**：
+     - 在右下角本周战报面板第 3 项复盘栏中，将原“今日发货 / 施工”（管件为“今日发运 / 安装”）正式更正为“昨日发货 / 施工”（管件为“昨日发运 / 安装”）；
+     - 明确反映出 7 日滚动窗口 `[show_date - 6天 ~ show_date]` 中末日（即业务基准日/昨日）的实际发货与施工消耗闭环数据；
+  2. **双 KPI 副标题提示同步优化**：
+     - 保温管 `weeklyShipNote` 与 `weeklyUsageNote` 同步调整为 `昨日 xx km`；
+     - 管件 `weeklyFitShipNote` 与 `weeklyFitUsageNote` 同步调整为 `昨日 xx 件`；
+  3. **代码业务逻辑注释补齐**：
+     - 为 `weeklyToday` 与 `weeklyFitToday` 补充明确的业务口径注释，指明数组末项实质为“统计期末日（即业务基准日/昨日）”数据，消除阅读代码时的潜在语义混淆。
+
 ## 2026-09-02 需求管理：每日施工使用与损耗填报增加“损耗量真实性核对”确认弹窗
 
 - **关联前端页面与组件**：

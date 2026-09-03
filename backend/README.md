@@ -1,3 +1,14 @@
+## 2026-09-03 数字指挥大屏：本周施工战报统计期与业务基准日口径对齐（协同说明）
+
+- **业务协同与模块定位**：
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（右下角本周施工战报轮播面板）
+  - 对应后端接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /api/v1/projects/{project_key}/tubes/big-screen/data`）
+  - 对应配置服务：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)（`get_configured_show_date`）
+- **口径协同说明**：
+  1. **后端 7 日战报区间计算规则**：后端依据配置基准日 `base_dt = show_date`（在系统自动滚动模式下为 `北京时间当日 - 1天`，即昨日）往前倒推 7 日生成 `seven_days` 连续日期数组，其末尾元素（即 `days[-1]`）对应的真实日期为**昨日**；
+  2. **工程业务日终核算特性**：施工现场下沟敷设量与管件安装量每天均以闭工日终核算录入，当日施工尚在进行中，故统计期截止日为昨日；
+  3. **协同调整**：前端已将战报面板复盘栏原“今日发货 / 施工”更正为“昨日发货 / 施工”，确保跨端统计口径严谨统一。
+
 ## 2026-09-02 需求管理：每日施工使用与损耗填报“损耗量真实性核对”机制（协同记录）
 
 - **业务协同与模块定位**：
