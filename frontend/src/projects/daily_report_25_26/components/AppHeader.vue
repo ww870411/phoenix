@@ -82,10 +82,29 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 
-// 在线用户 Presence 响应式状态
+// 在线用户 Presence 响应式状态（持久化最近已知在线人数，消除进入新页面时从 1 突然跳变的视觉闪烁）
+const PRESENCE_COUNT_STORAGE_KEY = 'phoenix_last_online_count'
+
+function getInitialOnlineCount() {
+  if (typeof window === 'undefined') return 1
+  try {
+    const cached = parseInt(localStorage.getItem(PRESENCE_COUNT_STORAGE_KEY), 10)
+    if (!isNaN(cached) && cached > 0) return cached
+  } catch (e) {}
+  return 1
+}
+
+function updateOnlineCount(count) {
+  const num = Math.max(1, parseInt(count, 10) || 1)
+  onlineCount.value = num
+  try {
+    localStorage.setItem(PRESENCE_COUNT_STORAGE_KEY, String(num))
+  } catch (e) {}
+}
+
 const presenceWrapRef = ref(null)
 const showPresenceDropdown = ref(false)
-const onlineCount = ref(1)
+const onlineCount = ref(getInitialOnlineCount())
 const onlineUsers = ref([])
 const loadingPresence = ref(false)
 let heartbeatTimer = null
@@ -209,7 +228,7 @@ async function sendHeartbeat() {
     if (response.ok) {
       const data = await response.json()
       if (data.online_count) {
-        onlineCount.value = data.online_count
+        updateOnlineCount(data.online_count)
       }
     }
   } catch (e) {
@@ -256,7 +275,7 @@ async function fetchOnlineUsers() {
       })
 
       onlineUsers.value = list
-      onlineCount.value = Math.max(data.online_count || 0, list.length)
+      updateOnlineCount(Math.max(data.online_count || 0, list.length))
     }
   } catch (e) {
     console.error('Fetch online users error:', e)
@@ -292,8 +311,19 @@ async function logout() {
   router.replace('/login')
 }
 
+function handleVisibilityChange() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    // 监听用户从后台切回标签页，立即主动唤醒补发心跳并拉取最新在线人数
+    sendHeartbeat()
+    if (showPresenceDropdown.value) {
+      fetchOnlineUsers()
+    }
+  }
+}
+
 onMounted(() => {
   window.addEventListener('click', handleGlobalClick)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   // 初次启动并设置 30 秒轮询心跳
   sendHeartbeat()
   fetchOnlineUsers()
@@ -307,6 +337,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('click', handleGlobalClick)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer)
     heartbeatTimer = null

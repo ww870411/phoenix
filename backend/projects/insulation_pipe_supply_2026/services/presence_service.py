@@ -7,10 +7,10 @@ import time
 import threading
 from typing import Dict, Any, List
 
-# 内存线程安全在线用户哈希表 (超时阈值 65 秒)
+# 内存线程安全在线用户哈希表 (超时阈值 80 秒)
 _ONLINE_USERS_LOCK = threading.Lock()
 _ONLINE_USERS: Dict[str, Dict[str, Any]] = {}
-TIMEOUT_SECONDS = 65.0
+TIMEOUT_SECONDS = 80.0
 
 
 def record_user_heartbeat(
@@ -66,7 +66,7 @@ def get_online_users_count() -> int:
 
 def get_online_users_list() -> List[Dict[str, Any]]:
     """
-    获取当前未超时（65秒内有心跳）的活跃在线人员列表
+    获取当前未超时（80秒内有心跳）的活跃在线人员列表
     """
     now = time.time()
     active_users: List[Dict[str, Any]] = []

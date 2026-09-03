@@ -1,3 +1,13 @@
+## 2026-09-03 在线人员 Presence：心跳超时判定阈值由 65 秒调整为 80 秒（容错窗口优化）
+
+- **业务协同与模块定位**：
+  - 核心服务：[`presence_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/presence_service.py)（`record_user_heartbeat`、`get_online_users_list`、`_ONLINE_USERS`）
+  - API 路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`/presence/heartbeat`、`/presence/online-users`）
+- **核心调整与机制升级**：
+  1. **超时阈值放宽**：将 `TIMEOUT_SECONDS` 从 `65.0` 秒调整为 `80.0` 秒；
+  2. **容错余量提升**：以客户端 30 秒心跳周期为基准，容错窗口由原来的 5 秒大幅扩展至 20 秒（$80 - 30 \times 2 = 20$ 秒），有效容忍用户在浏览器中短暂切出前台、看微信或查阅资料导致的定时器节流降频，避免频繁误判下线；
+  3. **协同前端唤醒**：前端同步配合 `visibilitychange` 事件，用户切回前台即刻主动补发心跳，双向保障在线人员列表状态的平稳与真实。
+
 ## 2026-09-03 数字指挥大屏：本周施工战报统计期与业务基准日口径对齐（协同说明）
 
 - **业务协同与模块定位**：

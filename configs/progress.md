@@ -1,3 +1,39 @@
+## 2026-09-03 [在线状态优化：消除新页面在线人数跳变闪烁 + 超时阈值调整至 80 秒]
+- **需求与业务对齐**：
+  - 响应用户指令：“问题1按你说的修改，问题2，将超时时间拉长到80s”；
+- **全链路架构与改动点**：
+  1. **前端在线人数本地持久化与平滑初始化（前端）**：
+     - 在 [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue) 中定义缓存键 `PRESENCE_COUNT_STORAGE_KEY = 'phoenix_last_online_count'`；
+     - 新增 `getInitialOnlineCount()`：在组件挂载首帧优先读取 `localStorage` 中最近已知在线人数（若无则兜底 1），杜绝每次进新页面或刷新时从“1人”瞬间闪烁跳变为实际人数；
+     - 封装 `updateOnlineCount(count)`：在 `sendHeartbeat` 与 `fetchOnlineUsers` 响应时统一更新响应式变量并同步写入缓存；
+  2. **前端页面可见性唤醒监听（前端）**：
+     - 在 `AppHeader.vue` 中新增 `handleVisibilityChange` 函数，监听 `document.visibilityState === 'visible'`；
+     - 当用户从后台标签页或外部软件切回本系统时，立即主动补发心跳并拉取在线列表，消除浏览器后台定时器节流带来的感知延迟；
+     - 在 `onBeforeUnmount` 中销毁监听器，防止内存泄漏；
+  3. **后端超时驱逐阈值放宽（后端）**：
+     - 在 [`presence_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/presence_service.py) 中，将 `TIMEOUT_SECONDS` 从 `65.0` 秒调整为 `80.0` 秒；
+     - 使得 30 秒心跳周期的容错窗口从 5 秒大幅提升至 20 秒（$80 - 30 \times 2 = 20$ 秒），有效容忍客户端短时间切出查阅资料、看微信等轻微后台休眠，避免动辄误判为掉线驱逐。
+- **改动文件**：
+  - 前端：[`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue)
+  - 后端：[`presence_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/presence_service.py)
+
+## 2026-09-03 [技术答疑：平台“实时在线人员”数值跳变与人员忽现忽隐机制深度复盘]
+- **用户关切与现象反馈**：
+  - 用户反馈：“关于页面中显示的‘平台实时在线人员’，我发现数字经常在跳变，比如我进入某个页面，显示1人，然后突然又变为4人，其中的某个人，一会儿在，一会儿又没了，这是怎么回事呢”；
+- **底层架构与机制根源深度剖析**：
+  1. **现象一（进入页面显示 1 人然后突然跳为 4 人）的成因**：
+     - **前端组件初始默认值**：在 [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue#L88) 中，响应式变量默认声明为 `const onlineCount = ref(1)`（兜底仅当前账号）；
+     - **挂载首帧渲染与异步时差**：每当路由切换导致导航栏组件重新挂载时，首帧先以初始值 `1` 呈现；挂载后 `onMounted` 异步触发 `sendHeartbeat()` 与 `fetchOnlineUsers()`，约 200~500ms 后服务端返回真实在线总人数并覆写 `onlineCount`，从而产生从 1 人瞬间跳变为 4 人的视觉闪烁；
+  2. **现象二（某个人一会儿在，一会儿又没了）的成因**：
+     - **心跳周期与超时设定的紧凑容错窗口**：前端设定每 30 秒轮询一次心跳，而后端 [`presence_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/presence_service.py#L13) 的超时阈值为 65 秒（`TIMEOUT_SECONDS = 65.0`），仅多于 2 个心跳周期 5 秒；
+     - **现代浏览器后台标签页节流休眠（Timer Throttling）**：当某个用户将该网页最小化、切换到其他浏览器标签页或切至外部软件（如微信、Excel、钉钉）时，现代浏览器（Chrome/Edge）出于节能目的会对后台标签页的 `setInterval` 深度降频（拉长到 1 分钟以上甚至挂起）；
+     - **后端超时剔除与切回恢复**：只要后台挂起超过 65 秒未发心跳，后端的 `get_online_users_list()` 遍历时即判定该用户离线并从内存哈希表 `_ONLINE_USERS` 中 `pop` 驱逐，他人此时刷新即看到“某人消失”；当该用户重新激活或切回网页，心跳恢复，后端又将其重新纳管，从而表现为“一会儿在、一会儿没了”；
+     - **纯内存字典特性**：在线用户维护在后端单例 Python 内存哈希表，若本地开发代码热重载触发，内存会瞬时归零后由各客户端重新上报。
+- **可实施的改善路径规划**：
+  1. 将 `onlineCount` 纳入全局持久化存储（如 Pinia/缓存），消除新页面初始化时硬编码为 1 的闪烁；
+  2. 将后端超时阈值由 65s 适度放宽至 120s~180s（2~3分钟），容忍用户短暂切出前台查阅资料；
+  3. 前端挂载 `visibilitychange` 事件，用户切回页面时立即唤醒补发心跳。
+
 ## 2026-09-03 [数字指挥大屏：本周战报末日指标文案校正为“昨日发货/施工”（厘清统计期口径）]
 - **需求与业务对齐**：
   - 响应用户确认与改动诉求：“在 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen 页面中的‘本周管件施工战报’和‘本周保温管施工战报’板块中，均有一处‘今日发货 / 施工’，考虑到其实统计期是到昨日吧？这个‘今日发货 / 施工’的数据是真的今日，还是指其实是昨日？我想确认这一点”；

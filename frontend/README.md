@@ -1,3 +1,18 @@
+## 2026-09-03 在线人员 Presence：本地持久化消除跳变闪烁 + 页面切回唤醒主动补发心跳
+
+- **关联前端页面与组件**：
+  - [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue)（通用顶部导航栏 - Presence 在线人员胶囊与下拉面板）
+- **功能特性与交互升级**：
+  1. **本地持久化与平滑首帧初始化**：
+     - 新增缓存键 `PRESENCE_COUNT_STORAGE_KEY = 'phoenix_last_online_count'`；
+     - 组件挂载初始化声明 `onlineCount = ref(getInitialOnlineCount())`，优先从 `localStorage` 读取上一次已知在线人数；
+     - 封装 `updateOnlineCount(count)`，在 `sendHeartbeat` 与 `fetchOnlineUsers` 响应到达时统一更新响应式变量并同步写入本地缓存；
+     - 彻底消除用户在页面间跳转或刷新时，数字从硬编码“1人”突然跳变为实际人数的割裂视觉闪烁；
+  2. **页面可见性切回唤醒机制（`visibilitychange`）**：
+     - 在组件内注册 `document.addEventListener('visibilitychange', handleVisibilityChange)`；
+     - 当用户从其他浏览器标签页、最小化或微信等外部应用切回本系统（`visibilityState === 'visible'`）时，立即主动唤醒补发心跳并刷新在线列表；
+     - 在 `onBeforeUnmount` 中注销监听器，保障生命周期清洁安全。
+
 ## 2026-09-03 数字指挥大屏：本周施工战报末日指标更正为“昨日发货/施工”（口径对齐）
 
 - **关联前端页面与组件**：
