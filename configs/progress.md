@@ -1,3 +1,21 @@
+## 2026-09-03 [数字指挥大屏：标段卡片施工量等指标微图标升级为原生内联矢量SVG（彻底解决图标不可见问题）]
+- **需求与业务对齐**：
+  - 响应用户反馈：“发现在 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen 页面中，各个标段的卡片中，‘施工量’前面的小图标没有显示出来”；
+- **底层根因分析**：
+  - 标段卡片内部原有标签使用操作系统 Emoji 字符（施工量为 `🏗️`、保温管为 `📐`、管件为 `🔩`）；
+  - `🏗️` 属于包含变体选择符（`\uD83C\uDFD7\uFE0F`）的复合 Emoji，且在 `font-size: 10.5px; font-weight: 700` 的 CSS 约束下，许多 Windows 字体渲染引擎无法正确匹配并合成该字符字形，导致被直接丢弃或呈现为空白/不可见字符；
+- **全链路架构与改动点**：
+  1. **标段卡片三轨标签全面内联矢量化（前端）**：
+     - 在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 第 1 列与第 2 列的所有 10 大标段卡片中，彻底移除不稳定的 Emoji 字符；
+     - **施工量**：配备高精度“工程起重吊机/塔吊”内联矢量 SVG 微图标（`viewBox="0 0 24 24" width="11" height="11"`，含基座、塔柱、悬臂与吊钩），工业科技感十足且 100% 任何设备与操作系统均能稳定高亮可见；
+     - **保温管**：升级为“直角工程三角板尺”内联矢量 SVG 微图标；
+     - **管件**：升级为“六角机械管件法兰/螺母”内联矢量 SVG 微图标；
+  2. **专属样式规则匹配与双主题无缝适配（前端）**：
+     - 新增 `.tag-mini-icon` CSS 类（`width: 11px; height: 11px; stroke: currentColor; vertical-align: middle;`）；
+     - 利用 `stroke: currentColor` 特性，使图标在深色科技模式下保持白色高亮，在浅色模式下自动继承翡翠绿/天蓝/琥珀金高对比度配色。
+- **改动文件**：
+  - 前端：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+
 ## 2026-09-03 [在线状态优化：消除新页面在线人数跳变闪烁 + 超时阈值调整至 80 秒]
 - **需求与业务对齐**：
   - 响应用户指令：“问题1按你说的修改，问题2，将超时时间拉长到80s”；

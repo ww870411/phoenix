@@ -1,3 +1,18 @@
+## 2026-09-03 数字指挥大屏：标段卡片施工量等三轨标签全面升级为原生内联矢量 SVG
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（数字指挥大屏 - 标段健康矩阵卡片）
+- **功能特性与视觉升级**：
+  1. **彻底根除 Emoji 兼容性缺失问题**：
+     - 排查发现部分 Windows 浏览器环境下，`🏗️`（U+1F3D7+U+FE0F）在较小字号（`10.5px`）与粗体（`font-weight: 700`）约束下无法匹配字形导致图标丢失；
+     - 将各标段卡片中全部标签图标重构为原生内联矢量 SVG：
+       - **施工量**：配备工业工程起重机/塔吊高精度 SVG 图标；
+       - **保温管**：配备工程直角三角板尺高精度 SVG 图标；
+       - **管件**：配备六角机械构件法兰/螺母高精度 SVG 图标；
+  2. **样式规则与双主题自适应**：
+     - 新增 `.tag-mini-icon` 类（`width: 11px; height: 11px; vertical-align: middle; stroke: currentColor;`）；
+     - 图标颜色自适应继承当前标签文字色彩，在深色大屏（纯白高亮）与浅色模式（翡翠绿/天蓝/琥珀金）下均极致清晰锐利，无任何平台依赖。
+
 ## 2026-09-03 在线人员 Presence：本地持久化消除跳变闪烁 + 页面切回唤醒主动补发心跳
 
 - **关联前端页面与组件**：

@@ -930,7 +930,15 @@
                           <!-- 1. 保温管 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label pipe-tag">📐 保温管</span>
+                              <span class="line-label pipe-tag">
+                                <svg class="tag-mini-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                  <path d="M21 21H3V3l18 18z"/>
+                                  <path d="M8 17v2"/>
+                                  <path d="M12 17v2"/>
+                                  <path d="M16 17v2"/>
+                                </svg>
+                                <span>保温管</span>
+                              </span>
                               <span class="line-val cyan-text">
                                 {{ sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm }}<span v-if="sec.transitKm > 0" class="transit-num-tag cyan-transit" title="在途运送量">(+{{ sec.transitKm }})</span> / {{ sec.designKm }} km
                               </span>
@@ -958,7 +966,16 @@
                           <!-- 2. 施工量 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label construct-tag">🏗️ 施工量</span>
+                              <span class="line-label construct-tag">
+                                <svg class="tag-mini-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                  <path d="M2 22h20"/>
+                                  <path d="M13 2v20"/>
+                                  <path d="M5 2h14l-7 7"/>
+                                  <path d="M13 9h-3l-2 5h5"/>
+                                  <circle cx="6" cy="14" r="1" fill="currentColor"/>
+                                </svg>
+                                <span>施工量</span>
+                              </span>
                               <span class="line-val green-text">{{ sec.installedKm || '0.00' }} / {{ sec.designKm }} km</span>
                               <span class="line-pct green-text">{{ sec.installedPercent || 0 }}%</span>
                             </div>
@@ -970,7 +987,13 @@
                           <!-- 3. 管件 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label fitting-tag">🔩 管件</span>
+                              <span class="line-label fitting-tag">
+                                <svg class="tag-mini-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                  <path d="M12 2l7 4.5v9L12 20l-7-4.5v-9L12 2z"/>
+                                  <circle cx="12" cy="11" r="3"/>
+                                </svg>
+                                <span>管件</span>
+                              </span>
                               <span class="line-val gold-text">
                                 {{ sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings }}<span v-if="sec.transitFittings > 0" class="transit-num-tag gold-transit" title="在途运送量">(+{{ sec.transitFittings }})</span> / {{ sec.totalFittings }} 件
                               </span>
@@ -1045,7 +1068,15 @@
                           <!-- 1. 保温管 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label pipe-tag">📐 保温管</span>
+                              <span class="line-label pipe-tag">
+                                <svg class="tag-mini-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                  <path d="M21 21H3V3l18 18z"/>
+                                  <path d="M8 17v2"/>
+                                  <path d="M12 17v2"/>
+                                  <path d="M16 17v2"/>
+                                </svg>
+                                <span>保温管</span>
+                              </span>
                               <span class="line-val cyan-text">
                                 {{ sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm }}<span v-if="sec.transitKm > 0" class="transit-num-tag cyan-transit" title="在途运送量">(+{{ sec.transitKm }})</span> / {{ sec.designKm }} km
                               </span>
@@ -1073,7 +1104,16 @@
                           <!-- 2. 施工量 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label construct-tag">🏗️ 施工量</span>
+                              <span class="line-label construct-tag">
+                                <svg class="tag-mini-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                  <path d="M2 22h20"/>
+                                  <path d="M13 2v20"/>
+                                  <path d="M5 2h14l-7 7"/>
+                                  <path d="M13 9h-3l-2 5h5"/>
+                                  <circle cx="6" cy="14" r="1" fill="currentColor"/>
+                                </svg>
+                                <span>施工量</span>
+                              </span>
                               <span class="line-val green-text">{{ sec.installedKm || '0.00' }} / {{ sec.designKm }} km</span>
                               <span class="line-pct green-text">{{ sec.installedPercent || 0 }}%</span>
                             </div>
@@ -1085,7 +1125,13 @@
                           <!-- 3. 管件 -->
                           <div class="sec-metric-line">
                             <div class="line-info">
-                              <span class="line-label fitting-tag">🔩 管件</span>
+                              <span class="line-label fitting-tag">
+                                <svg class="tag-mini-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                  <path d="M12 2l7 4.5v9L12 20l-7-4.5v-9L12 2z"/>
+                                  <circle cx="12" cy="11" r="3"/>
+                                </svg>
+                                <span>管件</span>
+                              </span>
                               <span class="line-val gold-text">
                                 {{ sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings }}<span v-if="sec.transitFittings > 0" class="transit-num-tag gold-transit" title="在途运送量">(+{{ sec.transitFittings }})</span> / {{ sec.totalFittings }} 件
                               </span>
@@ -5465,6 +5511,15 @@ onBeforeUnmount(() => {
   line-height: 1.2;
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+.tag-mini-icon {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .line-label.pipe-tag {
