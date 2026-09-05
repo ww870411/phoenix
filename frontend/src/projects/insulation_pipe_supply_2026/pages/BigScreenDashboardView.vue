@@ -1420,14 +1420,14 @@
 
               <div
                 class="weekly-kpi-card"
-                :class="activeWeeklyTab === 'pipe' ? 'usage-card' : 'fit-usage-card'"
+                :class="activeWeeklyTab === 'pipe' ? 'fit-usage-card' : 'usage-card'"
                 :title="activeWeeklyTab === 'pipe' ? '近7日现场累计施工使用（敷设）总量' : '近7日现场累计安装使用管件总量'"
               >
                 <div class="kpi-card-header">
-                  <span class="kpi-dot" :class="activeWeeklyTab === 'pipe' ? 'gold' : 'emerald'"></span>
+                  <span class="kpi-dot" :class="activeWeeklyTab === 'pipe' ? 'emerald' : 'gold'"></span>
                   <span class="kpi-title">{{ activeWeeklyTab === 'pipe' ? '7日累计施工量' : '7日累计安装量' }}</span>
                 </div>
-                <div class="kpi-main-val" :class="activeWeeklyTab === 'pipe' ? 'gold-text' : 'emerald-text'">
+                <div class="kpi-main-val" :class="activeWeeklyTab === 'pipe' ? 'emerald-text' : 'gold-text'">
                   {{ activeWeeklyTab === 'pipe' ? formatWeeklyKm(weeklyReport.total_usage_km) : formatWeeklyInt(weeklyFittingReport.total_usage_pcs) }}
                   <span class="unit">{{ activeWeeklyTab === 'pipe' ? 'km' : '件' }}</span>
                 </div>
@@ -2349,8 +2349,8 @@ function renderWeeklyChart() {
 
     const series1Color = isLight ? '#0284c7' : '#00f2fe'
     const series2Color = isPipe
-      ? (isLight ? '#d97706' : '#fbbf24')
-      : (isLight ? '#059669' : '#34d399')
+      ? (isLight ? '#059669' : '#34d399')
+      : (isLight ? '#d97706' : '#fbbf24')
 
     const option = {
       animation: true,
@@ -2361,7 +2361,7 @@ function renderWeeklyChart() {
       tooltip: {
         trigger: 'axis',
         backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(10, 20, 38, 0.96)',
-        borderColor: isLight ? '#cbd5e1' : (isPipe ? 'rgba(0, 242, 254, 0.4)' : 'rgba(52, 211, 153, 0.4)'),
+        borderColor: isLight ? '#cbd5e1' : (isPipe ? 'rgba(52, 211, 153, 0.4)' : 'rgba(251, 191, 36, 0.4)'),
         borderWidth: 1,
         padding: [8, 12],
         textStyle: {
@@ -2371,7 +2371,7 @@ function renderWeeklyChart() {
         axisPointer: {
           type: 'line',
           lineStyle: {
-            color: isLight ? 'rgba(2, 132, 199, 0.4)' : (isPipe ? 'rgba(0, 242, 254, 0.6)' : 'rgba(52, 211, 153, 0.6)'),
+            color: isLight ? 'rgba(2, 132, 199, 0.4)' : (isPipe ? 'rgba(52, 211, 153, 0.6)' : 'rgba(251, 191, 36, 0.6)'),
             type: 'dashed',
             width: 1.2
           }
@@ -2492,8 +2492,8 @@ function renderWeeklyChart() {
             width: 2.2,
             color: series2Color,
             shadowColor: isPipe
-              ? (isLight ? 'rgba(217, 119, 6, 0.3)' : 'rgba(251, 191, 36, 0.4)')
-              : (isLight ? 'rgba(5, 150, 105, 0.3)' : 'rgba(52, 211, 153, 0.4)'),
+              ? (isLight ? 'rgba(5, 150, 105, 0.3)' : 'rgba(52, 211, 153, 0.4)')
+              : (isLight ? 'rgba(217, 119, 6, 0.3)' : 'rgba(251, 191, 36, 0.4)'),
             shadowBlur: 8
           },
           areaStyle: {
@@ -2504,11 +2504,11 @@ function renderWeeklyChart() {
               x2: 0,
               y2: 1,
               colorStops: isPipe ? [
-                { offset: 0, color: isLight ? 'rgba(217, 119, 6, 0.24)' : 'rgba(251, 191, 36, 0.28)' },
-                { offset: 1, color: isLight ? 'rgba(217, 119, 6, 0.0)' : 'rgba(251, 191, 36, 0.0)' }
-              ] : [
                 { offset: 0, color: isLight ? 'rgba(5, 150, 105, 0.24)' : 'rgba(52, 211, 153, 0.28)' },
                 { offset: 1, color: isLight ? 'rgba(5, 150, 105, 0.0)' : 'rgba(52, 211, 153, 0.0)' }
+              ] : [
+                { offset: 0, color: isLight ? 'rgba(217, 119, 6, 0.24)' : 'rgba(251, 191, 36, 0.28)' },
+                { offset: 1, color: isLight ? 'rgba(217, 119, 6, 0.0)' : 'rgba(251, 191, 36, 0.0)' }
               ]
             }
           },
@@ -8860,7 +8860,7 @@ onBeforeUnmount(() => {
 
   .topology-layout-grid {
     min-width: 860px;
-    min-height: 640px;
+    min-height: 780px;
     width: 100%;
     height: 100%;
     grid-template-columns: 220px 38px 1fr;
@@ -8870,7 +8870,7 @@ onBeforeUnmount(() => {
 
   .topology-svg {
     min-width: 860px;
-    min-height: 640px;
+    min-height: 780px;
     width: 100%;
     height: 100%;
   }
@@ -8879,14 +8879,14 @@ onBeforeUnmount(() => {
     gap: 16px;
     padding: 2px 0;
     height: 100%;
-    min-height: 600px;
+    min-height: 740px;
     justify-content: space-around;
     box-sizing: border-box;
   }
 
   .supply-node-card {
-    min-height: 88px;
-    flex: 1 0 88px;
+    min-height: 96px;
+    flex: 1 0 96px;
     padding: 12px 14px;
     box-sizing: border-box;
   }
@@ -8911,29 +8911,29 @@ onBeforeUnmount(() => {
   .demand-systems-split {
     gap: 14px;
     height: 100%;
-    min-height: 600px;
+    min-height: 740px;
     box-sizing: border-box;
   }
 
   .system-sub-col {
     height: 100%;
-    min-height: 600px;
+    min-height: 740px;
   }
 
   .system-cards-list {
     gap: 10px;
     padding: 2px 0;
     height: 100%;
-    min-height: 600px;
+    min-height: 740px;
     justify-content: space-between;
     box-sizing: border-box;
   }
 
   .demand-node-card {
-    min-height: 122px;
-    flex: 1 0 122px;
-    padding: 8px 12px;
-    gap: 5px;
+    min-height: 146px;
+    flex: 1 0 146px;
+    padding: 6px 10px;
+    gap: 4px;
     box-sizing: border-box;
     overflow: hidden;
     display: flex;
@@ -8981,7 +8981,7 @@ onBeforeUnmount(() => {
   .sec-metrics-body {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 3.5px;
     flex: 1;
     justify-content: space-around;
     min-height: 0;
@@ -8990,7 +8990,7 @@ onBeforeUnmount(() => {
   .sec-metric-line {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1.5px;
     flex-shrink: 0;
   }
 
@@ -9036,6 +9036,39 @@ onBeforeUnmount(() => {
     height: 5px;
     border-radius: 3px;
     flex-shrink: 0;
+  }
+
+  /* 📱 移动端专属：现场库存微核算条显式保障 */
+  .demand-node-card .sec-stock-strip {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 2px 6px !important;
+    margin-top: 1px !important;
+    font-size: 9.5px !important;
+    line-height: 1.2 !important;
+    border-radius: 4px !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .demand-node-card .sec-stock-strip .stock-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    min-width: 0 !important;
+  }
+
+  .demand-node-card .sec-stock-strip .stock-label {
+    font-size: 9.5px !important;
+    white-space: nowrap !important;
+    color: #94a3b8 !important;
+  }
+
+  .demand-node-card .sec-stock-strip .stock-val {
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
   }
 
   .transit-channel-col .channel-text {

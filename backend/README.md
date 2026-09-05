@@ -1,3 +1,61 @@
+## 2026-09-05 数字指挥大屏：动态战报流（live_feed_list）中“需求量申报”数据生成与口径归档
+
+- **业务协同与模块定位**：
+  - 核心接口函数：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_big_screen_dashboard_data()`
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（右侧面板实时动态播报）
+- **数据源与生成口径**：
+  1. **查询逻辑**：扫描 `tube.tube_daily_plan` 表中 `plan_qty > 0` 的记录（按 `plan_date DESC, id DESC LIMIT 20`）；
+  2. **下发字段与格式**：
+     - `category`: `"需求量申报"`，`category_key`: `"plan"`；
+     - `headline`: `f"申报{plan_date_str}要料 · {sec_name}"`；
+     - `specification`: `f"{pipe_model_id} 保温管"`；
+     - `amount`: `f"申报需求 {plan_qty} 米"`；
+     - `shipmentCode`: `f"JH-{plan_date_str}"`；
+     - `positiveTag`: `"滚动需求计划提报，待调度排产"`。
+
+## 2026-09-03 数字指挥大屏：各标段“保温管”、“管件”、“施工量”数据输出口径与闭环模型归档
+
+- **业务协同与模块定位**：
+  - 核心接口函数：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_big_screen_dashboard_data()`
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（各标段卡片指标轨道）
+- **数据输出契约与业务口径**：
+  1. **保温管直管供应指标**：
+     - `arrivedKm`：标段实物到货量（公里）；
+     - `transitKm`：在途运输量（公里）；
+     - `designKm`：工程设计总需量（公里）；
+     - `pipePercent`：材料到货兑现率（%）；
+  2. **特种管件供应指标**：
+     - `arrivedFittings`：到场合格管件（件）；
+     - `transitFittings`：在途管件（件）；
+     - `totalFittings`：工程设计总需件数（件）；
+     - `fittingPercent`：管件到货到位率（%）；
+  3. **现场施工工程指标**：
+     - `installedKm`：累计已下沟施工量（公里）；
+     - `installedPercent`：现场施工下沟完成率（%）。
+
+## 2026-09-03 数字指挥大屏：各标段“保温管库存量”与“管件库存量”核算模型与数据流转归档
+
+- **业务协同与模块定位**：
+  - 核心计算与接口函数：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_big_screen_dashboard_data()`（`GET /api/v1/projects/{project_key}/tubes/big-screen/data`）
+  - 对应前端展现：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（各标段卡片底部的现场库存微条）
+- **核算模型与计算公式**：
+  1. **保温管库存量（直管现场堆场可用库存）**：
+     - **公式**：$\text{保温管库存量 (km)} = \max(0.0, \text{累计到货直管 (km)} - \text{累计现场施工 (km)})$
+     - **数据源**：发货签收实物量（`pipe_arrived_by_sec`，米转公里）减去标段下沟施工日报表 `tube.tube_daily_usage` 的真实聚合值（`sec_usage_map`，米转公里）；
+     - **下发字段**：`stockKm`、`stockM`；
+  2. **管件库存量（各类特种管件现场堆场可用库存）**：
+     - **公式**：$\text{管件库存量 (件)} = \max(0, \text{累计到货管件 (件)} - \text{累计施工安装管件 (件)})$
+     - **数据源**：管件到场点验件数（`fit_arrived_by_sec`）减去管件日常施工安装记录表 `tube.tube_fitting_daily_usage`（`status='active'`）累计件数（`sec_fit_usage_map`）；
+     - **下发字段**：`stockFittings`。
+
+## 2026-09-03 数字指挥大屏：移动端标段卡片高度扩容与库存量展示协同（协同说明）
+
+- **业务协同与模块定位**：
+  - 核心接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /api/v1/projects/{project_key}/tubes/big-screen/data`）
+  - 对应前端大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（移动端供需拓扑面板 `activeMobileTab === 'topology'`）
+- **协同说明**：
+  - 前端排查确认移动端媒体查询此前写死了标段卡片固定高度（`122px`）且带 `overflow: hidden`，导致新增的现场库存量微条被截断遮挡；现前端已将卡片高度扩容至 `146px` 并同步调整拓扑网格与厂家节点高度阈值，使后端下发的 `stockKm` 与 `stockFittings` 数据在移动端手机屏幕上同样完整、端正可见。
+
 ## 2026-09-03 数字指挥大屏：标段实体扩充保温管现场库存量字段（`stockKm` / `stockM`）
 
 - **业务协同与模块定位**：

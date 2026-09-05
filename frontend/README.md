@@ -1,3 +1,72 @@
+## 2026-09-05 数字指挥大屏：本周战报（保温管 vs 管件）图表曲线色彩规范归档
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（右侧面板下半部分 `.weekly-report-panel` 本周战报双轨折线图）
+- **曲线色彩口径（`renderWeeklyChart`）**：
+  1. **本周保温管施工战报（保温管 Tab）**：
+     - **施工量曲线（Series 2）**：深色科技模式为 **翡翠绿 / 薄荷绿 (`#34d399`)**，浅色模式为 **森林绿 (`#059669`)**，带翠绿色半透明渐变面积阴影；
+     - **发货量曲线（Series 1）**：深色模式为 **科技青蓝 (`#00f2fe`)**，浅色模式为 **蔚蓝 (`#0284c7`)**；
+     - **顶部 KPI 卡片**：指示灯为 `emerald`，大字数值为 `emerald-text`；
+  2. **本周管件施工战报（管件 Tab）**：
+     - **安装量曲线（Series 2）**：深色科技模式为 **琥珀金 / 明黄色 (`#fbbf24`)**，浅色模式为 **琥珀橙 (`#d97706`)**，带金色半透明渐变面积阴影；
+     - **发运量曲线（Series 1）**：深色模式为 **科技青蓝 (`#00f2fe`)**，浅色模式为 **蔚蓝 (`#0284c7`)**；
+     - **顶部 KPI 卡片**：指示灯为 `gold`，大字数值为 `gold-text`。
+
+## 2026-09-05 数字指挥大屏：实时动态播报（Live Feed）中“需求量申报”显示逻辑与表述分析
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（右侧面板 `.live-feed-panel` 全网工程实时动态播报）
+- **动态卡片呈现逻辑**：
+  1. **分类归属**：`category_key: "plan"`，标签展示为 `📋 需求量申报`；
+  2. **四行排版与表述口径**：
+     - **Row 1**：分类标签 `需求量申报` + 经办人 `👤 {filled_by}`（缺省 `标段材料员`）+ 发生时间；
+     - **Row 2**：左侧动作 `申报{MM-DD}要料`，右侧标段名称（无流向箭头，两端对齐）；
+     - **Row 3**：左侧规格型号，右侧高亮徽章显示 `申报需求 {plan_qty} 米`；
+     - **Row 4**：单号 `🔖 JH-{MM-DD}`，正向评价 `✨ 滚动需求计划提报，待调度排产`；
+  3. **交互联动**：点击/悬停卡片高亮对应标段节点，不触发激光发货飞线；大盘库存缺口胶囊联动预警。
+
+## 2026-09-03 数字指挥大屏：标段卡片“保温管”、“管件”、“施工量”数据展示口径与闭环模型归档
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（各标段节点卡片 `.demand-node-card` 指标轨道）
+- **数据展示结构与业务内涵**：
+  1. **保温管行（材料保供线）**：
+     - 展示格式：`{arrivedKm} (+{transitKm}) / {designKm} km  {pipePercent}%`；
+     - 业务含义：`已到场验收总量 (+在途运输量) / 设计总里程`；右侧百分比为**到货保供率**（材料到位程度）；
+  2. **管件行（关键配件保供线）**：
+     - 展示格式：`{arrivedFittings} (+{transitFittings}) / {totalFittings} 件  {fittingPercent}%`；
+     - 业务含义：`已到场验收管件 (+在途运输管件) / 设计总需管件`；右侧百分比为**管件到位率**；
+  3. **施工量行（工程铺设线）**：
+     - 展示格式：`{installedKm} / {designKm} km  {installedPercent}%`；
+     - 业务含义：`已下沟施工安装量 / 设计总里程`；右侧百分比为**现场施工进度率**；
+  4. **库存量行（现场可用现货）**：
+     - 展示格式：`保温管库存量: {stockKm}km / 管件库存量: {stockFittings}件`；
+     - 业务含义：$\text{已到场} - \text{已安装}$，反映当前堆场/库房中未经下沟消耗的实物现存量。
+
+## 2026-09-03 数字指挥大屏：标段卡片“保温管库存量”与“管件库存量”计算公式与渲染机制归档
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（数字指挥大屏 - 标段节点微进度与现场库存量微核算条）
+- **核心计算与渲染机制**：
+  1. **双轨库存量数据源溯源**：
+     - **保温管库存量 (km)**：$\text{现场可用库存} = \max(0, \text{累计到货直管 (km)} - \text{累计施工直管 (km)})$，字段优先取后端精准核算的 `sec.stockKm`；
+     - **管件库存量 (件)**：$\text{现场可用管件} = \max(0, \text{累计到货管件 (件)} - \text{累计安装管件 (件)})$，字段优先取后端精准核算的 `sec.stockFittings`；
+  2. **前端自适应容错计算**：
+     - 若接口字段尚未到达，前端使用 `Math.max(0, Math.round(((sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm) - (sec.installedKm || 0)) * 100) / 100)` 进行双保险兜底实时算力支撑，杜绝数据空白或 NaN。
+
+## 2026-09-03 数字指挥大屏：移动端标段卡片高度扩容与“现场库存量微条”裁切遮挡修复
+
+- **关联前端页面与组件**：
+  - [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（数字指挥大屏 - 移动端拓扑面板 `activeMobileTab === 'topology'`）
+- **功能特性与移动端修复**：
+  1. **彻底解决移动端第四行裁切问题**：
+     - 排查发现移动端媒体查询（`@media (max-width: 900px)`）下，各标段卡片固定写死了 `min-height: 122px; flex: 1 0 122px; overflow: hidden;`，桌面端新增第四行现场库存量微条后，卡片总高增至约 142px，导致第四行被 `overflow: hidden` 强制截断裁切；
+     - 将移动端标段卡片高度扩容为 `min-height: 146px; flex: 1 0 146px;`，内边距优化为 `padding: 6px 10px; gap: 4px;`，轨道间距优化为 `gap: 1.5px;`；
+  2. **拓扑双翼自适应与视觉对齐**：
+     - 同步提升左侧供货厂家与拓扑网格高度阈值（`.topology-layout-grid` 最小高度提升至 780px，供货与标段立柱最小高度提升至 740px），确保移动端手势滑动下左右节点垂直对齐与贝塞尔连线精准命中；
+  3. **显式保障移动端库存微条呈现**：
+     - 为 `.demand-node-card .sec-stock-strip` 编写移动端专属样式，强制 `flex-shrink: 0 !important; font-size: 9.5px !important;`，100% 确保在手机端完整高亮展示“保温管库存量”与“管件库存量”。
+
 ## 2026-09-03 数字指挥大屏：标段卡片底部现场库存微核算条（“保温管库存量”与“管件库存量”双轨呈现）
 
 - **关联前端页面与组件**：

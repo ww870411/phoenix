@@ -2067,12 +2067,12 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "target": sec_name,
                     "headline": f"申报{plan_date_str}要料 · {sec_name}",
                     "specification": model_name,
-                    "amount": f"申报调拨 {int(float(pl['plan_qty']))} 米",
+                    "amount": f"申报需求 {int(float(pl['plan_qty']))} 米",
                     "shipmentCode": f"JH-{plan_date_str}",
                     "vehiclePlate": "要料计划申报",
                     "operator": fill_op,
                     "time": t_str,
-                    "positiveTag": f"滚动调拨计划提报，待调度排产",
+                    "positiveTag": f"滚动需求计划提报，待调度排产",
                     "isNew": False,
                     "raw_time": raw_t
                 })
