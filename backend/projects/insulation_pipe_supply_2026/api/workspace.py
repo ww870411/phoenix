@@ -36,6 +36,7 @@ from backend.projects.insulation_pipe_supply_2026.services.config_service import
     get_usage_collection_date,
     load_tube_config,
     load_section_1_submission_status,
+    record_supply_entity_contact,
     resolve_accessible_supply_entity_ids,
     resolve_accessible_section_1_ids,
     resolve_supply_entity_allowed_section_ids,
@@ -439,6 +440,12 @@ class WarehouseConfirmPayload(BaseModel):
     remark: str = ""
 
 
+class SupplyContactSavePayload(BaseModel):
+    supply_entity_id: str
+    contact_name: str
+    contact_phone: str = ""
+
+
 class DiffApprovePayload(BaseModel):
     approved: bool
     remark: str = ""
@@ -741,6 +748,7 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
         "auto_receive_timeout_hours",
         "fitting_config",
         "supply_entities",
+        "supply_entity_contacts",
         "demand_entities",
         "pipe_models",
         "production_capacities",
@@ -917,6 +925,10 @@ def _save_config_section(section: str, data: Any) -> Dict[str, Any]:
             print(f"⚠️ 保存管件基准量至 tube.tube_fitting_baseline 发生异常: {exc}")
         # 彻底从 JSON 结构中剔除 fitting_baselines，确保配置纯净
         payload.pop("fitting_baselines", None)
+    elif normalized_section == "supply_entity_contacts":
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=422, detail="supply_entity_contacts 必须为对象")
+        payload[normalized_section] = data
     else:
         if not isinstance(data, list):
             raise HTTPException(status_code=422, detail=f"{normalized_section} 必须为数组")
@@ -1064,18 +1076,28 @@ def _serialize_supply_entity_options(
     payload: Dict[str, Any],
     accessible_supply_entity_ids: set[str],
 ) -> List[Dict[str, Any]]:
+    contacts_map = payload.get("supply_entity_contacts") or {}
     rows: List[Dict[str, Any]] = []
     for item in get_config_list(payload, "supply_entities"):
         entity_id = str(item.get("entity_id") or "").strip()
         if not entity_id or entity_id not in accessible_supply_entity_ids:
             continue
+        c_name = item.get("contact_name") or ""
+        c_phone = item.get("contact_phone") or ""
+        if isinstance(contacts_map, dict) and entity_id in contacts_map:
+            c_list = contacts_map.get(entity_id) or []
+            for c in c_list:
+                if c.get("is_default") and c.get("contact_name"):
+                    c_name = str(c.get("contact_name")).strip()
+                    c_phone = str(c.get("contact_phone") or "").strip()
+                    break
         rows.append(
             {
                 "entity_id": entity_id,
                 "code": str(item.get("code") or "").strip().upper(),
                 "entity_name": item.get("entity_name") or entity_id,
-                "contact_name": item.get("contact_name") or "",
-                "contact_phone": item.get("contact_phone") or "",
+                "contact_name": c_name,
+                "contact_phone": c_phone,
                 "section_1_ids": item.get("section_1_ids") or [],
                 "is_custom": bool(item.get("is_custom")),
             }
@@ -2554,12 +2576,30 @@ def get_supply_management_options(
             "unit": session.unit,
         },
         "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
+        "supply_entity_contacts": payload.get("supply_entity_contacts") or {},
         "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
         "pipe_models": _serialize_pipe_options(payload),
         "fitting_config": payload.get("fitting_config") or {},
         "show_date": get_configured_show_date(payload).isoformat(),
         "plan_start_date": get_configured_plan_start_date(payload).isoformat(),
         "current_supply_entity_ids": sorted(accessible_supply_entity_ids),
+    }
+
+
+@router.post("/supply-management/contacts", summary="保存并设置供给主体默认联系人")
+def save_supply_entity_contact_endpoint(
+    payload: SupplyContactSavePayload,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    record_supply_entity_contact(
+        payload.supply_entity_id,
+        payload.contact_name,
+        payload.contact_phone or "",
+    )
+    cfg = load_tube_config()
+    return {
+        "ok": True,
+        "supply_entity_contacts": cfg.get("supply_entity_contacts") or {},
     }
 
 
@@ -3005,6 +3045,13 @@ def create_supply_management_delivery_batch(
             client_ip=_get_client_ip(request)
         )
         
+    if payload.supply_entity_id and payload.ship_contact_name:
+        record_supply_entity_contact(
+            payload.supply_entity_id,
+            payload.ship_contact_name,
+            payload.ship_contact_phone or "",
+        )
+
     return {
         "ok": True,
         "project_key": PROJECT_KEY,
@@ -5707,12 +5754,19 @@ def handle_submit_fitting_delivery(
     allowed_section_ids = resolve_supply_entity_allowed_section_ids(config, payload.supply_entity_id)
     if allowed_section_ids and payload.section_1_id.strip().lower() not in _normalized_access_ids(allowed_section_ids):
         raise HTTPException(status_code=403, detail="当前供给主体无该标段的管件发货权限")
-    return submit_fitting_delivery(
+    res = submit_fitting_delivery(
         payload.model_dump(),
         operator=session.username,
         operator_group=session.group,
         client_ip=_get_client_ip(request),
     )
+    if payload.supply_entity_id and payload.ship_contact_name:
+        record_supply_entity_contact(
+            payload.supply_entity_id,
+            payload.ship_contact_name,
+            payload.ship_contact_phone or "",
+        )
+    return res
 
 
 @router.post("/workspace/fitting_deliveries/confirm_arrival", summary="确认管件现场到货")

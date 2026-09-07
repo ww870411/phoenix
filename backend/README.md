@@ -1,3 +1,19 @@
+## 2026-09-07 供给管理：供给主体联系人列表记忆与发货自动沉淀机制
+
+- **新增配置区块与数据源**：
+  - 文件：[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+  - 新增顶层节点 `supply_entity_contacts`，结构为 `{ [entity_id: string]: Array<{ contact_name, contact_phone, is_default, created_at }> }`，用于独立管理各厂家的常用经办人多条目名录。
+- **服务层与接口层改动**：
+  - **服务方法 (`config_service.py`)**：
+    - 新增 `record_supply_entity_contact(entity_id, contact_name, contact_phone)`：处理经办人查重、最新项设为 `is_default=True` 并置顶、历史项降级及最多保留 15 条自动截断；
+    - 在 `load_tube_config()` 中增加 `supply_entity_contacts` 结构保底检查。
+  - **接口与白名单 (`workspace.py`)**：
+    - 在 `_save_config_section` 的 `allowed_sections` 中注册 `"supply_entity_contacts"`；
+    - 在 `_serialize_supply_entity_options` 中优先提取 `supply_entity_contacts` 中被标记为默认的联系人；
+    - 在 `GET /supply-management/options` 接口响应中透传 `supply_entity_contacts` 节点；
+    - 新增接口：`POST /supply-management/contacts`，提供显式保存并设置默认联系人能力；
+    - 在 `POST /supply-management/deliveries/batch` 与 `POST /workspace/fitting_deliveries/submit` 两个发货接口成功执行后，自动调用 `record_supply_entity_contact` 沉淀最新经办人。
+
 ## 2026-09-05 数字指挥大屏：动态战报流（live_feed_list）中“需求量申报”数据生成与口径归档
 
 - **业务协同与模块定位**：

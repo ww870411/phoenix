@@ -1,3 +1,18 @@
+## 2026-09-07 供给管理：发货经办人可输可选下拉 Combobox 与多条目记忆沉淀组件
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 涉及区域：Tab 2（批量发货与车次装配 `category=pipe&tab=register`）与 Tab 4（管件发货登记 `category=fitting&tab=fitting`）中的“发货联系人 / 发货经办人”输入区域。
+- **组件结构与交互特性**：
+  1. **Combobox 复合交互能力**：
+     - 用户点击或聚焦联系人输入框，或点击标签右侧的 `📋 常用 (N) ▾` 按钮时，展开悬浮下拉推荐卡片（`.contact-dropdown-panel`）；
+     - 条目展示：经办人姓名（`👤`）、联系电话（`📞`）以及当前默认徽章（`默认`）；
+     - 点击某一项（`@mousedown.prevent="selectDeliveryContact(item)"`）自动瞬间同时回填【姓名】与【联系电话】，并收起浮层；
+     - 允许操作员直接在输入框中通过键盘键入全新姓名与电话号码。
+  2. **默认回填与切换优先级**：
+     - 进入页面或通过下拉框切换“供给主体”时，优先提取 `supply_entity_contacts[entity_id]` 中标记为 `is_default: true` 的条目回填；
+     - 在直管车次提交或管件发货提交成功后，前端响应式方法 `updateLocalContactDefault` 自动将当前填写的经办人置为最新默认并置顶，实现全流程免刷新、无感沉淀。
+
 ## 2026-09-05 数字指挥大屏：本周战报（保温管 vs 管件）图表曲线色彩规范归档
 
 - **关联前端页面与组件**：

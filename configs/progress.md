@@ -1,3 +1,108 @@
+## 2026-09-07 [发货管理：现有联系人修改电话号码时原地同步更新配置文件]
+- **需求与业务规则**：
+  - 响应用户指令：“如果用户选择了某一个现有的联系人，但是，他修改了电话号码，则配置文件中 supply_entity_contacts 部分相应人员的电话号码也需要更新”；
+- **具体实现与流转机制**：
+  1. **后端服务层 (`config_service.py`)**：
+     - 文件：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py) 中的 `record_supply_entity_contact()` 函数；
+     - 调整匹配逻辑：优先按人员姓名（`contact_name`）在当前主体的联系人名录中查找匹配项；
+     - 原地更新电话：若匹配到同名人员且传入了新电话号码，直接更新该条目的 `contact_phone`，并更新 `updated_at`；同时设为 `is_default=True` 并置顶至列表首位；若修改的是基础档案中的法人/默认人员，同步更新 `supply_entities` 节点中的 `contact_phone`；
+  2. **前端响应式方法 (`SupplyManagementView.vue`)**：
+     - 文件：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中的 `updateLocalContactDefault()` 函数；
+     - 同步调整前端本地响应式状态的匹配逻辑：当姓名匹配时原地覆写其 `contact_phone`，置顶为默认，保证界面无需刷新即刻展现修改后的新电话号码；
+  3. **测试与构建验证**：
+     - Python 单元执行电话变更与置顶测试通过（实测将开元“宋波”电话由 13940478275 变更为 13900000000 成功写盘，随后恢复并保证薛向新默认锁定）；
+     - 前端执行 `npm run build` 生产构建成功通过（`✓ built in 19.15s`）。
+
+## 2026-09-07 [发货管理：开元与鑫瑞得常用联系人名录扩充与默认人员锁定]
+- **需求与录入清单**：
+  - 响应用户指令，为开元（`kaiyuan`）扩充 1 名联系人，为鑫瑞得（`xinruide`）扩充 10 名现场联系人，且锁定当前默认联系人不变：
+  - **大连开元 (`kaiyuan`)**：
+    * 默认联系人：**薛向新 / 13998603445**（保持默认 `is_default: true`）
+    * 扩充新增：**宋波 / 13940478275** (`is_default: false`)
+  - **河北鑫瑞得 (`xinruide`)**：
+    * 默认联系人：**刘宁 / 18230465777**（保持默认 `is_default: true`）
+    * 扩充新增/整理：
+      - 戚超 / 15100797605
+      - 康寿良 / 15075711089
+      - 孟勇 / 18631782196
+      - 满仓 / 13832709257
+      - 王增福 / 13311278339
+      - 蒋观猛 / 17731730999
+      - 陈德生 / 15642247773
+      - 高俊伟 / 19931764455
+      - 黄万强 / 17703371920
+      - 刘铁峰 / 13804386058
+      （以上 10 人均录入为常用备选经办人，`is_default: false`）；
+- **落地验证**：
+  - [`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 写入成功并通过只读加载验证；
+  - 前端发货页面打开或切换至对应主体时，默认输入框仍然自动回显原默认人员（薛向新 / 刘宁），点击输入框或点击“📋 常用 ▾”即可一键点选上述新增人员。
+
+## 2026-09-07 [发货管理：各供给主体最新保温管/管件发货记录联系人数据排查]
+- **需求与排查目标**：
+  - 读取各供给主体的保温管（`tube.tube_delivery`）与管件（`tube.tube_fitting_delivery`）最新 5 条发货记录，排查是否存在填报非默认联系人的真实业务数据；
+- **排查结果与核心发现**：
+  1. **保温管发货 (`tube.tube_delivery`)**：
+     - **大连开元 (`kaiyuan`)**：最新 5 条记录联系人全部为默认联系人 **薛向新 (13998603445)**，完全一致；
+     - **河北鑫瑞得 (`xinruide`)**：最新 5 条记录**全部使用了非默认联系人**！
+       * 最新车次 `SSB-260907-001`（2026-09-07 00:20）：填报人为 **戚超 (15100797605)**（默认配置为刘宁 18230465777）；
+       * 车次 `SSB-260905-001`（2026-09-05 09:36）：填报人为 **康寿良 (15075711089)**；
+  2. **管件发货 (`tube.tube_fitting_delivery`)**：
+     - **大连开元 (`kaiyuan`)**：最新 5 条记录全部为默认经办人 **薛向新 (13998603445)**；
+     - **江苏沃圣 (`wosheng`)**：最新 5 条记录全部为默认经办人 **秦杰 (13520598794)**；
+     - **天津卡尔斯 (`kaersi`)**：最新 5 条记录全部为默认经办人 **贾祥娟 (18311089570)**；
+     - **河北鑫瑞得 (`xinruide`)**：最新 5 条记录**全部使用了非默认联系人**！
+       * 最新车次 `FSSB-260907-001`（2026-09-07 00:27）：填报经办人全部为 **戚超 (15100797605)**；
+  3. **数据沉淀与兼容强化**：
+     - 已将排查出的真实经办人（“戚超 15100797605”设为最新默认、“康寿良 15075711089”设为常用）直接补充进 [`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 的 `xinruide` 节点；
+     - 优化了 [`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py) 中 `record_supply_entity_contact` 的主体 ID 匹配逻辑，无缝兼容管件发货中可能传入的大写 `XINRUIDE`，消除大小写不一致隐患。
+
+## 2026-09-07 [发货管理：供给主体联系人列表记忆与自动设为默认机制全面落地]
+- **需求与变更动因**：
+  - 响应用户指令：“直接对配置文件下手，新增一块内容保存联系人信息，首先是当前配置的联系人且标记为默认；之后用户填入别的联系人信息自动保存并标记为默认；界面上允许点击联系人输入框自行填入或从已有条目选择”；
+- **具体改动点与落地模块**：
+  1. **底座配置扩展 (`tube_config.json`)**：
+     - 文件：[`backend_data/projects/insulation_pipe_supply_2026/tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)；
+     - 新增顶层节点 `supply_entity_contacts`，初始化当前全部 7 个供给主体（开元、鑫瑞得、沃圣、卡尔斯、泽悦、天地龙、吴近）的基础联系人条目并标注 `"is_default": true`；
+  2. **后端配置服务与自动沉淀逻辑 (`config_service.py` & `workspace.py`)**：
+     - 文件：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)；
+       - 在 `load_tube_config` 增加对 `supply_entity_contacts` 的保底检查；
+       - 实现核心工具函数 `record_supply_entity_contact(entity_id, contact_name, contact_phone)`：支持自动查重置顶、将历史同名项或新项设为 `is_default=True`，其余项置为 `False`，限制保留最近 15 条并写盘；
+     - 文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)；
+       - 在 `_save_config_section` 白名单中注册 `"supply_entity_contacts"` 并增加对象类型校验；
+       - 在 `_serialize_supply_entity_options` 中优先提取 `supply_entity_contacts` 中被标记为默认的联系人；
+       - 在 `get_supply_management_options` 选项接口透传 `supply_entity_contacts` 节点；
+       - 新增端点 `POST /api/v1/projects/insulation_pipe_supply_2026/supply-management/contacts`；
+       - 在保温管批量发货（`create_supply_management_delivery_batch`）与管件发货（`handle_submit_fitting_delivery`）接口返回前，静默调用 `record_supply_entity_contact` 自动沉淀经办人；
+  3. **前端可输入/可选择下拉 Combobox (`SupplyManagementView.vue`)**：
+     - 文件：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)；
+     - 引入 `supplyEntityContactsMap`、`currentEntityContacts` 等响应式状态与 `selectDeliveryContact`/`selectFittingContact` 选择函数；
+     - 在 Tab 2（保温管发货登记）与 Tab 4（管件发货登记）中的发货联系人输入框处，实现悬浮下拉选择卡片（展示经办人姓名、电话与默认徽章），点击即可同时回填姓名与电话；支持直接打字修改；
+     - `watch(selectedSupplyEntityId)` 优先注入默认联系人；单次提交成功后前端响应式无感置顶最新经办人；
+  4. **验证与交付**：
+     - 后端 Python 模块加载语法校验通过（`Workspace import ok`）；
+     - 前端执行 `npm run build` 生产构建成功通过（`✓ built in 19.26s`）。
+
+## 2026-09-07 [发货管理：管件与保温管发货默认联系人信息自动填充机制与取值链路排查]
+- **需求与业务对齐**：
+  - 用户询问：在管件发货（`category=fitting&tab=fitting`）和保温管发货（`category=pipe&tab=register`）页面填写发货信息时，是否会自动填入默认发货联系人信息，以及这些信息是从哪里取得的；
+- **排查结论与技术实现链路**：
+  1. **自动填充行为确认**：
+     - 是的，系统会自动填入默认的发货联系人姓名（`shipContactName`）和联系电话（`shipContactPhone`）；
+  2. **数据源层（持久化配置）**：
+     - 文件位置：[`backend_data/projects/insulation_pipe_supply_2026/tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 中的 `supply_entities` 数组；
+     - 每个供给主体节点中维护了 `contact_name`（如“薛向新”、“刘宁”等）和 `contact_phone`；系统管理员可在“全局管理”（[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)）界面中的“供给主体设置”卡片直接在线修改维护；
+  3. **后端接口层（API 与序列化）**：
+     - 接口：`GET /api/v1/projects/insulation_pipe_supply_2026/supply-management/options`；
+     - 后端模块：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_supply_management_options()` 调用 `_serialize_supply_entity_options()`，提取各供给主体的 `contact_name` 和 `contact_phone` 随选项透传给前端；
+  4. **前端响应与联动（自动回填与沿用）**：
+     - 前端页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)；
+     - 页面加载时执行 `loadOptions()` 获取供给主体列表；通过 `watch(selectedSupplyEntityId)` 监听当前选中的主体，自动执行：
+       `deliveryForm.value.shipContactName = matchedEntity.contact_name || ''`
+       `deliveryForm.value.shipContactPhone = matchedEntity.contact_phone || ''`
+       `fittingForm.value.shipContactName = matchedEntity.contact_name || ''`
+       `fittingForm.value.shipContactPhone = matchedEntity.contact_phone || ''`
+     - 当管理员切换供给主体时，自动刷新替换为对应主体的默认联系人；单次发货提交后，系统在重置明细时依然保留该联系人信息，免去连续装车重复填写的操作负担。
+
 ## 2026-09-05 [数字指挥大屏：本周战报“保温管施工量”与“管件安装量”全链路视觉色彩对调（保温管绿色 / 管件金色）]
 - **需求与变更动因**：
   - 响应用户指令：“保温管的‘施工量’和管件的‘安装量’，颜色调换吧”；

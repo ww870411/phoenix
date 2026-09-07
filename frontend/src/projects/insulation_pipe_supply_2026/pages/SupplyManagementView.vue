@@ -339,9 +339,47 @@
                 </div>
 
                 <div class="form-row-2col">
-                  <label class="field">
-                    <span>联系人</span>
-                    <input v-model.trim="deliveryForm.shipContactName" type="text" maxlength="50" placeholder="发货联系人" />
+                  <label class="field contact-field-wrapper" style="position: relative;">
+                    <span style="display: flex; justify-content: space-between; align-items: center;">
+                      <span>联系人</span>
+                      <span
+                        v-if="currentEntityContacts.length"
+                        class="contact-hint-badge"
+                        style="font-size: 11px; color: #6366f1; cursor: pointer; user-select: none;"
+                        @mousedown.prevent="showDeliveryContactDropdown = !showDeliveryContactDropdown"
+                      >
+                        📋 常用 ({{ currentEntityContacts.length }}) ▾
+                      </span>
+                    </span>
+                    <div style="position: relative;">
+                      <input
+                        v-model.trim="deliveryForm.shipContactName"
+                        type="text"
+                        maxlength="50"
+                        placeholder="发货联系人（可手填或下拉选择）"
+                        autocomplete="off"
+                        @focus="showDeliveryContactDropdown = true"
+                        @blur="hideDeliveryContactDropdownLater"
+                      />
+                      <div
+                        v-if="showDeliveryContactDropdown && currentEntityContacts.length"
+                        class="contact-dropdown-panel"
+                      >
+                        <div
+                          v-for="(item, idx) in currentEntityContacts"
+                          :key="idx"
+                          class="contact-dropdown-item"
+                          :class="{ active: item.contact_name === deliveryForm.shipContactName }"
+                          @mousedown.prevent="selectDeliveryContact(item)"
+                        >
+                          <div class="contact-item-main">
+                            <span class="contact-item-name">👤 {{ item.contact_name }}</span>
+                            <span v-if="item.is_default" class="contact-default-tag">默认</span>
+                          </div>
+                          <span class="contact-item-phone">📞 {{ item.contact_phone || '无电话' }}</span>
+                        </div>
+                      </div>
+                    </div>
                   </label>
 
                   <label class="field">
@@ -617,9 +655,48 @@
                 <input :value="currentSupplyEntityLabel" type="text" disabled class="input" style="background: #f1f5f9; color: #64748b; padding: 6px 10px; font-size: 13px;" />
               </label>
 
-              <label class="field">
-                <span style="font-size: 13px;">发货经办人</span>
-                <input v-model.trim="fittingForm.shipContactName" type="text" placeholder="选填" class="input" style="padding: 6px 10px; font-size: 13px;" />
+              <label class="field contact-field-wrapper" style="position: relative;">
+                <span style="font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+                  <span>发货经办人</span>
+                  <span
+                    v-if="currentEntityContacts.length"
+                    class="contact-hint-badge"
+                    style="font-size: 11px; color: #6366f1; cursor: pointer; user-select: none;"
+                    @mousedown.prevent="showFittingContactDropdown = !showFittingContactDropdown"
+                  >
+                    📋 常用 ({{ currentEntityContacts.length }}) ▾
+                  </span>
+                </span>
+                <div style="position: relative;">
+                  <input
+                    v-model.trim="fittingForm.shipContactName"
+                    type="text"
+                    placeholder="选填（可手填或下拉选择）"
+                    autocomplete="off"
+                    class="input"
+                    style="padding: 6px 10px; font-size: 13px;"
+                    @focus="showFittingContactDropdown = true"
+                    @blur="hideFittingContactDropdownLater"
+                  />
+                  <div
+                    v-if="showFittingContactDropdown && currentEntityContacts.length"
+                    class="contact-dropdown-panel"
+                  >
+                    <div
+                      v-for="(item, idx) in currentEntityContacts"
+                      :key="idx"
+                      class="contact-dropdown-item"
+                      :class="{ active: item.contact_name === fittingForm.shipContactName }"
+                      @mousedown.prevent="selectFittingContact(item)"
+                    >
+                      <div class="contact-item-main">
+                        <span class="contact-item-name">👤 {{ item.contact_name }}</span>
+                        <span v-if="item.is_default" class="contact-default-tag">默认</span>
+                      </div>
+                      <span class="contact-item-phone">📞 {{ item.contact_phone || '无电话' }}</span>
+                    </div>
+                  </div>
+                </div>
               </label>
 
               <label class="field">
@@ -2137,6 +2214,77 @@ const supplyEntityOptions = ref([])
 const customSupplyEntities = ref([])
 const isCustomInputMode = ref(false)
 const customEntityInput = ref('')
+const supplyEntityContactsMap = ref({})
+const showDeliveryContactDropdown = ref(false)
+const showFittingContactDropdown = ref(false)
+
+const currentEntityContacts = computed(() => {
+  const entityId = selectedSupplyEntityId.value || ''
+  if (!entityId) return []
+  return supplyEntityContactsMap.value[entityId] || []
+})
+
+const hideDeliveryContactDropdownLater = () => {
+  setTimeout(() => {
+    showDeliveryContactDropdown.value = false
+  }, 220)
+}
+
+const hideFittingContactDropdownLater = () => {
+  setTimeout(() => {
+    showFittingContactDropdown.value = false
+  }, 220)
+}
+
+const selectDeliveryContact = (contact) => {
+  if (!contact) return
+  deliveryForm.value.shipContactName = contact.contact_name || ''
+  deliveryForm.value.shipContactPhone = contact.contact_phone || ''
+  showDeliveryContactDropdown.value = false
+}
+
+const selectFittingContact = (contact) => {
+  if (!contact) return
+  fittingForm.value.shipContactName = contact.contact_name || ''
+  fittingForm.value.shipContactPhone = contact.contact_phone || ''
+  showFittingContactDropdown.value = false
+}
+
+const updateLocalContactDefault = (entityId, name, phone) => {
+  if (!entityId || !name) return
+  const currentList = supplyEntityContactsMap.value[entityId] ? [...supplyEntityContactsMap.value[entityId]] : []
+  let found = false
+  const updatedList = currentList.map((item) => {
+    if (item.contact_name === name) {
+      found = true
+      return {
+        ...item,
+        contact_phone: phone !== undefined && phone !== null && phone !== '' ? phone : item.contact_phone,
+        is_default: true,
+        updated_at: new Date().toISOString(),
+      }
+    }
+    return { ...item, is_default: false }
+  })
+  if (!found) {
+    updatedList.unshift({
+      contact_name: name,
+      contact_phone: phone || '',
+      is_default: true,
+      created_at: new Date().toISOString(),
+    })
+  } else {
+    const idx = updatedList.findIndex((item) => item.contact_name === name)
+    if (idx > 0) {
+      const [item] = updatedList.splice(idx, 1)
+      updatedList.unshift(item)
+    }
+  }
+  supplyEntityContactsMap.value = {
+    ...supplyEntityContactsMap.value,
+    [entityId]: updatedList,
+  }
+}
 
 const allSupplyEntityOptions = computed(() => {
   const rawFromBackend = supplyEntityOptions.value || []
@@ -3124,6 +3272,11 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
       fittingForm.value.shippedAt = getNowISOString()
       pendingSubmitPayload.value = null
       recentFittingShipmentData.value = null
+      updateLocalContactDefault(
+        fittingForm.value.supplyEntityId || selectedSupplyEntityId.value,
+        fittingForm.value.shipContactName,
+        fittingForm.value.shipContactPhone
+      )
       loadFittingDeliveries()
     } else {
       fittingActionMsg.value = { type: 'error', text: data?.detail || '提交失败' }
@@ -3916,6 +4069,7 @@ function normalizeOptionsPayload(response) {
   return {
     currentGroup: response.user?.group || '',
     supplyEntities: response.supply_entities || [],
+    supplyEntityContacts: response.supply_entity_contacts || {},
     section_1s: response.section_1s || [],
     pipeModels: response.pipe_models || [],
     showDate: response.show_date || response.biz_date || '',
@@ -4037,6 +4191,7 @@ async function loadOptions() {
     const normalized = normalizeOptionsPayload(response)
     currentGroup.value = normalized.currentGroup
     supplyEntityOptions.value = normalized.supplyEntities
+    supplyEntityContactsMap.value = normalized.supplyEntityContacts || {}
     section1Options.value = normalized.section_1s
     allPipeModelOptions.value = normalized.pipeModels
     currentSupplyEntityIds.value = normalized.currentSupplyEntityIds
@@ -4176,6 +4331,11 @@ async function submitDeliveryBatch() {
     nextForm.shipContactPhone = deliveryForm.value.shipContactPhone || ''
     deliveryForm.value = nextForm
     deliveryForm.value.supplyEntityId = currentSupplyEntityId
+    updateLocalContactDefault(
+      currentSupplyEntityId || selectedSupplyEntityId.value,
+      nextForm.shipContactName,
+      nextForm.shipContactPhone
+    )
     draftDeliveryItems.value = []
     await Promise.all([loadDemandSummary(), loadDeliveries()])
   } catch (error) {
@@ -4259,12 +4419,15 @@ watch(selectedSupplyEntityId, (value) => {
     deliveryForm.value.supplyEntityId = value
     fittingForm.value.supplyEntityId = value
     const matchedEntity = allSupplyEntityOptions.value.find((item) => item.entity_id === value)
-    if (matchedEntity) {
-      deliveryForm.value.shipContactName = matchedEntity.contact_name || ''
-      deliveryForm.value.shipContactPhone = matchedEntity.contact_phone || ''
-      fittingForm.value.shipContactName = matchedEntity.contact_name || ''
-      fittingForm.value.shipContactPhone = matchedEntity.contact_phone || ''
-    }
+    const entityContacts = supplyEntityContactsMap.value[value] || []
+    const defaultContact = entityContacts.find((c) => c.is_default) || entityContacts[0]
+    const defaultName = defaultContact?.contact_name || matchedEntity?.contact_name || ''
+    const defaultPhone = defaultContact?.contact_phone || matchedEntity?.contact_phone || ''
+
+    deliveryForm.value.shipContactName = defaultName
+    deliveryForm.value.shipContactPhone = defaultPhone
+    fittingForm.value.shipContactName = defaultName
+    fittingForm.value.shipContactPhone = defaultPhone
     const validValues = new Set(supplyDemandViewOptions.value.map((opt) => opt.value))
     if (!validValues.has(supplyDemandViewMode.value)) {
       supplyDemandViewMode.value = 'summary'
@@ -6656,6 +6819,72 @@ async function saveSuperEditFitting() {
   border-radius: 4px !important;
   text-decoration: underline solid #4f46e5 !important;
   box-shadow: 0 0 0 2px #e0e7ff !important;
+}
+
+.contact-field-wrapper {
+  position: relative;
+}
+.contact-hint-badge {
+  font-size: 11px;
+  color: #6366f1;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+.contact-hint-badge:hover {
+  color: #4338ca;
+  text-decoration: underline;
+}
+.contact-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+  z-index: 999;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.contact-dropdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.contact-dropdown-item:hover {
+  background: #f1f5f9;
+}
+.contact-dropdown-item.active {
+  background: #e0e7ff;
+}
+.contact-item-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.contact-item-name {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 13px;
+}
+.contact-default-tag {
+  font-size: 11px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.contact-item-phone {
+  font-size: 12px;
+  color: #64748b;
+  font-family: monospace;
 }
 </style>
 

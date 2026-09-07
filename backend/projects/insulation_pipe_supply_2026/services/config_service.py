@@ -349,6 +349,10 @@ def load_tube_config() -> Dict[str, Any]:
             "standard_types": ["弯头", "三通", "大小头", "封头", "直缝弯管", "补偿器", "固定节"],
         }
 
+    # 确保 supply_entity_contacts 节点存在并为对象结构
+    if "supply_entity_contacts" not in payload or not isinstance(payload.get("supply_entity_contacts"), dict):
+        payload["supply_entity_contacts"] = {}
+
     return payload
 
 
@@ -361,6 +365,77 @@ def save_tube_config(payload: Dict[str, Any]) -> None:
         encoding="utf-8",
     )
     temp_path.replace(CONFIG_PATH)
+
+
+def record_supply_entity_contact(
+    entity_id: str,
+    contact_name: str,
+    contact_phone: str = "",
+) -> None:
+    """
+    记录并持久化供给主体联系人信息，自动将其设为默认并移至首位。
+    """
+    norm_entity_id = str(entity_id or "").strip()
+    norm_name = str(contact_name or "").strip()
+    norm_phone = str(contact_phone or "").strip()
+    if not norm_entity_id or not norm_name:
+        return
+
+    try:
+        payload = load_tube_config()
+        # 兼容管件发货时传入的大写 entity_id，匹配并统一为标准的主体键名
+        for ent in payload.get("supply_entities") or []:
+            std_id = str(ent.get("entity_id") or "").strip()
+            if std_id.lower() == norm_entity_id.lower():
+                norm_entity_id = std_id
+                # 若修改的是基础档案中的联系人，顺带同步其电话号码
+                if str(ent.get("contact_name") or "").strip() == norm_name and norm_phone:
+                    ent["contact_phone"] = norm_phone
+                break
+
+        contacts_map = payload.setdefault("supply_entity_contacts", {})
+        if not isinstance(contacts_map, dict):
+            contacts_map = {}
+            payload["supply_entity_contacts"] = contacts_map
+
+        c_list = contacts_map.setdefault(norm_entity_id, [])
+        if not isinstance(c_list, list):
+            c_list = []
+            contacts_map[norm_entity_id] = c_list
+
+        target_item = None
+        for i, item in enumerate(c_list):
+            # 优先按姓名匹配已有联系人
+            if str(item.get("contact_name") or "").strip() == norm_name:
+                target_item = c_list.pop(i)
+                break
+
+        for item in c_list:
+            item["is_default"] = False
+
+        if target_item is None:
+            target_item = {
+                "contact_name": norm_name,
+                "contact_phone": norm_phone,
+                "is_default": True,
+                "created_at": datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        else:
+            # 用户修改了电话号码，则原地更新电话
+            if norm_phone:
+                target_item["contact_phone"] = norm_phone
+            target_item["is_default"] = True
+            target_item["updated_at"] = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+        c_list.insert(0, target_item)
+
+        # 限制单主体最多记忆 15 条
+        if len(c_list) > 15:
+            contacts_map[norm_entity_id] = c_list[:15]
+
+        save_tube_config(payload)
+    except Exception as exc:
+        print(f"⚠️ 自动记录供给主体联系人失败: {exc}")
 
 
 def load_section_1_submission_status() -> Dict[str, Any]:
