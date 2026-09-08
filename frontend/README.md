@@ -1,3 +1,38 @@
+## 2026-09-09 供给管理：导出样式全面解绑合并依赖，独立订单平铺导出恢复完整排版与彩色高亮
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（直管发货 Tab 3 与管件发货 Tab 4）
+  - 导出组件：[`ExportSettingsModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/ExportSettingsModal.vue)
+- **样式机制彻底解绑与升级**：
+  1. **彻底解决未合并单元格时样式丢失问题**：
+     - 排查发现原单元格高亮逻辑过度依赖 `isMergeCol`，导致取消车次合并的独立平铺行丢失了车次号与车牌号色彩；
+     - 全面解绑 `isMergeCol` 限制，直接按列字段特征判定：
+       * `车次号`：沉稳靛蓝加粗居中（`#3730A3`）；
+       * `车牌号`：青翠深绿加粗居中（`#0F766E`）；
+       * `发货数量`：深黑加粗靠右（`#0F172A`）；
+       * `状态`：按业务语义高亮加粗居中（撤销红色 `#DC2626`、确认绿色 `#15803D`、待办蓝色 `#2563EB`）；
+       * `单号/时间/单位/主体`：居中对齐；
+  2. **斑马底色自适应保底**：
+     - 当未启用车次合并时，斑马交替底色自动切换为按数据行交替（`dataRowIndex % 2 === 1 ? '#F8FAFC' : '#FFFFFF'`），确保平铺订单明细表格具有清晰优雅的隔行底色，绝不全白；
+  3. **表头深蓝灰底色与 AutoFilter 自动筛选 100% 保持**。
+
+## 2026-09-09 供给管理：已提交管件发货记录台账导出排版样式与“直管物流跟踪记录”全面对齐
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 导出组件：[`ExportSettingsModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/ExportSettingsModal.vue)
+  - 涉及区域：Tab 4（管件发货登记 `category=fitting&tab=fitting`）下半部分的“📋 已提交管件发货记录台账”区域。
+- **架构升级与排版风格对齐**：
+  1. **接入专属 ExportSettingsModal 导出设置组件**：
+     - 点击“📥 导出台账 (.xlsx)”直接调起与直管物流发货记录一致的高规格导出弹窗；
+     - 支持自定义导出文件名（默认 `管件发货历史台账_YYYYMMDD.xlsx`）、自选导出范围（仅当前筛选 vs 全部原始数据）、自由勾选 15 个列字段；
+     - 支持同车次前置公共列（车次号、订单号、车牌号、供给主体、接收标段、发货时间、经办人、电话）跨行居中合并（Merge Cells）；
+  2. **高规格视觉与单元格排版**：
+     - **表头**：行高 30pt，`#334155` 商务深蓝灰底色，白色加粗微软雅黑（10.5pt），全居中换行；
+     - **数据行**：行高 24pt，9.5pt 微软雅黑，`#CBD5E1` 细边框，按车次组交替 `#FFFFFF` 与 `#F8FAFC` 斑马底色；
+     - **视觉焦点与对齐**：车次号沉稳靛蓝加粗（`#3730A3`），车牌号青翠深绿加粗（`#0F766E`），发货数量靠右对齐加粗（`#0F172A`），单号/状态/时间/单位全居中，规格/经办人/备注靠左；
+     - **列宽自适应**：按中英文长度动态计算并配置留白边距，确保导出的 Excel 文件与直管发货台账排版样式 100% 绝对一致。
+
 ## 2026-09-07 供给管理：发货经办人可输可选下拉 Combobox 与多条目记忆沉淀组件
 
 - **关联前端页面与组件**：

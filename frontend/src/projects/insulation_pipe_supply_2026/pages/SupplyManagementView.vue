@@ -779,7 +779,7 @@
                 </select>
                 <input v-model.trim="fittingSearchKw" type="text" placeholder="搜索车牌号/单号/管件类型..." class="input" style="min-width: 160px; flex: 1;" @keyup.enter="loadFittingDeliveries" />
                 <button type="button" class="btn ghost" :disabled="fittingLoading" @click="loadFittingDeliveries">刷新列表</button>
-                <button v-if="canExtractXlsx && fittingDeliveries.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="downloadFittingHistoryExcel">📥 导出台账 (.xlsx)</button>
+                <button v-if="canExtractXlsx && fittingDeliveries.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showFittingExportModal = true">📥 导出台账 (.xlsx)</button>
               </div>
             </div>
 
@@ -2119,7 +2119,7 @@
       </div>
     </div>
 
-    <!-- 导出配置与 XLSX 导出组件 -->
+    <!-- 直管物流导出配置与 XLSX 导出组件 -->
     <ExportSettingsModal
       :show="showExportModal"
       :columns="exportColumns"
@@ -2127,6 +2127,16 @@
       :filtered-data="deliveryRows"
       default-filename="保温管物流发货历史台账"
       @close="showExportModal = false"
+    />
+
+    <!-- 管件发货台账导出配置与 XLSX 导出组件（按订单明细独立列出记录，不进行车次合并） -->
+    <ExportSettingsModal
+      :show="showFittingExportModal"
+      :columns="fittingExportColumns"
+      :data="allFittingDeliveriesFormatted"
+      :filtered-data="formattedFittingDeliveries"
+      default-filename="管件发货历史台账"
+      @close="showFittingExportModal = false"
     />
   </div>
 </template>
@@ -2786,47 +2796,68 @@ const downloadFittingTemplate = () => {
   XLSX.writeFile(workbook, '管件发货清单标准填报模板.xlsx')
 }
 
-const downloadFittingHistoryExcel = () => {
-  if (!fittingDeliveries.value || !fittingDeliveries.value.length) {
-    alert('当前没有可导出的管件发货记录')
-    return
+const showFittingExportModal = ref(false)
+const allFittingDeliveries = ref([])
+
+const getFittingExportStatusText = (status) => {
+  if (status === 'cancelled') return '已撤销'
+  if (status === 'warehouse_confirmed' || status === 'completed') return '库管已确认'
+  if (status === 'construction_confirmed' || status === 'pending_warehouse' || status === 'received') return '待库管确认'
+  if (status === 'arrived' || status === 'pending_receive') return '待施工接收'
+  if (status === 'shipped' || status === 'pending_arrival') return '待到货'
+  return '待到货'
+}
+
+const formatFittingDeliveryRow = (row) => {
+  return {
+    ...row,
+    shipment_no: row.shipment_no || row.order_no || '—',
+    order_no: row.order_no || '—',
+    vehicle_plate_no: row.vehicle_plate_no || '—',
+    supply_entity_name: row.supply_entity_name || row.supply_entity_id || (selectedSupplyEntity.value?.name || '—'),
+    section_1_name: row.section_1_name || getSection1Name(row.section_1_id) || '—',
+    fitting_type: row.fitting_type || '—',
+    model_spec: row.model_spec || '—',
+    shipped_qty: row.shipped_qty ?? 0,
+    unit: row.unit || '个',
+    statusLabel: getFittingExportStatusText(row.status),
+    cancel_reason: row.status === 'cancelled' ? (row.cancel_reason || '已撤销') : '—',
+    shippedAtDisplay: formatDateTimeDisplay(row.shipped_at),
+    ship_contact_name: row.ship_contact_name || '—',
+    ship_contact_phone: row.ship_contact_phone || '—',
+    ship_remark: row.ship_remark || '—'
   }
+}
 
-  const exportData = fittingDeliveries.value.map(row => ({
-    '管件车次号': row.shipment_no,
-    '管件订单号': row.order_no,
-    '车牌号': row.vehicle_plate_no,
-    '接收标段': getSection1Name(row.section_1_id),
-    '管件类型': row.fitting_type,
-    '型号/规格': row.model_spec,
-    '发货数量': row.shipped_qty,
-    '单位': row.unit || '个',
-    '发货时间': formatDateTimeDisplay(row.shipped_at),
-    '发货经办人': row.ship_contact_name || '—',
-    '联系电话': row.ship_contact_phone || '—',
-    '备注': row.ship_remark || '—',
-  }))
+const formattedFittingDeliveries = computed(() => {
+  return (fittingDeliveries.value || []).map(row => formatFittingDeliveryRow(row))
+})
 
-  const worksheet = XLSX.utils.json_to_sheet(exportData)
-  worksheet['!cols'] = [
-    { wch: 18 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 8 },
-    { wch: 20 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 25 }
-  ]
+const allFittingDeliveriesFormatted = computed(() => {
+  const source = allFittingDeliveries.value && allFittingDeliveries.value.length ? allFittingDeliveries.value : fittingDeliveries.value
+  return (source || []).map(row => formatFittingDeliveryRow(row))
+})
 
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, '已发货管件台账')
-  const dateStr = new Date().toISOString().slice(0, 10)
-  XLSX.writeFile(workbook, `已发货管件历史台账_${dateStr}.xlsx`)
+const fittingExportColumns = computed(() => [
+  { key: 'shipment_no', label: '管件车次号' },
+  { key: 'order_no', label: '管件订单号' },
+  { key: 'vehicle_plate_no', label: '车牌号' },
+  { key: 'supply_entity_name', label: '供给主体' },
+  { key: 'section_1_name', label: '需求主体' },
+  { key: 'fitting_type', label: '管件类型' },
+  { key: 'model_spec', label: '型号/规格' },
+  { key: 'shipped_qty', label: '发货数量' },
+  { key: 'unit', label: '单位' },
+  { key: 'statusLabel', label: '状态' },
+  { key: 'cancel_reason', label: '撤销原因' },
+  { key: 'shippedAtDisplay', label: '发货时间' },
+  { key: 'ship_contact_name', label: '发货经办人' },
+  { key: 'ship_contact_phone', label: '联系电话' },
+  { key: 'ship_remark', label: '备注' }
+])
+
+const downloadFittingHistoryExcel = () => {
+  showFittingExportModal.value = true
 }
 
 const fittingTableSectionFilter = ref('')
@@ -2933,6 +2964,9 @@ const loadFittingDeliveries = async () => {
     })
     if (data && data.ok) {
       fittingDeliveries.value = data.items || []
+      if (!fittingTableSectionFilter.value && !fittingSearchKw.value) {
+        allFittingDeliveries.value = data.items || []
+      }
     }
   } catch (err) {
     console.error('加载管件发货记录失败:', err)
@@ -3681,7 +3715,7 @@ const exportColumns = computed(() => [
   { key: 'shipmentNo', label: '运输车次号' },
   { key: 'vehiclePlateNo', label: '车牌号' },
   { key: 'supplyEntityName', label: '供给主体' },
-  { key: 'section1Name', label: `装车接收${modeLabels.value.section1}` },
+  { key: 'section1Name', label: '需求主体' },
   { key: 'pipeModelName', label: '保温管规格型号' },
   { key: 'shippedQty', label: '发货量（米）' },
   { key: 'arrivedQty', label: '到货量（米）' },

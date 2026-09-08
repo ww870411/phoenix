@@ -321,47 +321,69 @@ async function executeExcelExport() {
           // 表头样式
           ws[cellAddress].s = headerStyle
         } else {
-          // 数据行
           const dataRowIndex = r - 1
           const colDef = activeCols[c]
           const isMergeCol = mergeColSet.has(colDef.key)
-          const grpIdx = rowGroupIndexMap.get(dataRowIndex) || 0
           
-          // 车次交替微底色：偶数组纯白，奇数组极淡蓝灰
-          const isOddGroup = grpIdx % 2 === 1
-          const bgRgb = isOddGroup ? 'F8FAFC' : 'FFFFFF'
+          // 斑马底色计算：若启用车次合并则按车次组交替；若未启用合并（按订单独立列出），则直接隔行交替微底色
+          let bgRgb = 'FFFFFF'
+          if (enableGroupMerge.value && props.mergeColumns && props.mergeColumns.length) {
+            const grpIdx = rowGroupIndexMap.get(dataRowIndex) || 0
+            bgRgb = (grpIdx % 2 === 1) ? 'F8FAFC' : 'FFFFFF'
+          } else {
+            bgRgb = (dataRowIndex % 2 === 1) ? 'F8FAFC' : 'FFFFFF'
+          }
 
-          // 判断对齐方式
+          // 判断对齐方式与文字焦点着色（解绑 isMergeCol，确保即使不合并单元格也具备同等顶级排版视觉）
           let hAlign = 'left'
           let fontColor = '1E293B'
           let isBold = false
 
-          if (isMergeCol) {
+          // 1. 车次号：沉稳高贵靛蓝 + 加粗居中
+          if (colDef.key === 'shipment_no' || colDef.key === 'shipmentNo' || (colDef.label && colDef.label.includes('车次号'))) {
             hAlign = 'center'
-            if (colDef.key === 'shipment_no') {
-              fontColor = '3730A3' // 沉稳靛蓝
-              isBold = true
-            } else if (colDef.key === 'vehicle_plate_no') {
-              fontColor = '0F766E' // 青翠深绿
-              isBold = true
-            }
-          } else if (
+            fontColor = '3730A3' // 沉稳靛蓝
+            isBold = true
+          }
+          // 2. 车牌号：青翠深绿 + 加粗居中
+          else if (colDef.key === 'vehicle_plate_no' || colDef.key === 'vehiclePlateNo' || (colDef.label && colDef.label.includes('车牌号'))) {
+            hAlign = 'center'
+            fontColor = '0F766E' // 青翠深绿
+            isBold = true
+          }
+          // 3. 发货数量/工程量/数值：靠右对齐 + 加粗 + 深黑高亮
+          else if (
             colDef.key.includes('qty') || 
             colDef.key.includes('amount') || 
-            colDef.label.includes('量') || 
-            colDef.label.includes('米') || 
-            colDef.label.includes('件')
+            (colDef.label && (colDef.label.includes('量') || colDef.label.includes('米') || colDef.label.includes('件')))
           ) {
             hAlign = 'right'
             isBold = true
             fontColor = '0F172A'
-          } else if (
-            colDef.key.includes('status') || 
+          }
+          // 4. 状态列：居中加粗，按状态业务语义着色
+          else if (colDef.key.includes('status') || (colDef.label && colDef.label.includes('状态'))) {
+            hAlign = 'center'
+            isBold = true
+            const valStr = String(ws[cellAddress].v || '')
+            if (valStr.includes('撤销')) {
+              fontColor = 'DC2626' // 撤销深红
+            } else if (valStr.includes('确认') || valStr.includes('完成')) {
+              fontColor = '15803D' // 确认绿色
+            } else {
+              fontColor = '2563EB' // 待办科技蓝
+            }
+          }
+          // 5. 单号、编码、时间、日期、单位、电话等：整齐居中
+          else if (
             colDef.key.includes('code') || 
-            colDef.key.includes('no') || 
+            colDef.key.includes('order') || 
             colDef.key.includes('time') || 
             colDef.key.includes('At') || 
-            colDef.key.includes('elapsed')
+            colDef.key.includes('unit') || 
+            colDef.key.includes('phone') || 
+            colDef.key.includes('elapsed') ||
+            (colDef.label && (colDef.label.includes('单号') || colDef.label.includes('时间') || colDef.label.includes('单位') || colDef.label.includes('电话') || colDef.label.includes('主体') || colDef.label.includes('标段')))
           ) {
             hAlign = 'center'
           }
@@ -387,9 +409,10 @@ async function executeExcelExport() {
 
     ws['!rows'] = rowHeights
 
-    // 🌟 8. 高级自适应列宽计算，确保 Excel 表格极其整齐美观 🌟
+    // 🌟 8. 高级自适应列宽计算，确保 Excel 表格极其整齐美观且留足筛选箭头空间 🌟
     const colWidths = activeCols.map(col => {
-      const headerLen = col.label ? col.label.replace(/[^\x00-\xff]/g, '00').length : 10
+      // 额外为表头增加 3 字符宽度以容纳 Excel 原生筛选下拉三角图标，防止遮挡表头文字
+      const headerLen = (col.label ? col.label.replace(/[^\x00-\xff]/g, '00').length : 10) + 3
       const maxValLen = exportRows.reduce((max, row) => {
         const val = row[col.label] ?? ''
         const len = String(val).replace(/[^\x00-\xff]/g, '00').length
@@ -399,7 +422,12 @@ async function executeExcelExport() {
     })
     ws['!cols'] = colWidths
 
-    // 9. 生成 Workbook 并写入下载
+    // 🌟 9. 开启工作表默认字段自动筛选 (AutoFilter) 🌟
+    if (ws['!ref']) {
+      ws['!autofilter'] = { ref: ws['!ref'] }
+    }
+
+    // 10. 生成 Workbook 并写入下载
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, '数据台账')
     
