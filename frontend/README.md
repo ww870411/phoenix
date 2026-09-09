@@ -1,3 +1,36 @@
+## 2026-09-09 库管管理：保温管“按车次合并视图”横向细线视觉塌缩排障与默认展开深度重构
+
+- **关联前端页面与组件**：
+  - 页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（直管库管 Tab，`activeTab === 'pipe'`）
+- **核心优化与架构重构**：
+  1. **建立专属 CSS 类与抗压扁保底机制 (`.pipe-shipment-*`)**：
+     - 新增并规范化 `.pipe-shipment-group-list`、`.pipe-shipment-card`、`.pipe-shipment-header`、`.pipe-shipment-toggle`、`.pipe-shipment-route`、`.pipe-shipment-side`；
+     - 显式定义 `flex-shrink: 0; min-height: 60px;`，杜绝子卡片在 Flex 纵向容器中因无内容撑开而被算法等比压扁成横向细线的恶性视觉 Bug；
+  2. **切换车次合并视图默认全部展开 (`switchPipeViewMode`)**：
+     - 用户点击“🚚 按车次合并视图”或数据更新时，若当前未展开车次，自动触发 `toggleAllPipeShipments(true)` 全展开，避免所有卡片默认闭合导致用户误以为无数据；
+  3. **车次卡片头部结构全面对标管件规范**：
+     - 左侧分区：展开指示小箭头、整车待确认项勾选框、车次号 monospace 徽章、车牌号徽章与发货时间；
+     - 中间分区：独立的 `.pipe-shipment-route` 供需路线卡片（`供给主体 → 需求主体`），具备白底微阴影与独立文本省略保护；
+     - 右侧分区：规格种类计数、发货/实到/接收三色高亮米数看板、综合状态 Badge 与流转凭证按钮；
+  4. **构建验证**：
+     - 执行 `npm run build`，738 个模块打包顺利编译通过，退出码 0。
+
+## 2026-09-09 库管管理：保温管“按车次合并视图”排版优化与流转凭证时光轴修复
+
+- **关联前端页面与组件**：
+  - 页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（直管库管 Tab，`activeTab === 'pipe'`）
+- **核心优化与架构重构**：
+  1. **内嵌明细表格样式与布局重构 (`.pipe-detail-table`)**：
+     - 将内嵌表格从全局受限的 `.table`（强制 `min-width: 1400px`）解绑，设立专属样式 `.pipe-detail-table` 并搭配 `.pipe-detail-table-wrap`；
+     - 设定自适应与 `min-width: 960px`，解除规格列 130px 强制截断，9 列精准配置宽度，右侧“在途时长”、“状态”与“📜 凭证”按钮完整展现，彻底解决右侧被截断 300px 的硬性显示 Bug；
+  2. **卡片头部单行自适应排版 (`.pipe-shipment-header`)**：
+     - 去除 `flex-wrap: wrap;`，左右两栏弹性分布，主体名称增加收缩保护，杜绝右侧统计下坠折行；
+  3. **列表容器高度扩充**：最大高度提升至 `680px`，消除双重微型滚动条；
+  4. **卡片交互联动流转轨迹**：点击卡片或批量展开时自动聚焦首条记录，右下角全生命周期轨迹实时展示；
+  5. **流转凭证时光轴字段兼容 (`showDeliveryDetail`)**：
+     - 增加对 `arrived_confirm_at`、`received_confirm_at`、`warehouse_confirm_at` 及经办人 `*_name` 的多态提取，时光轴节点告别全灰，精准亮起绿/蓝色节点并展示办理时间与备注；
+  6. **微看板统计口径同步**：`pipeTotalShippedMeters` 改为基于当前筛选结果实时累加，消除看板与明细的口径冲突。
+
 ## 2026-09-09 供给管理：导出样式全面解绑合并依赖，独立订单平铺导出恢复完整排版与彩色高亮
 
 - **关联前端页面与组件**：

@@ -1,3 +1,20 @@
+## 2026-09-09 库管管理：保温管车次合并视图契约同步与接口聚合验证
+
+- **接口与数据契约同步**：
+  - 关联接口：`GET /tube-warehouse-management/deliveries`
+  - 前端车次聚合依据 `shipment_no` / `vehicle_plate_no` 开展客户端车次归并，提取包括 `order_no`、`shipped_qty`、`arrived_qty`、`received_qty`、`pipe_model_name`、`abnormal_flag` 等关键字段；
+  - 确认后端所返回的台账行数据结构与前端重构后的专属卡片模型（`.pipe-shipment-*`）及 9 列自适应内嵌明细表格完全兼容，数据链路运行顺畅。
+
+## 2026-09-09 库管管理：保温管流转时序证据链契约对齐与前端流转凭证时光轴适配
+
+- **业务协同与数据库模型对齐**：
+  - 关联数据表：`tube.tube_delivery`
+  - 前端流转凭证适配字段：
+    * 到货阶段：`arrived_confirm_at`、`arrived_confirm_by`、`arrived_confirm_by_name`、`arrived_remark`
+    * 接收阶段：`received_confirm_at`、`received_confirm_by`、`received_confirm_by_name`、`received_remark`
+    * 库管确认阶段：`warehouse_confirm_at`、`warehouse_confirm_by`、`warehouse_confirm_by_name`、`warehouse_remark`
+  - 经前端适配后，前端库管页面的流转凭证弹窗与时光轴已与后端 `tube.tube_delivery` 表的时间戳及经办人字段完全对齐，四节点流转轨迹与审计留痕 100% 连通生效。
+
 ## 2026-09-07 供给管理：供给主体联系人列表记忆与发货自动沉淀机制
 
 - **新增配置区块与数据源**：

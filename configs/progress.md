@@ -1,3 +1,50 @@
+## 2026-09-09 [库管管理：保温管“按车次合并视图”横向细线视觉塌缩排障与默认全展开深度重构]
+- **需求与排障背景**：
+  - 用户深入测试反馈：“我点击按车次合并视图后，区域显示一些横向细线，却看不到任何记录信息，帮我仔细全面检查。还有，工作时多用内置工具”；
+  - 经对前端 [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue) 的模板与样式进行全面审查，诊断出以下三个致病因：
+    1. **【最核心原因：默认全折叠隐藏】**：`expandedPipeShipmentKeys` 初始为 `new Set()`，用户一点击“🚚 按车次合并视图”时，所有车次均处于闭合状态，内嵌台账明细表格全部被 `v-show="false"` 隐藏，导致用户看到的不是发货记录，而是一排排收起的折叠条；
+    2. **【横向细线的视觉塌缩根因】**：列表外层容器使用 flex 纵向布局（`display: flex; flex-direction: column; max-height: 680px; overflow-y: auto;`），而子卡片 `.pipe-shipment-card` 未设置 `flex-shrink: 0; min-height: 60px;`；在收起状态下且数据较多时，子卡片被 Flex 算法强行压缩变扁，加上浅灰底与 1px 细边框，直接退化为一条条横向细线；
+    3. **【卡片头部缺乏立体结构与 CSS 规范类】**：原头部完全依赖内联样式（inline-style），供需主体与车次信息未形成独立分区，缺少与管件一致的路线卡片与数量高亮看板；
+- **具体重构与修复方案 (`WarehouseManagementView.vue`)**：
+  1. **建立专属 CSS 规范类与抗压扁保护**：
+     - 新增并完善 `.pipe-shipment-group-list`、`.pipe-shipment-card`、`.pipe-shipment-header`、`.pipe-shipment-toggle`、`.pipe-shipment-route`、`.pipe-shipment-side` 等全套 CSS 样式；
+     - 显式配置 `flex-shrink: 0; min-height: 60px;`，无论折叠或数据量多大，每张车次卡片均保持饱满立体的看板形态，彻底根除“横向细线”塌缩；
+  2. **切换合并视图与数据载入时默认展开全车次**：
+     - 新增 `switchPipeViewMode(mode)` 函数，在用户点击“🚚 按车次合并视图”时，若当前未展开任何车次，自动调用 `toggleAllPipeShipments(true)` 全展开；
+     - 在 `loadDeliveries()` 异步请求拉取最新数据后，若处于合并视图且未展开，同样自动执行 `toggleAllPipeShipments(true)`，确保所有车次内部的订单明细、规格型号、发货米数等台账记录立即可见；
+  3. **车次卡片头部结构全面对标管件成熟规范**：
+     - 左侧集成展开箭头、整车待确认勾选框、车次号 monospace 徽章、车牌标签与发货时间；
+     - 中间增设独立的 `.pipe-shipment-route` 供需流向卡片（白底轻边框，供给主体 → 需求主体，清晰对齐）；
+     - 右侧包含“共 X 种规格”与发货量、到货量、接收量多色高亮徽章（`.pipe-qty-badge`）、综合状态 Badge 及流转凭证按钮；
+  4. **字段容错与健全保底**：
+     - 在 `groupedPipeDeliveries` 中对车次号、车牌号、供给主体、需求主体提供健全的默认缺省字符兜底，防止空值引发的渲染塌陷；
+- **验证与构建结果**：
+  - 前端执行 `npm run build`，738 个模块顺利编译，无任何警告与错误（`✓ built in 13.87s`，exit code 0）。
+
+## 2026-09-09 [库管管理：保温管“按车次合并视图”排版与时光轴凭证全面排障与修复]
+- **需求与排障背景**：
+  - 用户反馈排查：“帮我看一下，页面 https://platform.smartview.top/projects/insulation_pipe_supply_2026/pages/warehouse_management 的保温管页面，按车次合并视图的显示是不是有问题”；
+  - 经深入代码诊断与比对，确认保温管页面的“按车次合并视图”存在 6 项核心显示与交互缺陷：
+    1. **内嵌明细表格右侧被卡片硬性截断约 300px**：内嵌表格使用了 `.table`，受全局 CSS 强制 `min-width: 1400px; table-layout: fixed;` 绑架，而卡片容器约 1100px 且设置了 `overflow: hidden;`，明细表格外层未设置 `overflow-x: auto;`，导致“操作（📜 凭证按钮）”、“在途时长”被完全遮挡，“状态”列被截断一半；
+    2. **卡片头部两端布局被挤破下坠换行**：`.pipe-shipment-header` 设置了 `flex-wrap: wrap;`，左右两块总宽约 1200px 超过卡片宽，右侧统计信息整体跌落至第二行；
+    3. **外层列表硬性限高 480px 产生双重/三重逼仄滚动条**；
+    4. **折叠卡片状态下无法联动右侧流转轨迹**：点击卡片头部展开折叠未选定单据，右下角轨迹始终为空白提示；
+    5. **点击“📜 流转凭证”弹窗时光轴全灰 Bug**：`showDeliveryDetail` 字段取值仅写了管件专用的 `arrived_at`、`construction_confirmed_at`、`warehouse_confirmed_at`，未适配保温管在数据库与 API 中的 `arrived_confirm_at`、`received_confirm_at`、`warehouse_confirm_at`，导致时光轴节点时间全空、各节点全部显示灰色待办；
+    6. **顶部看板“合计发货米数”未跟随筛选联动**：`pipeTotalShippedMeters` 优先统计了全量 `allDeliveries`，导致筛选后车次数和明细数变小，但合计米数依然为全库总米数，数据口径矛盾；
+- **具体实现与修复方案 (`WarehouseManagementView.vue`)**：
+  1. **重构内嵌明细表格排版与样式**：
+     - 表格解绑 `.table`，采用独立类名 `class="pipe-detail-table"` 并以 `<div class="pipe-detail-table-wrap custom-scroll-list">` 包裹；
+     - 设定 `min-width: 960px; table-layout: fixed;` 与 `overflow-x: auto;`，精准配置 9 列 `<colgroup>`；
+     - 解除型号规格列的 130px 强制截断限制，实现全屏自适应，彻底消除右侧凭证按钮与状态截断；
+  2. **重构车次卡片头部排版**：
+     - 移除 `flex-wrap: wrap;`，左侧主体名称增加 `text-overflow: ellipsis` 弹性收缩保护，右侧统计保持不折行，确保单行优雅对齐；
+  3. **放宽列表限高**：卡片列表最大高度从 `480px` 调整为 `680px`，消除逼仄感；
+  4. **卡片展开自动联动流转轨迹**：在 `togglePipeShipmentExpand` 与 `toggleAllPipeShipments` 中加入自动选中首行机制，点击卡片即刻在右下角查看流转证据链；
+  5. **流转凭证弹窗字段映射多态兼容**：`showDeliveryDetail` 支持从 `itemsList` 和 `mainRow` 读取 `arrived_confirm_at`、`received_confirm_at`、`warehouse_confirm_at` 及经办人 `*_name`，时光轴各节点正确亮起绿/蓝色节点并展示办理人与备注；
+  6. **修正看板合计米数口径**：`pipeTotalShippedMeters` 改为基于当前筛选结果集 `deliveries.value` 实时计算；
+- **验证结果**：
+  - 前端执行 `npm run build`，738 个模块打包顺利编译通过（`✓ built in 14.30s`，exit code 0）。
+
 ## 2026-09-09 [发货管理：管件导出样式全面解绑合并依赖，独立订单平铺恢复完整排版与彩色高亮]
 - **需求与排障背景**：
   - 响应用户指令：“管件的表格，样式怎么又没了”；

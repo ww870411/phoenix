@@ -332,7 +332,7 @@
                 type="button"
                 style="border: none; padding: 4px 12px; font-size: 12.5px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.15s ease;"
                 :style="pipeViewMode === 'flat' ? { background: '#ffffff', color: '#4f46e5', fontWeight: '700', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' } : { background: 'transparent', color: '#64748b' }"
-                @click="pipeViewMode = 'flat'"
+                @click="switchPipeViewMode('flat')"
               >
                 <span>📋 扁平明细视图</span>
               </button>
@@ -340,7 +340,7 @@
                 type="button"
                 style="border: none; padding: 4px 12px; font-size: 12.5px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.15s ease;"
                 :style="pipeViewMode === 'grouped' ? { background: '#ffffff', color: '#4f46e5', fontWeight: '700', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' } : { background: 'transparent', color: '#64748b' }"
-                @click="pipeViewMode = 'grouped'"
+                @click="switchPipeViewMode('grouped')"
               >
                 <span>🚚 按车次合并视图</span>
               </button>
@@ -352,102 +352,119 @@
         <div v-else-if="deliveries.length === 0" class="page-state">当前筛选条件下没有记录。</div>
 
         <!-- 模式 1：按车次合并折叠卡片列表 -->
-        <div v-else-if="pipeViewMode === 'grouped'" class="pipe-shipment-group-list custom-scroll-list" style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; max-height: 480px; overflow-y: auto;">
+        <div v-else-if="pipeViewMode === 'grouped'" class="pipe-shipment-group-list custom-scroll-list">
           <div
             v-for="group in groupedPipeDeliveries"
             :key="group.groupKey"
             class="pipe-shipment-card"
-            :class="{ 'has-selected': group.checkedItemsCount > 0 }"
-            style="border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.03); transition: all 0.2s ease;"
+            :class="{ 'has-selected': group.checkedItemsCount > 0, 'is-expanded': isPipeShipmentExpanded(group.groupKey) }"
           >
-            <!-- 车次卡片头部汇总行 -->
-            <div 
-              class="pipe-shipment-header"
-              style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8fafc; cursor: pointer; user-select: none; gap: 12px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap;"
-              @click="togglePipeShipmentExpand(group.groupKey)"
-            >
-              <!-- 左侧：展开箭头、整车勾选框、车次号、车牌、供需流向、发货时间 -->
-              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <span class="expand-arrow" style="font-size: 11px; color: #6366f1; transition: transform 0.2s ease; display: inline-block; width: 14px; text-align: center;" :style="{ transform: isPipeShipmentExpanded(group.groupKey) ? 'rotate(90deg)' : 'none' }">
+            <!-- 车次卡片头部汇总行（抗压扁、分区清晰、信息饱满） -->
+            <div class="pipe-shipment-header">
+              <!-- 左侧及主体：交互触发区（展开箭头 + 整车勾选 + 车次信息 + 供需流向卡片） -->
+              <div 
+                class="pipe-shipment-toggle"
+                @click="togglePipeShipmentExpand(group.groupKey)"
+              >
+                <!-- 展开箭头 -->
+                <span class="pipe-shipment-chevron" :class="{ 'is-expanded': isPipeShipmentExpanded(group.groupKey) }" aria-hidden="true">
                   ▶
                 </span>
-                
-                <!-- 整车勾选框（仅在该车次包含“待库管确认”状态项时可勾选） -->
-                <input
-                  v-if="group.hasPendingWarehouse"
-                  type="checkbox"
-                  :checked="group.allPendingWarehouseChecked"
-                  :indeterminate.prop="group.hasPartialPendingWarehouseSelection"
-                  title="勾选/取消整车待库管确认记录"
-                  @click.stop
-                  @change="togglePipeShipmentSelectAll(group, $event)"
-                />
 
-                <span class="shipment-code-badge" style="font-family: monospace; font-size: 13px; font-weight: 700; color: #4338ca; background: #e0e7ff; padding: 2px 8px; border-radius: 6px; border: 1px solid #c7d2fe;">
-                  {{ group.shipmentNo }}
-                </span>
-
-                <span class="plate-badge" style="font-size: 12px;">
-                  {{ group.vehiclePlateNo }}
-                </span>
-
-                <!-- 供需路由流向 -->
-                <span style="font-size: 12.5px; color: #475569; display: inline-flex; align-items: center; gap: 4px;">
-                  <strong>{{ group.supplyEntityName }}</strong>
-                  <span style="color: #94a3b8;">→</span>
-                  <strong style="color: #1e293b;">{{ group.section1Name }}</strong>
-                </span>
-
-                <span style="font-size: 11.5px; color: #64748b; font-family: monospace;">
-                  🕒 {{ formatDateTime(group.shippedAt) }}
-                </span>
-              </div>
-
-              <!-- 右侧：包含物料汇总与综合状态 Badge -->
-              <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-                <div style="font-size: 12px; color: #475569; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;">
-                  <span style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: #475569; font-weight: 500;">
-                    共 {{ group.items.length }} 种型号
-                  </span>
-                  <span>发货: <strong style="color: #0f172a;">{{ formatAmount(group.totalShippedQty) }}</strong> 米</span>
-                  <span v-if="group.totalArrivedQty > 0">到货: <strong style="color: #059669;">{{ formatAmount(group.totalArrivedQty) }}</strong> 米</span>
-                  <span v-if="group.totalReceivedQty > 0">接收: <strong style="color: #7c3aed;">{{ formatAmount(group.totalReceivedQty) }}</strong> 米</span>
+                <!-- 整车待确认项勾选框（仅在该车次含“待库管确认”时展示） -->
+                <div class="pipe-shipment-checkbox-wrap" @click.stop>
+                  <input
+                    v-if="group.hasPendingWarehouse"
+                    type="checkbox"
+                    :checked="group.allPendingWarehouseChecked"
+                    :indeterminate.prop="group.hasPartialPendingWarehouseSelection"
+                    title="批量勾选/取消该车次内所有待库管确认记录"
+                    @change="togglePipeShipmentSelectAll(group, $event)"
+                  />
                 </div>
 
-                <span :class="['status-pill', statusClass(group.overallStatus)]" style="font-size: 11.5px; padding: 2px 8px;">
-                  {{ deliveryStatusLabelMap[group.overallStatus] || group.overallStatus }}
-                </span>
+                <!-- 车次号、车牌号、发货时间 -->
+                <div class="pipe-shipment-main">
+                  <div class="pipe-shipment-main-row">
+                    <span class="pipe-shipment-label">车次</span>
+                    <strong class="pipe-shipment-no">{{ group.shipmentNo }}</strong>
+                    <span class="plate-badge">{{ group.vehiclePlateNo }}</span>
+                  </div>
+                  <div class="pipe-shipment-time">
+                    发货时间 {{ formatDateTime(group.shippedAt) }}
+                  </div>
+                </div>
 
-                <span v-if="group.hasAbnormal" class="status-pill status-abnormal" style="font-size: 11px;">
-                  含异常
-                </span>
+                <!-- 供需流向专属路线卡片（对标管件规范） -->
+                <div class="pipe-shipment-route" :title="`${group.supplyEntityName} → ${group.section1Name}`">
+                  <div class="pipe-route-party">
+                    <small>供给主体</small>
+                    <strong :title="group.supplyEntityName">{{ group.supplyEntityName }}</strong>
+                  </div>
+                  <span class="pipe-route-arrow" aria-hidden="true">→</span>
+                  <div class="pipe-route-party">
+                    <small>需求主体</small>
+                    <strong :title="group.section1Name">{{ group.section1Name }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右侧看板区：规格数与米数看板、综合状态徽章、流转凭证按钮 -->
+              <div class="pipe-shipment-side">
+                <div class="pipe-shipment-quantity">
+                  <span class="pipe-specs-count">共 {{ group.items.length }} 种规格</span>
+                  <div class="pipe-qty-badges">
+                    <span class="pipe-qty-badge is-shipped">发货 <strong>{{ formatAmount(group.totalShippedQty) }}</strong> 米</span>
+                    <span v-if="group.totalArrivedQty > 0" class="pipe-qty-badge is-arrived">实到 <strong>{{ formatAmount(group.totalArrivedQty) }}</strong> 米</span>
+                    <span v-if="group.totalReceivedQty > 0" class="pipe-qty-badge is-received">接收 <strong>{{ formatAmount(group.totalReceivedQty) }}</strong> 米</span>
+                  </div>
+                </div>
+
+                <div class="pipe-status-group">
+                  <span :class="['status-pill', statusClass(group.overallStatus)]">
+                    {{ deliveryStatusLabelMap[group.overallStatus] || group.overallStatus }}
+                  </span>
+                  <span v-if="group.hasAbnormal" class="status-pill status-abnormal">
+                    含异常
+                  </span>
+                </div>
 
                 <button 
                   type="button" 
-                  class="btn ghost btn-sm"
-                  style="height: 26px; padding: 0 8px; font-size: 11.5px; color: #4f46e5; border-color: #c7d2fe; display: inline-flex; align-items: center; gap: 4px;"
+                  class="btn ghost btn-sm pipe-proof-button"
                   title="查看整车全生命周期流转凭证"
                   @click.stop="openDeliveryDetailModal(group)"
                 >
-                  📜 流转凭证
+                  📜 凭证
                 </button>
               </div>
             </div>
 
-            <!-- 展开后的明细表格 -->
-            <div v-show="isPipeShipmentExpanded(group.groupKey)" style="padding: 8px 12px; background: #ffffff;">
-              <table class="table" style="font-size: 12px; margin: 0; background: #ffffff;">
+            <!-- 展开后的明细表格（独立于外层大表，防右侧截断且支持平滑自适应） -->
+            <div v-show="isPipeShipmentExpanded(group.groupKey)" class="pipe-detail-table-wrap custom-scroll-list">
+              <table class="pipe-detail-table">
+                <colgroup>
+                  <col style="width: 44px;" />
+                  <col style="width: 140px;" />
+                  <col style="min-width: 160px;" />
+                  <col style="width: 95px;" />
+                  <col style="width: 95px;" />
+                  <col style="width: 95px;" />
+                  <col style="width: 110px;" />
+                  <col style="width: 105px;" />
+                  <col style="width: 75px;" />
+                </colgroup>
                 <thead>
-                  <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                    <th style="width: 38px; text-align: center;">勾选</th>
-                    <th style="width: 140px;">订单号</th>
+                  <tr>
+                    <th style="text-align: center;">勾选</th>
+                    <th>订单号</th>
                     <th>保温管型号规格</th>
-                    <th class="cell-number" style="width: 110px;">发货量 (米)</th>
-                    <th class="cell-number" style="width: 110px;">到货量 (米)</th>
-                    <th class="cell-number" style="width: 110px;">接收量 (米)</th>
-                    <th class="cell-status" style="width: 110px;">状态</th>
-                    <th style="width: 120px;">在途时长</th>
-                    <th style="width: 90px; text-align: center;">操作</th>
+                    <th style="text-align: right;">发货量 (米)</th>
+                    <th style="text-align: right;">到货量 (米)</th>
+                    <th style="text-align: right;">接收量 (米)</th>
+                    <th>状态</th>
+                    <th>在途时长</th>
+                    <th style="text-align: center;">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -459,7 +476,7 @@
                     title="点击在下方查看流转轨迹"
                     @click="toggleDeliverySelection(row)"
                   >
-                    <td class="cell-checkbox" style="text-align: center;" @click.stop>
+                    <td style="text-align: center;" @click.stop>
                       <input
                         v-if="row.status === 'pending_warehouse'"
                         type="checkbox"
@@ -468,31 +485,31 @@
                         @change="toggleDeliverySelection(row)"
                       />
                     </td>
-                    <td class="cell-code-wrapper font-mono" style="font-weight: 600; color: #1e293b;">
-                      {{ row.order_no || row.delivery_code || row.id }}
+                    <td>
+                      <span class="cell-code">{{ row.order_no || row.delivery_code || row.id }}</span>
                     </td>
-                    <td class="cell-model font-mono" :title="row.pipe_model_name" style="font-weight: 600; color: #334155;">
+                    <td :title="row.pipe_model_name" style="font-weight: 500; color: #1e293b; font-family: monospace;">
                       {{ row.pipe_model_name }}
                     </td>
-                    <td class="cell-number">{{ formatAmount(row.shipped_qty) }}</td>
-                    <td class="cell-number">{{ formatOptionalAmount(row.arrived_qty) }}</td>
-                    <td class="cell-number">{{ formatOptionalAmount(row.received_qty) }}</td>
-                    <td class="cell-status">
+                    <td class="cell-number" style="font-weight: 600; color: #0f172a;">{{ formatAmount(row.shipped_qty) }}</td>
+                    <td class="cell-number" style="color: #059669;">{{ formatOptionalAmount(row.arrived_qty) }}</td>
+                    <td class="cell-number" style="color: #7c3aed;">{{ formatOptionalAmount(row.received_qty) }}</td>
+                    <td>
                       <div class="status-pill-group">
-                        <span class="status-pill" :class="statusClass(row.status)" style="font-size: 11px; padding: 1px 6px;">
+                        <span class="status-pill" :class="statusClass(row.status)" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">
                           {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
                         </span>
-                        <span v-if="row.abnormal_flag" class="status-pill status-abnormal" style="font-size: 10px; padding: 1px 4px;">
+                        <span v-if="row.abnormal_flag" class="status-pill status-abnormal" style="font-size: 10px; padding: 1px 4px; white-space: nowrap;">
                           {{ getAbnormalLabel(row) }}
                         </span>
                       </div>
                     </td>
-                    <td class="cell-elapsed" style="font-size: 11px;">{{ formatDeliveryElapsedDisplay(row) }}</td>
+                    <td class="cell-elapsed" style="font-size: 11px; white-space: nowrap;">{{ formatDeliveryElapsedDisplay(row) }}</td>
                     <td style="text-align: center;">
                       <button
                         type="button"
                         class="btn ghost btn-sm"
-                        style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px;"
+                        style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;"
                         title="查看单据流转凭证"
                         @click.stop="openDeliveryDetailModal(row)"
                       >
@@ -1304,7 +1321,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
@@ -1420,17 +1437,21 @@ function showDeliveryDetail(input) {
   const createdBy = mainRow.created_by || mainRow.createdBy || mainRow.operator || input.createdBy || '发货操作员'
   const shipRemark = input.shipRemark || mainRow.ship_remark || mainRow.shipRemark || ''
 
-  const arrivedConfirmAt = mainRow.arrived_at || mainRow.arrivedConfirmAt || ''
-  const arrivedConfirmBy = mainRow.arrived_by || mainRow.arrivedConfirmBy || (arrivedConfirmAt ? '现场到货负责人' : '')
-  const arrivedRemark = mainRow.arrival_remark || mainRow.arrivedRemark || ''
+  const firstWithArrived = itemsList.find(it => it.arrived_confirm_at || it.arrived_at || it.arrivedConfirmAt) || mainRow
+  const firstWithReceived = itemsList.find(it => it.received_confirm_at || it.construction_confirmed_at || it.receivedConfirmAt) || mainRow
+  const firstWithWarehouse = itemsList.find(it => it.warehouse_confirm_at || it.warehouse_confirmed_at || it.warehouseConfirmAt) || mainRow
 
-  const constructionConfirmedAt = mainRow.construction_confirmed_at || mainRow.receivedConfirmAt || ''
-  const constructionConfirmedBy = mainRow.construction_confirmed_by || mainRow.receivedConfirmBy || (constructionConfirmedAt ? '施工接收负责人' : '')
-  const constructionRemark = mainRow.construction_remark || mainRow.receivedRemark || ''
+  const arrivedConfirmAt = firstWithArrived.arrived_confirm_at || firstWithArrived.arrived_at || firstWithArrived.arrivedConfirmAt || input.arrived_confirm_at || input.arrivedConfirmAt || ''
+  const arrivedConfirmBy = firstWithArrived.arrived_confirm_by_name || firstWithArrived.arrived_confirm_by || firstWithArrived.arrived_by || firstWithArrived.arrivedConfirmBy || (arrivedConfirmAt ? '现场到货负责人' : '')
+  const arrivedRemark = firstWithArrived.arrived_remark || firstWithArrived.arrival_remark || firstWithArrived.arrivedRemark || input.arrivedRemark || ''
 
-  const warehouseConfirmedAt = mainRow.warehouse_confirmed_at || mainRow.warehouseConfirmAt || ''
-  const warehouseConfirmedBy = mainRow.warehouse_confirmed_by || mainRow.warehouseConfirmBy || (warehouseConfirmedAt ? '库管员' : '')
-  const warehouseRemark = mainRow.warehouse_remark || mainRow.warehouseRemark || ''
+  const constructionConfirmedAt = firstWithReceived.received_confirm_at || firstWithReceived.construction_confirmed_at || firstWithReceived.receivedConfirmAt || input.received_confirm_at || input.receivedConfirmAt || ''
+  const constructionConfirmedBy = firstWithReceived.received_confirm_by_name || firstWithReceived.received_confirm_by || firstWithReceived.construction_confirmed_by || firstWithReceived.receivedConfirmBy || (constructionConfirmedAt ? '施工接收负责人' : '')
+  const constructionRemark = firstWithReceived.received_remark || firstWithReceived.construction_remark || firstWithReceived.receivedRemark || input.receivedRemark || ''
+
+  const warehouseConfirmedAt = firstWithWarehouse.warehouse_confirm_at || firstWithWarehouse.warehouse_confirmed_at || firstWithWarehouse.warehouseConfirmAt || input.warehouse_confirm_at || input.warehouseConfirmAt || ''
+  const warehouseConfirmedBy = firstWithWarehouse.warehouse_confirm_by_name || firstWithWarehouse.warehouse_confirm_by || firstWithWarehouse.warehouse_confirmed_by || firstWithWarehouse.warehouseConfirmBy || (warehouseConfirmedAt ? '库管员' : '')
+  const warehouseRemark = firstWithWarehouse.warehouse_remark || firstWithWarehouse.warehouseRemark || input.warehouseRemark || ''
 
   const totalShippedQty = itemsList.reduce((sum, it) => sum + (Number(it.shipped_qty !== undefined ? it.shipped_qty : it.shippedQty) || 0), 0)
   const totalArrivedQty = itemsList.reduce((sum, it) => {
@@ -2108,6 +2129,16 @@ const selectedDeliveryAggregate = computed(() => {
 const pipeViewMode = ref('flat')
 const expandedPipeShipmentKeys = ref(new Set())
 
+function switchPipeViewMode(mode) {
+  pipeViewMode.value = mode
+  if (mode === 'grouped') {
+    // 切换到车次合并视图时，若尚未展开任何车次，默认全部展开，保证用户立即可见每车明细记录
+    if (expandedPipeShipmentKeys.value.size === 0 && groupedPipeDeliveries.value.length > 0) {
+      toggleAllPipeShipments(true)
+    }
+  }
+}
+
 // 计算属性：按车次号合并的保温管数据
 const groupedPipeDeliveries = computed(() => {
   const groupsMap = new Map()
@@ -2121,9 +2152,9 @@ const groupedPipeDeliveries = computed(() => {
       groupsMap.set(shipmentKey, {
         groupKey: shipmentKey,
         shipmentNo: row.shipment_no || '无车次号',
-        vehiclePlateNo: row.vehicle_plate_no || '—',
-        supplyEntityName: row.supply_entity_name || '—',
-        section1Name: row.section_1_name || '—',
+        vehiclePlateNo: row.vehicle_plate_no || '未填车牌',
+        supplyEntityName: row.supply_entity_name || row.supply_entity_id || '未知供给主体',
+        section1Name: row.section_1_name || row.section_1_id || '未知需求主体',
         shippedAt: row.shipped_at,
         items: [],
         totalShippedQty: 0,
@@ -2184,11 +2215,23 @@ function togglePipeShipmentExpand(groupKey) {
     next.add(groupKey)
   }
   expandedPipeShipmentKeys.value = next
+
+  // 联动下方流转轨迹：若当前未选属于该车次的单据，自动聚焦选中该车次第一条明细
+  const group = groupedPipeDeliveries.value.find(g => g.groupKey === groupKey)
+  if (group && group.items && group.items.length) {
+    const hasCurrent = group.items.some(it => String(it.id) === selectedDeliveryId.value)
+    if (!hasCurrent) {
+      selectDelivery(group.items[0])
+    }
+  }
 }
 
 function toggleAllPipeShipments(expand) {
   if (expand) {
     expandedPipeShipmentKeys.value = new Set(groupedPipeDeliveries.value.map(g => g.groupKey))
+    if (!selectedDeliveryId.value && groupedPipeDeliveries.value.length && groupedPipeDeliveries.value[0].items.length) {
+      selectDelivery(groupedPipeDeliveries.value[0].items[0])
+    }
   } else {
     expandedPipeShipmentKeys.value = new Set()
   }
@@ -2231,8 +2274,7 @@ const deliverySummary = computed(() => {
 })
 
 const pipeTotalShippedMeters = computed(() => {
-  const source = allDeliveries.value.length ? allDeliveries.value : deliveries.value
-  return source
+  return deliveries.value
     .filter(r => r.status !== 'cancelled')
     .reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
 })
@@ -2472,6 +2514,15 @@ async function loadDeliveries() {
       selectedDeliveryId.value = ''
     } else {
       selectedDeliveryId.value = ''
+    }
+
+    // 若当前处于按车次合并视图且尚未展开，自动展开所有车次，确保明细记录立即可见
+    if (pipeViewMode.value === 'grouped' && expandedPipeShipmentKeys.value.size === 0) {
+      nextTick(() => {
+        if (groupedPipeDeliveries.value.length > 0) {
+          toggleAllPipeShipments(true)
+        }
+      })
     }
   } catch (error) {
     pageError.value = error?.message || '读取库管台账失败'
@@ -3668,5 +3719,355 @@ th.cell-number {
   border-radius: 4px !important;
   text-decoration: underline solid #4f46e5 !important;
   box-shadow: 0 0 0 2px #e0e7ff !important;
+}
+
+/* 保温管按车次合并视图：专属内嵌明细表格样式 */
+.pipe-detail-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+}
+
+.pipe-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 960px;
+  table-layout: fixed;
+  font-size: 12px;
+  background: #ffffff;
+}
+
+.pipe-detail-table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  padding: 8px 10px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  white-space: nowrap !important;
+  text-align: left;
+}
+
+.pipe-detail-table td {
+  padding: 8px 10px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  vertical-align: middle !important;
+  color: #334155;
+}
+
+.pipe-detail-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.pipe-detail-table tbody tr:hover {
+  background: #f8fafc !important;
+}
+
+.pipe-detail-table tbody tr.active {
+  background: #eff6ff !important;
+}
+
+.pipe-detail-table tbody tr.active td:first-child {
+  position: relative;
+}
+
+.pipe-detail-table tbody tr.active td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: #4f46e5;
+}
+
+.pipe-detail-table tbody tr.checked {
+  background: #f0fdf4 !important;
+}
+
+/* 保温管按车次合并视图：专属卡片与流转看板样式 */
+.pipe-shipment-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  max-height: 720px;
+  overflow-y: auto;
+}
+
+.pipe-shipment-card {
+  flex-shrink: 0;
+  min-height: 60px;
+  overflow: hidden;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s ease;
+}
+
+.pipe-shipment-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.06);
+}
+
+.pipe-shipment-card.has-selected {
+  border-color: #86efac;
+  box-shadow: 0 0 0 1px #86efac;
+}
+
+.pipe-shipment-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  background: #f8fafc;
+  min-height: 60px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.pipe-shipment-toggle {
+  display: grid;
+  grid-template-columns: 18px 24px minmax(180px, auto) minmax(260px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.pipe-shipment-toggle:hover {
+  background: #f1f5f9;
+}
+
+.pipe-shipment-chevron {
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 700;
+  transition: transform 0.2s ease;
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.pipe-shipment-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.pipe-shipment-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.pipe-shipment-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pipe-shipment-main-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pipe-shipment-label {
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pipe-shipment-no {
+  color: #4338ca;
+  font-family: "Inter", "SFMono-Regular", Consolas, monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  background: #e0e7ff;
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid #c7d2fe;
+  white-space: nowrap;
+}
+
+.pipe-shipment-time {
+  color: #64748b;
+  font-size: 11px;
+  font-family: "Inter", "SFMono-Regular", Consolas, monospace;
+  white-space: nowrap;
+}
+
+.pipe-shipment-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.pipe-route-party {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pipe-route-party small {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.pipe-route-party strong {
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipe-route-arrow {
+  color: #3b82f6;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.pipe-shipment-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 16px;
+  border-left: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.pipe-shipment-quantity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.pipe-specs-count {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pipe-qty-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+.pipe-qty-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.pipe-qty-badge.is-shipped {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+.pipe-qty-badge.is-shipped strong {
+  color: #0f172a;
+}
+
+.pipe-qty-badge.is-arrived {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.pipe-qty-badge.is-arrived strong {
+  color: #059669;
+}
+
+.pipe-qty-badge.is-received {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.pipe-qty-badge.is-received strong {
+  color: #7c3aed;
+}
+
+.pipe-status-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.pipe-proof-button {
+  min-height: 28px;
+  padding: 0 10px !important;
+  font-size: 11.5px !important;
+  color: #4f46e5 !important;
+  background: #eef2ff !important;
+  border-color: #c7d2fe !important;
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s ease;
+}
+
+.pipe-proof-button:hover {
+  background: #e0e7ff !important;
+  color: #3730a3 !important;
+  border-color: #a5b4fc !important;
+}
+
+@media (max-width: 1200px) {
+  .pipe-shipment-header {
+    grid-template-columns: 1fr;
+  }
+  .pipe-shipment-side {
+    justify-content: flex-start;
+    padding: 8px 14px 10px 48px;
+    border-top: 1px solid #e2e8f0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .pipe-shipment-toggle {
+    grid-template-columns: 16px 20px minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .pipe-shipment-route {
+    grid-column: 3;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 4px;
+  }
 }
 </style>
