@@ -1,3 +1,24 @@
+## 2026-09-11 [物流链系统：新增 3 个业务账号（大连三维膨胀节有限公司及大连开泰市政工程 2 名施工人员）]
+- **需求背景**：
+  - 用户提出在物流链项目（`insulation_pipe_supply_2026`）中增加 3 个业务账号：
+    1. 施工单位人员：大连开泰市政工程有限公司 · 蔡玉洪（分管 `high_lot_4`，联系电话：`13052770653`）；
+    2. 施工单位人员：大连开泰市政工程有限公司 · 侯世夷（分管 `high_lot_3`，联系电话：`13324200407`）；
+    3. 供给主体人员：大连三维膨胀节有限公司 · 胡春霞（分管 `high_lot_3`、`high_lot_4`，联系电话：`13654938186`）；
+  - 账号与密码策略确认：
+    - 供给主体遵循厂家标准格式：账号为 `sanwei`，初始密码 `sanwei_123`，绑定主体为 `大连三维膨胀节有限公司`；
+    - 两名施工人员账号分别采用姓名 `蔡玉洪`、`侯世夷`，初始密码后缀统一指定为 `0911`（即 `caiyuhong_0911`、`houshiyi_0911`）。
+- **具体改动点与落地文件**：
+  1. [`backend_data/shared/auth/账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/%E8%B4%A6%E6%88%B7%E4%BF%A1%E6%81%AF.json)：
+     - 在 `"tube_supplier"` 角色组中追加 `sanwei` 账号项；
+     - 在 `"tube_construction_unit"` 角色组中追加 `蔡玉洪` 与 `侯世夷` 账号项。
+  2. [`backend_data/projects/insulation_pipe_supply_2026/tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)：
+     - 在 `"supply_entities"` 中追加新厂家实体项（`entity_id: "sanwei"`, `code: "SH"`, `entity_name: "大连三维膨胀节有限公司"`, `contact_name: "胡春霞"`, `contact_phone: "13654938186"`, `section_1_ids: ["high_lot_3", "high_lot_4"]`）；
+     - 将“吴近”（能源集团保温管厂）调整至 `"supply_entities"` 以及 `"supply_entity_contacts"` 的最后一位，保持能源集团保温管厂作为供给主体尾项的规范展示顺序；
+     - 在 `"supply_entity_contacts"` 中为 `sanwei` 显式补齐常用经办人节点（`contact_name: "胡春霞"`, `contact_phone: "13654938186"`, `is_default: true`），确保发货界面常用联系人下拉选择与沉淀机制无缝对齐；
+     - 在 `"construction_units"` 中追加两名施工人员实体项（蔡玉洪绑定 `high_lot_4`，侯世夷绑定 `high_lot_3`），实现精准的标段级数据权限隔离。
+- **验证结果**：
+  - 后端执行 `AuthManager` 与 `config_service` 自动化鉴权与标段解析校验，3 个账号均成功被热加载，标段管辖权限（`resolve_accessible_section_1_ids` 及 `resolve_accessible_supply_entity_ids`）与供给主体常备联系人（`_serialize_supply_entity_options`）全部准确解析无误。
+
 ## 2026-09-09 [库管管理：保温管“按车次合并视图”横向细线视觉塌缩排障与默认全展开深度重构]
 - **需求与排障背景**：
   - 用户深入测试反馈：“我点击按车次合并视图后，区域显示一些横向细线，却看不到任何记录信息，帮我仔细全面检查。还有，工作时多用内置工具”；

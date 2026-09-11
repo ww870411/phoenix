@@ -156,6 +156,11 @@
         "username": "wosheng",
         "password": "wosheng_123",
         "unit": "江苏沃圣阀业有限公司"
+      },
+      {
+        "username": "sanwei",
+        "password": "sanwei_123",
+        "unit": "大连三维膨胀节有限公司"
       }
     ],
     "tube_site_manager": [
@@ -340,6 +345,16 @@
         "username": "高玉荣",
         "password": "gaoyurong_0831",
         "unit": "low_lot_6"
+      },
+      {
+        "username": "蔡玉洪",
+        "password": "caiyuhong_0911",
+        "unit": "high_lot_4"
+      },
+      {
+        "username": "侯世夷",
+        "password": "houshiyi_0911",
+        "unit": "high_lot_3"
       }
     ],
     "tube_warehouse_keeper": [

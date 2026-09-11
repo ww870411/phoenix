@@ -1,3 +1,19 @@
+## 2026-09-11 物流链系统：新增 3 个业务账号（大连三维膨胀节有限公司及大连开泰市政工程施工人员）
+
+- **账户信息更新 (`backend_data/shared/auth/账户信息.json`)**：
+  - 在 `tube_supplier` 组中新增供给主体厂家账号 `sanwei`（密码 `sanwei_123`，单位标识 `大连三维膨胀节有限公司`）；
+  - 在 `tube_construction_unit` 组中新增施工人员账号 `蔡玉洪`（密码 `caiyuhong_0911`，单位标识 `high_lot_4`）与 `侯世夷`（密码 `houshiyi_0911`，单位标识 `high_lot_3`）。
+- **业务主体配置与标段绑定 (`backend_data/projects/insulation_pipe_supply_2026/tube_config.json`)**：
+  - 在 `supply_entities` 中追加厂家 `大连三维膨胀节有限公司`（`entity_id: "sanwei"`, `code: "SH"`, 经办人：胡春霞，电话：13654938186，分管标段：`high_lot_3`、`high_lot_4`）；
+  - 将能源集团保温管厂（吴近）调整并固定至 `supply_entities` 与 `supply_entity_contacts` 的最末位；
+  - 在 `supply_entity_contacts` 常用经办人字典中同步录入 `sanwei` 默认联系人（胡春霞，13654938186，`is_default: True`）；
+  - 在 `construction_units` 中追加两名施工人员实体：
+    * 蔡玉洪（所属单位：大连开泰市政工程有限公司，电话：13052770653，分管标段：`high_lot_4`）；
+    * 侯世夷（所属单位：大连开泰市政工程有限公司，电话：13324200407，分管标段：`high_lot_3`）。
+- **服务层协同与权限解析**：
+  - `AuthManager`（[`backend/services/auth_manager.py`](file:///D:/编程项目/phoenix/backend/services/auth_manager.py)）通过 mtime 热加载机制即时载入账号；
+  - `config_service.py` 中的 `resolve_accessible_section_1_ids` 与 `resolve_accessible_supply_entity_ids` 自动绑定标段数据隔离。
+
 ## 2026-09-09 库管管理：保温管车次合并视图契约同步与接口聚合验证
 
 - **接口与数据契约同步**：

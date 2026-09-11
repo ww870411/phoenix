@@ -1,3 +1,18 @@
+## 2026-09-11 物流链系统：新增 3 个业务账号（大连三维膨胀节有限公司及大连开泰市政工程施工人员）
+
+- **关联前端页面与权限联动**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)、[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)、[`ComprehensiveQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/ComprehensiveQueryView.vue) 等；
+- **前端受众与表单/筛选联动机制**：
+  1. **供给主体账号 (`sanwei`)**：
+     - 所属单位：大连三维膨胀节有限公司（代码 `SH`）；
+     - 登录后前端依据 `session.username` 自动锁定供给主体为“大连三维膨胀节有限公司”，并在需求拉取、发货录入和台账筛选时，标段下拉框自动联动受限于分管的 `high_lot_3`（高温水_标段3）与 `high_lot_4`（高温水_标段4）；
+     - 前端发货界面的常用经办人名录（来源于 `supply_entity_contacts`）已同步联动预设默认联系人“胡春霞（13654938186）”，支持发货自动带入与沉淀；
+  2. **施工单位账号 (`蔡玉洪`, `侯世夷`)**：
+     - 所属单位：大连开泰市政工程有限公司；
+     - 登录后前端需求提报与到货接收页面，标段选择框精准预选并隔离至对应标段（蔡玉洪绑定 `high_lot_4`，侯世夷绑定 `high_lot_3`）；
+  3. **认证配置同步**：
+     - 对应共享账号配置文件 [`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json) 及业务配置文件 [`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)。
+
 ## 2026-09-09 库管管理：保温管“按车次合并视图”横向细线视觉塌缩排障与默认展开深度重构
 
 - **关联前端页面与组件**：
