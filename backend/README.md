@@ -1,3 +1,18 @@
+## 2026-09-21 物资基准体系：94项“联网平衡阀”物料基准量全量入库 tube.tube_fitting_baseline
+
+- **业务背景与入库标准**：
+  - 依据用户要求，将低温水 1~6 标段的“联网平衡阀”物料基准量写入数据库表 `tube.tube_fitting_baseline`；
+  - 计量单位明确为 **“套”**（`unit: '套'`），物理大类明确为 **“联网平衡阀”**（`category: '联网平衡阀'`），所属系统类型自动划入 **“低温水”**（`system_type: '低温水'`）；
+  - 数据源基于 [`configs/9.21 物联网平衡阀询价单-数据整理2.xlsx`](file:///D:/编程项目/phoenix/configs/9.21%20%E7%89%A9%E8%81%94%E7%BD%91%E5%B9%B3%E8%A1%A1%E9%98%80%E8%AF%A2%E4%BB%B7%E5%8D%95-%E6%95%B0%E6%8D%AE%E6%95%B4%E7%90%862.xlsx)。
+- **数据结构与解析规范**：
+  - 规格型号 `model_spec`（如 `PN16/DN25`）自动提取公称压力 `pressure_rating`（`PN16` / `PN25`）与公称通径 `main_dn`（25.0 ~ 200.0）；
+  - 子型号 `sub_model_spec` 保留地上/地下安装环境标识；
+  - 采用 PostgreSQL `UPSERT ON CONFLICT (section_1_id, system_type, standard_name, model_spec, sub_model_spec) DO UPDATE` 幂等写入，保证数据无重复与原子性。
+- **入库核验与容量变化**：
+  - 全表总行数由 1,173 提升至 **1,267 行**（净增 94 行）；
+  - 低温水 6 个标段设计总量与计划采购总量各 **4,506.00 套**，与 Excel 100% 对齐；
+  - 后端 [`baseline_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/baseline_service.py) 中 `list_fitting_baselines` 方法可无缝查询与下发该批物料。
+
 ## 2026-09-11 物流链系统：新增 3 个业务账号（大连三维膨胀节有限公司及大连开泰市政工程施工人员）
 
 - **账户信息更新 (`backend_data/shared/auth/账户信息.json`)**：

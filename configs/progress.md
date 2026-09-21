@@ -1,3 +1,51 @@
+## 2026-09-21 [业务规划探讨：供给主体（保温管厂家）厂区在库待发量（成品库存）填报需求分析]
+- **需求沟通背景**：
+  - 用户提出新业务诉求：公司希望各供给主体（保温管生产厂家）能够填报“库存”数据，即掌握各家仓库中“已生产完工、但尚未发货”的各型号保温管数量；
+  - 征询该业务需求在供应链控制、系统架构、数据模型与交互设计层面的专业看法与落地建议。
+- **业务价值与定位**：
+  1. **全链路供应链前置可视**：填补了当前系统只有在“发货（`tube_delivery`）”后才产生数据的盲区，将监控节点前移至“工厂成品库”；
+  2. **精准供需平衡调度**：结合需求方的“明日需求申报（`tube_daily_plan`）”与供给方的“在库待发量”，形成供需动态撮合与缺口预警，避免现场停工待料；
+  3. **真实产能与履约监控**：穿透掌握各厂家的实际生产进度（采购计划 vs 已发货 vs 厂区待发 vs 剩余未产）。
+- **关键业务与架构考量（待用户确认）**：
+  1. **库存分配口径**：是“通用成品池（厂家+管型）”还是“标段专料专用（厂家+标段+管型）”；
+  2. **数据流转模式**：推荐采用“按日快照/实盘在库量录入”，而非系统强行与发货自动联动扣减，避免线下损耗等导致的账实脱节；
+  3. **交互与录入体验**：在 `SupplyManagementView.vue` 中增设轻量级快捷录入 Tab，支持一键载入上次数据快速调整；
+  4. **大屏与调度联动**：大屏可新增“厂家待发储备”看板，形成“厂家库存 ➔ 在途运输 ➔ 现场库存 ➔ 现场消耗”的全生命周期监控闭环。
+
+## 2026-09-21 [物资基准体系：94项“联网平衡阀”物料基准量全量入库 tube.tube_fitting_baseline]
+- **需求与确认背景**：
+  - 用户确认业务细节：
+    1. 计量单位统一使用 **“套”**（`unit = '套'`）；
+    2. 物理类别独立记为 **“联网平衡阀”**（`category = '联网平衡阀'`，不并入传统“阀门”类）；
+  - 数据源基于 [`configs/9.21 物联网平衡阀询价单-数据整理2.xlsx`](file:///D:/编程项目/phoenix/configs/9.21%20%E7%89%A9%E8%81%94%E7%BD%91%E5%B9%B3%E8%A1%A1%E9%98%80%E8%AF%A2%E4%BB%B7%E5%8D%95-%E6%95%B0%E6%8D%AE%E6%95%B4%E7%90%862.xlsx)（工作表：`按标段+型号+地上地下聚合`）。
+- **具体实施与入库执行**：
+  - 编写并执行入库脚本 [`scratch/import_balance_valves_20260921.py`](file:///D:/编程项目/phoenix/scratch/import_balance_valves_20260921.py)：
+    1. 自动解析 94 行标准数据，精准提取 `pressure_rating`（`PN16`, `PN25`）与 `main_dn`（口径 25~200mm）；
+    2. 执行 PostgreSQL 事务级幂等写入（`UPSERT ON CONFLICT (section_1_id, system_type, standard_name, model_spec, sub_model_spec) DO UPDATE`）；
+    3. 全表总行数平滑从 1,173 行升级至 **1,267 行**（净增 94 行），全部 94 条联网平衡阀记录入库成功。
+- **各标段数据统计核验**：
+  - `low_lot_1`: 16 条，设计量 739.00 套，计划采购量 739.00 套；
+  - `low_lot_2`: 14 条，设计量 620.00 套，计划采购量 620.00 套；
+  - `low_lot_3`: 17 条，设计量 996.00 套，计划采购量 996.00 套；
+  - `low_lot_4`: 22 条，设计量 691.00 套，计划采购量 691.00 套；
+  - `low_lot_5`: 13 条，设计量 767.00 套，计划采购量 767.00 套；
+  - `low_lot_6`: 12 条，设计量 693.00 套，计划采购量 693.00 套；
+  - **全网总量**：设计总量与计划采购总量各 **4,506.00 套**，与 Excel 完全 100% 精确吻合。
+- **业务验证**：
+  - 调用 [`baseline_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/baseline_service.py) 的 `list_fitting_baselines()` 验证查询，`low_lot_1` 等标段成功完整调取该批物料明细，各项几何工程参数与审计字段映射无误。
+
+## 2026-09-21 [物资基准体系：梳理与答复 tube.tube_fitting_baseline 管件设计量/采购计划量基准底表]
+- **沟通与排查背景**：
+  - 用户询问是否还记得数据库中的管件设计量/需求量表 `tube_fitting_baseline`；
+  - 全面对接并审查了 [`backend/sql/tube_schema_init.sql`](file:///D:/编程项目/phoenix/backend/sql/tube_schema_init.sql)、[`backend/projects/insulation_pipe_supply_2026/services/baseline_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/baseline_service.py) 及前后端业务代码，向用户做完整汇报。
+- **表定位与核心作用**：
+  - 该表位于 PostgreSQL `tube` Schema 中，全名 `tube.tube_fitting_baseline`，是保温管保供项目（`insulation_pipe_supply_2026`）中**管件与特种物料的设计量（`design_qty`）与计划采购量（`purchase_plan_qty`）的基准底表（Baseline）**；
+  - 作为全项目物资控制的“单一事实来源（Single Source of Truth）”，与直管基准表 `tube.tube_pipe_baseline` 配套，为大屏看板、供给方/需求方基准明细、发货核销（`tube_fitting_delivery`）及施工消耗（`tube_fitting_daily_usage`）提供基准对照。
+- **结构与演进特性**：
+  1. **28 列工业级参数化多维宽表**：包含标段 `section_1_id`、系统类型 `system_type`（高/低温水）、类别 `category`、标准名称 `standard_name`、主规格 `model_spec`、子型号 `sub_model_spec`、单位 `unit`、设计量 `design_qty`、计划采购量 `purchase_plan_qty`、主次径 `main_dn`/`sub_dn`、角度 `angle`、弯曲半径 `bending_radius_ratio`/`bending_radius_m`、阀门型号 `valve_model`、外径 `outer_diameter`、壁厚 `wall_thickness`、长度 `length_m`、压力等级 `pressure_rating`、补偿量 `compensation_mm`、流向 `flow_direction`、扩展 JSONB `extra_params` 等；
+  2. **约束与索引**：联合唯一约束 `uq_tube_fitting_baseline_sec_sys_name_spec_sub`（`section_1_id, system_type, standard_name, model_spec, sub_model_spec`），非负数量校验，以及多维度覆盖索引；
+  3. **数据容量与历史演进**：全表包含约 1,173 条基准记录，由最初的 1,138 项标准化物料（《8.17 标准化数据.xlsx》）加上 49 条高温水 1-4 标球阀（《8.20 高温水1.2.3.4标球阀数量（额外）.xlsx》）升级汇聚而成。
+
 ## 2026-09-11 [物流链系统：新增 3 个业务账号（大连三维膨胀节有限公司及大连开泰市政工程 2 名施工人员）]
 - **需求背景**：
   - 用户提出在物流链项目（`insulation_pipe_supply_2026`）中增加 3 个业务账号：

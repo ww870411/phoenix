@@ -74,7 +74,8 @@
       "contact_phone": "13998603445",
       "section_1_ids": [
         "high_lot_1",
-        "high_lot_2"
+        "high_lot_2",
+        "high_lot_4"
       ],
       "is_custom": false
     },
@@ -169,6 +170,22 @@
       "contact_name": "吴近",
       "contact_phone": "13998473933",
       "section_1_ids": [],
+      "is_custom": false
+    },
+    {
+      "entity_id": "taideer",
+      "code": "SI",
+      "entity_name": "泰德尔物联(辽宁)有限公司",
+      "contact_name": "佟玲",
+      "contact_phone": "18602400520",
+      "section_1_ids": [
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
+      ],
       "is_custom": false
     }
   ],
@@ -345,6 +362,19 @@
       "contact_phone": "15042408099",
       "section_1_ids": [
         "high_lot_4"
+      ]
+    },
+    {
+      "manager_id": "那永帅",
+      "manager_name": "那永帅",
+      "contact_phone": "15840616203",
+      "section_1_ids": [
+        "low_lot_1",
+        "low_lot_2",
+        "low_lot_3",
+        "low_lot_4",
+        "low_lot_5",
+        "low_lot_6"
       ]
     },
     {
@@ -727,9 +757,9 @@
       {
         "contact_name": "薛向新",
         "contact_phone": "13998603445",
-        "is_default": false,
+        "is_default": true,
         "created_at": "2026-09-07T11:00:00",
-        "updated_at": "2026-09-07 11:27:01"
+        "updated_at": "2026-09-20 15:58:47"
       },
       {
         "contact_name": "宋波",
@@ -741,9 +771,99 @@
     ],
     "xinruide": [
       {
+        "contact_name": "张洪讯",
+        "contact_phone": "19931720966",
+        "is_default": true,
+        "created_at": "2026-09-19 21:33:23",
+        "updated_at": "2026-09-19 21:46:17"
+      },
+      {
+        "contact_name": "董居庆",
+        "contact_phone": "18131775035",
+        "is_default": false,
+        "created_at": "2026-09-19 21:26:41",
+        "updated_at": "2026-09-19 21:29:57"
+      },
+      {
+        "contact_name": "迟志雄",
+        "contact_phone": "13315725260",
+        "is_default": false,
+        "created_at": "2026-09-19 21:14:32",
+        "updated_at": "2026-09-19 21:21:04"
+      },
+      {
+        "contact_name": "田保华",
+        "contact_phone": "17331735090",
+        "is_default": false,
+        "created_at": "2026-09-19 20:49:38",
+        "updated_at": "2026-09-19 20:58:07"
+      },
+      {
+        "contact_name": "鞠猛",
+        "contact_phone": "19948089966",
+        "is_default": false,
+        "created_at": "2026-09-19 20:40:35",
+        "updated_at": "2026-09-19 20:44:25"
+      },
+      {
+        "contact_name": "崔俊强",
+        "contact_phone": "13032428585",
+        "is_default": false,
+        "created_at": "2026-09-19 16:37:58",
+        "updated_at": "2026-09-19 16:42:46"
+      },
+      {
+        "contact_name": "张艳堂",
+        "contact_phone": "19213077678",
+        "is_default": false,
+        "created_at": "2026-09-19 16:16:23",
+        "updated_at": "2026-09-19 16:28:27"
+      },
+      {
+        "contact_name": "孙健庆",
+        "contact_phone": "15613798139",
+        "is_default": false,
+        "created_at": "2026-09-16 14:31:40",
+        "updated_at": "2026-09-19 15:57:04"
+      },
+      {
+        "contact_name": "柴美涛",
+        "contact_phone": "19833707931",
+        "is_default": false,
+        "created_at": "2026-09-14 22:06:53",
+        "updated_at": "2026-09-14 22:11:54"
+      },
+      {
+        "contact_name": "孟勇",
+        "contact_phone": "18631782196",
+        "is_default": false,
+        "created_at": "2026-09-07T11:23:00",
+        "updated_at": "2026-09-14 22:00:02"
+      },
+      {
+        "contact_name": "满仓",
+        "contact_phone": "13832709257",
+        "is_default": false,
+        "created_at": "2026-09-07T11:23:00",
+        "updated_at": "2026-09-14 21:54:15"
+      },
+      {
+        "contact_name": "信伟",
+        "contact_phone": "13252896222",
+        "is_default": false,
+        "created_at": "2026-09-12 22:09:01"
+      },
+      {
+        "contact_name": "鲁治信",
+        "contact_phone": "13383373302",
+        "is_default": false,
+        "created_at": "2026-09-12 22:00:27",
+        "updated_at": "2026-09-12 22:04:28"
+      },
+      {
         "contact_name": "刘宁",
         "contact_phone": "18230465777",
-        "is_default": true,
+        "is_default": false,
         "created_at": "2026-09-07T11:00:00"
       },
       {
@@ -751,60 +871,6 @@
         "contact_phone": "15100797605",
         "is_default": false,
         "created_at": "2026-09-07T00:27:00"
-      },
-      {
-        "contact_name": "康寿良",
-        "contact_phone": "15075711089",
-        "is_default": false,
-        "created_at": "2026-09-05T09:36:00"
-      },
-      {
-        "contact_name": "孟勇",
-        "contact_phone": "18631782196",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
-      },
-      {
-        "contact_name": "满仓",
-        "contact_phone": "13832709257",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
-      },
-      {
-        "contact_name": "王增福",
-        "contact_phone": "13311278339",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
-      },
-      {
-        "contact_name": "蒋观猛",
-        "contact_phone": "17731730999",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
-      },
-      {
-        "contact_name": "陈德生",
-        "contact_phone": "15642247773",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
-      },
-      {
-        "contact_name": "高俊伟",
-        "contact_phone": "19931764455",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
-      },
-      {
-        "contact_name": "黄万强",
-        "contact_phone": "17703371920",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
-      },
-      {
-        "contact_name": "刘铁峰",
-        "contact_phone": "13804386058",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00"
       }
     ],
     "wosheng": [
@@ -812,14 +878,22 @@
         "contact_name": "秦杰",
         "contact_phone": "13520598794",
         "is_default": true,
-        "created_at": "2026-09-07T11:00:00"
+        "created_at": "2026-09-07T11:00:00",
+        "updated_at": "2026-09-19 09:13:41"
       }
     ],
     "kaersi": [
       {
+        "contact_name": "翟冬立",
+        "contact_phone": "18210877195",
+        "is_default": true,
+        "created_at": "2026-09-18 08:27:54",
+        "updated_at": "2026-09-18 08:30:55"
+      },
+      {
         "contact_name": "贾祥娟",
         "contact_phone": "18311089570",
-        "is_default": true,
+        "is_default": false,
         "created_at": "2026-09-07T11:00:00"
       }
     ],
@@ -828,7 +902,8 @@
         "contact_name": "刘波",
         "contact_phone": "13910551929",
         "is_default": true,
-        "created_at": "2026-09-07T11:00:00"
+        "created_at": "2026-09-07T11:00:00",
+        "updated_at": "2026-09-15 08:55:16"
       }
     ],
     "tiandilong": [
@@ -836,7 +911,8 @@
         "contact_name": "丁彧",
         "contact_phone": "13516258086",
         "is_default": true,
-        "created_at": "2026-09-07T11:00:00"
+        "created_at": "2026-09-07T11:00:00",
+        "updated_at": "2026-09-20 14:45:24"
       }
     ],
     "sanwei": [
@@ -853,6 +929,15 @@
         "contact_phone": "13998473933",
         "is_default": true,
         "created_at": "2026-09-07T11:00:00"
+      }
+    ],
+    "taideer": [
+      {
+        "contact_name": "佟玲",
+        "contact_phone": "18602400520",
+        "is_default": true,
+        "created_at": "2026-09-20 09:13:56",
+        "updated_at": "2026-09-21 09:24:25"
       }
     ]
   }
