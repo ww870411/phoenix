@@ -881,6 +881,34 @@ export async function getTubeSupplyManagementDemandSummary(projectKey = 'insulat
   return response.json()
 }
 
+export async function getTubeSupplierInventory(projectKey = 'insulation_pipe_supply_2026', params = {}) {
+  const search = new URLSearchParams()
+  if (params?.supply_entity_id) search.set('supply_entity_id', String(params.supply_entity_id))
+  if (params?.report_date) search.set('report_date', String(params.report_date))
+  const queryStr = search.toString() ? `?${search.toString()}` : ''
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/inventory${queryStr}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取供给主体库存盘点失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function saveTubeSupplierInventory(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/inventory/save`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存供给主体库存盘点失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getTubeSupplyManagementDeliveries(projectKey, params = {}) {
   const search = new URLSearchParams()
   if (params.section1Id) search.set('section_1_id', String(params.section1Id))

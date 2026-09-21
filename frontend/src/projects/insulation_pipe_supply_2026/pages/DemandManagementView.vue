@@ -280,6 +280,18 @@
                 <div class="kpi-footer-note">现存+在途合计 {{ formatNumber(overviewStats.totalInventoryPlusTransit) }} 米</div>
               </div>
 
+              <div class="overview-kpi-card kpi-orange">
+                <div class="kpi-card-header">
+                  <span class="kpi-icon">🏭</span>
+                  <span class="kpi-title">供方实盘在库总量</span>
+                </div>
+                <div class="kpi-main-val">
+                  <strong class="kpi-number">{{ formatNumber(overviewStats.totalSupplierStock) }}</strong>
+                  <span class="kpi-unit">米</span>
+                </div>
+                <div class="kpi-footer-note">负责厂家现货 · 覆盖 {{ overviewStats.supplierStockModelsCount }} 种型号</div>
+              </div>
+
               <div class="overview-kpi-card" :class="overviewStats.totalNetGap > 0 ? 'kpi-red is-alert-pulse' : 'kpi-safe'">
                 <div class="kpi-card-header">
                   <span class="kpi-icon">{{ overviewStats.totalNetGap > 0 ? '🚨' : '🛡️' }}</span>
@@ -303,6 +315,7 @@
                   <span class="dot purple"></span> 三日需求计划
                   <span class="dot green"></span> 现场库存
                   <span class="dot blue"></span> 运输在途
+                  <span class="dot orange"></span> 厂家在库现货
                   <span class="dot red"></span> 三日净缺口
                 </div>
               </div>
@@ -355,6 +368,7 @@
                       <th style="min-width: 100px; text-align: right; color: #0369a1; background: #f0f9ff;">运输在途(m)</th>
                       <th style="min-width: 110px; text-align: right; color: #0f766e;">库存+在途(m)</th>
                       <th style="min-width: 115px; text-align: right; color: #b91c1c; background: #fef2f2;">三日净缺口(m)</th>
+                      <th style="min-width: 115px; text-align: right; color: #c2410c; background: #fff7ed;">厂家在库现货(m)</th>
                       <th style="min-width: 110px; text-align: center;">保供态势判定</th>
                       <th style="min-width: 120px; text-align: center;">快捷联动</th>
                     </tr>
@@ -395,6 +409,16 @@
                           ⚠️ {{ formatQtyDisplay(row.netGapQty) }}
                         </span>
                         <span v-else>0.00</span>
+                      </td>
+                      <td style="text-align: right; font-weight: 600; color: #c2410c; background: #fff7ed;">
+                        <span 
+                          v-if="row.supplierStockQty > 0"
+                          :title="formatSupplierStockTooltip(row.supplierStockBreakdown)"
+                          style="cursor: help; text-decoration: underline dotted #ea580c; text-underline-offset: 3px;"
+                        >
+                          🏭 {{ formatQtyDisplay(row.supplierStockQty) }}
+                        </span>
+                        <span v-else style="color: #94a3b8;">0.00</span>
                       </td>
                       <td style="text-align: center;">
                         <span :class="['status-pill', row.statusPillClass]">
@@ -452,6 +476,9 @@
                         :style="{ color: filteredOverviewTotals.netGapQty > 0 ? '#b91c1c' : '#15803d' }"
                       >
                         {{ formatQtyDisplay(filteredOverviewTotals.netGapQty) }}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #c2410c; background: #ffedd5;">
+                        {{ formatQtyDisplay(filteredOverviewTotals.supplierStockQty) }}
                       </td>
                       <td colspan="2" style="text-align: center; font-size: 12px; color: #64748b;">
                         {{ filteredOverviewTotals.netGapQty > 0 ? `共 ${overviewStats.gapModelsCount} 种型号缺料` : '全型号供需平衡' }}
@@ -4174,6 +4201,18 @@ function formatQtyDisplay(val) {
   return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function formatSupplierStockTooltip(breakdown) {
+  if (!Array.isArray(breakdown) || !breakdown.length) {
+    return '暂无负责厂家实盘在库数据'
+  }
+  return breakdown.map(item => {
+    const supName = item.supplier_name || item.supply_entity_name || item.supply_entity_id || '未知厂家'
+    const rawTime = item.inventory_time || item.reported_at || ''
+    const timeStr = rawTime ? ` (${rawTime.slice(5, 16).replace('T', ' ')})` : ''
+    return `${supName}: ${formatQtyDisplay(item.stock_qty)} 米${timeStr}`
+  }).join('\n')
+}
+
 const overviewStats = computed(() => {
   let totalPlan = 0
   let totalShipped = 0
@@ -4181,10 +4220,12 @@ const overviewStats = computed(() => {
   let totalUsage = 0
   let totalInventory = 0
   let totalTransit = 0
+  let totalSupplierStock = 0
   let totalInventoryPlusTransit = 0
   let totalNetGap = 0
   let planModelsCount = 0
   let gapModelsCount = 0
+  let supplierStockModelsCount = 0
 
   overviewRows.value.forEach(r => {
     totalPlan += r.futurePlanQty || 0
@@ -4193,6 +4234,7 @@ const overviewStats = computed(() => {
     totalUsage += r.totalUsageQty || 0
     totalInventory += r.inventoryQty || 0
     totalTransit += r.pendingArrivalQty || 0
+    totalSupplierStock += r.supplierStockQty || 0
     totalInventoryPlusTransit += r.inventoryPlusPipeline || 0
     totalNetGap += r.netGapQty || 0
 
@@ -4201,6 +4243,9 @@ const overviewStats = computed(() => {
     }
     if ((r.netGapQty || 0) > 0) {
       gapModelsCount += 1
+    }
+    if ((r.supplierStockQty || 0) > 0) {
+      supplierStockModelsCount += 1
     }
   })
 
@@ -4211,10 +4256,12 @@ const overviewStats = computed(() => {
     totalUsage: Math.round(totalUsage * 100) / 100,
     totalInventory: Math.round(totalInventory * 100) / 100,
     totalTransit: Math.round(totalTransit * 100) / 100,
+    totalSupplierStock: Math.round(totalSupplierStock * 100) / 100,
     totalInventoryPlusTransit: Math.round(totalInventoryPlusTransit * 100) / 100,
     totalNetGap: Math.round(totalNetGap * 100) / 100,
     planModelsCount,
     gapModelsCount,
+    supplierStockModelsCount,
   }
 })
 
@@ -4242,6 +4289,7 @@ const filteredOverviewTotals = computed(() => {
   let totalUsageQty = 0
   let inventoryQty = 0
   let pendingArrivalQty = 0
+  let supplierStockQty = 0
   let inventoryPlusPipeline = 0
   let netGapQty = 0
 
@@ -4251,6 +4299,7 @@ const filteredOverviewTotals = computed(() => {
     totalUsageQty += r.totalUsageQty || 0
     inventoryQty += r.inventoryQty || 0
     pendingArrivalQty += r.pendingArrivalQty || 0
+    supplierStockQty += r.supplierStockQty || 0
     inventoryPlusPipeline += r.inventoryPlusPipeline || 0
     netGapQty += r.netGapQty || 0
   })
@@ -4261,6 +4310,7 @@ const filteredOverviewTotals = computed(() => {
     totalUsageQty: Math.round(totalUsageQty * 100) / 100,
     inventoryQty: Math.round(inventoryQty * 100) / 100,
     pendingArrivalQty: Math.round(pendingArrivalQty * 100) / 100,
+    supplierStockQty: Math.round(supplierStockQty * 100) / 100,
     inventoryPlusPipeline: Math.round(inventoryPlusPipeline * 100) / 100,
     netGapQty: Math.round(netGapQty * 100) / 100,
   }
@@ -4287,16 +4337,26 @@ async function loadDemandInventoryOverview() {
       const totalUsageQty = Number(r.total_usage_qty) || 0
       const inventoryQty = Number(r.section_1_inventory_qty) || 0
       const pendingArrivalQty = Number(r.pending_arrival_qty) || 0
+      const supplierStockQty = Number(r.supplier_stock_qty) || 0
+      const supplierStockBreakdown = Array.isArray(r.supplier_stock_breakdown) ? r.supplier_stock_breakdown : []
       const inventoryPlusPipeline = Math.round((inventoryQty + pendingArrivalQty) * 100) / 100
       const netGapQty = Number(r.net_gap_qty) || 0
       const hardGapQty = Number(r.hard_gap_qty) || 0
 
-      // 保供态势判定
+      // 保供态势判定升级（联动上游负责厂家在库现货）
       let statusText = '⚪ 现存安全'
       let statusPillClass = 'pill-neutral'
       if (netGapQty > 0) {
-        statusText = '🚨 紧缺待调拨'
-        statusPillClass = 'pill-danger'
+        if (supplierStockQty >= netGapQty) {
+          statusText = '🟡 现货可保供'
+          statusPillClass = 'pill-warning'
+        } else if (supplierStockQty > 0) {
+          statusText = '🟠 部分现货'
+          statusPillClass = 'pill-orange'
+        } else {
+          statusText = '🚨 厂家无现货'
+          statusPillClass = 'pill-danger'
+        }
       } else if (futurePlanQty > inventoryQty && futurePlanQty <= inventoryPlusPipeline) {
         statusText = '🚚 在途可满足'
         statusPillClass = 'pill-info'
@@ -4317,6 +4377,8 @@ async function loadDemandInventoryOverview() {
         totalUsageQty,
         inventoryQty,
         pendingArrivalQty,
+        supplierStockQty,
+        supplierStockBreakdown,
         inventoryPlusPipeline,
         netGapQty,
         hardGapQty,
@@ -4369,6 +4431,7 @@ function renderOverviewChart() {
   const planData = dataList.map(item => item.futurePlanQty)
   const invData = dataList.map(item => item.inventoryQty)
   const transitData = dataList.map(item => item.pendingArrivalQty)
+  const supplierStockData = dataList.map(item => item.supplierStockQty || 0)
   const netGapData = dataList.map(item => item.netGapQty)
 
   const option = {
@@ -4385,6 +4448,7 @@ function renderOverviewChart() {
         html += `<span style="color: #6d28d9;">🟣 三日需求计划:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.futurePlanQty)} m</strong>`
         html += `<span style="color: #047857;">🟢 现场实物库存:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.inventoryQty)} m</strong>`
         html += `<span style="color: #0284c7;">🔵 运输在途保供:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.pendingArrivalQty)} m</strong>`
+        html += `<span style="color: #ea580c;">🏭 厂家在库现货:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.supplierStockQty)} m</strong>`
         html += `<span style="color: #0f766e;">🌐 现存+在途合计:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.inventoryPlusPipeline)} m</strong>`
         html += `<span style="color: #475569;">🚚 累计发货总量:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.totalShippedQty)} m</strong>`
         html += `<span style="color: #475569;">🔨 累计施工消耗:</span><strong style="text-align: right;">${formatQtyDisplay(targetRow.totalUsageQty)} m</strong>`
@@ -4392,13 +4456,24 @@ function renderOverviewChart() {
         const gapText = (targetRow.netGapQty || 0) > 0 ? `⚠️ ${formatQtyDisplay(targetRow.netGapQty)} m` : `0.00 m (安全)`
         html += `<span style="color: ${gapColor}; font-weight: bold;">🔴 三日净缺口:</span><strong style="text-align: right; color: ${gapColor};">${gapText}</strong>`
         html += `</div>`
+        if (targetRow.supplierStockBreakdown && targetRow.supplierStockBreakdown.length > 0) {
+          html += `<div style="margin-top: 6px; padding-top: 4px; border-top: 1px dashed #e2e8f0; font-size: 11px; color: #64748b;">`
+          html += `<div style="font-weight: 600; margin-bottom: 2px;">🏭 负责厂家实盘现货明细:</div>`
+          targetRow.supplierStockBreakdown.forEach(s => {
+            const supName = s.supplier_name || s.supply_entity_name || s.supply_entity_id || '未知厂家'
+            const rawTime = s.inventory_time || s.reported_at || ''
+            const timeStr = rawTime ? ` (${rawTime.slice(5, 16).replace('T', ' ')})` : ''
+            html += `<div>• ${supName}: <strong>${formatQtyDisplay(s.stock_qty)}</strong> m${timeStr}</div>`
+          })
+          html += `</div>`
+        }
         return html
       }
     },
     legend: {
       top: 6,
       right: 12,
-      data: ['三日需求计划', '现场库存', '运输在途', '三日净缺口'],
+      data: ['三日需求计划', '现场库存', '运输在途', '厂家在库现货', '三日净缺口'],
       textStyle: { color: '#475569', fontSize: 12 }
     },
     grid: {
@@ -4429,7 +4504,7 @@ function renderOverviewChart() {
       {
         name: '三日需求计划',
         type: 'bar',
-        barMaxWidth: 22,
+        barMaxWidth: 20,
         data: planData,
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -4442,7 +4517,7 @@ function renderOverviewChart() {
       {
         name: '现场库存',
         type: 'bar',
-        barMaxWidth: 22,
+        barMaxWidth: 20,
         data: invData,
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -4455,7 +4530,7 @@ function renderOverviewChart() {
       {
         name: '运输在途',
         type: 'bar',
-        barMaxWidth: 22,
+        barMaxWidth: 20,
         data: transitData,
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -4466,9 +4541,22 @@ function renderOverviewChart() {
         }
       },
       {
+        name: '厂家在库现货',
+        type: 'bar',
+        barMaxWidth: 20,
+        data: supplierStockData,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#fb923c' },
+            { offset: 1, color: '#ea580c' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
         name: '三日净缺口',
         type: 'bar',
-        barMaxWidth: 22,
+        barMaxWidth: 20,
         data: netGapData,
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -4497,7 +4585,7 @@ function exportOverviewToExcel() {
 
   const header = [
     '序号', '保温管规格型号', '未来三日计划(米)', '累计发货量(米)', '累计施工量(米)', 
-    '现场库存量(米)', '运输在途量(米)', '库存+在途(米)', '三日净缺口(米)', '保供态势判定'
+    '现场库存量(米)', '运输在途量(米)', '库存+在途(米)', '三日净缺口(米)', '厂家在库现货(米)', '保供态势判定'
   ]
   const rows = filteredOverviewRows.value.map((r, idx) => [
     idx + 1,
@@ -4509,6 +4597,7 @@ function exportOverviewToExcel() {
     r.pendingArrivalQty,
     r.inventoryPlusPipeline,
     r.netGapQty,
+    r.supplierStockQty,
     r.statusText
   ])
 
@@ -4522,6 +4611,7 @@ function exportOverviewToExcel() {
     filteredOverviewTotals.value.pendingArrivalQty,
     filteredOverviewTotals.value.inventoryPlusPipeline,
     filteredOverviewTotals.value.netGapQty,
+    filteredOverviewTotals.value.supplierStockQty,
     filteredOverviewTotals.value.netGapQty > 0 ? `存在 ${overviewStats.value.gapModelsCount} 种缺料` : '全型号充足'
   ])
 
@@ -12157,11 +12247,23 @@ function jumpToUsageTab() {
   gap: 20px;
 }
 
-/* 1. 顶部 4 张关键态势概览指标卡片 */
+/* 1. 顶部 5 张关键态势概览指标卡片 */
 .overview-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
+}
+
+@media (max-width: 1400px) {
+  .overview-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .overview-kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .overview-kpi-card {
@@ -12194,6 +12296,11 @@ function jumpToUsageTab() {
 .overview-kpi-card.kpi-blue {
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border-color: rgba(2, 132, 199, 0.25);
+}
+
+.overview-kpi-card.kpi-orange {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border-color: rgba(249, 115, 22, 0.25);
 }
 
 .overview-kpi-card.kpi-red {
@@ -12249,6 +12356,7 @@ function jumpToUsageTab() {
 .kpi-purple .kpi-number { color: #6d28d9; }
 .kpi-green .kpi-number { color: #047857; }
 .kpi-blue .kpi-number { color: #0369a1; }
+.kpi-orange .kpi-number { color: #ea580c; }
 .kpi-red .kpi-number { color: #b91c1c; }
 
 .kpi-unit {
@@ -12308,6 +12416,7 @@ function jumpToUsageTab() {
 .chart-legend-hint .dot.purple { background: #7c3aed; }
 .chart-legend-hint .dot.green { background: #059669; }
 .chart-legend-hint .dot.blue { background: #0284c7; }
+.chart-legend-hint .dot.orange { background: #ea580c; }
 .chart-legend-hint .dot.red { background: #dc2626; }
 
 .overview-chart-stage {
@@ -12463,6 +12572,18 @@ function jumpToUsageTab() {
   background: #fef2f2;
   color: #dc2626;
   border: 1px solid #fecaca;
+}
+
+.status-pill.pill-warning {
+  background: #fefce8;
+  color: #b45309;
+  border: 1px solid #fef08a;
+}
+
+.status-pill.pill-orange {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
 }
 
 .status-pill.pill-info {

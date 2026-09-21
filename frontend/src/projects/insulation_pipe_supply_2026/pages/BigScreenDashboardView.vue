@@ -582,6 +582,18 @@
             </div>
           </div>
 
+          <!-- 全网供方实盘在库待发储备条 -->
+          <div class="supplier-stock-summary-bar" :title="`全网供方最新实盘在库待发量: ${formatNumber(kpiData.supplierStockM)} 米`">
+            <div class="sup-stock-summary-left">
+              <span class="sup-stock-icon">🏭</span>
+              <span class="sup-stock-title">在库现货待发：</span>
+            </div>
+            <div class="sup-stock-summary-right">
+              <strong class="sup-stock-num green-text">{{ formatNumber(kpiData.supplierStockKm) }}</strong>
+              <span class="sup-stock-unit">km</span>
+            </div>
+          </div>
+
           <!-- 管材保供进度充能条 -->
           <div class="energy-progress-box">
             <div class="energy-progress-info">
@@ -853,6 +865,7 @@
                     :class="{ 
                       active: activeNodeIds.has(sup.id),
                       hovered: hoveredSupplierId === sup.id,
+                      'has-stock': sup.has_inventory && sup.stock_qty > 0,
                       'is-shipping-source': isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId === sup.id,
                       [`mat-${activeMaterialType}`]: isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId === sup.id,
                       dimmed: (hoveredSupplierId && hoveredSupplierId !== sup.id) || 
@@ -863,7 +876,31 @@
                     @mouseenter="handleNodeMouseEnter('sup', sup.id)"
                     @mouseleave="handleNodeMouseLeave('sup')"
                   >
-                    <strong class="sup-title" :title="sup.name">{{ sup.name }}</strong>
+                    <div class="sup-card-content">
+                      <strong class="sup-title" :title="sup.name">{{ sup.name }}</strong>
+                      <div v-if="sup.has_inventory && sup.stock_qty > 0" class="sup-stock-badge-row">
+                        <span class="sup-stock-badge" :title="'在库待发: ' + sup.stock_qty + 'm (' + formatNumber(sup.stock_km) + 'km)'">
+                          <span class="stock-pulse-dot"></span>在库现货：{{ formatNumber(sup.stock_km) }}km
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- 悬停弹层：展示该厂型号现货明细 -->
+                    <div v-if="hoveredSupplierId === sup.id && sup.has_inventory && sup.inventory_models && sup.inventory_models.length > 0" class="sup-inventory-popover">
+                      <div class="popover-header">
+                        <span class="popover-title">🏭 {{ sup.name }} · 现货储备</span>
+                        <span class="popover-time" v-if="sup.inventory_time">{{ sup.inventory_time.split(' ')[0] }}</span>
+                      </div>
+                      <div class="popover-models-list">
+                        <div v-for="m in sup.inventory_models" :key="m.pipe_model_id" class="popover-model-item">
+                          <span class="popover-model-name">{{ m.pipe_model_id }}</span>
+                          <span class="popover-model-qty">{{ m.stock_qty }}m</span>
+                        </div>
+                      </div>
+                      <div class="popover-footer">
+                        <span>在库待发合计: <strong class="popover-stock-strong">{{ sup.stock_qty }}m</strong> ({{ sup.stock_km }}km)</span>
+                      </div>
+                    </div>
 
                     <!-- 物理对齐连接端口 (右锚点) -->
                     <div class="node-port port-out" :id="'port-out-' + sup.id" title="发运输出端口">
@@ -1666,6 +1703,7 @@ const feedFilterOptions = [
   { key: 'arrival', label: '确认到货', icon: '📍', color: '#60a5fa' },
   { key: 'receive', label: '施工单位收货', icon: '🏗️', color: '#f59e0b' },
   { key: 'warehouse', label: '库管确认', icon: '🛡️', color: '#10b981' },
+  { key: 'inventory', label: '厂家盘点', icon: '🏭', color: '#00ff87' },
   { key: 'usage', label: '施工量确认', icon: '📐', color: '#a855f7' },
   { key: 'plan', label: '需求量申报', icon: '📋', color: '#f43f5e' },
 ]
@@ -1722,33 +1760,143 @@ function handleNodeMouseLeave(type) {
   }
 }
 
-// --- 权威默认数据源 (保证第一帧即刻渲染完整节点与飞线) ---
+// --- 权威默认数据源 (保证第一帧即刻渲染完整 9 家制造基地与飞线，杜绝跳变) ---
+const STORAGE_KEY_SUPPLY_NODES = 'phoenix_tube_bigscreen_supply_nodes'
+
 const defaultSupplyNodes = [
   {
     id: 'sup_kaiyuan',
     raw_id: 'kaiyuan',
     code: 'SA',
-    name: '大连开元热力管道',
-    assigned_sections: ['高温水 1、2 标'],
-    assigned_section_ids: ['high_lot_1', 'high_lot_2']
+    name: '大连开元热力管道股份有限公司',
+    assigned_sections: ['高温水 1、2、3、4 标'],
+    assigned_section_ids: ['high_lot_1', 'high_lot_2', 'high_lot_3', 'high_lot_4'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
   },
   {
     id: 'sup_xinruide',
     raw_id: 'xinruide',
     code: 'SB',
-    name: '河北鑫瑞得管道',
+    name: '河北鑫瑞得管道设备有限公司',
+    assigned_sections: ['低温水 1~6 标'],
+    assigned_section_ids: ['low_lot_1', 'low_lot_2', 'low_lot_3', 'low_lot_4', 'low_lot_5', 'low_lot_6'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
+  },
+  {
+    id: 'sup_wosheng',
+    raw_id: 'wosheng',
+    code: 'SD',
+    name: '江苏沃圣阀业有限公司',
     assigned_sections: ['低温水 1、2、3 标'],
-    assigned_section_ids: ['low_lot_1', 'low_lot_2', 'low_lot_3']
+    assigned_section_ids: ['low_lot_1', 'low_lot_2', 'low_lot_3'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
+  },
+  {
+    id: 'sup_kaersi',
+    raw_id: 'kaersi',
+    code: 'SE',
+    name: '天津卡尔斯阀门股份有限公司',
+    assigned_sections: ['高温水 1、2、3、4 标'],
+    assigned_section_ids: ['high_lot_1', 'high_lot_2', 'high_lot_3', 'high_lot_4'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
+  },
+  {
+    id: 'sup_zeyue',
+    raw_id: 'zeyue',
+    code: 'SF',
+    name: '河北泽悦节能设备科技有限公司',
+    assigned_sections: ['低温水 4、5、6 标'],
+    assigned_section_ids: ['low_lot_4', 'low_lot_5', 'low_lot_6'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
+  },
+  {
+    id: 'sup_tiandilong',
+    raw_id: 'tiandilong',
+    code: 'SG',
+    name: '天津天地龙管业股份有限公司',
+    assigned_sections: ['低温水 1~6 标'],
+    assigned_section_ids: ['low_lot_1', 'low_lot_2', 'low_lot_3', 'low_lot_4', 'low_lot_5', 'low_lot_6'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
+  },
+  {
+    id: 'sup_sanwei',
+    raw_id: 'sanwei',
+    code: 'SH',
+    name: '大连三维膨胀节有限公司',
+    assigned_sections: ['高温水 3、4 标'],
+    assigned_section_ids: ['high_lot_3', 'high_lot_4'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
   },
   {
     id: 'sup_吴近',
     raw_id: '吴近',
     code: 'SC',
     name: '能源集团保温管厂',
-    assigned_sections: ['高水 3、4 标 / 低水 4、5、6 标'],
-    assigned_section_ids: ['high_lot_3', 'high_lot_4', 'low_lot_4', 'low_lot_5', 'low_lot_6']
+    assigned_sections: [],
+    assigned_section_ids: [],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
+  },
+  {
+    id: 'sup_taideer',
+    raw_id: 'taideer',
+    code: 'SI',
+    name: '泰德尔物联(辽宁)有限公司',
+    assigned_sections: ['低温水 4、5、6 标'],
+    assigned_section_ids: ['low_lot_4', 'low_lot_5', 'low_lot_6'],
+    stock_qty: 0,
+    stock_km: 0,
+    inventory_time: '',
+    inventory_models: [],
+    has_inventory: false
   }
 ]
+
+function getInitialSupplyNodes() {
+  try {
+    const cached = localStorage.getItem(STORAGE_KEY_SUPPLY_NODES)
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      if (Array.isArray(parsed) && parsed.length >= 9) {
+        return parsed
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return defaultSupplyNodes
+}
 
 const defaultSectionList = [
   { id: 'high_lot_1', name: '高温水_标段1', code: 'H1', system_type: 'high', construction_status: '施工中', designKm: 18.5, shippedKm: 12.0, arrivedKm: 10.0, transitKm: 2.0, pipePercent: 64.9, arrivedPercent: 54.1, transitPercent: 10.8, installedKm: 0.23, installedPercent: 1.2, totalFittings: 400, shippedFittings: 280, arrivedFittings: 240, transitFittings: 40, fittingPercent: 70.0, arrivedFittingPercent: 60.0, transitFittingPercent: 10.0 },
@@ -1778,6 +1926,8 @@ const kpiData = reactive({
   pipeThreeDayPlanKm: 0.0,
   pipeThreeDayGapKm: 0.0,
   pipeDeliveredKm: 0.0,
+  supplierStockKm: 0.0,
+  supplierStockM: 0.0,
   fittingTotalPcs: 0,
   fittingShippedPcs: 0,
   fittingTransitPcs: 0,
@@ -1898,8 +2048,8 @@ const fittingCategoryCount = computed(() => {
   return 5
 })
 
-// 拓扑节点定义 (3 大真实管厂)
-const supplyNodes = ref([...defaultSupplyNodes])
+// 拓扑节点定义 (全网保供制造基地，首帧优先从本地持久化缓存恢复，杜绝跳变)
+const supplyNodes = ref(getInitialSupplyNodes())
 
 // 真实 10 大标段健康矩阵数据
 const sectionProgressList = ref([...defaultSectionList])
@@ -2716,6 +2866,8 @@ async function pollLiveRealData() {
       kpiData.pipeThreeDayPlanKm = Number(res.kpi.pipeThreeDayPlanKm || 0)
       kpiData.pipeThreeDayGapKm = Number(res.kpi.pipeThreeDayGapKm || 0)
       kpiData.pipeDeliveredKm = Number(res.kpi.pipeDeliveredKm || 0)
+      kpiData.supplierStockKm = Number(res.kpi.supplierStockKm || 0)
+      kpiData.supplierStockM = Number(res.kpi.supplierStockM || 0)
       kpiData.fittingTotalPcs = Number(res.kpi.fittingTotalPcs || 1138)
       kpiData.fittingShippedPcs = Number(res.kpi.fittingShippedPcs || 0)
       kpiData.fittingTransitPcs = Number(res.kpi.fittingTransitPcs || 0)
@@ -2735,6 +2887,14 @@ async function pollLiveRealData() {
     // 3. 实时同步 10 大标段真实进度
     if (Array.isArray(res.section_progress_list) && res.section_progress_list.length > 0) {
       sectionProgressList.value = res.section_progress_list
+    }
+
+    // 3.5 实时同步全网制造基地拓扑节点与实盘待发库存
+    if (Array.isArray(res.supply_nodes) && res.supply_nodes.length > 0) {
+      supplyNodes.value = res.supply_nodes
+      try {
+        localStorage.setItem(STORAGE_KEY_SUPPLY_NODES, JSON.stringify(res.supply_nodes))
+      } catch (e) {}
     }
 
     // 4. 实时同步管件类型汇总
@@ -3231,6 +3391,8 @@ async function loadRealData(isForce = false) {
         kpiData.pipeThreeDayPlanKm = Number(res.kpi.pipeThreeDayPlanKm || 0)
         kpiData.pipeThreeDayGapKm = Number(res.kpi.pipeThreeDayGapKm || 0)
         kpiData.pipeDeliveredKm = Number(res.kpi.pipeDeliveredKm || 0)
+        kpiData.supplierStockKm = Number(res.kpi.supplierStockKm || 0)
+        kpiData.supplierStockM = Number(res.kpi.supplierStockM || 0)
         kpiData.fittingTotalPcs = Number(res.kpi.fittingTotalPcs || 1138)
         kpiData.fittingShippedPcs = Number(res.kpi.fittingShippedPcs || 0)
         kpiData.fittingTransitPcs = Number(res.kpi.fittingTransitPcs || 0)
@@ -3263,9 +3425,12 @@ async function loadRealData(isForce = false) {
         res.live_feed_list.forEach(f => knownFeedIds.value.add(f.id))
       }
 
-      // 5. 真实拓扑节点 (3 大管厂)
-      if (Array.isArray(res.supply_nodes)) {
+      // 5. 真实拓扑节点 (全网制造基地，同步写入本地缓存)
+      if (Array.isArray(res.supply_nodes) && res.supply_nodes.length > 0) {
         supplyNodes.value = res.supply_nodes
+        try {
+          localStorage.setItem(STORAGE_KEY_SUPPLY_NODES, JSON.stringify(res.supply_nodes))
+        } catch (e) {}
       }
 
       // 5.5. 大屏持久化运行参数绑定
@@ -4673,6 +4838,60 @@ onBeforeUnmount(() => {
   50% { opacity: 0.7; transform: scale(0.96); text-shadow: none; }
 }
 
+/* 全网供方实盘在库待发储备条 */
+.supplier-stock-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(90deg, rgba(0, 255, 135, 0.08) 0%, rgba(17, 34, 60, 0.5) 100%);
+  border: 1px solid rgba(0, 255, 135, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.sup-stock-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sup-stock-icon {
+  font-size: 13px;
+}
+
+.sup-stock-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.sup-stock-summary-right {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.sup-stock-num {
+  font-family: 'DIN Alternate', 'JetBrains Mono', Consolas, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #00ff87 !important;
+  text-shadow: 0 0 8px rgba(0, 255, 135, 0.3);
+}
+
+.sup-stock-unit {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.sup-stock-meters {
+  font-size: 10.5px;
+  color: #64748b;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
 /* 飘字气泡 (Delta Bubble) */
 .delta-bubble {
   position: absolute;
@@ -5087,10 +5306,10 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-around;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 6px;
   overflow: visible;
-  padding: 4px 2px;
+  padding: 2px 2px;
   box-sizing: border-box;
 }
 
@@ -5099,12 +5318,13 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 242, 254, 0.22);
   border-left: 3px solid #00f2fe;
   border-radius: 6px;
-  padding: 10px 14px;
+  padding: 4px 10px;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  min-height: 60px;
+  flex: 1 1 0;
+  min-height: 0;
   min-width: 0;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -5112,13 +5332,19 @@ onBeforeUnmount(() => {
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
 }
 
-.supply-node-card:nth-child(2) {
+.supply-node-card:nth-child(3n+1) {
+  border-left-color: #00f2fe;
+  border-color: rgba(0, 242, 254, 0.22);
+  background: linear-gradient(135deg, rgba(17, 34, 60, 0.85) 0%, rgba(11, 20, 36, 0.95) 100%);
+}
+
+.supply-node-card:nth-child(3n+2) {
   border-left-color: #fbbf24;
   border-color: rgba(251, 191, 36, 0.22);
   background: linear-gradient(135deg, rgba(38, 30, 18, 0.75) 0%, rgba(15, 25, 45, 0.95) 100%);
 }
 
-.supply-node-card:nth-child(3) {
+.supply-node-card:nth-child(3n) {
   border-left-color: #00ff87;
   border-color: rgba(0, 255, 135, 0.22);
   background: linear-gradient(135deg, rgba(16, 38, 30, 0.75) 0%, rgba(15, 25, 45, 0.95) 100%);
@@ -5129,19 +5355,20 @@ onBeforeUnmount(() => {
 .supply-node-card.hovered {
   border-color: #00f2fe;
   transform: translateX(3px);
-  box-shadow: 0 4px 16px rgba(0, 242, 254, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 242, 254, 0.25);
+  z-index: 10;
 }
 
-.supply-node-card:nth-child(2):hover,
-.supply-node-card:nth-child(2).hovered {
+.supply-node-card:nth-child(3n+2):hover,
+.supply-node-card:nth-child(3n+2).hovered {
   border-color: #fbbf24;
-  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.18);
+  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.25);
 }
 
-.supply-node-card:nth-child(3):hover,
-.supply-node-card:nth-child(3).hovered {
+.supply-node-card:nth-child(3n):hover,
+.supply-node-card:nth-child(3n).hovered {
   border-color: #00ff87;
-  box-shadow: 0 4px 16px rgba(0, 255, 135, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 255, 135, 0.25);
 }
 
 .supply-node-card.is-shipping-source {
@@ -5150,7 +5377,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 20px rgba(0, 242, 254, 0.5), inset 0 0 10px rgba(0, 242, 254, 0.18);
   animation: supplier-shipping-pulse 1.6s infinite ease-in-out;
   transform: translateX(3px);
-  z-index: 5;
+  z-index: 15;
 }
 
 .supply-node-card.is-shipping-source.mat-fitting {
@@ -5183,15 +5410,152 @@ onBeforeUnmount(() => {
   opacity: 0.3;
 }
 
+.sup-card-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
 .sup-title {
-  font-size: 13.5px;
+  font-size: 11.5px;
   font-weight: 700;
   color: #ffffff;
-  white-space: normal;
-  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
   letter-spacing: 0.2px;
-  word-break: break-word;
   padding-right: 4px;
+}
+
+.sup-stock-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sup-stock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 255, 135, 0.12);
+  border: 1px solid rgba(0, 255, 135, 0.35);
+  color: #00ff87;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.2;
+  box-shadow: 0 0 6px rgba(0, 255, 135, 0.15);
+}
+
+.stock-pulse-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00ff87;
+  box-shadow: 0 0 6px #00ff87;
+  animation: stock-pulse-anim 2s infinite ease-in-out;
+}
+
+@keyframes stock-pulse-anim {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 8px #00ff87; }
+}
+
+/* 拓扑管厂型号现货明细悬停浮层 */
+.sup-inventory-popover {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 120;
+  min-width: 220px;
+  max-width: 280px;
+  background: rgba(10, 22, 40, 0.96);
+  border: 1px solid rgba(0, 255, 135, 0.45);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 18px rgba(0, 255, 135, 0.22);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  animation: popover-fade-in 0.2s ease-out;
+}
+
+@keyframes popover-fade-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(-6px); }
+  to { opacity: 1; transform: translateY(-50%) translateX(0); }
+}
+
+.popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.popover-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #00ff87;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popover-time {
+  font-size: 10px;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.popover-models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  margin-bottom: 6px;
+}
+
+.popover-model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 2px 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.popover-model-name {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.popover-model-qty {
+  color: #00ff87;
+  font-weight: 700;
+  font-family: 'DIN Alternate', 'JetBrains Mono', Consolas, monospace;
+}
+
+.popover-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 6px;
+  font-size: 10.5px;
+  color: #cbd5e1;
+  display: flex;
+  justify-content: space-between;
+}
+
+.popover-stock-strong {
+  color: #00ff87;
+  font-weight: 700;
 }
 
 /* 2. 中间传输通道 */
@@ -6174,6 +6538,12 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
 }
 
+.feed-card.is-active-feed.inventory {
+  background: linear-gradient(135deg, rgba(0, 255, 135, 0.14) 0%, #112620 100%);
+  border-color: #00ff87;
+  box-shadow: 0 0 16px rgba(0, 255, 135, 0.4);
+}
+
 .feed-card.is-active-feed.plan {
   background: linear-gradient(135deg, rgba(244, 63, 94, 0.14) 0%, #201322 100%);
   border-color: #f43f5e;
@@ -6211,6 +6581,10 @@ onBeforeUnmount(() => {
 .feed-card.warehouse.mat-fitting,
 .feed-card.warehouse.is-fitting-event {
   border-left: 3.5px solid #fbbf24;
+}
+
+.feed-card.inventory {
+  border-left: 3.5px solid #00ff87;
 }
 
 .feed-card.usage {
@@ -6300,6 +6674,12 @@ onBeforeUnmount(() => {
   background: rgba(251, 191, 36, 0.14);
   border: 1px solid rgba(251, 191, 36, 0.3);
   color: #fbbf24;
+}
+
+.feed-category-tag.inventory {
+  background: rgba(0, 255, 135, 0.14);
+  border: 1px solid rgba(0, 255, 135, 0.3);
+  color: #00ff87;
 }
 
 .feed-category-tag.usage {

@@ -230,6 +230,7 @@
                       <option value="CONFIRM_WAREHOUSE">🏢 库管确认</option>
                       <option value="SUBMIT_FITTING_DELIVERY">🔩 管件发货</option>
                       <option value="DELETE_FITTING_DELIVERY">🗑️ 撤销管件发货</option>
+                      <option value="SAVE_SUPPLIER_INVENTORY">🏭 厂家现货盘点</option>
                     </optgroup>
                     <optgroup v-if="submissionFilters.category !== 'submission'" label="🔍 综合数据查询行为">
                       <option value="QUERY_DAILY_FLOW">📅 查询每日流转台账</option>
@@ -552,6 +553,7 @@
                       <th>主体ID (唯一)</th>
                       <th>主体编码</th>
                       <th>供给主体名称</th>
+                      <th>供货范围</th>
                       <th>对应的需求主体 (供货标段)</th>
                       <th>发货联系人</th>
                       <th>联系电话</th>
@@ -563,6 +565,26 @@
                       <td><input v-model.trim="item.entity_id" class="input table-cell-input" type="text" placeholder="如 supplier_a" /></td>
                       <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="8" placeholder="如 SA" /></td>
                       <td><input v-model.trim="item.entity_name" class="input table-cell-input" type="text" placeholder="供给主体名称" /></td>
+                      <td>
+                        <div style="display: flex; gap: 8px; align-items: center; white-space: nowrap;">
+                          <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 12px; cursor: pointer;">
+                            <input 
+                              type="checkbox" 
+                              :checked="isSupplyTypeChecked(item, 'pipe')" 
+                              @change="toggleSupplyType(item, 'pipe', $event.target.checked)" 
+                            />
+                            <span>保温管</span>
+                          </label>
+                          <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 12px; cursor: pointer;">
+                            <input 
+                              type="checkbox" 
+                              :checked="isSupplyTypeChecked(item, 'fitting')" 
+                              @change="toggleSupplyType(item, 'fitting', $event.target.checked)" 
+                            />
+                            <span>管件</span>
+                          </label>
+                        </div>
+                      </td>
                       <td>
                         <input 
                           v-model.trim="item.section_1_ids_text" 
@@ -611,6 +633,7 @@
                       <th>主体ID (唯一)</th>
                       <th>主体编码</th>
                       <th>自定义供给主体名称</th>
+                      <th>供货范围</th>
                       <th>供货需求主体 (标段)</th>
                       <th>发货联系人</th>
                       <th>联系电话</th>
@@ -622,6 +645,26 @@
                       <td><span style="font-weight: bold; color: #7e22ce;">{{ item.entity_id }}</span></td>
                       <td><input v-model.trim="item.code" class="input table-cell-input" type="text" maxlength="12" placeholder="如 CUST_01" /></td>
                       <td><input v-model.trim="item.entity_name" class="input table-cell-input font-bold" type="text" placeholder="主体名称" /></td>
+                      <td>
+                        <div style="display: flex; gap: 8px; align-items: center; white-space: nowrap;">
+                          <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 12px; cursor: pointer;">
+                            <input 
+                              type="checkbox" 
+                              :checked="isSupplyTypeChecked(item, 'pipe')" 
+                              @change="toggleSupplyType(item, 'pipe', $event.target.checked)" 
+                            />
+                            <span>保温管</span>
+                          </label>
+                          <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 12px; cursor: pointer;">
+                            <input 
+                              type="checkbox" 
+                              :checked="isSupplyTypeChecked(item, 'fitting')" 
+                              @change="toggleSupplyType(item, 'fitting', $event.target.checked)" 
+                            />
+                            <span>管件</span>
+                          </label>
+                        </div>
+                      </td>
                       <td>
                         <input 
                           v-model.trim="item.section_1_ids_text" 
@@ -1661,6 +1704,7 @@
                       <option value="CONFIRM_ARRIVAL">👷 现场到货确认 (CONFIRM_ARRIVAL)</option>
                       <option value="CONFIRM_CONSTRUCTION">🏗️ 施工接收确认 (CONFIRM_CONSTRUCTION)</option>
                       <option value="CONFIRM_WAREHOUSE">🏢 库管入库确认 (CONFIRM_WAREHOUSE)</option>
+                      <option value="SAVE_SUPPLIER_INVENTORY">🏭 厂家库存盘点 (SAVE_INVENTORY)</option>
                     </optgroup>
                     <optgroup label="🔩 管件物流与流转">
                       <option value="SUBMIT_FITTING_DELIVERY">🔩 提交管件发货 (SUBMIT_FITTING)</option>
@@ -2670,6 +2714,7 @@ function applyConfig(config) {
   strictPlanningFlowControl.value = config.strict_planning_flow_control ?? true
   supplyEntities.value = cloneRows(config.supply_entities).map(item => ({
     ...item,
+    supply_types: Array.isArray(item.supply_types) && item.supply_types.length > 0 ? [...item.supply_types] : ['pipe', 'fitting'],
     section_1_ids_text: listToText(item.section_1_ids),
   }))
   demandEntities.value = cloneRows(config.demand_entities)
@@ -3269,15 +3314,19 @@ function buildSectionPayload(section) {
     return Boolean(strictPlanningFlowControl.value)
   }
   if (section === 'supply_entities') {
-    return supplyEntities.value.map((item) => ({
-      entity_id: item.entity_id || '',
-      code: String(item.code || '').trim().toUpperCase(),
-      entity_name: item.entity_name || '',
-      contact_name: item.contact_name || '',
-      contact_phone: item.contact_phone || '',
-      section_1_ids: textToList(item.section_1_ids_text),
-      is_custom: Boolean(item.is_custom),
-    }))
+    return supplyEntities.value.map((item) => {
+      const types = Array.isArray(item.supply_types) && item.supply_types.length > 0 ? item.supply_types : ['pipe', 'fitting']
+      return {
+        entity_id: item.entity_id || '',
+        code: String(item.code || '').trim().toUpperCase(),
+        entity_name: item.entity_name || '',
+        supply_types: types,
+        contact_name: item.contact_name || '',
+        contact_phone: item.contact_phone || '',
+        section_1_ids: textToList(item.section_1_ids_text),
+        is_custom: Boolean(item.is_custom),
+      }
+    })
   }
   if (section === 'demand_entities') {
     return demandEntities.value.map((item) => ({
@@ -3683,11 +3732,35 @@ const removeCustomEntity = (item) => {
   }
 }
 
+function isSupplyTypeChecked(item, type) {
+  if (!item) return false
+  const types = Array.isArray(item.supply_types) && item.supply_types.length > 0 ? item.supply_types : ['pipe', 'fitting']
+  return types.includes(type)
+}
+
+function toggleSupplyType(item, type, checked) {
+  if (!item) return
+  let types = Array.isArray(item.supply_types) && item.supply_types.length > 0 ? [...item.supply_types] : ['pipe', 'fitting']
+  if (checked) {
+    if (!types.includes(type)) {
+      types.push(type)
+    }
+  } else {
+    types = types.filter((t) => t !== type)
+    if (types.length === 0) {
+      alert('每个供给主体至少需要保留一种供货范围（保温管或管件）')
+      return
+    }
+  }
+  item.supply_types = types
+}
+
 function addSupplyEntity() {
   supplyEntities.value.push({
     entity_id: '',
     code: '',
     entity_name: '',
+    supply_types: ['pipe', 'fitting'],
     section_1_ids_text: '',
     contact_name: '',
     contact_phone: '',
@@ -3901,6 +3974,7 @@ function onSubmissionCategoryChange() {
       'CONFIRM_ARRIVAL', 'CONFIRM_CONSTRUCTION', 'CREATE_DELIVERY',
       'CREATE_DELIVERY_BATCH', 'CANCEL_DELIVERY', 'CONFIRM_WAREHOUSE',
       'SUBMIT_FITTING_DELIVERY', 'DELETE_FITTING_DELIVERY',
+      'SAVE_SUPPLIER_INVENTORY',
     ]
     if (submissionActions.includes(submissionFilters.value.actionType)) {
       submissionFilters.value.actionType = ''
@@ -4395,6 +4469,7 @@ function translateActionType(type) {
     CONFIRM_FITTING_CONSTRUCTION: '🏗️ 管件施工接收',
     CONFIRM_FITTING_WAREHOUSE: '🏢 管件库管确认',
     CANCEL_FITTING_DELIVERY: '❌ 撤销管件发货',
+    SAVE_SUPPLIER_INVENTORY: '🏭 厂家库存盘点',
     QUERY_DAILY_FLOW: '📅 综合流转查询',
     QUERY_BASELINE_PROGRESS: '📐 基准进度查询',
     QUERY_MATERIAL_PRICES: '💰 采购单价查询',
@@ -4425,6 +4500,7 @@ function getActionTypeBadgeStyle(type) {
     CONFIRM_FITTING_CONSTRUCTION: { bg: '#e8f7f0', color: '#059669', border: '1px solid #a7f3d0' },
     CONFIRM_FITTING_WAREHOUSE: { bg: '#f4eafc', color: '#7c3aed', border: '1px solid #ddd6fe' },
     CANCEL_FITTING_DELIVERY: { bg: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' },
+    SAVE_SUPPLIER_INVENTORY: { bg: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' },
     QUERY_DAILY_FLOW: { bg: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' },
     QUERY_BASELINE_PROGRESS: { bg: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4' },
     QUERY_MATERIAL_PRICES: { bg: '#fefce8', color: '#a16207', border: '1px solid #fef08a' },

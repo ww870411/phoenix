@@ -80,7 +80,7 @@ def _get_supplier_map(cfg: Dict[str, Any]) -> Dict[str, str]:
 
 def _get_pipe_section_dynamic_suppliers(session, cfg: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
     """
-    纯数据驱动解析保温管直管供给方与标段的映射：
+    纯数据驱动解析保温管供给方与标段的映射：
     1. 优先从 tube.tube_delivery 真实发货表中动态统计各标段实际供货最多的主体；
     2. 其次从配置 tube_config.json 的 supply_entities 中查找管辖标段的主体；
     3. 绝不基于标段名称前缀硬编码，完全按发货事实与配置动态自适应。
@@ -88,7 +88,7 @@ def _get_pipe_section_dynamic_suppliers(session, cfg: Dict[str, Any]) -> Dict[st
     sup_name_map = _get_supplier_map(cfg)
     sec_to_sup: Dict[str, Dict[str, str]] = {}
 
-    # 1. 优先从数据库实际直管发货记录动态提取真实主供货商
+    # 1. 优先从数据库实际保温管发货记录动态提取真实主供货商
     try:
         rows = session.execute(text("""
             SELECT DISTINCT ON (section_1_id)
@@ -109,8 +109,11 @@ def _get_pipe_section_dynamic_suppliers(session, cfg: Dict[str, Any]) -> Dict[st
     except Exception:
         pass
 
-    # 2. 结合配置 supply_entities 补充尚未有实际发货记录的标段
+    # 2. 结合配置 supply_entities 补充尚未有实际发货记录的标段（仅筛选具备保温管供货资格的主体）
     for ent in (get_config_list(cfg, "supply_entities") or []):
+        stypes = ent.get("supply_types") or ["pipe", "fitting"]
+        if "pipe" not in stypes:
+            continue
         ent_id = str(ent.get("entity_id") or ent.get("supplier_id") or "").strip()
         ent_name = str(ent.get("entity_name") or ent.get("supplier_name") or ent.get("name") or ent_id)
         for sid in (ent.get("section_1_ids") or []):
@@ -174,9 +177,12 @@ def _get_fitting_dynamic_supplier_map(session, cfg: Dict[str, Any]):
     except Exception:
         pass
 
-    # 3. 配置标段兜底映射
+    # 3. 配置标段兜底映射（仅筛选具备管件供货资格的主体）
     cfg_sec_map: Dict[str, Dict[str, str]] = {}
     for ent in (get_config_list(cfg, "supply_entities") or []):
+        stypes = ent.get("supply_types") or ["pipe", "fitting"]
+        if "fitting" not in stypes:
+            continue
         ent_id = str(ent.get("entity_id") or ent.get("supplier_id") or "").strip()
         ent_name = str(ent.get("entity_name") or ent.get("supplier_name") or ent.get("name") or ent_id)
         for sid in (ent.get("section_1_ids") or []):

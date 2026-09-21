@@ -1,3 +1,131 @@
+## 2026-09-21 供给主体体系：选项接口 current_supply_entity_ids 按配置文件预设顺序输出
+
+- **核心接口优化**：
+  - 路由接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_supply_management_options` (`GET /supply-management/options`)；
+- **业务实现逻辑**：
+  - 将原本的 `sorted(accessible_supply_entity_ids)` 字母字典序排序改为严格按照 [`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 中 `supply_entities` 的自然预设顺序（SA 大连开元、SB 河北鑫瑞得、SD 江苏沃圣、SE 天津卡尔斯...）输出；
+  - 彻底解决用户在无指定主体参数访问时默认选中项跳至“天津卡尔斯”而非首选“大连开元”的问题。
+
+## 2026-09-21 供给主体体系：supply_types 供货范围全链路落地（配置、接口透传与综合历史推导隔离）
+
+- **核心服务、配置与接口优化**：
+  - 配置文件：[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)；
+  - 路由接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `_serialize_supply_entity_options` 与 `_serialize_all_supply_entity_options`；
+  - 推导服务：[`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)；
+- **业务实现逻辑**：
+  1. **供货范围标记**：
+     - 在 `tube_config.json` 的 `supply_entities` 中为 9 家主体增加 `supply_types`：
+       * `["pipe", "fitting"]`：大连开元、河北鑫瑞得、天津天地龙、能源集团保温管厂（4家）；
+       * `["fitting"]`：江苏沃圣、天津卡尔斯、河北泽悦、大连三维、泰德尔物联（5家）；
+  2. **选项接口序列化透传与保底**：
+     - `_serialize_supply_entity_options` 与 `_serialize_all_supply_entity_options` 均补充字段 `"supply_types": item.get("supply_types") or ["pipe", "fitting"]`，保证向前兼容；
+  3. **标段供货主体推导严格隔离**：
+     - `_get_pipe_section_dynamic_suppliers`：在标段尚未产生发货流水时，仅从 `supply_types` 包含 `"pipe"` 的主体中匹配保温管主供货商，杜绝阀门厂被误判为保温管供货商；
+     - `_get_fitting_dynamic_supplier_map`：在标段尚未产生管件发货时，仅从 `supply_types` 包含 `"fitting"` 的主体中匹配管件供货商。
+
+## 2026-09-21 数据库表结构治理：tube_supplier_inventory 约束严密化与 DDL 体系同步
+
+- **核心服务与 DDL 优化**：
+  - 服务：[`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)；
+  - DDL 脚本：[`create_tube_supplier_inventory.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_supplier_inventory.sql)、[`tube_schema_init.sql`](file:///D:/编程项目/phoenix/backend/sql/tube_schema_init.sql)；
+- **业务实现逻辑与约束体系**：
+  1. **主键与非空约束**：`id BIGSERIAL PRIMARY KEY`，`batch_no VARCHAR(64) NOT NULL`，`report_date`、`supply_entity_id`、`pipe_model_id`、`stock_qty` 均设为 `NOT NULL`；
+  2. **数值范围检查约束**：`CONSTRAINT chk_supplier_inventory_qty_nonnegative CHECK (stock_qty >= 0)`，防止录入负数库存；
+  3. **按次实盘联合唯一索引**：`CREATE UNIQUE INDEX uq_tube_supplier_inventory_batch_entity_model ON (batch_no, supply_entity_id, pipe_model_id)`，确保同一批次内型号不重复，且支持同日多次盘点快照共存；
+  4. **高频查询索引**：`idx_tube_supplier_inventory_entity_time` 支撑按厂家快速提取最新盘点时间戳与记录。
+
+## 2026-09-21 数字指挥大屏接口：厂家库存盘点战报卡片标签精简为“完成最新实盘清点”
+
+- **核心接口优化**：
+  - 路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_big_screen_dashboard_data`；
+- **业务实现逻辑**：
+  - 将 `live_feed_list` 中库存盘点动态卡片的 `positiveTag` 文案由 `"完成最新实盘清点，现货待发充足"` 更新为 **`"完成最新实盘清点"`**，精简战报标签文案。
+
+## 2026-09-21 审计与操作日志：打通“SAVE_SUPPLIER_INVENTORY”业务操作记录白名单与导出字典
+
+- **核心服务与接口优化**：
+  - 服务：[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)；
+  - 路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 CSV 导出映射 `export_tube_audit_logs`；
+- **业务实现逻辑**：
+  1. **操作白名单收录**：
+     - 在 `SUPPLY_SUBMISSION_ACTIONS` 白名单列表中追加 `"SAVE_SUPPLIER_INVENTORY"`；
+     - 使厂家盘点行为自动纳入 `SUBMISSION_ONLY_ACTIONS` 与 `ALL_SUBMISSION_ACTIONS` 范围，业务操作记录查询接口 `query_submission_logs` 正常收录该类型日志，并自动计入 24h 供给侧操作量统计；
+  2. **CSV 导出翻译**：
+     - 在 `action_type_map` 中补充 `"SAVE_SUPPLIER_INVENTORY": "厂家库存盘点"`，确保导出文件语义清晰。
+
+## 2026-09-21 数字指挥大屏接口：聚合全网供方实盘在库总量与各厂型号储备穿透
+
+- **核心接口优化**：
+  - 路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_big_screen_dashboard_data` (`GET /api/v1/projects/{project_key}/big-screen-dashboard`)；
+- **业务实现逻辑**：
+  1. **全网供方实盘聚合**：
+     - 调用 `get_latest_all_suppliers_inventory()` 提取各厂家最新一次提交批次的在库实盘总量与型号明细；
+     - 拓扑节点 `supply_nodes` 注入 `stock_qty`（在库总米数）、`stock_km`（公里数）、`inventory_time`（盘点时间戳）、`inventory_models`（具体型号与米数列表）及 `has_inventory` 标志；
+  2. **大盘 KPI 与战报流联动**：
+     - `kpi` 返回结构中新增全网供方在库总量：`supplierStockKm` 与 `supplierStockM`；
+     - 动态战报流 `live_feed_list` 新增 `【厂家库存盘点】` 动态类别（`category_key: "inventory"`），展现各厂家最新实盘在库待发储备。
+
+## 2026-09-21 供需穿透接口：全要素需求大盘接口聚合负责厂家最新实盘在库量与明细
+
+- **核心接口优化**：
+  - 路由：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_supply_management_demand_summary` (`GET /api/v1/projects/{project_key}/supply-management/demand-summary`)；
+- **业务实现逻辑**：
+  1. **管辖厂家映射构建**：
+     - 解析各供给主体负责标段（低温水 1~6 标段由河北鑫瑞得与天津天地龙负责，高温水 1~4 标段由大连开元负责，能源集团保温管厂覆盖全量）；
+  2. **最新实盘在库聚合**：
+     - 调用 `get_latest_all_suppliers_inventory()` 获取所有厂家最新提交批次的实盘在库数据；
+     - 针对各 `(section_1_id, pipe_model_id)` 数据行，动态提取负责该标段的厂家库存，计算并注入 `supplier_stock_qty`（在库总米数）及 `supplier_stock_breakdown`（各厂家名称、在库米数、盘点时间戳列表）；
+  3. **向后兼容**：
+     - 保持原有字段口径完全一致，新增字段供需求侧前端与大屏消费。
+
+## 2026-09-21 物资基准体系：供给主体库存盘点默认置零（方案B），支持按需一键沿用上次数据
+
+- **业务逻辑优化（方案 B）**：
+  - 后端服务 [`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py) 中 `get_supplier_inventory_for_date`：
+    * 遍历各管型时，本次初始实盘量 `cur_stock` 默认设为 `0.0`，变动差额初始为 `0.0 - prev_stock`；
+    * 不再自动将上次盘点数据填入“本次实盘量”，避免厂家未仔细清点即直接提交；
+    * 历史批次数据（`previous_stock_qty`）仍然精准返回，供前端比对及支持一键沿用；
+  - 单元测试（[`test_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py)）：
+    * 单元测试回归验证通过（`OK`）。
+
+## 2026-09-21 物资基准体系：供给主体库存盘点重构为“按次盘点”，支持同日多次提交且互不覆盖
+
+- **业务重构与架构升级**：
+  - 响应用户指令：“并不是按日盘点，而是按次盘点。也就是说，不限盘点时间点，只有‘这次’和‘上次’，即使在一天内，也可以多次提交盘点，但都不会因为是在同一日而覆盖记录”；
+  - 表结构与索引演进（[`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)）：
+    1. 自愈新增 `batch_no VARCHAR(64)` 盘点批次号字段；
+    2. 彻底移除旧的按日联合唯一索引 `uq_tube_supplier_inventory_date_entity_model_sec`，解除每日仅限单次覆盖的约束；
+    3. 新建批次联合唯一索引 `uq_tube_supplier_inventory_batch_entity_model ON (batch_no, supply_entity_id, pipe_model_id)`，以及按厂家与提交时间降序的高频索引；
+  - 核心服务方法：
+    1. `save_supplier_inventory`：每次提交生成微秒级唯一批次号 `INV_YYYYMMDD_HHMMSS_ffffff_ENTITY`，批量 `INSERT` 全新快照记录，绝不执行覆盖更新；
+    2. `get_supplier_inventory_for_date`：查询该厂家最新提交的一个批次作为“上次”（`latest_previous_time`、`latest_previous_batch_no`），返回管辖标段并集型号供本次实盘录入；
+    3. `get_latest_all_suppliers_inventory`：通过 `latest_batches` 聚合各厂家最新一次提交批次的待发在库量，为大屏与调度看板提供一致的现货池；
+  - API 路由（[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）：
+    1. `SupplierInventorySavePayload`：`report_date` 设为可选，优先以批次为核心维度；
+    2. 业务操作日志记录对应批次号及在库总量；
+  - 单元测试（[`test_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py)）：
+    - 验证同日内连续 2 次盘点记录完全共存（行数累加不覆盖），最新查询精准对齐第二次批次，测试全部通过（`OK`）。
+
+## 2026-09-21 物资基准体系：供给主体库存盘点根据负责标段动态过滤保温管型号并集
+
+- **业务逻辑与算法实现**：
+  - 后端服务 [`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py) 新增 `list_models_for_supply_entity(supply_entity_id: str)`：
+    1. 读取 `tube_config.json`，解析各供给主体配置的负责标段 `section_1_ids`；
+    2. 若仅负责高温水标段（如大连开元），动态提取高温水标段（`high%`）涉及的 21 种保温管型号并集；
+    3. 若仅负责低温水标段（如河北鑫瑞得、天津天地龙），动态提取低温水标段（`low%`）涉及的 14 种保温管型号并集；
+    4. 若高温水与低温水均涉及或未限制标段（如能源集团保温管厂），提取全量需求的 35 种型号并集；
+    5. 默认统一按管径数值降序（`_extract_dn_number`，大口径在先）排列；
+  - 优化 `get_supplier_inventory_for_date()`：严格按照主体负责标段下发型号清单，仅对当日已有显式保存记录的特殊历史型号进行安全兜底合并，各行 `remark` 默认为空字符串；
+  - 单元测试 [`test_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py) 新增专门用例，覆盖开元（21种）、鑫瑞得（14种）、能源集团（35种）及降序排序断言，全部通过（`OK`）。
+
+## 2026-09-21 物资基准体系：供给主体“库存盘点”结构精简，删除“今日完工量”字段
+
+- **业务减负与字段精简**：
+  - 响应用户指令，库存盘点彻底降维至最纯粹的“实盘在库待发量（`stock_qty`）”，供给主体无需填报完工增量，杜绝概念复杂化；
+  - 数据库表 `tube.tube_supplier_inventory` 执行自愈删除 `daily_produced_qty` 字段及相关约束；
+  - 后端服务 [`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py) 及 API 路由 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 全面移除 `daily_produced_qty` 相关的查询映射、UPSERT 写入与汇总统计；
+  - 单元测试 [`test_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py) 重新测试 100% 通过。
+
 ## 2026-09-21 物资基准体系：94项“联网平衡阀”物料基准量全量入库 tube.tube_fitting_baseline
 
 - **业务背景与入库标准**：

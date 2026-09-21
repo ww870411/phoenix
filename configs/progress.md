@@ -1,3 +1,302 @@
+## 2026-09-21 [供给侧工作台界面微调：删除顶部副标题说明文案]
+- **需求响应与界面净化**：
+  - 用户指令：“删掉‘面向供给主体。提供 Tabs 标签化分类，支持查看缺口与供需明细、运输车次装配、物流发货批量登记及在途运输跟踪。数量当前统一以“米”为计量单位。’字样”；
+- **优化点**：
+  - 在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 顶部 `premium-topbar` 中，彻底移除副标题 `<p class="sub">` 及其包含的描述文案，使页面顶部标题区域更加紧凑清爽；
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+
+## 2026-09-21 [供给侧工作台界面微调：删除全局管理员特权提示文案]
+- **需求响应与界面净化**：
+  - 用户指令：“删除‘(全局管理员特权：可选择预设主体或直接手动录入临时供给主体)’字样”；
+- **优化点**：
+  - 在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 的 `entity-control-bar` 中，将右侧提示文案调整为仅在供给方管理员时呈现（`v-if="!isGlobalAdmin"`），全局管理员登录时彻底移除该提示字样，界面更加简洁纯粹；
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+
+## 2026-09-21 [供给主体排序优化：选项接口 current_supply_entity_ids 调整为按配置文件预设顺序排序]
+- **需求响应与根因治理**：
+  - 用户反馈进入供给侧页面时默认首个展示“天津卡尔斯”而非“大连开元”；
+  - 查明根因：后端选项接口此前执行 `sorted(accessible_supply_entity_ids)` 按照英文 ID 字母升序排列，`kaersi` (k-a-e) 排在 `kaiyuan` (k-a-i) 前面；
+- **优化点**：
+  - 在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `get_supply_management_options` 中，将 `current_supply_entity_ids` 调整为严格按照 [`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 中 `supply_entities` 的自然预设顺序（SA 大连开元、SB 河北鑫瑞得、SD 江苏沃圣、SE 天津卡尔斯...）输出；
+  - 解决了无指定主体参数访问时默认选中项跳出人类直觉顺序的问题；
+- **改动清单**：
+  - 后端接口：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+- **验证与测试**：
+  - 单元测试回归验证全部通过（`17 passed in 1.92s`）。
+
+## 2026-09-21 [供给方供货范围联动全面落地：综合历史推导隔离、工作台自适应与全局管理界面化维护]
+- **业务背景与目标**：
+  - 将 `supply_types`（保温管与管件供货范围）在全系统完成端到端联动，彻底解决“阀门厂被误判为保温管供货商”、“纯管件厂误入保温管工作台”等数据与操作体验短板；
+- **核心落地与改动点**：
+  1. **综合历史推导严格隔离**：
+     - 在 [`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py) 中，`_get_pipe_section_dynamic_suppliers` 在未产生发货时仅从 `supply_types` 包含 `"pipe"` 的主体中匹配保温管主供货商；`_get_fitting_dynamic_supplier_map` 仅从包含 `"fitting"` 的主体中匹配管件供货商；
+  2. **供给侧工作台智能自适应与拦截**：
+     - 在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中：
+       * 供给主体切换下拉框中补充展示供货范围徽章（如“（保温管+管件）”、“（仅管件）”）；
+       * 顶部工作台卡片展示当前主体供货范围专属徽章；
+       * 一级物料分类栏（Segmented Category Bar）根据当前主体供货范围动态展示功能数或“非供货业务”，不支持品类呈现置灰与禁用；
+       * 智能自适应切换：切换到仅管件主体时自动跳转到管件业务，点击未开通业务时弹出拦截提示；
+  3. **全局管理界面化维护**：
+     - 在 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue) 中：
+       * “供货商与供给主体档案”与“现场补录自定义主体”两个表格均新增“供货范围”复选框列（[x] 保温管 [x] 管件）；
+       * 打通 `applyConfig` 解析、`buildSectionPayload` 持久化、`addSupplyEntity` 默认值与 `toggleSupplyType` 校验（至少保留一种供货范围）；
+- **改动清单**：
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 前端工作台：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 前端全局管理：[`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+- **验证与测试**：
+  - 后端 33 个单元测试全部通过（`33 passed in 4.58s`）；
+  - 前端执行 `npm run build` 生产打包编译 100% 成功（`✓ built in 19.59s`）。
+
+## 2026-09-21 [数据库健康体检与约束严密化：tube_supplier_inventory 唯一约束、非空约束与 DDL 体系闭环]
+- **体检排查与发现的短板**：
+  1. **唯一约束机制**：当前业务已演进为“按次实盘”（一天可盘多次、不互相覆盖），数据库中已生效按批次隔离的联合唯一索引 `uq_tube_supplier_inventory_batch_entity_model ON (batch_no, supply_entity_id, pipe_model_id)`，逻辑严密；
+  2. **发现短板 1（历史数据与 NULL 约束）**：库中有 21 条初期旧数据 `batch_no` 为 NULL，且该列此前未设置 `NOT NULL`，影响唯一索引严格性；
+  3. **发现短板 2（CHECK 约束缺失）**：`stock_qty >= 0` 非负检查约束 `chk_supplier_inventory_qty_nonnegative` 在物理库中遗失；
+  4. **发现短板 3（DDL 文件未同步）**：`create_tube_supplier_inventory.sql` 与 `tube_schema_init.sql` 仍保留旧版的按日唯一约束与缺少 `batch_no` 定义；
+- **实施补齐与修复**：
+  1. **数据清洗与非空化**：对 21 条历史数据回填基于盘点时间的批次编号，并将 `batch_no` 列设置为 `NOT NULL`；
+  2. **物理补齐非负约束**：执行 `ALTER TABLE tube.tube_supplier_inventory ADD CONSTRAINT chk_supplier_inventory_qty_nonnegative CHECK (stock_qty >= 0);`；
+  3. **服务自愈逻辑增强**：在 [`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py) 中完善自愈补齐 `batch_no NOT NULL` 与 CHECK 约束；
+  4. **DDL 同步闭环**：同步更新 [`create_tube_supplier_inventory.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_supplier_inventory.sql) 与 [`tube_schema_init.sql`](file:///D:/编程项目/phoenix/backend/sql/tube_schema_init.sql)；
+- **改动清单**：
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)
+  - 数据库 DDL：[`backend/sql/create_tube_supplier_inventory.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_supplier_inventory.sql)、[`backend/sql/tube_schema_init.sql`](file:///D:/编程项目/phoenix/backend/sql/tube_schema_init.sql)
+- **验证与测试**：
+  - 数据库元数据查询（`pg_constraint` / `pg_indexes` / `information_schema.columns`）确认 PK、CHECK、UNIQUE INDEX 全量生效；
+  - 后端单元测试全部通过（`2 passed in 1.13s`）。
+
+## 2026-09-21 [展示大屏文案微调：厂家库存盘点战报标签精简为“完成最新实盘清点”]
+- **需求响应与文案精简**：
+  - 用户指令：“在大屏的‘全网工程实时动态播报’中‘厂家库存盘点’类的卡片中，‘完成最新实盘清点，现货待发充足’的标签，改写为‘完成最新实盘清点’”；
+- **优化点**：
+  - 在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `get_big_screen_dashboard_data` 中，将厂家库存盘点动态战报的 `positiveTag` 由 `"完成最新实盘清点，现货待发充足"` 精简为 **`"完成最新实盘清点"`**，使大屏右侧卡片排版更加精炼清晰；
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+- **验证与测试**：
+  - 后端单元测试回归验证全部通过（`2 passed in 0.96s`）。
+
+## 2026-09-21 [全局管理与大屏播报：打通厂家库存盘点（SAVE_SUPPLIER_INVENTORY）业务操作记录与实时动态播报]
+- **需求求证与业务闭环**：
+  - 用户问题 1：“现在的保存库存的行为，会不会被记录在全局管理页面的‘业务操作记录’中？”
+    * **现状与根因**：保存库存时，后端已将操作日志调用 `save_operation_log(action_type="SAVE_SUPPLIER_INVENTORY", ...)` 完整写入数据库 `logs.tube_operation_logs` 表；在“操作审计日志（audit）”中可直接查阅；但在“业务操作记录（submissions）”Tab 下此前因白名单遗漏被过滤；
+    * **补齐措施**：
+      1. 后端 [`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)：在 `SUPPLY_SUBMISSION_ACTIONS` 白名单中追加 `"SAVE_SUPPLIER_INVENTORY"`，使其直接纳入业务操作记录查询范围，并计入 24h 供给侧提交指标；
+      2. 前端 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)：在业务操作记录与操作审计日志两个筛选下拉中均增加“🏭 厂家现货盘点”选项，并配置翡翠绿专用徽章样式与类型中文翻译；
+      3. 后端 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)：在 CSV 导出字典中补充 `"SAVE_SUPPLIER_INVENTORY": "厂家库存盘点"`。
+  - 用户问题 2：“会不会显示在展示大屏的‘全网工程实时动态播报’中？”
+    * **查证结论**：**会显示！**
+    * **代码依据**：在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `get_big_screen_dashboard_data()` 接口中，会自动提取各厂家最新实盘在库量，生成类别为 `category_key: "inventory"`、标题为 `【实盘在库待发 · 厂家名称】` 的战报动态并排入 `live_feed_list`；大屏前端已支持“🏭 厂家盘点”筛选标签与翠绿色战报卡片（`.feed-card.inventory`）。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)
+
+## 2026-09-21 [展示大屏文案微调：左侧指标条标题调整为“在库现货待发：”]
+- **需求响应与文案微调**：
+  - 用户指令：“‘供方实盘待发:’改为‘在库现货待发：’”；
+- **优化点**：
+  - 保温管全网发运情报面板中的 `supplier-stock-summary-bar` 标签文案由 `供方实盘待发:` 精准调整为 **`在库现货待发：`**，与拓扑卡片上的“在库现货：xxkm”形成标准统一的业务词汇体系；
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+- **验证与测试**：
+  - 前端执行 `npm run build` 编译打包 100% 成功（`✓ built in 13.09s`）。
+
+## 2026-09-21 [展示大屏细节微调：供给方卡片微徽章文案调整为“在库现货：xxkm”并精简左侧大盘指标]
+- **需求响应与排版微调**：
+  - 用户指令：“将供给方名称卡片中的库存写为‘在库现货：xxkm’。左侧的‘供方实盘待发: 1.90 km (1900.00m)’也去掉括号内容”；
+- **优化点**：
+  1. 拓扑供给方卡片微胶囊徽章（`.sup-stock-badge`）文案升级为 `在库现货：{{ formatNumber(sup.stock_km) }}km`，统一以公里为单位呈现，与整体大盘数据口径保持一致；
+  2. 左侧保温管发运情报面板中，`supplier-stock-summary-bar` 移除括号内的 `(1900.00m)`，保持纯粹的数值与单位 `1.90 km`，界面更加清爽干练；
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+- **验证与测试**：
+  - 前端执行 `npm run build` 编译打包 100% 成功（`✓ built in 13.41s`）。
+
+## 2026-09-21 [展示大屏升级：解决首帧节点跳变，深度融入全网供方实盘在库待发与穿透看板]
+- **问题分析与首帧跳变根因**：
+  - 用户反馈展示大屏（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）首次打开时“只能显示三家供给单位，过一小会儿才能将所有的供给方显示出来”；
+  - 经排查，前端原代码在常量层硬编码了 3 家默认供给基地（开元、鑫瑞得、能源管厂），首帧渲染了这 3 家；等异步接口返回全部 9 家真实管厂配置后才被替换，导致肉眼可见的节点突变与飞线抖动；
+- **优化与功能实现**：
+  1. **首帧零跳变治理**：
+     - 将前端 `defaultSupplyNodes` 扩充为全网 9 家保供基地（大连开元、河北鑫瑞得、江苏沃圣、天津卡尔斯、河北泽悦、天津天地龙、大连三维、能源集团保温管厂、泰德尔物联）；
+     - 引入本地持久化缓存机制（`localStorage.getItem('phoenix_tube_bigscreen_supply_nodes')`），首帧优先读取最新缓存的完整节点体系，保证首屏渲染 100% 严丝合缝、完全杜绝跳变；
+  2. **拓扑管厂卡片紧凑排版与型号现货穿透浮层**：
+     - 拓扑卡片采用自适应弹性高度（`flex: 1 1 0; min-height: 0;`），容纳 9 家供方同时与右侧 10 大标段双立柱对称呼应；
+     - 卡片内新增实时在库待发微胶囊徽章（`.sup-stock-badge`）与动态呼吸光点（`.stock-pulse-dot`）；
+     - PC 桌面鼠标悬停时，弹出毛玻璃穿透浮层（`.sup-inventory-popover`），展示该厂具体型号明细、实盘在库米数与盘点时间；
+  3. **左侧大盘 KPI 融入全网供方在库待发指标**：
+     - 在保温管全网发运情报面板中新增 `supplier-stock-summary-bar`，展示全网供方最新实盘在库待发总量（km 与 m）；
+  4. **右侧实时战报流支持厂家盘点动态与过滤**：
+     - 过滤菜单新增“🏭 厂家盘点”选项；
+     - 引入实盘盘点战报卡片（`.feed-card.inventory`），呈现厂家最新盘点结果与重点现货型号；
+  5. **后端数据供给闭环 (`workspace.py`)**：
+     - `get_big_screen_dashboard_data()` 调用 `get_latest_all_suppliers_inventory()` 聚合供方库存数据，向 `supply_nodes` 注入 `stock_qty`、`stock_km`、`inventory_time`、`inventory_models`、`has_inventory` 字段，并在 KPI 中返回 `supplierStockKm` 与 `supplierStockM`。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+- **验证与测试**：
+  - 前端执行 `npm run build` 编译打包 100% 成功（`✓ built in 17.98s`）。
+
+## 2026-09-21 [修复：厂家在库现货明细气泡显示“未知厂家”的字段对齐缺陷]
+- **问题排查与根因分析**：
+  - 用户反馈在台账中鼠标悬停在厂家在库现货上时，提示气泡显示“未知厂家：200米”；
+  - 经排查，后端 `workspace.py` 生成明细时使用的字段名为 `supply_entity_name` 与 `reported_at`，而前端 Tooltip 函数读取的是 `item.supplier_name` 与 `item.inventory_time`，因键名不一致导致取值为 `undefined`，进而回退到了默认兜底文案“未知厂家”且未显示盘点时间；
+- **修复措施**：
+  1. **后端双向兼容输出 (`workspace.py`)**：在明细字典中同时输出 `supplier_name`（对齐 `sup["entity_name"]`）与 `inventory_time`（对齐 `inv_record["reported_at"]`）；
+  2. **前端高健壮性降级取值 (`DemandManagementView.vue`)**：
+     - `formatSupplierStockTooltip` 与 ECharts Tooltip 统一采用双重安全回退取值：
+       `const supName = item.supplier_name || item.supply_entity_name || item.supply_entity_id || '未知厂家'`；
+       `const rawTime = item.inventory_time || item.reported_at || ''`；
+       时间格式化友好支持 ISO 格式与微秒清洗（`slice(5, 16).replace('T', ' ')`）；
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+- **验证**：
+  - 前端执行 `npm run build` 编译打包。
+
+## 2026-09-21 [需求侧台账排版优化：“厂家在库现货(m)”列调整至“三日净缺口(m)”后方]
+- **业务考量与排版优化**：
+  - 用户指出：“厂家在库现货不直接参与现场缺口的数值扣减”，其本质属于上游供给侧的保供支撑能力；
+  - 顺应业务流向（需求 -> 现场库存 -> 运输在途 -> 库存+在途 -> 现场净缺口 -> 厂家现货储备 -> 最终保供态势判定）；
+  - 将表格中“厂家在库现货(m)”列从“运输在途(m)”右侧移至“三日净缺口(m)”右侧、保供态势判定左侧；
+  - 表头、表体数据行、表尾合计行以及 Excel 导出报表列顺序均同步调整；
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+- **验证**：
+  - 前端执行 `npm run build` 编译打包。
+
+## 2026-09-21 [供需穿透协同：需求侧全面联动展示上游厂家实盘在库现货与保供态势分级]
+- **需求背景与业务价值**：
+  - 用户确认：“将供给方的库存量展示给需求侧（DemandManagementView.vue），使施工单位提报计划、排查净缺口时，对上游负责厂家的现货储备与保供能力做到心中有数”；
+  - 施工单位与现场管理查看供需台账时，不仅能看到自己现场的实物库存和在途运输量，还能穿透看到对应供货厂家的在库现货，极大增强供应链透明度与调度预见性；
+- **核心功能实现与协同链路**：
+  1. **后端数据聚合与接口赋能 (`workspace.py`)**：
+     - 在 `get_supply_management_demand_summary` 接口中，构建标段与负责供货厂家的映射字典（低温水标段绑定河北鑫瑞得与天津天地龙，高温水标段绑定大连开元，能源集团保温管厂覆盖全量）；
+     - 读取各厂家最新一次盘点快照（`get_latest_all_suppliers_inventory()`），精准匹配并注入 `supplier_stock_qty`（在库现货总量）及 `supplier_stock_breakdown`（各厂家明细列表）；
+  2. **前端穿透呈现与交互升级 (`DemandManagementView.vue`)**：
+     - **顶部 KPI 卡片区**：新增“🏭 供方实盘在库总量”指标卡片，显示当前标段对应负责厂家的现货总量及覆盖型号数；
+     - **全要素穿透台账表格**：新增“厂家在库现货(m)”列及表尾合计，支持鼠标悬浮 Tooltip 查看各负责厂家名称、数量及盘点时间戳明细；
+     - **保供态势判定升级**：当存在三日净缺口时，细化判定分级：
+       * 若 `厂家在库 >= 净缺口`：判定为 `🟡 现货可保供`（厂家有充足现货，仅需督促进场发车）；
+       * 若 `厂家在库 > 0` 但不足：判定为 `🟠 部分现货`；
+       * 若 `厂家无在库`：判定为 `🚨 厂家无现货`（需紧急组织排产）；
+     - **ECharts 柱状图联动**：柱状图新增“厂家在库现货”橙色柱体、图例及悬浮 Tooltip 厂家明细；
+     - **Excel 导出联动**：导出的统计报表同步增加“厂家在库现货(米)”数据列；
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+- **验证与测试**：
+  - 前端执行 `npm run build` 编译打包 100% 成功（`✓ built in 15.28s`）。
+
+## 2026-09-21 [供给方库存盘点交互优化：盘点数值默认置零（方案B）与沿用按钮文案精简]
+- **交互逻辑升级（方案 B）**：
+  - 用户确认采用“方案 B”：进入页面或刷新数据时，“本次实盘在库量”默认全部置 `0.0`，不再自动带入上次的盘点数据，要求厂家必须逐项清点输入；
+  - 若库存确无变化，厂家可自主点击“📋 沿用上次盘点”按钮一键带入上次数据作为底稿，变动差额初始依据 `0 - previous_stock_qty` 动态呈现；
+- **按钮文案精简**：
+  - 去掉按钮原括号中的时间提示（`({{ formatPreviousInventoryBtnLabel }})`），精简为干练的 `📋 沿用上次盘点`；
+- **改动清单**：
+  - 后端：[`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py) 中 `get_supplier_inventory_for_date` 函数将各型号初始 `cur_stock` 设为 `0.0`；
+  - 前端：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中移除按钮内的时间插值，保持纯净按钮文案；
+- **验证与测试**：
+  - 运行后端单元测试 `python -m unittest backend.projects.insulation_pipe_supply_2026.tests.test_supplier_inventory_service` 全部通过（`OK`）；
+  - 执行前端 `npm run build` 进行生产编译。
+
+## 2026-09-21 [供给方库存盘点控制栏精简：彻底移除“盘点机制”冗余胶囊标签]
+- **需求响应与界面精简**：
+  - 响应用户指令，在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中彻底删除控制栏内的 `“盘点机制: ⏱️ 按次实盘 (可随时多次提交)”` 标签；
+  - 控制栏视觉层级进一步聚焦于核心业务元素：`当前厂家`、`上次盘点时间` 与 `本次实盘在库总量`，排版更加干练宽敞；
+  - 执行 `npm run build` 打包编译通过。
+
+## 2026-09-21 [供给主体库存盘点业务重构：由“按日盘点”升级为“按次盘点”，支持一天内多次提交且互不覆盖]
+- **需求背景与业务逻辑升级**：
+  - 用户明确调整库存盘点业务口径：“并不是按日盘点，而是按次盘点。也就是说，不限盘点时间点，只有‘这次’和‘上次’，即使在一天内，也可以多次提交盘点，但都不会因为是在同一日而覆盖记录”；
+  - 核心转变：
+    * **去日期覆盖化**：解除原数据库 `(report_date, supply_entity_id, pipe_model_id, section_1_id)` 唯一索引，允许同一天产生多个独立的盘点快照；
+    * **批次化生命周期**：新增全局唯一盘点批次号 `batch_no`（`INV_YYYYMMDD_HHMMSS_ffffff_ENTITY`），每次点击“提交本次盘点结果”即生成全新盘点批次全量入库；
+    * **“这次”与“上次”概念落地**：
+      - “上次”：获取该供给主体最近一次成功提交的有效盘点批次数据（精确到秒的时间戳与在库量）；
+      - “这次”：以管辖标段并集型号为准，本次实盘量默认建议沿用上次实盘量，支持随时提交，提交后自动变为“上次”并可随时开启下一轮盘点；
+    * **调度中心大屏适配**：`get_latest_all_suppliers_inventory` 采用 `DISTINCT ON (supply_entity_id)` 关联最新批次，实时呈现各厂家最新一次盘点快照。
+- **改动清单与实现细节**：
+  1. **后端数据库与服务 (`supplier_inventory_service.py`)**：
+     - `ensure_supplier_inventory_table`：自愈增加 `batch_no` 字段，删除旧按日唯一索引，创建 `(batch_no, supply_entity_id, pipe_model_id)` 批次唯一索引及时间倒序索引；
+     - `get_supplier_inventory_for_date`：改造为获取该主体最新提交批次作为“上次”，返回 `latest_previous_time`、`latest_previous_batch_no`、`has_previous_record` 等元数据；
+     - `save_supplier_inventory`：每次提交生成微秒级唯一 `batch_no`，以独立记录批量 INSERT 入库，绝不覆盖旧数据；
+     - `get_latest_all_suppliers_inventory`：按 `latest_batches` 子查询精准取每个主体最新一次提交批次的数据；
+  2. **后端 API (`workspace.py`)**：
+     - `SupplierInventorySavePayload`：`report_date` 调整为可选（不作为唯一键约束）；
+     - `save_supplier_inventory_endpoint`：记录业务日志包含批次号 `batch_no`，资源定位精确到批次；
+  3. **前端界面与交互 (`SupplyManagementView.vue`)**：
+     - 控制栏移除“盘点日期”与“当日状态”，改造为横向胶囊组：“当前厂家”、“上次盘点时间 (精确到秒)”与“盘点机制: ⏱️ 按次实盘 (可随时多次提交)”；
+     - 按钮升级为：“💾 提交本次盘点结果”与“📋 沿用上次盘点 (MM/DD HH:MM)”；
+     - 提交成功后自动触发数据刷新，将刚才提交的批次自动流转为“上次”，清空备注，准备下一次实盘；
+  4. **单元测试 (`test_supplier_inventory_service.py`)**：
+     - 编写同日内连续提交 2 次盘点（批次 1 与批次 2）测试用例，验证两次记录在数据库中完全共存未覆盖，查询“上次”精准返回批次 2 数值，大屏汇总精准对齐批次 2，测试结果全部通过（`OK`）。
+
+## 2026-09-21 [供给方库存盘点界面优化：“保存盘点结果”按钮配色调亮调柔]
+- **视觉优化与设计调整**：
+  - 用户反馈“保存盘点结果”按钮原深靛蓝渐变色（`#4f46e5 -> #3730a3`）整体偏深沉暗闷；
+  - 在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中将其升级为明快、清爽的活力科技蓝渐变：
+    * 渐变：`linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)`；
+    * 阴影与质感：追加轻量柔和投影 `box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25)`，更具层次与可点击感；
+  - 执行 `npm run build`，编译打包顺利通过（`✓ built in 16.61s`）。
+
+## 2026-09-21 [供给方库存盘点控制栏重构：彻底消除折行错位，盘点日期锁定为只读当天]
+- **业务考量与交互优化**：
+  - 用户反馈原控制栏中“标签”与“数值/徽章”竖向折行串行，排版凌乱；且指出“盘点”应当仅针对“当天”，不应允许用户随意手动挑选历史日期；
+  - 彻底移除 `<input type="date">` 手动日期选择器与旧 `.field` 纵向流样式，将盘点日期严格锁定为系统当天（`inventoryDate`），杜绝倒填、误填或篡改日期；
+  - 界面排版重构为现代横向信息胶囊条（`.inventory-control-bar` + `.inventory-info-pill`）：
+    * 胶囊 1：`📅 盘点日期: 2026-09-21`（纯只读微徽章，高亮清晰）；
+    * 胶囊 2：`当前厂家: 河北鑫瑞得管道设备有限公司`；
+    * 胶囊 3：`当日状态: ⚠️ 当日尚未提交盘点 / ✅ 当日已完成盘点`；
+    * 右侧高亮卡片：`实盘在库待发总量: 0 米`；
+  - 各胶囊显式声明 `display: inline-flex; flex-direction: row; white-space: nowrap;`，杜绝任何错位或内部串行；
+  - 执行 `npm run build`，编译打包顺利通过（`✓ built in 15.41s`）。
+
+## 2026-09-21 [供给方库存盘点交互优化：未盘点状态文案精简为“⚠️ 当日尚未提交盘点”]
+- **需求响应与文案调整**：
+  - 用户反馈库存盘点控制栏中的状态文案过长，要求“去掉括号中的内容，并改为 ⚠️ 当日尚未提交盘点”；
+  - 在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中将 `'⚠️ 当日尚未保存 (当前显示推荐底稿)'` 规范更新为 `'⚠️ 当日尚未提交盘点'`；
+  - 执行 `npm run build` 打包编译通过（`✓ built in 14.24s`），界面状态更加简练明了。
+
+## 2026-09-21 [供给方库存盘点交互优化：隐藏实盘在库量输入框原生上下微调小箭头 (Spinner)]
+- **需求响应与交互优化**：
+  - 用户反馈“本次实盘在库量 (米)”输入框中的原生上下调节箭头（Spinner）影响界面整洁度并存在滚轮误触风险，指令要求“去掉它”；
+  - 在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中为盘点数量输入框添加 `.no-spin` 类，并通过 CSS 伪元素规则全面消除：
+    * WebKit (Chrome/Edge/Safari): `::-webkit-outer-spin-button`, `::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0 !important; }`；
+    * Firefox: `-moz-appearance: textfield !important; appearance: textfield !important;`；
+  - 执行 `npm run build` 编译顺利通过（`✓ built in 15.61s`），输入框呈现干净平整的数字输入体验，输入框右侧文本不再受箭头挤占。
+
+## 2026-09-21 [供给方库存盘点交互优化：文案极简化、表格错位修复与按水质标段动态过滤型号]
+- **需求背景与优化目标**：
+  - 用户对供给方“库存盘点”页面提出进一步人机工程优化要求：
+    1. **文案精简**：去掉“面向供给主体。登记各型号保温管在厂区“已生产完工、尚未发货”的实物在库待发量...”等冗余说明；
+    2. **表格错位治理**：读取、识别并优化库存表格错位现象，确保各列在滚动和不同屏幕尺寸下均实现像素级对齐；
+    3. **文案与默认值微调**：“盘点备注 / 批注”改为“备注”，各行记录的备注文本框中彻底去除预写占位内容；
+    4. **标段动态型号范围过滤**：“保温管规格型号 (pipe_model_id)”改为“保温管型号”，其自动展示的型号列表严格根据该供给主体所负责的标段动态过滤：
+       - 若供应高温水标段，则显示高温水标段涉及型号并集（21种，DN1120 ~ DN57）；
+       - 若负责低温水标段，则显示低温水标段涉及型号并集（14种，DN377 ~ DN32）；
+       - 若高温水与低温水均涉及（或全负责），则显示全量需求型号并集（35种）；
+       - 默认按管径数值降序排列（大口径在先）。
+- **具体实施与改动清单**：
+  1. **后端服务与算法 (`supplier_inventory_service.py`)**：
+     - 新增 `list_models_for_supply_entity(supply_entity_id: str) -> List[str]`：
+       * 解析供给主体在 `tube_config.json` 中配置的 `section_1_ids`；
+       * 动态判定标段水质系统（`high%` vs `low%`），精确生成高温水并集、低温水并集或全量并集；
+       * 默认使用 `_extract_dn_number` 进行口径数值降序排序；
+     - 优化 `get_supplier_inventory_for_date()`：采用 `list_models_for_supply_entity` 过滤管型，仅对当日已有显式保存记录的特殊历史型号进行安全兜底合并，各行 `remark` 默认为空；
+     - 单元测试 [`test_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py)：新增对大连开元（21种）、河北鑫瑞得（14种）、能源集团（35种）及口径降序排序的完整断言测试，运行结果全部通过（`OK`）；
+  2. **前端界面与样式优化 (`SupplyManagementView.vue`)**：
+     - 去除卡片标题下方的提示副标题文案，保持界面清爽专注；
+     - 引入明确的 `<colgroup>` 规范 6 列宽度（序号 60px、型号 320px、上次量 140px、本次量 180px、差额 130px、备注 180px+）；
+     - 表格声明 `table-layout: fixed; border-collapse: separate; border-spacing: 0;`，单元格 `vertical-align: middle;`，输入框约束最大宽度并居中对齐，彻底消除由于 `colspan="2"` 导致的表尾与表头列宽错位；
+     - 表头列名更新：“保温管型号”、“备注”；
+     - 备注输入框占位符彻底清空（`placeholder=""`），消除预写内容；
+     - 执行 `npm run build` 成功通过打包（`✓ built in 14.85s`）。
+
 ## 2026-09-21 [业务规划探讨：供给主体（保温管厂家）厂区在库待发量（成品库存）填报需求分析]
 - **需求沟通背景**：
   - 用户提出新业务诉求：公司希望各供给主体（保温管生产厂家）能够填报“库存”数据，即掌握各家仓库中“已生产完工、但尚未发货”的各型号保温管数量；
@@ -11,6 +310,62 @@
   2. **数据流转模式**：推荐采用“按日快照/实盘在库量录入”，而非系统强行与发货自动联动扣减，避免线下损耗等导致的账实脱节；
   3. **交互与录入体验**：在 `SupplyManagementView.vue` 中增设轻量级快捷录入 Tab，支持一键载入上次数据快速调整；
   4. **大屏与调度联动**：大屏可新增“厂家待发储备”看板，形成“厂家库存 ➔ 在途运输 ➔ 现场库存 ➔ 现场消耗”的全生命周期监控闭环。
+
+## 2026-09-21 [业务精简与减负：供给主体库存盘点全面删除“今日完工量”字段，纯粹聚焦在库盘点]
+- **需求响应与设计决策**：
+  - 用户提出明确指令：“单纯就交给各供给方盘点就好。这个字段删除”；
+  - 坚持极简实用主义，杜绝增加一线厂家额外填报概念，将“厂区成品库存盘点”彻底降维至最纯粹的**“实盘在库待发量（`stock_qty`）”**。
+- **具体改动点清单**：
+  1. **数据库 DDL 与自愈**：
+     - [`backend/sql/create_tube_supplier_inventory.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_supplier_inventory.sql) 及 [`backend/sql/tube_schema_init.sql`](file:///D:/编程项目/phoenix/backend/sql/tube_schema_init.sql)：删除 `daily_produced_qty` 字段及其 CHECK 约束；
+     - 数据库执行自愈迁移：`ALTER TABLE tube.tube_supplier_inventory DROP COLUMN IF EXISTS daily_produced_qty;`；
+  2. **后端服务与 API (`supplier_inventory_service.py` & `workspace.py`)**：
+     - 在 `supplier_inventory_service.py` 中删除 `daily_produced_qty` 的查询映射、UPSERT 写入与汇总统计；
+     - 在 `workspace.py` 中从 `SupplierInventoryItemInput` 模型中删除 `daily_produced_qty`；
+     - 单元测试 [`test_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py) 剔除该字段测试用例并 100% 测试通过；
+  3. **前端交互与界面 (`SupplyManagementView.vue`)**：
+     - 删除顶部控制栏右侧的“今日完工入库总量”徽章，仅保留“实盘在库待发总量”；
+     - 表格中删除 `今日完工量 (米,选填)` 表头列、数据行对应输入框以及底部汇总行对应单元格；
+     - script setup 中彻底清理 `computedTotalInventoryProduced` 与关联映射；
+     - 重新执行 `npm run build`，编译顺利通过无任何错误。
+
+## 2026-09-21 [业务逻辑释义：“今日完工量 (daily_produced_qty)”字段的定位与应用场景]
+- **业务沟通背景**：
+  - 用户询问在库存盘点功能中，“今日完工量 (米, 选填)”有什么具体用处；
+  - 向用户系统阐明该字段在供应链控制中“区分存量与增量”、“监控厂家真实日产能”与“物质守恒勾稽校验”的核心价值，并说明将其设为“选填”以兼顾一线录入体验的权衡考量。
+
+## 2026-09-21 [物资协同体系：供给主体（保温管厂家）厂区成品“库存盘点”功能全链路落地]
+- **业务需求与决策背景**：
+  - 为消除发货前各厂家厂区库存的信息黑盒，实现供需动态平衡调度，公司要求各供给主体（保温管生产厂家）填报厂区“已生产好但尚未发货”的各型号保温管实物在库量；
+  - 核心业务决策：
+    1. **库存归属口径（模式 A）**：通用现货池模式，按 `(supply_entity_id, pipe_model_id)` 管理，不强行绑定发货标段（`section_1_id` 默认为空），确保调度最大的灵活性；
+    2. **数据更新模式（方案 A）**：每日实盘在库快照录入，支持历史回溯，当日未录入时**智能回退拉取最近一次有效盘点在库量作为初始底稿**，避免厂家重复录入；
+    3. **页面功能命名**：在供给方工作台（[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)）中，保温管业务下新增二级标签，命名为 **“📦 库存盘点”**。
+- **具体实施与代码改动清单**：
+  1. **数据库 DDL 体系**：
+     - 新建 [`backend/sql/create_tube_supplier_inventory.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_supplier_inventory.sql)：创建 `tube.tube_supplier_inventory` 表、非负约束、联合唯一索引 `uq_tube_supplier_inventory_date_entity_model_sec`（`report_date, supply_entity_id, pipe_model_id, section_1_id`）与日期查询索引；
+     - 更新 [`backend/sql/tube_schema_init.sql`](file:///D:/编程项目/phoenix/backend/sql/tube_schema_init.sql)：追加该表作为第 13 项核心业务表，保障新环境初始化一致性；
+  2. **后端服务层 (`supplier_inventory_service.py`)**：
+     - 新建 [`backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)：
+       * `ensure_supplier_inventory_table()`：自愈探测与建表；
+       * `list_standard_pipe_models()`：获取系统中所有标准直管型号并按口径降序排列；
+       * `get_supplier_inventory_for_date()`：查询指定厂家某日盘点数据，当日无记录时自动回退提取上次在库量作为参考；
+       * `save_supplier_inventory()`：事务级批量 UPSERT 保存盘点数据；
+       * `get_latest_all_suppliers_inventory()`：获取所有厂家最新在库待发量汇总。
+  3. **后端 API 路由层 (`workspace.py`)**：
+     - 在 [`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中：
+       * 注册 Pydantic 模型 `SupplierInventoryItemInput` 与 `SupplierInventorySavePayload`；
+       * 挂载 `GET /supply-management/inventory`（查询盘点列表，结合角色鉴权隔离）；
+       * 挂载 `POST /supply-management/inventory/save`（保存盘点数据并记录审计日志）；
+       * 挂载 `GET /supply-management/inventory/summary`（调度端全局最新待发库存看板）。
+  4. **前端服务与交互层 (`api.js` & `SupplyManagementView.vue`)**：
+     - 在 [`frontend/src/projects/daily_report_25_26/services/api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js) 中新增 `getTubeSupplierInventory` 与 `saveTubeSupplierInventory`；
+     - 在 [`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中：
+       * 保温管业务功能项由 3 项更新为 4 项，二级子标签新增“📦 库存盘点”按钮；
+       * 新增 Tab 内容面板：包含盘点日期选择器、当前厂家与当日完成状态徽章、在库/完工总量高亮微看板、“沿用上次盘点”、“刷新数据”与“💾 保存盘点结果”操作流；
+       * 盘点明细表格：支持全型号实盘在库量、今日完工量实时编辑输入，变动差额自动高亮计算（+绿 / -橙），吸顶表头与吸底汇总行。
+  5. **单元测试与验证**：
+     - 新建并运行 [`backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_supplier_inventory_service.py)，CRUD 与智能回退机制 100% 测试通过。
 
 ## 2026-09-21 [物资基准体系：94项“联网平衡阀”物料基准量全量入库 tube.tube_fitting_baseline]
 - **需求与确认背景**：

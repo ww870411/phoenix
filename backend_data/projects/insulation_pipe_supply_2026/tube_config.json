@@ -70,11 +70,16 @@
       "entity_id": "kaiyuan",
       "code": "SA",
       "entity_name": "大连开元热力管道股份有限公司",
+      "supply_types": [
+        "pipe",
+        "fitting"
+      ],
       "contact_name": "薛向新",
       "contact_phone": "13998603445",
       "section_1_ids": [
         "high_lot_1",
         "high_lot_2",
+        "high_lot_3",
         "high_lot_4"
       ],
       "is_custom": false
@@ -83,6 +88,10 @@
       "entity_id": "xinruide",
       "code": "SB",
       "entity_name": "河北鑫瑞得管道设备有限公司",
+      "supply_types": [
+        "pipe",
+        "fitting"
+      ],
       "contact_name": "刘宁",
       "contact_phone": "18230465777",
       "section_1_ids": [
@@ -99,6 +108,9 @@
       "entity_id": "wosheng",
       "code": "SD",
       "entity_name": "江苏沃圣阀业有限公司",
+      "supply_types": [
+        "fitting"
+      ],
       "contact_name": "秦杰",
       "contact_phone": "13520598794",
       "section_1_ids": [
@@ -112,6 +124,9 @@
       "entity_id": "kaersi",
       "code": "SE",
       "entity_name": "天津卡尔斯阀门股份有限公司",
+      "supply_types": [
+        "fitting"
+      ],
       "contact_name": "贾祥娟",
       "contact_phone": "18311089570",
       "section_1_ids": [
@@ -126,6 +141,9 @@
       "entity_id": "zeyue",
       "code": "SF",
       "entity_name": "河北泽悦节能设备科技有限公司",
+      "supply_types": [
+        "fitting"
+      ],
       "contact_name": "刘波",
       "contact_phone": "13910551929",
       "section_1_ids": [
@@ -139,6 +157,10 @@
       "entity_id": "tiandilong",
       "code": "SG",
       "entity_name": "天津天地龙管业股份有限公司",
+      "supply_types": [
+        "pipe",
+        "fitting"
+      ],
       "contact_name": "丁彧",
       "contact_phone": "13516258086",
       "section_1_ids": [
@@ -155,6 +177,9 @@
       "entity_id": "sanwei",
       "code": "SH",
       "entity_name": "大连三维膨胀节有限公司",
+      "supply_types": [
+        "fitting"
+      ],
       "contact_name": "胡春霞",
       "contact_phone": "13654938186",
       "section_1_ids": [
@@ -164,18 +189,12 @@
       "is_custom": false
     },
     {
-      "entity_id": "吴近",
-      "code": "SC",
-      "entity_name": "能源集团保温管厂",
-      "contact_name": "吴近",
-      "contact_phone": "13998473933",
-      "section_1_ids": [],
-      "is_custom": false
-    },
-    {
       "entity_id": "taideer",
       "code": "SI",
       "entity_name": "泰德尔物联(辽宁)有限公司",
+      "supply_types": [
+        "fitting"
+      ],
       "contact_name": "佟玲",
       "contact_phone": "18602400520",
       "section_1_ids": [
@@ -186,6 +205,19 @@
         "low_lot_5",
         "low_lot_6"
       ],
+      "is_custom": false
+    },
+    {
+      "entity_id": "吴近",
+      "code": "SC",
+      "entity_name": "能源集团保温管厂",
+      "supply_types": [
+        "pipe",
+        "fitting"
+      ],
+      "contact_name": "吴近",
+      "contact_phone": "13998473933",
+      "section_1_ids": [],
       "is_custom": false
     }
   ],

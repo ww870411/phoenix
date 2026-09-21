@@ -8,9 +8,7 @@
       <header class="topbar premium-topbar">
         <div>
           <h2>现场管理工作台 (供给侧)</h2>
-          <p class="sub">
-            面向供给主体。提供 Tabs 标签化分类，支持查看缺口与供需明细、运输车次装配、物流发货批量登记及在途运输跟踪。数量当前统一以“米”为计量单位。
-          </p>
+
         </div>
         <div class="topbar-actions">
           <button type="button" class="btn ghost btn-back" @click="goProjectPages">返回功能页</button>
@@ -33,7 +31,7 @@
                 @change="handleSelectSupplyEntityChange($event.target.value)"
               >
                 <option v-for="entity in allSupplyEntityOptions" :key="entity.entity_id" :value="entity.entity_id">
-                  {{ entity.entity_name }} {{ entity.isCustom ? '（自定义）' : (entity.entity_id ? `(${entity.entity_id})` : '') }}
+                  {{ entity.entity_name }} {{ formatSupplyTypesBadge(entity.supply_types) }} {{ entity.isCustom ? '（自定义）' : (entity.entity_id ? `(${entity.entity_id})` : '') }}
                 </option>
                 <option v-if="isGlobalAdmin" value="__ENTER_CUSTOM_MODE__">✍️ 手动输入自定义供给方...</option>
               </select>
@@ -66,14 +64,23 @@
               </button>
             </template>
           </div>
-          <span style="font-size: 12px; color: #64748b;">{{ isGlobalAdmin ? '(全局管理员特权：可选择预设主体或直接手动录入临时供给主体)' : '(供给方管理员：可在所辖供给主体间自由切换)' }}</span>
+          <span v-if="!isGlobalAdmin" style="font-size: 12px; color: #64748b;">(供给方管理员：可在所辖供给主体间自由切换)</span>
         </div>
 
         <section class="card elevated quick-dashboard-card">
           <div class="meta-dashboard">
             <div class="meta-card">
               <span class="meta-label">当前供给主体</span>
-              <strong class="meta-value">{{ currentSupplyEntityLabel }}</strong>
+              <strong class="meta-value">
+                {{ currentSupplyEntityLabel }}
+                <span 
+                  class="badge" 
+                  style="margin-left: 6px; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 600; vertical-align: middle;"
+                  :style="supportsPipe && supportsFitting ? 'background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;' : (supportsPipe ? 'background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;' : 'background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff;')"
+                >
+                  {{ supplyTypeBadgeText }}
+                </span>
+              </strong>
             </div>
             <div class="meta-card">
               <span class="meta-label">展示/业务日期</span>
@@ -99,22 +106,26 @@
             <button 
               type="button" 
               class="category-segment-btn" 
-              :class="{ active: activeCategory === 'pipe' }" 
+              :class="{ active: activeCategory === 'pipe', disabled: !supportsPipe }" 
+              :disabled="!supportsPipe"
+              :title="!supportsPipe ? '当前供给主体未开通保温管业务' : ''"
               @click="handleCategoryClick('pipe')"
             >
               <span class="cat-icon">🔹</span>
               <span class="cat-label">保温管业务</span>
-              <span class="cat-count">3 项功能</span>
+              <span class="cat-count">{{ supportsPipe ? '4 项功能' : '非供货业务' }}</span>
             </button>
             <button 
               type="button" 
               class="category-segment-btn" 
-              :class="{ active: activeCategory === 'fitting' }" 
+              :class="{ active: activeCategory === 'fitting', disabled: !supportsFitting }" 
+              :disabled="!supportsFitting"
+              :title="!supportsFitting ? '当前供给主体未开通管件业务' : ''"
               @click="handleCategoryClick('fitting')"
             >
               <span class="cat-icon">🔩</span>
               <span class="cat-label">管件业务</span>
-              <span class="cat-count">2 项功能</span>
+              <span class="cat-count">{{ supportsFitting ? '2 项功能' : '非供货业务' }}</span>
             </button>
           </div>
         </div>
@@ -143,6 +154,13 @@
               @click="handleTabClick('history')"
             >
               📋 物流发货记录
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: activeTab === 'inventory' }" 
+              @click="handleTabClick('inventory')"
+            >
+              📦 库存盘点
             </button>
           </div>
 
@@ -603,6 +621,173 @@
                     </td>
                   </tr>
                 </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- Tab: 保温管库存盘点 (activeTab === 'inventory') -->
+        <div v-if="activeTab === 'inventory'" class="tab-pane">
+          <section class="card elevated tab-card">
+            <div class="panel-title-row">
+              <div>
+                <h2>📦 保温管厂区成品库存盘点</h2>
+              </div>
+              <div class="toolbar-actions" style="display: flex; align-items: center; gap: 8px;">
+                <p v-if="inventoryActionMessage" :class="['action-message', inventoryActionMessage.type]">
+                  {{ inventoryActionMessage.text }}
+                </p>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :disabled="inventoryLoading || inventorySaving"
+                  title="重新从服务器拉取最新盘点数据"
+                  @click="loadInventoryData"
+                >
+                  🔄 刷新数据
+                </button>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :disabled="inventoryLoading || inventorySaving || !inventoryData.has_previous_record"
+                  title="将所有管型的实盘在库量一键填充为上次盘点数值"
+                  style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: 600;"
+                  @click="applyPreviousInventory"
+                >
+                  📋 沿用上次盘点
+                </button>
+                <button
+                  type="button"
+                  class="btn primary"
+                  :disabled="inventoryLoading || inventorySaving"
+                  style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important; border: none !important; font-weight: 700; padding: 8px 22px; color: #ffffff !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25); border-radius: 6px;"
+                  @click="saveInventoryData"
+                >
+                  {{ inventorySaving ? '正在提交本次盘点...' : '💾 提交本次盘点结果' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 盘点控制栏与指标微看板 (按次实盘) -->
+            <div class="inventory-control-bar">
+              <div class="inventory-info-group">
+                <div class="inventory-info-pill">
+                  <span class="info-label">当前厂家:</span>
+                  <strong class="info-val entity-val">{{ currentSupplyEntityLabel }}</strong>
+                </div>
+                <div class="inventory-info-pill">
+                  <span class="info-label">上次盘点时间:</span>
+                  <span v-if="inventoryData.has_previous_record" class="info-val time-val" :title="`上次盘点批次: ${inventoryData.latest_previous_batch_no || '—'}`">
+                    ⏱️ {{ inventoryData.latest_previous_time }}
+                  </span>
+                  <span v-else class="status-badge status-pending">
+                    ⚠️ 暂无历史盘点记录
+                  </span>
+                </div>
+              </div>
+
+              <!-- 右侧在库汇总徽章 -->
+              <div class="inventory-total-card">
+                <span class="total-label">本次实盘在库总量:</span>
+                <strong class="total-val">{{ formatNumber(computedTotalInventoryStock) }} 米</strong>
+                <span v-if="inventoryData.has_previous_record" style="font-size: 12px; color: #64748b; margin-left: 6px;">
+                  (上次: {{ formatNumber(computedTotalPreviousStock) }} 米)
+                </span>
+              </div>
+            </div>
+
+            <!-- 盘点明细表格 -->
+            <div v-if="inventoryLoading" class="loading-text">正在加载厂区成品库存盘点明细...</div>
+            <div v-else-if="inventoryError" class="error-box">{{ inventoryError }}</div>
+            <div v-else class="table-wrap" style="max-height: 620px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+              <table class="data-table" style="width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0;">
+                <colgroup>
+                  <col style="width: 60px;" />
+                  <col style="width: 320px;" />
+                  <col style="width: 140px;" />
+                  <col style="width: 180px;" />
+                  <col style="width: 130px;" />
+                  <col style="min-width: 180px;" />
+                </colgroup>
+                <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2;">
+                  <tr>
+                    <th style="text-align: center; white-space: nowrap; padding: 10px 8px;">序号</th>
+                    <th style="text-align: left; white-space: nowrap; padding: 10px 12px;">保温管型号</th>
+                    <th style="text-align: right; white-space: nowrap; padding: 10px 12px;" :title="inventoryData.latest_previous_time ? `上次盘点时间: ${inventoryData.latest_previous_time}` : '历史尚无更早盘点'">
+                      上次在库量 (米)
+                    </th>
+                    <th style="text-align: center; white-space: nowrap; padding: 10px 12px; background: #e0e7ff; color: #312e81;">
+                      本次实盘在库量 (米) *
+                    </th>
+                    <th style="text-align: right; white-space: nowrap; padding: 10px 12px;">变动差额 (米)</th>
+                    <th style="text-align: left; white-space: nowrap; padding: 10px 12px;">备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(row, idx) in inventoryData.items"
+                    :key="row.pipe_model_id"
+                    :style="{ background: row.stock_qty > 0 ? '#fbfcfe' : '#ffffff' }"
+                  >
+                    <td style="text-align: center; color: #64748b; font-size: 12px; padding: 8px 6px; vertical-align: middle;">{{ idx + 1 }}</td>
+                    <td style="text-align: left; font-weight: 600; color: #1e293b; font-size: 13px; padding: 8px 12px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.pipe_model_name || row.pipe_model_id">
+                      {{ row.pipe_model_name || row.pipe_model_id }}
+                    </td>
+                    <td style="text-align: right; color: #64748b; font-size: 13px; font-family: monospace; padding: 8px 12px; vertical-align: middle;">
+                      {{ formatNumber(row.previous_stock_qty) }}
+                    </td>
+                    <td style="text-align: center; background: rgba(224, 231, 255, 0.25); padding: 6px 10px; vertical-align: middle;">
+                      <input
+                        v-model.number="row.stock_qty"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        class="input no-spin"
+                        placeholder="0.0"
+                        style="width: 100%; max-width: 130px; text-align: right; font-weight: 700; color: #4338ca; border: 1px solid #a5b4fc; border-radius: 6px; padding: 5px 8px; font-size: 13px; box-sizing: border-box;"
+                      />
+                    </td>
+                    <td style="text-align: right; font-size: 12.5px; font-family: monospace; font-weight: 600; padding: 8px 12px; vertical-align: middle;">
+                      <span
+                        v-if="row.stock_qty - row.previous_stock_qty > 0"
+                        style="color: #16a34a;"
+                      >
+                        +{{ formatNumber(row.stock_qty - row.previous_stock_qty) }}
+                      </span>
+                      <span
+                        v-else-if="row.stock_qty - row.previous_stock_qty < 0"
+                        style="color: #ea580c;"
+                      >
+                        {{ formatNumber(row.stock_qty - row.previous_stock_qty) }}
+                      </span>
+                      <span v-else style="color: #94a3b8;">0.0</span>
+                    </td>
+                    <td style="text-align: left; padding: 6px 10px; vertical-align: middle;">
+                      <input
+                        v-model="row.remark"
+                        type="text"
+                        class="input"
+                        placeholder=""
+                        style="width: 100%; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; font-size: 12px; box-sizing: border-box;"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot style="position: sticky; bottom: 0; background: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1; z-index: 2;">
+                  <tr>
+                    <td colspan="2" style="text-align: center; padding: 10px 12px; vertical-align: middle;">全型号盘点汇总合计</td>
+                    <td style="text-align: right; color: #64748b; font-family: monospace; padding: 10px 12px; vertical-align: middle;">
+                      {{ formatNumber(computedTotalPreviousStock) }}
+                    </td>
+                    <td style="text-align: center; color: #4338ca; font-size: 14px; font-family: monospace; padding: 10px 12px; vertical-align: middle;">
+                      {{ formatNumber(computedTotalInventoryStock) }} 米
+                    </td>
+                    <td style="text-align: right; font-family: monospace; padding: 10px 12px; vertical-align: middle;">
+                      {{ formatNumber(computedTotalInventoryStock - computedTotalPreviousStock) }}
+                    </td>
+                    <td style="color: #64748b; font-size: 12px; text-align: left; padding: 10px 12px; vertical-align: middle;">共 {{ inventoryData.items.length }} 种规格型号</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </section>
@@ -2163,6 +2348,8 @@ import {
   submitFittingDelivery,
   cancelFittingDelivery,
   getTubeDemandManagementFittingBaseline,
+  getTubeSupplierInventory,
+  saveTubeSupplierInventory,
 } from '../../daily_report_25_26/services/api'
 
 const PROJECT_KEY = 'insulation_pipe_supply_2026'
@@ -2170,7 +2357,7 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const VALID_TABS = ['demand', 'register', 'history', 'fitting', 'fitting_baseline']
+const VALID_TABS = ['demand', 'register', 'history', 'inventory', 'fitting', 'fitting_baseline']
 const VALID_CATEGORIES = ['pipe', 'fitting']
 
 // 清理历史残留的 localStorage 缓存，避免跨入口污染
@@ -2347,6 +2534,14 @@ const supplyDemandViewMode = ref('summary')
 const selectedPipeModelIds = ref([])
 
 const handleCategoryClick = (category) => {
+  if (category === 'pipe' && !supportsPipe.value) {
+    alert('当前供给主体暂未开通保温管供货业务')
+    return
+  }
+  if (category === 'fitting' && !supportsFitting.value) {
+    alert('当前供给主体暂未开通管件供货业务')
+    return
+  }
   if (activeCategory.value === category) return
   activeCategory.value = category
   if (category === 'pipe') {
@@ -2365,7 +2560,139 @@ const handleTabClick = (tab) => {
     lastPipeTab.value = tab
   }
   syncTabStateToUrl(activeCategory.value, tab)
+  if (tab === 'inventory') {
+    loadInventoryData()
+  }
 }
+
+// --- 🏭 保温管厂区成品库存盘点专用变量与逻辑 (按次盘点) ---
+const inventoryLoading = ref(false)
+const inventorySaving = ref(false)
+const inventoryError = ref('')
+const inventoryActionMessage = ref(null)
+const inventoryData = reactive({
+  has_previous_record: false,
+  has_record: false,
+  latest_previous_time: null,
+  latest_previous_date: null,
+  latest_previous_batch_no: null,
+  total_previous_stock_qty: 0,
+  total_stock_qty: 0,
+  items: [],
+})
+
+const formatPreviousInventoryBtnLabel = computed(() => {
+  const timeStr = inventoryData.latest_previous_time || inventoryData.latest_previous_date
+  if (!timeStr) return '无'
+  if (timeStr.length >= 16) {
+    return timeStr.slice(5, 16)
+  }
+  return timeStr
+})
+
+const computedTotalPreviousStock = computed(() => {
+  return (inventoryData.items || []).reduce((sum, it) => sum + (Number(it.previous_stock_qty) || 0), 0)
+})
+
+const computedTotalInventoryStock = computed(() => {
+  return (inventoryData.items || []).reduce((sum, it) => sum + (Number(it.stock_qty) || 0), 0)
+})
+
+const setInventoryActionMessage = (text, type = 'success', duration = 3500) => {
+  inventoryActionMessage.value = { text, type }
+  if (duration > 0) {
+    setTimeout(() => {
+      if (inventoryActionMessage.value?.text === text) {
+        inventoryActionMessage.value = null
+      }
+    }, duration)
+  }
+}
+
+const loadInventoryData = async () => {
+  const entityId = selectedSupplyEntityId.value || ''
+  if (!entityId) return
+  inventoryLoading.value = true
+  inventoryError.value = ''
+  try {
+    const res = await getTubeSupplierInventory(PROJECT_KEY, {
+      supply_entity_id: entityId,
+    })
+    if (res && res.data) {
+      const d = res.data
+      inventoryData.has_previous_record = !!(d.has_previous_record || d.has_record)
+      inventoryData.has_record = inventoryData.has_previous_record
+      inventoryData.latest_previous_time = d.latest_previous_time || d.latest_previous_date || null
+      inventoryData.latest_previous_date = inventoryData.latest_previous_time
+      inventoryData.latest_previous_batch_no = d.latest_previous_batch_no || null
+      inventoryData.total_previous_stock_qty = Number(d.total_previous_stock_qty) || 0
+      inventoryData.total_stock_qty = Number(d.total_stock_qty) || 0
+      inventoryData.items = (d.items || []).map((it) => ({
+        ...it,
+        stock_qty: Number(it.stock_qty) || 0,
+        previous_stock_qty: Number(it.previous_stock_qty) || 0,
+        remark: it.remark || '',
+      }))
+    }
+  } catch (err) {
+    console.error('加载库存盘点失败:', err)
+    inventoryError.value = err.message || '加载库存盘点失败'
+  } finally {
+    inventoryLoading.value = false
+  }
+}
+
+const applyPreviousInventory = () => {
+  if (!inventoryData.items || !inventoryData.items.length) return
+  inventoryData.items.forEach((it) => {
+    it.stock_qty = Number(it.previous_stock_qty) || 0
+  })
+  const timeDesc = inventoryData.latest_previous_time || '上次'
+  setInventoryActionMessage(`已成功沿用上次 (${timeDesc}) 盘点在库数值`, 'success', 3000)
+}
+
+const saveInventoryData = async () => {
+  const entityId = selectedSupplyEntityId.value || ''
+  if (!entityId) {
+    setInventoryActionMessage('请先选择或绑定当前供给主体', 'error', 4000)
+    return
+  }
+
+  inventorySaving.value = true
+  inventoryError.value = ''
+  try {
+    const payload = {
+      supply_entity_id: entityId,
+      items: inventoryData.items.map((it) => ({
+        pipe_model_id: it.pipe_model_id,
+        stock_qty: Number(it.stock_qty) || 0,
+        remark: String(it.remark || '').trim(),
+      })),
+    }
+
+    const res = await saveTubeSupplierInventory(PROJECT_KEY, payload)
+    if (res && res.ok) {
+      const batchNo = res.data?.batch_no || ''
+      const totalStock = formatNumber(res.data?.total_stock_qty || 0)
+      setInventoryActionMessage(
+        `🎉 本次盘点已成功提交入库！批次 [${batchNo}]，实盘在库总量 ${totalStock} 米已归档为最新记录。`,
+        'success',
+        5000
+      )
+      // 重新加载数据，使刚才提交的批次自动成为“上次”
+      await loadInventoryData()
+    } else {
+      setInventoryActionMessage(res?.message || '提交失败', 'error', 4000)
+    }
+  } catch (err) {
+    console.error('提交库存盘点失败:', err)
+    inventoryError.value = err.message || '提交库存盘点失败'
+    setInventoryActionMessage(inventoryError.value, 'error', 5000)
+  } finally {
+    inventorySaving.value = false
+  }
+}
+
 
 // --- 管件发货记录 Tab 专用变量与逻辑 ---
 const getNowISOString = () => {
@@ -3811,6 +4138,42 @@ const currentSupplyEntityLabel = computed(() => {
   return matched?.entity_name || selectedSupplyEntityId.value || '未识别'
 })
 
+const currentSupplyEntity = computed(() => {
+  return allSupplyEntityOptions.value.find((item) => item.entity_id === selectedSupplyEntityId.value) || null
+})
+
+const currentSupplyTypes = computed(() => {
+  const types = currentSupplyEntity.value?.supply_types
+  return Array.isArray(types) && types.length > 0 ? types : ['pipe', 'fitting']
+})
+
+const supportsPipe = computed(() => currentSupplyTypes.value.includes('pipe'))
+const supportsFitting = computed(() => currentSupplyTypes.value.includes('fitting'))
+
+const supplyTypeBadgeText = computed(() => {
+  if (supportsPipe.value && supportsFitting.value) return '保温管 + 管件'
+  if (supportsPipe.value) return '仅保温管'
+  if (supportsFitting.value) return '仅管件'
+  return '全品类'
+})
+
+const formatSupplyTypesBadge = (types) => {
+  const t = Array.isArray(types) && types.length ? types : ['pipe', 'fitting']
+  if (t.includes('pipe') && t.includes('fitting')) return '（保温管+管件）'
+  if (t.includes('pipe')) return '（仅保温管）'
+  if (t.includes('fitting')) return '（仅管件）'
+  return ''
+}
+
+// 智能自适应切换：若当前主体不支持当前激活分类，自动无缝切换至支持分类
+watch([supportsPipe, supportsFitting], ([canPipe, canFitting]) => {
+  if (!canPipe && canFitting && activeCategory.value === 'pipe') {
+    handleCategoryClick('fitting')
+  } else if (canPipe && !canFitting && activeCategory.value === 'fitting') {
+    handleCategoryClick('pipe')
+  }
+})
+
 const currentDeliverySupplyEntityLabel = computed(() => {
   const matched = allSupplyEntityOptions.value.find((item) => item.entity_id === deliveryForm.value.supplyEntityId)
   return matched?.entity_name || deliveryForm.value.supplyEntityId || currentSupplyEntityLabel.value
@@ -4429,7 +4792,7 @@ async function cancelDelivery(row) {
   cancelModalState.value = {
     visible: true,
     type: 'pipe_delivery',
-    title: '直管发货记录撤销确认',
+    title: '保温管发货记录撤销确认',
     targetDesc: `发货单号：${identifier}（车牌：${row.vehiclePlateNo || '—'}，型号：${row.pipeModelName || '—'}，发货量：${formatNumber(row.shippedQty)} ${row.unit || '米'}）`,
     reason: '',
     loading: false,
@@ -4483,6 +4846,9 @@ watch(selectedSupplyEntityId, (value) => {
     loadFittingDeliveries()
     if (activeTab.value === 'fitting_baseline') {
       loadFittingBaseline()
+    }
+    if (activeTab.value === 'inventory') {
+      loadInventoryData()
     }
   } else {
     fittingDeliveries.value = []
@@ -5019,6 +5385,145 @@ async function saveSuperEditFitting() {
 </script>
 
 <style scoped>
+/* 隐藏数字输入框自带的上下微调箭头 (Spinner) 与步进按钮 */
+:deep(input.no-spin::-webkit-outer-spin-button),
+:deep(input.no-spin::-webkit-inner-spin-button),
+input.no-spin::-webkit-outer-spin-button,
+input.no-spin::-webkit-inner-spin-button,
+.data-table input[type=number]::-webkit-outer-spin-button,
+.data-table input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+:deep(input.no-spin),
+input.no-spin,
+.data-table input[type=number] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+/* 盘点控制栏与横向单行元数据信息胶囊样式 (抗折行防错位) */
+.inventory-control-bar {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 16px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  padding: 10px 16px !important;
+  border-radius: 8px !important;
+  margin-bottom: 16px !important;
+}
+
+.inventory-info-group {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 20px !important;
+}
+
+.inventory-info-pill {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+  font-size: 13px !important;
+}
+
+.inventory-info-pill .info-label {
+  color: #64748b !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.inventory-info-pill .info-val {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+
+.inventory-info-pill .info-val.date-val {
+  color: #4f46e5 !important;
+  background: #eef2ff !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  border: 1px solid #c7d2fe !important;
+  font-family: monospace !important;
+}
+
+.inventory-info-pill .info-val.time-val {
+  color: #0284c7 !important;
+  background: #f0f9ff !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  border: 1px solid #bae6fd !important;
+  font-family: monospace !important;
+}
+
+.inventory-info-pill .info-val.mode-val {
+  color: #475569 !important;
+  background: #f1f5f9 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  border: 1px solid #cbd5e1 !important;
+  font-size: 12.5px !important;
+}
+
+.inventory-info-pill .info-val.entity-val {
+  background: #e2e8f0 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+}
+
+.inventory-info-pill .status-badge {
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+}
+
+.inventory-info-pill .status-badge.status-done {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1px solid #86efac !important;
+}
+
+.inventory-info-pill .status-badge.status-pending {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+}
+
+.inventory-total-card {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  background: #eef2ff !important;
+  border: 1px solid #c7d2fe !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  white-space: nowrap !important;
+}
+
+.inventory-total-card .total-label {
+  font-size: 12.5px !important;
+  color: #4338ca !important;
+  font-weight: 600 !important;
+}
+
+.inventory-total-card .total-val {
+  font-size: 15px !important;
+  color: #3730a3 !important;
+  font-weight: 800 !important;
+  font-family: monospace !important;
+}
+
 :deep(.rg-cell-error) {
   background-color: #fee2e2 !important;
   color: #b91c1c !important;
@@ -5998,6 +6503,16 @@ async function saveSuperEditFitting() {
   background: #ffffff !important;
   border-color: #dbeafe !important;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.category-segment-btn.disabled,
+.category-segment-btn:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #94a3b8 !important;
+  box-shadow: none !important;
 }
 
 .category-segment-btn .cat-icon {

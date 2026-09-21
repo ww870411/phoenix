@@ -1,3 +1,210 @@
+## 2026-09-21 界面体验优化：供给侧工作台删除顶部副标题说明文案
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧现场管理工作台，顶部 `premium-topbar`）
+- **功能升级与实现细节**：
+  - 彻底移除标题下方的副标题 `<p class="sub">` 及其“面向供给主体。提供 Tabs 标签化分类，支持查看缺口与供需明细、运输车次装配、物流发货批量登记及在途运输跟踪。数量当前统一以“米”为计量单位。”说明文案，使顶部工作台视觉更加精练。
+
+## 2026-09-21 界面体验优化：供给侧工作台删除全局管理员特权提示文案
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧现场管理工作台，顶部主体控制行）
+- **功能升级与实现细节**：
+  - 删除顶部主体切换控制行右侧的 `(全局管理员特权：可选择预设主体或直接手动录入临时供给主体)` 提示文案，仅在供给方管理员时呈现对应提示，界面更显精练。
+
+## 2026-09-21 供给主体体系：供给方供货范围（supply_types）工作台自适应与全局管理界面化维护
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧现场管理工作台）
+  - 页面：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（全局管理与主体档案维护）
+- **功能升级与实现细节**：
+  1. **供给侧工作台智能自适应与安全拦截**（`SupplyManagementView.vue`）：
+     - 主体切换下拉框中直观呈现供货范围标签（如“（保温管+管件）”、“（仅管件）”）；
+     - 顶部工作台卡片展示当前主体供货范围微胶囊徽章（`supplyTypeBadgeText`）；
+     - 一级物料分类栏（Segmented Category Bar）根据当前主体是否具备保温管/管件供货资格，动态呈现功能数或“非供货业务”；对不具备资格的大类实施置灰、禁用与非法点击拦截（`alert` 友好提示）；
+     - 切换至仅管件厂商（如沃圣、卡尔斯）时，系统自动无缝跳转至“管件业务”Tab，彻底杜绝误填；
+  2. **全局管理界面化维护供货范围**（`GlobalManagementView.vue`）：
+     - “供货商与供给主体档案”与“现场补录自定义主体”两个表格均新增“供货范围”复选框列（[x] 保温管 [x] 管件）；
+     - 打通 `applyConfig` 初始化解析、`buildSectionPayload` 持久化、`addSupplyEntity` 默认值与 `toggleSupplyType` 防呆校验（至少保留一种供货范围）。
+
+## 2026-09-21 数据治理：厂家库存盘点表约束与索引体系完整性校验（前端无破坏性变更）
+
+- **数据模型与前端协同**：
+  - 经全面体检，`tube.tube_supplier_inventory` 的主键、非空、非负 CHECK 约束以及按次盘点唯一索引（`batch_no` + `supply_entity_id` + `pipe_model_id`）已 100% 严密对齐；
+  - 前端库存盘点工作台（`SupplyManagementView.vue`）提交时生成的唯一批次号在数据库端具备完整的强约束保障，前端数据呈现与提交协议保持稳定。
+
+## 2026-09-21 展示大屏：全网工程实时动态播报中厂家库存盘点卡片标签对齐为“完成最新实盘清点”
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（保温管业务，数字指挥大屏，右侧战报流水）
+- **功能升级与表现**：
+  - 战报流卡片右下角正向评价徽章（`.feed-pos-tag`）同步消费后端返回的 `positiveTag`，由原本的“✨ 完成最新实盘清点，现货待发充足”精简对齐为 **“✨ 完成最新实盘清点”**。
+
+## 2026-09-21 全局管理：业务操作记录与操作审计日志全面收录“🏭 厂家现货盘点”行为
+
+- **关联前端页面与组件**：
+  - 页面：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)（保温管业务，全局管理入口，Tab 0 业务操作记录 & Tab 8 操作审计日志）
+- **功能升级与实现细节**：
+  1. **操作行为下拉筛选**：
+     - 在“业务操作记录”的“业务数据提交行为”分类下，新增 `<option value="SAVE_SUPPLIER_INVENTORY">🏭 厂家现货盘点</option>`；
+     - 在“操作审计日志”的“管道物流与履约”分类下，新增 `<option value="SAVE_SUPPLIER_INVENTORY">🏭 厂家库存盘点 (SAVE_INVENTORY)</option>`；
+  2. **行为类型中文翻译与样式映射**：
+     - `translateActionType` 映射新增 `SAVE_SUPPLIER_INVENTORY: '🏭 厂家库存盘点'`；
+     - `getActionTypeBadgeStyle` 配置翡翠绿专用微胶囊背景与边框（`bg: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0'`）；
+  3. **分类联动过滤**：
+     - `onSubmissionCategoryChange` 中将 `SAVE_SUPPLIER_INVENTORY` 纳入 `submissionActions` 集合，确保在切换大类时智能联动重置。
+
+## 2026-09-21 展示大屏：治理首帧节点跳变，拓扑卡片融入厂家实盘现货徽章与型号穿透浮层
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（保温管业务，数字指挥大屏）
+- **功能升级与实现细节**：
+  1. **首帧零跳变治理**：
+     - 常量层 `defaultSupplyNodes` 扩充为全网 9 家保供基地；
+     - 引入 `localStorage` 持久化缓存（`phoenix_tube_bigscreen_supply_nodes`），首帧渲染优先读取缓存列表，彻底解决原本从 3 家跳变至 9 家的视觉闪烁与连线抖动；
+  2. **拓扑管厂卡片排版紧凑化与穿透浮层**：
+     - 卡片调整为弹性高度（`flex: 1 1 0; min-height: 0; padding: 4px 10px;`），与右侧需求标段双立柱对称平衡；
+     - 卡片右侧展示“在库现货：{stock_km}km”微胶囊徽章（`.sup-stock-badge`）与呼吸光点，保持与全网公里数口径一致；
+     - 鼠标悬停卡片时弹出毛玻璃穿透浮层（`.sup-inventory-popover`），展示该厂型号现货明细列表与盘点时间；
+  3. **左侧大盘与战报流联动**：
+     - 左侧 KPI 面板新增全网供方实盘在库待发储备条（`.supplier-stock-summary-bar`），标签标题为“在库现货待发：”，纯粹展示数值与单位（如 `1.90 km`），去除括号内多余的米数描述；
+     - 右侧实时战报流支持“🏭 厂家盘点”分类过滤与专用标识色战报卡片（`.feed-card.inventory`）；
+  4. **构建验证**：
+     - 执行 `npm run build` 编译打包 100% 成功（`✓ built in 13.09s`，exit code 0）。
+
+## 2026-09-21 需求管理：供需穿透台账全面联动上游厂家实盘在库量与保供态势分级
+
+- **关联前端页面与组件**：
+  - 页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（保温管业务，`activeTab === 'overview'`）
+- **功能改动与穿透展现**：
+  1. **顶部 KPI 指标区**：
+     - 新增“🏭 供方实盘在库总量”卡片（`.kpi-orange`），展示当前标段管辖供货厂家的现货总量与覆盖型号数；
+     - 卡片网格升级为 5 列自适应响应式布局；
+  2. **全要素穿透台账表格**：
+     - 在“三日净缺口(m)”右侧（保供态势判定左侧）新增“厂家在库现货(m)”列与表尾合计；
+     - 鼠标悬浮于厂家在库数字时触发 Tooltip 悬浮框，清晰展示具体负责厂家、实盘现货数量以及盘点时间；
+  3. **保供态势判定逻辑精细化**：
+     - 当型号存在净缺口时：
+       * `厂家在库 >= 净缺口` 时判定为 `🟡 现货可保供`（`.pill-warning`）；
+       * `厂家在库 > 0` 但不足时判定为 `🟠 部分现货`（`.pill-orange`）；
+       * `厂家无库存` 时判定为 `🚨 厂家无现货`（`.pill-danger`）；
+  4. **ECharts 柱状图联动**：
+     - 新增“厂家在库现货”橙色柱体系列与图例项，Hover 提示框同步展示厂家现货明细；
+  5. **报表导出联动**：
+     - Excel 导出同步输出“厂家在库现货(米)”数据；
+  6. **构建验证**：
+     - 执行 `npm run build` 编译打包 100% 成功（`✓ built in 15.28s`，exit code 0）。
+
+## 2026-09-21 供给管理：库存盘点默认置零（方案B），“📋 沿用上次盘点”按钮文案精简
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeTab === 'inventory'`）
+- **优化与交互细节（方案 B）**：
+  1. **本次实盘量默认置零**：
+     - 进入盘点页面或点击刷新时，各型号的“本次实盘在库量”默认显示为 `0`，变动差额初始对应呈现负差额；
+     - 要求厂家逐项输入实际清点数字，防止未清点盲目提交；
+  2. **一键沿用上次与文案精简**：
+     - 按钮文案去掉括号中的时间戳，精简为纯净的 **“📋 沿用上次盘点”**；
+     - 若厂家确认库存无变化，可点击该按钮一键将上次在库量完整带入本次输入框中；
+  3. **构建验证**：
+     - 执行 `npm run build`，编译打包顺利通过（`✓ built in 16.44s`，exit code 0）。
+
+## 2026-09-21 供给管理：库存盘点升级为“按次实盘”，删除控制栏“盘点机制”冗余标签
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeTab === 'inventory'`）
+- **业务升级与前端实现**：
+  1. **按次实盘机制与控制栏极致精简**：
+     - 去除原带有“当日”字样的状态与日期限制，界面彻底聚焦于**“这次”**与**“上次”**；
+     - 彻底删除控制栏中冗余的“`盘点机制: ⏱️ 按次实盘 (可随时多次提交)`”胶囊标签，避免给厂家日常操作带来视觉噪点；
+     - 控制栏当前仅保留核心必要信息：左侧 `当前厂家`、`上次盘点时间 (精确到秒，附带批次提示)`，右侧 `本次实盘总量 (对比上次)`；
+  2. **交互流转**：
+     - 操作按钮升级为“💾 提交本次盘点结果”与“📋 沿用上次盘点 (MM/DD HH:MM)”；
+     - 点击提交后生成微秒级全新批次，提交成功后系统自动重新拉取，刚才提交的批次即刻流转为“上次”，清空备注，准备下一轮实盘；
+     - 一天内无论盘点多少次，均以全新批次入库，绝不覆盖同日历史记录；
+  3. **构建验证**：
+     - 执行 `npm run build`，编译打包顺利通过（`✓ built in 16.58s`，exit code 0）。
+
+## 2026-09-21 供给管理：库存盘点控制栏重构，消除折行并锁定日期为只读
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeTab === 'inventory'`）
+- **优化细节**：
+  - 移除 `<input type="date">`，盘点日期作为**纯只读信息**锁定为当天，禁止厂家随意回溯/篡改日期填报；
+  - 修复串行错位：重构为 `.inventory-control-bar` + `.inventory-info-pill`，强制单行横排并声明 `white-space: nowrap;`；
+  - 呈现 4 个并排清晰小单元：`📅 盘点日期`、`当前厂家`、`当日状态` 以及右侧 `实盘在库待发总量`；
+  - 执行 `npm run build`，编译打包顺利通过（`✓ built in 15.41s`）。
+
+## 2026-09-21 供给管理：库存盘点未提交状态文案更新为“⚠️ 当日尚未提交盘点”
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeTab === 'inventory'`）
+- **优化细节**：
+  - 当日状态文案精简：原 `'⚠️ 当日尚未保存 (当前显示推荐底稿)'` 更新为 `'⚠️ 当日尚未提交盘点'`；
+  - 状态保持黄色/琥珀色高亮徽章提醒，语言更直接、干练；
+  - 执行 `npm run build`，编译打包顺利通过（`✓ built in 14.24s`）。
+
+## 2026-09-21 供给管理：隐藏实盘在库量数字输入框微调箭头 (Spinner)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeTab === 'inventory'`）
+- **优化细节**：
+  - 为盘点数量输入框增加 `.no-spin` 类，并通过全局/局部伪元素样式隐藏 Chrome/Edge/Firefox 原生微调箭头（`::-webkit-inner-spin-button`, `appearance: textfield`）；
+  - 消除箭头挤占输入框内部空间与滚轮误触风险，界面视觉更平整统一；
+  - 执行 `npm run build`，编译打包顺利通过（`✓ built in 15.61s`）。
+
+## 2026-09-21 供给管理：库存盘点界面优化、表格错位修复与按水质标段动态过滤型号
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeCategory === 'pipe'`，`activeTab === 'inventory'`）
+- **优化与调整点**：
+  1. **文案极简化**：移除标题下方冗余的说明副标题（`panel-hint`），呈现干净专业的录入界面；
+  2. **表格错位像素级修复**：
+     - 显式引入 `<colgroup>` 规范 6 列像素宽度（序号 60px、型号 320px、上次量 140px、本次量 180px、差额 130px、备注 180px+）；
+     - 声明 `table-layout: fixed; border-collapse: separate; border-spacing: 0;`；
+     - 解决 `tfoot` 中 `colspan="2"` 导致的表尾与表头列宽错位，各列数据与输入框实现严格对齐；
+  3. **表头与占位符规范**：
+     - 表头列名优化为“保温管型号”与“备注”；
+     - 各行记录备注输入框清空占位文本（`placeholder=""`），消除预写内容；
+  4. **动态型号范围过滤联动**：
+     - 自动显示的型号列表联动后端 `list_models_for_supply_entity`，根据供给主体所负责标段（高温水/低温水/全量）动态展示对应型号并集，默认降序排列；
+  5. **构建验证**：
+     - 执行 `npm run build`，编译顺利通过（`✓ built in 14.85s`，exit code 0）。
+
+## 2026-09-21 供给管理：库存盘点界面精简，全面剔除“今日完工量”字段与统计
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeCategory === 'pipe'`，`activeTab === 'inventory'`）
+- **精简与优化点**：
+  1. 移除控制栏右侧的“今日完工入库总量”徽章，仅保留“实盘在库待发总量”微看板；
+  2. 盘点明细表格中删除 `今日完工量 (米,选填)` 表头列、数据行输入框及底部汇总列；
+  3. script setup 中彻底移除 `computedTotalInventoryProduced` 计算属性与请求体中的 `daily_produced_qty` 映射；
+  4. 界面聚焦于：`序号`、`规格型号`、`上次在库量`、`本次实盘在库量`、`变动差额`、`盘点备注`，实现最纯粹高效的盘点体验；
+  5. 执行 `npm run build`，编译顺利通过（`✓ built in 12.78s`，exit code 0）。
+
+## 2026-09-21 供给管理：新增“📦 库存盘点”Tab 与厂区成品待发量快捷填报
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管业务，`activeCategory === 'pipe'`）
+  - API 服务：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（`getTubeSupplierInventory`, `saveTubeSupplierInventory`）
+- **核心交互与页面结构**：
+  1. **导航扩展**：
+     - 一级导航：保温管业务从原“3 项功能”升级为“4 项功能”；
+     - 二级子标签：新增 **“📦 库存盘点”**（`activeTab === 'inventory'`）；
+  2. **盘点控制与微看板**：
+     - 包含盘点日期选择器（默认今日，支持历史日期切换）；
+     - 当前厂家主体标识与当日盘点状态徽章（绿色已盘点 / 黄色未盘点提示）；
+     - 右侧实时统计：实盘在库待发总量徽章与今日完工入库总量徽章；
+  3. **快捷操作与智能底稿**：
+     - 提供“🔄 刷新数据”与“📋 沿用上次盘点”快捷按钮；
+     - 当选定日期尚未盘点时，自动拉取最近一次盘点数据作为推荐底稿，避免厂家从零重复输入；
+  4. **盘点明细表格**：
+     - 自动列出系统中所有标准直管型号（按口径从大到小排列）；
+     - 列项：序号、规格型号、上次在库量(米)、本次实盘在库量(米,编辑框)、今日完工量(米,选填)、变动差额(米,动态+绿/-橙色)、盘点备注；
+     - 吸顶表头与吸底汇总行，支持一键批量保存（UPSERT）；
+  5. **构建验证**：
+     - 执行 `npm run build`，738 个模块打包顺利编译通过（`✓ built in 17.93s`，exit code 0）。
+
 ## 2026-09-11 物流链系统：新增 3 个业务账号（大连三维膨胀节有限公司及大连开泰市政工程施工人员）
 
 - **关联前端页面与权限联动**：
