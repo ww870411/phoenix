@@ -2990,6 +2990,8 @@ export async function getTubeMaterialPrices(projectKey = 'insulation_pipe_supply
   if (params.supplierName) searchParams.set('supplier_name', params.supplierName)
   if (params.category) searchParams.set('category', params.category)
   if (params.keyword) searchParams.set('keyword', params.keyword)
+  if (params.section1Id || params.section_1_id) searchParams.set('section_1_id', params.section1Id || params.section_1_id)
+  if (params.applicableSections || params.applicable_sections) searchParams.set('applicable_sections', params.applicableSections || params.applicable_sections)
 
   const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/material-prices?${searchParams.toString()}`)
   const response = await authAwareFetch(url, { headers: attachAuthHeaders() })

@@ -6530,12 +6530,15 @@ def handle_get_material_prices(
     supplier_name: Optional[str] = Query(None, description="供给方名称"),
     category: Optional[str] = Query(None, description="物理品类"),
     keyword: Optional[str] = Query(None, description="规格型号/材料名称搜索关键字"),
+    section_1_id: Optional[str] = Query(None, description="标段代码筛选 (如 high_lot_1)"),
+    applicable_sections: Optional[str] = Query(None, description="适用标段范围代码 (如 all 或 high_lot_1,high_lot_2)"),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     kind_text = "保温管" if material_kind == "pipe" else ("管件" if material_kind == "fitting" else (material_kind or "全品类"))
     sup_text = supplier_name or "全部供给方"
+    sec_text = f"，标段: {section_1_id}" if section_1_id else ""
     kw_text = f"，关键字: {keyword}" if keyword else ""
-    desc = f"综合数据查询中心 - 调阅【物料采购单价字典】(品类: {kind_text}，供给方: {sup_text}{kw_text})"
+    desc = f"综合数据查询中心 - 调阅【物料采购单价字典】(品类: {kind_text}，供给方: {sup_text}{sec_text}{kw_text})"
     
     save_operation_log(
         operator=session.username or "GUEST",
@@ -6549,6 +6552,8 @@ def handle_get_material_prices(
             "supplier_name": supplier_name,
             "category": category,
             "keyword": keyword,
+            "section_1_id": section_1_id,
+            "applicable_sections": applicable_sections,
         },
         client_ip=_get_client_ip(request),
     )
@@ -6558,6 +6563,8 @@ def handle_get_material_prices(
         supplier_name=supplier_name,
         category=category,
         keyword=keyword,
+        section_1_id=section_1_id,
+        applicable_sections=applicable_sections,
     )
     return {
         "success": True,

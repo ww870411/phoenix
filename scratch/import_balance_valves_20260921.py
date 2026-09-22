@@ -93,9 +93,19 @@ def parse_excel_rows(excel_path: str):
             "remark": "2026-09-21 物联网平衡阀询价单入库",
             "operator_name": "system_import_20260921"
         }
-        parsed_items.append(item)
+    # 2026-09-22 业务规则更新：不论地上地下，相同 model_spec 属于同种物料，合并记录并累加数量
+    merged_map = {}
+    for it in parsed_items:
+        key = (it["section_1_id"], it["system_type"], it["category"], it["standard_name"], it["model_spec"])
+        if key not in merged_map:
+            it["sub_model_spec"] = ""
+            it["remark"] = "2026-09-21 物联网平衡阀询价单入库 (合并地上地下)"
+            merged_map[key] = it
+        else:
+            merged_map[key]["design_qty"] += it["design_qty"]
+            merged_map[key]["purchase_plan_qty"] += it["purchase_plan_qty"]
 
-    return parsed_items
+    return list(merged_map.values())
 
 
 def main():

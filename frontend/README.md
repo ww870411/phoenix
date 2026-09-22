@@ -1,3 +1,61 @@
+## 2026-09-22 物料采购单价字典更新：新增泰德尔物联物联网温度平衡阀 14 种规格单价（全标段通用）
+
+- **关联前端页面与组件**：
+  - 页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合数据查询中心，Tab 2 采购价格专属子视图）；
+- **前端呈现与联动**：
+  - 价格字典表格中新增 14 条泰德尔物联（辽宁）有限公司生产的“物联网温度平衡阀”报价（¥1,680.00 ~ ¥11,842.00/套）；
+  - 适用标段列统一呈现为灰色微胶囊徽章 `[全标段通用]`（`applicable_sections = 'all'`），备注列完整展现技术参数（`传输协议：4G Cat1；配供电箱`）；
+  - 规格型号以纯规格（如 `PN16/DN25`）呈现，与设计采购基准进度表中的平衡阀规格实现无缝对齐。
+
+## 2026-09-22 供给方发货流转台账：保温管“计算总价”算法升级为三维标段防窜价核算
+
+- **关联前端页面与组件**：
+  - 页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合数据查询中心，Tab 3 供给方发货流转台账）；
+- **算法升级与核心表现**：
+  1. **三维单价匹配机制（供货商 + 规格型号 + 需求标段）**：
+     - 单价匹配函数 `getPipeUnitPriceInfo` 与 `getPipeUnitPrice` 全面支持 `sectionId` 入参；
+     - 引入标段亲和度优先级阶梯：专属标段精准命中（Level 1） > 全标段通用报价（Level 2） > 跨标段兜底与提示（Level 3）；
+     - 彻底解决开元在 1、2 标段与 3、4 标段同型号不同价格时的跨标段窜价问题（如发往 3 标段的 `Φ820×11/Φ955×13` 准确匹配 1581 元/米，发往 1 标段准确匹配 1533 元/米）；
+  2. **多维透视与大盘汇总自适应**：
+     - 在多维透视聚合中，若包含需求标段维度，各组直接输出该标段精准单价；若未包含需求标段维度且产生跨标段同型号合并，自动以总货值除以总米数计算加权平均单价并附 `(均)` 角标；
+     - 底栏汇总大盘、运单展开子表格以及 Excel 导出全链路同步享受标段防窜价核算。
+
+## 2026-09-22 物料采购单价字典呈现优化：管件规格型号净化为纯规格展示
+
+- **关联前端页面与组件**：
+  - 页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合数据查询中心，Tab 2 采购价格专属子视图）；
+- **呈现效果升级**：
+  - 单价字典表格中的“规格型号”列实现数据净化：
+    * 保温管（直管）保持外径/壁厚规格（如 `Φ1120×13/Φ1260×16`）；
+    * 管件类物资（弯头、三通、变径管、球阀等）彻底剥离中文名称前缀，仅呈现纯规格参数（如 `90° DN150 R=3DN`、`DN1000/DN900`），与物资类别、物资名称列界限分明，表格排版更加紧凑清晰，与设计基准库规格完全统一。
+
+## 2026-09-22 物料采购单价字典界面升级：增加“适用标段”专属排序列与开元 3、4 标段新单价呈现
+
+- **关联前端页面与组件**：
+  - 页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合数据查询中心，Tab 2 采购价格专属子视图）；
+  - 服务：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（`getTubeMaterialPrices` 增加标段参数透传）；
+- **功能升级与实现细节**：
+  1. **价格工具栏适用标段筛选自适应**：顶部紧凑筛选栏的“适用标段”下拉框自动识别并支持“全部标段范围”、“高温水1、2标段”、“高温水3、4标段”、“全标段通用”等选项，支持一键筛选特定标段的所有有效报价；
+  2. **价格数据表新增适用标段列**：在供给方全称右侧新增“适用标段”列，带有排序功能（`section_name_scope`），并以徽章形式呈现（全标段通用呈灰色徽章 `badge-all-sections`，标段专属报价呈暖橙色徽章 `badge-specific-sections`）；
+  3. **大连开元标段精准隔离与并存**：开元现有 79 条历史报价清晰标记为“高温水1、2标段”，新导入的 140 条报价清晰标记为“高温水3、4标段”，用户在前端可一目了然对比同规格物料在不同标段的单价差异。
+
+## 2026-09-22 基准数据治理：tube_fitting_baseline 物联网平衡阀规格合并（地上/地下同规格聚合与数量累加）
+
+- **关联前端页面与表现**：
+  - 页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)、[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)、[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)；
+- **前端呈现升级**：
+  - 需求端、供给侧及全局管理中查看“管件与标准化物料基准量”时，物联网平衡阀不再按“地上”和“地下”割裂为两行展示；
+  - 相同型号规格（如 `PN16/DN50`）聚合为单一行条目，子型号字段统一呈现为占位符 `—`，设计量与采购计划量直观展示合并后总量（如原地上 394 + 地下 73 = 467 套），更加符合采购与物资调配的业务直觉。
+
+## 2026-09-22 需求研判与前端架构现状：保温管与管件供应商库存管理功能评估
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧现场管理工作台）
+- **功能现状与对比**：
+  1. **保温管业务分类**：具备完整的“📦 库存盘点”Tab（`activeTab === 'inventory'`），提供按次实盘在库量录入、上次历史对比、变动差额计算、一键沿用上次盘点等能力；
+  2. **管件业务分类**：当前仅有“🔧 管件发货与明细记录”与“📋 设计量与计划采购量”两个 Tab，尚无管件供应商厂区成品库存盘点入口；
+  3. **演进方向**：在管件大类下新增第三个 Tab“📦 管件库存盘点”，复用保温管成熟的交互模式并适配管件多品类/离散计量单位特征。
+
 ## 2026-09-21 界面体验优化：供给侧工作台删除顶部副标题说明文案
 
 - **关联前端页面与组件**：

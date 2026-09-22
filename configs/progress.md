@@ -1,3 +1,167 @@
+## 2026-09-22 [物料单价体系落地：泰德尔物联物联网温度平衡阀单价 14 行全量入库（标段为 all）并实现设计基准库 100% 对齐]
+- **需求背景与业务推进**：
+  - 用户提供《`configs/9.22_导入_泰德尔_物联网温度平衡阀.xlsx`》，包含泰德尔物联（辽宁）有限公司生产的“物联网温度平衡阀”全套 14 种规格型号的采购单价；
+  - 业务明确要求：标段范围设置为 `all`（全标段通用）；
+- **实施操作与技术落地**：
+  1. **数据源解析与对齐校验**：
+     - 解析 Excel 工作表 `标准化价格表`，共 14 行有效报价明细，单价区间为 ¥1,680.00 ~ ¥11,842.00/套；
+     - 完整保留产品工程备注（如 `传输协议：4G Cat1；配供电箱`）；
+     - 将原始规格（如 `PN16 DN25`）规范化为纯规格 `PN16/DN25`，同时将 `raw_model_spec` 保留为原始文本；
+     - 经核验，此 14 种规格与此前治理后的设计采购基准库（`tube.tube_fitting_baseline`）中的 14 种物联网平衡阀规格实现 **100% 严密对齐**；
+  2. **后端服务扩展与入库执行**：
+     - 在 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中：
+       * `_resolve_supply_entity_id` 显式收录 `"泰德尔": "taideer"`；
+       * 新增 `import_taideer_valve_prices()` 幂等导入方法，支持全标段通用标记与原子写入；
+     - 编写并执行导入脚本 [`import_taideer_prices.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/import_taideer_prices.py)；
+     - 全表总行数由 486 行增加至 500 行，泰德尔 14 条单价全部录入，`applicable_sections = 'all'`，`section_name_scope = '全标段通用'`。
+- **改动清单**：
+  - 数据库表：`tube.tube_material_price`（入库 14 条泰德尔单价）
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 导入脚本：[`scratch/import_taideer_prices.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/import_taideer_prices.py)
+- **验证与测试**：
+  - 导入核验与基准库规格集合比对校验 100% 通过（`规格是否100%对齐: True`）。
+
+## 2026-09-22 [供给方发货流转台账：保温管“计算总价”算法升级融入标段维度，实现三维防窜价精准核算]
+- **需求背景与业务对齐**：
+  - 用户指出在综合查询中心（`/projects/insulation_pipe_supply_2026/pages/comprehensive_query`）的“供给方发货流转台账”中勾选“结合供给方与型号计算总价”时，算法是否依据了标段信息；
+  - 经查证，原 `getPipeUnitPriceInfo(supplierName, pipeModelName)` 仅依据供给方与型号进行二维匹配，未引入需求标段（`section_1_id`）；
+  - 在大连开元新增高温水 3、4 标段单价后，发往 3、4 标段的保温管单据会因数组在先顺序被误匹配为 1、2 标段的单价（如 `Φ820×11/Φ955×13` 误用 1533 元/米而非 1581 元/米），导致总金额偏低且产生跨标段窜价；
+- **实施操作与技术落地**：
+  1. **单价匹配算法全面升级**：
+     - 在 [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue) 中改造 `getPipeUnitPriceInfo(supplierName, pipeModelName, sectionId = null)` 与 `getPipeUnitPrice(supplierName, pipeModelName, sectionId = null)`；
+     - 引入标段亲和度多级优先级机制：
+       * **优先级 1（专属标段精准命中）**：当 `sectionId` 命中单价的 `applicable_sections` 时（如 `high_lot_3` 命中 `high_lot_3,high_lot_4`），优先返回该专属标段单价；
+       * **优先级 2（全标段通用匹配）**：若无专属标段，匹配 `applicable_sections === 'all'` 的通用单价；
+       * **优先级 3（跨标段兜底与友好提示）**：若均无匹配，借用其他标段报价并在 `price_note` 中明确标注 `⚠️ 未找到标段专属报价，采用【xxx】报价`；
+  2. **多维聚合与汇总全链路打通**：
+     - `aggregatedSupplierLedgerRows`：逐单传入 `row.section_1_id`，精确核算单笔发货、到货、接收与入库金额；若多维聚合时未勾选标段维度且产生跨标段同型号合并，自动按总货值除以总米数计算加权平均单价并附 `(均)` 标识；
+     - `supplierLedgerSummary`：底栏大盘汇总逐单传入 `r.section_1_id`，确保汇总金额与各组金额 100% 严密自洽；
+     - 运单展开明细弹窗与 Excel 导出台账自动同步享受标段精准单价核算。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 验证脚本：[`scratch/test_matching_logic.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/test_matching_logic.py)
+- **验证与测试**：
+  - 开元发往 `high_lot_1` 命中 1533 元/米（level 1），发往 `high_lot_3` 命中 1581 元/米（level 1），通用厂家（鑫瑞得）命中 460 元/米（level 2），标段隔离核算 100% 准确；
+  - 执行 `npm run build` 前端打包编译构建。
+
+## 2026-09-22 [物料单价数据治理：tube_material_price 管件 model_spec 剥离中文名称前缀，恢复纯规格型号]
+- **需求背景与业务对齐**：
+  - 用户反馈数据库表 `tube.tube_material_price` 中的 `model_spec` 字段存在冗余：除了“塑套钢直埋预制保温管”（保温管直管）之外，其余管件类记录均重复拼接了中文物资类型名称（如 `塑套钢预制保温弯头 90° DN150 R=3DN`）；
+  - 业务要求：清理此类记录的 `model_spec` 字段，剥离中文名称前缀，仅保留纯规格型号部分（如 `90° DN150 R=3DN`），与设计基准库（`tube_fitting_baseline`）的纯规格规范保持一致；
+- **实施操作与技术落地**：
+  1. **数据分析与核验**：
+     - 全表共 486 行，其中保温管（`pipe`）40 行，管件（`fitting`）446 行；
+     - 446 行管件记录的 `raw_model_spec` 字段完整保存了纯规格（如 `90° DN800 R=3DN`、`DN1000/DN900` 等），且无任何中文材料名前缀；
+  2. **数据库批量原子更新**：
+     - 执行更新脚本 [`update_material_price_model_spec.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/update_material_price_model_spec.py)；
+     - 对 `material_kind = 'fitting'` 的 446 条记录执行 `SET model_spec = TRIM(raw_model_spec), updated_by = 'SPEC_CLEANUP_20260922', updated_at = NOW()`；
+     - 保温管 40 条记录（如 `Φ1120×13/Φ1260×16`）保持原样不受影响；
+     - 更新后全表管件 `model_spec` 中包含中文类型名的记录数降为 0；
+  3. **后端单价导入逻辑同步修正**：
+     - 在 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中：
+       * `import_prices_from_excel()`：管件的 `model_spec` 赋值逻辑直接采用纯规格 `raw_spec`，不再拼接 `mat_name` 或 `category`；
+       * `import_kaiyuan_lot34_prices()`：管件与保温管均直接采用纯规格 `spec`，不再拼接中文物资名称；
+       * 保证后续任何重新导入或增量导入均生成标准的纯规格型号。
+- **改动清单**：
+  - 数据库表：`tube.tube_material_price`（更新 446 条管件记录的 `model_spec` 为纯规格）
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 执行脚本：[`scratch/update_material_price_model_spec.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/update_material_price_model_spec.py)
+  - 验证脚本：[`scratch/test_query.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/test_query.py)
+- **验证与测试**：
+  - 抽样核验更新后数据 100% 符合预期；
+  - 调用 `list_material_prices()` 接口测试管件查询、开元专属标段查询、保温管查询全部通过。
+
+## 2026-09-22 [物料单价体系落地：开元新增高温水3、4标段保温管与管件单价全量 140 行入库与标段隔离核验]
+- **需求背景与业务推进**：
+  - 用户提供《`configs/9.22 导入_开元新增高温水3、4标段保温管、管件.xlsx`》，包含大连开元最新中标高温水 3、4 标段（`high_lot_3,high_lot_4`）的保温管与管件单价明细；
+  - 需将此批单价以幂等方式录入 `tube.tube_material_price`，并绑定 `applicable_sections = 'high_lot_3,high_lot_4'` 与 `section_name_scope = '高温水3、4标段'`；
+- **实施操作与技术落地**：
+  1. **数据源解析与校验**：
+     - 解析 Excel 工作表 `产品明细`，经校验共有 140 条有效数据（行 2 至行 141，序号 1 至 140），140 个规格型号无任何重复，单价均为正数且合规；
+     - 其中保温直管 15 条（单位：米，单价 67.00 ~ 1581.00 元），管件与附件 125 条（涵盖三通、弯头、变径管、弯管、封头，单位：个，单价 59.00 ~ 18273.00 元）；
+     - 完整保留 5 处原始工程备注（如“此部分为低温水管网,10-45°弯头按45°弯头,45-90°按90°弯头提材料”）；
+  2. **后端服务扩展与导入执行**：
+     - 在 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中新增 `import_kaiyuan_lot34_prices()` 方法，支持先清理同标段旧报价后原子写入；
+     - 编写并执行导入脚本 [`import_kaiyuan_lot34_prices.py`](file:///D:/编程项目/phoenix/scratch/import_kaiyuan_lot34_prices.py)；
+     - 数据库全表总行数从 346 行增加至 486 行（净增 140 行），开元总记录数达到 219 行（1、2标段 79 行 + 3、4标段 140 行）；
+  3. **标段价格差异与隔离效果核验**：
+     - 对比发现开元在 1、2 标段与 3、4 标段存在 20 项完全同名的交集规格型号，价格均存在明显差异（如 `Φ820×11/Φ955×13` 在 1、2 标段为 ¥1533.00，在 3、4 标段为 ¥1581.00，差额 +48.00 元；`塑套钢预制保温跨越三通 DN800/DN800` 在 1、2 标段为 ¥9715.00，在 3、4 标段为 ¥12810.00，差额 +3095.00 元）；
+     - 运行测试用例确认：按 `section_1_id='high_lot_1'` 查询时仅返回 1、2 标段报价（79条）+ 通用厂家（267条）= 346条；按 `section_1_id='high_lot_3'` 查询时仅返回 3、4 标段报价（140条）+ 通用厂家（267条）= 407条，两批价格完全实现物理级防窜价隔离！
+- **改动清单**：
+  - 数据库表：`tube.tube_material_price`（入库 140 条新单价）
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 导入脚本：[`scratch/import_kaiyuan_lot34_prices.py`](file:///D:/编程项目/phoenix/scratch/import_kaiyuan_lot34_prices.py)
+  - 测试脚本：[`scratch/test_price_sections.py`](file:///D:/编程项目/phoenix/scratch/test_price_sections.py)
+- **验证与测试**：
+  - 导入核验与标段比对统计 100% 通过；
+  - 自动化单元测试全部通过。
+
+## 2026-09-22 [物料单价体系治理：tube_material_price 增加适用标段字段并完成开元/通用数据回填与前后端联动]
+- **业务背景与需求演进**：
+  - 用户反馈大连开元（`kaiyuan`）最新中标高温水 3、4 标段（`high_lot_3,high_lot_4`）的保温管与管件供货资格，由于中标批次不同，价格存在差异，出现了同一厂家相同规格但不同标段单价不同的客观情况；
+  - 需将单价定价模型从二维（`供应商 + 规格`）平滑演进为三维（`供应商 + 规格 + 适用标段`）；
+  - 本次作为分步推进的第一阶段：
+    1. 为数据表 `tube.tube_material_price` 增加适用标段字段；
+    2. 将开元现有 79 条历史报价明确更新为 `high_lot_1,high_lot_2`（高温水1、2标段）；
+    3. 将其他厂家的 267 条报价标记为 `all`（全标段通用）；
+- **实施改动与实现细节**：
+  1. **数据库层扩充与数据回填**：
+     - 在表 `tube.tube_material_price` 中新增 `applicable_sections VARCHAR(255) NOT NULL DEFAULT 'all'` 与 `section_name_scope VARCHAR(255) NOT NULL DEFAULT '全标段通用'` 字段，并创建 `idx_tube_material_price_sections` 索引；
+     - 编写执行脚本 [`migrate_material_price_sections.py`](file:///D:/编程项目/phoenix/scratch/migrate_material_price_sections.py)，在事务内完成 DDL 与数据清洗：
+       * 开元（`kaiyuan`）79 条记录更新为 `applicable_sections='high_lot_1,high_lot_2'`, `section_name_scope='高温水1、2标段'`；
+       * 其他 5 家厂家共 267 条记录更新为 `applicable_sections='all'`, `section_name_scope='全标段通用'`；
+  2. **后端服务与 API 升级**：
+     - DDL 脚本 [`create_tube_material_price.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_material_price.sql)：同步新增字段定义、字段注释与索引；
+     - 服务层 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)：
+       * `ensure_price_table()`：补齐向后兼容的字段自愈与索引检查；
+       * `import_prices_from_excel()`：导入时自动对开元标记 `high_lot_1,high_lot_2`，其他标记 `all`；
+       * `list_material_prices()`：支持 `section_1_id`（自动匹配专属标段或通用报价）与 `applicable_sections` 精确查询，并在输出字段中完整携带标段信息；
+     - API 接口 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)：`GET /material-prices` 增加 `section_1_id` 与 `applicable_sections` 查询参数，并在操作审计日志中记录；
+  3. **前端 API 与单价字典表格联动**：
+     - 前端 API [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)：`getTubeMaterialPrices` 增加标段参数透传；
+     - 综合查询页面 [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)：
+       * 价格模式顶部工具栏增加“适用标段”筛选下拉框；
+       * 价格表格增加“适用标段”排序列与单元格徽章呈现（`badge-all-sections` / `badge-specific-sections`），支持按标段升降序排列。
+- **改动清单**：
+  - 数据库表：`tube.tube_material_price`
+  - 后端：[`backend/sql/create_tube_material_price.sql`](file:///D:/编程项目/phoenix/backend/sql/create_tube_material_price.sql)、[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)、[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/daily_report_25_26/services/api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)、[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 脚本：[`scratch/migrate_material_price_sections.py`](file:///D:/编程项目/phoenix/scratch/migrate_material_price_sections.py)、[`scratch/test_price_sections.py`](file:///D:/编程项目/phoenix/scratch/test_price_sections.py)
+- **验证与测试**：
+  - 后端单价标段筛选单元测试 [`test_price_sections.py`](file:///D:/编程项目/phoenix/scratch/test_price_sections.py) 100% 通过；
+  - 前端 `npm run build` 打包构建 100% 成功。
+
+## 2026-09-22 [基准数据治理：tube_fitting_baseline 物联网平衡阀规格合并（地上/地下同规格聚合与数量累加）]
+- **需求背景与业务对齐**：
+  - 之前入库的低温水 1~6 标段“物联网平衡阀”（类别：`联网平衡阀`）在 `sub_model_spec` 中细分了“地上”和“地下”两类子规格；
+  - 业务部门明确反馈：不论地上还是地下，只要 `model_spec`（如 `PN16/DN50`）相同，即为同一种物料（仅用途不同）；
+  - 需将相同 `model_spec` 的物联网平衡阀记录进行合并，相应设计量（`design_qty`）与采购计划量（`purchase_plan_qty`）累加，并将 `sub_model_spec` 统一置为空字符串 `''`；
+- **实施操作与核验结果**：
+  1. **数据分析与预计算**：
+     - 合并前共有 94 行物联网平衡阀记录，总设计量与总采购量均为 4506.00 套；
+     - 包含 39 组同时具备地上/地下的规格，以及 16 组单类规格，合并后目标记录数为 55 行；
+  2. **事务级原子替换与核验**：
+     - 编写执行脚本 [`merge_balance_valves_20260922.py`](file:///D:/编程项目/phoenix/scratch/merge_balance_valves_20260922.py)，在事务内完成聚合、核验、删除旧 94 行并写入合并后 55 行；
+     - 合并后严格校验：总记录数 55 行（净减少 39 行冗余条目），设计总量 4506.00 套、采购计划总量 4506.00 套与合并前 100% 吻合，无任何数据丢失；
+     - 全量记录的 `sub_model_spec` 统一固化为空字符串 `''`，完美契合联合唯一索引 `uq_tube_fitting_baseline_sec_sys_name_spec_sub`；
+  3. **历史导入脚本同步更新**：
+     - 同步升级 [`import_balance_valves_20260921.py`](file:///D:/编程项目/phoenix/scratch/import_balance_valves_20260921.py)，使未来如需再次导入时自动按 `model_spec` 聚合，不再产生地上/地下的离散记录。
+- **改动清单**：
+  - 数据库表：`tube.tube_fitting_baseline`（从 94 条联网平衡阀平滑优化为 55 条）
+  - 脚本：[`scratch/merge_balance_valves_20260922.py`](file:///D:/编程项目/phoenix/scratch/merge_balance_valves_20260922.py)、[`scratch/import_balance_valves_20260921.py`](file:///D:/编程项目/phoenix/scratch/import_balance_valves_20260921.py)
+- **验证与测试**：
+  - 数据库聚合前后统计总数校验 100% 通过；
+  - 基准服务测试回归全部通过（`1 passed in 3.43s`）。
+
+## 2026-09-22 [业务需求研判：保温管与管件供应商库存管理功能现状评估与方案规划]
+- **需求背景**：
+  - 用户反馈需为 `insulation_pipe_supply_2026` 建设“保温管”与“管件”的供应商库存管理功能；
+- **现状查证与技术研判**：
+  1. **保温管供应商库存**：已高度成熟。后端具备 [`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)，物理表 `tube.tube_supplier_inventory` 具备按次盘点联合唯一索引与非负约束，前端 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 已支持“按次实盘”、“沿用上次”、“默认置零”，并与大屏战报及需求端缺口穿透全面打通；
+  2. **管件供应商库存**：当前完全缺失。管件业务目前仅有发货填报（`fitting_delivery_service.py`）及现场施工动态库存（`fitting_usage_service.py`），5 家纯管件厂家（沃圣、卡尔斯等）及 4 家双业务厂家在厂区待发成品库存方面尚无填报与查询入口；
+- **规划建议**：
+  - 核心工作在于将保温管“按次实盘”的成熟经验复刻到管件，解决管件复合主键（`fitting_type + model_spec`）及离散单位（个/套/件）差异，打通端到端管件库存流转闭环。
+
 ## 2026-09-21 [供给侧工作台界面微调：删除顶部副标题说明文案]
 - **需求响应与界面净化**：
   - 用户指令：“删掉‘面向供给主体。提供 Tabs 标签化分类，支持查看缺口与供需明细、运输车次装配、物流发货批量登记及在途运输跟踪。数量当前统一以“米”为计量单位。’字样”；

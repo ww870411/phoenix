@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS tube.tube_material_price (
     raw_model_spec VARCHAR(128),                                  -- 原始表格中的规格型号简写 (如 DN300, 90° DN1100 R=1.5DN)
     unit VARCHAR(32) NOT NULL DEFAULT '米',                       -- 计量单位 (米, 个, 套, 台)
     unit_price NUMERIC(18, 2) NOT NULL DEFAULT 0,                 -- 含税合同单价 (元)
+    applicable_sections VARCHAR(255) NOT NULL DEFAULT 'all',      -- 适用标段代码列表 (如 all 或 high_lot_1,high_lot_2)
+    section_name_scope VARCHAR(255) NOT NULL DEFAULT '全标段通用', -- 适用标段中文范围描述 (如 全标段通用 或 高温水1、2标段)
     remark TEXT,                                                  -- 备注说明 (如甲供钢管加工等特殊说明)
     created_by VARCHAR(128) DEFAULT 'EXCEL_IMPORT',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -45,6 +47,8 @@ COMMENT ON COLUMN tube.tube_material_price.model_spec IS '标准化规格型号�
 COMMENT ON COLUMN tube.tube_material_price.raw_model_spec IS '原始规格型号简写';
 COMMENT ON COLUMN tube.tube_material_price.unit IS '计量单位 (米/个/套/台)';
 COMMENT ON COLUMN tube.tube_material_price.unit_price IS '含税中标单价 (元)';
+COMMENT ON COLUMN tube.tube_material_price.applicable_sections IS '适用标段代码列表 (如 all 或 high_lot_1,high_lot_2)';
+COMMENT ON COLUMN tube.tube_material_price.section_name_scope IS '适用标段中文范围描述 (如 全标段通用 或 高温水1、2标段)';
 COMMENT ON COLUMN tube.tube_material_price.remark IS '备注说明';
 
 -- 检索索引：支持供给方 + 规格型号快速匹配 (允许同名多行报价)
@@ -63,6 +67,9 @@ CREATE INDEX IF NOT EXISTS idx_tube_material_price_entity_id
 
 CREATE INDEX IF NOT EXISTS idx_tube_material_price_spec 
     ON tube.tube_material_price (model_spec);
+
+CREATE INDEX IF NOT EXISTS idx_tube_material_price_sections 
+    ON tube.tube_material_price (applicable_sections);
 
 -- 2. 直管与管件分类便捷视图
 CREATE OR REPLACE VIEW tube.v_tube_pipe_price AS

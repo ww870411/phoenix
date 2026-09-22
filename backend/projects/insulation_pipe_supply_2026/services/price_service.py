@@ -59,6 +59,8 @@ def _resolve_supply_entity_id(supplier_name: str, config: Dict[str, Any]) -> str
         return "zeyue"
     if "保温管厂" in name_clean:
         return "吴近"
+    if "泰德尔" in name_clean:
+        return "taideer"
 
     return ""
 
@@ -86,6 +88,8 @@ def ensure_price_table() -> None:
                 raw_model_spec VARCHAR(128),
                 unit VARCHAR(32) NOT NULL DEFAULT '米',
                 unit_price NUMERIC(18, 2) NOT NULL DEFAULT 0,
+                applicable_sections VARCHAR(255) NOT NULL DEFAULT 'all',
+                section_name_scope VARCHAR(255) NOT NULL DEFAULT '全标段通用',
                 remark TEXT,
                 created_by VARCHAR(128) DEFAULT 'EXCEL_IMPORT',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -97,6 +101,17 @@ def ensure_price_table() -> None:
                     CHECK (material_kind IN ('pipe', 'fitting'))
             );
         """))
+
+        # 向后自愈补齐字段
+        alter_cols = [
+            ("applicable_sections", "VARCHAR(255) NOT NULL DEFAULT 'all'"),
+            ("section_name_scope", "VARCHAR(255) NOT NULL DEFAULT '全标段通用'"),
+        ]
+        for col_name, col_def in alter_cols:
+            try:
+                session.execute(text(f"ALTER TABLE tube.tube_material_price ADD COLUMN IF NOT EXISTS {col_name} {col_def};"))
+            except Exception:
+                pass
 
         # 确保自增序列
         try:
@@ -135,6 +150,10 @@ def ensure_price_table() -> None:
         session.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_tube_material_price_spec 
                 ON tube.tube_material_price (model_spec);
+        """))
+        session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_tube_material_price_sections 
+                ON tube.tube_material_price (applicable_sections);
         """))
 
         # 便捷视图
@@ -198,6 +217,8 @@ def import_prices_from_excel(
                 unit_price = 0.0
 
             entity_id = _resolve_supply_entity_id(sup_name, config)
+            app_sec = "high_lot_1,high_lot_2" if ("开元" in sup_name or entity_id == "kaiyuan") else "all"
+            sec_name = "高温水1、2标段" if app_sec == "high_lot_1,high_lot_2" else "全标段通用"
             all_rows.append({
                 "project_key": "insulation_pipe_supply_2026",
                 "material_kind": "pipe",
@@ -209,6 +230,8 @@ def import_prices_from_excel(
                 "raw_model_spec": model_spec,
                 "unit": unit,
                 "unit_price": unit_price,
+                "applicable_sections": app_sec,
+                "section_name_scope": sec_name,
                 "remark": remark,
                 "created_by": operator,
                 "updated_by": operator,
@@ -235,15 +258,12 @@ def import_prices_from_excel(
             except (ValueError, TypeError):
                 unit_price = 0.0
 
-            # 构造自解释标准规格型号
-            if raw_spec.startswith(mat_name) or (mat_name and mat_name in raw_spec):
-                model_spec = raw_spec
-            elif mat_name:
-                model_spec = f"{mat_name} {raw_spec}".strip()
-            else:
-                model_spec = f"{category} {raw_spec}".strip()
+            # 保持规格型号为纯规格（如 90° DN150 R=3DN），不拼接中文物资名称
+            model_spec = raw_spec
 
             entity_id = _resolve_supply_entity_id(sup_name, config)
+            app_sec = "high_lot_1,high_lot_2" if ("开元" in sup_name or entity_id == "kaiyuan") else "all"
+            sec_name = "高温水1、2标段" if app_sec == "high_lot_1,high_lot_2" else "全标段通用"
             all_rows.append({
                 "project_key": "insulation_pipe_supply_2026",
                 "material_kind": "fitting",
@@ -255,6 +275,8 @@ def import_prices_from_excel(
                 "raw_model_spec": raw_spec,
                 "unit": unit,
                 "unit_price": unit_price,
+                "applicable_sections": app_sec,
+                "section_name_scope": sec_name,
                 "remark": remark,
                 "created_by": operator,
                 "updated_by": operator,
@@ -285,12 +307,12 @@ def import_prices_from_excel(
             INSERT INTO tube.tube_material_price (
                 project_key, material_kind, supply_entity_id, supplier_name,
                 category, material_name, model_spec, raw_model_spec,
-                unit, unit_price, remark, created_by, created_at,
+                unit, unit_price, applicable_sections, section_name_scope, remark, created_by, created_at,
                 updated_by, updated_at
             ) VALUES (
                 :project_key, :material_kind, :supply_entity_id, :supplier_name,
                 :category, :material_name, :model_spec, :raw_model_spec,
-                :unit, :unit_price, :remark, :created_by, NOW(),
+                :unit, :unit_price, :applicable_sections, :section_name_scope, :remark, :created_by, NOW(),
                 :updated_by, NOW()
             );
         """)
@@ -313,13 +335,225 @@ def import_prices_from_excel(
     }
 
 
+def import_kaiyuan_lot34_prices(
+    excel_path: Optional[str] = None,
+    operator: str = "EXCEL_IMPORT_20260922"
+) -> Dict[str, Any]:
+    """
+    从《configs/9.22 导入_开元新增高温水3、4标段保温管、管件.xlsx》导入开元高温水3、4标段单价数据。
+    自动设置 applicable_sections = 'high_lot_3,high_lot_4'，section_name_scope = '高温水3、4标段'。
+    操作具备幂等性（先清理同标段旧数据再写入）。
+    """
+    ensure_price_table()
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    if not excel_path:
+        excel_path = os.path.join(base_dir, "configs", "9.22 导入_开元新增高温水3、4标段保温管、管件.xlsx")
+
+    if not os.path.exists(excel_path):
+        raise FileNotFoundError(f"未找到开元3、4标段单价文件: {excel_path}")
+
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb["产品明细"]
+
+    rows_to_insert: List[Dict[str, Any]] = []
+
+    for r in range(2, ws.max_row + 1):
+        sup = _normalize_text(ws.cell(r, 2).value)
+        cat = _normalize_text(ws.cell(r, 3).value)
+        mat = _normalize_text(ws.cell(r, 4).value)
+        spec = _normalize_text(ws.cell(r, 5).value)
+        unit = _normalize_text(ws.cell(r, 6).value)
+        raw_price = ws.cell(r, 8).value
+        rem = _normalize_text(ws.cell(r, 9).value)
+
+        if not sup and not spec and not raw_price:
+            continue
+        if not spec or raw_price is None:
+            continue
+
+        try:
+            unit_price = round(float(raw_price or 0), 2)
+        except (ValueError, TypeError):
+            unit_price = 0.0
+
+        is_pipe = (cat == "保温管" or unit == "米")
+        kind = "pipe" if is_pipe else "fitting"
+        unit_val = unit or ("米" if is_pipe else "个")
+
+        # 保温管与管件均保持纯规格型号，不拼接中文物资名称
+        model_spec = spec
+
+        rows_to_insert.append({
+            "project_key": "insulation_pipe_supply_2026",
+            "material_kind": kind,
+            "supply_entity_id": "kaiyuan",
+            "supplier_name": sup or "大连开元热力管道股份有限公司",
+            "category": cat or ("保温管" if is_pipe else "管件"),
+            "material_name": mat or cat or ("塑套钢直埋预制保温管" if is_pipe else "管件"),
+            "model_spec": model_spec,
+            "raw_model_spec": spec,
+            "unit": unit_val,
+            "unit_price": unit_price,
+            "applicable_sections": "high_lot_3,high_lot_4",
+            "section_name_scope": "高温水3、4标段",
+            "remark": rem,
+            "created_by": operator,
+            "updated_by": operator,
+        })
+
+    session = SessionLocal()
+    try:
+        # 幂等清理开元3、4标段旧单价
+        session.execute(text("""
+            DELETE FROM tube.tube_material_price 
+            WHERE supply_entity_id = 'kaiyuan' AND applicable_sections = 'high_lot_3,high_lot_4';
+        """))
+
+        sql_insert = text("""
+            INSERT INTO tube.tube_material_price (
+                project_key, material_kind, supply_entity_id, supplier_name,
+                category, material_name, model_spec, raw_model_spec,
+                unit, unit_price, applicable_sections, section_name_scope, remark, created_by, created_at,
+                updated_by, updated_at
+            ) VALUES (
+                :project_key, :material_kind, :supply_entity_id, :supplier_name,
+                :category, :material_name, :model_spec, :raw_model_spec,
+                :unit, :unit_price, :applicable_sections, :section_name_scope, :remark, :created_by, NOW(),
+                :updated_by, NOW()
+            );
+        """)
+
+        for row in rows_to_insert:
+            session.execute(sql_insert, row)
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise RuntimeError(f"写入开元3、4标段单价数据至数据库失败: {e}") from e
+    finally:
+        session.close()
+
+    return {
+        "success": True,
+        "total_inserted": len(rows_to_insert),
+        "pipe_count": len([r for r in rows_to_insert if r["material_kind"] == "pipe"]),
+        "fitting_count": len([r for r in rows_to_insert if r["material_kind"] == "fitting"]),
+        "file": excel_path,
+    }
+
+
+def import_taideer_valve_prices(
+    excel_path: Optional[str] = None,
+    operator: str = "EXCEL_IMPORT_20260922"
+) -> Dict[str, Any]:
+    """
+    从《configs/9.22_导入_泰德尔_物联网温度平衡阀.xlsx》导入泰德尔物联全标段通用单价数据。
+    自动设置 applicable_sections = 'all'，section_name_scope = '全标段通用'。
+    规格型号统一为纯规格（如 PN16/DN25），对齐 tube_fitting_baseline 设计基准。
+    操作具备幂等性（先清理旧数据再写入）。
+    """
+    import re
+    ensure_price_table()
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    if not excel_path:
+        excel_path = os.path.join(base_dir, "configs", "9.22_导入_泰德尔_物联网温度平衡阀.xlsx")
+
+    if not os.path.exists(excel_path):
+        raise FileNotFoundError(f"未找到泰德尔单价文件: {excel_path}")
+
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb["标准化价格表"] if "标准化价格表" in wb.sheetnames else wb.active
+
+    rows_to_insert: List[Dict[str, Any]] = []
+
+    for r in range(2, ws.max_row + 1):
+        sup = _normalize_text(ws.cell(r, 1).value)
+        cat = _normalize_text(ws.cell(r, 2).value) or "物联网温度平衡阀"
+        mat = _normalize_text(ws.cell(r, 3).value) or cat
+        spec = _normalize_text(ws.cell(r, 4).value)
+        unit = _normalize_text(ws.cell(r, 5).value) or "套"
+        raw_price = ws.cell(r, 6).value
+        rem = _normalize_text(ws.cell(r, 7).value)
+
+        if not spec or raw_price is None:
+            continue
+
+        try:
+            unit_price = round(float(raw_price or 0), 2)
+        except (ValueError, TypeError):
+            unit_price = 0.0
+
+        # 标准化规格型号为纯规格：若形如 PN16 DN25，转换为与 baseline 一致的 PN16/DN25
+        norm_spec = re.sub(r'^(PN\d+)\s+(DN\d+)$', r'\1/\2', spec)
+
+        rows_to_insert.append({
+            "project_key": "insulation_pipe_supply_2026",
+            "material_kind": "fitting",
+            "supply_entity_id": "taideer",
+            "supplier_name": "泰德尔物联(辽宁)有限公司",
+            "category": cat,
+            "material_name": mat,
+            "model_spec": norm_spec,
+            "raw_model_spec": spec,
+            "unit": unit,
+            "unit_price": unit_price,
+            "applicable_sections": "all",
+            "section_name_scope": "全标段通用",
+            "remark": rem,
+            "created_by": operator,
+            "updated_by": operator,
+        })
+
+    session = SessionLocal()
+    try:
+        # 幂等清理旧单价
+        session.execute(text("""
+            DELETE FROM tube.tube_material_price 
+            WHERE supply_entity_id = 'taideer' AND applicable_sections = 'all';
+        """))
+
+        sql_insert = text("""
+            INSERT INTO tube.tube_material_price (
+                project_key, material_kind, supply_entity_id, supplier_name,
+                category, material_name, model_spec, raw_model_spec,
+                unit, unit_price, applicable_sections, section_name_scope, remark, created_by, created_at,
+                updated_by, updated_at
+            ) VALUES (
+                :project_key, :material_kind, :supply_entity_id, :supplier_name,
+                :category, :material_name, :model_spec, :raw_model_spec,
+                :unit, :unit_price, :applicable_sections, :section_name_scope, :remark, :created_by, NOW(),
+                :updated_by, NOW()
+            );
+        """)
+
+        for row in rows_to_insert:
+            session.execute(sql_insert, row)
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise RuntimeError(f"写入泰德尔单价数据至数据库失败: {e}") from e
+    finally:
+        session.close()
+
+    return {
+        "success": True,
+        "total_inserted": len(rows_to_insert),
+        "supplier_name": "泰德尔物联(辽宁)有限公司",
+        "file": excel_path,
+        "items": rows_to_insert
+    }
+
+
 def list_material_prices(
     material_kind: Optional[str] = None,
     supplier_name: Optional[str] = None,
     category: Optional[str] = None,
     keyword: Optional[str] = None,
+    section_1_id: Optional[str] = None,
+    applicable_sections: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """查询单价字典列表 (默认保温管在前、管件在后)。"""
+    """查询单价字典列表 (默认保温管在前、管件在后，支持标段筛选)。"""
     ensure_price_table()
     session = SessionLocal()
     try:
@@ -338,13 +572,19 @@ def list_material_prices(
         if keyword:
             wheres.append("(model_spec ILIKE :kw OR material_name ILIKE :kw OR raw_model_spec ILIKE :kw OR remark ILIKE :kw)")
             params["kw"] = f"%{keyword}%"
+        if applicable_sections and applicable_sections != "all_scope":
+            wheres.append("applicable_sections = :applicable_sections")
+            params["applicable_sections"] = applicable_sections
+        elif section_1_id and section_1_id != "all":
+            wheres.append("(applicable_sections = 'all' OR :sec = ANY(string_to_array(applicable_sections, ',')))")
+            params["sec"] = section_1_id
 
         where_clause = " AND ".join(wheres)
         sql = text(f"""
             SELECT 
                 id, project_key, material_kind, supply_entity_id, supplier_name,
                 category, material_name, model_spec, raw_model_spec,
-                unit, unit_price, remark, created_at, updated_at
+                unit, unit_price, applicable_sections, section_name_scope, remark, created_at, updated_at
             FROM tube.tube_material_price
             WHERE {where_clause}
             ORDER BY material_kind DESC, supplier_name ASC, category ASC, id ASC

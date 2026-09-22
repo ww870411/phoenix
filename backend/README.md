@@ -1,3 +1,58 @@
+## 2026-09-22 物料单价体系落地：泰德尔物联物联网温度平衡阀单价 14 行全量入库（标段为 all）
+
+- **数据入库与基准对齐**：
+  - 基于《`configs/9.22_导入_泰德尔_物联网温度平衡阀.xlsx`》将泰德尔物联（辽宁）有限公司生产的物联网温度平衡阀 14 行单价全量入库 `tube.tube_material_price`；
+  - 自动绑定 `applicable_sections = 'all'` 与 `section_name_scope = '全标段通用'`；
+  - 规格型号标准化为纯规格（如 `PN16/DN25`），与工程设计基准表 `tube.tube_fitting_baseline` 14 个规格实现 100% 精确对齐；
+  - 服务层 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 新增 `import_taideer_valve_prices()` 幂等导入方法，并在 `_resolve_supply_entity_id` 中支持泰德尔主体别名。
+
+## 2026-09-22 跨端协同：供给方发货台账保温管金额核算打通标段匹配（前后端协议与业务口径对齐）
+
+- **业务协同与口径一致性**：
+  - 前端综合查询中心（`HistoryQueryView.vue`）保温管发货金额核算函数 `getPipeUnitPriceInfo` 完成标段入参升级，与后端 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中单价模型的 `applicable_sections`（适用标段）实现 100% 对齐；
+  - 彻底杜绝多标段中标供应商（如大连开元）在发运台账核算时的跨标段窜价现象。
+
+## 2026-09-22 物料单价数据治理：tube_material_price 管件 model_spec 剥离中文前缀，统一为纯规格
+
+- **数据治理与服务优化**：
+  - 针对 `tube.tube_material_price` 表中除“塑套钢直埋预制保温管”之外的管件类记录，将原本拼接的中文类型名称前缀（如 `塑套钢预制保温弯头 90° DN150 R=3DN`）彻底清理，仅保留纯规格型号（如 `90° DN150 R=3DN`）；
+  - 全表 446 行管件记录的 `model_spec` 全部更新为 `TRIM(raw_model_spec)`，与设计基准库（`tube_fitting_baseline`）的规格规范完全对齐；保温管 40 行记录保持原样；
+  - 优化服务层 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中 `import_prices_from_excel()` 与 `import_kaiyuan_lot34_prices()` 的单价导入逻辑，统一直接使用原始纯规格 `spec`，杜绝未来导入时重复拼接中文物资名称。
+
+## 2026-09-22 物料单价体系落地：开元新增高温水3、4标段保温管与管件单价全量 140 行入库与标段隔离
+
+- **数据入库与标段隔离**：
+  - 基于《`configs/9.22 导入_开元新增高温水3、4标段保温管、管件.xlsx`》将大连开元中标的高温水 3、4 标段单价全量 140 行（保温管 15 行 + 管件 125 行）录入 `tube.tube_material_price`；
+  - 自动绑定 `applicable_sections = 'high_lot_3,high_lot_4'` 与 `section_name_scope = '高温水3、4标段'`；
+  - 服务层 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 增加 `import_kaiyuan_lot34_prices()` 幂等导入方法；
+  - 经核验，开元 1、2 标段（79行）与 3、4 标段（140行）实现严格的物理级防窜价隔离，按标段查询自动精准匹配。
+
+## 2026-09-22 物料单价体系演进：tube_material_price 增加适用标段维度（applicable_sections）与开元/通用数据回填
+
+- **数据模型演进与业务对齐**：
+  - 针对大连开元新中标高温水 3、4 标段导致同厂家同规格在不同标段价格不同的业务实际，将单价模型升级为“供应商 + 规格 + 适用标段”；
+  - 数据库表 `tube.tube_material_price` 扩充 `applicable_sections VARCHAR(255)` 与 `section_name_scope VARCHAR(255)` 字段及专属检索索引；
+  - 数据平滑清洗：开元 79 条历史报价回填为 `high_lot_1,high_lot_2`（高温水1、2标段），其他 267 条报价回填为 `all`（全标段通用）；
+  - 服务与接口升级：[`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 与 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `GET /material-prices` 支持 `section_1_id` 与 `applicable_sections` 查询，自动支持标段专属价格与全标段通用兜底匹配。
+
+## 2026-09-22 基准数据治理：tube_fitting_baseline 物联网平衡阀规格合并（地上/地下同规格聚合与数量累加）
+
+- **数据治理与业务对齐**：
+  - 针对低温水 1~6 标段的“物联网平衡阀”（`category = '联网平衡阀'`），依据业务部门确认，不论地上或地下，相同 `model_spec`（如 `PN16/DN50`）均为同种物料；
+  - 执行事务级聚合处理：将相同 `(section_1_id, system_type, standard_name, model_spec)` 的记录合并为一条，`sub_model_spec` 统一置为空字符串 `''`，设计量与采购计划量精确累加；
+  - 数据库表 `tube.tube_fitting_baseline` 中物联网平衡阀记录数从 94 条平滑精简为 55 条，设计总量与采购总量保持 4506.00 套严格不变；
+  - 同步更新导入脚本 [`import_balance_valves_20260921.py`](file:///D:/编程项目/phoenix/scratch/import_balance_valves_20260921.py) 与执行脚本 [`merge_balance_valves_20260922.py`](file:///D:/编程项目/phoenix/scratch/merge_balance_valves_20260922.py)。
+
+## 2026-09-22 需求研判与架构现状：保温管与管件供应商库存管理功能评估
+
+- **业务现状与架构对照**：
+  1. **保温管库存体系（已成熟）**：
+     - 服务层：[`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)；
+     - 数据层：`tube.tube_supplier_inventory`，主键 + 批次联合唯一索引（`batch_no` + `supply_entity_id` + `pipe_model_id`），支持“按次实盘”、“沿用上次”，已打通大屏战报与需求端保供态势；
+  2. **管件库存体系（待补齐）**：
+     - 当前服务层仅有发货服务 [`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py) 与现场动态库存计算 [`fitting_usage_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_usage_service.py)，尚无上游管件供应商厂区成品库存数据模型与服务接口；
+     - 规划建设 `tube.tube_fitting_supplier_inventory` 与配套按次盘点服务，将保温管的成熟机制平移扩展至管件。
+
 ## 2026-09-21 供给主体体系：选项接口 current_supply_entity_ids 按配置文件预设顺序输出
 
 - **核心接口优化**：

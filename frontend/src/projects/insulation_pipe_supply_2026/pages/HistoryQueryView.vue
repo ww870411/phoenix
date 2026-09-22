@@ -867,6 +867,15 @@
                   </select>
                 </div>
 
+                <!-- 适用标段筛选 -->
+                <div class="filter-select-item">
+                  <label class="filter-item-label">适用标段:</label>
+                  <select v-model="priceFilterSection" class="form-select-compact">
+                    <option value="all">全部标段范围</option>
+                    <option v-for="sec in priceSectionOptions" :key="`p-sec-${sec.code}`" :value="sec.code">{{ sec.label }}</option>
+                  </select>
+                </div>
+
                 <!-- 物理类别筛选 -->
                 <div class="filter-select-item">
                   <label class="filter-item-label">物理类别:</label>
@@ -1333,6 +1342,18 @@
                     </th>
                     <th 
                       class="text-left sortable-th" 
+                      style="width: 130px;"
+                      :class="{ 'sorted-col': isColumnSorted('price_table', 'section_name_scope') }"
+                      @click="handleTableSort('price_table', 'section_name_scope')"
+                      title="点击切换排序：升序 / 降序 / 恢复默认"
+                    >
+                      <div class="th-inner-cell">
+                        <span>适用标段</span>
+                        <span class="sort-arrow" :class="{ active: isColumnSorted('price_table', 'section_name_scope') }">{{ getSortIcon('price_table', 'section_name_scope') }}</span>
+                      </div>
+                    </th>
+                    <th 
+                      class="text-left sortable-th" 
                       style="width: 110px;"
                       :class="{ 'sorted-col': isColumnSorted('price_table', 'category') }"
                       @click="handleTableSort('price_table', 'category')"
@@ -1344,7 +1365,7 @@
                       </div>
                     </th>
                     <th 
-                      class="text-left sortable-th"
+                      class="text-left sortable-th" 
                       :class="{ 'sorted-col': isColumnSorted('price_table', 'material_name') }"
                       @click="handleTableSort('price_table', 'material_name')"
                       title="点击切换排序：升序 / 降序 / 恢复默认"
@@ -1355,7 +1376,7 @@
                       </div>
                     </th>
                     <th 
-                      class="text-left sortable-th"
+                      class="text-left sortable-th" 
                       :class="{ 'sorted-col': isColumnSorted('price_table', 'model_spec') }"
                       @click="handleTableSort('price_table', 'model_spec')"
                       title="点击切换排序：升序 / 降序 / 恢复默认"
@@ -1394,7 +1415,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="sortedMaterialPriceRows.length === 0">
-                    <td colspan="9" class="empty-cell">未查询到符合条件的物料采购价格记录</td>
+                    <td colspan="10" class="empty-cell">未查询到符合条件的物料采购价格记录</td>
                   </tr>
                   <tr v-for="(row, idx) in sortedMaterialPriceRows" :key="`price-row-${row.id || idx}`">
                     <td class="text-center text-muted font-mono">{{ idx + 1 }}</td>
@@ -1404,6 +1425,11 @@
                       </span>
                     </td>
                     <td class="text-left font-bold text-sky">{{ row.supplier_name }}</td>
+                    <td class="text-left">
+                      <span :class="['badge-tag', row.applicable_sections === 'all' ? 'badge-all-sections' : 'badge-specific-sections']" style="font-size: 11px;">
+                        {{ row.section_name_scope || '全标段通用' }}
+                      </span>
+                    </td>
                     <td class="text-left text-slate font-medium">{{ row.category }}</td>
                     <td class="text-left text-dark font-medium">{{ row.material_name }}</td>
                     <td class="text-left font-bold text-slate">
@@ -1418,7 +1444,7 @@
 
                   <!-- 汇总行 -->
                   <tr v-if="sortedMaterialPriceRows.length > 0" class="summary-footer-row">
-                    <td colspan="7" class="text-left">
+                    <td colspan="8" class="text-left">
                       💰 当前筛选物料单价总览 (共 {{ sortedMaterialPriceRows.length }} 条记录 / 覆盖 {{ priceFilteredSuppliersCount }} 家供给方)
                     </td>
                     <td class="text-right font-mono font-bold text-emerald">
@@ -3153,20 +3179,34 @@ function parsePipeSpec(str) {
   }
 }
 
-// 结合供货厂家全称与保温管规格型号精准匹配基准单价及备注
-function getPipeUnitPriceInfo(supplierName, pipeModelName) {
+// 辅助判断单价记录 p 对当前需求标段 secId 的匹配优先级
+// 1: 专属标段精准命中 (如 high_lot_3 属于 high_lot_3,high_lot_4)
+// 2: 全标段通用报价 (applicable_sections === 'all' 或为空)
+// 3: 其他标段报价 (兜底借用)
+function getSectionMatchLevel(p, secId) {
+  if (!secId) return 0
+  const appSecs = (p.applicable_sections || 'all').split(',').map(s => s.trim()).filter(Boolean)
+  if (appSecs.includes(secId)) return 1
+  if (appSecs.includes('all') || appSecs.length === 0) return 2
+  return 3
+}
+
+// 结合供货厂家全称、保温管规格型号及所属标段精准匹配基准单价及备注
+function getPipeUnitPriceInfo(supplierName, pipeModelName, sectionId = null) {
   const defRes = {
     unitPrice: null,
     matchedSpec: '',
     targetSpec: pipeModelName || '',
     matchType: null, // 'exact' | 'tolerance' | 'dn_fallback'
     matchNote: '',
-    isExact: false
+    isExact: false,
+    sectionScope: ''
   }
 
   if (!materialPriceList.value || materialPriceList.value.length === 0) return defRes
   const supClean = (supplierName || '').trim()
   const modelClean = (pipeModelName || '').trim()
+  const secClean = (sectionId || '').trim()
   if (!supClean || !modelClean) return defRes
 
   const pipePrices = materialPriceList.value.filter(p => p.material_kind === 'pipe')
@@ -3180,26 +3220,37 @@ function getPipeUnitPriceInfo(supplierName, pipeModelName) {
 
   if (matchedSupPrices.length === 0) return defRes
 
+  // 若指定了需求标段，按标段匹配亲和度预排序：专属标段(1) > 全标段通用(2) > 其他标段(3)
+  const sortedSupPrices = secClean
+    ? [...matchedSupPrices].sort((a, b) => getSectionMatchLevel(a, secClean) - getSectionMatchLevel(b, secClean))
+    : matchedSupPrices
+
   // 2. 匹配型号 (第 1 优先级：字符级完全精确匹配)
-  const exactMatched = matchedSupPrices.find(p => 
+  const exactMatched = sortedSupPrices.find(p => 
     (p.model_spec && p.model_spec.replace(/\s+/g, '') === modelClean.replace(/\s+/g, '')) ||
     (p.raw_model_spec && p.raw_model_spec.replace(/\s+/g, '') === modelClean.replace(/\s+/g, ''))
   )
   if (exactMatched) {
+    const matchLvl = secClean ? getSectionMatchLevel(exactMatched, secClean) : 0
+    let note = ''
+    if (matchLvl === 3) {
+      note = `⚠️ 未找到标段【${secClean}】专属报价，采用【${exactMatched.section_name_scope || exactMatched.applicable_sections}】报价`
+    }
     return {
       unitPrice: Number(exactMatched.unit_price) || 0,
       matchedSpec: exactMatched.model_spec || exactMatched.raw_model_spec || modelClean,
       targetSpec: modelClean,
       matchType: 'exact',
-      matchNote: '', // 精确匹配无需特别备注
-      isExact: true
+      matchNote: note,
+      isExact: matchLvl !== 3,
+      sectionScope: exactMatched.section_name_scope || exactMatched.applicable_sections || '全标段通用'
     }
   }
 
   // 3. 结构化工程参数解析匹配 (第 2 优先级：工作管外径+壁厚一致，外护管允许工程级微差容差匹配)
   const targetParsed = parsePipeSpec(modelClean)
   if (targetParsed && targetParsed.d1 != null) {
-    for (const p of matchedSupPrices) {
+    for (const p of sortedSupPrices) {
       const pParsed = parsePipeSpec(p.model_spec || p.raw_model_spec || '')
       if (!pParsed || pParsed.d1 == null) continue
 
@@ -3226,13 +3277,19 @@ function getPipeUnitPriceInfo(supplierName, pipeModelName) {
 
         if (isTolerance) {
           const matchedSpec = p.model_spec || p.raw_model_spec || ''
+          const matchLvl = secClean ? getSectionMatchLevel(p, secClean) : 0
+          let note = `单据规格【${modelClean}】匹配基准报价【${matchedSpec}】（工作管Φ${targetParsed.d1}×${targetParsed.t1 || ''}参数一致，外护管工程容差匹配）`
+          if (matchLvl === 3) {
+            note = `⚠️ 未找到标段【${secClean}】专属报价，采用【${p.section_name_scope || p.applicable_sections}】报价；${note}`
+          }
           return {
             unitPrice: Number(p.unit_price) || 0,
             matchedSpec,
             targetSpec: modelClean,
             matchType: 'tolerance',
-            matchNote: `单据规格【${modelClean}】匹配基准报价【${matchedSpec}】（工作管Φ${targetParsed.d1}×${targetParsed.t1 || ''}参数一致，外护管工程容差匹配）`,
-            isExact: false
+            matchNote: note,
+            isExact: false,
+            sectionScope: p.section_name_scope || p.applicable_sections || '全标段通用'
           }
         }
       }
@@ -3248,7 +3305,7 @@ function getPipeUnitPriceInfo(supplierName, pipeModelName) {
   }
   const targetDn = getDnNum(modelClean)
   if (targetDn != null) {
-    const dnMatched = matchedSupPrices.find(p => {
+    const dnMatched = sortedSupPrices.find(p => {
       const pParsed = parsePipeSpec(p.model_spec || p.raw_model_spec || '')
       if (pParsed && targetParsed && pParsed.isJiaGong !== targetParsed.isJiaGong) return false
       const pDn = getDnNum(p.model_spec || p.raw_model_spec || '')
@@ -3256,13 +3313,19 @@ function getPipeUnitPriceInfo(supplierName, pipeModelName) {
     })
     if (dnMatched) {
       const matchedSpec = dnMatched.model_spec || dnMatched.raw_model_spec || ''
+      const matchLvl = secClean ? getSectionMatchLevel(dnMatched, secClean) : 0
+      let note = `单据规格【${modelClean}】匹配基准报价【${matchedSpec}】（按主工作管径/DN对齐兜底匹配）`
+      if (matchLvl === 3) {
+        note = `⚠️ 未找到标段【${secClean}】专属报价，采用【${dnMatched.section_name_scope || dnMatched.applicable_sections}】报价；${note}`
+      }
       return {
         unitPrice: Number(dnMatched.unit_price) || 0,
         matchedSpec,
         targetSpec: modelClean,
         matchType: 'dn_fallback',
-        matchNote: `单据规格【${modelClean}】匹配基准报价【${matchedSpec}】（按主工作管径/DN对齐兜底匹配）`,
-        isExact: false
+        matchNote: note,
+        isExact: false,
+        sectionScope: dnMatched.section_name_scope || dnMatched.applicable_sections || '全标段通用'
       }
     }
   }
@@ -3271,8 +3334,8 @@ function getPipeUnitPriceInfo(supplierName, pipeModelName) {
 }
 
 // 保持兼容的单价数值获取方法
-function getPipeUnitPrice(supplierName, pipeModelName) {
-  const info = getPipeUnitPriceInfo(supplierName, pipeModelName)
+function getPipeUnitPrice(supplierName, pipeModelName, sectionId = null) {
+  const info = getPipeUnitPriceInfo(supplierName, pipeModelName, sectionId)
   return info.unitPrice
 }
 
@@ -3293,12 +3356,14 @@ function formatAmountWan(val) {
 const materialPriceList = ref([])
 const priceFilterKind = ref('all') // 'all' | 'pipe' | 'fitting'
 const priceFilterSupplier = ref('all') // 'all' | 某供给方全称
+const priceFilterSection = ref('all') // 'all' | 适用标段代码
 const priceFilterCategory = ref('all') // 'all' | 某物理品类
 const priceFilterKeyword = ref('') // 规格型号/材料搜索
 
 function resetPriceFilters() {
   priceFilterKind.value = 'all'
   priceFilterSupplier.value = 'all'
+  priceFilterSection.value = 'all'
   priceFilterCategory.value = 'all'
   priceFilterKeyword.value = ''
   if (tableSortStates.value.price_table) {
@@ -4515,6 +4580,19 @@ const priceSupplierOptions = computed(() => {
   return Array.from(sups).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
+// 适用标段下拉选项列表
+const priceSectionOptions = computed(() => {
+  const map = new Map()
+  materialPriceList.value.forEach(p => {
+    const code = p.applicable_sections || 'all'
+    const label = p.section_name_scope || (code === 'all' ? '全标段通用' : code)
+    if (!map.has(code)) {
+      map.set(code, label)
+    }
+  })
+  return Array.from(map.entries()).map(([code, label]) => ({ code, label }))
+})
+
 // 物理类别下拉选项列表（联动大类）
 const priceCategoryOptions = computed(() => {
   const cats = new Set()
@@ -4534,6 +4612,9 @@ const filteredMaterialPriceRows = computed(() => {
   if (priceFilterSupplier.value !== 'all') {
     list = list.filter(p => p.supplier_name === priceFilterSupplier.value)
   }
+  if (priceFilterSection.value !== 'all') {
+    list = list.filter(p => (p.applicable_sections || 'all') === priceFilterSection.value)
+  }
   if (priceFilterCategory.value !== 'all') {
     list = list.filter(p => p.category === priceFilterCategory.value)
   }
@@ -4543,6 +4624,7 @@ const filteredMaterialPriceRows = computed(() => {
       (p.model_spec && p.model_spec.toLowerCase().includes(kw)) ||
       (p.material_name && p.material_name.toLowerCase().includes(kw)) ||
       (p.raw_model_spec && p.raw_model_spec.toLowerCase().includes(kw)) ||
+      (p.section_name_scope && p.section_name_scope.toLowerCase().includes(kw)) ||
       (p.remark && p.remark.toLowerCase().includes(kw))
     )
   }
@@ -4589,6 +4671,7 @@ const sortedMaterialPriceRows = computed(() => {
   return sortRows(list, 'price_table', {
     material_kind: r => r.material_kind || '',
     supplier_name: r => r.supplier_name || '',
+    section_name_scope: r => r.section_name_scope || '',
     category: r => r.category || '',
     material_name: r => r.material_name || '',
     model_spec: r => r.model_spec || '',
@@ -4738,8 +4821,8 @@ const aggregatedSupplierLedgerRows = computed(() => {
 
     const groupKey = keyParts.join('____')
 
-    // 💰 保温管单项货值金额核算与单价匹配说明
-    const priceInfo = subMaterialType.value === 'pipe' ? getPipeUnitPriceInfo(row.supplier_name, row.pipe_model_name) : { unitPrice: null, matchNote: '', isExact: true }
+    // 💰 保温管单项货值金额核算与单价匹配说明 (结合需求标段精准防窜价)
+    const priceInfo = subMaterialType.value === 'pipe' ? getPipeUnitPriceInfo(row.supplier_name, row.pipe_model_name, row.section_1_id) : { unitPrice: null, matchNote: '', isExact: true }
     const itPrice = priceInfo.unitPrice
     const itShippedAmt = itPrice != null ? ((Number(row.shipped_qty) || 0) * itPrice) : 0
     const itArrivedAmt = itPrice != null ? ((Number(row.arrived_qty) || 0) * itPrice) : 0
@@ -4914,7 +4997,7 @@ const supplierLedgerSummary = computed(() => {
     total_warehouse_qty += wQty
 
     if (subMaterialType.value === 'pipe') {
-      const price = getPipeUnitPrice(r.supplier_name, r.pipe_model_name)
+      const price = getPipeUnitPrice(r.supplier_name, r.pipe_model_name, r.section_1_id)
       if (price != null) {
         total_shipped_amount += sQty * price
         total_arrived_amount += aQty * price
@@ -8948,6 +9031,18 @@ function exportCurrentOrderItemsExcel() {
   background: #eff6ff;
   color: #1d4ed8;
   border: 1px solid #bfdbfe;
+}
+
+.badge-all-sections {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.badge-specific-sections {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
 }
 
 .sub-pill-lock-tag {
