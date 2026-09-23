@@ -545,6 +545,110 @@ def import_taideer_valve_prices(
     }
 
 
+def import_tiandilong_prices(
+    excel_path: Optional[str] = None,
+    operator: str = "EXCEL_IMPORT_20260922"
+) -> Dict[str, Any]:
+    """
+    从《configs/9.22_导入_天津天地龙管业.xlsx》导入天津天地龙管业全标段通用单价数据（保温管22行+管件133行共155行）。
+    自动设置 applicable_sections = 'all'，section_name_scope = '全标段通用'。
+    规格型号统一为纯规格（保温管为管径规格，管件为纯规格如 90° DN25、DN300/DN150），不拼接中文名称。
+    操作具备幂等性（先清理同主体通用旧单价再写入）。
+    """
+    ensure_price_table()
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    if not excel_path:
+        excel_path = os.path.join(base_dir, "configs", "9.22_导入_天津天地龙管业.xlsx")
+
+    if not os.path.exists(excel_path):
+        raise FileNotFoundError(f"未找到天津天地龙单价文件: {excel_path}")
+
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb["标准化价格表"] if "标准化价格表" in wb.sheetnames else wb.active
+
+    rows_to_insert: List[Dict[str, Any]] = []
+
+    for r in range(2, ws.max_row + 1):
+        sup = _normalize_text(ws.cell(r, 1).value) or "天津天地龙管业股份有限公司"
+        cat = _normalize_text(ws.cell(r, 2).value)
+        mat = _normalize_text(ws.cell(r, 3).value)
+        spec = _normalize_text(ws.cell(r, 4).value)
+        unit = _normalize_text(ws.cell(r, 5).value)
+        raw_price = ws.cell(r, 7).value
+        rem = _normalize_text(ws.cell(r, 8).value)
+
+        if not spec or raw_price is None:
+            continue
+
+        try:
+            unit_price = round(float(raw_price or 0), 2)
+        except (ValueError, TypeError):
+            unit_price = 0.0
+
+        is_pipe = (cat == "保温管" or unit == "米")
+        kind = "pipe" if is_pipe else "fitting"
+        unit_val = unit or ("米" if is_pipe else "个")
+
+        rows_to_insert.append({
+            "project_key": "insulation_pipe_supply_2026",
+            "material_kind": kind,
+            "supply_entity_id": "tiandilong",
+            "supplier_name": "天津天地龙管业股份有限公司",
+            "category": cat or ("保温管" if is_pipe else "管件"),
+            "material_name": mat or cat or ("塑套钢直埋预制保温管" if is_pipe else "管件"),
+            "model_spec": spec,
+            "raw_model_spec": spec,
+            "unit": unit_val,
+            "unit_price": unit_price,
+            "applicable_sections": "all",
+            "section_name_scope": "全标段通用",
+            "remark": rem,
+            "created_by": operator,
+            "updated_by": operator,
+        })
+
+    session = SessionLocal()
+    try:
+        # 幂等清理旧单价
+        session.execute(text("""
+            DELETE FROM tube.tube_material_price 
+            WHERE supply_entity_id = 'tiandilong' AND applicable_sections = 'all';
+        """))
+
+        sql_insert = text("""
+            INSERT INTO tube.tube_material_price (
+                project_key, material_kind, supply_entity_id, supplier_name,
+                category, material_name, model_spec, raw_model_spec,
+                unit, unit_price, applicable_sections, section_name_scope, remark, created_by, created_at,
+                updated_by, updated_at
+            ) VALUES (
+                :project_key, :material_kind, :supply_entity_id, :supplier_name,
+                :category, :material_name, :model_spec, :raw_model_spec,
+                :unit, :unit_price, :applicable_sections, :section_name_scope, :remark, :created_by, NOW(),
+                :updated_by, NOW()
+            );
+        """)
+
+        for row in rows_to_insert:
+            session.execute(sql_insert, row)
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise RuntimeError(f"写入天津天地龙单价数据至数据库失败: {e}") from e
+    finally:
+        session.close()
+
+    return {
+        "success": True,
+        "total_inserted": len(rows_to_insert),
+        "pipe_count": len([r for r in rows_to_insert if r["material_kind"] == "pipe"]),
+        "fitting_count": len([r for r in rows_to_insert if r["material_kind"] == "fitting"]),
+        "supplier_name": "天津天地龙管业股份有限公司",
+        "file": excel_path,
+    }
+
+
 def list_material_prices(
     material_kind: Optional[str] = None,
     supplier_name: Optional[str] = None,

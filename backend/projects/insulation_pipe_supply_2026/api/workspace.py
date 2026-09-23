@@ -2976,8 +2976,11 @@ def get_supply_management_demand_summary(
                             "batch_no": inv_record.get("batch_no") or "",
                         })
 
+            # 若型号属于该标段显式录入的直管基准（如甲供钢管预备发货型号），即使数值为0也必须保留在大盘中，供供给端选择发货
+            is_explicit_baseline = pipe_model_id in section_1_baseline_preset_map
             if (
-                design_qty <= 0
+                not is_explicit_baseline
+                and design_qty <= 0
                 and purchase_plan_qty <= 0
                 and plan_total_qty <= 0
                 and inbound_pipeline_qty <= 0

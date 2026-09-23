@@ -1,3 +1,29 @@
+## 2026-09-23 数据治理：全库保温管规格型号去“.0”规范化清洗与重复记录原子级合并
+
+- **全库数据清洗与口径统一**：
+  - 对工程全量直管型号执行格式规范化，去除规格中无意义的小数“.0”（如 `Φ32×4.0/Φ118×3.0` 统一为 `Φ32×4/Φ118×3`），有效工程小数（如 4.5、3.2、4.9 等）全量严格保护；
+  - 事务级全链路清洗覆盖：直管需求基准表 `tube.tube_pipe_baseline`（67条）、采购单价表 `tube.tube_material_price`（22条直管报价）、发货单据表 `tube.tube_delivery`（129条单据）、系统直管种子文件 `seeds/pipe_baselines_seed.json`（63项）；
+  - **业务表冲突安全合并**：针对三日计划表 `tube.tube_daily_plan`（746条更新、20组重叠）与每日施工消耗表 `tube.tube_daily_usage`（518条更新、8组重叠），按 `(section_1_id, date, normalized_model)` 进行事务级求和合并与冗余清理，确保业务数据 0 丢失、无唯一键冲突；
+  - 清洗后全库直管型号带“.0”数量为 0，彻底杜绝发货、计划上报、大盘核销与价格匹配中的型号割裂。
+
+## 2026-09-23 直管基准体系扩展：天津天地龙供货 10 项“甲供钢管”规格入库（low_lot_6）与种子固化
+
+- **数据入库与发货链路打通**：
+  - 基于《`configs/9.22_导入_天津天地龙管业.xlsx`》【标准化价格表】，将带有“（甲供钢管）”的 10 项保温管规格作为 `low_lot_6`（低温水标段6）的直管基准录入 `tube.tube_pipe_baseline`；
+  - 严格按照业务要求，设计量（`design_qty`）与计划采购量（`purchase_plan_qty`）均设为 `0.0`，完整保留原始工程运输与壁厚备注；
+  - **修复需求大盘过滤死锁**：在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `GET /supply-management/demand-summary` 接口中，增加 `is_explicit_baseline` 判定，杜绝因设计量、采购量、计划量和库存量全为 0 而被误跳过，确保显式基准行全量输出至前端 `summaryRows`，供给端发货型号下拉彻底解锁；
+  - 同步更新直管种子归档文件 [`pipe_baselines_seed.json`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/seeds/pipe_baselines_seed.json)（总数扩充至 99 条），保障容器冷启动与自动自愈一致性；
+  - 服务层与接口层（`_resolve_section_1_sorted_pipe_model_ids`、`/supply-management/demand-summary`）天然兼容该批型号，按管径智能降序排序，并与昨日入库的 `tube.tube_material_price` 天地龙甲供管单价 100% 精确联动。
+
+## 2026-09-22 物料单价体系落地：天津天地龙管业保温管与管件单价 155 行全量入库（标段为 all）
+
+- **数据入库与多物料覆盖**：
+  - 基于《`configs/9.22_导入_天津天地龙管业.xlsx`》将天津天地龙管业股份有限公司的保温管与管件单价共 155 行全量入库 `tube.tube_material_price`；
+  - 自动绑定 `applicable_sections = 'all'` 与 `section_name_scope = '全标段通用'`；
+  - 涵盖保温直管 22 行（常规直管 + 甲供钢管加工，30.00 ~ 358.00 元/米）与管件 133 行（三通 71 行、变径管 38 行、弯头 24 行，102.00 ~ 2,073.00 元/个）；
+  - 管件规格严格规范为纯规格，不重复拼接中文物资名称；
+  - 服务层 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 新增 `import_tiandilong_prices()` 幂等导入方法。
+
 ## 2026-09-22 物料单价体系落地：泰德尔物联物联网温度平衡阀单价 14 行全量入库（标段为 all）
 
 - **数据入库与基准对齐**：

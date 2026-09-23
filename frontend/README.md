@@ -1,3 +1,33 @@
+## 2026-09-23 全局数据治理协同：保温管规格型号全面去“.0”规范化呈现
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（发货登记与供给大盘）；
+  - 页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（三日计划矩阵与每日消耗填报）；
+  - 页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合流转台账与价格字典）；
+- **前端呈现与联动提升**：
+  - 全局直管型号统一呈现为纯净的生产标准规格（如 `Φ32×4/Φ118×3`、`Φ219×6/Φ309×4.9`），消除了同口径带“.0”与不带“.0”在下拉框中并存的混乱；
+  - 发货登记、施工消耗与三日计划填报时，型号检索与联动 100% 精确匹配，大盘缺口核销与价格字典自动关联无缝衔接。
+
+## 2026-09-23 供给端发货型号联动：低温水6标段补齐 10 项“甲供钢管”规格，发货型号下拉与大盘无缝呈现
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（供给侧发货与履约监控管理）；
+  - 页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（需求侧主体管线基准量展示）；
+- **前端呈现与联动提升**：
+  - 天津天地龙管业作为负责低温水标段 1~6 的供方，在发货登记弹窗的“保温管型号”下拉框（`deliveryFormPipeModelOptions`）及顶部型号多选筛选器中，能够正常选择这 10 项“（甲供钢管）”型号；
+  - **供给主体 URL 参数自适应与自动重置**：支持在 URL 中通过 `supply_entity_id=tiandilong` 直达天地龙视图；切换供给主体时自动同步 URL 并自愈重置 `deliveryForm.pipeModelId` 为当前供方的有效首选项；
+  - 型号下拉选项通过共享函数 [`sortPipeModelsByDiameterDesc`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/shared.js) 智能识别内管与外护管口径，甲供钢管紧贴同口径常规保温管降序排列，排版紧凑规范；
+  - 需求大盘汇总（`summaryRows`）展示中，该批型号设计量与计划采购量展示为 `0.00`，发货登记后自动累计实际发货与在途数据，不会触发非预期校验阻断。
+
+## 2026-09-22 物料采购单价字典更新：新增天津天地龙管业 155 种保温管与管件单价（全标段通用）
+
+- **关联前端页面与组件**：
+  - 页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合数据查询中心，Tab 2 采购价格专属子视图）；
+- **前端呈现与联动**：
+  - 价格字典表格中新增 155 条天津天地龙管业股份有限公司的物料单价（保温管 22 条、三通 71 条、变径管 38 条、弯头 24 条）；
+  - 适用标段列统一呈现为灰色微胶囊徽章 `[全标段通用]`（`applicable_sections = 'all'`）；
+  - 8 项“甲供钢管”保温管规格清晰标识，管件规格全部呈现为纯规格（如 `90° DN25`、`DN300/DN150`），与设计采购基准进度表中的管件规格实现无缝对齐。
+
 ## 2026-09-22 物料采购单价字典更新：新增泰德尔物联物联网温度平衡阀 14 种规格单价（全标段通用）
 
 - **关联前端页面与组件**：

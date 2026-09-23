@@ -1,3 +1,95 @@
+## 2026-09-23 [数据治理：全库保温管规格型号去“.0”规范化清洗与业务表重叠原子级合并]
+- **需求背景与业务推进**：
+  - 用户敏锐指出系统中保温管型号规格存在不一致现象：部分型号带有无意义的小数“.0”（如 `Φ32×4.0/Φ118×3.0`），而新对接的供货标准与物料价格（如天地龙）为纯数字（如 `Φ32×4/Φ118×3`）；
+  - 此种格式割裂导致系统在计划上报、单据核销、发货下拉选择及价格匹配时，将同一口径视为两个不同型号，极易发生窜型与漏算；
+  - 业务明确要求：对数据库全部相关表执行全面清洗，统一去掉保温管型号中的“.0”，保留有效工程小数（如 4.5、3.2、4.9 等）。
+- **实施操作与技术落地**：
+  1. **全盘扫描与影响面评估**：
+     - 排查涵盖 6 大数据库业务表与种子文件，发现带有“.0”的记录广泛分布于：直管基准表（67条）、采购单价表（22条）、发货单据表（129条）、三日计划表（746条）、施工消耗表（518条）及种子文件（63项）；
+     - 识别出三日计划表（20组）与每日消耗表（8组）中因历史全0占位导致去“.0”后同标段同日期的重叠记录，设计了“先合并求和、再删除冗余、后更新保留行”的原子合并算法，彻底杜绝唯一索引冲突；
+  2. **全库事务级原子清洗执行**：
+     - 编写执行脚本 [`normalize_all_pipe_models.py`](file:///D:/编程项目/phoenix/scratch/normalize_all_pipe_models.py)；
+     - `tube.tube_pipe_baseline`：全量更新 67 条记录，所有标段型号 100% 规范化；
+     - `tube.tube_material_price`：全量更新 22 条保温管价格记录；
+     - `tube.tube_delivery`：全量更新 129 条历史发货单据；
+     - `tube.tube_daily_plan`：更新规范化 746 条，原子合并冲突 20 组，清理多余重叠 20 条；
+     - `tube.tube_daily_usage`：更新规范化 518 条，原子合并冲突 8 组，清理多余重叠 8 条；
+     - `seeds/pipe_baselines_seed.json`：全量规范化 63 项直管预设，与数据库保持绝对一致；
+  3. **清洗后全链路校验与健康评估**：
+     - 再次运行全库扫描，全库直管型号带“.0”数量彻底归零（0条）；
+     - 大盘需求汇总接口 `/supply-management/demand-summary` 125 条明细全部呈现规范化型号，大连开元管辖型号去重收敛为标准的 19 种，天地龙 24 种型号（含 10 种甲供）严密就绪。
+- **改动清单**：
+  - 数据库表：`tube.tube_pipe_baseline`（67条更新）、`tube.tube_material_price`（22条更新）、`tube.tube_delivery`（129条更新）、`tube.tube_daily_plan`（746条更新+20条合并）、`tube.tube_daily_usage`（518条更新+8条合并）
+  - 种子文件：[`backend/projects/insulation_pipe_supply_2026/seeds/pipe_baselines_seed.json`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/seeds/pipe_baselines_seed.json)
+  - 清洗与扫描脚本：[`scratch/normalize_all_pipe_models.py`](file:///D:/编程项目/phoenix/scratch/normalize_all_pipe_models.py)、[`scratch/check_dot_zero_models.py`](file:///D:/编程项目/phoenix/scratch/check_dot_zero_models.py)
+- **验证结果**：
+  - 数据库全库保温管型号带“.0”数量为 0；
+  - 计划与消耗历史数据量求和无任何丢失，无孤岛数据。
+
+## 2026-09-23 [直管基准体系扩展：依据天地龙供货补录 10 项“（甲供钢管）”规格至 low_lot_6 直管基准表及种子库]
+- **需求背景与业务推进**：
+  - 用户反馈在整理供给方“天津天地龙管业股份有限公司”的供货清单时，发现其供货中有一部分保温管为“甲供钢管”；
+  - 此前各标段需求编制时未包含此情况，导致工程直管需求基准表 `tube.tube_pipe_baseline` 中缺乏相应规格，发货方在供给端（`SupplyManagementView.vue`）登记发货时无法选择到“甲供钢管”型号；
+  - 业务明确要求：依据《`configs/9.22_导入_天津天地龙管业.xlsx`》的【标准化价格表】，将规格型号字段中带有“（甲供钢管）”的保温管型号加入 `tube.tube_pipe_baseline` 作为 `low_lot_6`（低温水标段6）的记录，设计量与计划采购量均填 0。
+- **实施操作与技术落地**：
+  1. **数据源精准提取**：
+     - 解析 Excel 表《`configs/9.22_导入_天津天地龙管业.xlsx`》工作表【标准化价格表】，提取出全部 10 项带有“（甲供钢管）”的保温管型号：
+       1. `Φ38×4/Φ124×3（甲供钢管）`
+       2. `Φ45×4/Φ131×3（甲供钢管）`
+       3. `Φ57×4/Φ140×3（甲供钢管）`
+       4. `Φ76×4/Φ160×3（甲供钢管）`
+       5. `Φ89×4/Φ175×3（甲供钢管）`
+       6. `Φ108×4/Φ194×3.2（甲供钢管）`
+       7. `Φ133×4.5/Φ219×3.5（甲供钢管）`
+       8. `Φ159×4.5/Φ245×3.9（甲供钢管）`
+       9. `Φ219×6/Φ309×4.9（甲供钢管）`
+       10. `Φ325×7/Φ417×7（甲供钢管）`
+     - 完整保留原表中的装卸、运输及分壁厚工程备注（如“买受人提供钢管，出卖人负责装卸、运输和保温...”）；
+  2. **数据库事务入库与自愈**：
+     - 调用后端服务层 [`save_pipe_baselines`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/baseline_service.py) 对这 10 条记录基于联合唯一索引 `(section_1_id, pipe_model_id)` 进行幂等 UPSERT 写入；
+     - 确认序列 `tube.tube_pipe_baseline_id_seq` 健康无碰撞，`low_lot_6` 标段直管基准型号数由 11 条增至 21 条，全网直管基准总行数增至 99 条；
+  3. **系统种子库持久化固化**：
+     - 同步更新系统直管种子归档文件 [`pipe_baselines_seed.json`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/seeds/pipe_baselines_seed.json)，追加这 10 条 `low_lot_6` 甲供基准预设，确保系统冷启动与种子自愈时数据永久有效；
+  4. **跨端业务链路验证与下拉死锁排查修复**：
+     - **发现并修复后端过滤阻断**：在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `GET /supply-management/demand-summary` 接口中，原逻辑会在“设计量、采购量、计划量、在途量、库存量等全部 <= 0”时直接 `continue` 跳过该行；由于甲供钢管初始设计量与计划量填 0 且尚未发货，导致全0行被误当作“无关型号”过滤掉；
+     - **大盘透传放行修复**：加入 `is_explicit_baseline = pipe_model_id in section_1_baseline_preset_map` 显式基准判断，只要属于数据库/预设中明确登记的需求基准，即使为 0 也完整向前端 `summaryRows` 输出，大盘数据行从 115 恢复至 125 行，彻底打破前端下拉选项的死锁；
+     - **前端厂家路由传参与自动重置**：在 [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue) 中支持读取 `route.query.supply_entity_id`，并在厂家切换时自动同步 URL 及重置 `deliveryForm.pipeModelId`，保证管理员或天地龙账号均能一键选中并显示这 10 个甲供钢管型号；
+     - 校验物料价格联动，10 个甲供型号在价格表 `tube.tube_material_price` 中均能 100% 精准匹配天津天地龙对应的采购单价。
+- **改动清单**：
+  - 数据库表：`tube.tube_pipe_baseline`（新增 10 条 `low_lot_6` 甲供钢管基准记录，ID 为 804~813）
+  - 后端接口：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（放行显式基准全0记录）
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（支持供给主体路由传参及型号下拉自愈）
+  - 种子文件：[`backend/projects/insulation_pipe_supply_2026/seeds/pipe_baselines_seed.json`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/seeds/pipe_baselines_seed.json)
+  - 导入与校验脚本：[`scratch/import_jiagong_pipe_baseline.py`](file:///D:/编程项目/phoenix/scratch/import_jiagong_pipe_baseline.py)、[`scratch/verify_pipe_baseline_integration.py`](file:///D:/编程项目/phoenix/scratch/verify_pipe_baseline_integration.py)、[`scratch/diagnose_frontend_dropdown.py`](file:///D:/编程项目/phoenix/scratch/diagnose_frontend_dropdown.py)
+- **验证结果**：
+  - 数据库记录与字段校验 100% 通过（设计量=0，采购量=0，单位=米）；
+  - 后端 `/supply-management/demand-summary` 返回 125 行，成功包含 10 项甲供直管记录；
+  - 天津天地龙管业管辖下的可选保温管型号增至 24 种，10 项甲供钢管型号 100% 在下拉框中可选；
+  - 价格表单价联动匹配 100% 通过。
+
+## 2026-09-22 [物料单价体系落地：天津天地龙管业保温管与管件单价 155 行全量入库（标段为 all）]
+- **需求背景与业务推进**：
+  - 用户提供《`configs/9.22_导入_天津天地龙管业.xlsx`》，包含天津天地龙管业股份有限公司的保温管与管件全套合同采购单价明细（共 155 条）；
+  - 业务明确要求：标段范围设置为 `all`（全标段通用）；
+- **实施操作与技术落地**：
+  1. **数据源解析与校验**：
+     - 解析 Excel 工作表 `标准化价格表`，共 155 行有效报价，无任何空规格或非法负单价；
+     - 其中保温直管 22 条（单位：米，单价 30.00 ~ 358.00 元/米，包含 8 项带“甲供钢管”区分的专属单价）；
+     - 管件与附件 133 条（三通 71 条、变径管 38 条、弯头 24 条，单位：个，单价 102.00 ~ 2,073.00 元/个）；
+     - 规格型号全面符合治理标准：保温管保持标准管径规格，管件类彻底剥离中文名称前缀，仅保留纯规格（如 `90° DN25`、`DN300/DN150` 等）；
+     - 完整保留甲供钢管加工、装卸、运输等工程技术备注；
+  2. **后端服务扩展与入库执行**：
+     - 在 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中新增 `import_tiandilong_prices()` 幂等导入方法；
+     - 编写并执行导入脚本 [`import_tiandilong_prices.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/import_tiandilong_prices.py)；
+     - 全表总行数由 500 行增加至 655 行，天地龙 155 条单价全部录入，`applicable_sections = 'all'`，`section_name_scope = '全标段通用'`。
+- **改动清单**：
+  - 数据库表：`tube.tube_material_price`（入库 155 条天地龙单价）
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 导入脚本：[`scratch/import_tiandilong_prices.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/86d8fcf4-56a2-43d9-a6f1-8edb89ab7341/scratch/import_tiandilong_prices.py)
+- **验证与测试**：
+  - 数据分类统计与抽样验证 100% 通过；
+  - 管件规格中文前缀检查为 0 条。
+
 ## 2026-09-22 [物料单价体系落地：泰德尔物联物联网温度平衡阀单价 14 行全量入库（标段为 all）并实现设计基准库 100% 对齐]
 - **需求背景与业务推进**：
   - 用户提供《`configs/9.22_导入_泰德尔_物联网温度平衡阀.xlsx`》，包含泰德尔物联（辽宁）有限公司生产的“物联网温度平衡阀”全套 14 种规格型号的采购单价；

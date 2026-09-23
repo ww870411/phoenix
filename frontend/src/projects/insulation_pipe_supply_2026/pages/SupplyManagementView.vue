@@ -4606,7 +4606,10 @@ async function loadOptions() {
       ...normalized.currentSupplyEntityIds,
       ...customSupplyEntities.value.map((c) => c.entity_id),
     ]
-    if (!availableSupplyEntityIds.includes(selectedSupplyEntityId.value)) {
+    const querySupplyEntityId = String(route?.query?.supply_entity_id || route?.query?.supplyEntityId || '').trim()
+    if (querySupplyEntityId && availableSupplyEntityIds.includes(querySupplyEntityId)) {
+      selectedSupplyEntityId.value = querySupplyEntityId
+    } else if (!availableSupplyEntityIds.includes(selectedSupplyEntityId.value)) {
       selectedSupplyEntityId.value = availableSupplyEntityIds[0] || ''
     } else if (!canSwitchSupplyEntity.value && normalized.currentSupplyEntityIds.length) {
       selectedSupplyEntityId.value = normalized.currentSupplyEntityIds[0]
@@ -4805,6 +4808,12 @@ function handleSupplyEntityChange(value) {
   if (!value) return
   if (canSwitchSupplyEntity.value) {
     selectedSupplyEntityId.value = value
+    router.replace({
+      query: {
+        ...(route?.query || {}),
+        supply_entity_id: value,
+      },
+    }).catch(() => {})
     loadDeliveries()
   } else {
     deliveryForm.value.supplyEntityId = selectedSupplyEntityId.value
@@ -4832,6 +4841,10 @@ watch(selectedSupplyEntityId, (value) => {
     const validSectionIds = currentAssignedSection1Ids.value
     if (!validSectionIds.has(deliveryForm.value.section1Id)) {
       deliveryForm.value.section1Id = currentAssignedSection1Options.value[0]?.section_1_id || ''
+    }
+    const validPipeIds = new Set(deliveryFormPipeModelOptions.value.map((opt) => opt.pipe_model_id))
+    if (!validPipeIds.has(deliveryForm.value.pipeModelId)) {
+      deliveryForm.value.pipeModelId = deliveryFormPipeModelOptions.value[0]?.pipe_model_id || ''
     }
     if (!validSectionIds.has(fittingForm.value.section1Id)) {
       fittingForm.value.section1Id = currentAssignedSection1Options.value[0]?.section_1_id || ''
