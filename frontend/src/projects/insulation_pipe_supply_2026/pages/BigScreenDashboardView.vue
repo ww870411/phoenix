@@ -1888,8 +1888,12 @@ function getInitialSupplyNodes() {
     const cached = localStorage.getItem(STORAGE_KEY_SUPPLY_NODES)
     if (cached) {
       const parsed = JSON.parse(cached)
-      if (Array.isArray(parsed) && parsed.length >= 9) {
-        return parsed
+      if (Array.isArray(parsed)) {
+        // 过滤临时自定义供应商（无正式账号的临时供应商），确保卡组不展示
+        const filtered = parsed.filter(s => !s.is_custom && s.name !== '辽宁华阳管道设备有限公司' && s.raw_id !== '辽宁华阳管道设备有限公司')
+        if (filtered.length >= 9) {
+          return filtered
+        }
       }
     }
   } catch (e) {
@@ -2174,7 +2178,7 @@ const activeSupplierId = computed(() => {
       if (sup) return sup.id
     }
     const sup = supplyNodes.value.find(s => s.name === ev.supplier || (ev.supplier && ev.supplier.includes(s.name)) || s.raw_id === ev.supplier)
-    return sup ? sup.id : (supplyNodes.value[0]?.id || null)
+    return sup ? sup.id : null
   }
   return null
 })
@@ -2737,12 +2741,14 @@ function handleFeedClick(feed) {
     sec = sectionProgressList.value.find(s => s.name === feed.target || (feed.target && feed.target.includes(s.name)) || s.id === feed.target)
   }
 
-  const fromId = sup ? sup.id : (supplyNodes.value[0]?.id || 'sup_kaiyuan')
+  const fromId = sup ? sup.id : null
   const toId = sec ? ('sec_' + sec.id) : ('sec_' + (sectionProgressList.value[0]?.id || 'high_lot_1'))
 
   if (isDispatch) {
-    // 1. 发货事件发射专属激光飞线并高亮供给方
-    shootLaserParticle(fromId, toId, feed.type || 'pipe')
+    // 1. 发货事件发射专属激光飞线并高亮供给方（仅当供给方属于大屏卡组时）
+    if (fromId) {
+      shootLaserParticle(fromId, toId, feed.type || 'pipe')
+    }
     if (sup) hoveredSupplierId.value = sup.id
   }
 
@@ -2823,10 +2829,12 @@ async function pollLiveRealData() {
           // 查找匹配管厂与标段
           const sup = supplyNodes.value.find(s => s.name === feed.supplier || feed.supplier.includes(s.name) || s.raw_id === feed.supplier)
           const sec = sectionProgressList.value.find(s => s.name === feed.target || feed.target.includes(s.name) || s.id === feed.target)
-          const fromId = sup ? sup.id : (supplyNodes.value[0]?.id || 'sup_kaiyuan')
+          const fromId = sup ? sup.id : null
           const toId = sec ? ('sec_' + sec.id) : ('sec_' + (sectionProgressList.value[0]?.id || 'high_lot_1'))
 
-          shootLaserParticle(fromId, toId, feed.type)
+          if (fromId) {
+            shootLaserParticle(fromId, toId, feed.type)
+          }
 
           if (feed.type === 'pipe') {
             const meters = parseInt(feed.amount) || 120
@@ -2889,11 +2897,12 @@ async function pollLiveRealData() {
       sectionProgressList.value = res.section_progress_list
     }
 
-    // 3.5 实时同步全网制造基地拓扑节点与实盘待发库存
+    // 3.5 实时同步全网制造基地拓扑节点与实盘待发库存（过滤临时自定义供应商）
     if (Array.isArray(res.supply_nodes) && res.supply_nodes.length > 0) {
-      supplyNodes.value = res.supply_nodes
+      const filtered = res.supply_nodes.filter(s => !s.is_custom && s.name !== '辽宁华阳管道设备有限公司' && s.raw_id !== '辽宁华阳管道设备有限公司')
+      supplyNodes.value = filtered
       try {
-        localStorage.setItem(STORAGE_KEY_SUPPLY_NODES, JSON.stringify(res.supply_nodes))
+        localStorage.setItem(STORAGE_KEY_SUPPLY_NODES, JSON.stringify(filtered))
       } catch (e) {}
     }
 
@@ -3425,11 +3434,12 @@ async function loadRealData(isForce = false) {
         res.live_feed_list.forEach(f => knownFeedIds.value.add(f.id))
       }
 
-      // 5. 真实拓扑节点 (全网制造基地，同步写入本地缓存)
+      // 5. 真实拓扑节点 (全网制造基地，同步写入本地缓存，严格过滤临时自定义供应商)
       if (Array.isArray(res.supply_nodes) && res.supply_nodes.length > 0) {
-        supplyNodes.value = res.supply_nodes
+        const filtered = res.supply_nodes.filter(s => !s.is_custom && s.name !== '辽宁华阳管道设备有限公司' && s.raw_id !== '辽宁华阳管道设备有限公司')
+        supplyNodes.value = filtered
         try {
-          localStorage.setItem(STORAGE_KEY_SUPPLY_NODES, JSON.stringify(res.supply_nodes))
+          localStorage.setItem(STORAGE_KEY_SUPPLY_NODES, JSON.stringify(filtered))
         } catch (e) {}
       }
 

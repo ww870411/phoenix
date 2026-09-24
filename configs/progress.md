@@ -1,3 +1,22 @@
+## 2026-09-24 [数字指挥大屏：排除临时自定义供应商进入供给方卡组与拓扑节点]
+- **需求背景与用户指示**：
+  - 用户反馈：“*在http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen中，我发现有一家名为“辽宁华阳管道设备有限公司”的供给方也被列出来了，按我预想，这家单位并没有发放账号，只是作为临时的自定义供应商填写了两单发货单，所以我希望这类供给方不要出现在大屏的供给方卡组中*”。
+- **实施操作与技术落地**：
+  1. **后端大屏数据服务严格隔离自定义临时主体 (`workspace.py`)**：
+     - 在 [`get_big_screen_dashboard_data`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中，识别并提取 `official_entity_ids`（仅保留 `not s.get("is_custom")` 的正式保供主体）；
+     - 构建 `supply_nodes` 拓扑节点时增加 `if s.get("is_custom"): continue` 过滤，确保返回的供给方卡组列表只包含正式发放账号的核心保供管厂/配件厂（9家核心制造管厂），彻底排除“辽宁华阳管道设备有限公司”等临时自定义供应商；
+     - 供方在库待发总量与厂家库存盘点战报同步过滤非正式保供单位，避免临时无账号单位产生虚假盘点或干扰大屏保供大盘；
+  2. **前端大屏视图防御性过滤与拓扑容错 (`BigScreenDashboardView.vue`)**：
+     - 在 `getInitialSupplyNodes` 读取本地缓存时增加过滤逻辑，过滤掉带有 `is_custom` 或“辽宁华阳”标识的旧缓存，防止前端页面在加载初期回显旧缓存卡片；
+     - 在 `loadRealData` 首次全量拉取与 `pollLiveRealData` 实时增量同步中，双重过滤 `res.supply_nodes`；
+     - 优化焦点事件与飞线交互逻辑（`activeSupplierId`、`handleFeedClick`、`pollLiveRealData`）：针对临时自定义供应商提交的发货单据，当单据供给方未在当前卡组中时安全返回 `null`，只高亮目标需求标段，杜绝将无卡片单据错误关联至首个节点（开元）或错误发射跨厂飞线。
+- **改动清单**：
+  - 后端接口：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端页面：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+- **验证结果**：
+  - 后端执行 `get_big_screen_dashboard_data()` 单元检验，`supply_nodes` 长度为 9，全部为正式保供管厂，断言确认“华阳”已彻底排除；
+  - 前端 `npm run build` 全量打包编译一次性通过，零警告零报错。
+
 ## 2026-09-24 [综合数据查询中心：移除匹配规格文本、卡片3更名、成品库存表格接入多维聚合透视控制器]
 - **需求背景与用户指示**：
   1. “*页面中的‘当前筛选匹配 6 种在库现货规格’去掉。*”

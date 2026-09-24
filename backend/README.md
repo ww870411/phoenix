@@ -1,3 +1,14 @@
+## 2026-09-24 数字指挥大屏接口服务优化：拓扑节点与供方实盘在库排除临时自定义供应商
+
+- **接口与服务层实现 (`workspace.py`)**：
+  - 核心接口：[`GET /big-screen/data`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（读取指挥大屏 100% 全量真实项目数据与双轨联动状态）；
+  - **核心保供供给主体过滤**：
+    * 提取正式保供主体 ID 集合 `official_entity_ids = {s['entity_id'] for s in supply_entities if not s.get('is_custom')}`；
+    * 在构建 `supply_nodes`（大屏左侧 Supply Hub 供给方卡组与飞线拓扑端口）时，显式执行 `if s.get("is_custom"): continue`，仅输出发放正式账号的核心保供管厂/配件厂（共 9 家），彻底剔除“辽宁华阳管道设备有限公司”等临时自定义发货主体；
+  - **库存与战报数据一致性收敛**：
+    * 供方实盘在库待发总量（`supplier_stock_total_m` 与 `supplier_stock_total_km`）仅求和 `official_entity_ids` 范围内的供货商；
+    * 厂家库存盘点战报动态流水自动跳过非正式保供单位，确保大屏展示与账号体系严格对齐。
+
 ## 2026-09-24 综合数据查询中心服务扩展：新增供货商厂区成品库存多维综合检索服务与接口
 
 - **服务层实现 (`comprehensive_history_service.py`)**：

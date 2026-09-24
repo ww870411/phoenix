@@ -1,3 +1,15 @@
+## 2026-09-24 数字指挥大屏交互优化：供给方卡组与拓扑节点排除临时自定义供应商
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（数字指挥大屏 / 实时调度中心）；
+- **前端结构与行为变更**：
+  - **供给方卡组隔离临时自定义主体**：
+    * 在 `getInitialSupplyNodes` 初始化恢复本地缓存、`loadRealData` 首次全量加载及 `pollLiveRealData` 高频增量拉取三个环节，全面增加对 `s.is_custom` 及临时供应商（如“辽宁华阳管道设备有限公司”）的防御性过滤；
+    * 确保证书与卡组列表 `supplyNodes` 严格恒定展示 9 家发放账号的核心保供制造基地，顶部“核心制造管厂”数量与左侧 Supply Hub 卡片完美对应；
+  - **飞线与事件焦点容错安全升级**：
+    * 优化 `activeSupplierId` 计算属性：当轮播或点击到临时自定义供应商提交的发货流水时，若该供给方未进入卡组，返回 `null`，杜绝错误回退至首个节点（开元）卡片进行高亮；
+    * 优化 `handleFeedClick` 与 `pollLiveRealData`：非卡组供给方产生的发货单据在被点击时跳过供给侧飞线与卡片高亮，仅高亮接收方需求标段卡片，保证动效轨迹严密合规。
+
 ## 2026-09-24 综合数据查询中心结构升级：状态栏微调、卡片3更名、成品库存接入多维聚合透视控制器
 
 - **关联前端页面与组件**：

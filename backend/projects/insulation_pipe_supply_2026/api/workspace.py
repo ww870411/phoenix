@@ -2165,12 +2165,23 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             s_data["models"].sort(key=lambda x: x["stock_qty"], reverse=True)
             s_data["total_stock_qty"] = round(s_data["total_stock_qty"], 2)
 
-        # 聚合全网供方实盘在库总量 (米和公里)
-        supplier_stock_total_m = sum(s["total_stock_qty"] for s in supplier_inv_map.values())
+        # 聚合全网供方实盘在库总量 (米和公里，仅统计正式发放账号的核心保供主体)
+        official_entity_ids = {
+            str(s.get("entity_id") or "").strip()
+            for s in supply_entities
+            if not s.get("is_custom")
+        }
+        supplier_stock_total_m = sum(
+            s["total_stock_qty"] 
+            for sid, s in supplier_inv_map.items() 
+            if sid in official_entity_ids
+        )
         supplier_stock_total_km = round(supplier_stock_total_m / 1000.0, 2)
 
-        # 4.7 厂家库存实盘最新动态（若厂家有实盘在库量，呈现盘点战报）
+        # 4.7 厂家库存实盘最新动态（若厂家有实盘在库量，呈现盘点战报，排除临时自定义供应商）
         for sid, s_data in supplier_inv_map.items():
+            if sid not in official_entity_ids:
+                continue
             if s_data["total_stock_qty"] > 0 and s_data["latest_inventory_time"]:
                 sup_name = _clean_str(sup_name_map.get(sid, sid))
                 top_models_str = "、".join([f"{m['pipe_model_id']} ({int(m['stock_qty'])}m)" for m in s_data["models"][:2]])
@@ -2216,8 +2227,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         live_feed_list = live_feed_list[:big_screen_config["feed_limit"]]
 
         # 5. 真实拓扑节点 (全网保供管厂 + 施工标段现场，注入实盘在库待发量与盘点时间)
+        # 严格过滤临时自定义供应商（未发放正式账号，仅填写临时发货单的主体），避免进入大屏核心保供卡组
         supply_nodes = []
         for s in supply_entities:
+            if s.get("is_custom"):
+                continue
             sid = str(s["entity_id"]).strip()
             inv_info = supplier_inv_map.get(sid, {})
             stock_qty = float(inv_info.get("total_stock_qty") or 0.0)
@@ -2237,6 +2251,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "inventory_time": inv_time,
                 "inventory_models": models,
                 "has_inventory": stock_qty > 0,
+                "is_custom": False,
             })
 
         demand_nodes = [

@@ -220,6 +220,15 @@
       "contact_phone": "13998473933",
       "section_1_ids": [],
       "is_custom": false
+    },
+    {
+      "entity_id": "辽宁华阳管道设备有限公司",
+      "code": "CUST_01",
+      "entity_name": "辽宁华阳管道设备有限公司",
+      "contact_name": "",
+      "contact_phone": "",
+      "section_1_ids": [],
+      "is_custom": true
     }
   ],
   "demand_entities": [
@@ -792,7 +801,7 @@
         "contact_phone": "13998603445",
         "is_default": true,
         "created_at": "2026-09-07T11:00:00",
-        "updated_at": "2026-09-22 19:03:04"
+        "updated_at": "2026-09-24 15:11:32"
       },
       {
         "contact_name": "宋波",
@@ -804,9 +813,43 @@
     ],
     "xinruide": [
       {
+        "contact_name": "刘辉",
+        "contact_phone": "15842088389",
+        "is_default": true,
+        "created_at": "2026-09-23 23:19:54"
+      },
+      {
+        "contact_name": "原鹏",
+        "contact_phone": "15141922218",
+        "is_default": false,
+        "created_at": "2026-09-23 23:14:57",
+        "updated_at": "2026-09-23 23:18:20"
+      },
+      {
+        "contact_name": "刘生柱",
+        "contact_phone": "18831788835",
+        "is_default": false,
+        "created_at": "2026-09-21 22:30:07",
+        "updated_at": "2026-09-21 22:37:19"
+      },
+      {
+        "contact_name": "鲁志信",
+        "contact_phone": "13383373302",
+        "is_default": false,
+        "created_at": "2026-09-21 22:26:58",
+        "updated_at": "2026-09-21 22:28:20"
+      },
+      {
+        "contact_name": "石志雄",
+        "contact_phone": "13315725260",
+        "is_default": false,
+        "created_at": "2026-09-21 22:08:54",
+        "updated_at": "2026-09-21 22:24:30"
+      },
+      {
         "contact_name": "张洪讯",
         "contact_phone": "19931720966",
-        "is_default": true,
+        "is_default": false,
         "created_at": "2026-09-19 21:33:23",
         "updated_at": "2026-09-19 21:46:17"
       },
@@ -872,38 +915,6 @@
         "is_default": false,
         "created_at": "2026-09-07T11:23:00",
         "updated_at": "2026-09-14 22:00:02"
-      },
-      {
-        "contact_name": "满仓",
-        "contact_phone": "13832709257",
-        "is_default": false,
-        "created_at": "2026-09-07T11:23:00",
-        "updated_at": "2026-09-14 21:54:15"
-      },
-      {
-        "contact_name": "信伟",
-        "contact_phone": "13252896222",
-        "is_default": false,
-        "created_at": "2026-09-12 22:09:01"
-      },
-      {
-        "contact_name": "鲁治信",
-        "contact_phone": "13383373302",
-        "is_default": false,
-        "created_at": "2026-09-12 22:00:27",
-        "updated_at": "2026-09-12 22:04:28"
-      },
-      {
-        "contact_name": "刘宁",
-        "contact_phone": "18230465777",
-        "is_default": false,
-        "created_at": "2026-09-07T11:00:00"
-      },
-      {
-        "contact_name": "戚超",
-        "contact_phone": "15100797605",
-        "is_default": false,
-        "created_at": "2026-09-07T00:27:00"
       }
     ],
     "wosheng": [
@@ -945,7 +956,7 @@
         "contact_phone": "13516258086",
         "is_default": true,
         "created_at": "2026-09-07T11:00:00",
-        "updated_at": "2026-09-20 14:45:24"
+        "updated_at": "2026-09-23 19:23:25"
       }
     ],
     "sanwei": [
@@ -970,7 +981,21 @@
         "contact_phone": "18602400520",
         "is_default": true,
         "created_at": "2026-09-20 09:13:56",
-        "updated_at": "2026-09-21 09:24:25"
+        "updated_at": "2026-09-24 09:22:43"
+      }
+    ],
+    "辽宁华阳管道设备有限公司": [
+      {
+        "contact_name": "无",
+        "contact_phone": "18622203129",
+        "is_default": true,
+        "created_at": "2026-09-23 16:14:14"
+      },
+      {
+        "contact_name": "王启辉",
+        "contact_phone": "15840031166",
+        "is_default": false,
+        "created_at": "2026-09-23 16:12:14"
       }
     ]
   }
