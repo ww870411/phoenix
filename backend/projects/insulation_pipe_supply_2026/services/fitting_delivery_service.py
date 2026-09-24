@@ -1525,3 +1525,133 @@ def super_update_fitting_delivery_record(
     finally:
         session.close()
 
+
+def update_fitting_shipment_common_info(
+    *,
+    shipment_no: str,
+    delivery_ids: Optional[List[int]] = None,
+    vehicle_plate_no: Optional[str] = None,
+    section_1_id: Optional[str] = None,
+    shipped_at: Optional[datetime] = None,
+    ship_contact_name: Optional[str] = None,
+    ship_contact_phone: Optional[str] = None,
+    ship_remark: Optional[str] = None,
+    operator: str,
+    operator_group: str,
+    client_ip: Optional[str] = None,
+) -> Dict[str, Any]:
+    """统一修改整车管件发货的公共属性与发货备注。"""
+    _ensure_fitting_table_structures()
+    clean_shipment_no = _clean(shipment_no)
+    if not clean_shipment_no:
+        raise HTTPException(status_code=422, detail="运输车次号不能为空")
+
+    now_bj = datetime.now(BEIJING_TZ)
+    session = SessionLocal()
+    try:
+        if delivery_ids and len(delivery_ids) > 0:
+            query_sql = text(
+                """
+                SELECT id, shipment_no, order_no, vehicle_plate_no, section_1_id,
+                       fitting_type, model_spec, shipped_qty, unit, shipped_at,
+                       ship_contact_name, ship_contact_phone, ship_remark, status
+                FROM tube.tube_fitting_delivery
+                WHERE shipment_no = :shipment_no AND id = ANY(:delivery_ids)
+                FOR UPDATE
+                """
+            )
+            rows = session.execute(query_sql, {"shipment_no": clean_shipment_no, "delivery_ids": delivery_ids}).mappings().all()
+        else:
+            query_sql = text(
+                """
+                SELECT id, shipment_no, order_no, vehicle_plate_no, section_1_id,
+                       fitting_type, model_spec, shipped_qty, unit, shipped_at,
+                       ship_contact_name, ship_contact_phone, ship_remark, status
+                FROM tube.tube_fitting_delivery
+                WHERE shipment_no = :shipment_no
+                FOR UPDATE
+                """
+            )
+            rows = session.execute(query_sql, {"shipment_no": clean_shipment_no}).mappings().all()
+
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"未找到车次号为 {clean_shipment_no} 的管件发货记录")
+
+        orig_records = [dict(r) for r in rows]
+
+        updates: Dict[str, Any] = {}
+        if vehicle_plate_no is not None:
+            updates["vehicle_plate_no"] = _clean(vehicle_plate_no)
+        if section_1_id is not None:
+            val_sec = _clean(section_1_id)
+            if not val_sec:
+                raise HTTPException(status_code=422, detail="装车接收需求主体不能为空")
+            updates["section_1_id"] = val_sec
+        if shipped_at is not None:
+            dt_shipped_at = shipped_at
+            if dt_shipped_at.tzinfo is None:
+                dt_shipped_at = dt_shipped_at.replace(tzinfo=BEIJING_TZ)
+            else:
+                dt_shipped_at = dt_shipped_at.astimezone(BEIJING_TZ)
+            updates["shipped_at"] = dt_shipped_at
+        if ship_contact_name is not None:
+            updates["ship_contact_name"] = _clean(ship_contact_name)
+        if ship_contact_phone is not None:
+            updates["ship_contact_phone"] = _clean(ship_contact_phone)
+        if ship_remark is not None:
+            updates["ship_remark"] = str(ship_remark).strip()
+
+        if not updates:
+            return {
+                "ok": True,
+                "detail": "未传入任何需要修改的公共信息",
+                "updated_count": 0,
+                "shipment_no": clean_shipment_no,
+            }
+
+        updates["updated_by"] = operator
+        updates["updated_at"] = now_bj
+
+        set_clauses = [f"{col} = :{col}" for col in updates.keys()]
+        set_sql_str = ", ".join(set_clauses)
+        target_ids = [r["id"] for r in rows]
+
+        update_sql = text(
+            f"""
+            UPDATE tube.tube_fitting_delivery
+            SET {set_sql_str}
+            WHERE id = ANY(:target_ids)
+            """
+        )
+        exec_params = {**updates, "target_ids": target_ids}
+        result = session.execute(update_sql, exec_params)
+        updated_count = result.rowcount
+
+        _write_audit_log(
+            session,
+            operator=operator,
+            operator_group=operator_group,
+            action_type="UPDATE_FITTING_SHIPMENT_COMMON",
+            action_desc=f"统一更新车次【{clean_shipment_no}】公共信息与备注：共应用至 {updated_count} 项管件明细",
+            resource_id=clean_shipment_no,
+            before_value={"count": len(orig_records), "sample": orig_records[:2]},
+            after_value={"updated_fields": {k: str(v) for k, v in updates.items()}, "updated_count": updated_count},
+            client_ip=client_ip,
+        )
+
+        session.commit()
+        return {
+            "ok": True,
+            "shipment_no": clean_shipment_no,
+            "updated_count": updated_count,
+            "updated_fields": list(updates.keys()),
+        }
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"统一更新车次公共信息失败: {exc}") from exc
+    finally:
+        session.close()
+

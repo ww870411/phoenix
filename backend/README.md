@@ -1,3 +1,40 @@
+## 2026-09-24 综合数据查询中心服务扩展：新增供货商厂区成品库存多维综合检索服务与接口
+
+- **服务层实现 (`comprehensive_history_service.py`)**：
+  - 新增 [`query_supplier_inventory_history`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py) 综合查询服务函数；
+  - **最新快照视角 (`view_mode='latest'`)**：采用窗口函数解析各供给主体最新一次提交批次（`rnk=1`）及前一次批次（`rnk=2`），结合直管型号提取口径并计算环比增减（`change_qty`），口径数值大优先降序排列；
+  - **历史流水视角 (`view_mode='history'`)**：全量检索 `tube.tube_supplier_inventory` 记录，支持厂家、型号、起止日期区间及关键词模糊检索；
+  - 核心汇总指标：在库待发总米数、参与供方数、在库型号种类数、最新盘点提交时间与对应供方；
+- **接口挂载与权限管控 (`workspace.py`)**：
+  - 新增端点 `GET /comprehensive-history/supplier-inventory`；
+  - 权限隔离：`Global_admin`、`tube_supplier_admin`、`tube_global_viewer`、`tube_data_viewer` 等全局角色全量放行；普通供货商角色受 `resolve_accessible_supply_entity_ids` 自动限定仅查看本厂数据；
+  - 记录结构化审计日志 `QUERY_SUPPLIER_INVENTORY`。
+
+## 2026-09-24 供给侧管件服务扩展：新增整车公共信息与发货备注统一原子级批量更新接口
+
+- **服务层实现 (`fitting_delivery_service.py`)**：
+  - 新增 [`update_fitting_shipment_common_info`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py) 事务服务，基于车次号与行级排他锁（`FOR UPDATE`）锁定目标明细；
+  - 动态拼装公共字段（`vehicle_plate_no`、`section_1_id`、`shipped_at`、`ship_contact_name`、`ship_contact_phone`、`ship_remark`），通过 `WHERE id = ANY(:target_ids)` 一次性事务级批量更新整车全部明细行；
+  - 记录详细的审计日志 `UPDATE_FITTING_SHIPMENT_COMMON`，保留操作前后快照与受影响行数；
+- **接口挂载与鉴权 (`workspace.py`)**：
+  - 新增端点 `POST /supply-management/fitting-deliveries/shipments/{shipment_no}/common-update`；
+  - 权限边界严格收敛至 `Global_admin`、`tube_supplier_admin`（以及 `dev_admin`），阻断普通角色与只读用户。
+
+## 2026-09-24 权限与数据广度对齐：确认 tube_global_viewer 供给端全网主体调阅支持
+
+- **服务层与接口鉴权状态**：
+  - 在 [`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py) 中，`resolve_accessible_supply_entity_ids` 原生已将 `tube_global_viewer` 和 `tube_data_viewer` 纳入全放行角色，返回全网所有 8 家合法供给主体；
+  - 在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中，`GET /supply-management/options`、`GET /supply-management/deliveries`、`GET /workspace/fitting_deliveries/list` 均对该角色放行全网数据查询，配合前端界面已全面实现该角色在供给侧工作台自由切换任意供应商视图。
+
+## 2026-09-23 物料单价体系扩充：追加导入辽宁华阳散货单独订单单价数据（11行）
+
+- **数据入库与多物料覆盖**：
+  - 基于《`configs/9.23_导入_辽宁华阳散货.xlsx`》将辽宁华阳管道设备有限公司的散货单独订单物料单价共 11 行追加导入至 `tube.tube_material_price`；
+  - 自动设置 `applicable_sections = 'all'` 与 `section_name_scope = '全标段通用'`；
+  - 包含补偿器 7 行（直埋型套筒-波纹复合补偿器，¥54,860.00 ~ ¥118,800.00/台）与固定支架 4 行（直埋管道固定支架，¥9,180.00 ~ ¥13,120.00/台）；
+  - 规格型号规范为纯规格（如 `HYSDT1100-2.5-175（单正）`、`DN1100 L=2400mm`），备注字段保留原始“单独订单，不作为常用的供货单位”并附带采购批量说明；
+  - 服务层 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 新增 `import_huayang_bulk_prices()` 幂等导入方法，采用精准规格与散货备注匹配清理，确保不影响华阳历史既有的 19 条基础通用单价。
+
 ## 2026-09-23 数据治理：全库保温管规格型号去“.0”规范化清洗与重复记录原子级合并
 
 - **全库数据清洗与口径统一**：

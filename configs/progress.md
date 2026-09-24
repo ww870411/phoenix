@@ -1,3 +1,253 @@
+## 2026-09-24 [综合数据查询中心：移除匹配规格文本、卡片3更名、成品库存表格接入多维聚合透视控制器]
+- **需求背景与用户指示**：
+  1. “*页面中的‘当前筛选匹配 6 种在库现货规格’去掉。*”
+  2. “*卡片‘在库直管规格种类’改名为‘在库保温管规格种类’*”
+  3. “*另外，表格显示的记录，目前是按照供给方名称、规格型号来展示的，我希望能够自由选择，比如可以仅按供给方来聚合所有型号，或仅按规格型号来聚合。之前在其他标签页中，不是有一个“聚合维度”吗？请在该页面中也设置一个*”。
+- **实施操作与技术落地**：
+  1. **移除状态栏匹配文本与卡片3重命名 (`HistoryQueryView.vue`)**：
+     - 从 Tab 3（`supplier_inventory`）的顶部状态栏 `.inventory-header-bar` 中彻底删除了 `当前筛选匹配 X 种在库现货规格` 提示文本，只保留右侧紧凑的 `🔄 刷新数据` 快捷触发按钮；
+     - 将第 3 张 KPI 看板卡片标题从 `📏 在库直管规格种类` 规范更名为 `📏 在库保温管规格种类`。
+  2. **全面接入“多维透视聚合控制器” (`supplierInventoryDimensions`)**：
+     - 在 script 中声明 `supplierInventoryDimensions = ref(['supplier', 'model'])`，并配置 4 种常用快捷方案：
+       * `⚡ 默认 (供给方➔型号)`: `['supplier', 'model']`
+       * `🔥 纯型号总览 (厂家全合并)`: `['model']`
+       * `🏭 纯供给方汇总 (型号全合并)`: `['supplier']`
+       * `📐 型号➔供给方对比`: `['model', 'supplier']`；
+     - 扩展 `getTargetDimensionRef`、`getAvailableDimensions`、`resetToDefaultDimensions`，深度融入系统成熟的透视维度调度器；
+     - 在表格卡片 `.data-table-card` 顶部新增工具栏 `.table-toolbar-row`，提供标题、实时聚合组数统计与 `🎛️ 聚合维度` 下拉浮层面板（支持维度顺序调整、自由勾选与一键预设切换）；
+  3. **数据层动态分组聚合与智能排序 (`aggregatedSupplierInventoryRows`)**：
+     - 新增计算属性 `aggregatedSupplierInventoryRows`：根据选定维度链动态归组求和 `stock_qty`、`previous_stock_qty`、`change_qty`，追踪每个组覆盖的厂家集合与型号集合；
+     - 表格列完全由 `supplierInventoryDimensions` 动态生成；在单维度聚合时贴心展示子统计徽章（如“X 种型号在库”或“X 家供方有货”）；
+     - `sortedSupplierInventoryRows` 基于当前首个激活维度及列头点击实现正反向与口径大小智能排序；表尾动态计算 `colspan`；
+     - 同步升级 Excel 导出引擎（`exportCurrentTabExcel`），使导出的“供给方成品库存现货”工作表表头与数据行自动对齐当前透视维度。
+- **改动清单**：
+  - 前端组件：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+- **验证结果**：
+  - 本地运行 `npm run build` 全量打包成功（738 modules transformed，耗时 12.93s），零警告零报错。
+
+## 2026-09-24 [综合数据查询中心：最新盘点时间卡片“最新供方”置于日期时间下方独立单行展示]
+- **需求背景与用户指示**：
+  - 用户反馈并进一步明确意图：
+    - “*哦不，我是说，这个“最新供方: 河北鑫瑞得管道设备有限公司”放在日期时间的下面一行*”。
+- **实施操作与技术落地**：
+  1. **结构与样式微调 (`HistoryQueryView.vue`)**：
+     - 重构第四张卡片内容容器为 `.inv-kpi-time-content`（垂直列布局 `flex-direction: column; gap: 2px;`）；
+     - 第一行展示标题 `🕒 全网最新盘点时间`，第二行展示日期时间（13px 等宽字体），第三行独立展示 `最新供方: 河北鑫瑞得管道设备有限公司`；
+     - 供方说明文字样式定义为 `.inv-kpi-supplier-row`（**11px**，颜色采用优雅翡翠绿 `#047857`），设置 `white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`，确保置于单行内不折行；
+     - 卡片高度统一设为紧凑工整的 `min-height: 66px`，4 张卡片高度完全平齐、层次分明。
+- **改动清单**：
+  - 前端组件：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 15.95s），零警告零报错。
+  - 前端组件：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.51s），零警告零报错。
+
+## 2026-09-24 [综合数据查询中心：成品库存4大卡片去除冗余标签与描述、时间字体缩小、高度大幅调减紧凑化]
+- **需求背景与用户指示**：
+  - 用户反馈并明确具体优化要求：
+    1. “*这几张卡片中的‘核心现货’‘保供基地’‘现货规格’‘动态提报’都给我去掉。*”
+    2. “*第二张卡片中的‘涵盖全网重点保温管生产基地’和第三张卡片中的‘大口径Φ1120~小口径现货覆盖’去掉。*”
+    3. “*第四张卡片中的日期时间文字缩小一点。*”
+    4. “*整个四张卡片的高度调减*”。
+- **实施操作与技术落地**：
+  1. **清理卡片微标签与冗余描述 (`HistoryQueryView.vue`)**：
+     - 彻底移除 4 张卡片顶部的微标签（“核心现货”、“保供基地”、“现货规格”、“动态提报”）；
+     - 彻底移除卡片 2 的“涵盖全网重点保温管生产基地”和卡片 3 的“大口径Φ1120~小口径现货覆盖”说明行，内容极简化。
+  2. **第四张卡片时间字号紧凑化**：
+     - 建立专属样式类 `.inv-kpi-time-text`，将时间文字从原先大号字体收缩为 12.5px 精致等宽文本，与最新供方名称紧凑基线排布，杜绝折行抢眼。
+  3. **大幅调减四张卡片高度（垂直空间占用减少约 45%）**：
+     - `min-height` 从 108px 压缩至 60px；
+     - 内边距由 `padding: 14px 16px` 精简至 `padding: 8px 14px`；
+     - 卡片内容采用 `display: flex; align-items: baseline; gap: 8px;` 水平基线紧密排列，数值与单位、环比胶囊高度统一；
+     - 主数值字号由 26px 调整为干练有力的 20px，行高紧密，消除卡片上下多余留白，为下方现货表格留出充裕的视口空间。
+- **改动清单**：
+  - 前端组件：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 12.56s），零警告零报错。
+
+## 2026-09-24 [综合数据查询中心：移除历史明细流水子标签，全面重构4大KPI现货卡片样式与4列对称排版]
+- **需求背景与用户指示**：
+  - 用户反馈并明确具体要求：
+    1. “*那个‘全量历史盘点批次明细流水’子标签就不要了吧。*”
+    2. “*另外‘厂区在库待发总量’等4个卡片的样式和排版也好好优化一下*”。
+- **实施操作与技术落地**：
+  1. **移除“全量历史盘点批次明细流水”子标签与对应表格 (`HistoryQueryView.vue`)**：
+     - 彻底删除子标签切换栏（`sub-pill-bar` 中的“各厂家最新快照”与“全量历史流水”切换按钮），避免多余层级干扰；
+     - 彻底清除下方模式 2 的全量历史流水明细表格（120余行旧模板与无用标记）；
+     - 顶栏替换为高工整度的 `.inventory-header-bar`，直观呈现“🏭 供给方成品在库现货台账 (各厂家最新实盘 · 实盘量 > 0)”并搭配右侧实时记录计数与清新刷新按钮；
+     - Excel 导出统一对齐当前 6 列现货大盘结构。
+  2. **4 大 KPI 卡片样式与排版彻底重构**：
+     - **修复网格塌陷缺陷**：废弃了原先写死 6 列的 `.kpi-banner-grid`，构建专属的 4 列自适应对称网格 `.supplier-inventory-kpi-grid`（`repeat(4, minmax(0, 1fr))`），左右完全对齐并严密贴合下方表格，消除右侧大面积空白塌陷；
+     - **视觉层级与工业质感升级 (`.inv-kpi-card`)**：
+       * **卡片 1（📦 厂区在库待发总量）**：主推核心现货卡片，天蓝色微渐变（`#f0f9ff` ➔ `#ffffff`），左侧 `4px solid #0284c7`，26px 等宽天蓝数字，下方搭配红/绿/灰微胶囊徽标展示环比波动（`▲ +X 米` / `▼ -X 米` / `● 持平`）；
+       * **卡片 2（🏭 参与盘点供方厂家）**：深海蓝微渐变，左侧 `4px solid #2563eb`，26px 科技蓝数字，徽标标注“保供基地”，辅助提示全网重点生产基地覆盖；
+       * **卡片 3（📏 在库直管规格种类）**：紫靛微渐变，左侧 `4px solid #7c3aed`，26px 优雅靛青数字，徽标标注“现货规格”，提示大口径Φ1120~小口径全规格覆盖；
+       * **卡片 4（🕒 全网最新盘点时间）**：薄荷翠绿微渐变，左侧 `4px solid #059669`，徽标标注“动态提报”，主数值展示等宽高辨识度提交时间，底行高亮最新提报厂家全称。
+- **改动清单**：
+  - 前端组件：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 15.26s），零警告零报错。
+
+## 2026-09-24 [综合数据查询中心：位置3更名“供给方成品库存”、0库存过滤与高规整度精简排版重构]
+- **需求背景与用户指示**：
+  - 用户反馈并明确具体优化要求：
+    1. “*标签名给我改一下：供给方成品库存*”；
+    2. “*下方的表格格式排版你好好看看，真的很丑很不整齐。字段‘上次在库量 (米) ↕’‘最新盘点批次’‘填报人’‘上报时间 ↕’‘盘点说明 / 备注’都删掉*”；
+    3. “*另外，‘    盘点日期 ↕’改为‘最新盘点日期’*”；
+    4. “*数据记录的显示方面，‘实盘在库待发 (米) ’为0的记录不显示*”。
+- **实施操作与技术落地**：
+  1. **主 Tab 标签文案规范 (`HistoryQueryView.vue`)**：
+     - 位置 3 标签文案正式调整为 **“🏭 供给方成品库存”**（全称与缩写同步统一），语义紧凑专业。
+  2. **0 库存记录强制硬过滤 (`filteredSupplierInventoryRows`)**：
+     - 在快照视图计算属性中增加 `list = list.filter(r => (Number(r.stock_qty) || 0) > 0)`；
+     - 彻底剔除在库量为 0 的空置行，使得大盘焦点 100% 聚焦于全网各厂家当前真正有货、待装车发运的“真金白银”现货。
+  3. **表格排版与视觉体系全面重构 (`.data-table-card` & `.data-table`)**：
+     - **剔除 5 项冗余字段**：彻底移除了原先导致版面挤压变形的“上次在库量 (米)”、“最新盘点批次”、“填报人”、“上报时间”、“盘点说明 / 备注”；
+     - **表头重命名与对齐**：将原盘点日期列规范重命名为 **“最新盘点日期”**；
+     - **精简为高工整度 6 列标准布局**：
+       * `[#]`：序号（固定 56px 居中对齐）；
+       * `[🏭 供给方厂家]`：加粗徽章展示厂家全称（固定 288px 居左）；
+       * `[🔥 保温管规格型号]`：等宽字体呈现工程标准口径规格（自适应宽度 居左）；
+       * `[📦 实盘在库待发 (米)]`：天空蓝超大字号等宽数字（固定 208px 居右，视觉重心）；
+       * `[环比增减 (米)]`：规范红/绿/灰微胶囊徽标展示环比波动（固定 160px 居中）；
+       * `[最新盘点日期]`：等宽日期文本（固定 176px 居中）。
+     - **样式底座统一**：废弃临时自定义类，全面回落至系统成熟的 `<div class="card data-table-card">` 与 `<table class="data-table">`，严格使用 `.sortable-th` 与 `.th-inner-cell`，确保表头文字与排序小三角严丝合缝、完全居中或居右对齐，与全站整体高级暗黑/现代工业风浑然一体。
+  4. **表尾汇总与流水明细同步升级**：
+     - 表尾汇总行紧凑对齐实盘总米数与环比增减合计；
+     - 全量历史流水明细表也同步精简为工整 6 列规范结构。
+- **改动清单**：
+  - 前端组件：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.86s），零警告零报错。
+
+## 2026-09-24 [综合数据查询中心：位置3新建“供给方成品库存”多维查询展示标签页]
+- **需求背景与业务落地**：
+  - 用户反馈并明确需求：“*关于保温管供货商填报的库存数据，我希望能够在http://localhost:5173/projects/insulation_pipe_supply_2026/pages/comprehensive_query新建一个标签页提供查询展示，请将该新标签页置于位置3*”；
+  - 核心目标：打破供货商厂区填报端与项目调度中心的数据壁垒，在“综合数据查询中心”第 3 个位置正式上线【📦 供货商厂区成品库存】（`supplier_inventory`）标签页，满足调度平衡会、开会速查与全量历史明细溯源需求。
+- **实施操作与技术落地**：
+  1. **后端服务层开发 (`comprehensive_history_service.py`)**：
+     - 新增 [`query_supplier_inventory_history`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py) 服务函数；
+     - **最新实盘快照视角 (`view_mode='latest'`)**：基于窗口函数提取各供货商最新一次盘点批次（`rnk=1`）及前一次批次（`rnk=2`），利用字典映射自动核算同型号环比增减量（`change_qty`），按口径降序组织；
+     - **历史流水明细视角 (`view_mode='history'`)**：全量检索 `tube.tube_supplier_inventory` 盘点明细，支持起止日期、供货厂家、保温管型号及多维关键字模糊搜索；
+     - 汇总并返回核心 KPI 指标：全网在库待发总米数、参与盘点供方数、在库型号种类数、最新盘点提交时间与对应供方；
+  2. **后端 API 路由挂载与权限管控 (`workspace.py`)**：
+     - 挂载路由 `GET /comprehensive-history/supplier-inventory`；
+     - 权限隔离：`Global_admin`、`tube_supplier_admin`、`tube_global_viewer`、`tube_data_viewer` 等全局角色支持跨全厂查询；具体供方账号受 `resolve_accessible_supply_entity_ids` 自动限定仅查看本厂数据；
+     - 记录结构化审计日志 `QUERY_SUPPLIER_INVENTORY`；
+  3. **前端 API 服务层封装 (`api.js`)**：
+     - 在 `frontend/src/projects/daily_report_25_26/services/api.js` 中封装并导出 [`getComprehensiveSupplierInventory`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)；
+  4. **前端视图组件设计与实现 (`HistoryQueryView.vue`)**：
+     - **Tab 栏精准插位**：将【📦 供货商厂区成品库存】精确安置在**位置 3**（1: 每日流转 -> 2: 设计·采购·价格 -> **3: 厂区成品库存** -> 4: 供给方发运台账 -> 5: 责任主体矩阵）；
+     - **顶栏多维筛选器联动适配 (Filter Hub)**：
+       * 第 1 列在切换到厂区库存 Tab 时，自适应从“需求标段”切换为“🏭 供货厂家 (可多选)”，支持全选、清空、已选计数与 Chips 胶囊联动；
+       * 保留第 2 列“🔥 保温管型号 (可多选)”、第 3 列“📅 盘点时段 / 业务日期”及第 4 列“🔎 全局速搜”；
+     - **Tab 内容区双重视角与核心看板**：
+       * 顶部 4 大 KPI 毛玻璃卡片（厂区在库待发总量、参与供方数、在库规格数、最新盘点时间）；
+       * 视角 1：📌【各厂家最新实盘在库快照】（含上次在库对比、涨跌环比增减胶囊、批次号、填报人与表尾总计行）；
+       * 视角 2：📜【全量历史盘点批次明细流水】（按时间倒序展示全网每次盘点记录，表头支持动态排序）；
+     - **Excel 报表导出**：
+       * 在 `canExtractXlsx` 权限控制下，点击顶栏 `📥 导出 Excel (.xlsx)` 即可直接将当前筛选条件下的快照或历史流水导出为带汇总行的规范表格。
+- **改动清单**：
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 后端接口：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端服务：[`frontend/src/projects/daily_report_25_26/services/api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+  - 前端页面：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+- **验证结果**：
+  - 后端 Python 静态编译全部通过（零语法错误）；
+  - 前端 `npm run build` 全量打包通过（738 modules transformed），零警告零报错。
+
+## 2026-09-24 [供给侧管件物流链：实现整车公共信息与发货备注统一批量修改功能]
+- **需求背景与业务落地**：
+  - 用户反馈并明确需求：“*关于整车次的公共信息，我希望能够进行统一修改和统一备注*”；
+  - 在管件发货管理中，同一车次通常装配多项不同规格的管件（多明细），此前管理员需展开车次逐项点开明细弹窗修改，无法一次性调整整车车牌、发货时间、接收标段及整车统一备注；
+  - 核心要求：支持针对整车次执行一次性原子级的公共属性修改与备注覆盖，同时保留展开后针对具体规格数量的单项编辑通道。
+- **实施操作与技术落地**：
+  1. **后端服务层实现 (`fitting_delivery_service.py`)**：
+     - 新增 [`update_fitting_shipment_common_info`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py) 事务更新方法；
+     - 基于 `shipment_no` 与行级排他锁（`FOR UPDATE`）锁定该车次全部关联明细记录，动态拼装更新字段（`vehicle_plate_no`、`section_1_id`、`shipped_at`、`ship_contact_name`、`ship_contact_phone`、`ship_remark`、`updated_by`、`updated_at`），并通过 `WHERE id = ANY(:target_ids)` 一次性批量生效；
+     - 记录结构化审计日志 `UPDATE_FITTING_SHIPMENT_COMMON`，保留操作前后的快照样本与受影响记录数；
+  2. **后端 API 路由挂载 (`workspace.py`)**：
+     - 新增请求模型 `UpdateFittingShipmentCommonPayload` 与接口 `POST /supply-management/fitting-deliveries/shipments/{shipment_no}/common-update`；
+     - 严格鉴权限制：仅超级管理员 `Global_admin`、供给方管理员 `tube_supplier_admin`（以及 `dev_admin`）可调用，普通角色与只读观察员强阻断；
+  3. **前端 API 层与视图交互升级 (`api.js` & `SupplyManagementView.vue`)**：
+     - 在 `api.js` 导出 `updateTubeFittingShipmentCommonInfo`；
+     - 在车次卡片头部将原先混淆的按钮升级为 **【🚚 整车修改与备注】**，展开后的具体明细行右侧按钮规范为 **【⚙️ 单项编辑】**，职责层次分明；
+     - 新增 **【🚚 整车公共信息与备注统一修改】** 弹窗组件（`showFittingShipmentCommonModal`），支持快速编辑车牌、标段、发货时间、随车联系人及一键清空/填写整车统一发货备注，保存后自动刷新列表并弹出绿色成功反馈条。
+- **改动清单**：
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)
+  - 后端接口：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端服务：[`frontend/src/projects/daily_report_25_26/services/api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)
+  - 前端页面：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+- **验证结果**：
+  - 后端 Python 静态编译全部通过（零语法错误）；
+  - 前端 `npm run build` 全量打包通过（738 modules transformed），零警告零报错。
+
+## 2026-09-24 [保温管物流链系统 insulation_pipe_supply_2026 当前账号设置体系与 tube_viewer 权能范围核验]
+- **需求背景与审查目标**：
+  - 用户询问：核验项目 `insulation_pipe_supply_2026`（2026年度保温管、管件物流链管理系统）当前的完整账号设置体系，并深度解析 `tube_viewer` 账号当前在全系统的可操作范围与权能边界。
+- **核验结论与全景矩阵**：
+  1. **当前账号分组与人员矩阵**：
+     - 系统为该项目配置了 8 类角色分组（`Global_admin` 超管、`tube_supplier_admin` 供给管理员、`tube_supplier` 供给厂家、`tube_site_manager` 现场总管、`tube_construction_unit` 施工单位、`tube_warehouse_keeper` 库管员、`tube_global_viewer` 全局只读观察员、`tube_data_viewer` 数据导出观察员），收录了包括管厂、标段经理、施工队、库管员在内的 50 余个生产作业账号。
+  2. **`tube_viewer` 权限定位与边界**：
+     - **身份定位**：归属于 `tube_global_viewer` 用户组，所属单位标识为 `项目全局浏览`，密码 `tube_viewer123`；
+     - **数据调阅广度**：全网 10 个标段（高温1~4、低温1~6）及全部 8 家管厂/阀门供给主体全量放行，对齐超管调阅视野；
+     - **可访问页面 (7个)**：数字指挥大屏 (`big_screen`)、全局数字看板 (`dashboard`)、综合数据查询中心 (`comprehensive_query`/`history_query`)、供给侧管理工作台 (`supply_management`)、需求侧管理工作台 (`demand_management`)、库管员工作台 (`warehouse_management`)；
+     - **不可访问页面 (2个)**：GIS 地图标注 (`gis_map`) 与全局管理后台 (`global_management`) 受 403 路由拦截；
+     - **操作权限控制 (纯只读)**：
+       * 物理禁用全部业务写操作（发货提交、计划与消耗填报、到货确认、施工接收、库管确认、发货撤回等），前端按钮置灰/隐藏，后端接口实施 403 强拦截；
+       * 严格剥夺 Excel 报表导出权限（全系统各页面导出按钮物理隐藏不渲染，后端导出接口 403 拦截）。若需导出报表可使用同视角的 `tube_data_viewer` 账号（如 `张文韬`）。
+ 3. **供给侧工作台 (`supply_management`) 下拉列表交互核验**：
+    - 当作为 `Global_admin` 访问时，顶部微看板上方会精准渲染【🏭 切换当前供给主体】下拉选择框（`canSwitchSupplyEntity` 为 true）；
+    - 下拉列表中除了收录全网所有合法供给厂家外，超管独占拥有【✍️ 手动输入自定义供给方...】选项，支持即时动态扩充供给主体；
+    - 在发货登记表单中，供给主体字段同样呈现为可自由切换的 `<select>` 下拉框，并与全局选中主体严格双向联动。
+ 4. **管件发货记录超级编辑覆盖粒度核验**：
+    - 用户询问：在供给侧工作台管件发货记录 Tab（`category=fitting&tab=fitting`）下，作为 `Global_admin` 编辑车次信息时，需展开逐条修改还是可修改整条记录；
+    - 经查证代码架构与底层数据库实现：
+      * 系统底层数据表 `tube.tube_fitting_delivery` 以“单条管件明细”为主键行存储；
+      * 若车次仅包含 1 种管件，车次头部的【⚙️ 编辑覆盖】直接对应修改该记录；
+      * 若车次包含多项管件，车次头部按钮当前仅绑定首条明细（`group.items[0]`），修改其他明细需要展开车次卡片并在内层表格逐项点击【⚙️ 编辑】；
+      * 后端接口 `POST /supply-management/fitting-deliveries/{delivery_id}/super-update` 执行单行 `WHERE id = :id` 覆盖更新。
+
+## 2026-09-23 [物料单价体系扩充：追加导入辽宁华阳散货单独订单单价数据（11行）至 tube_material_price]
+- **需求背景与业务推进**：
+  - 用户提供新增单价文件《`configs/9.23_导入_辽宁华阳散货.xlsx`》，包含供给方“辽宁华阳管道设备有限公司”针对特定工程散货单独订单的单价信息；
+  - 需将此批散货单价（补偿器 7 项、直埋固定支架 4 项，共 11 项）追加导入数据库表 `tube.tube_material_price`；
+  - 业务要求：保留原始单独订单备注与采购数量背景，确保与历史既有 19 条基础通用单价和平共存，保证全流程幂等入库。
+- **实施操作与技术落地**：
+  1. **数据源结构分析与清洗对齐**：
+     - 解析 Excel 文件《`configs/9.23_导入_辽宁华阳散货.xlsx`》【标准化价格表】，共 11 行数据：
+       1. `直埋型套筒-波纹复合补偿器 HYSDT1100-2.5-175（单正）`（1台，¥59,030.00）
+       2. `直埋型套筒-波纹复合补偿器 HYSDT1100-2.5-175（单反）`（1台，¥59,030.00）
+       3. `直埋型套筒-波纹复合补偿器 HYSDT1100-2.5-145（单正）`（1台，¥54,860.00）
+       4. `直埋型套筒-波纹复合补偿器 HYSDT1100-2.5-145（单反）`（1台，¥54,860.00）
+       5. `直埋型套筒-波纹复合补偿器 HYSDT1100-2.5-500（单正）`（1台，¥118,800.00）
+       6. `直埋管道固定支架 DN1100 L=2400mm`（7台，¥13,120.00）
+       7. `直埋型套筒-波纹复合补偿器 HYSDT1000-2.5-300（双向流通）`（1台，¥68,360.00）
+       8. `直埋型套筒-波纹复合补偿器 HYSDT900-2.5-400（双向流通）`（3台，¥66,700.00）
+       9. `直埋管道固定支架 DN1000 L=2400mm`（1台，¥11,900.00）
+       10. `直埋管道固定支架 DN900 L=2400mm`（5台，¥10,500.00）
+       11. `直埋管道固定支架 DN800 L=2400mm`（1台，¥9,180.00）
+     - 物料大类统一为 `material_kind = 'fitting'`（管件与附件），适用标段设置为 `applicable_sections = 'all'`（全标段通用）；
+     - 规格型号严格保留工程纯规格（如 `HYSDT1100-2.5-175（单正）`、`DN1100 L=2400mm`），不与中文品类名混杂；
+     - 备注字段完美融合原始单独订单说明与原单据采购批量：如 `单独订单，不作为常用的供货单位（采购数量: 7台）`。
+  2. **服务层新增专用幂等导入方法**：
+     - 在 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中新增 `import_huayang_bulk_prices(excel_path, operator)`；
+     - 设计精准的幂等清理策略：基于 `supply_entity_id = 'huayang'` 且匹配目标型号或散货单独订单备注进行清理后再写入，100% 保护 8.28 初始导入的 19 条历史基础单价不被误触；
+  3. **事务执行与全量核验**：
+     - 执行导入脚本 [`import_huayang_bulk_prices.py`](file:///D:/编程项目/phoenix/scratch/import_huayang_bulk_prices.py)；
+     - `tube.tube_material_price` 全表记录数从 655 条平稳增至 666 条（净增 11 条），辽宁华阳总记录数从 19 条增至 30 条；
+     - 幂等性测试通过：二次重跑行数保持 666 条与 30 条不变，无任何重复数据；
+     - 验证 `list_material_prices(supplier_name='华阳')` 接口，30 条华阳报价可顺畅检索。
+- **改动清单**：
+  - 数据库表：`tube.tube_material_price`（追加入库 11 条散货单价记录，ID 656~666）
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)（新增 `import_huayang_bulk_prices`）
+  - 导入核验脚本：[`scratch/import_huayang_bulk_prices.py`](file:///D:/编程项目/phoenix/scratch/import_huayang_bulk_prices.py)、[`scratch/inspect_huayang_excel.py`](file:///D:/编程项目/phoenix/scratch/inspect_huayang_excel.py)
+- **验证结果**：
+  - 辽宁华阳散货 11 条单价数据全部成功入库；
+  - 历史既有 19 条华阳单价完全保留未受干扰；
+  - 幂等执行验证通过，无重复脏数据。
+
 ## 2026-09-23 [数据治理：全库保温管规格型号去“.0”规范化清洗与业务表重叠原子级合并]
 - **需求背景与业务推进**：
   - 用户敏锐指出系统中保温管型号规格存在不一致现象：部分型号带有无意义的小数“.0”（如 `Φ32×4.0/Φ118×3.0`），而新对接的供货标准与物料价格（如天地龙）为纯数字（如 `Φ32×4/Φ118×3`）；

@@ -89,6 +89,7 @@ from backend.projects.insulation_pipe_supply_2026.services.fitting_delivery_serv
     normalize_delivery_ids,
     submit_fitting_delivery,
     super_update_fitting_delivery_record,
+    update_fitting_shipment_common_info,
 )
 from backend.projects.insulation_pipe_supply_2026.services import weather_service
 from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import (
@@ -441,6 +442,16 @@ class SuperUpdateFittingDeliveryPayload(BaseModel):
     cancel_at: Optional[datetime] = None
     cancel_by: Optional[str] = None
     cancel_reason: Optional[str] = None
+
+
+class UpdateFittingShipmentCommonPayload(BaseModel):
+    delivery_ids: Optional[List[int]] = None
+    vehicle_plate_no: Optional[str] = None
+    section_1_id: Optional[str] = None
+    shipped_at: Optional[datetime] = None
+    ship_contact_name: Optional[str] = None
+    ship_contact_phone: Optional[str] = None
+    ship_remark: Optional[str] = None
 
 
 
@@ -3443,6 +3454,33 @@ def super_update_supply_management_fitting_delivery(
     return result
 
 
+@router.post("/supply-management/fitting-deliveries/shipments/{shipment_no}/common-update", summary="[超级管理员/供给管理员] 统一修改整车管件公共信息与发货备注")
+def update_supply_management_fitting_shipment_common(
+    shipment_no: str,
+    payload: UpdateFittingShipmentCommonPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    group_lower = str(session.group or "").strip().lower()
+    if group_lower not in ("global_admin", "tube_supplier_admin", "dev_admin"):
+        raise HTTPException(status_code=403, detail="此接口为管理员专属车次公共信息更新通道，普通角色无权访问")
+
+    result = update_fitting_shipment_common_info(
+        shipment_no=shipment_no,
+        delivery_ids=payload.delivery_ids,
+        vehicle_plate_no=payload.vehicle_plate_no,
+        section_1_id=payload.section_1_id,
+        shipped_at=payload.shipped_at,
+        ship_contact_name=payload.ship_contact_name,
+        ship_contact_phone=payload.ship_contact_phone,
+        ship_remark=payload.ship_remark,
+        operator=session.username,
+        operator_group=session.group,
+        client_ip=_get_client_ip(request),
+    )
+    return result
+
+
 
 @router.get("/warehouse-management/options", summary="读取库管页选项")
 def get_warehouse_management_options(
@@ -6364,6 +6402,7 @@ from backend.projects.insulation_pipe_supply_2026.services.comprehensive_history
     query_baseline_progress_history,
     query_supplier_ledger_history,
     query_entity_directory,
+    query_supplier_inventory_history,
 )
 
 
@@ -6515,6 +6554,71 @@ def handle_comprehensive_entity_directory(
         client_ip=_get_client_ip(request),
     )
     return query_entity_directory(PROJECT_KEY)
+
+
+@router.get("/comprehensive-history/supplier-inventory", summary="综合历史数据：供货商厂区成品库存快照与明细流水")
+def handle_comprehensive_supplier_inventory(
+    request: Request,
+    view_mode: str = Query("latest", description="视图模式: latest 快照 | history 历史明细"),
+    start_date: Optional[date] = Query(None, description="开始日期"),
+    end_date: Optional[date] = Query(None, description="结束日期"),
+    supplier_ids: Optional[str] = Query(None, description="供给方ID（逗号分隔）"),
+    pipe_model_ids: Optional[str] = Query(None, description="保温管型号ID（逗号分隔）"),
+    keyword: Optional[str] = Query(None, description="全局速搜关键词"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    cfg = load_tube_config()
+    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, session.group)
+
+    raw_sup_list = [s.strip() for s in supplier_ids.split(",") if s.strip()] if supplier_ids else []
+    
+    # 权限管控：若账号受管辖主体限制（非管理员且非全网观察员），则必须限制在其管辖实体内
+    is_global_role = session.group in (
+        "Global_admin", "global_admin", "tube_supplier_admin", 
+        "tube_global_viewer", "tube_viewer", "tube_data_viewer", "system"
+    )
+    if not is_global_role and accessible_entities:
+        if raw_sup_list:
+            filtered_sup_list = [s for s in raw_sup_list if s in accessible_entities]
+        else:
+            filtered_sup_list = list(accessible_entities)
+    else:
+        filtered_sup_list = raw_sup_list
+
+    model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
+    
+    view_text = "最新快照" if view_mode == "latest" else "历史明细流水"
+    sup_text = f"{len(filtered_sup_list)}家供方" if filtered_sup_list else "全部供方"
+    range_text = f"{start_date} ~ {end_date}" if start_date and end_date else (f"{start_date}起" if start_date else "全时段")
+    desc = f"综合数据查询中心 - 查询【供货商厂区成品库存】({view_text}，时段: {range_text}，供方: {sup_text})"
+
+    save_operation_log(
+        operator=session.username or "GUEST",
+        operator_group=session.group,
+        action_type="QUERY_SUPPLIER_INVENTORY",
+        action_desc=desc,
+        resource_id="comprehensive_query_supplier_inventory",
+        after_value={
+            "tab": "supplier_inventory",
+            "view_mode": view_mode,
+            "start_date": str(start_date) if start_date else None,
+            "end_date": str(end_date) if end_date else None,
+            "supplier_ids": filtered_sup_list,
+            "pipe_model_ids": model_list,
+            "keyword": keyword,
+        },
+        client_ip=_get_client_ip(request),
+    )
+
+    return query_supplier_inventory_history(
+        view_mode=view_mode,
+        start_date=start_date,
+        end_date=end_date,
+        supplier_ids=filtered_sup_list if filtered_sup_list else None,
+        pipe_model_ids=model_list,
+        keyword=keyword,
+    )
+
 
 
 # -----------------------------------------------------------------------------

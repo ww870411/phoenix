@@ -649,6 +649,129 @@ def import_tiandilong_prices(
     }
 
 
+def import_huayang_bulk_prices(
+    excel_path: Optional[str] = None,
+    operator: str = "EXCEL_IMPORT_20260923"
+) -> Dict[str, Any]:
+    """
+    从《configs/9.23_导入_辽宁华阳散货.xlsx》导入辽宁华阳管道设备有限公司散货单独订单单价数据（补偿器与固定支架共11行）。
+    自动设置 applicable_sections = 'all'，section_name_scope = '全标段通用'。
+    规格型号统一为纯规格（如 HYSDT1100-2.5-175（单正）、DN1100 L=2400mm），不拼接中文名称。
+    操作具备幂等性（先清理同主体匹配规格或散货备注的旧单价再写入，不影响既有19条基础通用单价）。
+    """
+    ensure_price_table()
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    if not excel_path:
+        excel_path = os.path.join(base_dir, "configs", "9.23_导入_辽宁华阳散货.xlsx")
+
+    if not os.path.exists(excel_path):
+        raise FileNotFoundError(f"未找到辽宁华阳散货单价文件: {excel_path}")
+
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb["标准化价格表"] if "标准化价格表" in wb.sheetnames else wb.active
+
+    rows_to_insert: List[Dict[str, Any]] = []
+
+    for r in range(2, ws.max_row + 1):
+        sup = _normalize_text(ws.cell(r, 1).value) or "辽宁华阳管道设备有限公司"
+        cat = _normalize_text(ws.cell(r, 2).value)
+        mat = _normalize_text(ws.cell(r, 3).value)
+        spec = _normalize_text(ws.cell(r, 4).value)
+        unit = _normalize_text(ws.cell(r, 5).value) or "台"
+        raw_qty = ws.cell(r, 6).value
+        raw_price = ws.cell(r, 7).value
+        rem = _normalize_text(ws.cell(r, 8).value)
+
+        if not spec or raw_price is None:
+            continue
+
+        try:
+            unit_price = round(float(raw_price or 0), 2)
+        except (ValueError, TypeError):
+            unit_price = 0.0
+
+        is_pipe = (cat == "保温管" or unit == "米")
+        kind = "pipe" if is_pipe else "fitting"
+        unit_val = unit or ("米" if is_pipe else "个")
+
+        # 整理备注：保留原始备注并记录订单采购数量
+        qty_str = ""
+        if raw_qty is not None and str(raw_qty).strip():
+            try:
+                qty_val = int(raw_qty) if float(raw_qty).is_integer() else float(raw_qty)
+                qty_str = f"（采购数量: {qty_val}{unit_val}）"
+            except (ValueError, TypeError):
+                qty_str = f"（采购数量: {raw_qty}{unit_val}）"
+
+        full_remark = f"{rem}{qty_str}" if rem else (qty_str.strip("（）") if qty_str else "")
+
+        rows_to_insert.append({
+            "project_key": "insulation_pipe_supply_2026",
+            "material_kind": kind,
+            "supply_entity_id": "huayang",
+            "supplier_name": "辽宁华阳管道设备有限公司",
+            "category": cat or ("保温管" if is_pipe else "管件"),
+            "material_name": mat or cat or ("塑套钢直埋预制保温管" if is_pipe else "管件"),
+            "model_spec": spec,
+            "raw_model_spec": spec,
+            "unit": unit_val,
+            "unit_price": unit_price,
+            "applicable_sections": "all",
+            "section_name_scope": "全标段通用",
+            "remark": full_remark,
+            "created_by": operator,
+            "updated_by": operator,
+        })
+
+    session = SessionLocal()
+    try:
+        # 幂等清理辽宁华阳散货旧单价（避免重复，且不误删8.28导入的19条历史基础报价）
+        specs_to_clean = [r["model_spec"] for r in rows_to_insert]
+        if specs_to_clean:
+            session.execute(
+                text("""
+                    DELETE FROM tube.tube_material_price 
+                    WHERE supply_entity_id = 'huayang' 
+                      AND (model_spec = ANY(:specs) OR remark ILIKE '%单独订单%' OR created_by = :operator);
+                """),
+                {"specs": specs_to_clean, "operator": operator}
+            )
+
+        sql_insert = text("""
+            INSERT INTO tube.tube_material_price (
+                project_key, material_kind, supply_entity_id, supplier_name,
+                category, material_name, model_spec, raw_model_spec,
+                unit, unit_price, applicable_sections, section_name_scope, remark, created_by, created_at,
+                updated_by, updated_at
+            ) VALUES (
+                :project_key, :material_kind, :supply_entity_id, :supplier_name,
+                :category, :material_name, :model_spec, :raw_model_spec,
+                :unit, :unit_price, :applicable_sections, :section_name_scope, :remark, :created_by, NOW(),
+                :updated_by, NOW()
+            );
+        """)
+
+        for row in rows_to_insert:
+            session.execute(sql_insert, row)
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise RuntimeError(f"写入辽宁华阳散货单价数据至数据库失败: {e}") from e
+    finally:
+        session.close()
+
+    return {
+        "success": True,
+        "total_inserted": len(rows_to_insert),
+        "pipe_count": len([r for r in rows_to_insert if r["material_kind"] == "pipe"]),
+        "fitting_count": len([r for r in rows_to_insert if r["material_kind"] == "fitting"]),
+        "supplier_name": "辽宁华阳管道设备有限公司",
+        "file": excel_path,
+        "items": rows_to_insert,
+    }
+
+
 def list_material_prices(
     material_kind: Optional[str] = None,
     supplier_name: Optional[str] = None,

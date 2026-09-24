@@ -541,6 +541,19 @@ export async function superUpdateTubeFittingDelivery(projectKey, deliveryId, pay
   return response.json()
 }
 
+export async function updateTubeFittingShipmentCommonInfo(projectKey, shipmentNo, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/fitting-deliveries/shipments/${encodeURIComponent(String(shipmentNo || ''))}/common-update`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `统一修改车次公共信息失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function approveTubeDemandManagementDeliveryDifference(projectKey, deliveryId, payload) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/demand-management/deliveries/${encodeURIComponent(String(deliveryId || ''))}/diff-approve`, {
     method: 'POST',
@@ -2982,6 +2995,30 @@ export async function getComprehensiveSupplierLedger(projectKey, params = {}) {
   }
   return response.json()
 }
+
+export async function getComprehensiveSupplierInventory(projectKey, params = {}) {
+  const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
+  const searchParams = new URLSearchParams()
+  if (params.viewMode) searchParams.set('view_mode', params.viewMode)
+  if (params.startDate) searchParams.set('start_date', params.startDate)
+  if (params.endDate) searchParams.set('end_date', params.endDate)
+  if (params.supplierIds && params.supplierIds.length) {
+    searchParams.set('supplier_ids', Array.isArray(params.supplierIds) ? params.supplierIds.join(',') : params.supplierIds)
+  }
+  if (params.pipeModelIds && params.pipeModelIds.length) {
+    searchParams.set('pipe_model_ids', Array.isArray(params.pipeModelIds) ? params.pipeModelIds.join(',') : params.pipeModelIds)
+  }
+  if (params.keyword) searchParams.set('keyword', params.keyword)
+
+  const url = normalized(`/projects/${encodeURIComponent(normalizedKey)}/comprehensive-history/supplier-inventory?${searchParams.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取供货商厂区库存数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
 
 export async function getTubeMaterialPrices(projectKey = 'insulation_pipe_supply_2026', params = {}) {
   const normalizedKey = projectKey || 'insulation_pipe_supply_2026'

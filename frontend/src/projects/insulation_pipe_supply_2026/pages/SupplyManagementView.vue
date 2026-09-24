@@ -64,7 +64,8 @@
               </button>
             </template>
           </div>
-          <span v-if="!isGlobalAdmin" style="font-size: 12px; color: #64748b;">(供给方管理员：可在所辖供给主体间自由切换)</span>
+          <span v-if="isReadOnlyViewer" style="font-size: 12px; color: #0284c7;">(全局只读观察员：可在全网供给主体间自由切换调阅)</span>
+          <span v-else-if="!isGlobalAdmin" style="font-size: 12px; color: #64748b;">(供给方管理员：可在所辖供给主体间自由切换)</span>
         </div>
 
         <section class="card elevated quick-dashboard-card">
@@ -1025,10 +1026,10 @@
                         type="button"
                         class="btn primary btn-sm"
                         style="padding: 4px 10px; font-size: 12px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; flex-shrink: 0;"
-                        @click.stop="openSuperEditFitting(group.items[0], group)"
-                        :title="group.items.length > 1 ? '编辑覆盖本车次首条明细（多明细可展开逐行编辑）' : '编辑覆盖此条发货记录'"
+                        @click.stop="openEditFittingShipmentCommon(group)"
+                        title="整车统一修改：统一修改本车次的车牌号、接收标段、发货时间与统一发货备注"
                       >
-                        ⚙️ 编辑覆盖
+                        🚚 整车修改与备注
                       </button>
 
                       <button
@@ -1125,9 +1126,9 @@
                                   class="btn primary btn-sm"
                                   style="padding: 2px 6px; font-size: 11px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; border-radius: 4px;"
                                   @click.stop="openSuperEditFitting(item, group)"
-                                  title="编辑覆盖此项发货数据"
+                                  title="单项明细编辑覆盖：修改此项管件的规格型号、件数或单项状态"
                                 >
-                                  ⚙️ 编辑
+                                  ⚙️ 单项编辑
                                 </button>
                                 <button
                                   v-if="(item.status === 'shipped' || item.status === 'pending_arrival' || !item.status) && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
@@ -2304,6 +2305,74 @@
       </div>
     </div>
 
+    <!-- 整车管件公共信息与统一备注修改弹窗 -->
+    <div v-if="showFittingShipmentCommonModal" class="modal-overlay">
+      <div class="modal-card elevated" style="max-width: 620px; width: 92%; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.18);">
+        <div class="modal-header" style="padding: 18px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+              <span>🚚 整车公共信息与备注统一修改</span>
+              <span style="font-family: monospace; color: #4f46e5; font-size: 15px; font-weight: 700;">({{ shipmentCommonForm.shipmentNo }})</span>
+            </h3>
+          </div>
+          <button type="button" class="close-btn" @click="showFittingShipmentCommonModal = false" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">×</button>
+        </div>
+        <div class="modal-body" style="padding: 20px; max-height: 65vh; overflow-y: auto;">
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; font-size: 13px; color: #1e40af; line-height: 1.5;">
+            💡 <strong>业务提示：</strong>当前车次共装运了 <strong>{{ shipmentCommonForm.itemCount }} 项</strong>管件明细。在此处修改的<strong>车牌号、需求标段、发货时间、联系人与发货备注</strong>将<strong>一次性原子同步至整车所有明细记录</strong>。<br />
+            <span style="color: #64748b; font-size: 12px;">（注：如需调整具体某种管件的规格型号或发货件数，请在车次展开后的明细行中点击“单项编辑”）</span>
+          </div>
+
+          <div class="field-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">运输车牌号</span>
+              <input v-model.trim="shipmentCommonForm.vehiclePlateNo" type="text" class="input" style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px;" placeholder="例如: 鲁B-88888" />
+            </label>
+
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">装车接收需求主体 (标段)</span>
+              <select v-model="shipmentCommonForm.section1Id" class="input" style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px;">
+                <option v-for="st in currentAssignedSection1Options" :key="st.section_1_id" :value="st.section_1_id">
+                  {{ st.section_1_name }}
+                </option>
+              </select>
+            </label>
+
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">发货日期与时间</span>
+              <input v-model="shipmentCommonForm.shippedAt" type="datetime-local" class="input" style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px;" />
+            </label>
+
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">随车发货联系人</span>
+              <input v-model.trim="shipmentCommonForm.shipContactName" type="text" class="input" style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px;" placeholder="选填联系人姓名" />
+            </label>
+
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 13px; font-weight: 600; color: #475569;">联系电话</span>
+              <input v-model.trim="shipmentCommonForm.shipContactPhone" type="text" class="input" style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px;" placeholder="选填电话号码" />
+            </label>
+
+            <label class="field" style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
+              <span style="font-size: 13px; font-weight: 600; color: #334155; display: flex; justify-content: space-between; align-items: center;">
+                <span>📝 整车发货统一备注</span>
+                <button v-if="shipmentCommonForm.shipRemark" type="button" class="btn ghost btn-xs" style="font-size: 11px; padding: 1px 6px; border: none; color: #64748b; cursor: pointer;" @click="shipmentCommonForm.shipRemark = ''">清空备注</button>
+              </span>
+              <textarea v-model.trim="shipmentCommonForm.shipRemark" class="input" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px; min-height: 80px; resize: vertical;" placeholder="在此输入整车统一备注信息，将覆盖该车次所有管件明细记录..."></textarea>
+            </label>
+          </div>
+
+          <p v-if="shipmentCommonError" style="margin-top: 14px; color: #ef4444; font-size: 13px; font-weight: 600;">⚠️ 错误提示：{{ shipmentCommonError }}</p>
+        </div>
+        <div class="modal-footer" style="padding: 14px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
+          <button type="button" class="btn ghost" @click="showFittingShipmentCommonModal = false" style="padding: 8px 18px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; border-radius: 6px; font-size: 13.5px; font-weight: 600; cursor: pointer;">取消</button>
+          <button type="button" class="btn primary" :disabled="shipmentCommonSaving" @click="saveEditFittingShipmentCommon" style="padding: 8px 20px; border: none; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; border-radius: 6px; font-size: 13.5px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
+            {{ shipmentCommonSaving ? '正在统一更新整车...' : '💾 保存并统一应用到整车' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 直管物流导出配置与 XLSX 导出组件 -->
     <ExportSettingsModal
       :show="showExportModal"
@@ -2343,6 +2412,7 @@ import {
   createCustomSupplyEntity,
   superUpdateTubeSupplyManagementDelivery,
   superUpdateTubeFittingDelivery,
+  updateTubeFittingShipmentCommonInfo,
   getFittingDeliveriesList,
   checkRecentFittingShipment,
   submitFittingDelivery,
@@ -4063,7 +4133,14 @@ const deliveryForm = ref(createDefaultDeliveryForm())
 
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
 const canExtractXlsx = computed(() => auth.canExtractXlsxFor(PROJECT_KEY))
-const canSwitchSupplyEntity = computed(() => ['Global_admin', 'tube_supplier_admin'].includes(currentGroup.value))
+const canSwitchSupplyEntity = computed(() => {
+  const g1 = String(currentGroup.value || '').trim().toLowerCase()
+  const g2 = String(auth.user?.group || auth.session?.group || '').trim().toLowerCase()
+  const u1 = String(auth.user?.username || auth.session?.username || '').trim().toLowerCase()
+  const allowedGroups = new Set(['global_admin', 'dev_admin', 'tube_supplier_admin', 'tube_global_viewer', 'tube_data_viewer'])
+  const allowedUsers = new Set(['tube_viewer'])
+  return allowedGroups.has(g1) || allowedGroups.has(g2) || allowedUsers.has(u1)
+})
 const isReadOnlyViewer = computed(() => {
   const g1 = String(currentGroup.value || '').trim().toLowerCase()
   const g2 = String(auth.user?.group || auth.session?.group || '').trim().toLowerCase()
@@ -4130,6 +4207,8 @@ const currentGroupLabel = computed(() => {
   if (currentGroup.value === 'Global_admin') return '全局管理员'
   if (currentGroup.value === 'tube_supplier_admin') return '供给方管理员'
   if (currentGroup.value === 'tube_supplier') return '供给主体'
+  if (currentGroup.value === 'tube_global_viewer') return '项目全局浏览'
+  if (currentGroup.value === 'tube_data_viewer') return '项目全局浏览(含导出)'
   return currentGroup.value
 })
 
@@ -4974,6 +5053,21 @@ const superEditForm = ref({
   warehouseConfirmAt: '',
 })
 
+const showFittingShipmentCommonModal = ref(false)
+const shipmentCommonSaving = ref(false)
+const shipmentCommonError = ref('')
+const shipmentCommonForm = ref({
+  shipmentNo: '',
+  itemCount: 0,
+  vehiclePlateNo: '',
+  section1Id: '',
+  shippedAt: '',
+  shipContactName: '',
+  shipContactPhone: '',
+  shipRemark: '',
+  deliveryIds: [],
+})
+
 const showSuperEditFittingModal = ref(false)
 const superEditFittingSaving = ref(false)
 const superEditFittingError = ref('')
@@ -5210,6 +5304,57 @@ let origSuperEditFittingSnap = {
   receivedConfirmAt: '',
   warehouseConfirmAt: '',
   cancelAt: '',
+}
+
+function openEditFittingShipmentCommon(group) {
+  shipmentCommonError.value = ''
+  const items = group.items || []
+  const firstItem = items[0] || {}
+  const shippedAtVal = formatToDatetimeLocal(group.shippedAt || firstItem.shipped_at)
+  
+  shipmentCommonForm.value = {
+    shipmentNo: group.shipmentNo || firstItem.shipment_no || '',
+    itemCount: items.length || 1,
+    vehiclePlateNo: group.vehiclePlateNo || firstItem.vehicle_plate_no || '',
+    section1Id: group.section1Id || firstItem.section_1_id || '',
+    shippedAt: shippedAtVal,
+    shipContactName: group.shipContactName || firstItem.ship_contact_name || '',
+    shipContactPhone: group.shipContactPhone || firstItem.ship_contact_phone || '',
+    shipRemark: group.shipRemark || firstItem.ship_remark || '',
+    deliveryIds: items.map(it => it.id).filter(Boolean),
+  }
+  showFittingShipmentCommonModal.value = true
+}
+
+async function saveEditFittingShipmentCommon() {
+  const form = shipmentCommonForm.value
+  if (!form.shipmentNo) return
+  shipmentCommonError.value = ''
+  shipmentCommonSaving.value = true
+  try {
+    const shippedAtIso = form.shippedAt ? new Date(form.shippedAt).toISOString() : null
+    
+    const res = await updateTubeFittingShipmentCommonInfo(PROJECT_KEY, form.shipmentNo, {
+      delivery_ids: form.deliveryIds && form.deliveryIds.length ? form.deliveryIds : undefined,
+      vehicle_plate_no: form.vehiclePlateNo,
+      section_1_id: form.section1Id,
+      shipped_at: shippedAtIso,
+      ship_contact_name: form.shipContactName,
+      ship_contact_phone: form.shipContactPhone,
+      ship_remark: form.shipRemark,
+    })
+    
+    showFittingShipmentCommonModal.value = false
+    fittingActionMsg.value = {
+      type: 'success',
+      text: `🎉 已成功统一更新车次【${form.shipmentNo}】的公共信息与发货备注（共应用至 ${res.updated_count || form.itemCount} 项管件明细）！`
+    }
+    await loadFittingDeliveries()
+  } catch (err) {
+    shipmentCommonError.value = err?.message || '统一修改整车公共信息失败'
+  } finally {
+    shipmentCommonSaving.value = false
+  }
 }
 
 function openSuperEditFitting(item, group = null) {
