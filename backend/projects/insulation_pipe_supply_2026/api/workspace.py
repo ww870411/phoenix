@@ -110,6 +110,12 @@ from backend.projects.insulation_pipe_supply_2026.services.supplier_inventory_se
     save_supplier_inventory,
     get_latest_all_suppliers_inventory,
 )
+from backend.projects.insulation_pipe_supply_2026.services.fitting_supplier_inventory_service import (
+    ensure_fitting_supplier_inventory_table,
+    get_fitting_supplier_inventory_snapshot,
+    save_fitting_supplier_inventory,
+    get_latest_all_fitting_suppliers_inventory,
+)
 from backend.projects.insulation_pipe_supply_2026.services.fitting_usage_service import (
     cancel_fitting_usage_record,
     get_fitting_inventory_summary,
@@ -348,6 +354,22 @@ class SupplierInventorySavePayload(BaseModel):
     supply_entity_id: str
     report_date: Optional[str] = None
     items: List[SupplierInventoryItemInput] = []
+
+
+class FittingSupplierInventoryItemInput(BaseModel):
+    fitting_type: str
+    material_name: Optional[str] = ""
+    model_spec: str
+    unit: Optional[str] = "个"
+    section_1_id: Optional[str] = ""
+    stock_qty: float = Field(default=0, ge=0)
+    remark: Optional[str] = ""
+
+
+class FittingSupplierInventorySavePayload(BaseModel):
+    supply_entity_id: str
+    report_date: Optional[str] = None
+    items: List[FittingSupplierInventoryItemInput] = []
 
 
 class SupplyDeliveryCreatePayload(BaseModel):
@@ -2165,6 +2187,39 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             s_data["models"].sort(key=lambda x: x["stock_qty"], reverse=True)
             s_data["total_stock_qty"] = round(s_data["total_stock_qty"], 2)
 
+        # 4.6.1 供给主体管件实盘在库待发量聚合
+        fitting_supplier_inventory_rows = get_latest_all_fitting_suppliers_inventory()
+        fitting_supplier_inv_map: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+            "total_stock_qty": 0,
+            "latest_inventory_time": "",
+            "raw_inventory_time": "",
+            "batch_no": "",
+            "reported_by": "",
+            "items": []
+        })
+        for inv_r in fitting_supplier_inventory_rows:
+            sid = str(inv_r["supply_entity_id"]).strip()
+            stock_qty = int(round(float(inv_r["stock_qty"] or 0)))
+            fitting_supplier_inv_map[sid]["total_stock_qty"] += stock_qty
+            if inv_r["reported_at"] and (not fitting_supplier_inv_map[sid]["latest_inventory_time"] or inv_r["reported_at"] > fitting_supplier_inv_map[sid]["raw_inventory_time"]):
+                t_str, raw_t = _format_bj_time(inv_r["reported_at"])
+                fitting_supplier_inv_map[sid]["latest_inventory_time"] = t_str
+                fitting_supplier_inv_map[sid]["raw_inventory_time"] = raw_t
+                fitting_supplier_inv_map[sid]["batch_no"] = inv_r["batch_no"]
+                fitting_supplier_inv_map[sid]["reported_by"] = inv_r["reported_by"]
+            if stock_qty > 0:
+                fitting_supplier_inv_map[sid]["items"].append({
+                    "fitting_type": inv_r["fitting_type"],
+                    "material_name": inv_r["material_name"],
+                    "model_spec": inv_r["model_spec"],
+                    "unit": inv_r["unit"],
+                    "stock_qty": stock_qty,
+                    "remark": inv_r["remark"]
+                })
+
+        for sid, s_data in fitting_supplier_inv_map.items():
+            s_data["items"].sort(key=lambda x: x["stock_qty"], reverse=True)
+
         # 聚合全网供方实盘在库总量 (米和公里，仅统计正式发放账号的核心保供主体)
         official_entity_ids = {
             str(s.get("entity_id") or "").strip()
@@ -2177,6 +2232,13 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             if sid in official_entity_ids
         )
         supplier_stock_total_km = round(supplier_stock_total_m / 1000.0, 2)
+
+        # 聚合全网管件供方实盘在库总量 (件/套)
+        fitting_supplier_stock_total_pcs = sum(
+            s["total_stock_qty"] 
+            for sid, s in fitting_supplier_inv_map.items() 
+            if sid in official_entity_ids
+        )
 
         # 4.7 厂家库存实盘最新动态（若厂家有实盘在库量，呈现盘点战报，排除临时自定义供应商）
         for sid, s_data in supplier_inv_map.items():
@@ -2204,6 +2266,36 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "operator": s_data.get("reported_by") or "厂区库管员",
                     "time": s_data["latest_inventory_time"],
                     "positiveTag": "完成最新实盘清点",
+                    "isNew": False,
+                    "raw_time": s_data.get("raw_inventory_time") or ""
+                })
+
+        # 4.7.1 厂家管件库存实盘最新动态
+        for sid, s_data in fitting_supplier_inv_map.items():
+            if sid not in official_entity_ids:
+                continue
+            if s_data["total_stock_qty"] > 0 and s_data["latest_inventory_time"]:
+                sup_name = _clean_str(sup_name_map.get(sid, sid))
+                top_items_str = "、".join([f"{it['material_name'] or it['fitting_type']}({it['model_spec']}:{it['stock_qty']}{it['unit']})" for it in s_data["items"][:2]])
+                if len(s_data["items"]) > 2:
+                    top_items_str += f" 等{len(s_data['items'])}个规格"
+                live_feed_list.append({
+                    "id": f"inv_fit_{sid}_{s_data.get('batch_no') or 'latest'}",
+                    "category": "厂家管件库存盘点",
+                    "category_key": "fitting_inventory",
+                    "type": "fitting",
+                    "supplier_id": sid,
+                    "section_id": None,
+                    "supplier": sup_name,
+                    "target": "厂区成品待发库",
+                    "headline": f"管件实盘在库待发 · {sup_name}",
+                    "specification": top_items_str or "多规格管件成品",
+                    "amount": f"在库现货 {int(s_data['total_stock_qty'])} 件/套",
+                    "shipmentCode": s_data.get("batch_no") or "INV-FIT-LATEST",
+                    "vehiclePlate": "厂区现货仓储",
+                    "operator": s_data.get("reported_by") or "厂区发运调度",
+                    "time": s_data["latest_inventory_time"],
+                    "positiveTag": "已完成实物盘点，支持即调即发",
                     "isNew": False,
                     "raw_time": s_data.get("raw_inventory_time") or ""
                 })
@@ -2238,6 +2330,13 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             stock_km = round(stock_qty / 1000.0, 2)
             inv_time = inv_info.get("latest_inventory_time") or ""
             models = inv_info.get("models") or []
+
+            # 对应管件库存
+            fit_inv_info = fitting_supplier_inv_map.get(sid, {})
+            fitting_stock_qty = int(fit_inv_info.get("total_stock_qty") or 0)
+            fitting_inv_time = fit_inv_info.get("latest_inventory_time") or ""
+            fitting_items = fit_inv_info.get("items") or []
+
             supply_nodes.append({
                 "id": f"sup_{s['entity_id']}",
                 "raw_id": s["entity_id"],
@@ -2251,6 +2350,11 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "inventory_time": inv_time,
                 "inventory_models": models,
                 "has_inventory": stock_qty > 0,
+                # 管件现货库存
+                "fitting_stock_qty": fitting_stock_qty,
+                "fitting_inventory_time": fitting_inv_time,
+                "fitting_inventory_items": fitting_items,
+                "has_fitting_inventory": fitting_stock_qty > 0,
                 "is_custom": False,
             })
 
@@ -2558,6 +2662,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "fittingCategoryCount": len(cat_counts),
                 "supplierStockKm": supplier_stock_total_km,
                 "supplierStockM": round(supplier_stock_total_m, 2),
+                "fittingSupplierStockPcs": int(fitting_supplier_stock_total_pcs),
             },
             "fitting_type_summary": fitting_type_summary,
             "section_progress_list": section_progress_list,
@@ -2882,6 +2987,73 @@ def get_supplier_inventory_summary_endpoint(
         "ok": True,
         "data": data,
     }
+
+
+@router.get("/supply-management/fitting-inventory", summary="读取供给主体厂区管件成品库存盘点列表")
+def get_fitting_supplier_inventory_endpoint(
+    supply_entity_id: Optional[str] = Query(None),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    payload = load_tube_config()
+    accessible_entities = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+
+    target_entity_id = str(supply_entity_id or "").strip()
+    if not target_entity_id:
+        if accessible_entities:
+            target_entity_id = sorted(accessible_entities)[0]
+        else:
+            raise HTTPException(status_code=400, detail="未指定供给主体且当前账号无可访问主体")
+    elif target_entity_id not in accessible_entities and session.group not in ("Global_admin", "global_admin", "tube_supplier_admin"):
+        raise HTTPException(status_code=403, detail="无权查看该供给主体的管件库存盘点数据")
+
+    data = get_fitting_supplier_inventory_snapshot(target_entity_id)
+    return {
+        "ok": True,
+        "data": data,
+    }
+
+
+@router.post("/supply-management/fitting-inventory/save", summary="保存供给主体厂区管件成品库存盘点记录")
+def save_fitting_supplier_inventory_endpoint(
+    payload: FittingSupplierInventorySavePayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    cfg = load_tube_config()
+    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, session.group)
+    target_entity_id = str(payload.supply_entity_id or "").strip()
+    if not target_entity_id:
+        raise HTTPException(status_code=422, detail="供给主体标识不能为空")
+
+    if target_entity_id not in accessible_entities and session.group not in ("Global_admin", "global_admin", "tube_supplier_admin"):
+        raise HTTPException(status_code=403, detail="无权保存该供给主体的管件库存盘点数据")
+
+    items_dict = [it.dict() for it in payload.items]
+    res = save_fitting_supplier_inventory(
+        supply_entity_id=target_entity_id,
+        report_date=payload.report_date,
+        items=items_dict,
+        operator_name=session.username,
+    )
+
+    batch_no = res.get("batch_no") or "UNKNOWN"
+    save_operation_log(
+        operator=session.username,
+        operator_group=session.group,
+        action_type="SAVE_FITTING_SUPPLIER_INVENTORY",
+        action_desc=f"提交供给主体[{target_entity_id}]管件实盘库存，批次[{batch_no}]，共保存 {res.get('saved_count', 0)} 种规格，在库总量 {res.get('total_stock_qty', 0)} 件/套",
+        resource_id=f"{target_entity_id}::{batch_no}",
+        before_value=None,
+        after_value=res,
+        client_ip=_get_client_ip(request),
+    )
+
+    return {
+        "ok": True,
+        "message": "管件库存盘点数据提交成功",
+        "data": res,
+    }
+
 
 
 @router.get("/supply-management/demand-summary", summary="读取供给侧需求与缺口汇总")
@@ -6418,6 +6590,7 @@ from backend.projects.insulation_pipe_supply_2026.services.comprehensive_history
     query_supplier_ledger_history,
     query_entity_directory,
     query_supplier_inventory_history,
+    query_fitting_supplier_inventory_history,
 )
 
 
@@ -6574,11 +6747,13 @@ def handle_comprehensive_entity_directory(
 @router.get("/comprehensive-history/supplier-inventory", summary="综合历史数据：供货商厂区成品库存快照与明细流水")
 def handle_comprehensive_supplier_inventory(
     request: Request,
+    material_kind: str = Query("pipe", description="物料品类: pipe 保温管 | fitting 管件"),
     view_mode: str = Query("latest", description="视图模式: latest 快照 | history 历史明细"),
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     supplier_ids: Optional[str] = Query(None, description="供给方ID（逗号分隔）"),
     pipe_model_ids: Optional[str] = Query(None, description="保温管型号ID（逗号分隔）"),
+    fitting_types: Optional[str] = Query(None, description="管件大类（逗号分隔）"),
     keyword: Optional[str] = Query(None, description="全局速搜关键词"),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
@@ -6600,12 +6775,44 @@ def handle_comprehensive_supplier_inventory(
     else:
         filtered_sup_list = raw_sup_list
 
-    model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
-    
     view_text = "最新快照" if view_mode == "latest" else "历史明细流水"
     sup_text = f"{len(filtered_sup_list)}家供方" if filtered_sup_list else "全部供方"
     range_text = f"{start_date} ~ {end_date}" if start_date and end_date else (f"{start_date}起" if start_date else "全时段")
-    desc = f"综合数据查询中心 - 查询【供货商厂区成品库存】({view_text}，时段: {range_text}，供方: {sup_text})"
+
+    if material_kind == "fitting":
+        fitting_type_list = [ft.strip() for ft in fitting_types.split(",") if ft.strip()] if fitting_types else None
+        desc = f"综合数据查询中心 - 查询【供货商厂区管件成品库存】({view_text}，时段: {range_text}，供方: {sup_text})"
+
+        save_operation_log(
+            operator=session.username or "GUEST",
+            operator_group=session.group,
+            action_type="QUERY_FITTING_SUPPLIER_INVENTORY",
+            action_desc=desc,
+            resource_id="comprehensive_query_fitting_supplier_inventory",
+            after_value={
+                "tab": "supplier_inventory",
+                "material_kind": "fitting",
+                "view_mode": view_mode,
+                "start_date": str(start_date) if start_date else None,
+                "end_date": str(end_date) if end_date else None,
+                "supplier_ids": filtered_sup_list,
+                "fitting_types": fitting_type_list,
+                "keyword": keyword,
+            },
+            client_ip=_get_client_ip(request),
+        )
+
+        return query_fitting_supplier_inventory_history(
+            view_mode=view_mode,
+            start_date=start_date,
+            end_date=end_date,
+            supplier_ids=filtered_sup_list if filtered_sup_list else None,
+            fitting_types=fitting_type_list,
+            keyword=keyword,
+        )
+
+    model_list = [m.strip() for m in pipe_model_ids.split(",") if m.strip()] if pipe_model_ids else None
+    desc = f"综合数据查询中心 - 查询【供货商厂区保温管成品库存】({view_text}，时段: {range_text}，供方: {sup_text})"
 
     save_operation_log(
         operator=session.username or "GUEST",
@@ -6615,6 +6822,7 @@ def handle_comprehensive_supplier_inventory(
         resource_id="comprehensive_query_supplier_inventory",
         after_value={
             "tab": "supplier_inventory",
+            "material_kind": "pipe",
             "view_mode": view_mode,
             "start_date": str(start_date) if start_date else None,
             "end_date": str(end_date) if end_date else None,

@@ -1,3 +1,219 @@
+## 2026-09-26 综合数据查询中心“供给方成品库存”双品类架构升级：管件现货子标签页与多维透视看板落地
+
+- **关联前端页面与组件**：
+  - 页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合数据查询中心 - 供给方成品库存 Tab 3）；
+  - 接口服务：[`frontend/src/projects/daily_report_25_26/services/api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（`getComprehensiveSupplierInventory`）；
+- **前端结构与交互变更**：
+  - **子品类药丸胶囊切换栏 (`sub-pill-bar`)**：
+    * 在 Tab 3 顶部构建切换栏，支持在【🔥 保温管成品库存】与【🔧 管件成品库存】两个子视图间平滑切换；
+  - **管件 4 大 KPI 现货看板**：
+    * 仿照保温管打造 4 列紧凑 KPI 矩阵：
+      1. 📦 厂区在库待发总量（件数，含环比变动徽标）；
+      2. 🏭 参与盘点供方厂家数；
+      3. 🔧 在库管件规格品类数；
+      4. 🕒 全网最新盘点时间及最新供方提示；
+  - **管件多维动态聚合透视 (`supplierFittingInventoryDimensions`)**：
+    * 支持在 `['supplier', 'category', 'model']`（厂家、管件大类、规格型号）三大维度间自由排序、增删并进行快捷透视预设（默认透视、纯供给方汇总、纯大类汇总、大类➔规格汇总等）；
+  - **数值精度整数规约 (`formatCount`)**：
+    * 所有管件在库现货量、环比变动量、表尾合计值全面接入 `formatCount`，严格按个位数整数显示（如 `15,838件`、`+500件`），杜绝小数展示；
+  - **全量检索与导出联动**：
+    * 供货厂家多选、关键字模糊搜索、各字段双向动态排序（`tableSortStates.supplier_fitting_inventory_latest`）与 `exportCurrentTabExcel` 管件 Excel 导出闭环联通；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 16.85s），产出 `HistoryQueryView-BpbAxqTz.js`，零语法报错。
+
+## 2026-09-26 现场管理供给侧工作台交互精修：管件现货库存导入非标准表格拦截确认与识别不佳模态框闭环
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理供给侧工作台 - 管件现货库存填报 Tab）；
+- **前端结构与交互变更**：
+  - **非标准表格前置拦截确认模态窗 (`showNonStandardModal`)**：
+    * 当用户点击【导入盘点表格】上传文件后，系统优先执行表格头特征检测（`isStandardFormat`）；
+    * 若表格为线下多区块报表或缺少系统标准模板标识，流程通过 `Promise` 异步挂起，唤起琥珀金确认弹窗，提示：“**您导入了非标准表格，系统将尽力识别，请核对识别结果与实际库存量。**”；
+    * 用户点击【确定】后触发 `resolve(true)` 继续执行六维指纹识别；点击【取消导入】或点击遮罩则终止导入并清空文件选择器。
+  - **识别效果不佳警示引导模态窗 (`showBadRecognitionModal`)**：
+    * 在识别解析过程中实时跟踪统计扫描到的管件行数与匹配成功数；
+    * 若完全未匹配到物料（`matchedCount === 0`）或匹配率过低（低于 25%）或文件出现不可读异常时，触发警示红模态窗，提示：“**无法完整识别导入表格。上传表格应包含完整的管件类型、规格型号和数量信息，并与合同保持一致。若仍出现此问题，请下载标准表格填写导入。**”；
+    * 弹窗内集成【📥 下载标准表格】快捷按钮，一键调取 `downloadFittingInventoryExcel()`，形成完整的操作引导闭环。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 17.00s），产出 `SupplyManagementView-CXCOeOvp.js`，零语法报错。
+
+## 2026-09-26 智慧大屏全网物料口径与数值精度精修：正名“保温管现货”并将管件现货严格保留至个位数整数
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（指挥大屏全网物料与拓扑态势感知）；
+- **前端结构与交互变更**：
+  - **文案正名**：
+    * 供货商卡片（`supply-node-card`）及悬停弹层（`sup-inventory-popover`）中的“直管现货”/“直管:”统一正名为【保温管现货：X.Xkm】与【保温管: X.Xkm】，对齐标准工程物料口径；
+  - **管件整数个位数规约 (`formatCount`)**：
+    * 新增 `formatCount(val)` 函数（`Math.round(val).toLocaleString('zh-CN')`），杜绝原 `formatNumber` 的 `toFixed(2)` 产生带小数（如 `15,838.00件`）的不符合物理实物属性的情况；
+    * 左侧大盘指标条（`.supplier-stock-summary-bar.fitting`）、厂家卡片管件徽标【管件现货：X,XXX件】及悬停弹层中的管件数量，全部严格保留到个位数整数；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 21.73s），产出 `BigScreenDashboardView-BC1dTGHM.js`，零语法报错。
+
+## 2026-09-26 智慧大屏制造基地拓扑卡片视觉精修：供货商现货徽标调整为保温管在上、管件在下垂直排布
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（指挥大屏制造基地拓扑卡片区域）；
+- **前端结构与交互变更**：
+  - **排版结构优化**：
+    * 移除卡片底部左右分栏排布（`.dual`）；
+    * 采用更加自然舒适、不压缩文字的**垂直双行结构**：
+      1. **上层（保温管现货）**：`v-if="sup.has_inventory && sup.stock_qty > 0"`，居左展示【直管现货：X.Xkm】（荧光绿脉冲呼吸灯）；
+      2. **下层（管件现货）**：`v-if="sup.has_fitting_inventory && sup.fitting_stock_qty > 0"`，居左展示【管件现货：X,XXX件】（科技金脉冲呼吸灯，`margin-top: 1px` 微调间距）；
+    * 当厂家同时供两类物料且均有实盘在库时（如大连开元），按“直管在上、管件在下”规整呈现；当仅有单项在库时，自动单独展示对应行。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.36s），产出 `BigScreenDashboardView-DYZWPz3d.js`，零语法报错。
+
+## 2026-09-26 智慧大屏全网发运与制造基地拓扑交互升级：管件现货在库待发全面接入（双物料左右排布与大盘指标条）
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（指挥大屏全网物料与拓扑态势感知）；
+- **前端结构与交互变更**：
+  - **位置一（左侧“管件全网发运情报”大盘指标条）**：
+    * 仿照直管发运情报卡片的“在库现货待发”储备条，在管件发运情报卡片（`.fitting-kpi-panel`）中管件供应进度条上方，新增 `.supplier-stock-summary-bar.fitting` 储备条；
+    * 实时绑定展示 `kpiData.fittingSupplierStockPcs`（全网核心供货商实盘在库待发管件总件数，单位：`件`）；
+    * 采用专属科技金发光渐变与数值文字高亮（`.gold-text` / `text-shadow`）。
+  - **位置二（拓扑节点保供厂家卡片下方现货徽标）**：
+    * 改造各保供厂家卡片（`supply-node-card`）的在库徽标区域：
+      1. **双物料在库（直管 + 管件均有库存）**：采用弹性分栏 `.sup-stock-badge-row.dual`，分别显示在**左、右**两侧（左侧：直管现货 `管: 0.5km` 带荧光绿脉冲点；右侧：管件现货 `件: 1,000` 带科技金脉冲点）；
+      2. **仅保温管在库**：居中展示直管现货徽标（`在库现货：0.5km`）；
+      3. **仅管件在库**：居中展示管件现货徽标（`管件现货：14,838件`）；
+    * 厂家卡片激活高亮类（`has-stock`）：当厂家直管或管件任意一项在库量大于 0 时均激活高亮发光边框。
+  - **厂家现货明细悬停浮层 (`sup-inventory-popover`)**：
+    * 浮层内支持直管现货与管件现货的双分区块排版；
+    * 管件现货区块分行呈现规格名称、口径及在库件数/套数；
+    * 底部合计栏联动显示直管总米数与管件总件数。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 14.44s），产出 `BigScreenDashboardView-5vnhuPqG.js`，零语法报错。
+
+## 2026-09-26 供给侧工作台交互升级：管件成品库存六维智能自适应 Excel 导入识别引擎全量落地
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理工作台供给侧，管件库存盘点 Tab）；
+- **前端结构与交互变更**：
+  - **六维物理特征指纹降维匹配引擎 (`extractSpecFingerprint`)**：
+    * 提取物料物理基因特征：`Category` + `Subtype (:跨越/:直三通/:焊接三通)` + `Angle (°)` + `Radius R (__r:1.5/__r:3)` + `Main/Sub DN (main_dn_sub_dn)`；
+    * 彻底解决弯头同角度同口径下不同弯曲半径 $R$（如 `R=1.5DN` vs `R=3.0DN` vs `R=6DN`）以及三通同口径下细分子类型（`跨越三通` vs `直三通`）的精准区分；
+  - **多 Sheet 自动密度评分优选器 (`autoSelectFittingSheet`)**：
+    * 自动遍历工作簿所有 Sheet，快速抽样并根据管件大类、口径密度、标题与直管排斥分计算特征得分，自动切换并回填得分最高的管件工作表，用户无需手动提取 Sheet；
+  - **垂直向下补齐机制 (Forward Fill)**：
+    * 解决厂家线下 Excel 常见的品名大类跨行合并居中问题，状态机维护前向指针，当前行品名为空时自动向下沿用前一行的有效品名；
+  - **宽容数值清洗器 (`parseLenientNumber`)**：
+    * 自动剥离千分位逗号（如 `1,250` ➔ `1250`，消除 JS `parseFloat` 截断隐患）与汉字计量单位（`120个`、`35套`）；
+  - **四级递进容错匹配链 (`findMatchedFittingItem`)**：
+    * Level 1: `(大类, 材料全称, 规格型号)` 精确匹配；
+    * Level 2: `(大类, 去尾缀材料名称, 规格型号)` 容错匹配（去“管/件”）；
+    * Level 3: `(大类, 规格型号)` 规格兜底匹配；
+    * Level 4: `extractSpecFingerprint` 物理特征指纹穿透匹配；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 18.62s），产出 `SupplyManagementView-CQtGlNP1.js`，零语法报错。
+
+## 2026-09-26 供给侧工作台交互升级：管件成品库存 Excel 双模自适应识别引擎 (支持厂家线下多区块非标报表)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理工作台供给侧，管件库存盘点 Tab）；
+- **前端结构与交互变更**：
+  - **按钮文案规范化**：导出按钮正式定名为【📥 下载标准盘点表格】，凸显标准模板定位；
+  - **双模自适应导入引擎 (`handleFittingInventoryExcelFile`)**：
+    * 智能分流：自动识别用户上传的是“系统标准 7 列/6 列单表头模板”，还是“厂家线下纵向混排多区块报表（如直管与 5 大类管件垂直堆叠的非标报表）”；
+    * 多区块流式状态机（FSM Block Scanner）：逐行追踪大标题与区块表头，动态切换列映射，自动识别直管段并优雅剥离跳过；
+    * 智能品名去噪与同义词泛化（`cleanFittingItemName`）：自动消除末尾“管/件”冗余后缀，实现 `预制保温直三通管` ➔ `预制保温直三通` 100% 自动精确对齐；
+    * 导入反馈沉浸式呈现：识别到线下综合报表时友好提示匹配项数与已过滤直管项数；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 16.23s），零报错零语法警告。
+
+## 2026-09-26 供给侧工作台交互实现：管件成品库存 Excel 标准表格下载与导入闭环 (含选填参考上次盘点数)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理工作台供给侧，管件库存盘点 Tab）；
+- **前端结构与交互变更**：
+  - **工具栏新增标准 Excel 操作组**：
+    * 新增【📥 下载盘点表格】与【📤 导入盘点表格】按钮；
+    * 挂载隐藏的专用文件选择器 `<input ref="fittingInventoryExcelFileInputRef" type="file" accept=".xlsx, .xls" />`；
+    * 严格遵循临时供应商锁定守卫，自定义供应商下按钮自动置灰禁用；
+  - **动态预置 7 列标准 Excel 生成 (`downloadFittingInventoryExcel`)**：
+    * 基于 `xlsx-js-style` 构建符合工程规范的标准工作簿；
+    * 标题与元数据栏集成提报单位、厂家编码、基准日期与“数量单位：个”说明；
+    * 表格精细规约 7 列：`序号`、`管件大类`、`材料名称`、`规格型号`、`上次盘点数量 (选填/参考)`（浅灰底色）、`本次实盘在库量 (必填)`（核心高亮浅绿底）、`备注`；
+    * 已排好三级工序的全部物料自动预填，现场库管既有历史基准可循，又聚焦于本次实盘填写；
+  - **智能容错与双索引导入引擎 (`handleFittingInventoryExcelFile`)**：
+    * 自动嗅探 Excel 中的“厂家编码”，防止误传跨厂家表格；
+    * 动态探测表头行与列索引，主动排除“上次/历史/参考”，精准锁定“本次实盘在库量”；
+    * 按 `(管件大类, 材料名称, 规格型号)` 优先匹配，`(大类, 规格)` 兜底匹配；
+    * 匹配后一键灌入当前页面的 RevoGrid 网格中，差额与汇总总件数实时响应联动；
+    * 用户在网页做最后目视核对后，点击【💾 提交本次盘点结果】正式入库。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 23.61s），零报错零语法警告。
+
+## 2026-09-26 供给侧工作台交互升级：管件成品盘点 RevoGrid 网格三级科学排序与大类联动
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理工作台供给侧，管件库存盘点 Tab）；
+- **前端结构与交互变更**：
+  - **三级层级排序视图无损透传**：
+    * 接收后端已按 `管件大类 ➔ 材料名称 ➔ 规格型号（大口径/大支管降序）` 排序好的物料快照；
+    * 响应式计算属性 `filteredFittingInventoryGridSource` 严格继承该三级层级序列，并保证在用户切换大类过滤（如切换到“三通”、“变径管”等）或查看全量时，行号 `_seq` 自适应重排，视觉层次井然有序；
+  - **大类过滤胶囊顺序同步**：
+    * 微看板顶部的大类过滤按钮组（`categories`）严格按照后端赋予的工程业务权重（弯头 ➔ 三通 ➔ 变径管 ➔ 弯管 ➔ 封头...）自左向右排列，符合管网工程规范；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 18.46s），零报错零语法警告。
+
+## 2026-09-26 供给侧工作台交互完善：临时/自定义供应商免盘点友好卡片与防呆保护上线
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理工作台供给侧，直管盘点 Tab 与管件盘点 Tab）；
+- **前端结构与交互变更**：
+  - **临时主体状态识别 (`isCurrentEntityCustom`)**：
+    * 新增计算属性 `isCurrentEntityCustom`，联动当前供给主体的 `isCustom / is_custom` 属性；
+  - **锁定库存标签页与导航防呆**：
+    * 当选定主体为临时/自定义供应商时，二级导航中的【📦 库存盘点】与【📦 管件库存盘点】标签按钮自动变更为锁定禁用态（`🔒 库存盘点 (锁定)` 与 `🔒 管件库存 (锁定)`），样式置灰、挂载 `:disabled="isCurrentEntityCustom"` 且禁用 hover；
+    * 在 `handleTabClick` 中增加阻断防护，阻止用户点击切换；
+    * 增加 `watch(isCurrentEntityCustom)` 监听：当用户在正式厂家选定了库存盘点后切换至自定义供应商，系统自动无缝重定向至发货或看板页（直管切至 `demand`，管件切至 `fitting`），并同步更新 URL Query；
+  - **友好免盘点卡片沉浸式呈现**：
+    * 在保温管盘点 Tab（`activeTab === 'inventory'`）与管件盘点 Tab（`activeTab === 'fitting_inventory'`）中，当选定临时/自定义供应商时，优雅隐藏无意义的数据表格，呈现精致工业风提示卡片：
+      `🏢 当前供给主体【XXX】为临时/自定义供应商，不设固定产线成品现货池，无需进行厂区成品库存盘点`；
+  - **按钮禁用防呆与函数守卫**：
+    * 工具栏操作按钮（【沿用上次盘点】、【默认置零】、【提交本次盘点结果】）在自定义主体下自动置灰不可点击，提交按钮文案自适应变更为“`🔒 临时供应商无需盘点`”；
+    * `loadInventoryData`、`loadFittingInventoryData`、`saveInventoryData`、`saveFittingInventoryData` 均内置前置安全拦截守卫，防止多余网络请求与无效数据入库；
+  - **打包与构建**：
+    * `npm run build` 全量编译通过，零语法报错。
+
+## 2026-09-26 供给侧工作台交互实现：管件厂区成品库存 RevoGrid 填报页面上线
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理工作台供给侧）；
+  - 接口模块：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（新增 `getTubeFittingSupplierInventory` 与 `saveTubeFittingSupplierInventory`）；
+- **前端结构与交互变更**：
+  - **二级导航扩展**：管件业务下新增第 3 个子 Tab“`📦 管件库存盘点`”（`activeTab === 'fitting_inventory'`），管件业务功能数量由 2 项调整为 3 项；
+  - **操作工具栏与微看板**：配备 `🔄 刷新数据`、`📋 沿用上次盘点`、`0️⃣ 默认置零`、`💾 提交本次盘点结果`，右侧展示本次在库总件数与上次在库件数；
+  - **管件大类快速筛选胶囊组**：针对拥有 100~200 项管件的大厂（如鑫瑞得、开元），提供弯头、三通、变径管等快速过滤胶囊按钮，瞬间缩小视野；
+  - **RevoGrid 高性能网格**：
+    * 序号、管件大类、材料名称、规格型号、单位、上次在库量（只读）；
+    * **本次实盘在库量**（醒目浅蓝底，只允许输入非负数，支持键盘方向键与 Ctrl+V 批量粘贴）；
+    * 变动差额动态红绿变色，备注支持输入；
+    * 编辑后即时响应顶部汇总卡片与差额变动。
+
+## 2026-09-26 供给侧工作台交互规划：智能盘点表上传、自适应预览与人机协同入库
+
+- **交互设计与用户体验闭环**：
+  - 针对供应商提报的非标 Excel，规划“上传解析 ➔ 结构化智能预览 ➔ 人机复核入库”的三步流转机制；
+  - **可视化卡片与分组对齐**：上传后弹窗直观呈现直管总米数（带标准型号转换前后对比）、管件总数（按弯头、三通、变径管大类折叠展示）；
+  - **柔性防呆与异常反馈**：若存在无法自动识别的行或未知型号，标红呈现供人工确认或修正，彻底免除供应商手工录入 100+ 项规格的巨大负担。
+
+## 2026-09-26 供应商真实盘点报表对标：契约契合度检验与导入准备
+
+- **业务数据源比对**：
+  - 接入河北鑫瑞得（负责低温水 6 个标段的保供制造厂）线下真实报表《`9.26 鑫瑞得大连项目截止2026年9月20日.xlsx`》；
+  - 确认管件涵盖 5 大类、145 项规格，在库 14,838 个；直管 13 项规格，在库 91,500 米；
+  - 前端后续的“管件库存盘点”页面（或综合数据查询中心管件库存 Tab）可直接基于该 5 大分类（90°弯头、45°弯头、跨越三通、直三通、变径管）构建手风琴/折叠面板组件，极大优化长列表填报体验。
+
+## 2026-09-26 管件业务数据契约就绪：新增管件供应商厂区成品待发库存表结构 (tube.tube_fitting_supplier_inventory)
+
+- **业务规划与数据契约准备**：
+  - 响应管件成品库存盘点业务需求，后端已完成底层物理表 `tube.tube_fitting_supplier_inventory` 建设；
+  - 继承“按次实盘（`batch_no`）”与“通用现货池（`section_1_id` 缺省）”机制，字段完全收敛于管件核心三元组（`fitting_type`、`model_spec`、`unit`）与盘点数量（`stock_qty`）；
+  - 后续前端可无缝对齐直管盘点交互（支持“沿用上次盘点”、“默认置零实盘”及管件品类折叠面板），为供给侧工作台管件成品盘点页及综合查询中心管件库存 Tab 提供坚实的数据契约支撑。
+
 ## 2026-09-24 数字指挥大屏交互优化：供给方卡组与拓扑节点排除临时自定义供应商
 
 - **关联前端页面与组件**：

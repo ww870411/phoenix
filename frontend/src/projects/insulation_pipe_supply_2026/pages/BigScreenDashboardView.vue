@@ -672,6 +672,18 @@
             </div>
           </div>
 
+          <!-- 全网管件供方实盘在库待发储备条 -->
+          <div class="supplier-stock-summary-bar fitting" :title="`全网管件供方最新实盘在库待发量: ${formatCount(kpiData.fittingSupplierStockPcs || 0)} 件`">
+            <div class="sup-stock-summary-left">
+              <span class="sup-stock-icon">🔩</span>
+              <span class="sup-stock-title">现货在库待发：</span>
+            </div>
+            <div class="sup-stock-summary-right">
+              <strong class="sup-stock-num gold-text">{{ formatCount(kpiData.fittingSupplierStockPcs || 0) }}</strong>
+              <span class="sup-stock-unit">件</span>
+            </div>
+          </div>
+
           <!-- 管件供应进度条 -->
           <div class="energy-progress-box">
             <div class="energy-progress-info">
@@ -865,7 +877,7 @@
                     :class="{ 
                       active: activeNodeIds.has(sup.id),
                       hovered: hoveredSupplierId === sup.id,
-                      'has-stock': sup.has_inventory && sup.stock_qty > 0,
+                      'has-stock': (sup.has_inventory && sup.stock_qty > 0) || (sup.has_fitting_inventory && sup.fitting_stock_qty > 0),
                       'is-shipping-source': isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId === sup.id,
                       [`mat-${activeMaterialType}`]: isAnimationRunning && activeEventCategory === 'dispatch' && activeSupplierId === sup.id,
                       dimmed: (hoveredSupplierId && hoveredSupplierId !== sup.id) || 
@@ -878,27 +890,67 @@
                   >
                     <div class="sup-card-content">
                       <strong class="sup-title" :title="sup.name">{{ sup.name }}</strong>
-                      <div v-if="sup.has_inventory && sup.stock_qty > 0" class="sup-stock-badge-row">
-                        <span class="sup-stock-badge" :title="'在库待发: ' + sup.stock_qty + 'm (' + formatNumber(sup.stock_km) + 'km)'">
-                          <span class="stock-pulse-dot"></span>在库现货：{{ formatNumber(sup.stock_km) }}km
+                      
+                      <!-- 保温管现货在库（在上） -->
+                      <div v-if="sup.has_inventory && sup.stock_qty > 0" class="sup-stock-badge-row pipe-row">
+                        <span class="sup-stock-badge pipe-badge" :title="'保温管在库待发: ' + sup.stock_qty + 'm (' + formatNumber(sup.stock_km) + 'km)'">
+                          <span class="stock-pulse-dot"></span>保温管现货：{{ formatNumber(sup.stock_km) }}km
+                        </span>
+                      </div>
+
+                      <!-- 管件现货在库（在下） -->
+                      <div v-if="sup.has_fitting_inventory && sup.fitting_stock_qty > 0" class="sup-stock-badge-row fitting-row">
+                        <span class="sup-stock-badge fitting-badge" :title="'管件在库待发: ' + formatCount(sup.fitting_stock_qty) + '件'">
+                          <span class="stock-pulse-dot gold"></span>管件现货：{{ formatCount(sup.fitting_stock_qty) }}件
                         </span>
                       </div>
                     </div>
 
-                    <!-- 悬停弹层：展示该厂型号现货明细 -->
-                    <div v-if="hoveredSupplierId === sup.id && sup.has_inventory && sup.inventory_models && sup.inventory_models.length > 0" class="sup-inventory-popover">
+                    <!-- 悬停弹层：展示该厂型号现货明细（直管 + 管件） -->
+                    <div 
+                      v-if="hoveredSupplierId === sup.id && ((sup.has_inventory && sup.inventory_models && sup.inventory_models.length > 0) || (sup.has_fitting_inventory && sup.fitting_inventory_items && sup.fitting_inventory_items.length > 0))" 
+                      class="sup-inventory-popover"
+                    >
                       <div class="popover-header">
                         <span class="popover-title">🏭 {{ sup.name }} · 现货储备</span>
-                        <span class="popover-time" v-if="sup.inventory_time">{{ sup.inventory_time.split(' ')[0] }}</span>
+                        <span class="popover-time" v-if="sup.inventory_time || sup.fitting_inventory_time">
+                          {{ (sup.inventory_time || sup.fitting_inventory_time).split(' ')[0] }}
+                        </span>
                       </div>
-                      <div class="popover-models-list">
-                        <div v-for="m in sup.inventory_models" :key="m.pipe_model_id" class="popover-model-item">
-                          <span class="popover-model-name">{{ m.pipe_model_id }}</span>
-                          <span class="popover-model-qty">{{ m.stock_qty }}m</span>
+
+                      <!-- 保温管现货明细 -->
+                      <div v-if="sup.inventory_models && sup.inventory_models.length > 0" class="popover-section-wrap">
+                        <div class="popover-sub-header">
+                          <span class="popover-sub-title green-text">保温管现货 ({{ formatNumber(sup.stock_km) }}km)</span>
+                        </div>
+                        <div class="popover-models-list">
+                          <div v-for="m in sup.inventory_models" :key="m.pipe_model_id" class="popover-model-item">
+                            <span class="popover-model-name">{{ m.pipe_model_id }}</span>
+                            <span class="popover-model-qty">{{ m.stock_qty }}m</span>
+                          </div>
                         </div>
                       </div>
+
+                      <!-- 管件现货明细 -->
+                      <div v-if="sup.fitting_inventory_items && sup.fitting_inventory_items.length > 0" class="popover-section-wrap">
+                        <div class="popover-sub-header">
+                          <span class="popover-sub-title gold-text">管件现货 ({{ formatCount(sup.fitting_stock_qty) }}件)</span>
+                        </div>
+                        <div class="popover-models-list">
+                          <div v-for="(it, idx) in sup.fitting_inventory_items.slice(0, 8)" :key="idx" class="popover-model-item">
+                            <span class="popover-model-name" :title="it.material_name || it.fitting_type">{{ it.material_name || it.fitting_type }} {{ it.model_spec }}</span>
+                            <span class="popover-model-qty gold-text">{{ formatCount(it.stock_qty) }}{{ it.unit || '件' }}</span>
+                          </div>
+                          <div v-if="sup.fitting_inventory_items.length > 8" class="popover-model-item more-item">
+                            <span class="popover-model-name text-muted">等共 {{ sup.fitting_inventory_items.length }} 种规格...</span>
+                          </div>
+                        </div>
+                      </div>
+
                       <div class="popover-footer">
-                        <span>在库待发合计: <strong class="popover-stock-strong">{{ sup.stock_qty }}m</strong> ({{ sup.stock_km }}km)</span>
+                        <span v-if="sup.stock_qty > 0">保温管: <strong class="popover-stock-strong green-text">{{ formatNumber(sup.stock_km) }}km</strong></span>
+                        <span v-if="sup.stock_qty > 0 && sup.fitting_stock_qty > 0" style="margin: 0 4px; opacity: 0.5;">|</span>
+                        <span v-if="sup.fitting_stock_qty > 0">管件: <strong class="popover-stock-strong gold-text">{{ formatCount(sup.fitting_stock_qty) }}件</strong></span>
                       </div>
                     </div>
 
@@ -1939,6 +1991,7 @@ const kpiData = reactive({
   fittingStockPcs: 0,
   fittingArrivedPcs: 0,
   fittingCategoryCount: 0,
+  fittingSupplierStockPcs: 0,
   warehouseConfirmRate: 100.0,
   avgTransitHours: 16.4
 })
@@ -2883,6 +2936,7 @@ async function pollLiveRealData() {
       kpiData.fittingStockPcs = Number(res.kpi.fittingStockPcs !== undefined ? res.kpi.fittingStockPcs : (res.kpi.fittingArrivedPcs || 0))
       kpiData.fittingArrivedPcs = Number(res.kpi.fittingArrivedPcs || 0)
       kpiData.fittingCategoryCount = Number(res.kpi.fittingCategoryCount || 0)
+      kpiData.fittingSupplierStockPcs = Number(res.kpi.fittingSupplierStockPcs || 0)
       kpiData.warehouseConfirmRate = res.kpi.warehouseConfirmRate !== undefined ? Number(res.kpi.warehouseConfirmRate) : 100.0
       kpiData.avgTransitHours = res.kpi.avgTransitHours !== undefined ? Number(res.kpi.avgTransitHours) : 16.4
     }
@@ -3359,10 +3413,16 @@ function goBackToStandardDashboard() {
   router.push(`/projects/${encodeURIComponent(projectKey.value)}/pages/dashboard`)
 }
 
-// 格式化数字
+// 格式化数字（浮点数两位小数）
 function formatNumber(val) {
   if (val === null || val === undefined) return '0.00'
   return Number(val).toFixed(2)
+}
+
+// 格式化件数/套数等整数（保留到个位数，千分位规范化）
+function formatCount(val) {
+  if (val === null || val === undefined || isNaN(Number(val))) return '0'
+  return Math.round(Number(val)).toLocaleString('zh-CN')
 }
 
 // 时钟更新
@@ -3409,6 +3469,7 @@ async function loadRealData(isForce = false) {
         kpiData.fittingStockPcs = Number(res.kpi.fittingStockPcs !== undefined ? res.kpi.fittingStockPcs : (res.kpi.fittingArrivedPcs || 0))
         kpiData.fittingArrivedPcs = Number(res.kpi.fittingArrivedPcs || 0)
         kpiData.fittingCategoryCount = Number(res.kpi.fittingCategoryCount || 0)
+        kpiData.fittingSupplierStockPcs = Number(res.kpi.fittingSupplierStockPcs || 0)
         kpiData.warehouseConfirmRate = res.kpi.warehouseConfirmRate !== undefined ? Number(res.kpi.warehouseConfirmRate) : 100.0
         kpiData.avgTransitHours = res.kpi.avgTransitHours !== undefined ? Number(res.kpi.avgTransitHours) : 16.4
       }
@@ -4902,6 +4963,16 @@ onBeforeUnmount(() => {
   font-family: 'JetBrains Mono', Consolas, monospace;
 }
 
+.supplier-stock-summary-bar.fitting {
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.08) 0%, rgba(17, 34, 60, 0.5) 100%);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.supplier-stock-summary-bar.fitting .sup-stock-num {
+  color: #fbbf24 !important;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.3);
+}
+
 /* 飘字气泡 (Delta Bubble) */
 .delta-bubble {
   position: absolute;
@@ -5447,6 +5518,10 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
+.sup-stock-badge-row.fitting-row {
+  margin-top: 1px;
+}
+
 .sup-stock-badge {
   display: inline-flex;
   align-items: center;
@@ -5462,6 +5537,20 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 6px rgba(0, 255, 135, 0.15);
 }
 
+.sup-stock-badge.pipe-badge {
+  background: rgba(0, 255, 135, 0.12);
+  border: 1px solid rgba(0, 255, 135, 0.35);
+  color: #00ff87;
+  box-shadow: 0 0 6px rgba(0, 255, 135, 0.15);
+}
+
+.sup-stock-badge.fitting-badge {
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.15);
+}
+
 .stock-pulse-dot {
   width: 5px;
   height: 5px;
@@ -5471,9 +5560,20 @@ onBeforeUnmount(() => {
   animation: stock-pulse-anim 2s infinite ease-in-out;
 }
 
+.stock-pulse-dot.gold {
+  background: #fbbf24;
+  box-shadow: 0 0 6px #fbbf24;
+  animation: stock-pulse-gold-anim 2s infinite ease-in-out;
+}
+
 @keyframes stock-pulse-anim {
   0%, 100% { opacity: 0.7; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 8px #00ff87; }
+}
+
+@keyframes stock-pulse-gold-anim {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 8px #fbbf24; }
 }
 
 /* 拓扑管厂型号现货明细悬停浮层 */
@@ -5566,6 +5666,36 @@ onBeforeUnmount(() => {
 .popover-stock-strong {
   color: #00ff87;
   font-weight: 700;
+}
+
+.popover-sub-header {
+  margin: 6px 0 3px 0;
+  padding: 2px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.popover-sub-title.green-text {
+  color: #00ff87;
+}
+
+.popover-sub-title.gold-text {
+  color: #fbbf24;
+}
+
+.popover-stock-strong.gold-text {
+  color: #fbbf24;
+}
+
+.popover-stock-strong.green-text {
+  color: #00ff87;
+}
+
+.popover-model-item.more-item {
+  justify-content: center;
+  font-size: 10px;
+  opacity: 0.8;
 }
 
 /* 2. 中间传输通道 */

@@ -922,6 +922,34 @@ export async function saveTubeSupplierInventory(projectKey = 'insulation_pipe_su
   return response.json()
 }
 
+export async function getTubeFittingSupplierInventory(projectKey = 'insulation_pipe_supply_2026', params = {}) {
+  const search = new URLSearchParams()
+  if (params?.supply_entity_id) search.set('supply_entity_id', String(params.supply_entity_id))
+  const queryStr = search.toString() ? `?${search.toString()}` : ''
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/fitting-inventory${queryStr}`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `读取供给主体管件库存盘点失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function saveTubeFittingSupplierInventory(projectKey = 'insulation_pipe_supply_2026', payload = {}) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/supply-management/fitting-inventory/save`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `保存供给主体管件库存盘点失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+
 export async function getTubeSupplyManagementDeliveries(projectKey, params = {}) {
   const search = new URLSearchParams()
   if (params.section1Id) search.set('section_1_id', String(params.section1Id))
@@ -2999,6 +3027,7 @@ export async function getComprehensiveSupplierLedger(projectKey, params = {}) {
 export async function getComprehensiveSupplierInventory(projectKey, params = {}) {
   const normalizedKey = projectKey || 'insulation_pipe_supply_2026'
   const searchParams = new URLSearchParams()
+  if (params.materialKind) searchParams.set('material_kind', params.materialKind)
   if (params.viewMode) searchParams.set('view_mode', params.viewMode)
   if (params.startDate) searchParams.set('start_date', params.startDate)
   if (params.endDate) searchParams.set('end_date', params.endDate)
@@ -3007,6 +3036,9 @@ export async function getComprehensiveSupplierInventory(projectKey, params = {})
   }
   if (params.pipeModelIds && params.pipeModelIds.length) {
     searchParams.set('pipe_model_ids', Array.isArray(params.pipeModelIds) ? params.pipeModelIds.join(',') : params.pipeModelIds)
+  }
+  if (params.fittingTypes && params.fittingTypes.length) {
+    searchParams.set('fitting_types', Array.isArray(params.fittingTypes) ? params.fittingTypes.join(',') : params.fittingTypes)
   }
   if (params.keyword) searchParams.set('keyword', params.keyword)
 

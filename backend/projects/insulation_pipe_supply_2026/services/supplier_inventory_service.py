@@ -136,6 +136,25 @@ def _extract_dn_number(model_id: str) -> float:
             pass
     return 0.0
 
+def _is_custom_supplier(supply_entity_id: str) -> bool:
+    """判断供给主体是否为临时/自定义供应商。"""
+    from backend.projects.insulation_pipe_supply_2026.services.config_service import (
+        load_tube_config,
+        get_config_list,
+    )
+    try:
+        cfg = load_tube_config()
+        supply_entities = get_config_list(cfg, "supply_entities")
+        norm_id = str(supply_entity_id or "").strip().lower()
+        for se in supply_entities:
+            eid = str(se.get("entity_id") or "").strip().lower()
+            ename = str(se.get("entity_name") or "").strip().lower()
+            if eid == norm_id or ename == norm_id:
+                return bool(se.get("is_custom"))
+    except Exception:
+        pass
+    return False
+
 
 def list_models_for_supply_entity(supply_entity_id: str) -> List[str]:
     """
@@ -236,6 +255,22 @@ def get_supplier_inventory_for_date(
     """
     ensure_supplier_inventory_table()
     norm_entity_id = str(supply_entity_id or "").strip()
+
+    if _is_custom_supplier(norm_entity_id):
+        return {
+            "supply_entity_id": norm_entity_id,
+            "is_custom": True,
+            "has_previous_record": False,
+            "has_record": False,
+            "latest_previous_batch_no": None,
+            "latest_previous_time": None,
+            "latest_previous_date": None,
+            "latest_previous_by": None,
+            "total_previous_stock_qty": 0.0,
+            "total_stock_qty": 0.0,
+            "items": [],
+            "message": "当前供给主体为临时/自定义供应商，无需进行厂区成品库存盘点。",
+        }
 
     session = SessionLocal()
     try:
@@ -343,6 +378,9 @@ def save_supplier_inventory(
     norm_entity_id = str(supply_entity_id or "").strip()
     if not norm_entity_id:
         raise ValueError("供给主体标识 (supply_entity_id) 不能为空")
+
+    if _is_custom_supplier(norm_entity_id):
+        raise ValueError("临时/自定义供给主体无需填报厂区成品库存")
 
     now = datetime.now(BEIJING_TZ)
     norm_date_str = str(report_date or "").strip()

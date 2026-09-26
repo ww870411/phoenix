@@ -1524,359 +1524,756 @@
         <!-- 📦 Tab 3: 供给方成品库存 (Supplier Factory Inventory) -->
         <!-- ==================================================================== -->
         <section v-else-if="activeTab === 'supplier_inventory'" class="tab-content-section">
-          <!-- 顶部台账控制与状态栏 -->
-          <div class="inventory-header-bar flex justify-between items-center">
-            <div class="flex items-center gap-2">
-              <span class="inventory-bar-icon">🏭</span>
-              <span class="inventory-bar-title">供给方成品在库现货台账</span>
-              <span class="inventory-bar-tag">各厂家最新实盘 · 实盘量 &gt; 0</span>
-            </div>
-
-            <div class="flex items-center gap-3 text-xs text-muted">
-              <button 
-                type="button" 
-                class="btn-refresh-clean" 
-                title="刷新当前库存数据"
-                @click="fetchActiveTabData"
-              >
-                🔄 刷新数据
-              </button>
-            </div>
+          <!-- 子品类切换 -->
+          <div class="sub-pill-bar">
+            <button 
+              type="button" 
+              :class="['sub-pill', { active: subMaterialType === 'pipe' }]"
+              @click="switchSubMaterial('pipe')"
+            >
+              🔥 保温管成品库存
+            </button>
+            <button 
+              type="button" 
+              :class="['sub-pill', { active: subMaterialType === 'fitting' }]"
+              @click="switchSubMaterial('fitting')"
+            >
+              🔧 管件成品库存
+            </button>
           </div>
 
-          <!-- 顶部 4 大 KPI 现货看板 (专属 4 列对称工整网格 · 高度调减) -->
-          <div class="supplier-inventory-kpi-grid">
-            <!-- 1. 厂区在库待发总量 -->
-            <div class="inv-kpi-card inv-card-stock">
-              <div class="inv-kpi-top">
-                <span class="inv-kpi-title">📦 厂区在库待发总量</span>
+          <!-- 分支 1: 🔥 保温管成品库存 -->
+          <template v-if="subMaterialType === 'pipe'">
+            <!-- 顶部台账控制与状态栏 -->
+            <div class="inventory-header-bar flex justify-between items-center">
+              <div class="flex items-center gap-2">
+                <span class="inventory-bar-icon">🏭</span>
+                <span class="inventory-bar-title">供给方保温管成品在库现货台账</span>
+                <span class="inventory-bar-tag">各厂家最新实盘 · 实盘量 &gt; 0</span>
               </div>
-              <div class="inv-kpi-body">
-                <div class="inv-kpi-num text-sky">
-                  {{ formatQty(supplierInventoryKpi.total_stock_qty) }} <span class="inv-kpi-unit">米</span>
-                </div>
-                <div class="inv-kpi-foot">
-                  <span 
-                    v-if="supplierInventoryKpi.total_change_qty > 0" 
-                    class="badge-inv-diff diff-up"
-                    title="较前次盘点增加"
-                  >
-                    ▲ +{{ formatQty(supplierInventoryKpi.total_change_qty) }}
-                  </span>
-                  <span 
-                    v-else-if="supplierInventoryKpi.total_change_qty < 0" 
-                    class="badge-inv-diff diff-down"
-                    title="较前次盘点减少"
-                  >
-                    ▼ {{ formatQty(supplierInventoryKpi.total_change_qty) }}
-                  </span>
-                  <span v-else class="badge-inv-diff diff-zero" title="较前次盘点持平">
-                    ● 持平
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            <!-- 2. 参与盘点供方厂家 -->
-            <div class="inv-kpi-card inv-card-supplier">
-              <div class="inv-kpi-top">
-                <span class="inv-kpi-title">🏭 参与盘点供方厂家</span>
-              </div>
-              <div class="inv-kpi-body">
-                <div class="inv-kpi-num text-blue">
-                  {{ supplierInventoryKpi.supplier_count }} <span class="inv-kpi-unit">家</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 3. 在库保温管规格种类 -->
-            <div class="inv-kpi-card inv-card-model">
-              <div class="inv-kpi-top">
-                <span class="inv-kpi-title">📏 在库保温管规格种类</span>
-              </div>
-              <div class="inv-kpi-body">
-                <div class="inv-kpi-num text-indigo">
-                  {{ supplierInventoryKpi.model_count }} <span class="inv-kpi-unit">种</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 4. 全网最新盘点时间 -->
-            <div class="inv-kpi-card inv-card-time">
-              <div class="inv-kpi-top">
-                <span class="inv-kpi-title">🕒 全网最新盘点时间</span>
-              </div>
-              <div class="inv-kpi-time-content">
-                <div class="inv-kpi-time-text font-mono text-slate-700" :title="supplierInventoryKpi.latest_report_time">
-                  {{ supplierInventoryKpi.latest_report_time || '—' }}
-                </div>
-                <div 
-                  v-if="supplierInventoryKpi.latest_supplier_name" 
-                  class="inv-kpi-supplier-row text-emerald-700 font-medium" 
-                  :title="`最新供方: ${supplierInventoryKpi.latest_supplier_name}`"
+              <div class="flex items-center gap-3 text-xs text-muted">
+                <button 
+                  type="button" 
+                  class="btn-refresh-clean" 
+                  title="刷新当前库存数据"
+                  @click="fetchActiveTabData"
                 >
-                  最新供方: {{ supplierInventoryKpi.latest_supplier_name }}
-                </div>
+                  🔄 刷新数据
+                </button>
               </div>
             </div>
-          </div>
 
-          <!-- 最新实盘在库快照表格 (动态多维透视与明细) -->
-          <div class="card data-table-card">
-            <!-- 🎛️ 表格顶部紧凑工具栏 (含聚合维度下拉选择器) -->
-            <div class="table-toolbar-row">
-              <div class="toolbar-left">
-                <span class="toolbar-title">📊 供给方成品在库透视与明细</span>
-                <span class="toolbar-count font-mono text-muted">({{ aggregatedSupplierInventoryRows.length }} 组聚合数据)</span>
+            <!-- 顶部 4 大 KPI 现货看板 (专属 4 列对称工整网格 · 高度调减) -->
+            <div class="supplier-inventory-kpi-grid">
+              <!-- 1. 厂区在库待发总量 -->
+              <div class="inv-kpi-card inv-card-stock">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">📦 厂区在库待发总量</span>
+                </div>
+                <div class="inv-kpi-body">
+                  <div class="inv-kpi-num text-sky">
+                    {{ formatQty(supplierInventoryKpi.total_stock_qty) }} <span class="inv-kpi-unit">米</span>
+                  </div>
+                  <div class="inv-kpi-foot">
+                    <span 
+                      v-if="supplierInventoryKpi.total_change_qty > 0" 
+                      class="badge-inv-diff diff-up"
+                      title="较前次盘点增加"
+                    >
+                      ▲ +{{ formatQty(supplierInventoryKpi.total_change_qty) }}
+                    </span>
+                    <span 
+                      v-else-if="supplierInventoryKpi.total_change_qty < 0" 
+                      class="badge-inv-diff diff-down"
+                      title="较前次盘点减少"
+                    >
+                      ▼ {{ formatQty(supplierInventoryKpi.total_change_qty) }}
+                    </span>
+                    <span v-else class="badge-inv-diff diff-zero" title="较前次盘点持平">
+                      ● 持平
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div class="toolbar-right">
-                <!-- 聚合维度下拉触发与菜单 -->
-                <div class="pivot-dropdown-wrap">
-                  <button 
-                    type="button" 
-                    :class="['btn-pivot-trigger', { active: activePivotDropdown === 'supplier_inventory' }]"
-                    @click.stop="togglePivotDropdown('supplier_inventory')"
-                  >
-                    <span class="trigger-icon">🎛️</span>
-                    <span class="trigger-label">聚合维度:</span>
-                    <span class="trigger-chain">{{ getDimensionChainText('supplier_inventory') }}</span>
-                    <span class="trigger-arrow">▾</span>
-                  </button>
+              <!-- 2. 参与盘点供方厂家 -->
+              <div class="inv-kpi-card inv-card-supplier">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">🏭 参与盘点供方厂家</span>
+                </div>
+                <div class="inv-kpi-body">
+                  <div class="inv-kpi-num text-blue">
+                    {{ supplierInventoryKpi.supplier_count }} <span class="inv-kpi-unit">家</span>
+                  </div>
+                </div>
+              </div>
 
-                  <!-- 背景点击遮罩 -->
+              <!-- 3. 在库保温管规格种类 -->
+              <div class="inv-kpi-card inv-card-model">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">📏 在库保温管规格种类</span>
+                </div>
+                <div class="inv-kpi-body">
+                  <div class="inv-kpi-num text-indigo">
+                    {{ supplierInventoryKpi.model_count }} <span class="inv-kpi-unit">种</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. 全网最新盘点时间 -->
+              <div class="inv-kpi-card inv-card-time">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">🕒 全网最新盘点时间</span>
+                </div>
+                <div class="inv-kpi-time-content">
+                  <div class="inv-kpi-time-text font-mono text-slate-700" :title="supplierInventoryKpi.latest_report_time">
+                    {{ supplierInventoryKpi.latest_report_time || '—' }}
+                  </div>
                   <div 
-                    v-if="activePivotDropdown === 'supplier_inventory'" 
-                    class="pivot-backdrop" 
-                    @click.stop="closePivotDropdown"
-                  ></div>
-
-                  <!-- 浮层下拉列表面板 -->
-                  <div 
-                    v-if="activePivotDropdown === 'supplier_inventory'" 
-                    class="pivot-dropdown-panel card elevated"
-                    @click.stop
+                    v-if="supplierInventoryKpi.latest_supplier_name" 
+                    class="inv-kpi-supplier-row text-emerald-700 font-medium" 
+                    :title="`最新供方: ${supplierInventoryKpi.latest_supplier_name}`"
                   >
-                    <div class="panel-header">
-                      <span class="panel-title">选择透视维度（按勾选顺序依次分组）</span>
-                      <button type="button" class="btn-panel-reset" @click="resetToDefaultDimensions('supplier_inventory')">↺ 恢复默认</button>
-                    </div>
-
-                    <!-- 维度有序多选列表 -->
-                    <div class="panel-options-list">
-                      <div 
-                        v-for="dim in getAvailableDimensions('supplier_inventory')" 
-                        :key="`inv-opt-${dim.id}`"
-                        :class="['panel-opt-item', { checked: isDimensionSelected('supplier_inventory', dim.id) }]"
-                        @click="toggleDimensionSelection('supplier_inventory', dim.id)"
-                      >
-                        <div class="opt-badge-slot">
-                          <span v-if="isDimensionSelected('supplier_inventory', dim.id)" class="badge-active-num">{{ getDimensionOrder('supplier_inventory', dim.id) }}</span>
-                          <span v-else class="badge-unchecked"></span>
-                        </div>
-                        <span class="opt-name">{{ dim.label }}</span>
-                        
-                        <div v-if="isDimensionSelected('supplier_inventory', dim.id)" class="opt-order-btns" @click.stop>
-                          <button 
-                            type="button" 
-                            class="btn-rank" 
-                            :disabled="getDimensionOrder('supplier_inventory', dim.id) === 1"
-                            title="提升此维度分组优先级"
-                            @click="moveDimensionUp('supplier_inventory', dim.id)"
-                          >▲</button>
-                          <button 
-                            type="button" 
-                            class="btn-rank" 
-                            :disabled="getDimensionOrder('supplier_inventory', dim.id) === supplierInventoryDimensions.length"
-                            title="降低此维度分组优先级"
-                            @click="moveDimensionDown('supplier_inventory', dim.id)"
-                          >▼</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 常用快捷方案 -->
-                    <div class="panel-presets-row">
-                      <span class="presets-caption">⚡ 常用：</span>
-                      <div class="presets-btn-chips">
-                        <button
-                          v-for="(p, pIdx) in supplierInventoryDimensionPresets"
-                          :key="`p-inv-${pIdx}`"
-                          type="button"
-                          :class="['btn-preset-chip', { active: isCurrentPreset('supplier_inventory', p.dims) }]"
-                          @click="applyDimensionPreset('supplier_inventory', p.dims)"
-                        >
-                          {{ p.label }}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div class="panel-footer">
-                      <button type="button" class="btn-panel-done" @click="closePivotDropdown">完成</button>
-                    </div>
+                    最新供方: {{ supplierInventoryKpi.latest_supplier_name }}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th class="w-14 text-center">#</th>
-                    <template v-for="dim in supplierInventoryDimensions" :key="`th-inv-${dim}`">
+            <!-- 最新实盘在库快照表格 (动态多维透视与明细) -->
+            <div class="card data-table-card">
+              <!-- 🎛️ 表格顶部紧凑工具栏 (含聚合维度下拉选择器) -->
+              <div class="table-toolbar-row">
+                <div class="toolbar-left">
+                  <span class="toolbar-title">📊 供给方成品在库透视与明细</span>
+                  <span class="toolbar-count font-mono text-muted">({{ aggregatedSupplierInventoryRows.length }} 组聚合数据)</span>
+                </div>
+
+                <div class="toolbar-right">
+                  <!-- 聚合维度下拉触发与菜单 -->
+                  <div class="pivot-dropdown-wrap">
+                    <button 
+                      type="button" 
+                      :class="['btn-pivot-trigger', { active: activePivotDropdown === 'supplier_inventory' }]"
+                      @click.stop="togglePivotDropdown('supplier_inventory')"
+                    >
+                      <span class="trigger-icon">🎛️</span>
+                      <span class="trigger-label">聚合维度:</span>
+                      <span class="trigger-chain">{{ getDimensionChainText('supplier_inventory') }}</span>
+                      <span class="trigger-arrow">▾</span>
+                    </button>
+
+                    <!-- 背景点击遮罩 -->
+                    <div 
+                      v-if="activePivotDropdown === 'supplier_inventory'" 
+                      class="pivot-backdrop" 
+                      @click.stop="closePivotDropdown"
+                    ></div>
+
+                    <!-- 浮层下拉列表面板 -->
+                    <div 
+                      v-if="activePivotDropdown === 'supplier_inventory'" 
+                      class="pivot-dropdown-panel card elevated"
+                      @click.stop
+                    >
+                      <div class="panel-header">
+                        <span class="panel-title">选择透视维度（按勾选顺序依次分组）</span>
+                        <button type="button" class="btn-panel-reset" @click="resetToDefaultDimensions('supplier_inventory')">↺ 恢复默认</button>
+                      </div>
+
+                      <!-- 维度有序多选列表 -->
+                      <div class="panel-options-list">
+                        <div 
+                          v-for="dim in getAvailableDimensions('supplier_inventory')" 
+                          :key="`inv-opt-${dim.id}`"
+                          :class="['panel-opt-item', { checked: isDimensionSelected('supplier_inventory', dim.id) }]"
+                          @click="toggleDimensionSelection('supplier_inventory', dim.id)"
+                        >
+                          <div class="opt-badge-slot">
+                            <span v-if="isDimensionSelected('supplier_inventory', dim.id)" class="badge-active-num">{{ getDimensionOrder('supplier_inventory', dim.id) }}</span>
+                            <span v-else class="badge-unchecked"></span>
+                          </div>
+                          <span class="opt-name">{{ dim.label }}</span>
+                          
+                          <div v-if="isDimensionSelected('supplier_inventory', dim.id)" class="opt-order-btns" @click.stop>
+                            <button 
+                              type="button" 
+                              class="btn-rank" 
+                              :disabled="getDimensionOrder('supplier_inventory', dim.id) === 1"
+                              title="提升此维度分组优先级"
+                              @click="moveDimensionUp('supplier_inventory', dim.id)"
+                            >▲</button>
+                            <button 
+                              type="button" 
+                              class="btn-rank" 
+                              :disabled="getDimensionOrder('supplier_inventory', dim.id) === supplierInventoryDimensions.length"
+                              title="降低此维度分组优先级"
+                              @click="moveDimensionDown('supplier_inventory', dim.id)"
+                            >▼</button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 常用快捷方案 -->
+                      <div class="panel-presets-row">
+                        <span class="presets-caption">⚡ 常用：</span>
+                        <div class="presets-btn-chips">
+                          <button
+                            v-for="(p, pIdx) in supplierInventoryDimensionPresets"
+                            :key="`p-inv-${pIdx}`"
+                            type="button"
+                            :class="['btn-preset-chip', { active: isCurrentPreset('supplier_inventory', p.dims) }]"
+                            @click="applyDimensionPreset('supplier_inventory', p.dims)"
+                          >
+                            {{ p.label }}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="panel-footer">
+                        <button type="button" class="btn-panel-done" @click="closePivotDropdown">完成</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th class="w-14 text-center">#</th>
+                      <template v-for="dim in supplierInventoryDimensions" :key="`th-inv-${dim}`">
+                        <th 
+                          v-if="dim === 'supplier'"
+                          class="text-left sortable-th w-72" 
+                          :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'supply_entity_name') }"
+                          @click="handleTableSort('supplier_inventory_latest', 'supply_entity_name')"
+                          title="点击按厂家名称排序"
+                        >
+                          <div class="th-inner-cell text-left">
+                            <span>🏭 供给方厂家</span>
+                            <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'supply_entity_name') }">
+                              {{ getSortIcon('supplier_inventory_latest', 'supply_entity_name') }}
+                            </span>
+                          </div>
+                        </th>
+                        <th 
+                          v-else-if="dim === 'model'"
+                          class="text-left sortable-th" 
+                          :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'pipe_model_id') }"
+                          @click="handleTableSort('supplier_inventory_latest', 'pipe_model_id')"
+                          title="点击按口径大小排序"
+                        >
+                          <div class="th-inner-cell text-left">
+                            <span>🔥 保温管规格型号</span>
+                            <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'pipe_model_id') }">
+                              {{ getSortIcon('supplier_inventory_latest', 'pipe_model_id') }}
+                            </span>
+                          </div>
+                        </th>
+                      </template>
                       <th 
-                        v-if="dim === 'supplier'"
-                        class="text-left sortable-th w-72" 
-                        :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'supply_entity_name') }"
-                        @click="handleTableSort('supplier_inventory_latest', 'supply_entity_name')"
-                        title="点击按厂家名称排序"
+                        class="text-right sortable-th w-52" 
+                        :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'stock_qty') }"
+                        @click="handleTableSort('supplier_inventory_latest', 'stock_qty')"
+                        title="点击按实盘在库量排序"
                       >
-                        <div class="th-inner-cell text-left">
-                          <span>🏭 供给方厂家</span>
-                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'supply_entity_name') }">
-                            {{ getSortIcon('supplier_inventory_latest', 'supply_entity_name') }}
+                        <div class="th-inner-cell text-right">
+                          <span>📦 实盘在库待发 (米)</span>
+                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'stock_qty') }">
+                            {{ getSortIcon('supplier_inventory_latest', 'stock_qty') }}
                           </span>
                         </div>
                       </th>
                       <th 
-                        v-else-if="dim === 'model'"
-                        class="text-left sortable-th" 
-                        :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'pipe_model_id') }"
-                        @click="handleTableSort('supplier_inventory_latest', 'pipe_model_id')"
-                        title="点击按口径大小排序"
+                        class="text-center sortable-th w-40" 
+                        :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'change_qty') }"
+                        @click="handleTableSort('supplier_inventory_latest', 'change_qty')"
+                        title="点击按环比增减量排序"
                       >
-                        <div class="th-inner-cell text-left">
-                          <span>🔥 保温管规格型号</span>
-                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'pipe_model_id') }">
-                            {{ getSortIcon('supplier_inventory_latest', 'pipe_model_id') }}
+                        <div class="th-inner-cell text-center">
+                          <span>环比增减 (米)</span>
+                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'change_qty') }">
+                            {{ getSortIcon('supplier_inventory_latest', 'change_qty') }}
                           </span>
                         </div>
                       </th>
-                    </template>
-                    <th 
-                      class="text-right sortable-th w-52" 
-                      :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'stock_qty') }"
-                      @click="handleTableSort('supplier_inventory_latest', 'stock_qty')"
-                      title="点击按实盘在库量排序"
+                      <th 
+                        class="text-center sortable-th w-44" 
+                        :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'report_date') }"
+                        @click="handleTableSort('supplier_inventory_latest', 'report_date')"
+                        title="点击按最新盘点日期排序"
+                      >
+                        <div class="th-inner-cell text-center">
+                          <span>最新盘点日期</span>
+                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'report_date') }">
+                            {{ getSortIcon('supplier_inventory_latest', 'report_date') }}
+                          </span>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="aggregatedSupplierInventoryRows.length === 0">
+                      <td :colspan="supplierInventoryDimensions.length + 4" class="empty-state-cell">
+                        <div class="empty-content">
+                          <span class="empty-icon">📭</span>
+                          <span class="empty-text">暂无在库待发量大于 0 的供给方成品库存现货记录</span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr 
+                      v-for="(row, idx) in sortedSupplierInventoryRows" 
+                      :key="`inv-latest-${idx}`"
+                      class="hover:bg-sky-50/50 transition-colors"
                     >
-                      <div class="th-inner-cell text-right">
-                        <span>📦 实盘在库待发 (米)</span>
-                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'stock_qty') }">
-                          {{ getSortIcon('supplier_inventory_latest', 'stock_qty') }}
+                      <td class="text-center text-muted font-mono text-xs">{{ idx + 1 }}</td>
+                      <template v-for="dim in supplierInventoryDimensions" :key="`td-inv-${dim}`">
+                        <td v-if="dim === 'supplier'" class="font-bold text-slate-800 text-left">
+                          <span class="supplier-tag">{{ row.supply_entity_name }}</span>
+                          <span v-if="!supplierInventoryDimensions.includes('model') && row.model_count" class="badge-sub-count text-xs text-sky font-normal ml-1">
+                            ({{ row.model_count }} 种型号在库)
+                          </span>
+                        </td>
+                        <td v-else-if="dim === 'model'" class="font-mono font-medium text-slate-700 text-left">
+                          <span>{{ row.pipe_model_name || row.pipe_model_id }}</span>
+                          <span v-if="!supplierInventoryDimensions.includes('supplier') && row.supplier_count" class="badge-sub-count text-xs text-blue font-normal ml-1">
+                            ({{ row.supplier_count }} 家供方有货)
+                          </span>
+                        </td>
+                      </template>
+                      <td class="text-right font-mono font-bold text-sky text-base">
+                        {{ formatQty(row.stock_qty) }}
+                      </td>
+                      <td class="text-center font-mono font-bold">
+                        <span 
+                          v-if="row.change_qty > 0" 
+                          class="badge-change badge-up"
+                          title="较前次盘点增加"
+                        >
+                          +{{ formatQty(row.change_qty) }}
                         </span>
-                      </div>
-                    </th>
-                    <th 
-                      class="text-center sortable-th w-40" 
-                      :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'change_qty') }"
-                      @click="handleTableSort('supplier_inventory_latest', 'change_qty')"
-                      title="点击按环比增减量排序"
-                    >
-                      <div class="th-inner-cell text-center">
-                        <span>环比增减 (米)</span>
-                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'change_qty') }">
-                          {{ getSortIcon('supplier_inventory_latest', 'change_qty') }}
+                        <span 
+                          v-else-if="row.change_qty < 0" 
+                          class="badge-change badge-down"
+                          title="较前次盘点减少"
+                        >
+                          {{ formatQty(row.change_qty) }}
                         </span>
-                      </div>
-                    </th>
-                    <th 
-                      class="text-center sortable-th w-44" 
-                      :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'report_date') }"
-                      @click="handleTableSort('supplier_inventory_latest', 'report_date')"
-                      title="点击按最新盘点日期排序"
-                    >
-                      <div class="th-inner-cell text-center">
-                        <span>最新盘点日期</span>
-                        <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'report_date') }">
-                          {{ getSortIcon('supplier_inventory_latest', 'report_date') }}
-                        </span>
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="aggregatedSupplierInventoryRows.length === 0">
-                    <td :colspan="supplierInventoryDimensions.length + 4" class="empty-state-cell">
-                      <div class="empty-content">
-                        <span class="empty-icon">📭</span>
-                        <span class="empty-text">暂无在库待发量大于 0 的供给方成品库存现货记录</span>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr 
-                    v-for="(row, idx) in sortedSupplierInventoryRows" 
-                    :key="`inv-latest-${idx}`"
-                    class="hover:bg-sky-50/50 transition-colors"
-                  >
-                    <td class="text-center text-muted font-mono text-xs">{{ idx + 1 }}</td>
-                    <template v-for="dim in supplierInventoryDimensions" :key="`td-inv-${dim}`">
-                      <td v-if="dim === 'supplier'" class="font-bold text-slate-800 text-left">
-                        <span class="supplier-tag">{{ row.supply_entity_name }}</span>
-                        <span v-if="!supplierInventoryDimensions.includes('model') && row.model_count" class="badge-sub-count text-xs text-sky font-normal ml-1">
-                          ({{ row.model_count }} 种型号在库)
+                        <span 
+                          v-else 
+                          class="badge-change badge-zero"
+                          title="较前次盘点持平"
+                        >
+                          0.00
                         </span>
                       </td>
-                      <td v-else-if="dim === 'model'" class="font-mono font-medium text-slate-700 text-left">
-                        <span>{{ row.pipe_model_name || row.pipe_model_id }}</span>
-                        <span v-if="!supplierInventoryDimensions.includes('supplier') && row.supplier_count" class="badge-sub-count text-xs text-blue font-normal ml-1">
-                          ({{ row.supplier_count }} 家供方有货)
+                      <td class="text-center font-mono text-xs text-slate-600">
+                        {{ row.report_date || '—' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                  <!-- 表尾汇总行 -->
+                  <tfoot v-if="aggregatedSupplierInventoryRows.length > 0">
+                    <tr class="summary-total-row">
+                      <td :colspan="supplierInventoryDimensions.length + 1" class="text-left font-bold pl-4">
+                        <span>🏷️ 全网有库存在库现货合计 (共 {{ aggregatedSupplierInventoryRows.length }} 组聚合数据)</span>
+                      </td>
+                      <td class="text-right font-mono font-bold text-sky text-lg">
+                        {{ formatQty(supplierInventoryKpi.total_stock_qty) }} <small class="text-xs">米</small>
+                      </td>
+                      <td class="text-center font-mono font-bold text-sm">
+                        <span :class="supplierInventoryKpi.total_change_qty > 0 ? 'text-emerald' : (supplierInventoryKpi.total_change_qty < 0 ? 'text-amber' : 'text-slate-500')">
+                          {{ supplierInventoryKpi.total_change_qty > 0 ? '+' : '' }}{{ formatQty(supplierInventoryKpi.total_change_qty) }}
                         </span>
                       </td>
-                    </template>
-                    <td class="text-right font-mono font-bold text-sky text-base">
-                      {{ formatQty(row.stock_qty) }}
-                    </td>
-                    <td class="text-center font-mono font-bold">
-                      <span 
-                        v-if="row.change_qty > 0" 
-                        class="badge-change badge-up"
-                        title="较前次盘点增加"
-                      >
-                        +{{ formatQty(row.change_qty) }}
-                      </span>
-                      <span 
-                        v-else-if="row.change_qty < 0" 
-                        class="badge-change badge-down"
-                        title="较前次盘点减少"
-                      >
-                        {{ formatQty(row.change_qty) }}
-                      </span>
-                      <span 
-                        v-else 
-                        class="badge-change badge-zero"
-                        title="较前次盘点持平"
-                      >
-                        0.00
-                      </span>
-                    </td>
-                    <td class="text-center font-mono text-xs text-slate-600">
-                      {{ row.report_date || '—' }}
-                    </td>
-                  </tr>
-                </tbody>
-                <!-- 表尾汇总行 -->
-                <tfoot v-if="aggregatedSupplierInventoryRows.length > 0">
-                  <tr class="summary-total-row">
-                    <td :colspan="supplierInventoryDimensions.length + 1" class="text-left font-bold pl-4">
-                      <span>🏷️ 全网有库存在库现货合计 (共 {{ aggregatedSupplierInventoryRows.length }} 组聚合数据)</span>
-                    </td>
-                    <td class="text-right font-mono font-bold text-sky text-lg">
-                      {{ formatQty(supplierInventoryKpi.total_stock_qty) }} <small class="text-xs">米</small>
-                    </td>
-                    <td class="text-center font-mono font-bold text-sm">
-                      <span :class="supplierInventoryKpi.total_change_qty > 0 ? 'text-emerald' : (supplierInventoryKpi.total_change_qty < 0 ? 'text-amber' : 'text-slate-500')">
-                        {{ supplierInventoryKpi.total_change_qty > 0 ? '+' : '' }}{{ formatQty(supplierInventoryKpi.total_change_qty) }}
-                      </span>
-                    </td>
-                    <td class="text-center text-xs text-muted font-mono">
-                      {{ supplierInventoryKpi.latest_report_time }}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                      <td class="text-center text-xs text-muted font-mono">
+                        {{ supplierInventoryKpi.latest_report_time }}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
-          </div>
+          </template>
+
+          <!-- 分支 2: 🔧 管件成品库存 -->
+          <template v-else>
+            <!-- 顶部台账控制与状态栏 -->
+            <div class="inventory-header-bar flex justify-between items-center">
+              <div class="flex items-center gap-2">
+                <span class="inventory-bar-icon">🏭</span>
+                <span class="inventory-bar-title">供给方管件成品在库现货台账</span>
+                <span class="inventory-bar-tag">各厂家最新实盘 · 实盘量 &gt; 0</span>
+              </div>
+
+              <div class="flex items-center gap-3 text-xs text-muted">
+                <button 
+                  type="button" 
+                  class="btn-refresh-clean" 
+                  title="刷新当前管件库存数据"
+                  @click="fetchActiveTabData"
+                >
+                  🔄 刷新数据
+                </button>
+              </div>
+            </div>
+
+            <!-- 顶部 4 大 KPI 现货看板 (专属 4 列对称工整网格) -->
+            <div class="supplier-inventory-kpi-grid">
+              <!-- 1. 厂区管件在库待发总量 -->
+              <div class="inv-kpi-card inv-card-stock">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">📦 厂区在库待发总量</span>
+                </div>
+                <div class="inv-kpi-body">
+                  <div class="inv-kpi-num text-sky">
+                    {{ formatCount(supplierFittingInventoryKpi.total_stock_qty) }} <span class="inv-kpi-unit">件</span>
+                  </div>
+                  <div class="inv-kpi-foot">
+                    <span 
+                      v-if="supplierFittingInventoryKpi.total_change_qty > 0" 
+                      class="badge-inv-diff diff-up"
+                      title="较前次盘点增加"
+                    >
+                      ▲ +{{ formatCount(supplierFittingInventoryKpi.total_change_qty) }}
+                    </span>
+                    <span 
+                      v-else-if="supplierFittingInventoryKpi.total_change_qty < 0" 
+                      class="badge-inv-diff diff-down"
+                      title="较前次盘点减少"
+                    >
+                      ▼ {{ formatCount(supplierFittingInventoryKpi.total_change_qty) }}
+                    </span>
+                    <span v-else class="badge-inv-diff diff-zero" title="较前次盘点持平">
+                      ● 持平
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. 参与盘点供方厂家 -->
+              <div class="inv-kpi-card inv-card-supplier">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">🏭 参与盘点供方厂家</span>
+                </div>
+                <div class="inv-kpi-body">
+                  <div class="inv-kpi-num text-blue">
+                    {{ supplierFittingInventoryKpi.supplier_count }} <span class="inv-kpi-unit">家</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. 在库管件规格品类 -->
+              <div class="inv-kpi-card inv-card-model">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">🔧 在库管件规格品类</span>
+                </div>
+                <div class="inv-kpi-body">
+                  <div class="inv-kpi-num text-indigo">
+                    {{ supplierFittingInventoryKpi.model_count }} <span class="inv-kpi-unit">项</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. 全网最新盘点时间 -->
+              <div class="inv-kpi-card inv-card-time">
+                <div class="inv-kpi-top">
+                  <span class="inv-kpi-title">🕒 全网最新盘点时间</span>
+                </div>
+                <div class="inv-kpi-time-content">
+                  <div class="inv-kpi-time-text font-mono text-slate-700" :title="supplierFittingInventoryKpi.latest_report_time">
+                    {{ supplierFittingInventoryKpi.latest_report_time || '—' }}
+                  </div>
+                  <div 
+                    v-if="supplierFittingInventoryKpi.latest_supplier_name" 
+                    class="inv-kpi-supplier-row text-emerald-700 font-medium" 
+                    :title="`最新供方: ${supplierFittingInventoryKpi.latest_supplier_name}`"
+                  >
+                    最新供方: {{ supplierFittingInventoryKpi.latest_supplier_name }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 最新实盘在库快照表格 (动态多维透视与明细) -->
+            <div class="card data-table-card">
+              <!-- 🎛️ 表格顶部紧凑工具栏 (含聚合维度下拉选择器) -->
+              <div class="table-toolbar-row">
+                <div class="toolbar-left">
+                  <span class="toolbar-title">📊 供给方管件在库透视与明细</span>
+                  <span class="toolbar-count font-mono text-muted">({{ aggregatedSupplierFittingInventoryRows.length }} 组聚合数据)</span>
+                </div>
+
+                <div class="toolbar-right">
+                  <!-- 聚合维度下拉触发与菜单 -->
+                  <div class="pivot-dropdown-wrap">
+                    <button 
+                      type="button" 
+                      :class="['btn-pivot-trigger', { active: activePivotDropdown === 'supplier_inventory' }]"
+                      @click.stop="togglePivotDropdown('supplier_inventory')"
+                    >
+                      <span class="trigger-icon">🎛️</span>
+                      <span class="trigger-label">聚合维度:</span>
+                      <span class="trigger-chain">{{ getDimensionChainText('supplier_inventory') }}</span>
+                      <span class="trigger-arrow">▾</span>
+                    </button>
+
+                    <!-- 背景点击遮罩 -->
+                    <div 
+                      v-if="activePivotDropdown === 'supplier_inventory'" 
+                      class="pivot-backdrop" 
+                      @click.stop="closePivotDropdown"
+                    ></div>
+
+                    <!-- 浮层下拉列表面板 -->
+                    <div 
+                      v-if="activePivotDropdown === 'supplier_inventory'" 
+                      class="pivot-dropdown-panel card elevated"
+                      @click.stop
+                    >
+                      <div class="panel-header">
+                        <span class="panel-title">选择透视维度（按勾选顺序依次分组）</span>
+                        <button type="button" class="btn-panel-reset" @click="resetToDefaultDimensions('supplier_inventory')">↺ 恢复默认</button>
+                      </div>
+
+                      <!-- 维度有序多选列表 -->
+                      <div class="panel-options-list">
+                        <div 
+                          v-for="dim in getAvailableDimensions('supplier_inventory')" 
+                          :key="`inv-fit-opt-${dim.id}`"
+                          :class="['panel-opt-item', { checked: isDimensionSelected('supplier_inventory', dim.id) }]"
+                          @click="toggleDimensionSelection('supplier_inventory', dim.id)"
+                        >
+                          <div class="opt-badge-slot">
+                            <span v-if="isDimensionSelected('supplier_inventory', dim.id)" class="badge-active-num">{{ getDimensionOrder('supplier_inventory', dim.id) }}</span>
+                            <span v-else class="badge-unchecked"></span>
+                          </div>
+                          <span class="opt-name">{{ dim.label }}</span>
+                          
+                          <div v-if="isDimensionSelected('supplier_inventory', dim.id)" class="opt-order-btns" @click.stop>
+                            <button 
+                              type="button" 
+                              class="btn-rank" 
+                              :disabled="getDimensionOrder('supplier_inventory', dim.id) === 1"
+                              title="提升此维度分组优先级"
+                              @click="moveDimensionUp('supplier_inventory', dim.id)"
+                            >▲</button>
+                            <button 
+                              type="button" 
+                              class="btn-rank" 
+                              :disabled="getDimensionOrder('supplier_inventory', dim.id) === supplierFittingInventoryDimensions.length"
+                              title="降低此维度分组优先级"
+                              @click="moveDimensionDown('supplier_inventory', dim.id)"
+                            >▼</button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 常用快捷方案 -->
+                      <div class="panel-presets-row">
+                        <span class="presets-caption">⚡ 常用：</span>
+                        <div class="presets-btn-chips">
+                          <button
+                            v-for="(p, pIdx) in supplierFittingInventoryDimensionPresets"
+                            :key="`p-inv-fit-${pIdx}`"
+                            type="button"
+                            :class="['btn-preset-chip', { active: isCurrentPreset('supplier_inventory', p.dims) }]"
+                            @click="applyDimensionPreset('supplier_inventory', p.dims)"
+                          >
+                            {{ p.label }}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="panel-footer">
+                        <button type="button" class="btn-panel-done" @click="closePivotDropdown">完成</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th class="w-14 text-center">#</th>
+                      <template v-for="dim in supplierFittingInventoryDimensions" :key="`th-inv-fit-${dim}`">
+                        <th 
+                          v-if="dim === 'supplier'"
+                          class="text-left sortable-th w-64" 
+                          :class="{ 'sorted-col': isColumnSorted('supplier_fitting_inventory_latest', 'supply_entity_name') }"
+                          @click="handleTableSort('supplier_fitting_inventory_latest', 'supply_entity_name')"
+                          title="点击按厂家名称排序"
+                        >
+                          <div class="th-inner-cell text-left">
+                            <span>🏭 供给方厂家</span>
+                            <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_fitting_inventory_latest', 'supply_entity_name') }">
+                              {{ getSortIcon('supplier_fitting_inventory_latest', 'supply_entity_name') }}
+                            </span>
+                          </div>
+                        </th>
+                        <th 
+                          v-else-if="dim === 'category'"
+                          class="text-left sortable-th w-36" 
+                          :class="{ 'sorted-col': isColumnSorted('supplier_fitting_inventory_latest', 'fitting_type') }"
+                          @click="handleTableSort('supplier_fitting_inventory_latest', 'fitting_type')"
+                          title="点击按管件大类排序"
+                        >
+                          <div class="th-inner-cell text-left">
+                            <span>📑 管件大类</span>
+                            <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_fitting_inventory_latest', 'fitting_type') }">
+                              {{ getSortIcon('supplier_fitting_inventory_latest', 'fitting_type') }}
+                            </span>
+                          </div>
+                        </th>
+                        <th 
+                          v-else-if="dim === 'model'"
+                          class="text-left sortable-th" 
+                          :class="{ 'sorted-col': isColumnSorted('supplier_fitting_inventory_latest', 'model_spec') }"
+                          @click="handleTableSort('supplier_fitting_inventory_latest', 'model_spec')"
+                          title="点击按规格型号描述排序"
+                        >
+                          <div class="th-inner-cell text-left">
+                            <span>📏 规格型号描述</span>
+                            <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_fitting_inventory_latest', 'model_spec') }">
+                              {{ getSortIcon('supplier_fitting_inventory_latest', 'model_spec') }}
+                            </span>
+                          </div>
+                        </th>
+                      </template>
+                      <th class="text-center w-20">单位</th>
+                      <th 
+                        class="text-right sortable-th w-48" 
+                        :class="{ 'sorted-col': isColumnSorted('supplier_fitting_inventory_latest', 'stock_qty') }"
+                        @click="handleTableSort('supplier_fitting_inventory_latest', 'stock_qty')"
+                        title="点击按实盘在库量排序"
+                      >
+                        <div class="th-inner-cell text-right">
+                          <span>📦 实盘在库待发 (件)</span>
+                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_fitting_inventory_latest', 'stock_qty') }">
+                            {{ getSortIcon('supplier_fitting_inventory_latest', 'stock_qty') }}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        class="text-center sortable-th w-36" 
+                        :class="{ 'sorted-col': isColumnSorted('supplier_fitting_inventory_latest', 'change_qty') }"
+                        @click="handleTableSort('supplier_fitting_inventory_latest', 'change_qty')"
+                        title="点击按环比增减量排序"
+                      >
+                        <div class="th-inner-cell text-center">
+                          <span>环比增减 (件)</span>
+                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_fitting_inventory_latest', 'change_qty') }">
+                            {{ getSortIcon('supplier_fitting_inventory_latest', 'change_qty') }}
+                          </span>
+                        </div>
+                      </th>
+                      <th 
+                        class="text-center sortable-th w-40" 
+                        :class="{ 'sorted-col': isColumnSorted('supplier_fitting_inventory_latest', 'report_date') }"
+                        @click="handleTableSort('supplier_fitting_inventory_latest', 'report_date')"
+                        title="点击按最新盘点日期排序"
+                      >
+                        <div class="th-inner-cell text-center">
+                          <span>最新盘点日期</span>
+                          <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_fitting_inventory_latest', 'report_date') }">
+                            {{ getSortIcon('supplier_fitting_inventory_latest', 'report_date') }}
+                          </span>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="aggregatedSupplierFittingInventoryRows.length === 0">
+                      <td :colspan="supplierFittingInventoryDimensions.length + 5" class="empty-state-cell">
+                        <div class="empty-content">
+                          <span class="empty-icon">📭</span>
+                          <span class="empty-text">暂无在库待发量大于 0 的供给方管件现货记录</span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr 
+                      v-for="(row, idx) in sortedSupplierFittingInventoryRows" 
+                      :key="`inv-fit-latest-${idx}`"
+                      class="hover:bg-amber-50/40 transition-colors"
+                    >
+                      <td class="text-center text-muted font-mono text-xs">{{ idx + 1 }}</td>
+                      <template v-for="dim in supplierFittingInventoryDimensions" :key="`td-inv-fit-${dim}`">
+                        <td v-if="dim === 'supplier'" class="font-bold text-slate-800 text-left">
+                          <span class="supplier-tag">{{ row.supply_entity_name }}</span>
+                          <span v-if="!supplierFittingInventoryDimensions.includes('category') && row.category_count" class="badge-sub-count text-xs text-sky font-normal ml-1">
+                            ({{ row.category_count }} 类管件)
+                          </span>
+                        </td>
+                        <td v-else-if="dim === 'category'" class="text-left">
+                          <span class="badge-tag badge-fitting" style="font-size: 12px; padding: 2px 8px;">
+                            {{ row.fitting_type }}
+                          </span>
+                        </td>
+                        <td v-else-if="dim === 'model'" class="font-mono text-slate-700 text-left">
+                          <span v-if="row.material_name" class="font-medium text-slate-600 mr-1">{{ row.material_name }}</span>
+                          <span class="font-bold text-dark">{{ row.model_spec }}</span>
+                        </td>
+                      </template>
+                      <td class="text-center text-muted font-medium text-xs">{{ row.unit || '个' }}</td>
+                      <td class="text-right font-mono font-bold text-amber-700 text-base">
+                        {{ formatCount(row.stock_qty) }}
+                      </td>
+                      <td class="text-center font-mono font-bold">
+                        <span 
+                          v-if="row.change_qty > 0" 
+                          class="badge-change badge-up"
+                          title="较前次盘点增加"
+                        >
+                          +{{ formatCount(row.change_qty) }}
+                        </span>
+                        <span 
+                          v-else-if="row.change_qty < 0" 
+                          class="badge-change badge-down"
+                          title="较前次盘点减少"
+                        >
+                          {{ formatCount(row.change_qty) }}
+                        </span>
+                        <span 
+                          v-else 
+                          class="badge-change badge-zero"
+                          title="较前次盘点持平"
+                        >
+                          0
+                        </span>
+                      </td>
+                      <td class="text-center font-mono text-xs text-slate-600">
+                        {{ row.report_date || '—' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                  <!-- 表尾汇总行 -->
+                  <tfoot v-if="aggregatedSupplierFittingInventoryRows.length > 0">
+                    <tr class="summary-total-row">
+                      <td :colspan="supplierFittingInventoryDimensions.length + 2" class="text-left font-bold pl-4">
+                        <span>🏷️ 全网有库存在库管件现货合计 (共 {{ aggregatedSupplierFittingInventoryRows.length }} 组聚合数据)</span>
+                      </td>
+                      <td class="text-right font-mono font-bold text-amber-700 text-lg">
+                        {{ formatCount(supplierFittingInventoryKpi.total_stock_qty) }} <small class="text-xs">件</small>
+                      </td>
+                      <td class="text-center font-mono font-bold text-sm">
+                        <span :class="supplierFittingInventoryKpi.total_change_qty > 0 ? 'text-emerald' : (supplierFittingInventoryKpi.total_change_qty < 0 ? 'text-amber' : 'text-slate-500')">
+                          {{ supplierFittingInventoryKpi.total_change_qty > 0 ? '+' : '' }}{{ formatCount(supplierFittingInventoryKpi.total_change_qty) }}
+                        </span>
+                      </td>
+                      <td class="text-center text-xs text-muted font-mono">
+                        {{ supplierFittingInventoryKpi.latest_report_time }}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </template>
         </section>
 
         <!-- ==================================================================== -->
@@ -3446,6 +3843,7 @@ const directoryCategory = ref('all') // 'all' | 'suppliers' | 'site_managers' | 
 const inventoryViewMode = ref('latest') // 'latest' (最新在库快照) | 'history' (全量历史明细流水)
 const selectedSupplierIds = ref([])
 const supplierInventoryData = ref({ items: [], summary: {} })
+const supplierFittingInventoryData = ref({ items: [], summary: {} })
 
 
 // 责任主体专属视图切换模式 ('by_category': 按主体类别 | 'by_section': 按标段综合穿透)
@@ -3996,6 +4394,8 @@ const DIMENSION_DEFS = {
   date: { id: 'date', label: '📅 时间日期', shortLabel: '日期', colHeader: '时间日期', icon: '📅' },
   section: { id: 'section', label: '🏗️ 需求标段', shortLabel: '标段', colHeader: '需求标段', icon: '🏗️' },
   supplier: { id: 'supplier', label: '🏭 供给方', shortLabel: '供给方', colHeader: '供给方', icon: '🏭' },
+  category: { id: 'category', label: '📑 管件大类', shortLabel: '大类', colHeader: '管件大类', icon: '📑' },
+  material_name: { id: 'material_name', label: '🏷️ 材料名称', shortLabel: '品名', colHeader: '材料名称', icon: '🏷️' },
 }
 
 function getDimensionDef(dimId) {
@@ -4039,10 +4439,10 @@ const supplierLedgerDimensionPresets = [
   { label: '📐 纯型号汇总', dims: ['model'] },
 ]
 
-// Tab 3 (供给方成品库存) 当前激活维度层级 (默认: 供给方 ➔ 型号)
+// Tab 3 (供给方成品库存 - 保温管) 当前激活维度层级 (默认: 供给方 ➔ 型号)
 const supplierInventoryDimensions = ref(['supplier', 'model'])
 
-// Tab 3 快捷透视预设方案
+// Tab 3 (供给方成品库存 - 保温管) 快捷透视预设方案
 const supplierInventoryDimensionPresets = [
   { label: '⚡ 默认 (供给方➔型号)', dims: ['supplier', 'model'] },
   { label: '🔥 纯型号总览 (厂家全合并)', dims: ['model'] },
@@ -4050,10 +4450,24 @@ const supplierInventoryDimensionPresets = [
   { label: '📐 型号➔供给方对比', dims: ['model', 'supplier'] },
 ]
 
+// Tab 3 (供给方成品库存 - 管件) 当前激活维度层级 (默认: 供给方 ➔ 管件大类 ➔ 规格型号)
+const supplierFittingInventoryDimensions = ref(['supplier', 'category', 'model'])
+
+// Tab 3 (供给方成品库存 - 管件) 快捷透视预设方案
+const supplierFittingInventoryDimensionPresets = [
+  { label: '⚡ 默认 (供方➔大类➔规格)', dims: ['supplier', 'category', 'model'] },
+  { label: '🏭 纯供给方汇总', dims: ['supplier'] },
+  { label: '📑 纯管件大类汇总', dims: ['category'] },
+  { label: '📐 大类➔规格汇总', dims: ['category', 'model'] },
+  { label: '🏭 供给方➔管件大类', dims: ['supplier', 'category'] },
+]
+
 function getTargetDimensionRef(tab) {
   if (tab === 'daily') return dailyDimensions
   if (tab === 'supplier_ledger') return supplierLedgerDimensions
-  if (tab === 'supplier_inventory') return supplierInventoryDimensions
+  if (tab === 'supplier_inventory') {
+    return subMaterialType.value === 'fitting' ? supplierFittingInventoryDimensions : supplierInventoryDimensions
+  }
   return baselineDimensions
 }
 
@@ -4093,6 +4507,9 @@ function getAvailableDimensions(tab) {
     return ['supplier', 'model', 'date', 'section'].map(id => getDimensionDef(id))
   }
   if (tab === 'supplier_inventory') {
+    if (subMaterialType.value === 'fitting') {
+      return ['supplier', 'category', 'model'].map(id => getDimensionDef(id))
+    }
     return ['supplier', 'model'].map(id => getDimensionDef(id))
   }
   return ['model', 'section'].map(id => getDimensionDef(id))
@@ -4149,7 +4566,11 @@ function resetToDefaultDimensions(tab) {
   } else if (tab === 'supplier_ledger') {
     supplierLedgerDimensions.value = ['supplier', 'model']
   } else if (tab === 'supplier_inventory') {
-    supplierInventoryDimensions.value = ['supplier', 'model']
+    if (subMaterialType.value === 'fitting') {
+      supplierFittingInventoryDimensions.value = ['supplier', 'category', 'model']
+    } else {
+      supplierInventoryDimensions.value = ['supplier', 'model']
+    }
   } else {
     baselineDimensions.value = ['section', 'model']
   }
@@ -4895,6 +5316,7 @@ const tableSortStates = ref({
   price_table: { key: 'material_kind', order: 'desc' },
   supplier_ledger: { key: '', order: '' },
   supplier_inventory_latest: { key: '', order: '' },
+  supplier_fitting_inventory_latest: { key: '', order: '' },
   supplier_inventory_history: { key: '', order: '' }
 })
 
@@ -5634,6 +6056,206 @@ const supplierInventoryKpi = computed(() => {
   }
 })
 
+// -----------------------------------------------------------------------------
+// 供货商厂区管件成品库存 (Tab 3: supplier_inventory, subMaterialType === 'fitting') 过滤与计算
+// -----------------------------------------------------------------------------
+
+const filteredSupplierFittingInventoryRows = computed(() => {
+  let list = supplierFittingInventoryData.value.items || []
+
+  // 1. 供货厂家过滤
+  if (selectedSupplierIds.value.length > 0) {
+    const lowSups = selectedSupplierIds.value.map(s => String(s).toLowerCase())
+    list = list.filter(r => lowSups.includes(String(r.supply_entity_id || '').toLowerCase()))
+  }
+
+  // 2. 管件关键字过滤
+  if (fittingKeyword.value.trim()) {
+    const kw = fittingKeyword.value.trim().toLowerCase()
+    list = list.filter(r => {
+      return (
+        (r.fitting_type && r.fitting_type.toLowerCase().includes(kw)) ||
+        (r.model_spec && r.model_spec.toLowerCase().includes(kw)) ||
+        (r.category && r.category.toLowerCase().includes(kw)) ||
+        (r.material_name && r.material_name.toLowerCase().includes(kw))
+      )
+    })
+  }
+
+  // 3. 全局关键字过滤
+  const kw = globalSearchKeyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter(r => {
+      const text = `${r.supply_entity_name || ''} ${r.fitting_type || ''} ${r.model_spec || ''} ${r.category || ''} ${r.material_name || ''} ${r.batch_no || ''} ${r.reported_by || ''} ${r.remark || ''}`.toLowerCase()
+      return text.includes(kw)
+    })
+  }
+
+  // 4. “实盘在库待发 (件)”为 0 的记录不显示
+  list = list.filter(r => (Number(r.stock_qty) || 0) > 0)
+
+  return list
+})
+
+const aggregatedSupplierFittingInventoryRows = computed(() => {
+  const rawList = filteredSupplierFittingInventoryRows.value
+  const activeDims = supplierFittingInventoryDimensions.value
+  if (!activeDims || activeDims.length === 0) return rawList
+
+  const groupsMap = new Map()
+
+  for (const row of rawList) {
+    const keyParts = []
+    const dimValues = {}
+
+    for (const dim of activeDims) {
+      if (dim === 'supplier') {
+        const val = row.supply_entity_name || row.supply_entity_id || '—'
+        keyParts.push(val)
+        dimValues.supply_entity_name = val
+        dimValues.supply_entity_id = row.supply_entity_id
+      } else if (dim === 'category') {
+        const val = row.fitting_type || row.category || '—'
+        keyParts.push(val)
+        dimValues.fitting_type = val
+        dimValues.category = val
+      } else if (dim === 'model') {
+        const val = row.model_spec || '—'
+        keyParts.push(val)
+        dimValues.model_spec = val
+        dimValues.material_name = row.material_name || ''
+      }
+    }
+
+    const groupKey = keyParts.join('____')
+
+    if (!groupsMap.has(groupKey)) {
+      groupsMap.set(groupKey, {
+        ...dimValues,
+        unit: row.unit || '件',
+        stock_qty: 0,
+        previous_stock_qty: 0,
+        change_qty: 0,
+        report_date: row.report_date || '—',
+        reported_at: row.reported_at || '',
+        _supplier_set: new Set(),
+        _category_set: new Set(),
+        _model_set: new Set(),
+        _count: 0
+      })
+    }
+
+    const target = groupsMap.get(groupKey)
+    target.stock_qty += Number(row.stock_qty) || 0
+    target.previous_stock_qty += Number(row.previous_stock_qty) || 0
+    target.change_qty += Number(row.change_qty) || 0
+    target._count += 1
+    if (row.supply_entity_name) target._supplier_set.add(row.supply_entity_name)
+    if (row.fitting_type || row.category) target._category_set.add(row.fitting_type || row.category)
+    if (row.model_spec) target._model_set.add(row.model_spec)
+    if (row.reported_at && (!target.reported_at || row.reported_at > target.reported_at)) {
+      target.reported_at = row.reported_at
+      target.report_date = row.report_date || (row.reported_at ? row.reported_at.split(' ')[0] : '—')
+    }
+  }
+
+  const result = Array.from(groupsMap.values()).map(g => ({
+    ...g,
+    stock_qty: Math.round(g.stock_qty),
+    previous_stock_qty: Math.round(g.previous_stock_qty),
+    change_qty: Math.round(g.change_qty),
+    supplier_count: g._supplier_set.size,
+    category_count: g._category_set.size,
+    model_count: g._model_set.size,
+  }))
+
+  return result
+})
+
+const sortedSupplierFittingInventoryRows = computed(() => {
+  const list = [...aggregatedSupplierFittingInventoryRows.value]
+  const stateKey = 'supplier_fitting_inventory_latest'
+  const state = tableSortStates.value[stateKey]
+  if (!state || !state.key || !state.order) {
+    // 默认排序：按当前 activeDims 的首个维度排序
+    return list.sort((a, b) => {
+      const firstDim = supplierFittingInventoryDimensions.value[0]
+      if (firstDim === 'category') {
+        const catComp = String(a.fitting_type || a.category || '').localeCompare(String(b.fitting_type || b.category || ''), 'zh-CN')
+        if (catComp !== 0) return catComp
+        return compareModelSpecs(a.model_spec, b.model_spec, 'desc')
+      } else if (firstDim === 'model') {
+        const comp = compareModelSpecs(a.model_spec, b.model_spec, 'desc')
+        if (comp !== 0) return comp
+        return String(a.supply_entity_name || '').localeCompare(String(b.supply_entity_name || ''), 'zh-CN')
+      } else {
+        const supComp = String(a.supply_entity_name || '').localeCompare(String(b.supply_entity_name || ''), 'zh-CN')
+        if (supComp !== 0) return supComp
+        const catComp = String(a.fitting_type || a.category || '').localeCompare(String(b.fitting_type || b.category || ''), 'zh-CN')
+        if (catComp !== 0) return catComp
+        return compareModelSpecs(a.model_spec, b.model_spec, 'desc')
+      }
+    })
+  }
+
+  return list.sort((a, b) => {
+    let valA = a[state.key]
+    let valB = b[state.key]
+    if (state.key === 'model_spec' || state.key === 'model') {
+      return compareModelSpecs(valA, valB, state.order)
+    }
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return state.order === 'asc' ? valA - valB : valB - valA
+    }
+    valA = String(valA || '')
+    valB = String(valB || '')
+    return state.order === 'asc' ? valA.localeCompare(valB, 'zh-CN') : valB.localeCompare(valA, 'zh-CN')
+  })
+})
+
+const supplierFittingInventoryKpi = computed(() => {
+  const rows = filteredSupplierFittingInventoryRows.value
+  let totalStock = 0
+  let totalPrev = 0
+  let totalChange = 0
+  const supSet = new Set()
+  const catSet = new Set()
+  const modelSet = new Set()
+  const batchSet = new Set()
+  let latestTime = ''
+  let latestSup = ''
+
+  rows.forEach(r => {
+    const qty = parseFloat(r.stock_qty || 0)
+    const prev = parseFloat(r.previous_stock_qty || 0)
+    const chg = parseFloat(r.change_qty || 0)
+    totalStock += qty
+    totalPrev += prev
+    totalChange += chg
+    if (r.supply_entity_id) supSet.add(r.supply_entity_id)
+    if (r.fitting_type || r.category) catSet.add(r.fitting_type || r.category)
+    if (r.model_spec) modelSet.add(r.model_spec)
+    if (r.batch_no) batchSet.add(r.batch_no)
+    if (!latestTime || (r.reported_at && r.reported_at > latestTime)) {
+      latestTime = r.reported_at
+      latestSup = r.supply_entity_name || r.supply_entity_id
+    }
+  })
+
+  const s = supplierFittingInventoryData.value.summary || {}
+  return {
+    total_stock_qty: Math.round(totalStock),
+    total_previous_qty: Math.round(totalPrev),
+    total_change_qty: Math.round(totalChange),
+    supplier_count: supSet.size || s.supplier_count || 0,
+    category_count: catSet.size || s.category_count || 0,
+    model_count: modelSet.size || s.model_count || 0,
+    batch_count: batchSet.size || s.batch_count || 0,
+    latest_report_time: latestTime || s.latest_report_time || '',
+    latest_supplier_name: latestSup || s.latest_supplier_name || '',
+  }
+})
+
 const supplierLedgerSummary = computed(() => {
   const rows = filteredSupplierLedgerRows.value
   let total_shipped_qty = 0
@@ -6022,15 +6644,28 @@ async function fetchActiveTabData() {
         materialPriceList.value = results[1].data
       }
     } else if (activeTab.value === 'supplier_inventory') {
-      const res = await getComprehensiveSupplierInventory(projectKey, {
-        viewMode: inventoryViewMode.value,
-        startDate: filterStartDate.value,
-        endDate: filterEndDate.value,
-        supplierIds: selectedSupplierIds.value,
-        pipeModelIds: selectedPipeModelIds.value,
-        keyword: globalSearchKeyword.value.trim(),
-      })
-      supplierInventoryData.value = res
+      if (subMaterialType.value === 'fitting') {
+        const res = await getComprehensiveSupplierInventory(projectKey, {
+          materialKind: 'fitting',
+          viewMode: inventoryViewMode.value,
+          startDate: filterStartDate.value,
+          endDate: filterEndDate.value,
+          supplierIds: selectedSupplierIds.value,
+          keyword: globalSearchKeyword.value.trim() || fittingKeyword.value.trim(),
+        })
+        supplierFittingInventoryData.value = res || { items: [], summary: {} }
+      } else {
+        const res = await getComprehensiveSupplierInventory(projectKey, {
+          materialKind: 'pipe',
+          viewMode: inventoryViewMode.value,
+          startDate: filterStartDate.value,
+          endDate: filterEndDate.value,
+          supplierIds: selectedSupplierIds.value,
+          pipeModelIds: selectedPipeModelIds.value,
+          keyword: globalSearchKeyword.value.trim(),
+        })
+        supplierInventoryData.value = res || { items: [], summary: {} }
+      }
     } else if (activeTab.value === 'supplier_ledger') {
       const res = await getComprehensiveSupplierLedger(projectKey, {
         startDate: filterStartDate.value,
@@ -6089,6 +6724,7 @@ function resetAllFilters() {
     price_table: { key: '', order: '' },
     supplier_ledger: { key: '', order: '' },
     supplier_inventory_latest: { key: '', order: '' },
+    supplier_fitting_inventory_latest: { key: '', order: '' },
     supplier_inventory_history: { key: '', order: '' }
   }
 }
@@ -6148,6 +6784,12 @@ function formatQty(val) {
   if (val === undefined || val === null || val === '') return '0'
   const num = Number(val)
   return isNaN(num) ? '0' : num.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function formatCount(val) {
+  if (val === undefined || val === null || val === '') return '0'
+  const num = Math.round(Number(val))
+  return isNaN(num) ? '0' : num.toLocaleString('zh-CN')
 }
 
 // -----------------------------------------------------------------------------
@@ -6296,53 +6938,120 @@ async function exportCurrentTabExcel() {
       // =======================================================================
       // 📦 Tab 3: 供给方成品库存 (单 Sheet: 最新在库现货快照)
       // =======================================================================
-      const sheetName = '供给方成品库存现货'
-      defaultFilename = `供给方成品库存现货_${new Date().toISOString().slice(0, 10)}.xlsx`
+      if (subMaterialType.value === 'fitting') {
+        const sheetName = '供给方管件现货库存'
+        defaultFilename = `供给方管件现货库存_${new Date().toISOString().slice(0, 10)}.xlsx`
 
-      const rows = sortedSupplierInventoryRows.value
-      const exportData = []
-      const activeDims = supplierInventoryDimensions.value
-      const dimHeaders = activeDims.map(d => d === 'supplier' ? '供货厂家' : '保温管规格型号')
+        const rows = sortedSupplierFittingInventoryRows.value
+        const exportData = []
+        const activeDims = supplierFittingInventoryDimensions.value
+        const dimHeaders = activeDims.map(d => {
+          if (d === 'supplier') return '供货厂家'
+          if (d === 'category') return '管件大类'
+          if (d === 'model') return '规格型号描述'
+          return getDimensionDef(d).colHeader
+        })
 
-      exportData.push([
-        '序号',
-        ...dimHeaders,
-        '当前实盘在库待发(米)',
-        '环比增减(米)',
-        '最新盘点日期'
-      ])
-      rows.forEach((r, idx) => {
-        const dimVals = activeDims.map(d => {
-          if (d === 'supplier') {
-            const extra = !activeDims.includes('model') && r.model_count ? ` (${r.model_count}种型号)` : ''
-            return (r.supply_entity_name || r.supply_entity_id || '') + extra
-          }
-          if (d === 'model') {
-            const extra = !activeDims.includes('supplier') && r.supplier_count ? ` (${r.supplier_count}家供方)` : ''
-            return (r.pipe_model_name || r.pipe_model_id || '') + extra
-          }
+        exportData.push([
+          '序号',
+          ...dimHeaders,
+          '单位',
+          '当前实盘在库待发(件)',
+          '环比增减(件)',
+          '最新盘点日期'
+        ])
+        rows.forEach((r, idx) => {
+          const dimVals = activeDims.map(d => {
+            if (d === 'supplier') {
+              const extra = !activeDims.includes('category') && r.category_count ? ` (${r.category_count}类管件)` : ''
+              return (r.supply_entity_name || r.supply_entity_id || '') + extra
+            }
+            if (d === 'category') {
+              return r.fitting_type || r.category || ''
+            }
+            if (d === 'model') {
+              const namePart = r.material_name ? `${r.material_name} ` : ''
+              return namePart + (r.model_spec || '')
+            }
+            return ''
+          })
+          exportData.push([
+            idx + 1,
+            ...dimVals,
+            r.unit || '件',
+            Math.round(Number(r.stock_qty) || 0),
+            Math.round(Number(r.change_qty) || 0),
+            r.report_date || ''
+          ])
+        })
+        const kpi = supplierFittingInventoryKpi.value
+        const summaryDimVals = activeDims.map((d, i) => {
+          if (i === 0) return '全网管件现货合计'
+          if (d === 'supplier') return `覆盖 ${kpi.supplier_count} 家供方`
+          if (d === 'category') return `共 ${kpi.category_count} 类管件`
+          if (d === 'model') return `共 ${kpi.model_count} 项品类规格`
           return ''
         })
         exportData.push([
-          idx + 1,
-          ...dimVals,
-          Number(r.stock_qty) || 0,
-          Number(r.change_qty) || 0,
-          r.report_date || ''
+          '—',
+          ...summaryDimVals,
+          '件',
+          kpi.total_stock_qty,
+          kpi.total_change_qty,
+          kpi.latest_report_time
         ])
-      })
-      const kpi = supplierInventoryKpi.value
-      const summaryDimVals = activeDims.map((d, i) => i === 0 ? '全网现货合计' : (d === 'supplier' ? `覆盖 ${kpi.supplier_count} 家供方` : `共 ${kpi.model_count} 种型号`))
-      exportData.push([
-        '—',
-        ...summaryDimVals,
-        kpi.total_stock_qty,
-        kpi.total_change_qty,
-        kpi.latest_report_time
-      ])
 
-      const ws = XLSX.utils.aoa_to_sheet(exportData)
-      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+        const ws = XLSX.utils.aoa_to_sheet(exportData)
+        XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      } else {
+        const sheetName = '供给方保温管成品库存现货'
+        defaultFilename = `供给方保温管成品库存现货_${new Date().toISOString().slice(0, 10)}.xlsx`
+
+        const rows = sortedSupplierInventoryRows.value
+        const exportData = []
+        const activeDims = supplierInventoryDimensions.value
+        const dimHeaders = activeDims.map(d => d === 'supplier' ? '供货厂家' : '保温管规格型号')
+
+        exportData.push([
+          '序号',
+          ...dimHeaders,
+          '当前实盘在库待发(米)',
+          '环比增减(米)',
+          '最新盘点日期'
+        ])
+        rows.forEach((r, idx) => {
+          const dimVals = activeDims.map(d => {
+            if (d === 'supplier') {
+              const extra = !activeDims.includes('model') && r.model_count ? ` (${r.model_count}种型号)` : ''
+              return (r.supply_entity_name || r.supply_entity_id || '') + extra
+            }
+            if (d === 'model') {
+              const extra = !activeDims.includes('supplier') && r.supplier_count ? ` (${r.supplier_count}家供方)` : ''
+              return (r.pipe_model_name || r.pipe_model_id || '') + extra
+            }
+            return ''
+          })
+          exportData.push([
+            idx + 1,
+            ...dimVals,
+            Number(r.stock_qty) || 0,
+            Number(r.change_qty) || 0,
+            r.report_date || ''
+          ])
+        })
+        const kpi = supplierInventoryKpi.value
+        const summaryDimVals = activeDims.map((d, i) => i === 0 ? '全网现货合计' : (d === 'supplier' ? `覆盖 ${kpi.supplier_count} 家供方` : `共 ${kpi.model_count} 种型号`))
+        exportData.push([
+          '—',
+          ...summaryDimVals,
+          kpi.total_stock_qty,
+          kpi.total_change_qty,
+          kpi.latest_report_time
+        ])
+
+        const ws = XLSX.utils.aoa_to_sheet(exportData)
+        XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      }
     } else if (activeTab.value === 'supplier_ledger') {
       // =======================================================================
       // 🏭 Tab 4: 供给方发运台账 (单 Sheet: 多维明细台账 含单价金额、供给方小计与全项目总计)

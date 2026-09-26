@@ -2033,3 +2033,317 @@ def query_supplier_inventory_history(
     finally:
         session.close()
 
+
+def query_fitting_supplier_inventory_history(
+    view_mode: str = "latest",  # "latest" | "history"
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    supplier_ids: Optional[List[str]] = None,
+    fitting_types: Optional[List[str]] = None,
+    keyword: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    综合数据查询中心：供货商厂区成品【管件现货库存】综合查询。
+    支持：
+    1. latest 快照视图：展示各供给主体最新一次提交批次的数据，并关联前一次批次计算环比增减；
+    2. history 流水视图：展示所有历史盘点流水台账；
+    3. 支持按供给主体、管件大类、业务/盘点日期范围与全局关键字检索。
+    """
+    from backend.projects.insulation_pipe_supply_2026.services.fitting_supplier_inventory_service import (
+        ensure_fitting_supplier_inventory_table,
+        _fitting_inventory_sort_key,
+    )
+    ensure_fitting_supplier_inventory_table()
+
+    cfg = load_tube_config() or {}
+    supplier_map = _get_supplier_map(cfg)
+
+    sup_filter_set = {s.strip().lower() for s in supplier_ids if s.strip()} if supplier_ids else None
+    fitting_type_filter_set = {ft.strip() for ft in fitting_types if ft.strip()} if fitting_types else None
+    kw = (keyword or "").strip().lower()
+
+    session = SessionLocal()
+    try:
+        if view_mode == "history":
+            sql_clauses = ["1=1"]
+            params: Dict[str, Any] = {}
+
+            if start_date:
+                sql_clauses.append("i.report_date >= :start_date")
+                params["start_date"] = start_date
+            if end_date:
+                sql_clauses.append("i.report_date <= :end_date")
+                params["end_date"] = end_date
+
+            where_str = " AND ".join(sql_clauses)
+            sql = text(f"""
+                SELECT 
+                    i.id,
+                    i.batch_no,
+                    i.report_date,
+                    i.supply_entity_id,
+                    i.section_1_id,
+                    i.fitting_type,
+                    i.material_name,
+                    i.model_spec,
+                    i.unit,
+                    i.stock_qty,
+                    i.remark,
+                    i.reported_by,
+                    i.reported_at,
+                    i.updated_at
+                FROM tube.tube_fitting_supplier_inventory i
+                WHERE {where_str}
+                ORDER BY i.reported_at DESC, i.id DESC;
+            """)
+            rows = session.execute(sql, params).mappings().all()
+
+            items = []
+            total_stock = 0.0
+            unique_suppliers = set()
+            unique_specs = set()
+            unique_batches = set()
+
+            for r in rows:
+                sid = str(r["supply_entity_id"] or "").strip()
+                s_name = supplier_map.get(sid.upper()) or supplier_map.get(sid) or sid
+                ft = str(r["fitting_type"] or "").strip()
+                mn = str(r["material_name"] or "").strip()
+                ms = str(r["model_spec"] or "").strip()
+
+                if sup_filter_set and sid.lower() not in sup_filter_set:
+                    continue
+                if fitting_type_filter_set and ft not in fitting_type_filter_set:
+                    continue
+
+                batch_no = str(r["batch_no"] or "")
+                rep_by = str(r["reported_by"] or "")
+                remark = str(r["remark"] or "")
+
+                if kw:
+                    text_corpus = f"{sid} {s_name} {ft} {mn} {ms} {batch_no} {rep_by} {remark}".lower()
+                    if kw not in text_corpus:
+                        continue
+
+                stock_qty = float(r["stock_qty"] or 0)
+                rep_at = r["reported_at"]
+                rep_at_str = rep_at.astimezone(BEIJING_TZ).strftime("%Y/%m/%d %H:%M:%S") if rep_at else ""
+                rep_date_str = r["report_date"].isoformat() if r["report_date"] else ""
+
+                total_stock += stock_qty
+                unique_suppliers.add(sid)
+                unique_specs.add(f"{ft}__{ms}")
+                unique_batches.add(batch_no)
+
+                items.append({
+                    "id": r["id"],
+                    "batch_no": batch_no,
+                    "report_date": rep_date_str,
+                    "supply_entity_id": sid,
+                    "supply_entity_name": s_name,
+                    "fitting_type": ft,
+                    "material_name": mn,
+                    "model_spec": ms,
+                    "unit": r["unit"] or "个",
+                    "stock_qty": stock_qty,
+                    "remark": remark,
+                    "reported_by": rep_by,
+                    "reported_at": rep_at_str,
+                })
+
+            return {
+                "ok": True,
+                "material_kind": "fitting",
+                "view_mode": "history",
+                "summary": {
+                    "total_stock_qty": round(total_stock, 2),
+                    "supplier_count": len(unique_suppliers),
+                    "model_count": len(unique_specs),
+                    "batch_count": len(unique_batches),
+                    "record_count": len(items),
+                },
+                "items": items,
+            }
+
+        else:
+            # 默认：最新在库快照模式 (latest)
+            batch_rank_sql = text("""
+                WITH distinct_batches AS (
+                    SELECT DISTINCT 
+                        supply_entity_id, 
+                        batch_no, 
+                        report_date, 
+                        reported_at, 
+                        reported_by
+                    FROM tube.tube_fitting_supplier_inventory
+                ),
+                ranked AS (
+                    SELECT 
+                        supply_entity_id,
+                        batch_no,
+                        report_date,
+                        reported_at,
+                        reported_by,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY supply_entity_id 
+                            ORDER BY reported_at DESC, batch_no DESC
+                        ) AS rnk
+                    FROM distinct_batches
+                )
+                SELECT supply_entity_id, batch_no, report_date, reported_at, reported_by, rnk
+                FROM ranked
+                WHERE rnk IN (1, 2);
+            """)
+            batch_rows = session.execute(batch_rank_sql).mappings().all()
+
+            latest_batch_map: Dict[str, Dict[str, Any]] = {}
+            prev_batch_map: Dict[str, str] = {}
+
+            for br in batch_rows:
+                sid = str(br["supply_entity_id"]).strip()
+                b_no = str(br["batch_no"]).strip()
+                rnk = br["rnk"]
+                if rnk == 1:
+                    latest_batch_map[sid] = {
+                        "batch_no": b_no,
+                        "report_date": br["report_date"],
+                        "reported_at": br["reported_at"],
+                        "reported_by": br["reported_by"],
+                    }
+                elif rnk == 2:
+                    prev_batch_map[sid] = b_no
+
+            if not latest_batch_map:
+                return {
+                    "ok": True,
+                    "material_kind": "fitting",
+                    "view_mode": "latest",
+                    "summary": {
+                        "total_stock_qty": 0.0,
+                        "total_change_qty": 0.0,
+                        "supplier_count": 0,
+                        "model_count": 0,
+                        "latest_report_time": "",
+                        "latest_supplier_name": "",
+                        "record_count": 0,
+                    },
+                    "items": [],
+                }
+
+            latest_batch_numbers = [v["batch_no"] for v in latest_batch_map.values()]
+            inv_rows = session.execute(text("""
+                SELECT 
+                    id, batch_no, report_date, supply_entity_id, section_1_id,
+                    fitting_type, material_name, model_spec, unit,
+                    stock_qty, remark, reported_by, reported_at, updated_at
+                FROM tube.tube_fitting_supplier_inventory
+                WHERE batch_no = ANY(:batch_nos)
+                ORDER BY supply_entity_id ASC;
+            """), {"batch_nos": latest_batch_numbers}).mappings().all()
+
+            prev_batch_numbers = [b for b in prev_batch_map.values() if b]
+            prev_stock_map: Dict[Tuple[str, str, str, str], float] = {}
+            if prev_batch_numbers:
+                prev_inv_rows = session.execute(text("""
+                    SELECT supply_entity_id, fitting_type, material_name, model_spec, stock_qty
+                    FROM tube.tube_fitting_supplier_inventory
+                    WHERE batch_no = ANY(:batch_nos);
+                """), {"batch_nos": prev_batch_numbers}).mappings().all()
+                for pr in prev_inv_rows:
+                    sid = str(pr["supply_entity_id"]).strip()
+                    ft = str(pr["fitting_type"] or "").strip()
+                    mn = str(pr["material_name"] or "").strip()
+                    ms = str(pr["model_spec"] or "").strip()
+                    prev_stock_map[(sid, ft, mn, ms)] = float(pr["stock_qty"] or 0)
+
+            items = []
+            total_stock = 0.0
+            total_change = 0.0
+            unique_suppliers = set()
+            unique_specs = set()
+            overall_latest_time = None
+            overall_latest_sup = ""
+
+            for r in inv_rows:
+                sid = str(r["supply_entity_id"] or "").strip()
+                s_name = supplier_map.get(sid.upper()) or supplier_map.get(sid) or sid
+                ft = str(r["fitting_type"] or "").strip()
+                mn = str(r["material_name"] or "").strip()
+                ms = str(r["model_spec"] or "").strip()
+
+                if sup_filter_set and sid.lower() not in sup_filter_set:
+                    continue
+                if fitting_type_filter_set and ft not in fitting_type_filter_set:
+                    continue
+
+                r_date = r["report_date"]
+                if start_date and r_date and r_date < start_date:
+                    continue
+                if end_date and r_date and r_date > end_date:
+                    continue
+
+                batch_no = str(r["batch_no"] or "")
+                rep_by = str(r["reported_by"] or "")
+                remark = str(r["remark"] or "")
+
+                if kw:
+                    text_corpus = f"{sid} {s_name} {ft} {mn} {ms} {batch_no} {rep_by} {remark}".lower()
+                    if kw not in text_corpus:
+                        continue
+
+                stock_qty = float(r["stock_qty"] or 0)
+                prev_stock_qty = prev_stock_map.get((sid, ft, mn, ms), 0.0)
+                change_qty = round(stock_qty - prev_stock_qty, 2)
+
+                rep_at = r["reported_at"]
+                rep_at_str = rep_at.astimezone(BEIJING_TZ).strftime("%Y/%m/%d %H:%M:%S") if rep_at else ""
+                rep_date_str = r_date.isoformat() if r_date else ""
+
+                if overall_latest_time is None or (rep_at and rep_at > overall_latest_time):
+                    overall_latest_time = rep_at
+                    overall_latest_sup = s_name
+
+                total_stock += stock_qty
+                total_change += change_qty
+                unique_suppliers.add(sid)
+                unique_specs.add(f"{ft}__{ms}")
+
+                items.append({
+                    "id": r["id"],
+                    "batch_no": batch_no,
+                    "report_date": rep_date_str,
+                    "supply_entity_id": sid,
+                    "supply_entity_name": s_name,
+                    "fitting_type": ft,
+                    "material_name": mn,
+                    "model_spec": ms,
+                    "unit": r["unit"] or "个",
+                    "stock_qty": stock_qty,
+                    "previous_stock_qty": prev_stock_qty,
+                    "change_qty": change_qty,
+                    "remark": remark,
+                    "reported_by": rep_by,
+                    "reported_at": rep_at_str,
+                })
+
+            items.sort(key=lambda x: (x["supply_entity_name"], _fitting_inventory_sort_key(x)))
+            latest_time_str = overall_latest_time.astimezone(BEIJING_TZ).strftime("%Y/%m/%d %H:%M:%S") if overall_latest_time else ""
+
+            return {
+                "ok": True,
+                "material_kind": "fitting",
+                "view_mode": "latest",
+                "summary": {
+                    "total_stock_qty": round(total_stock, 2),
+                    "total_change_qty": round(total_change, 2),
+                    "supplier_count": len(unique_suppliers),
+                    "model_count": len(unique_specs),
+                    "latest_report_time": latest_time_str,
+                    "latest_supplier_name": overall_latest_sup,
+                    "record_count": len(items),
+                },
+                "items": items,
+            }
+    finally:
+        session.close()
+
