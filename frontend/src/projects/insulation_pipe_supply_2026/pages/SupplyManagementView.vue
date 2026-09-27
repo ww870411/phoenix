@@ -670,6 +670,43 @@
                 </button>
                 <button
                   type="button"
+                  class="btn ghost"
+                  :disabled="isCurrentEntityCustom || inventoryLoading || inventorySaving"
+                  title="将所有实盘在库量清零，方便重新盘点录入"
+                  style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1;"
+                  @click="resetPipeInventoryToZero"
+                >
+                  0️⃣ 默认置零
+                </button>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :disabled="isCurrentEntityCustom || inventoryLoading || !inventoryData.items?.length"
+                  title="下载当前厂家保温管成品库存盘点标准表格 (.xlsx)，已按通径规格预填全部物料"
+                  style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600;"
+                  @click="downloadPipeInventoryExcel"
+                >
+                  📥 下载标准盘点表格
+                </button>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :disabled="isCurrentEntityCustom || inventoryLoading || !inventoryData.items?.length"
+                  title="上传已填写好实盘库存量的标准 Excel 表格，系统将自动核对并回填至下方表格"
+                  style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 600;"
+                  @click="triggerPipeInventoryExcelUpload"
+                >
+                  📤 导入盘点表格
+                </button>
+                <input
+                  ref="pipeInventoryExcelFileInputRef"
+                  type="file"
+                  accept=".xlsx, .xls"
+                  style="display: none;"
+                  @change="handlePipeInventoryExcelFile"
+                />
+                <button
+                  type="button"
                   class="btn primary"
                   :disabled="isCurrentEntityCustom || inventoryLoading || inventorySaving"
                   style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important; border: none !important; font-weight: 700; padding: 8px 22px; color: #ffffff !important; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25); border-radius: 6px;"
@@ -721,100 +758,31 @@
                 </div>
               </div>
 
-              <!-- 盘点明细表格 -->
-              <div v-if="inventoryLoading" class="loading-text">正在加载厂区成品库存盘点明细...</div>
+              <!-- 盘点明细 RevoGrid 电子表格 -->
+              <div v-if="inventoryLoading" class="loading-text">正在从分配规格与盘点台账加载保温管清单...</div>
               <div v-else-if="inventoryError" class="error-box">{{ inventoryError }}</div>
-              <div v-else class="table-wrap" style="max-height: 620px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <table class="data-table" style="width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0;">
-                <colgroup>
-                  <col style="width: 60px;" />
-                  <col style="width: 320px;" />
-                  <col style="width: 140px;" />
-                  <col style="width: 180px;" />
-                  <col style="width: 130px;" />
-                  <col style="min-width: 180px;" />
-                </colgroup>
-                <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2;">
-                  <tr>
-                    <th style="text-align: center; white-space: nowrap; padding: 10px 8px;">序号</th>
-                    <th style="text-align: left; white-space: nowrap; padding: 10px 12px;">保温管型号</th>
-                    <th style="text-align: right; white-space: nowrap; padding: 10px 12px;" :title="inventoryData.latest_previous_time ? `上次盘点时间: ${inventoryData.latest_previous_time}` : '历史尚无更早盘点'">
-                      上次在库量 (米)
-                    </th>
-                    <th style="text-align: center; white-space: nowrap; padding: 10px 12px; background: #e0e7ff; color: #312e81;">
-                      本次实盘在库量 (米) *
-                    </th>
-                    <th style="text-align: right; white-space: nowrap; padding: 10px 12px;">变动差额 (米)</th>
-                    <th style="text-align: left; white-space: nowrap; padding: 10px 12px;">备注</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(row, idx) in inventoryData.items"
-                    :key="row.pipe_model_id"
-                    :style="{ background: row.stock_qty > 0 ? '#fbfcfe' : '#ffffff' }"
-                  >
-                    <td style="text-align: center; color: #64748b; font-size: 12px; padding: 8px 6px; vertical-align: middle;">{{ idx + 1 }}</td>
-                    <td style="text-align: left; font-weight: 600; color: #1e293b; font-size: 13px; padding: 8px 12px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.pipe_model_name || row.pipe_model_id">
-                      {{ row.pipe_model_name || row.pipe_model_id }}
-                    </td>
-                    <td style="text-align: right; color: #64748b; font-size: 13px; font-family: monospace; padding: 8px 12px; vertical-align: middle;">
-                      {{ formatNumber(row.previous_stock_qty) }}
-                    </td>
-                    <td style="text-align: center; background: rgba(224, 231, 255, 0.25); padding: 6px 10px; vertical-align: middle;">
-                      <input
-                        v-model.number="row.stock_qty"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        class="input no-spin"
-                        placeholder="0.0"
-                        style="width: 100%; max-width: 130px; text-align: right; font-weight: 700; color: #4338ca; border: 1px solid #a5b4fc; border-radius: 6px; padding: 5px 8px; font-size: 13px; box-sizing: border-box;"
-                      />
-                    </td>
-                    <td style="text-align: right; font-size: 12.5px; font-family: monospace; font-weight: 600; padding: 8px 12px; vertical-align: middle;">
-                      <span
-                        v-if="row.stock_qty - row.previous_stock_qty > 0"
-                        style="color: #16a34a;"
-                      >
-                        +{{ formatNumber(row.stock_qty - row.previous_stock_qty) }}
-                      </span>
-                      <span
-                        v-else-if="row.stock_qty - row.previous_stock_qty < 0"
-                        style="color: #ea580c;"
-                      >
-                        {{ formatNumber(row.stock_qty - row.previous_stock_qty) }}
-                      </span>
-                      <span v-else style="color: #94a3b8;">0.0</span>
-                    </td>
-                    <td style="text-align: left; padding: 6px 10px; vertical-align: middle;">
-                      <input
-                        v-model="row.remark"
-                        type="text"
-                        class="input"
-                        placeholder=""
-                        style="width: 100%; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; font-size: 12px; box-sizing: border-box;"
-                      />
-                    </td>
-                  </tr>
-                </tbody>
-                <tfoot style="position: sticky; bottom: 0; background: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1; z-index: 2;">
-                  <tr>
-                    <td colspan="2" style="text-align: center; padding: 10px 12px; vertical-align: middle;">全型号盘点汇总合计</td>
-                    <td style="text-align: right; color: #64748b; font-family: monospace; padding: 10px 12px; vertical-align: middle;">
-                      {{ formatNumber(computedTotalPreviousStock) }}
-                    </td>
-                    <td style="text-align: center; color: #4338ca; font-size: 14px; font-family: monospace; padding: 10px 12px; vertical-align: middle;">
-                      {{ formatNumber(computedTotalInventoryStock) }} 米
-                    </td>
-                    <td style="text-align: right; font-family: monospace; padding: 10px 12px; vertical-align: middle;">
-                      {{ formatNumber(computedTotalInventoryStock - computedTotalPreviousStock) }}
-                    </td>
-                    <td style="color: #64748b; font-size: 12px; text-align: left; padding: 10px 12px; vertical-align: middle;">共 {{ inventoryData.items.length }} 种规格型号</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+              <div v-else class="table-wrap card" style="min-height: 380px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff;">
+                <RevoGrid
+                  ref="pipeInventoryGridRef"
+                  :row-headers="true"
+                  :hide-attribution="true"
+                  :stretch="true"
+                  :row-size="34"
+                  :resize="true"
+                  :range="true"
+                  :can-focus="true"
+                  :apply-on-close="true"
+                  :columns="pipeInventoryGridColumns"
+                  :source="pipeInventoryGridSource"
+                  style="height: 520px; width: 100%;"
+                  @afteredit="handlePipeInventoryGridAfterEdit"
+                  @afterEdit="handlePipeInventoryGridAfterEdit"
+                />
+              </div>
+              <div style="margin-top: 8px; font-size: 12px; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
+                <span>💡 提示：双击【本次实盘在库量】单元格直接编辑，支持键盘方向键跳格与回车；可直接复制 Excel 矩阵按 Ctrl+V 批量粘贴。</span>
+                <span>当前显示 {{ pipeInventoryGridSource.length }} 种保温管规格型号</span>
+              </div>
             </template>
           </section>
         </div>
@@ -2602,7 +2570,7 @@
             您导入了非标准表格，系统将尽力识别，请核对识别结果与实际库存量。
           </div>
           <p style="margin: 0; font-size: 13px; color: #64748b;">
-            💡 提示：系统将启动多维物理特征与流式状态机智能解析。点击【确定】后将立即开始识别与填入；若需严格按规范填报，也可点击【取消】并下载标准表格填写。
+            💡 提示：系统将启动{{ importModalMaterialType === 'pipe' ? '保温管型号规格' : '多维物理特征与流式状态机' }}智能解析。点击【确定】后将立即开始识别与填入；若需严格按规范填报，也可点击【取消】并下载标准表格填写。
           </p>
         </div>
         <div class="modal-footer" style="padding: 14px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc;">
@@ -2637,7 +2605,12 @@
         </div>
         <div class="modal-body" style="padding: 22px 20px; font-size: 14.5px; line-height: 1.65; color: #334155;">
           <div style="background: #fee2e2; border-left: 4px solid #ef4444; padding: 12px 14px; border-radius: 6px; margin-bottom: 12px; font-weight: 600; color: #991b1b;">
-            无法完整识别导入表格。上传表格应包含完整的管件类型、规格型号和数量信息，并与合同保持一致。若仍出现此问题，请下载标准表格填写导入。
+            <template v-if="importModalMaterialType === 'pipe'">
+              无法完整识别导入表格。上传表格应包含完整的保温管型号与数量信息，并与合同保持一致。若仍出现此问题，请下载标准表格填写导入。
+            </template>
+            <template v-else>
+              无法完整识别导入表格。上传表格应包含完整的管件类型、规格型号和数量信息，并与合同保持一致。若仍出现此问题，请下载标准表格填写导入。
+            </template>
           </div>
           <p style="margin: 0; font-size: 13px; color: #64748b;">
             建议点击下方【📥 下载标准表格】，在标准模板中填入在库数量后重新导入，以保证数据100%精确对齐入库。
@@ -2647,7 +2620,7 @@
           <button 
             type="button" 
             class="btn ghost" 
-            @click="downloadFittingInventoryExcel(); showBadRecognitionModal = false" 
+            @click="handleDownloadTemplateFromModal" 
             style="padding: 8px 18px; border: 1px solid #93c5fd; background: #eff6ff; color: #2563eb; border-radius: 6px; font-size: 13.5px; font-weight: 600; cursor: pointer;"
           >
             📥 下载标准表格
@@ -2914,11 +2887,64 @@ const handleTabClick = (tab) => {
   }
 }
 
-// --- 🏭 保温管厂区成品库存盘点专用变量与逻辑 (按次盘点) ---
+// --- 📐 通用宽松数值解析工具与导入确认模态框控制 (供保温管与管件库存盘点通用) ---
+const importModalMaterialType = ref('fitting') // 'pipe' | 'fitting'
+const showNonStandardModal = ref(false)
+let nonStandardConfirmResolve = null
+const showBadRecognitionModal = ref(false)
+
+const handleConfirmNonStandard = () => {
+  if (nonStandardConfirmResolve) {
+    nonStandardConfirmResolve(true)
+    nonStandardConfirmResolve = null
+  }
+  showNonStandardModal.value = false
+}
+
+const handleCancelNonStandard = () => {
+  if (nonStandardConfirmResolve) {
+    nonStandardConfirmResolve(false)
+    nonStandardConfirmResolve = null
+  }
+  showNonStandardModal.value = false
+  if (pipeInventoryExcelFileInputRef.value) {
+    pipeInventoryExcelFileInputRef.value.value = ''
+  }
+  if (fittingInventoryExcelFileInputRef.value) {
+    fittingInventoryExcelFileInputRef.value.value = ''
+  }
+}
+
+const handleDownloadTemplateFromModal = () => {
+  if (importModalMaterialType.value === 'pipe') {
+    downloadPipeInventoryExcel()
+  } else {
+    downloadFittingInventoryExcel()
+  }
+  showBadRecognitionModal.value = false
+}
+
+const parseLenientNumber = (val) => {
+  if (val === undefined || val === null) return 0
+  if (typeof val === 'number') return Math.max(0, val)
+  const s = String(val).trim().replace(/,/g, '')
+  if (!s || ['-', '/', '无', '暂无', '空', '0'].includes(s)) return 0
+  const m = s.match(/-?\d+(?:\.\d+)?/)
+  if (m) {
+    const n = parseFloat(m[0])
+    return isNaN(n) ? 0 : Math.max(0, n)
+  }
+  return 0
+}
+
+// --- 🏭 保温管厂区成品库存盘点专用变量与逻辑 (按次盘点，基于 RevoGrid) ---
 const inventoryLoading = ref(false)
 const inventorySaving = ref(false)
 const inventoryError = ref('')
 const inventoryActionMessage = ref(null)
+const pipeInventoryGridRef = ref(null)
+const pipeInventoryExcelFileInputRef = ref(null)
+
 const inventoryData = reactive({
   has_previous_record: false,
   has_record: false,
@@ -2929,6 +2955,82 @@ const inventoryData = reactive({
   total_stock_qty: 0,
   items: [],
 })
+
+const pipeInventoryGridSource = computed(() => {
+  return (inventoryData.items || []).map((it, idx) => ({
+    ...it,
+    _seq: idx + 1,
+    unit: '米',
+    change_qty: Number(((Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0)).toFixed(1)),
+  }))
+})
+
+const pipeInventoryGridColumns = ref([
+  {
+    prop: '_seq',
+    name: '序号',
+    size: 55,
+    readonly: true,
+    pin: 'colPinStart',
+    cellProperties: () => ({ style: { textAlign: 'center', color: '#64748b', backgroundColor: '#f8fafc' } })
+  },
+  {
+    prop: 'pipe_model_name',
+    name: '保温管型号 / 规格',
+    size: 260,
+    readonly: true,
+    cellProperties: () => ({ style: { fontWeight: 'bold', color: '#0f172a' } })
+  },
+  {
+    prop: 'unit',
+    name: '单位',
+    size: 65,
+    readonly: true,
+    cellProperties: () => ({ style: { textAlign: 'center', color: '#475569' } })
+  },
+  {
+    prop: 'previous_stock_qty',
+    name: '上次在库量 (米)',
+    size: 130,
+    readonly: true,
+    cellProperties: () => ({ style: { textAlign: 'right', color: '#64748b', backgroundColor: '#f8fafc', fontFamily: 'monospace' } })
+  },
+  {
+    prop: 'stock_qty',
+    name: '本次实盘在库量 (米) *',
+    size: 180,
+    readonly: false,
+    cellProperties: () => ({
+      style: {
+        textAlign: 'right',
+        backgroundColor: '#eff6ff',
+        color: '#1d4ed8',
+        fontWeight: 'bold',
+        fontFamily: 'monospace'
+      }
+    })
+  },
+  {
+    prop: 'change_qty',
+    name: '变动差额 (米)',
+    size: 120,
+    readonly: true,
+    cellProperties: (props) => {
+      const model = (props && props.model) ? props.model : (props || {})
+      const val = Number(model.change_qty) || 0
+      if (val > 0) return { style: { textAlign: 'right', color: '#16a34a', fontWeight: 'bold', fontFamily: 'monospace' } }
+      if (val < 0) return { style: { textAlign: 'right', color: '#ea580c', fontWeight: 'bold', fontFamily: 'monospace' } }
+      return { style: { textAlign: 'right', color: '#94a3b8', fontFamily: 'monospace' } }
+    }
+  },
+  {
+    prop: 'remark',
+    name: '盘点备注',
+    size: 220,
+    readonly: false,
+    cellProperties: () => ({ style: { color: '#334155' } })
+  }
+])
 
 const formatPreviousInventoryBtnLabel = computed(() => {
   const timeStr = inventoryData.latest_previous_time || inventoryData.latest_previous_date
@@ -2958,6 +3060,39 @@ const setInventoryActionMessage = (text, type = 'success', duration = 3500) => {
   }
 }
 
+const handlePipeInventoryGridAfterEdit = (e) => {
+  const detail = e.detail || e
+  if (!detail || !detail.model) return
+  const model = detail.model
+  const prop = detail.prop
+  const val = detail.val
+
+  const target = (inventoryData.items || []).find(
+    (it) => it.pipe_model_id === model.pipe_model_id || it.pipe_model_name === model.pipe_model_name
+  )
+  if (target) {
+    if (prop === 'stock_qty') {
+      const num = Math.max(0, parseFloat(val) || 0)
+      target.stock_qty = Number(num.toFixed(1))
+      target.change_qty = Number((target.stock_qty - (Number(target.previous_stock_qty) || 0)).toFixed(1))
+    } else if (prop === 'remark') {
+      target.remark = String(val || '').trim()
+    }
+  }
+}
+
+const resetPipeInventoryToZero = () => {
+  if (!inventoryData.items || !inventoryData.items.length) return
+  inventoryData.items.forEach((it) => {
+    it.stock_qty = 0
+    it.change_qty = -Number(it.previous_stock_qty || 0)
+  })
+  if (pipeInventoryGridRef.value && typeof pipeInventoryGridRef.value.refresh === 'function') {
+    pipeInventoryGridRef.value.refresh()
+  }
+  setInventoryActionMessage('已将所有保温管实盘量置零，可重新输入实盘数', 'info', 3000)
+}
+
 const loadInventoryData = async () => {
   const entityId = selectedSupplyEntityId.value || ''
   if (!entityId) return
@@ -2984,8 +3119,10 @@ const loadInventoryData = async () => {
       inventoryData.total_stock_qty = Number(d.total_stock_qty) || 0
       inventoryData.items = (d.items || []).map((it) => ({
         ...it,
+        unit: '米',
         stock_qty: Number(it.stock_qty) || 0,
         previous_stock_qty: Number(it.previous_stock_qty) || 0,
+        change_qty: Number(((Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0)).toFixed(1)),
         remark: it.remark || '',
       }))
     }
@@ -3001,9 +3138,378 @@ const applyPreviousInventory = () => {
   if (!inventoryData.items || !inventoryData.items.length) return
   inventoryData.items.forEach((it) => {
     it.stock_qty = Number(it.previous_stock_qty) || 0
+    it.change_qty = 0
   })
+  if (pipeInventoryGridRef.value && typeof pipeInventoryGridRef.value.refresh === 'function') {
+    pipeInventoryGridRef.value.refresh()
+  }
   const timeDesc = inventoryData.latest_previous_time || '上次'
   setInventoryActionMessage(`已成功沿用上次 (${timeDesc}) 盘点在库数值`, 'success', 3000)
+}
+
+const downloadPipeInventoryExcel = () => {
+  const items = inventoryData.items || []
+  if (!items.length) {
+    setInventoryActionMessage('当前暂无可导出的保温管型号清单', 'error', 3000)
+    return
+  }
+  const entityName = currentSupplyEntityLabel.value || selectedSupplyEntityId.value || '供给方'
+  const entityId = selectedSupplyEntityId.value || ''
+  const todayStr = new Date().toISOString().slice(0, 10)
+
+  // 1. 构建二维数组数据行 (AOA)
+  const aoaData = [
+    [`【${entityName}】保温管成品库存盘点提报表`],
+    [`提报单位：${entityName}    厂家编码：${entityId}    数量单位：米    基准日期：${todayStr}`],
+    ['序号', '保温管型号', '上次盘点数量 (米/参考)', '本次实盘在库量 (米/必填)', '备注']
+  ]
+
+  items.forEach((it, idx) => {
+    aoaData.push([
+      idx + 1,
+      it.pipe_model_name || it.pipe_model_id || '',
+      it.previous_stock_qty !== undefined && it.previous_stock_qty !== null ? Number(it.previous_stock_qty) : '',
+      it.stock_qty !== undefined && it.stock_qty !== null ? Number(it.stock_qty) : '',
+      it.remark || ''
+    ])
+  })
+
+  const worksheet = XLSX.utils.aoa_to_sheet(aoaData)
+
+  const thinBorder = {
+    top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+  }
+
+  // 大标题样式 (Row 0)
+  worksheet['A1'].s = {
+    font: { name: '宋体', sz: 14, bold: true, color: { rgb: '1E293B' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    fill: { fgColor: { rgb: 'F1F5F9' } }
+  }
+
+  // 元信息样式 (Row 1)
+  worksheet['A2'].s = {
+    font: { name: '宋体', sz: 10, color: { rgb: '475569' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    fill: { fgColor: { rgb: 'F8FAFC' } }
+  }
+
+  // 表头样式 (Row 2, A3:E3)
+  const headerCols = ['A3', 'B3', 'C3', 'D3', 'E3']
+  headerCols.forEach((cellAddr, cIdx) => {
+    if (!worksheet[cellAddr]) worksheet[cellAddr] = { v: '', t: 's' }
+    const isQtyCol = cIdx === 3
+    const isPrevCol = cIdx === 2
+    worksheet[cellAddr].s = {
+      font: {
+        name: '宋体',
+        sz: 11,
+        bold: true,
+        color: { rgb: isQtyCol ? '166534' : isPrevCol ? '475569' : '1E293B' }
+      },
+      fill: { fgColor: { rgb: isQtyCol ? 'DCFCE7' : isPrevCol ? 'F1F5F9' : 'E2E8F0' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: '94A3B8' } },
+        bottom: { style: 'medium', color: { rgb: '475569' } },
+        left: { style: 'thin', color: { rgb: '94A3B8' } },
+        right: { style: 'thin', color: { rgb: '94A3B8' } }
+      }
+    }
+  })
+
+  // 数据行样式
+  const totalRows = aoaData.length
+  for (let r = 3; r < totalRows; r++) {
+    for (let c = 0; c < 5; c++) {
+      const cellAddress = XLSX.utils.encode_cell({ r, c })
+      if (!worksheet[cellAddress]) worksheet[cellAddress] = { v: '', t: 's' }
+      const isQtyCol = c === 3
+      const isPrevCol = c === 2
+      worksheet[cellAddress].s = {
+        font: {
+          name: '宋体',
+          sz: 10,
+          bold: isQtyCol,
+          color: { rgb: isPrevCol ? '64748B' : '1E293B' }
+        },
+        alignment: {
+          vertical: 'center',
+          horizontal: c === 0 ? 'center' : (c === 2 || c === 3) ? 'right' : 'left'
+        },
+        fill: isQtyCol
+          ? { fgColor: { rgb: 'F0FDF4' } }
+          : isPrevCol
+          ? { fgColor: { rgb: 'F8FAFC' } }
+          : undefined,
+        border: thinBorder
+      }
+    }
+  }
+
+  worksheet['!cols'] = [
+    { wch: 8 },  // 序号
+    { wch: 28 }, // 保温管型号
+    { wch: 24 }, // 上次盘点数量 (米/参考)
+    { wch: 24 }, // 本次实盘在库量 (米/必填)
+    { wch: 28 }, // 备注
+  ]
+
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }
+  ]
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, '保温管库存盘点')
+  const fileName = `保温管成品库存盘点表_${entityName}_${todayStr.replace(/-/g, '')}.xlsx`
+  XLSX.writeFile(workbook, fileName)
+  setInventoryActionMessage(`已成功生成并下载【${fileName}】`, 'success', 3500)
+}
+
+const triggerPipeInventoryExcelUpload = () => {
+  if (pipeInventoryExcelFileInputRef.value) {
+    pipeInventoryExcelFileInputRef.value.value = ''
+    pipeInventoryExcelFileInputRef.value.click()
+  }
+}
+
+const handlePipeInventoryExcelFile = (event) => {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+
+  const currentEntityName = currentSupplyEntityLabel.value || selectedSupplyEntityId.value || '供给方'
+  const currentEntityId = (selectedSupplyEntityId.value || '').trim().toLowerCase()
+
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target.result)
+      const workbook = XLSX.read(data, { type: 'array' })
+
+      let targetSheetName = workbook.SheetNames[0]
+      for (const name of workbook.SheetNames) {
+        if (/保温管|直管|库存|盘点/.test(name)) {
+          targetSheetName = name
+          break
+        }
+      }
+
+      const worksheet = workbook.Sheets[targetSheetName]
+      if (!worksheet) throw new Error('未在 Excel 中找到有效的工作表')
+
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+      if (!jsonData || jsonData.length < 2) {
+        throw new Error(`工作表【${targetSheetName}】内容过少，未找到有效的盘点数据行`)
+      }
+
+      // 1. 扫描元信息（防呆：判断是否误传其他厂家的表）
+      let detectedEntityId = ''
+      for (let r = 0; r < Math.min(5, jsonData.length); r++) {
+        const rowText = (jsonData[r] || []).join(' ')
+        const match = rowText.match(/厂家编码[:：\s]*([a-zA-Z0-9_\-]+)/i)
+        if (match && match[1]) {
+          detectedEntityId = match[1].trim().toLowerCase()
+          break
+        }
+      }
+      if (detectedEntityId && currentEntityId && detectedEntityId !== currentEntityId) {
+        const confirmed = window.confirm(
+          `⚠️ 厂家校验提醒：\n表格内标注的厂家编码为【${detectedEntityId}】，而当前工作台选中的厂家为【${currentEntityName} (${currentEntityId})】。\n\n是否仍确认将该 Excel 数据匹配导入当前厂家？`
+        )
+        if (!confirmed) {
+          if (pipeInventoryExcelFileInputRef.value) pipeInventoryExcelFileInputRef.value.value = ''
+          return
+        }
+      }
+
+      // 2. 查找表头行与列索引
+      let stdHeaderRowIdx = -1
+      let colMap = { spec: -1, qty: -1, remark: -1 }
+
+      let hasStandardTemplateTitle = false
+      for (let r = 0; r < Math.min(3, jsonData.length); r++) {
+        const rowText = (jsonData[r] || []).join(' ')
+        if (rowText.includes('保温管成品库存盘点提报表') || rowText.includes('保温管成品库存盘点')) {
+          hasStandardTemplateTitle = true
+          break
+        }
+      }
+
+      for (let r = 0; r < Math.min(8, jsonData.length); r++) {
+        const row = jsonData[r] || []
+        const rowHeaders = row.map((c) => String(c || '').trim())
+
+        let fSpec = -1, fQty = -1, fRemark = -1
+        // 优先匹配标准与常用规格型号列
+        rowHeaders.forEach((h, idx) => {
+          if (/规格型号|保温管型号|管型/.test(h)) {
+            fSpec = idx
+          } else if (fSpec === -1 && /型号|规格|物资名称|分项名称/.test(h)) {
+            fSpec = idx
+          }
+
+          // 数量列优先提取【库存米数/实盘量】，次选通用【库存/数量】（排除合同/支数等干扰列）
+          if (/本次实盘在库量|实盘在库量|实盘库存量|库存米数/.test(h)) {
+            fQty = idx
+          } else if (fQty === -1 && /库存|实盘|数量|米数|在库/.test(h) && !/上次|历史|参考|合同|计划|设计|采购|支数/.test(h)) {
+            fQty = idx
+          }
+
+          if (/备注|说明/.test(h)) {
+            fRemark = idx
+          }
+        })
+
+        if (fSpec !== -1 && fQty !== -1) {
+          stdHeaderRowIdx = r
+          colMap = { spec: fSpec, qty: fQty, remark: fRemark }
+          break
+        }
+      }
+
+      const isStandardFormat = hasStandardTemplateTitle && stdHeaderRowIdx !== -1
+
+      // 若为非标准表格，首先弹窗提示，等待用户点击【确定】后才开始识别和填入
+      if (!isStandardFormat) {
+        importModalMaterialType.value = 'pipe'
+        const confirmed = await new Promise((resolve) => {
+          nonStandardConfirmResolve = resolve
+          showNonStandardModal.value = true
+        })
+        if (!confirmed) {
+          if (pipeInventoryExcelFileInputRef.value) {
+            pipeInventoryExcelFileInputRef.value.value = ''
+          }
+          return
+        }
+      }
+
+      // 3. 构建保温管型号索引 Map（支持归一化提取与容错匹配）
+      const items = inventoryData.items || []
+      const modelMap = new Map()
+
+      const normalizeModelKey = (str) => {
+        if (!str) return ''
+        return String(str)
+          .trim()
+          .toUpperCase()
+          .replace(/[（(].*?[)）]/g, '')
+          .replace(/聚氨酯|预制|直埋|保温管|直管/g, '')
+          .replace(/[ΦФφ]/g, '')
+          .replace(/[×xX\*]/g, '*')
+          .replace(/\.0+(?!\d)/g, '')
+          .replace(/[\s\-_/\\,]+/g, '/')
+          .replace(/^\/+|\/+$/g, '')
+      }
+
+      items.forEach((it) => {
+        const rawKey = String(it.pipe_model_id || it.pipe_model_name || '').trim().toUpperCase()
+        const normKey = normalizeModelKey(rawKey)
+        modelMap.set(rawKey, it)
+        if (normKey) modelMap.set(normKey, it)
+      })
+
+      let matchedCount = 0
+      let totalQty = 0
+      let scannedRows = 0
+
+      const startIdx = stdHeaderRowIdx !== -1 ? stdHeaderRowIdx + 1 : 0
+      const dataRows = jsonData.slice(startIdx)
+
+      dataRows.forEach((row) => {
+        if (!row || !row.length) return
+
+        const rowLine = row.map((c) => String(c || '').trim()).join(' ')
+        // 过滤整行空行
+        if (!rowLine.replace(/\s+/g, '')) return
+
+        // 智能跳过次表头或混排的管件、配件区块（如弯头、三通、补偿器等）
+        if (
+          rowLine.includes('材料名称') ||
+          /弯头|三通|异径|变径|大小头|封头|支架|补偿器|球阀|套筒|接头|绝缘|波纹管|法兰/.test(rowLine)
+        ) {
+          return
+        }
+
+        let specStr = ''
+        let rawQty = ''
+        let remarkStr = ''
+
+        if (colMap.spec !== -1 && colMap.qty !== -1) {
+          specStr = String(row[colMap.spec] || '').trim()
+          rawQty = row[colMap.qty]
+          remarkStr = colMap.remark !== -1 ? String(row[colMap.remark] || '').trim() : ''
+        } else {
+          row.forEach((cell) => {
+            const s = String(cell || '').trim()
+            if (/DN\d+/i.test(s) && !specStr) specStr = s
+            else if (typeof cell === 'number' && rawQty === '') rawQty = cell
+            else if (typeof cell === 'string' && /^\d+(\.\d+)?$/.test(s) && rawQty === '') rawQty = s
+          })
+        }
+
+        // 再次过滤管件或非直管数据
+        if (!specStr || /弯头|三通|异径|变径|大小头|封头|支架|补偿器|球阀/.test(specStr)) return
+
+        // 若数量完全为空则跳过
+        if (rawQty === '' || rawQty === undefined || rawQty === null) return
+
+        scannedRows++
+
+        const rawK = specStr.toUpperCase()
+        const normK = normalizeModelKey(specStr)
+        const targetItem = modelMap.get(rawK) || modelMap.get(normK)
+
+        if (targetItem) {
+          const num = parseLenientNumber(rawQty)
+          targetItem.stock_qty = Number(num.toFixed(1))
+          targetItem.change_qty = Number((targetItem.stock_qty - (Number(targetItem.previous_stock_qty) || 0)).toFixed(1))
+          if (remarkStr) targetItem.remark = remarkStr
+          matchedCount++
+          totalQty += targetItem.stock_qty
+        }
+      })
+
+      if (pipeInventoryGridRef.value && typeof pipeInventoryGridRef.value.refresh === 'function') {
+        pipeInventoryGridRef.value.refresh()
+      }
+
+      // 4. 识别效果校验：若匹配为 0 或扫描数据行>=4但匹配率极低，触发识别不佳提醒模态框
+      const isBadRecognition = matchedCount === 0 || (scannedRows >= 4 && (matchedCount / scannedRows) < 0.25)
+
+      if (isBadRecognition) {
+        importModalMaterialType.value = 'pipe'
+        showBadRecognitionModal.value = true
+        setInventoryActionMessage(
+          `⚠️ 无法完整识别导入表格（仅匹配到 ${matchedCount} / ${scannedRows} 项），请核对或下载标准表格重新导入。`,
+          'warning',
+          6000
+        )
+        return
+      }
+
+      // 5. 给出贴心、明确的识别与回填反馈
+      setInventoryActionMessage(
+        `✅ 成功从 Excel 导入并匹配 ${matchedCount} 种保温管型号，实盘在库总量合计 ${formatNumber(totalQty)} 米！请在下方表格核对无误后点击【提交本次盘点结果】正式入库。`,
+        'success',
+        6000
+      )
+    } catch (err) {
+      console.error('导入保温管盘点表格失败:', err)
+      importModalMaterialType.value = 'pipe'
+      showBadRecognitionModal.value = true
+      setInventoryActionMessage(`❌ 导入异常: ${err.message || '表格无法完整识别'}，建议下载标准表格填写导入`, 'error', 6000)
+    } finally {
+      if (pipeInventoryExcelFileInputRef.value) {
+        pipeInventoryExcelFileInputRef.value.value = ''
+      }
+    }
+  }
+  reader.readAsArrayBuffer(file)
 }
 
 const saveInventoryData = async () => {
@@ -3343,19 +3849,6 @@ const triggerFittingInventoryExcelUpload = () => {
   }
 }
 
-const parseLenientNumber = (val) => {
-  if (val === undefined || val === null) return 0
-  if (typeof val === 'number') return Math.max(0, val)
-  const s = String(val).trim().replace(/,/g, '')
-  if (!s || ['-', '/', '无', '暂无', '空', '0'].includes(s)) return 0
-  const m = s.match(/-?\d+(?:\.\d+)?/)
-  if (m) {
-    const n = parseFloat(m[0])
-    return isNaN(n) ? 0 : Math.max(0, n)
-  }
-  return 0
-}
-
 const cleanFittingItemName = (name) => {
   let s = String(name || '').trim()
   s = s.replace(/^表[一二三四五六七八九十\d]+[:：\s]*/, '')
@@ -3487,29 +3980,7 @@ const autoSelectFittingSheet = (workbook) => {
   }
 }
 
-// 非标准表格导入提示与确认控制
-const showNonStandardModal = ref(false)
-let nonStandardConfirmResolve = null
-const showBadRecognitionModal = ref(false)
-
-const handleConfirmNonStandard = () => {
-  if (nonStandardConfirmResolve) {
-    nonStandardConfirmResolve(true)
-    nonStandardConfirmResolve = null
-  }
-  showNonStandardModal.value = false
-}
-
-const handleCancelNonStandard = () => {
-  if (nonStandardConfirmResolve) {
-    nonStandardConfirmResolve(false)
-    nonStandardConfirmResolve = null
-  }
-  showNonStandardModal.value = false
-  if (fittingInventoryExcelFileInputRef.value) {
-    fittingInventoryExcelFileInputRef.value.value = ''
-  }
-}
+// 管件成品库存 Excel 导入处理
 
 const handleFittingInventoryExcelFile = (event) => {
   const file = event?.target?.files?.[0]
@@ -3603,6 +4074,7 @@ const handleFittingInventoryExcelFile = (event) => {
 
       // 若为非标准表格，首先弹窗提示，等待用户点击【确定】后才开始识别和填入
       if (!isStandardFormat) {
+        importModalMaterialType.value = 'fitting'
         const confirmed = await new Promise((resolve) => {
           nonStandardConfirmResolve = resolve
           showNonStandardModal.value = true
@@ -3826,6 +4298,7 @@ const handleFittingInventoryExcelFile = (event) => {
       const isBadRecognition = matchedCount === 0 || (scannedFittingRowsCount >= 4 && (matchedCount / scannedFittingRowsCount) < 0.25)
 
       if (isBadRecognition) {
+        importModalMaterialType.value = 'fitting'
         showBadRecognitionModal.value = true
         setFittingInventoryActionMessage(
           `⚠️ 无法完整识别导入表格（仅匹配到 ${matchedCount} / ${scannedFittingRowsCount} 项），请核对或下载标准表格重新导入。`,
@@ -3852,6 +4325,7 @@ const handleFittingInventoryExcelFile = (event) => {
       }
     } catch (err) {
       console.error('导入管件库存 Excel 失败:', err)
+      importModalMaterialType.value = 'fitting'
       showBadRecognitionModal.value = true
       setFittingInventoryActionMessage(`❌ 导入异常: ${err.message || '表格无法完整识别'}，建议下载标准表格填写导入`, 'error', 6000)
     } finally {

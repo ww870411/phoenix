@@ -1,3 +1,27 @@
+## 2026-09-27 供给侧保温管业务协同：保温管现货库存非标准表格解析引擎增强与数据契约稳定
+
+- **前后端契约与数据流向**：
+  - 前端供给侧现场管理工作台（[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)）优化了非标准表格解析引擎（针对类似“鑫瑞得大连项目”等综合型报表）：
+    1. 升级了规格型号的模糊归一化算法（支持中英文乘号转换、去除 `.0` 厚度冗余、空格/斜杠自适应映射），使直管规格精准命中系统标准合同型号；
+    2. 严格限定实盘在库数量列提取优先级，确保命中“库存米数”；
+    3. 智能跳过混排在同一张表底部的管件配件区块，确保直管识别率达到 100%；
+  - 经前端清洗并核对无误后的实盘数据继续严格遵循既有接口规范 `POST /api/v1/projects/{project_key}/tubes/supply-management/inventory/save` 进行批次快照存储，后端数据模型（`tube.tube_supplier_inventory`）契约保持完全兼容。
+
+## 2026-09-27 供给侧保温管业务协同：保温管现货库存非标准表格前置拦截与识别引导闭环
+
+- **前后端契约与数据流向**：
+  - 前端在保温管成品库存盘点页面（[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)）对齐管件构建双层交互安全防线：
+    1. **非标准表格前置拦截**：当用户上传非系统标准表格时，前置弹出琥珀金确认窗口（“您导入了非标准表格，系统将尽力识别，请核对识别结果与实际库存量。”），经用户确认后再启动智能解析，有效防止用户误操作或上传错乱文件；
+    2. **识别不佳异常闭环**：当识别物料数量为 0 或匹配度极低时，弹出警示红引导窗口（“无法完整识别导入表格。上传表格应包含完整的保温管型号与数量信息，并与合同保持一致。若仍出现此问题，请下载标准表格填写导入。”），并提供一键下载保温管系统标准表格按钮；
+  - 最终用户核对确认后的实盘数据通过既有端点 `POST /api/v1/projects/{project_key}/tubes/supply-management/inventory/save` 统一原子持久化落库，数据安全与严密性全面提升。
+
+## 2026-09-27 供给侧保温管业务协同：保温管现货库存 RevoGrid 架构与 Excel 导入导出数据契约无缝闭环
+
+- **前后端契约与数据流向**：
+  - 前端将保温管成品库存盘点页面（[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)）升级为现代化的 `RevoGrid` 架构，并在表格剪贴板直接矩阵粘贴（Ctrl+V）的基础上，全面闭环支持【标准表格下载】与【Excel 自动识别导入】；
+  - 导入解析引擎对直管通径与保温层外径（如 `DN200/315`、`DN200*315`、`200/315`、`直埋保温管 DN200/315` 等）进行智能归一化映射，并在回填 RevoGrid 后通过既有稳定端点 `POST /api/v1/projects/{project_key}/tubes/supply-management/inventory/save` 统一原子提交；
+  - 后端持久化存储层（`tube.tube_supplier_inventory`）继续保持基于唯一批次号（`batch_no`）的版本快照隔离与审计流水记录，数据口径与大屏、综合查询中心保持 100% 稳定一致。
+
 ## 2026-09-26 综合历史查询服务升级：管件供给方成品库存历史分析与环比变动算法落地
 
 - **服务层实现与算法落地 (`comprehensive_history_service.py`)**：

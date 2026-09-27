@@ -1,3 +1,57 @@
+## 2026-09-27 现场管理工作台保温管现货库存非标准表格解析引擎增强：鑫瑞得等综合报表智能对齐与多区块过滤
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理供给侧工作台 - 保温管成品库存盘点 Tab）；
+  - 核心解析函数：`handlePipeInventoryExcelFile`、`normalizeModelKey`、`colMap`；
+- **前端结构与交互变更**：
+  - **多维规格归一化引擎升级 (`normalizeModelKey`)**：
+    * 兼容中文全角乘号 `×`、半角乘号 `*` 与字母 `x/X` 的统一转换；
+    * 自动剥离浮点型壁厚多余的 `.0`（如 `7.0` ➔ `7`）；
+    * 兼容内外管之间的各种分隔符（空格、下划线、斜杠等），使得类似 `Φ377X7.0 Φ471X7.0` 能够 100% 自动对齐系统标准规格 `Φ377×7/Φ471×7`；
+  - **数量列检测优先级严格化**：
+    * 优先提取【本次实盘在库量/实盘在库量/库存米数】，次选常规【库存/数量】，彻底避免混淆表格中同时存在的“合同数量”与“实盘库存米数”；
+  - **多区块混排智能跳过与过滤**：
+    * 针对包含直管与管件双区块的综合型报表，在扫描数据行时自动跳过空行、管件次表头及各类配件数据行（弯头、三通、补偿器等），使保温直管识别率达到 100%，不再因混排管件拉低识别率触发不佳警示弹窗；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 20.35s），产出 `SupplyManagementView-CY8_XOrc.js`，零语法报错。
+
+## 2026-09-27 现场管理工作台保温管现货库存导入体验升级：非标表格前置拦截确认与识别不佳模态框引导
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理供给侧工作台 - 保温管成品库存盘点 Tab）；
+  - 模态控制组件：`showNonStandardModal`、`showBadRecognitionModal`、`importModalMaterialType`、`handleConfirmNonStandard`、`handleCancelNonStandard`、`handleDownloadTemplateFromModal`；
+- **前端结构与交互变更**：
+  - **非标准表格前置拦截确认模态框 (`showNonStandardModal`)**：
+    * 当在保温管现货库存上传非标准模版时，拦截并弹出琥珀金确认窗，提示“**您导入了非标准表格，系统将尽力识别，请核对识别结果与实际库存量。**”；
+    * 采用异步挂起机制，用户点击【确定】后才启动智能解析与回填；点击【取消导入】或点击遮罩关闭，则清空文件并安全退出；
+  - **识别效果不佳警示引导模态框 (`showBadRecognitionModal`)**：
+    * 在识别阶段若未匹配到任何型号（`matchedCount === 0`）或匹配率低于 25% 或解析异常时，唤出警示红引导弹窗：“**无法完整识别导入表格。上传表格应包含完整的保温管型号与数量信息，并与合同保持一致。若仍出现此问题，请下载标准表格填写导入。**”；
+    * 底部内置【📥 下载标准表格】按钮（自动调用 `downloadPipeInventoryExcel()` 并关闭弹窗）与【确定】按钮；
+  - **通用双品类自适应模态架构**：
+    * 模态框文案与模板下载动作根据 `importModalMaterialType` 自动分流（`pipe` 对应保温管，`fitting` 对应管件），保证两端体验高度统一且零代码冗余；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 18.57s），产出 `SupplyManagementView-Duajn7H1.js`，零语法报错。
+
+## 2026-09-27 现场管理供给侧工作台保温管现货库存升级：全面接入 RevoGrid 架构与 Excel 导入导出
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（现场管理供给侧工作台 - 保温管成品库存盘点 Tab）；
+  - 数据模型与网格：`RevoGrid`（`ref="pipeInventoryGridRef"`）、`pipeInventoryGridColumns`、`pipeInventoryGridSource`；
+- **前端结构与交互变更**：
+  - **RevoGrid 现代电子表格重构**：
+    * 将原有的静态 HTML `table` 替换为响应式 `RevoGrid` 架构，实现全尺寸平滑虚拟滚动；
+    * 支持在单元格区域直接选择、键盘上下左右方向键无缝跳格、回车跳行，彻底解决原生 input 无法批量编辑的痛点；
+    * 原生支持 **Excel 剪贴板矩阵粘贴（Ctrl+V）**，库管人员在 Excel 中复制一列库存米数，在网页首行单元格按下 Ctrl+V 即可 1 秒完成全量型号快速录入；
+  - **辅助工具链对齐管件**：
+    * 新增【0️⃣ 默认置零】（`resetPipeInventoryToZero`）：一键重置所有型号实盘在库量为 0，方便全新一轮盘点录入；
+    * 保留【📋 沿用上次盘点】（`applyPreviousInventory`）：支持在产线库存未变动时一键继承前次盘点数据；
+    * 新增【📥 下载标准盘点表格】（`downloadPipeInventoryExcel`）：动态生成高颜值带样式的 `.xlsx` 表格，包含序号、型号、上次数量（参考）、本次实盘量（必填带绿色背景高亮）与备注；
+    * 新增【📤 导入盘点表格】（`handlePipeInventoryExcelFile`）：智能解析用户上传的 Excel 文件，支持厂家编码防呆核验、表头模糊匹配以及通径外径（如 `DN200/315`、`DN200*315`、`200/315` 等）的归一化容错对齐，匹配后自动回填并给出识别汇总弹层；
+  - **动态差额与状态同步**：
+    * 每次单格编辑、批量粘贴或导入后，实时计算 `change_qty`（正增长绿色高亮、负减少橙色高亮、零变动灰色），并同步联动顶部“本次实盘在库总量”微看板；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.19s），产出 `SupplyManagementView-CbC7hAFN.js`，零语法报错。
+
 ## 2026-09-26 综合数据查询中心“供给方成品库存”双品类架构升级：管件现货子标签页与多维透视看板落地
 
 - **关联前端页面与组件**：
