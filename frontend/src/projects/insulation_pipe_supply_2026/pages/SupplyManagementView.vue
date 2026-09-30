@@ -542,7 +542,7 @@
             <div v-if="deliveriesLoading && !deliveryRows.length" class="loading-text">正在加载发货记录...</div>
             <div v-else-if="deliveriesError && !deliveryRows.length" class="error-box">{{ deliveriesError }}</div>
             <div v-else-if="!deliveryRows.length" class="empty-box">当前没有发货记录。</div>
-            <div v-else class="table-wrap">
+            <div v-else class="table-wrap delivery-history-table-wrap">
               <table class="data-table delivery-record-table">
                 <colgroup>
                   <col class="col-order" />
@@ -634,6 +634,10 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div v-if="deliveryRows.length" class="history-table-footer">
+              <span>共 <strong>{{ deliveryRows.length }}</strong> 笔保温管发货明细记录</span>
+              <span class="footer-tip">💡 提示：表格支持内部纵向独立滚动，表头已锁定置顶。</span>
             </div>
           </section>
         </div>
@@ -962,7 +966,7 @@
               </div>
             </div>
 
-            <div class="table-wrap" style="position: relative; min-height: 140px;">
+            <div class="table-wrap fitting-history-scroll-wrap" style="position: relative; min-height: 140px;">
               <!-- 局部平滑加载中遮罩 (不销毁 DOM) -->
               <div v-if="fittingLoading" class="loading-overlay" style="position: absolute; inset: 0; background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); z-index: 10; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #4f46e5;">
                 ⚡ 正在更新台账数据...
@@ -973,7 +977,7 @@
               </div>
 
               <!-- 按发货车次折叠卡片列表 -->
-              <div v-else style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+              <div v-else style="display: flex; flex-direction: column; gap: 12px;">
                 <div 
                   v-for="group in groupedFittingDeliveries" 
                   :key="group.groupKey"
@@ -1144,6 +1148,10 @@
                   </div>
                 </div>
               </div>
+            </div>
+            <div v-if="groupedFittingDeliveries.length" class="history-table-footer">
+              <span>共 <strong>{{ groupedFittingDeliveries.length }}</strong> 个管件发货车次 · <strong>{{ fittingDeliveries.length }}</strong> 笔明细</span>
+              <span class="footer-tip">💡 提示：发货车次台账支持内部纵向独立滚动。</span>
             </div>
           </section>
         </div>
@@ -9254,6 +9262,74 @@ input.no-spin,
 .baseline-table-footer .footer-right {
   color: #94a3b8;
   font-size: 11.5px;
+}
+
+/* 🚚 保温管物流发货记录表格：限制约 15~18 行高度，启用局部纵向滚动条与粘性吸顶表头 */
+.delivery-history-table-wrap {
+  max-height: 650px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  position: relative !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+}
+
+.delivery-history-table-wrap table {
+  margin: 0 !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100% !important;
+}
+
+.delivery-history-table-wrap thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 12 !important;
+  background: #f8fafc !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 📦 管件发货台账车次卡片：限制高度，启用局部纵向滚动条 */
+.fitting-history-scroll-wrap {
+  max-height: 650px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  position: relative !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  padding: 12px !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  box-sizing: border-box !important;
+}
+
+/* 📜 发货台账底部状态指示栏 */
+.history-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #475569;
+}
+
+.history-table-footer strong {
+  color: #0284c7;
+  font-weight: 700;
+}
+
+.history-table-footer .footer-tip {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .user-matrix-link {

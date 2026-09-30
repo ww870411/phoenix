@@ -1,3 +1,12 @@
+## 2026-09-30 现场管理工作台发货记录长列表结构优化说明（接口保持稳定）
+
+- **关联后端服务与接口**：
+  - 保温管发货记录列表：`GET /api/v1/projects/insulation_pipe_supply_2026/deliveries`
+  - 管件发货台账列表：`GET /api/v1/projects/insulation_pipe_supply_2026/tube-fitting-deliveries`
+- **系统架构与接口契约说明**：
+  - 本次变更属于前端展示层长列表交互与视口滚动体验升级（为保温管大表格和管件车次卡片流设置局部独立滚动条及吸顶表头）；
+  - 后端数据查询、全量拉取及各单据字段协议（`deliveryRows`、`groupedFittingDeliveries`）保持 100% 稳定，无需后端接口或数据库变更。
+
 ## 2026-09-30 数字指挥大屏全网动态流施工安装语义规范升级（workspace.py）
 
 - **关联后端接口**：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L2055-L2115) (`get_big_screen_dashboard_data`)

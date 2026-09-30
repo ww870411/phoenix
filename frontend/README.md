@@ -1,3 +1,19 @@
+## 2026-09-30 现场管理工作台发货记录长列表结构升级：保温管与管件发货台账引入局部独立滚动条与表头吸顶 (SupplyManagementView)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（Tab 3 保温管物流发货记录、Tab 4 管件已提交发货台账）；
+- **前端结构与交互变更**：
+  1. **保温管物流发货记录表格 (`delivery-history-table-wrap`) 引入独立纵向滚动条与粘性表头**：
+     - 为外层包裹容器添加 `.delivery-history-table-wrap` 类，限制最大高度为 `max-height: 650px` 并启用 `overflow-y: auto` 与 `overflow-x: auto`，解决发货单据过多时页面被无限制纵向撑长的痛点；
+     - 表头 `thead th` 增加 `position: sticky !important; top: 0 !important; z-index: 12 !important;` 粘性置顶，确保在向下滚动浏览发货明细时表头始终牢固固定在视窗顶部；
+     - 底部配置 `.history-table-footer` 统计与指示栏，实时展示当前保温管发货总笔数与滚动操作提示；
+  2. **管件已提交发货台账 (`fitting-history-scroll-wrap`) 引入车次卡片滚动流视窗**：
+     - 为下半部分的发货车次折叠卡片列表外层添加 `.fitting-history-scroll-wrap` 容器，限制 `max-height: 650px` 并启用 `overflow-y: auto` 垂直独立滚动；
+     - 预留 `12px` 内边距与柔和阴影，即便车次持续增加或用户触发【📖 展开全部车次】，所有车次卡片与管件明细表均被严格限制在卡片区域内滚动，杜绝全局页面结构坍塌与过度拉长；
+     - 底部同步挂载 `.history-table-footer` 状态条，动态统计当前车次数及明细总项数。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 16.27s），产出 `SupplyManagementView-CH_ge7p6.js` 与 `SupplyManagementView-VW9vcKpV.css`，零语法与类型报错。
+
 ## 2026-09-30 展示大屏全网战报流卡片施工与安装分类及正向标签规范升级 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：
