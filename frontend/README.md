@@ -1,3 +1,95 @@
+## 2026-09-30 展示大屏全网战报流卡片施工与安装分类及正向标签规范升级 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 展示大屏页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（右侧“⚡ 今日全网业务动态战报流”卡片 `feed-card`、`activeEventCategoryKey`、`getFeedSourceOrAction` 与沙盘 mock 生成）；
+- **前端结构与交互变更**：
+  1. **卡片语义与文案展示全面对齐**：
+     - **保温管施工填报卡片**：顶部分类标签 `feed-category-tag` 显示为 **`保温管施工量确认`**，右下角正向评价 `feed-pos-tag` 显示为 **`✨ 完成保温管安装并记录`**；
+     - **管件安装填报卡片**：顶部分类标签 `feed-category-tag` 显示为 **`管件安装量确认`**，右下角正向评价 `feed-pos-tag` 显示为 **`✨ 完成管件安装并记录`**；
+  2. **动作来源与分类映射健壮兼容**：
+     - 在计算属性 `activeEventCategoryKey` 与函数 `getFeedSourceOrAction` 中，全面兼容新旧中文字符串（`保温管施工量确认`、`管件安装量确认`、`施工量确认`、`管件安装施工`），确保动态事件被点选或轮播时中心拓扑图动效与分类样式（`usage`）正常激活；
+     - 在沙盘演示 mock 动态生成中，同步支持管件与保温管两种施工安装动态及全新正向标签的随机触发。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.63s），零语法与类型报错。
+
+## 2026-09-30 展示大屏“库管确认率”指标升级：全品类双表联动与订单数履约浮动提示 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 展示大屏页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（左下角“运输全流程保障”安全保障卡片区第二格）；
+- **前端结构与交互变更**：
+  1. **响应式状态模型同步升级**：
+     - `kpiData` 响应式对象新增 `confirmedArrivedOrders`（已到货总订单数）与 `confirmedWarehouseOrders`（库管已确认总订单数）字段，初始值置 `0`；
+     - 在大屏初始化加载 `loadRealData()` 与后台 30 秒轮询更新逻辑中，同步接收并响应式更新两项订单数值；
+  2. **交互体验与统计透明度增强**：
+     - 为“库管确认率”指标卡片（`safety-card`）注入动态 `:title` 悬停提示：
+       `库管确认率：已确认 {kpiData.confirmedWarehouseOrders} 单 / 已到货 {kpiData.confirmedArrivedOrders} 单（含保温管与管件）`；
+     - 用户将鼠标移至该指标时，可立即获知该百分比背后的分子（已确认单数）与分母（已到货单数），彻底消除对统计口径的困惑。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 11.71s），零语法与类型报错。
+
+## 2026-09-30 流转凭证 Modal 顶栏去除冗余“规格型号”信息块与双列布局优化 (SupplyManagementView / DemandManagementView / WarehouseManagementView)
+
+- **关联前端页面与组件**：
+  - 供给侧管理页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（流转凭证 Modal `block-modal-metrics`）；
+  - 需求侧管理页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（流转凭证 Modal `block-modal-metrics`）；
+  - 库管侧管理页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（流转凭证 Modal `block-modal-metrics`）；
+- **前端结构与交互变更**：
+  1. **彻底消除顶栏指标卡与物资明细清单的重复冗余**：
+     - 去除原 Modal 顶栏第三格整行的“规格型号”展示卡块，避免与紧随其后的【本车装载物资明细清单】（直管规格描述与管件规格型号表格）信息重叠；
+  2. **顶栏指标排版升级为通透双列网格 (`1fr 1.6fr`)**：
+     - 左列展示【车牌号】，右列展示高亮【需求方（收货标段）】（`📍 {section1Name}`），字色清晰、两端对齐且紧凑大方；
+     - 发货备注（若有）自适应独占一行（`grid-column: span 2`），整体纵向空间得到合理释放，明细表的可视区更加充裕；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 15.63s），零语法与类型报错。
+
+## 2026-09-30 库管端常驻轨迹面板、车次分组与流转凭证 Modal 全链路补齐“需求方（收货标段）” (WarehouseManagementView / SupplyManagementView / DemandManagementView)
+
+- **关联前端页面与组件**：
+  - 库管侧管理页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（右侧常驻【⏳ 运输单全生命周期流转轨迹】面板、按车次合并视图 `groupedPipeDeliveries`、管件车次视图 `groupedWarehouseFittingRows`、凭证 Modal 及 `showDeliveryDetail` 函数）；
+  - 供给侧管理页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（凭证 Modal 顶栏卡片、发货阶段卡片与 `showDeliveryDetail` 函数）；
+  - 需求侧管理页面：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（凭证 Modal 顶栏卡片、发货阶段卡片与 `showDeliveryDetail` 函数）；
+- **前端结构与交互变更**：
+  1. **库管端右侧常驻流转轨迹面板全面呈现需求方**：
+     - 在库管员日常核心视线区——右侧占 58% 宽度的【💼 库管操作与全生命周期证据链 · ⏳ 运输单全生命周期流转轨迹】面板中，顶部信息摘要从 3 列扩建为 4 列，新增高亮深蓝字色 **【需求方（收货标段）】**：`📍 {section1Name}`（如 `📍 高温水_标段1`），并配置全局 hover 浮动提示；
+     - 阶段 1【📦 供给侧装车发货】卡片中，在“供给主体”下方新增显式行：**`收货需求方：{section1Name} ({section1Id})`**；
+     - 阶段 2 与阶段 3 的需求主体展示全面追加 `getSection1Name(selectedDelivery.section_1_id)` 健壮兜底；
+  2. **按车次合并与管件分组数据源底层加固**：
+     - 在 `groupedPipeDeliveries` 与 `groupedWarehouseFittingRows` 分组构造时，补齐 `section1Id`、`section_1_id`、`section1Name` 与 `section_1_name`，并通过 `getSection1Name` 前置转译为标准标段全称；
+     - 避免了车次分组在打开凭证时因未绑定 ID 或占位符 `'未知需求主体'` 导致未能正确展示标段名称的问题；
+  3. **凭证 Modal 顶栏概览与发货节点“需求方”成对呈现**：
+     - 在流转凭证 Modal 顶栏概览区第一行，扩充独立的【需求方（收货标段）】指标卡；
+     - 在装车发货卡片中新增展示 `收货需求方：{section1Name} ({section1Id})`，解决在途未到货阶段凭证无收货方名称的业务盲区；
+  4. **函数容错与名称解析保底 (`getSection1Name`)**：
+     - 组件顶部提升定义 `options`、`section1Options` 与 `getSection1Name(id)` 函数，在各处消费前消除暂时性死区；
+     - `showDeliveryDetail()` 中当标段名称为空、为原始 ID 或占位符时，自动触发 `section1Options` 字典匹配；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 12.64s），零语法与类型报错。
+
+## 2026-09-28 综合查询与单价字典数据源扩容：河北泽越球阀全标段通用价格库入库生效
+
+- **关联前端页面与接口服务**：
+  - 单价查询接口：`GET /api/v1/projects/insulation_pipe_supply_2026/material-prices`（前端服务调用 [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)）；
+  - 关联展示页面：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（综合历史数据查询中心 - 物料采购价格字典检索与造价测算）；
+- **前端表现与数据支撑升级**：
+  1. **价格库数据源平滑扩容**：系统价格库新增 38 条河北泽悦球阀单价记录，涵盖直埋焊接球阀、法兰球阀与焊接球阀全型号；
+  2. **全标段通用基准联动**：适用标段属性统一为 `all`（全标段通用），前端在按“全标段”或按各标段维度筛选物料采购价格、测算阀门材料造价与发货产值时，均可 100% 自动精确命中泽越球阀报价基准；
+  3. **丰富工艺参数与采购信息呈现**：前端在读取 `remark` 字段时，可直接读取埋深参数、配件说明及历史合同采购数量与总价信息。
+
+## 2026-09-28 数字指挥大屏：实时动态播报需求量申报卡片动作表述优化与保底升级
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（全网工程指挥大屏 - 实时动态播报卡片与 `getFeedSourceOrAction` 函数）；
+- **前端结构与交互变更**：
+  - **动态卡片 Row 2 业务动作与表述最终规范**：
+    * 针对分类为 `plan` 或 `需求量申报` 的战报卡片，原前置动作文案展示为 `申报09-29要料`；
+    * 现全面优化为 **`申报施工用料三日计划`**（彻底移除了单日日期后缀 `MM-DD`，并精准表述 3 日滚动需求计划）；
+    * 右侧继续保持两端对齐展示标段名称（如 `高温水 1 标段`），与整体大屏视觉规范保持高度统一；
+  - **函数容错与保底算法升级 (`getFeedSourceOrAction`)**：
+    * 扩展了对 headline 的智能匹配规则，新增对 `用料`、`材料计划`、`要料` 等关键词的容错解析；
+    * 将分类 `plan` 的缺省 fallback 返回值从 `'申报滚动要料'` 规范升级为 **`'申报施工用料三日计划'`**；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 19.45s），零语法与类型报错。
+
 ## 2026-09-27 现场管理工作台保温管现货库存非标准表格解析引擎增强：鑫瑞得等综合报表智能对齐与多区块过滤
 
 - **关联前端页面与组件**：

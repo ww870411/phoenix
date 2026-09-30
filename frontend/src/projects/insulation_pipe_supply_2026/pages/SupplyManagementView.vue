@@ -2028,14 +2028,16 @@
           </div>
           
           <!-- 信息概述 -->
-          <div class="block-modal-metrics" style="grid-template-columns: repeat(3, 1fr); padding: 15px; gap: 8px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+          <div class="block-modal-metrics" style="grid-template-columns: 1fr 1.6fr; padding: 15px; gap: 10px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
             <div class="metric-block-card">
               <span class="lbl">车牌号</span>
               <span class="val" style="font-size: 13px; font-weight: bold; color: #1e293b;">{{ deliveryDetailModalData.vehiclePlateNo || '—' }}</span>
             </div>
-            <div class="metric-block-card" style="grid-column: span 2;">
-              <span class="lbl">规格型号</span>
-              <span class="val model-val" style="font-size: 11px; line-height: 1.3;" :title="deliveryDetailModalData.pipeModelName">{{ deliveryDetailModalData.pipeModelName }}</span>
+            <div class="metric-block-card">
+              <span class="lbl">需求方（收货标段）</span>
+              <span class="val" style="font-size: 12.5px; font-weight: bold; color: #1d4ed8; word-break: break-all;" :title="deliveryDetailModalData.section1Name">
+                📍 {{ deliveryDetailModalData.section1Name || deliveryDetailModalData.section_1_name || '—' }}
+              </span>
             </div>
           </div>
 
@@ -2099,8 +2101,9 @@
                   <div>发货数量：<strong>{{ formatNumber(deliveryDetailModalData.shippedQty) }} {{ deliveryDetailModalData.unit || '米' }}</strong></div>
                   <div>操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.createdBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
                   <div>经办人：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
-                  <div style="grid-column: span 2;">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
+                  <div>联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
                   <div style="grid-column: span 2;">供给主体：<span>{{ deliveryDetailModalData.supplyEntityName || '—' }} ({{ deliveryDetailModalData.supplyEntityId || '—' }})</span></div>
+                  <div style="grid-column: span 2;">收货需求方：<strong style="color: #1d4ed8;">{{ deliveryDetailModalData.section1Name || deliveryDetailModalData.section_1_name || '—' }}</strong> <span v-if="deliveryDetailModalData.section1Id || deliveryDetailModalData.section_1_id" style="color: #64748b; font-weight: normal;">({{ deliveryDetailModalData.section1Id || deliveryDetailModalData.section_1_id }})</span></div>
                   <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipRemark">发货备注：<span style="color: #64748b; font-style: italic;">“{{ deliveryDetailModalData.shipRemark }}”</span></div>
                 </div>
               </div>
@@ -4722,7 +4725,7 @@ function showDeliveryDetail(input) {
   const supplyEntityId = input.supplyEntityId || input.supply_entity_id || mainRow.supply_entity_id || mainRow.supplyEntityId || ''
   const supplyEntityName = input.supplyEntityName || input.supply_entity_name || mainRow.supply_entity_name || mainRow.supplyEntityName || supplyEntityId
   const section1Id = input.section1Id || input.section_1_id || mainRow.section_1_id || mainRow.section1Id || ''
-  const section1Name = input.section1Name || input.section_1_name || mainRow.section_1_name || mainRow.section1Name || section1Id
+  const section1Name = input.section1Name || input.section_1_name || mainRow.section_1_name || mainRow.section1Name || getSection1Name(section1Id) || section1Id
 
   const shipContactName = mainRow.ship_contact_name || mainRow.shipContactName || input.shipContactName || mainRow.created_by || '发货负责人'
   const shipContactPhone = mainRow.ship_contact_phone || mainRow.shipContactPhone || input.shipContactPhone || '—'
@@ -4760,7 +4763,10 @@ function showDeliveryDetail(input) {
     unit: mainRow.unit || input.unit || ((mainRow.pipe_model_id || mainRow.pipe_model_name || mainRow.pipeModelId || mainRow.pipeModelName || input.pipeModelName || input.pipe_model_id) ? '米' : (mainRow.fitting_type ? '个' : '米')),
     pipeModelName: itemsList.length === 1 ? `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})` : `多规格组合管件车次 (${itemsList.length} 种规模型号卡块)`,
     supplyEntityName,
+    section1Id,
+    section_1_id: section1Id,
     section1Name,
+    section_1_name: section1Name,
     shipContactName,
     shipContactPhone,
     createdBy,

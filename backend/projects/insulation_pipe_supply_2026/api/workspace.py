@@ -2056,7 +2056,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 fill_op = _clean_str(u["filled_by"] or "现场施工负责人")
                 live_feed_list.append({
                     "id": f"u_{u['id']}",
-                    "category": "施工量确认",
+                    "category": "保温管施工量确认",
                     "category_key": "usage",
                     "type": "pipe",
                     "section_id": u.get("section_1_id"),
@@ -2069,7 +2069,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "vehiclePlate": "工区现场铺设",
                     "operator": fill_op,
                     "time": t_str,
-                    "positiveTag": f"完成管网下沟敷设，记录已确认",
+                    "positiveTag": "完成保温管安装并记录",
                     "isNew": False,
                     "raw_time": raw_t
                 })
@@ -2095,7 +2095,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 fill_op = _clean_str(u["filled_by"] or "施工填报员")
                 live_feed_list.append({
                     "id": f"fu_{u['id']}",
-                    "category": "管件安装施工",
+                    "category": "管件安装量确认",
                     "category_key": "usage",
                     "type": "fitting",
                     "section_id": u.get("section_1_id"),
@@ -2106,7 +2106,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "amount": f"{u['usage_qty']} {u['unit'] or '件'}",
                     "operator": fill_op,
                     "time": t_str,
-                    "positiveTag": "现场完成焊接安装并记账",
+                    "positiveTag": "完成管件安装并记录",
                     "isNew": False,
                     "raw_time": raw_t
                 })
@@ -2140,7 +2140,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                     "section_id": pl.get("section_1_id"),
                     "supplier": "标段材料计划组",
                     "target": sec_name,
-                    "headline": f"申报{plan_date_str}要料 · {sec_name}",
+                    "headline": f"申报施工用料三日计划 · {sec_name}",
                     "specification": model_name,
                     "amount": f"申报需求 {int(float(pl['plan_qty']))} 米",
                     "shipmentCode": f"JH-{plan_date_str}",
@@ -2420,9 +2420,10 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
 
         pipe_three_day_gap_m = max(0.0, three_day_plan_m - pipe_stock_total_m)
 
-        # 8. 库管确认率：累计保温管库管确认量 / 全部“确认到货”的累计量
+        # 8. 库管确认率：保温管与管件合并，按照“订单数”统计确认率（已库管确认订单数 / 全部已确认到货的订单数）
         try:
-            pipe_conf_sql = text("""
+            # 8.1 统计直管米数（用于保留向后兼容字段 pipeConfirmedArrivedKm / pipeConfirmedWarehouseKm）
+            pipe_conf_m_sql = text("""
                 SELECT 
                     SUM(COALESCE(arrived_qty, shipped_qty, 0)) AS arrived_total_m,
                     SUM(CASE 
@@ -2433,15 +2434,44 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 WHERE status != 'cancelled'
                   AND (arrived_confirm_at IS NOT NULL OR status IN ('pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'))
             """)
-            conf_res = session.execute(pipe_conf_sql).mappings().first()
-            pipe_confirmed_arrived_total_m = float(conf_res["arrived_total_m"] or 0) if conf_res else 0.0
-            pipe_confirmed_warehouse_total_m = float(conf_res["warehouse_total_m"] or 0) if conf_res else 0.0
+            conf_m_res = session.execute(pipe_conf_m_sql).mappings().first()
+            pipe_confirmed_arrived_total_m = float(conf_m_res["arrived_total_m"] or 0) if conf_m_res else 0.0
+            pipe_confirmed_warehouse_total_m = float(conf_m_res["warehouse_total_m"] or 0) if conf_m_res else 0.0
+
+            # 8.2 统计保温管与管件合并的订单数（以每笔发货订单项为单位，已到货订单底池 vs 库管已确认订单）
+            order_conf_sql = text("""
+                SELECT 
+                    COUNT(*) AS total_arrived_orders,
+                    COUNT(CASE 
+                        WHEN warehouse_confirm_at IS NOT NULL OR status = 'completed' THEN 1 
+                    END) AS total_warehouse_orders,
+                    COUNT(CASE WHEN category = 'pipe' THEN 1 END) AS pipe_arrived_orders,
+                    COUNT(CASE WHEN category = 'pipe' AND (warehouse_confirm_at IS NOT NULL OR status = 'completed') THEN 1 END) AS pipe_warehouse_orders,
+                    COUNT(CASE WHEN category = 'fitting' THEN 1 END) AS fitting_arrived_orders,
+                    COUNT(CASE WHEN category = 'fitting' AND (warehouse_confirm_at IS NOT NULL OR status = 'completed') THEN 1 END) AS fitting_warehouse_orders
+                FROM (
+                    SELECT id, status, arrived_confirm_at, warehouse_confirm_at, 'pipe' AS category
+                    FROM tube.tube_delivery
+                    WHERE status != 'cancelled'
+                      AND (arrived_confirm_at IS NOT NULL OR status IN ('pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'))
+                    UNION ALL
+                    SELECT id, status, arrived_confirm_at, warehouse_confirm_at, 'fitting' AS category
+                    FROM tube.tube_fitting_delivery
+                    WHERE status != 'cancelled'
+                      AND (arrived_confirm_at IS NOT NULL OR status IN ('pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'))
+                ) combined_orders
+            """)
+            order_conf_res = session.execute(order_conf_sql).mappings().first()
+            total_confirmed_arrived_orders = int(order_conf_res["total_arrived_orders"] or 0) if order_conf_res else 0
+            total_confirmed_warehouse_orders = int(order_conf_res["total_warehouse_orders"] or 0) if order_conf_res else 0
         except Exception:
             pipe_confirmed_arrived_total_m = 0.0
             pipe_confirmed_warehouse_total_m = 0.0
+            total_confirmed_arrived_orders = 0
+            total_confirmed_warehouse_orders = 0
 
-        if pipe_confirmed_arrived_total_m > 0:
-            warehouse_confirm_rate = round((pipe_confirmed_warehouse_total_m / pipe_confirmed_arrived_total_m) * 100, 1)
+        if total_confirmed_arrived_orders > 0:
+            warehouse_confirm_rate = round((total_confirmed_warehouse_orders / total_confirmed_arrived_orders) * 100, 1)
         else:
             warehouse_confirm_rate = 100.0
 
@@ -2650,6 +2680,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                 "pipeThreeDayGapKm": round(pipe_three_day_gap_m / 1000, 2),
                 "pipeDeliveredKm": round(pipe_delivered_total_m / 1000, 2),
                 "warehouseConfirmRate": warehouse_confirm_rate,
+                "confirmedArrivedOrders": total_confirmed_arrived_orders,
+                "confirmedWarehouseOrders": total_confirmed_warehouse_orders,
                 "avgTransitHours": avg_transit_hours,
                 "pipeConfirmedArrivedKm": round(pipe_confirmed_arrived_total_m / 1000, 2),
                 "pipeConfirmedWarehouseKm": round(pipe_confirmed_warehouse_total_m / 1000, 2),

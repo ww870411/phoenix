@@ -1,3 +1,59 @@
+## 2026-09-30 数字指挥大屏全网动态流施工安装语义规范升级（workspace.py）
+
+- **关联后端接口**：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L2055-L2115) (`get_big_screen_dashboard_data`)
+- **数据结构与契约规范**：
+  - **保温管施工事件（`tube.tube_daily_usage`）**：
+    * 分类名称 `category` 统一由“施工量确认”规范升级为 **`保温管施工量确认`**；
+    * 正向评价标签 `positiveTag` 统一由“完成管网下沟敷设，记录已确认”规范升级为 **`完成保温管安装并记录`**；
+  - **管件安装事件（`tube.tube_fitting_daily_usage`）**：
+    * 分类名称 `category` 统一由“管件安装施工”规范升级为 **`管件安装量确认`**；
+    * 正向评价标签 `positiveTag` 统一由“现场完成焊接安装并记账”规范升级为 **`完成管件安装并记录`**；
+  - **业务表意与一致性提升**：直观明确区分物料大类（保温管 vs 管件），且动作（量确认）与评价（安装并记录）成对呼应、高度专业统一。
+
+## 2026-09-30 数字指挥大屏库管确认率算法重构：纳入管件并按到货订单数统一统计（workspace.py）
+
+- **关联后端接口**：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L2423-L2480) (`get_big_screen_dashboard_data`)
+- **算法设计升级**：
+  - **统计对象扩容**：打破原先仅统计保温直管（`tube.tube_delivery`）累计米数的限制，通过 `UNION ALL` 联合管件发货单（`tube.tube_fitting_delivery`）；
+  - **统一按订单数统一度量**：避开直管“米”与管件“件”物理量纲冲突，按每笔发货订单项为粒度：
+    * **分母（已到货总订单数）**：所有已运抵施工现场并完成到货确认的直管与管件订单（`status != 'cancelled' AND (arrived_confirm_at IS NOT NULL OR status IN ('pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve'))`）；
+    * **分子（库管已确认总订单数）**：满足 `warehouse_confirm_at IS NOT NULL OR status = 'completed'` 的订单条数；
+    * **库管确认率公式**：`warehouseConfirmRate = round((total_confirmed_warehouse_orders / total_confirmed_arrived_orders) * 100, 1)`（分母为 0 兜底 100.0%）；
+  - **接口契约平滑扩充**：在 `kpi` 字典中新增返回 `confirmedArrivedOrders`（已到货订单总数）与 `confirmedWarehouseOrders`（库管已确认订单总数），既有 `pipeConfirmedArrivedKm` / `pipeConfirmedWarehouseKm` 字段保持 100% 兼容。
+
+## 2026-09-30 发货流转凭证契约核验：保温管及管件全生命周期需求方标段数据透传核验
+
+- **数据模型与契约核验**：
+  - 直管发货表：`tube.tube_delivery`（[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L162-L200)）包含 `section_1_id`；
+  - 管件发货表：`tube.tube_fitting_delivery`（[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L228-L262)）包含 `section_1_id`；
+  - 物流查询服务：[`supply_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py) 与 [`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py) 均向前端标准提供 `section_1_id` 与 `section_1_name`（如“高温水_标段1”）；
+  - 本轮后端无物理结构改动，前端已全量补齐流转凭证在顶栏及装车发货节点对需求方标段的显式呈现。
+
+## 2026-09-28 造价基准与单价服务升级：河北泽越球阀全标段采购单价入库与服务落地
+
+- **服务层实现与算法落地 (`price_service.py`)**：
+  - 新增核心导入函数：[`import_zeyue_valve_prices(excel_path=None, operator="EXCEL_IMPORT_20260928") -> Dict[str, Any]`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)；
+  - **解析与数据清洗机制**：
+    * 解析《`configs/9.28 导入_河北泽越球阀采购价格表.xlsx`》工作表 `附件1-价格表`；
+    * 提取 38 行采购单价数据，涵盖直埋焊接球阀（13条）、法兰球阀（11条）与焊接球阀（14条）；
+    * 统一定义供给方编码 `supply_entity_id = 'zeyue'`、全称 `'河北泽悦节能设备科技有限公司'`、物料大类 `material_kind = 'fitting'`、物理品类 `category = '球阀'`；
+    * 依据全标段通用要求，将适用范围配置为 `applicable_sections = 'all'`，`section_name_scope = '全标段通用'`；
+    * 备注自动留痕：保留原始埋深和配件备注，并结构化注入合同采购数量与采购总金额信息；
+  - **事务与幂等保障**：
+    * 导入前前置执行同主体安全清理：`DELETE FROM tube.tube_material_price WHERE supply_entity_id = 'zeyue' OR supplier_name ILIKE '%泽越%'`；
+    * 执行批量原子写入，全表总记录数从 655 条平滑扩增至 693 条（净增 38 条），重复执行依然保持 693 条，具备 100% 幂等可靠性。
+
+## 2026-09-28 数字指挥大屏业务流水契约优化：未来 3 日滚动要料计划 headline 规范为“申报施工用料三日计划”
+
+- **端点与服务层变更**：
+  - 核心文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（路由函数 `get_insulation_tube_workspace`）；
+  - 数据模型与聚合逻辑：在遍历 `tube.tube_daily_plan`（未来 3 日滚动要料计划申报）构造 `live_feed_list`（全网战报流水）时：
+    * 原字段：`"headline": f"申报{plan_date_str}要料 · {sec_name}"`（如 `申报09-29要料 · 高温水 1 标段`）；
+    * 最终调整后：`"headline": f"申报施工用料三日计划 · {sec_name}"`；
+  - **业务设计与契约优势**：
+    1. **消除日期冗余与业务精准表意**：滚动需求申报是标段每隔数日提报的滚动 3 日用料预测，原先在标题中内嵌单日日期（如 `09-29`）与下方单号标识 `JH-{plan_date_str}` 重合且容易误导；规范为“申报施工用料三日计划”后，直观明确、语义准确；
+    2. **契约标准统一**：使要料计划流水与“现场施工安装 · 标段名”、“车辆进场到货 · 标段名”等非发货单点业务完全对齐为 `业务动作 · 标段名称` 的纯净统一格式。
+
 ## 2026-09-27 供给侧保温管业务协同：保温管现货库存非标准表格解析引擎增强与数据契约稳定
 
 - **前后端契约与数据流向**：

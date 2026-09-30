@@ -1,3 +1,309 @@
+## 2026-09-30 [业务规范：大屏动态播报卡片施工安装分类与完成评价文案精细化定义]
+- **需求背景与用户决策**：
+  - 用户明确要求调整全网动态播报卡片（`live_feed_list`）中保温管与管件施工确认的分类及右下角标签文案：
+    * 保温管施工量填报：由“施工量确认”+“完成管网下沟敷设，记录已确认”改为：**“保温管施工量确认” + “完成保温管安装并记录”**；
+    * 管件安装填报：由“管件安装施工”+“现场完成焊接安装并记账”改为：**“管件安装量确认” + “完成管件安装并记录”**。
+- **改动范围与实施方案**：
+  1. **后端全网动态流事件构造规范 (`workspace.py`)**：
+     - 在 4.3 施工现场消耗与安装量填报（保温管直管 `tube.tube_daily_usage`）事件构造中：
+       * `category` 统一设置为 `'保温管施工量确认'`；
+       * `positiveTag` 统一设置为 `'完成保温管安装并记录'`；
+     - 在 4.4 管件现场安装与使用量填报（管件 `tube.tube_fitting_daily_usage`）事件构造中：
+       * `category` 统一设置为 `'管件安装量确认'`；
+       * `positiveTag` 统一设置为 `'完成管件安装并记录'`。
+  2. **前端大屏卡片响应式呈现与动作映射加固 (`BigScreenDashboardView.vue`)**：
+     - 在 `activeEventCategoryKey` 计算属性与 `getFeedSourceOrAction` 动作映射函数中，兼容对 `'保温管施工量确认'` 和 `'管件安装量确认'` 的判断，保持 `usage` 分组分类样式与左右两端对齐行为无缝适配；
+     - 在模拟/沙盘演示事件生成中同步对齐新分类与评价标签；
+     - 卡片顶部第一行 `feed-category-tag` 与第四行右下角 `feed-pos-tag` 呈现出完全对称、清晰规范的专业工程语义。
+  3. **双端构建与真实数据验证**：
+     - 后端真实接口测试：26 项现场施工安装事件中，保温管（13项）与管件（13项）均准确渲染新分类与新正向标签；
+     - 前端运行 `npm run build`，738 个模块完整打包成功通过。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-09-30 [指标重构：展示大屏“库管确认率”纳入管件，统一按已到货订单数统计履约闭环率]
+- **需求背景与用户决策**：
+  - 用户指出：“*我想加入管件，然后，保温管与管件都按照订单数进行统计，计算百分比。即已经确认到货的单子中，有多少比例的单子已经被库管确认了*”；
+  - 经前期排查，大屏原先的“库管确认率”仅统计了保温管直管（`tube.tube_delivery`）累计米数，未包含管件（`tube.tube_fitting_delivery`），且受米与件的物理量纲限制无法直接加总。按“订单数（已到货订单总数与已确认订单总数）”统一度量，既避开了量纲冲突，又真实反映了现场库管员对运抵物资的验收确认履约全貌。
+- **改动范围与实施方案**：
+  1. **后端大盘接口重构 (`workspace.py`)**：
+     - 在大屏大盘统计接口 `get_big_screen_dashboard_data()` 中，通过 `UNION ALL` 联合直管与管件发货单，统一底池过滤条件为：已生效（`status != 'cancelled'`）且已实际运抵施工现场完成到货确认（`arrived_confirm_at IS NOT NULL OR status IN ('pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve')`）；
+     - **分母（基准订单数）**：已确认到货的直管与管件订单总条数（`total_confirmed_arrived_orders = pipe_arrived_orders + fitting_arrived_orders`）；
+     - **分子（确认订单数）**：已由库管员确认或流转至完成态的订单总条数（`total_confirmed_warehouse_orders`，判定条件 `warehouse_confirm_at IS NOT NULL OR status = 'completed'`）；
+     - **计算公式**：$\text{warehouse\_confirm\_rate} = \operatorname{round}\left( \frac{\text{total\_confirmed\_warehouse\_orders}}{\text{total\_confirmed\_arrived\_orders}} \times 100, 1 \right)\%$，分母为 0 或异常时安全兜底 `100.0%`；
+     - 保留既有 `pipeConfirmedArrivedKm` / `pipeConfirmedWarehouseKm` 字段兼容性，并在 `kpi` 字典中新增返回 `confirmedArrivedOrders` 和 `confirmedWarehouseOrders`。
+  2. **前端大屏响应式联动与浮动提示优化 (`BigScreenDashboardView.vue`)**：
+     - 在 `kpiData` 中新增 `confirmedArrivedOrders` 与 `confirmedWarehouseOrders` 状态字段；
+     - 在初始加载 `loadRealData()` 与定时轮询中实时更新接收订单计数；
+     - 在大屏左下角“运输全流程保障”的“库管确认率”卡片上添加友好详细的 `:title` 悬停提示：`库管确认率：已确认 {库管确认订单数} 单 / 已到货 {已到货订单数} 单（含保温管与管件）`。
+  3. **全链路验证与构建测试**：
+     - 后端真实数据验证：累计到货订单 971 单，已库管确认 492 单，综合库管确认率精准输出为 `50.7%`；
+     - 前端执行 `npm run build`，738 个模块完整打包构建通过。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-09-30 [算法核查：展示大屏“库管确认率”统计口径与业务逻辑深度剖析]
+- **需求背景与用户咨询**：
+  - 用户询问展示大屏（`http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen`）中“库管确认率”的具体算法与计算口径。
+- **算法核心逻辑与代码定位**：
+  - **核心计算服务**：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L2423-L2447)；
+  - **前端大屏展示**：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue#L751-L755)（位于左下角“运输全流程保障”安全指标区）；
+  - **统计对象**：`tube.tube_delivery`（保温管直管物流表），剔除作废单（`status != 'cancelled'`）；
+  - **统计基准（分母）**：所有**已确认运抵施工现场**的单据累计到货米数 `SUM(COALESCE(arrived_qty, shipped_qty, 0))`（完全剔除在途未到货单据，避免在途物资拉低现场确认率）；
+  - **确认闭环（分子）**：满足“记录库管确认时间（`warehouse_confirm_at IS NOT NULL`）”或“状态为已完成（`status = 'completed'`）”的累计米数 `SUM(COALESCE(received_qty, arrived_qty, shipped_qty, 0))`；
+  - **兜底边界**：若分母 `<= 0`（全网暂无到货确认数据）或系统异常，默认返回 `100.0%`。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-30 [界面精简：去除流转凭证顶部冗余“规格型号”信息卡，优化供需双端排版]
+- **需求背景与用户决策**：
+  - 用户反馈：“*在供给方和需求方的管理页面中，我发现流转卡片上方有一个“规格型号”的信息，我觉得不论是保温管还是管件，都不需要这个信息，因为在下方的明细中有着具体的规格型号。所以，有一点冗余，希望去掉这个信息*”；
+  - 经核对确认：在流转凭证 Modal 弹窗顶栏信息卡区，原先展示了“车牌号”、“需求方（收货标段）”与整行的“规格型号”。而下方紧接着就是【本车装载物资明细清单】，表格中无论保温管（规格描述）还是管件（类型+规格型号）均有清晰详尽的逐项明细。车次装载多规格时顶栏该卡块也仅显示统计描述，确实存在视觉与信息冗余。
+- **改动范围与实施方案**：
+  1. **移除顶栏“规格型号”卡块 (`SupplyManagementView.vue` / `DemandManagementView.vue` / `WarehouseManagementView.vue`)**：
+     - 彻底删除流转凭证弹窗头部 `metric-block-card` 中的“规格型号”字段；
+     - 将顶部指标网格由 3 列优化为精简对齐的双列网格：`grid-template-columns: 1fr 1.6fr`，左列为【车牌号】，右列为【需求方（收货标段）】（带 `📍` 高亮蓝字与 title 悬停提示）；
+     - 发货备注（若有）自适应占满整行（`grid-column: span 2`），整体视觉更通透聚焦，紧凑利落。
+  2. **三端保持高度一致与本地构建验证**：
+     - 供给侧、需求侧及库管侧管理页面的流转凭证统一应用该精简排版规范；
+     - 运行 `npm run build`，738 个模块顺利编译打包通过，无任何语法及类型错误。
+- **改动清单**：
+  - 前端：
+    * [`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+    * [`frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)
+    * [`frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-09-30 [凭证完善：库管端右侧常驻流转轨迹面板与弹窗全链路补齐“需求方（收货标段）”]
+- **需求背景与用户指引**：
+  - 用户反馈：“*不是公共组件也没关系，但是，我发现在库管的凭证显示中，似乎没有加上这个需求方*”；
+  - 经深入排查发现：库管端页面（`WarehouseManagementView.vue`）除了具备流转凭证模态弹窗（Modal）外，其核心操作区为右侧常驻占 58% 宽度的【💼 库管操作与全生命周期证据链 · ⏳ 运输单全生命周期流转轨迹】面板。库管人员日常在左侧点选单据时，视线主要聚焦于右侧常驻轨迹面板，而该面板此前在顶部三格摘要及发货阶段中均未展示需求方标段。
+- **改动范围与实施方案**：
+  1. **右侧常驻流转轨迹面板显式呈现（`WarehouseManagementView.vue`）**：
+     - 顶部信息摘要网格由 3 列扩展为 4 列自适应网格，新增高亮深蓝字色的【需求方（收货标段）】：`📍 {{ selectedDelivery.section_1_name || getSection1Name(selectedDelivery.section_1_id) || '—' }}`，并配置全局 `title` 浮动提示；
+     - 阶段 1【📦 供给侧装车发货】卡片中，在供给主体后补充：`收货需求方：{{ selectedDelivery.section_1_name || getSection1Name(selectedDelivery.section_1_id) || '—' }} ({{ selectedDelivery.section_1_id }})`；
+     - 阶段 2 与阶段 3 的需求主体展示全面追加 `getSection1Name(selectedDelivery.section_1_id)` 健壮兜底。
+  2. **数据源构造与名称解析加固**：
+     - 在组件顶部全局提供 `options`、`section1Options` 与 `getSection1Name(id)` 辅助函数，避免声明顺序导致的暂时性死区；
+     - 在按车次合并视图 `groupedPipeDeliveries` 与管件车次视图 `groupedWarehouseFittingRows` 中，挂载 `section1Id`、`section_1_id`、`section1Name` 与 `section_1_name`，并通过 `getSection1Name` 前置解析标准标段全称（如“高温水_标段1”）；
+     - 优化 `showDeliveryDetail` 函数，当传入的标段名称为未解析 ID 或占位符 `'未知需求主体'` 时，自动通过 `section1Options` 及 `getSection1Name` 匹配解析。
+  3. **构建与功能验证**：
+     - 前端运行 `npm run build`，738 个模块顺利编译打包通过，无任何语法及类型错误。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-09-30 [业务调研：保温管及管件发货流转凭证信息现状盘点与缺失要素梳理]
+- **需求背景与用户咨询**：
+  - 用户反馈：“*今天有用户反馈，说关于保温管、管件的发货流转凭证之中，缺少一些必要的信息。你先帮我看一下，目前的流转凭证中有哪些信息*”；
+  - 用户进一步求证：“*实际上，用户认为缺少的是这一个订单究竟发给了谁，也就是哪个标段（即需求方是谁），有这个情况吗？*”
+- **核心漏洞精准诊断（完全属实）**：
+  1. **库管端彻底缺失 (`WarehouseManagementView.vue`)**：
+     - 虽然在 JS 函数 `showDeliveryDetail()` 中计算了解构字段 `section1Name`，但在弹窗模态模板 HTML 中，**从头部、概览指标、表格到时光轴节点，全篇从未绑定渲染 `section1Name`**！库管人员点击凭证从头到尾看不到发往哪个标段；
+  2. **供给端与需求端严重逻辑滞后与遮蔽 (`SupplyManagementView.vue` / `DemandManagementView.vue`)**：
+     - 凭证顶部概况卡片仅有“车牌号”与“规格型号”，发货节点（阶段 1）仅展示了“供给主体（谁发的）”，却漏写了“发往主体/标段”；
+     - “需求主体”字段被仅置于【阶段 2 到货确认】和【阶段 3 施工接收】的折叠详情块内；
+     - **直接后果**：在物资装车发货至卸车到货之间的关键在途阶段（`pending_arrival` / `shipped`），阶段 2/3 处于未完成状态无法展开，**整张流转凭证在在途状态下 100% 没有任何“发给谁/收货标段”信息**，导致用户强烈反馈“凭证上看不出到底发给了谁”。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-28 [造价与价格库业务扩展：河北泽越球阀全标段通用采购单价成功导入与核验]
+- **需求背景与用户决策**：
+  - 用户提供采购单价文件：`configs/9.28 导入_河北泽越球阀采购价格表.xlsx`；
+  - 经前期数据探查汇报后，用户明确指示适用标段范围：“*目前是全标段通用*”，即统一按全标段通用基准模型入库。
+- **服务层实现与幂等入库设计**：
+  1. **专用导入服务落地 (`price_service.py`)**：
+     - 在 [`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py) 中新增核心服务函数 [`import_zeyue_valve_prices(excel_path, operator)`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)；
+     - 读取 `附件1-价格表` 工作表，精确提取 38 行有效采购数据；
+     - 字段规约映射：
+       * `supply_entity_id: "zeyue"`，`supplier_name: "河北泽悦节能设备科技有限公司"`；
+       * `material_kind: "fitting"`，`category: "球阀"`；
+       * `applicable_sections: "all"`，`section_name_scope: "全标段通用"`（对齐天津卡尔斯与江苏沃圣）；
+       * `remark`: 完整保留原始工艺参数（如直埋球阀管中心距地面埋深、法兰球阀配套螺栓垫片），并无缝叠加记录 `（采购数量: {qty}{unit}，采购总价: ¥{total:,.2f}元）`，实现合同明细 100% 审计留痕；
+     - 事务与幂等性保障：在独立事务中前置清理 `supply_entity_id = 'zeyue'` 或同名旧单价数据后执行批量原子插入，杜绝重复与数据污染；
+  2. **执行与多维度核验**：
+     - 执行前全表行数 655 条，导入后全表行数 693 条，净增 38 条，泽越现有记录数 38 条；
+     - 细分物料：直埋焊接球阀 13 条、法兰球阀 11 条、焊接球阀 14 条；
+     - 幂等性测试通过：二次重复调用该导入函数后，全表总行数稳定在 693 条，泽越记录数稳定在 38 条；
+     - API 接口核验：调用 `list_material_prices(supplier_name="泽悦")` 检索验证，精确返回 38 条标准记录。
+- **改动清单**：
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)、[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)
+
+## 2026-09-28 [展示大屏需求申报卡片表述最终敲定：不带日期规范呈现为“申报施工用料三日计划”]
+- **需求背景与用户诉求**：
+  - 用户反馈：“*在展示大屏上，我发现有一处显示不太合适，目前显示是这样的“申报09-29要料”。我觉得应该不加日期，同时，显示为“申报施工材料计划”*”；
+  - 随后用户进一步明确最终表述偏好：“*还是改成“申报施工用料三日计划”*”。
+- **前后端问题定位与设计对齐**：
+  1. **后端大屏工作区接口 (`workspace.py`)**：
+     - 在聚合未来 3 日滚动要料计划（`tube.tube_daily_plan`）生成实时战报流（`live_feed_list`）时，原逻辑为 `"headline": f"申报{plan_date_str}要料 · {sec_name}"`；
+     - 现统一定制为 `"headline": f"申报施工用料三日计划 · {sec_name}"`，彻底剔除易产生歧义的单日日期（`09-29`），并精准表达“施工用料三日滚动计划”的核心业务属性；
+  2. **前端大屏组件 (`BigScreenDashboardView.vue`)**：
+     - 实时动态播报（Live Feed）卡片 Row 2 通过 `getFeedSourceOrAction(feed)` 解析 `headline`；
+     - 兼容匹配 `用料`、`材料计划`、`要料` 等关键词，并将 `plan` 分类的缺省保底返回值升级为 `'申报施工用料三日计划'`。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)、[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)
+
+## 2026-09-27 [服务器 Docker 生态多租户格局剖析：1Panel 专属网络 172.19.0.2 容器归属与宿主机多网关矩阵]
+- **需求背景与咨询问题**：
+  - 用户询问：“*刚才查询到的 1panel 那个地址又是什么？*”
+- **容器与网络拓扑定位**：
+  1. **容器身份**：`/1Panel-komari-UFqk` 是服务器上 1Panel 运维面板体系下部署的一个应用容器实例；
+  2. **网络归属**：挂载于 1Panel 自动创建的专属网桥 `1panel-network`（网段 `172.19.0.0/16`），`172.19.0.2` 为该容器在 1Panel 内部局域网分配的独立客户端 IP；
+  3. **服务器 Docker 三方独立局域表格局总结**：
+     - **Phoenix 阵营**：`25-26_phoenix_net`（`172.30.25.0/24`），含 web(4)、backend(3)、db(2)；
+     - **NPM 反代阵营**：`nginx_proxy_manager_default`（`172.18.0.0/16`），含 NPM 容器(2)；
+     - **1Panel 阵营**：`1panel-network`（`172.19.0.0/16`），含 komari 实例(2)；
+     - **宿主机枢纽**：在每个网桥上分别充当 `.1` 号网关，维持统一调度。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [Linux 路由与网络栈深度剖析：容器访问宿主机物理网卡 10.x 仍然有效的根本机制]
+- **需求背景与咨询问题**：
+  - 用户询问：“*那么既然已经有了172的那个地址，为何10.x那个仍有效呢？*”
+- **网络路由与内核机制原理解析**：
+  1. **容器默认网关出站机制**：容器并非局限于 172 虚拟网段，其内部配置有指向宿主机的默认路由（Default Gateway）。正如容器可以连通公网访问百度或下载镜像一样，跨网段访问 `10.x` 完全合规；
+  2. **Linux 内核“弱主机模型（Weak Host Model）”**：
+     - 数据包由容器送抵宿主机内核后，内核比对本地路由表（Local Routing Table）；
+     - 宿主机识别出目标 `10.x` 正是自身物理网卡 `eth0` 的 IP，判定该数据包终点即为本机，在内存中直接认领，无需物理外网回路；
+  3. **端口全绑定规约（`0.0.0.0:8001`）**：
+     - Docker 端口映射默认监听通配地址 `0.0.0.0`，宿主机上无论是 `127.0.0.1`、`172.17.0.1` 还是 `10.x` 的 8001 端口均处于监听转发状态，故双通道完全畅通。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [Linux 网络协议栈认知升级：172.17.0.1 与 10.x 宿主机双 IP 终点等价性原理剖析]
+- **需求背景与咨询问题**：
+  - 用户询问：“*你是说，对于我的容器来说，172.17.0.1或者10.x都是一样的地址？*”
+- **底层网络路由与多网卡架构原理解析**：
+  1. **字面意义不是同一 IP**：`172.17.0.1` 绑定于宿主机虚拟网卡 `docker0`，`10.x.x.x` 绑定于宿主机物理网卡 `eth0`；
+  2. **业务效果与通信终点 100% 等价**：
+     - 两张网卡均归属于同一个 Linux 操作系统内核；
+     - 宿主机的监听端口（如 `8001`）默认监听全网段 `0.0.0.0:8001`；
+     - 容器不论向 `172.17.0.1:8001` 还是 `10.x.x.x:8001` 发起请求，数据包到达的都是同一台宿主机，并均被宿主机 iptables 转发至 `phoenix-web` 的 80 端口；
+  3. **心智减负**：用户无需担心特定虚拟网关 IP 遗忘，服务器云控制台内网 IP `10.x` 可作为永远在线的直观替代项。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [Docker 基础架构与网络底层科普：docker0 默认虚拟网桥与 br-xxx 命名机制解析]
+- **需求背景与咨询问题**：
+  - 用户询问：“*docker0 是什么，难道还有 docker1?*”
+- **底层原理与网络命名规约剖析**：
+  1. **`docker0` 的本质**：
+     - Docker 服务启动时在 Linux 内核创建的默认虚拟网桥（Linux Bridge，相当于软件路由器/交换机），默认 IP 为 `172.17.0.1`；
+     - 未指定网络的容器默认都会挂载到该网桥上；
+  2. **为什么没有 `docker1`**：
+     - 命名按 `前缀 + 编号` 规约（如同 `eth0`、`wlan0`），理论上若在 daemon.json 中自定义 bridge 字段可指定名为 `docker1`，但系统默认不会自动递增生成 `docker1`；
+     - **用户自定义网络真实网卡名**：用户通过 Docker Compose 创建的网络（如 `25-26_phoenix_net`）在宿主机底层并不叫 `docker1`，而是被统一命名为 **`br-<网络ID前12位>`**（例如 `br-xxxx`，网关为 `172.30.25.1`）。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [运维灾备与心智模型：docker0 宿主机网关找回与服务器私网 IP 兜底方案]
+- **需求背景与咨询问题**：
+  - 用户询问：“*我的担忧是，如果我的NPM坏掉，然后我也忘记了172.17.0.1 这个地址，我该从哪找到它？*”
+- **网关找回与兜底策略汇总**：
+  1. **命令秒级找回 `172.17.0.1`**：
+     - 查询宿主机网卡：`ip addr show docker0`（查看 inet 字段）；
+     - Docker 原生命令查询 bridge 网关：`docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'`，直接输出 `172.17.0.1`；
+  2. **无需记忆网关的终极兜底方案**：
+     - **直接使用服务器局域网/私网 IP**：运行 `hostname -I | awk '{print $1}'`，直接获取服务器内网 IP（在云控制台面板也可一目了然）。NPM 反代填 `http://<服务器内网IP>:8001` 同样稳定生效；
+     - **项目配置自文档化**：在服务器部署的 `lo1_new_server.yml` 头部注释中明确记载反代地址模板，确保重建时无需额外翻找。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [Docker 网卡拓扑深度解析：172.17.0.1 宿主机网关定位与 25-26_phoenix_net 容器通信全解]
+- **排查数据与疑问**：
+  - 用户执行容器巡检命令，返回运行拓扑：
+    - `nginx_proxy_manager-app-1`: `172.18.0.2` (`nginx_proxy_manager_default`)
+    - `phoenix-web`: `172.30.25.4` (`25-26_phoenix_net`)
+    - `phoenix-backend`: `172.30.25.3` (`25-26_phoenix_net`)
+    - `phoenix-db`: `172.30.25.2` (`25-26_phoenix_net`)
+  - 用户疑问：“*这是 docker inspect 的结果，我没看出来 172.17.0.1 啊*”。
+- **网络底层根因剖析**：
+  1. **容器 IP 与宿主机网关 IP 的本质区别**：`docker inspect` 查询的是各个**容器内部客户端**被分配的 IP。而 `172.17.0.1` 是 Linux **宿主机本身**在 `docker0` 虚拟网桥上担任“网关/路由器”的 IP，宿主机是网络的服务端与路由器，因此不会出现在容器列表里；
+  2. **为什么 172.17.0.1 能通**：NPM 容器发往宿主机本地网卡 `172.17.0.1:8001`，由宿主机内核路由并经端口映射进入 `phoenix-web` 容器；
+  3. **之前容器名 502 的根本原因彻底实锤**：NPM 处于 `nginx_proxy_manager_default` 网络，而 Phoenix 处于 `25-26_phoenix_net`（Docker Compose 以项目目录命名前缀），两网物理隔离，故 DNS 无法解析容器名；若要容器名互联，网络名称应为 `25-26_phoenix_net`。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [Docker 容器网络排查利器：多维度查询运行中容器 IP 与所属网络命令汇总]
+- **需求背景与咨询问题**：
+  - 用户询问：“*通过何种命令，能够找到服务器上运行的各docker容器的网络地址呢？*”
+- **核心命令与实用技巧**：
+  1. **批量一键看板（最推荐）**：`docker inspect --format='{{printf "%-25s" .Name}} {{range $net, $v := .NetworkSettings.Networks}}{{printf "%-15s" $v.IPAddress}} ({{$net}}) {{end}}' $(docker ps -q)`，直观输出所有运行中容器名、IP 地址及绑定的网桥名称；
+  2. **按指定网络透视**：`docker network inspect <网络名> --format '{{range .Containers}}{{.Name}} -> {{.IPv4Address}}{{"\n"}}{{end}}'`，快速查看特定业务子网（如 `phoenix_net`）下所有已挂载成员；
+  3. **单容器精准提取**：`docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <容器名>`。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [NPM 容器名反代报 502 Bad Gateway 根因排查与网络隔离分析]
+- **现象反馈与排查**：
+  - 用户反馈：“*我试了，改为容器名，出现了“Bad gateway”页面*”。
+  - **根本原因定位**：
+    1. **容器网络隔离（最主要）**：NPM 容器与 `phoenix-web` 处于不同的 Docker 网络，NPM 容器内置 DNS 无法跨网络解析主机名 `phoenix-web`（需先执行 `docker network connect phoenix_net <NPM容器名>` 并重载）；
+    2. **端口误配风险**：跨网络容器访问宿主机映射端口（8001），而同一网络内直接互访容器内部端口（80）。若填成 `phoenix-web:8001`，容器内未监听 8001 也会产生 502。
+- **业务规约与务实建议**：
+  - 用户目前验证成功的 `http://172.17.0.1:8001` 已经打通了全链路，结构清晰且无需侵入改动 NPM 容器的网络拓扑；
+  - 建议用户直接保持 `http://172.17.0.1:8001` 这一稳定配置，无需强求合并 Docker 网络。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [服务器 NPM 反代实测拓扑确认：验证 http://172.17.0.1:8001 桥接模式与参数同步建议]
+- **实测配置确认**：
+  - 用户确认当前服务器上 NPM 的实际反代配置为：`http://172.17.0.1:8001`。
+  - **网络通路验证**：
+    - 该地址完全符合 Docker 架构下的经典跨网桥通信模式：NPM 容器向默认网桥网关 `172.17.0.1`（宿主机 docker0）发起请求，经宿主机端口转发到 `8001`，再映射进入 `phoenix-web` 容器的 80 端口。
+- **关联优化建议**：
+  - 明确该网络通路成立后，关键点在于保障容器内部 80 端口为纯 HTTP 响应；
+  - 建议确认 [`lo1.ps1`](file:///D:/编程项目/phoenix/lo1.ps1) 中构建 Web 镜像时是否需要固定传递 `--build-arg HTTP_ONLY=true`，以避免后续自动部署时误引入 301 重定向与证书缺失问题。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [服务器 NPM 反代 IP 精准推导与 HTTP_ONLY 架构隐患排查]
+- **需求背景与业务决策**：
+  - 用户提供了服务器上真实的部署文件 `lo1_new_server.yml`（适配 NPM，映射 `8001:80`，子网定义为 `172.30.25.0/24`）。
+  - **精准 IP 推导**：
+    1. **若 NPM 在同一宿主机的 Docker 中**：
+       - 最优解：执行 `docker network connect phoenix_net <NPM容器名>`，NPM 中直接填容器名 `phoenix-web`，端口 `80`；
+       - 次选解：NPM 转发至宿主机 Docker 网关 `172.17.0.1` 或服务器私网 IP，端口 `8001`；
+    2. **若 NPM 直接安装在宿主机系统（非 Docker）**：
+       - 直接填 `127.0.0.1`，端口 `8001`。
+  - **重大潜在隐患排查（重定向循环风险）**：
+    - 在 `lo1_new_server.yml` 中注明了“*SSL 证书由宿主机的 NPM 统一管理，容器内部使用纯 HTTP 模式*”；
+    - 但排查 [`lo1.ps1`](file:///D:/编程项目/phoenix/lo1.ps1) 发现，其构建命令未传递 `--build-arg HTTP_ONLY=true`，导致默认打包的是带有 80 端口强制 301 重定向与 443 SSL 的 [`deploy/nginx.prod.conf`](file:///D:/编程项目/phoenix/deploy/nginx.prod.conf)；
+    - 提醒用户若容器报证书缺失或访问时出现 301 重定向死循环，需在 `lo1.ps1` 构建时加上 `--build-arg HTTP_ONLY=true`。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-09-27 [技术答疑与架构推导：基于 lo1.ps1 关联配置推导服务器 NPM 反向代理 IP 及拓扑方案]
+- **需求背景与咨询问题**：
+  - 用户询问：“*我想知道，我使用phoenix\lo1.ps1进行镜像的构建和推送。是否能从中得到任何线索，找到我在服务器上的NPM服务应该通过什么IP对容器进行反代？*”
+- **代码与配置线索排查**：
+  1. **构建脚本自身定位**：[`lo1.ps1`](file:///D:/编程项目/phoenix/lo1.ps1) 本身仅负责本地交叉编译 ARM64 生产镜像并推送到 Docker Hub（`ww870411/phoenix-backend` 与 `ww870411/phoenix-web`），脚本中不包含具体的服务器主机 IP 或内网网段。
+  2. **关键下级依赖拓扑**：脚本末尾指引部署文件 [`lo1.yml`](file:///D:/编程项目/phoenix/lo1.yml)。在该文件中：
+     - 定义了两个核心应用服务：`phoenix-backend`（暴露 8000 端口）和 `phoenix-web`（映射宿主机 80/443）；
+     - 二者处于名为 `phoenix_net` 的自定义网桥中；
+     - `phoenix-web` 内部已配置反向代理（[`deploy/nginx.prod.conf`](file:///D:/编程项目/phoenix/deploy/nginx.prod.conf)），在 `/api/` 路由下自动将流量转发给 `http://backend:8000`。
+  3. **架构隐患识别**：
+     - 如果服务器上的 NPM（Nginx Proxy Manager）同样监听 80 和 443，则 `lo1.yml` 中 `web` 服务的 `80:80`、`443:443` 会产生端口冲突。
+- **推荐反代方案与落地结论**：
+  1. **方案一（最佳实践：容器名解析）**：若 NPM 同样运行于 Docker 容器中，将 NPM 容器加入 `phoenix_net` 网络，在 NPM 中反代直接填 `http://phoenix-web:80`，免除固定 IP 依赖与漂移风险；
+  2. **方案二（宿主机端口映射）**：修改 `lo1.yml` 将 `web` 端口映射改为非 80/443（如 `8088:80`），NPM 反代填宿主机 Docker 网关（如 `172.17.0.1`）或内网 IP + 端口 `8088`；
+  3. **方案三（实时容器 IP 探测）**：在服务器上使用 `docker inspect` 获取容器当前内网 IP。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
 ## 2026-09-27 [现场管理工作台保温管现货库存非标准表格解析引擎优化：彻底解决鑫瑞得综合报表型号无法识别与混排管件干扰问题]
 - **需求背景与业务决策**：
   - 用户反馈疑问：“*我用鑫瑞得的非标准表上传导入，发现保温管库存这里无法识别，提示了“无法完整识别导入表格。上传表格应包含完整的保温管型号与数量信息，并与合同保持一致。若仍出现此问题，请下载标准表格填写导入。”你帮我对照非标准表格查查看原因。phoenix\configs\9.26 鑫瑞得大连项目截止2026年9月20日.xlsx*”。

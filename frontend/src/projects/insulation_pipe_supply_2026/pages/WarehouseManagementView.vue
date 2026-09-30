@@ -700,7 +700,7 @@
             
             <div v-else class="timeline-container" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; position: relative; box-sizing: border-box; width: 100%;">
               <!-- 顶部信息摘要 -->
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #f1f5f9; box-sizing: border-box;">
+              <div style="display: grid; grid-template-columns: 1fr 1.2fr 1.4fr 1fr; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #f1f5f9; box-sizing: border-box;">
                 <div>
                   <div style="font-size: 11px; color: #64748b; margin-bottom: 2px;">车牌号</div>
                   <div style="font-size: 13px; font-weight: 600; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ selectedDelivery.vehicle_plate_no || '—' }}</div>
@@ -708,6 +708,12 @@
                 <div>
                   <div style="font-size: 11px; color: #64748b; margin-bottom: 2px;">规格型号</div>
                   <div style="font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="selectedDelivery.pipe_model_name">{{ selectedDelivery.pipe_model_name || '—' }}</div>
+                </div>
+                <div>
+                  <div style="font-size: 11px; color: #64748b; margin-bottom: 2px;">需求方（收货标段）</div>
+                  <div style="font-size: 13px; font-weight: 700; color: #1d4ed8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="selectedDelivery.section_1_name || getSection1Name(selectedDelivery.section_1_id)">
+                    📍 {{ selectedDelivery.section_1_name || getSection1Name(selectedDelivery.section_1_id) || '—' }}
+                  </div>
                 </div>
                 <div>
                   <div style="font-size: 11px; color: #64748b; margin-bottom: 2px;">当前状态</div>
@@ -738,6 +744,7 @@
                       <div>经办人：<span>{{ selectedDelivery.ship_contact_name || '—' }}</span></div>
                       <div style="grid-column: span 2;">联系电话：<span>{{ selectedDelivery.ship_contact_phone || '—' }}</span></div>
                       <div style="grid-column: span 2;">供给主体：<span>{{ selectedDelivery.supply_entity_name || '—' }} ({{ selectedDelivery.supply_entity_id || '—' }})</span></div>
+                      <div style="grid-column: span 2;">收货需求方：<strong style="color: #1d4ed8;">{{ selectedDelivery.section_1_name || getSection1Name(selectedDelivery.section_1_id) || '—' }}</strong> <span v-if="selectedDelivery.section_1_id" style="color: #64748b; font-weight: normal;">({{ selectedDelivery.section_1_id }})</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.ship_remark || selectedDelivery.cancel_reason">发货备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.ship_remark || selectedDelivery.cancel_reason }}”</span></div>
                     </div>
                   </div>
@@ -763,7 +770,7 @@
                       <div>操作账号：<span class="user-matrix-link" style="font-weight: 500; color: #0f766e;" @click="handleGoToUserDirectory(selectedDelivery.arrived_confirm_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.arrived_confirm_by || '—' }}</span></div>
                       <div>经办人：<span>{{ selectedDelivery.arrived_confirm_name || '—' }}</span></div>
                       <div style="grid-column: span 2;" v-if="selectedDelivery.arrived_confirm_phone">联系电话：<span>{{ selectedDelivery.arrived_confirm_phone }}</span></div>
-                      <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
+                      <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || getSection1Name(selectedDelivery.section_1_id) || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.arrived_remark">到货备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.arrived_remark }}”</span></div>
                     </div>
                   </div>
@@ -790,7 +797,7 @@
                       <div>操作账号：<span class="user-matrix-link" style="font-weight: 500; color: #6d28d9;" @click="handleGoToUserDirectory(selectedDelivery.received_confirm_by)" title="点击在责任主体矩阵中定位">{{ selectedDelivery.received_confirm_by || '—' }}</span></div>
                       <div>经办人：<span>{{ selectedDelivery.received_confirm_name || '—' }}</span></div>
                       <div style="grid-column: span 2;" v-if="selectedDelivery.received_confirm_phone">联系电话：<span>{{ selectedDelivery.received_confirm_phone }}</span></div>
-                      <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
+                      <div style="grid-column: span 2;">需求主体：<span>{{ selectedDelivery.section_1_name || getSection1Name(selectedDelivery.section_1_id) || '—' }} ({{ selectedDelivery.section_1_id || '—' }})</span></div>
                       <div style="grid-column: span 2; word-break: break-all;" v-if="selectedDelivery.received_remark">接收备注：<span style="color: #64748b; font-style: italic;">“{{ selectedDelivery.received_remark }}”</span></div>
                       <div style="grid-column: span 2; color: #f97316; font-weight: 500;" v-if="selectedDelivery.is_timeout_receive">
                         🕒 提示：该订单由系统触发 [12小时超时强制自动确认接收]。
@@ -1137,16 +1144,18 @@
           </div>
           
           <!-- 信息概述 -->
-          <div class="block-modal-metrics" style="grid-template-columns: repeat(3, 1fr); padding: 15px; gap: 8px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+          <div class="block-modal-metrics" style="grid-template-columns: 1fr 1.6fr; padding: 15px; gap: 10px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
             <div class="metric-block-card">
               <span class="lbl">车牌号</span>
               <span class="val" style="font-size: 13px; font-weight: bold; color: #1e293b;">{{ deliveryDetailModalData.vehiclePlateNo || '—' }}</span>
             </div>
-            <div class="metric-block-card" style="grid-column: span 2;">
-              <span class="lbl">规格型号</span>
-              <span class="val model-val" style="font-size: 11px; line-height: 1.3;" :title="deliveryDetailModalData.pipeModelName">{{ deliveryDetailModalData.pipeModelName }}</span>
+            <div class="metric-block-card">
+              <span class="lbl">需求方（收货标段）</span>
+              <span class="val" style="font-size: 12.5px; font-weight: bold; color: #1d4ed8; word-break: break-all;" :title="deliveryDetailModalData.section1Name">
+                📍 {{ deliveryDetailModalData.section1Name || deliveryDetailModalData.section_1_name || '—' }}
+              </span>
             </div>
-            <div v-if="deliveryDetailModalData.shipRemark" class="metric-block-card" style="grid-column: span 3; background: #eff6ff; border: 1px solid #bfdbfe; text-align: left; padding: 8px 12px; border-radius: 6px;">
+            <div v-if="deliveryDetailModalData.shipRemark" class="metric-block-card" style="grid-column: span 2; background: #eff6ff; border: 1px solid #bfdbfe; text-align: left; padding: 8px 12px; border-radius: 6px;">
               <span class="lbl" style="color: #1d4ed8; font-weight: 600; font-size: 11px; display: flex; align-items: center; gap: 4px;">📝 供给侧发货备注</span>
               <span class="val" style="font-size: 12px; color: #1e3a8a; font-weight: 500; white-space: pre-wrap; word-break: break-all; margin-top: 2px;">{{ deliveryDetailModalData.shipRemark }}</span>
             </div>
@@ -1211,8 +1220,10 @@
                 <div style="font-size: 11px; color: #475569; background: #fafafa; padding: 6px 10px; border-radius: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>发货总数：<strong>{{ deliveryDetailModalData.shippedQty }} {{ deliveryDetailModalData.unit || '个' }}</strong></div>
                   <div>操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.createdBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.createdBy || '供给端系统' }}</span></div>
-                  <div style="grid-column: span 2;">调度经办：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
-                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.shipContactPhone">联系电话：<span>{{ deliveryDetailModalData.shipContactPhone }}</span></div>
+                  <div>调度经办：<span>{{ deliveryDetailModalData.shipContactName || '—' }}</span></div>
+                  <div>联系电话：<span>{{ deliveryDetailModalData.shipContactPhone || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.supplyEntityName">供给主体：<span>{{ deliveryDetailModalData.supplyEntityName }} ({{ deliveryDetailModalData.supplyEntityId || '—' }})</span></div>
+                  <div style="grid-column: span 2;">收货需求方：<strong style="color: #1d4ed8;">{{ deliveryDetailModalData.section1Name || deliveryDetailModalData.section_1_name || '—' }}</strong> <span v-if="deliveryDetailModalData.section1Id || deliveryDetailModalData.section_1_id" style="color: #64748b; font-weight: normal;">({{ deliveryDetailModalData.section1Id || deliveryDetailModalData.section_1_id }})</span></div>
                 </div>
               </div>
             </div>
@@ -1229,10 +1240,11 @@
                   <span v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.arrivedAt) }}</span>
                   <span v-else style="font-size: 11px; color: #94a3b8;">(待到货确认)</span>
                 </div>
-                <div v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #475569; background: #ecfdf5; padding: 6px 10px; border-radius: 6px; border: 1px solid #a7f3d0;">
+                <div v-if="deliveryDetailModalData.arrivedAt" style="font-size: 11px; color: #475569; background: #ecfdf5; padding: 6px 10px; border-radius: 6px; border: 1px solid #a7f3d0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>实际到货总数：<strong style="color: #047857;">{{ deliveryDetailModalData.arrivedQty }} {{ deliveryDetailModalData.unit || '个' }}</strong></div>
                   <div>现场操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.arrivedBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.arrivedBy || '—' }}</span></div>
-                  <div v-if="deliveryDetailModalData.arrivalRemark">到货备注：<span style="color: #047857;">“{{ deliveryDetailModalData.arrivalRemark }}”</span></div>
+                  <div style="grid-column: span 2;">需求主体：<span>{{ deliveryDetailModalData.section1Name || deliveryDetailModalData.section_1_name || '—' }} ({{ deliveryDetailModalData.section1Id || deliveryDetailModalData.section_1_id || '—' }})</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.arrivalRemark">到货备注：<span style="color: #047857;">“{{ deliveryDetailModalData.arrivalRemark }}”</span></div>
                 </div>
               </div>
             </div>
@@ -1249,9 +1261,10 @@
                   <span v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #64748b; font-family: monospace;">{{ formatDateTime(deliveryDetailModalData.constructionConfirmedAt) }}</span>
                   <span v-else style="font-size: 11px; color: #94a3b8;">(待施工接收)</span>
                 </div>
-                <div v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #475569; background: #eff6ff; padding: 6px 10px; border-radius: 6px; border: 1px solid #bfdbfe;">
+                <div v-if="deliveryDetailModalData.constructionConfirmedAt" style="font-size: 11px; color: #475569; background: #eff6ff; padding: 6px 10px; border-radius: 6px; border: 1px solid #bfdbfe; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                   <div>施工领用操作账号：<span class="user-matrix-link" @click="handleGoToUserDirectory(deliveryDetailModalData.constructionConfirmedBy)" title="点击在责任主体矩阵中定位">{{ deliveryDetailModalData.constructionConfirmedBy || '—' }}</span></div>
-                  <div v-if="deliveryDetailModalData.constructionRemark">接收备注：<span>“{{ deliveryDetailModalData.constructionRemark }}”</span></div>
+                  <div>需求主体：<span>{{ deliveryDetailModalData.section1Name || deliveryDetailModalData.section_1_name || '—' }}</span></div>
+                  <div style="grid-column: span 2;" v-if="deliveryDetailModalData.constructionRemark">接收备注：<span>“{{ deliveryDetailModalData.constructionRemark }}”</span></div>
                 </div>
               </div>
             </div>
@@ -1374,6 +1387,14 @@ const { breadcrumbItems, goProjectPages, errorMessage: shellError, managementMod
 
 const activeTab = ref(getInitialTab())
 
+const options = ref(null)
+const section1Options = computed(() => options.value?.section_1s || [])
+function getSection1Name(id) {
+  if (!id) return ''
+  const item = (section1Options.value || []).find(o => o.section_1_id === id)
+  return item ? item.section_1_name : id
+}
+
 // 管件发货台账状态
 const fittingRows = ref([])
 const fittingLoading = ref(false)
@@ -1430,7 +1451,11 @@ function showDeliveryDetail(input) {
   const supplyEntityId = input.supplyEntityId || input.supply_entity_id || mainRow.supply_entity_id || mainRow.supplyEntityId || ''
   const supplyEntityName = input.supplyEntityName || input.supply_entity_name || mainRow.supply_entity_name || mainRow.supplyEntityName || supplyEntityId
   const section1Id = input.section1Id || input.section_1_id || mainRow.section_1_id || mainRow.section1Id || ''
-  const section1Name = input.section1Name || input.section_1_name || mainRow.section_1_name || mainRow.section1Name || section1Id
+  const secMatched = (section1Options.value || []).find(o => o.section_1_id === section1Id)
+  let resolvedSection1Name = input.section1Name || input.section_1_name || mainRow.section_1_name || mainRow.section1Name || ''
+  if (!resolvedSection1Name || resolvedSection1Name === '未知需求主体' || resolvedSection1Name === section1Id) {
+    resolvedSection1Name = secMatched?.section_1_name || getSection1Name(section1Id) || section1Id || '—'
+  }
 
   const shipContactName = mainRow.ship_contact_name || mainRow.shipContactName || input.shipContactName || mainRow.created_by || '发货负责人'
   const shipContactPhone = mainRow.ship_contact_phone || mainRow.shipContactPhone || input.shipContactPhone || '—'
@@ -1475,7 +1500,10 @@ function showDeliveryDetail(input) {
       ? (itemsList.length === 1 ? `${mainRow.fitting_type || '管件'} (${mainRow.model_spec || '未填'})` : `多规格组合管件车次 (${itemsList.length} 种规模型号卡块)`) 
       : (itemsList.length === 1 ? (mainRow.pipe_model_name || mainRow.pipeModelName || '保温管') : `保温管组合装车 (${itemsList.length} 种规格)`),
     supplyEntityName,
-    section1Name,
+    section1Id,
+    section_1_id: section1Id,
+    section1Name: resolvedSection1Name,
+    section_1_name: resolvedSection1Name,
     shipContactName,
     shipContactPhone,
     createdBy,
@@ -1565,8 +1593,10 @@ const groupedWarehouseFittingRows = computed(() => {
         shippedAt: item.shipped_at,
         supplyEntityId: item.supply_entity_id,
         supplyEntityName: item.supply_entity_name || item.supply_entity_id || '—',
-        section1Id: item.section_1_id,
-        section1Name: item.section_1_name || item.section_1_id || '—',
+        section1Id: item.section_1_id || '',
+        section_1_id: item.section_1_id || '',
+        section1Name: item.section_1_name || getSection1Name(item.section_1_id) || item.section_1_id || '—',
+        section_1_name: item.section_1_name || getSection1Name(item.section_1_id) || item.section_1_id || '—',
         shipRemark: item.ship_remark || '',
         status: item.status || 'shipped',
         totalQty: 0,
@@ -1776,7 +1806,6 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const pageError = ref('')
 const pageMessage = ref('')
-const options = ref(null)
 const deliveries = ref([])
 const allDeliveries = ref([])
 const showExportModal = ref(false)
@@ -2012,7 +2041,6 @@ const warehouseForm = reactive({
 const nowTick = ref(Date.now())
 let nowTimer = null
 
-const section1Options = computed(() => options.value?.section_1s || [])
 const supplyEntityOptions = computed(() => options.value?.supply_entities || [])
 const pipeModelOptions = computed(() => options.value?.pipe_models || [])
 const groupedPipeModelOptions = computed(() => {
@@ -2153,8 +2181,12 @@ const groupedPipeDeliveries = computed(() => {
         groupKey: shipmentKey,
         shipmentNo: row.shipment_no || '无车次号',
         vehiclePlateNo: row.vehicle_plate_no || '未填车牌',
+        supplyEntityId: row.supply_entity_id || '',
         supplyEntityName: row.supply_entity_name || row.supply_entity_id || '未知供给主体',
-        section1Name: row.section_1_name || row.section_1_id || '未知需求主体',
+        section1Id: row.section_1_id || '',
+        section_1_id: row.section_1_id || '',
+        section1Name: row.section_1_name || getSection1Name(row.section_1_id) || row.section_1_id || '未知需求主体',
+        section_1_name: row.section_1_name || getSection1Name(row.section_1_id) || row.section_1_id || '未知需求主体',
         shippedAt: row.shipped_at,
         items: [],
         totalShippedQty: 0,

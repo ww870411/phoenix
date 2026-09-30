@@ -740,7 +740,10 @@
                 <div class="safety-desc">施工标段现场</div>
               </div>
             </div>
-            <div class="safety-card">
+            <div 
+              class="safety-card" 
+              :title="`库管确认率：已确认 ${kpiData.confirmedWarehouseOrders || 0} 单 / 已到货 ${kpiData.confirmedArrivedOrders || 0} 单（含保温管与管件）`"
+            >
               <div class="safety-icon">
                 <svg class="safety-svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="#10b981" stroke-width="2" fill="rgba(16, 185, 129, 0.15)"/>
@@ -1993,6 +1996,8 @@ const kpiData = reactive({
   fittingCategoryCount: 0,
   fittingSupplierStockPcs: 0,
   warehouseConfirmRate: 100.0,
+  confirmedArrivedOrders: 0,
+  confirmedWarehouseOrders: 0,
   avgTransitHours: 16.4
 })
 
@@ -2255,7 +2260,7 @@ const activeEventCategory = computed(() => {
   const cat = ev.category_key || ev.category || ''
   if (cat === 'dispatch' || cat === '厂家发货') return 'dispatch'
   if (['arrival', 'receive', 'warehouse', '确认到货', '施工单位收货', '库管核销', '库管确认', '库管已确认'].includes(cat)) return 'arrival'
-  if (cat === 'usage' || cat === '施工量确认') return 'usage'
+  if (cat === 'usage' || ['施工量确认', '保温管施工量确认', '管件安装量确认', '管件安装施工'].includes(cat)) return 'usage'
   if (cat === 'plan' || cat === '需求量申报') return 'plan'
   return 'other'
 })
@@ -2280,15 +2285,15 @@ function getFeedSourceOrAction(feed) {
   if (feed.category_key === 'warehouse' || feed.category === '库管核销' || feed.category === '库管确认' || feed.category === '库管已确认') {
     return feed.type === 'fitting' ? '管件库管已确认' : '库管已确认'
   }
-  if (feed.category_key === 'usage' || feed.category === '施工量确认') {
-    return '现场施工安装'
+  if (feed.category_key === 'usage' || ['施工量确认', '保温管施工量确认', '管件安装量确认', '管件安装施工'].includes(feed.category)) {
+    return feed.type === 'fitting' ? '管件现场安装' : '现场施工安装'
   }
   if (feed.category_key === 'plan' || feed.category === '需求量申报') {
-    if (feed.headline && feed.headline.includes('申报') && feed.headline.includes('要料')) {
+    if (feed.headline && (feed.headline.includes('申报') || feed.headline.includes('用料') || feed.headline.includes('材料计划') || feed.headline.includes('要料'))) {
       const parts = feed.headline.split(/[──►·|]/)
       return parts[0].trim()
     }
-    return '申报滚动要料'
+    return '申报施工用料三日计划'
   }
   if (feed.headline) {
     const parts = feed.headline.split(/[──►·|]/)
@@ -2938,6 +2943,8 @@ async function pollLiveRealData() {
       kpiData.fittingCategoryCount = Number(res.kpi.fittingCategoryCount || 0)
       kpiData.fittingSupplierStockPcs = Number(res.kpi.fittingSupplierStockPcs || 0)
       kpiData.warehouseConfirmRate = res.kpi.warehouseConfirmRate !== undefined ? Number(res.kpi.warehouseConfirmRate) : 100.0
+      kpiData.confirmedArrivedOrders = Number(res.kpi.confirmedArrivedOrders || 0)
+      kpiData.confirmedWarehouseOrders = Number(res.kpi.confirmedWarehouseOrders || 0)
       kpiData.avgTransitHours = res.kpi.avgTransitHours !== undefined ? Number(res.kpi.avgTransitHours) : 16.4
     }
 
@@ -3148,8 +3155,8 @@ function triggerSimulateDelivery(mode = 'pipe') {
       matType = Math.random() > 0.5 ? 'pipe' : 'fitting'
     } else {
       categoryKey = 'usage'
-      categoryName = '施工量确认'
-      matType = 'pipe'
+      matType = Math.random() > 0.5 ? 'pipe' : 'fitting'
+      categoryName = matType === 'fitting' ? '管件安装量确认' : '保温管施工量确认'
     }
   }
 
@@ -3324,36 +3331,59 @@ function triggerSimulateDelivery(mode = 'pipe') {
       isNew: true
     }
 
-  } else if (categoryKey === 'usage') {
-    const meters = [60, 120, 180][Math.floor(Math.random() * 3)]
-    const kmDelta = Math.round((meters / 1000) * 100) / 100
+    if (matType === 'fitting') {
+      newFeed = {
+        id: eventId,
+        category: '管件安装量确认',
+        category_key: 'usage',
+        type: 'fitting',
+        supplier_id: null,
+        section_id: secTarget.id,
+        supplier: '施工现场班组',
+        target: secName,
+        headline: `管件现场安装 · ${secName}`,
+        specification: '90°大口径弯头 DN800',
+        amount: '2 件套',
+        shipmentCode: 'SG-' + Math.floor(1000 + Math.random() * 9000),
+        vehiclePlate: '工区现场安装',
+        operator: '现场施工负责人',
+        time: timeNow,
+        positiveTag: '完成管件安装并记录',
+        isNew: true
+      }
+      kpiData.fittingInstalledPcs = (kpiData.fittingInstalledPcs || 0) + 2
+      kpiData.fittingStockPcs = Math.max(0, (kpiData.fittingStockPcs || 0) - 2)
+    } else {
+      const meters = [60, 120, 180][Math.floor(Math.random() * 3)]
+      const kmDelta = Math.round((meters / 1000) * 100) / 100
 
-    newFeed = {
-      id: eventId,
-      category: '施工量确认',
-      category_key: 'usage',
-      type: 'pipe',
-      supplier_id: null,
-      section_id: secTarget.id,
-      supplier: '施工现场班组',
-      target: secName,
-      headline: `现场施工安装 · ${secName}`,
-      specification: 'DN800 预制直埋保温管',
-      amount: `铺设安装 ${meters} 米`,
-      shipmentCode: 'SG-' + Math.floor(1000 + Math.random() * 9000),
-      vehiclePlate: '工区现场铺设',
-      operator: '现场施工负责人',
-      time: timeNow,
-      positiveTag: '完成管网下沟敷设，记录已确认',
-      isNew: true
-    }
+      newFeed = {
+        id: eventId,
+        category: '保温管施工量确认',
+        category_key: 'usage',
+        type: 'pipe',
+        supplier_id: null,
+        section_id: secTarget.id,
+        supplier: '施工现场班组',
+        target: secName,
+        headline: `现场施工安装 · ${secName}`,
+        specification: 'DN800 预制直埋保温管',
+        amount: `铺设安装 ${meters} 米`,
+        shipmentCode: 'SG-' + Math.floor(1000 + Math.random() * 9000),
+        vehiclePlate: '工区现场铺设',
+        operator: '现场施工负责人',
+        time: timeNow,
+        positiveTag: '完成保温管安装并记录',
+        isNew: true
+      }
 
-    kpiData.pipeInstalledKm = Math.round((kpiData.pipeInstalledKm + kmDelta) * 100) / 100
-    kpiData.pipeStockKm = Math.max(0, Math.round((kpiData.pipeStockKm - kmDelta) * 100) / 100)
-    kpiData.pipeThreeDayGapKm = Math.max(0, Math.round(((kpiData.pipeThreeDayPlanKm || 0) - kpiData.pipeStockKm) * 100) / 100)
-    secTarget.installedKm = Math.round(((parseFloat(secTarget.installedKm) || 0) + kmDelta) * 100) / 100
-    if (secTarget.designKm > 0) {
-      secTarget.installedPercent = Math.min(Math.round((secTarget.installedKm / secTarget.designKm) * 1000) / 10, 100)
+      kpiData.pipeInstalledKm = Math.round((kpiData.pipeInstalledKm + kmDelta) * 100) / 100
+      kpiData.pipeStockKm = Math.max(0, Math.round((kpiData.pipeStockKm - kmDelta) * 100) / 100)
+      kpiData.pipeThreeDayGapKm = Math.max(0, Math.round(((kpiData.pipeThreeDayPlanKm || 0) - kpiData.pipeStockKm) * 100) / 100)
+      secTarget.installedKm = Math.round(((parseFloat(secTarget.installedKm) || 0) + kmDelta) * 100) / 100
+      if (secTarget.designKm > 0) {
+        secTarget.installedPercent = Math.min(Math.round((secTarget.installedKm / secTarget.designKm) * 1000) / 10, 100)
+      }
     }
   }
 
@@ -3471,6 +3501,8 @@ async function loadRealData(isForce = false) {
         kpiData.fittingCategoryCount = Number(res.kpi.fittingCategoryCount || 0)
         kpiData.fittingSupplierStockPcs = Number(res.kpi.fittingSupplierStockPcs || 0)
         kpiData.warehouseConfirmRate = res.kpi.warehouseConfirmRate !== undefined ? Number(res.kpi.warehouseConfirmRate) : 100.0
+        kpiData.confirmedArrivedOrders = Number(res.kpi.confirmedArrivedOrders || 0)
+        kpiData.confirmedWarehouseOrders = Number(res.kpi.confirmedWarehouseOrders || 0)
         kpiData.avgTransitHours = res.kpi.avgTransitHours !== undefined ? Number(res.kpi.avgTransitHours) : 16.4
       }
 

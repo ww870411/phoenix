@@ -820,3 +820,119 @@ def list_material_prices(
         return [dict(r) for r in rows]
     finally:
         session.close()
+
+
+def import_zeyue_valve_prices(
+    excel_path: Optional[str] = None,
+    operator: str = "EXCEL_IMPORT_20260928"
+) -> Dict[str, Any]:
+    """
+    从《configs/9.28 导入_河北泽越球阀采购价格表.xlsx》导入河北泽悦节能设备科技有限公司球阀采购单价数据（直埋焊接球阀、法兰球阀、焊接球阀共 38 行）。
+    自动设置 applicable_sections = 'all'，section_name_scope = '全标段通用'。
+    规格型号统一为纯规格（如 Q61F-16C DN25），不拼接中文名称。
+    在 remark 中保留原始工艺参数（如埋深、法兰垫片）并附带采购数量与采购总价记录。
+    操作具备幂等性（先清理 supply_entity_id = 'zeyue' 的旧单价再全量写入）。
+    """
+    ensure_price_table()
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    if not excel_path:
+        excel_path = os.path.join(base_dir, "configs", "9.28 导入_河北泽越球阀采购价格表.xlsx")
+
+    if not os.path.exists(excel_path):
+        raise FileNotFoundError(f"未找到河北泽越球阀价格表文件: {excel_path}")
+
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb["附件1-价格表"] if "附件1-价格表" in wb.sheetnames else wb.active
+
+    rows_to_insert: List[Dict[str, Any]] = []
+
+    for r in range(2, ws.max_row + 1):
+        sup = _normalize_text(ws.cell(r, 2).value) or "河北泽悦节能设备科技有限公司"
+        cat = _normalize_text(ws.cell(r, 3).value) or "球阀"
+        mat = _normalize_text(ws.cell(r, 4).value) or cat
+        spec = _normalize_text(ws.cell(r, 5).value)
+        unit = _normalize_text(ws.cell(r, 6).value) or "个"
+        raw_qty = ws.cell(r, 7).value
+        raw_price = ws.cell(r, 8).value
+        raw_total = ws.cell(r, 9).value
+        rem = _normalize_text(ws.cell(r, 10).value)
+
+        if not spec or raw_price is None:
+            continue
+
+        try:
+            unit_price = round(float(raw_price or 0), 2)
+        except (ValueError, TypeError):
+            unit_price = 0.0
+
+        # 整理备注：保留原始工艺备注并记录采购数量与总价
+        qty_info = ""
+        if raw_qty is not None and str(raw_qty).strip():
+            try:
+                qty_val = int(raw_qty) if float(raw_qty).is_integer() else float(raw_qty)
+                total_val = float(raw_total) if raw_total is not None else (qty_val * unit_price)
+                qty_info = f"（采购数量: {qty_val}{unit}，采购总价: ¥{total_val:,.2f}元）"
+            except (ValueError, TypeError):
+                qty_info = f"（采购数量: {raw_qty}{unit}）"
+
+        full_remark = f"{rem}{qty_info}" if rem else (qty_info.strip("（）") if qty_info else "")
+
+        rows_to_insert.append({
+            "project_key": "insulation_pipe_supply_2026",
+            "material_kind": "fitting",
+            "supply_entity_id": "zeyue",
+            "supplier_name": sup,
+            "category": cat,
+            "material_name": mat,
+            "model_spec": spec,
+            "raw_model_spec": spec,
+            "unit": unit,
+            "unit_price": unit_price,
+            "applicable_sections": "all",
+            "section_name_scope": "全标段通用",
+            "remark": full_remark,
+            "created_by": operator,
+            "updated_by": operator,
+        })
+
+    session = SessionLocal()
+    try:
+        # 幂等清理河北泽越旧单价
+        session.execute(text("""
+            DELETE FROM tube.tube_material_price 
+            WHERE supply_entity_id = 'zeyue' 
+               OR supplier_name ILIKE '%泽越%';
+        """))
+
+        sql_insert = text("""
+            INSERT INTO tube.tube_material_price (
+                project_key, material_kind, supply_entity_id, supplier_name,
+                category, material_name, model_spec, raw_model_spec,
+                unit, unit_price, applicable_sections, section_name_scope, remark, created_by, created_at,
+                updated_by, updated_at
+            ) VALUES (
+                :project_key, :material_kind, :supply_entity_id, :supplier_name,
+                :category, :material_name, :model_spec, :raw_model_spec,
+                :unit, :unit_price, :applicable_sections, :section_name_scope, :remark, :created_by, NOW(),
+                :updated_by, NOW()
+            );
+        """)
+
+        for row in rows_to_insert:
+            session.execute(sql_insert, row)
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        raise RuntimeError(f"写入河北泽越球阀采购单价数据至数据库失败: {e}") from e
+    finally:
+        session.close()
+
+    return {
+        "success": True,
+        "total_inserted": len(rows_to_insert),
+        "supplier_name": "河北泽悦节能设备科技有限公司",
+        "file": excel_path,
+        "items": rows_to_insert,
+    }
+
