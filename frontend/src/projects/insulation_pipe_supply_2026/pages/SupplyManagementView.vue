@@ -757,7 +757,12 @@
                   <span class="total-label">本次实盘在库总量:</span>
                   <strong class="total-val">{{ formatNumber(computedTotalInventoryStock) }} 米</strong>
                   <span v-if="inventoryData.has_previous_record" style="font-size: 12px; color: #64748b; margin-left: 6px;">
-                    (上次: {{ formatNumber(computedTotalPreviousStock) }} 米)
+                    <template v-if="inventoryData.total_shipped_since_inventory > 0">
+                      (上次实盘: {{ formatNumber(computedTotalPreviousStock) }} 米，发货: {{ formatNumber(inventoryData.total_shipped_since_inventory) }} 米，扣减后在库: <strong style="color: #1d4ed8;">{{ formatNumber(computedTotalPipeDeductedStock) }}</strong> 米)
+                    </template>
+                    <template v-else>
+                      (上次: {{ formatNumber(computedTotalPreviousStock) }} 米)
+                    </template>
                   </span>
                 </div>
               </div>
@@ -805,11 +810,11 @@
                   type="button" 
                   class="btn primary" 
                   :disabled="submitFittingLoading || isReadOnlyViewer || !canSubmitCurrentProject"
-                  :style="isReadOnlyViewer ? { opacity: 0.5, pointerEvents: 'none !important', cursor: 'not-allowed', background: '#94a3b8 !important', borderColor: '#94a3b8 !important', color: '#ffffff !important' } : {}"
+                  :style="isReadOnlyViewer ? { opacity: 0.5, pointerEvents: 'none !important', cursor: 'not-allowed', background: '#94a3b8 !important', borderColor: '#94a3b8 !important', color: '#ffffff !important' } : { background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', border: 'none', color: '#ffffff', fontWeight: '600', boxShadow: '0 2px 4px rgba(37,99,235,0.2)' }"
                   :title="isReadOnlyViewer ? '全局观察员角色仅具备只读权限，已被禁止提交发货' : '点击提交整车管件发货单'"
                   @click="submitFittingForm"
                 >
-                  {{ isReadOnlyViewer ? '🔒 观察员模式禁止提交发货' : '🚀 提交整车管件发货单' }}
+                  {{ isReadOnlyViewer ? '🔒 观察员模式禁止提交发货' : (submitFittingLoading ? '🚀 正在提交整车发货...' : '🚀 提交整车管件发货单') }}
                 </button>
               </div>
             </div>
@@ -899,7 +904,15 @@
                 📊 本车管件发货电子表格
                 <span class="mobile-hide-hint" style="font-size: 12px; font-weight: normal; color: #64748b;">(双击单元格输入，直接按方向键切换，或在网格区域按下 Ctrl+V 快捷粘贴 Excel 矩阵)</span>
               </h3>
-              <div style="display: flex; gap: 8px;">
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <button 
+                  type="button" 
+                  class="btn primary btn-sm" 
+                  @click="openFittingHelperModal"
+                  style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); border: none; color: #fff; font-weight: 600; box-shadow: 0 2px 4px rgba(37,99,235,0.2); display: flex; align-items: center; gap: 5px;"
+                >
+                  📦 从标准库中选择
+                </button>
                 <button type="button" class="btn ghost btn-sm" @click="addFittingGridRows(5)">+ 追加 5 行空行</button>
                 <button type="button" class="btn ghost btn-sm" style="color: #ef4444;" @click="clearFittingGrid">清空电子表格</button>
               </div>
@@ -1294,7 +1307,12 @@
                   <span class="total-label">本次实盘在库总量:</span>
                   <strong class="total-val">{{ formatNumber(computedTotalFittingInventoryStock) }} 个/套</strong>
                   <span v-if="fittingInventoryData.has_previous_record" style="font-size: 12px; color: #64748b; margin-left: 6px;">
-                    (上次: {{ formatNumber(computedTotalFittingPreviousStock) }} 个/套)
+                    <template v-if="fittingInventoryData.total_shipped_since_inventory > 0">
+                      (上次实盘: {{ formatNumber(computedTotalFittingPreviousStock) }}，发货: {{ formatNumber(fittingInventoryData.total_shipped_since_inventory) }}，扣减后在库: <strong style="color: #1d4ed8;">{{ formatNumber(computedTotalFittingDeductedStock) }}</strong> 个/套)
+                    </template>
+                    <template v-else>
+                      (上次: {{ formatNumber(computedTotalFittingPreviousStock) }} 个/套)
+                    </template>
                   </span>
                 </div>
               </div>
@@ -1878,6 +1896,330 @@
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
               <button type="button" class="btn ghost" @click="showFittingTypeConfirmModal = false">取消，返回修改</button>
               <button type="button" class="btn primary" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; border: none !important; font-weight: 600;" @click="handleConfirmNonStandardFitting">确认继续提交 🚀</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 发货助手 Modal 弹窗 -->
+    <Transition name="fade">
+      <div v-if="showFittingHelperModal" class="block-modal-overlay" @click.self="showFittingHelperModal = false">
+        <div class="block-modal-container fitting-helper-modal-container" style="max-width: 920px; width: 92vw; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important; padding: 14px 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 26px;">📦</span>
+                <div style="text-align: left;">
+                  <h3 style="margin: 0; color: #fff; font-size: 17px; font-weight: 600;">发货助手 · 选择标准管件与数量</h3>
+                  <span style="font-size: 12px; color: rgba(255,255,255,0.85);">
+                    供货主体：<strong>{{ currentSupplyEntityLabel }}</strong> · 共收录 {{ fittingStandardLibrary.length }} 种标准管件
+                  </span>
+                </div>
+              </div>
+              <button type="button" class="modal-close-btn" @click="showFittingHelperModal = false" style="background: transparent; border: none; color: #fff; font-size: 22px; cursor: pointer; line-height: 1;">✕</button>
+            </div>
+          </div>
+
+          <!-- 筛选与搜索工具条 -->
+          <div style="padding: 12px 18px 8px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+              <div style="position: relative; flex: 1;">
+                <input
+                  v-model.trim="fittingHelperSearchText"
+                  type="text"
+                  placeholder="🔍 快速搜索型号、品类、口径（如 90 1000 或 DN300 三通）..."
+                  class="input"
+                  style="width: 100%; padding: 7px 32px 7px 12px; font-size: 13px; border-radius: 6px; box-sizing: border-box;"
+                />
+                <button
+                  v-if="fittingHelperSearchText"
+                  type="button"
+                  @click="fittingHelperSearchText = ''"
+                  style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: transparent; color: #94a3b8; font-size: 14px; cursor: pointer;"
+                >✕</button>
+              </div>
+            </div>
+
+            <!-- 分类胶囊标签 -->
+            <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;" class="custom-horizontal-scrollbar">
+              <button
+                type="button"
+                class="category-pill-btn"
+                :class="{ active: fittingHelperSelectedCategory === 'ALL' }"
+                @click="fittingHelperSelectedCategory = 'ALL'"
+              >
+                全部 ({{ fittingStandardLibrary.length }})
+              </button>
+              <button
+                v-for="cat in fittingHelperCategories"
+                :key="cat.name"
+                type="button"
+                class="category-pill-btn"
+                :class="{ active: fittingHelperSelectedCategory === cat.name }"
+                @click="fittingHelperSelectedCategory = cat.name"
+              >
+                {{ cat.name }} ({{ cat.count }})
+              </button>
+            </div>
+          </div>
+
+          <!-- 物料明细滚动列表 -->
+          <div style="flex: 1; overflow-y: auto; padding: 12px 18px; max-height: calc(88vh - 230px);" class="custom-scroll-container">
+            <div v-if="filteredFittingHelperItems.length === 0" style="text-align: center; padding: 40px 0; color: #94a3b8;">
+              <span style="font-size: 32px; display: block; margin-bottom: 8px;">🔍</span>
+              未找到符合条件的标准管件
+            </div>
+            <div v-else class="helper-item-grid" style="display: grid; gap: 8px;">
+              <div
+                v-for="it in filteredFittingHelperItems"
+                :key="it._key"
+                class="helper-item-card"
+                :class="{ 'has-qty': (fittingHelperSelectedMap[it._key] || 0) > 0 }"
+                style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; transition: all 0.15s;"
+              >
+                <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; text-align: left;">
+                  <span class="tag-badge primary" style="font-size: 11px; padding: 2px 6px; flex-shrink: 0;">{{ it.category }}</span>
+                  <div style="min-width: 0;">
+                    <div style="font-size: 13px; font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      {{ it.model_spec }}
+                    </div>
+                    <div style="font-size: 11.5px; color: #64748b;">
+                      {{ it.material_name || it.category }} · 合同单价: ¥{{ it.unit_price || '—' }}/{{ it.unit || '个' }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 数量加减控制区 -->
+                <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                  <span style="font-size: 12px; color: #64748b;">发货数量:</span>
+                  <button
+                    type="button"
+                    class="step-btn"
+                    style="width: 26px; height: 26px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; font-weight: bold; cursor: pointer;"
+                    @click="stepHelperQty(it._key, -1)"
+                  >-</button>
+                  <input
+                    v-model.number="fittingHelperSelectedMap[it._key]"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    class="input"
+                    style="width: 70px; text-align: center; padding: 4px 6px; font-weight: bold; color: #1e40af;"
+                  />
+                  <button
+                    type="button"
+                    class="step-btn"
+                    style="width: 26px; height: 26px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; font-weight: bold; cursor: pointer;"
+                    @click="stepHelperQty(it._key, 1)"
+                  >+</button>
+                  <span style="font-size: 12px; color: #475569; width: 20px;">件</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部汇总与导入操作栏 -->
+          <div style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="font-size: 13px; color: #334155; text-align: left;">
+              已选 <strong style="color: #2563eb; font-size: 15px;">{{ selectedHelperItemCount }}</strong> 种管件，
+              合计 <strong style="color: #2563eb; font-size: 15px;">{{ totalHelperSelectedQty }}</strong> 件
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button
+                type="button"
+                class="btn ghost"
+                style="color: #64748b;"
+                :disabled="selectedHelperItemCount === 0"
+                @click="clearFittingHelperSelection"
+              >
+                清空已选
+              </button>
+              <button
+                type="button"
+                class="btn primary"
+                style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important; border: none !important; font-weight: 600;"
+                :disabled="selectedHelperItemCount === 0"
+                @click="importFittingHelperToGrid"
+              >
+                📥 导入发货表格 ({{ selectedHelperItemCount }} 种)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 发货数据智能规范与核对确认 Modal 弹窗 -->
+    <Transition name="fade">
+      <div v-if="showFittingAuditModal" class="block-modal-overlay" @click.self="showFittingAuditModal = false">
+        <div class="block-modal-container fitting-audit-modal-container" style="max-width: 880px; width: 92vw; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);">
+          <div class="block-modal-header" style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%) !important; padding: 12px 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 22px;">📋</span>
+                <h3 style="margin: 0; color: #fff; font-size: 16px; font-weight: 600;">整车管件发货核对确认 (共 {{ fittingAuditItems.length }} 笔明细)</h3>
+              </div>
+              <button type="button" class="modal-close-btn" @click="showFittingAuditModal = false" style="background: transparent; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1;">✕</button>
+            </div>
+          </div>
+
+          <!-- 顶部提示与快捷操作栏 -->
+          <div style="padding: 9px 18px; background: #f0fdfa; border-bottom: 1px solid #ccfbf1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="font-size: 12.5px; color: #115e59; line-height: 1.5; text-align: left;">
+              <span v-if="!hasNonStandardOrAmbiguousItems">
+                ✨ 本次整车 <strong>{{ fittingAuditItems.length }}</strong> 笔明细全部符合标准价格库，请核对数量后直接点击下方按钮提交发货。
+              </span>
+              <span v-else>
+                💡 <strong>核对说明</strong>：标绿条目为标准物料；对于存在差异或非标条目，您可采纳标准建议，也可自主选择“保留原样提交”。
+              </span>
+            </div>
+            <div v-if="hasNonStandardOrAmbiguousItems" style="display: flex; gap: 8px;">
+              <button type="button" class="btn ghost btn-sm" style="background: #fff; color: #0f766e; border: 1px solid #5eead4; font-size: 12px; font-weight: 600;" @click="auditApplyAllStandard">
+                ✨ 全部采纳推荐标准
+              </button>
+              <button type="button" class="btn ghost btn-sm" style="background: #fff; color: #64748b; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 500;" @click="auditKeepAllRaw">
+                📝 全部保留原样输入
+              </button>
+            </div>
+          </div>
+
+          <!-- 逐行审核清单 -->
+          <div style="flex: 1; overflow-y: auto; padding: 12px 18px; max-height: calc(88vh - 200px);" class="custom-scroll-container">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div v-for="(row, idx) in fittingAuditItems" :key="idx">
+                <!-- 场景 1: 完全吻合的标准型号 (极简紧凑单行条目，单行高度约 36px，无任何单选框打扰用户) -->
+                <div
+                  v-if="row.match_type === 'exact'"
+                  style="display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; gap: 10px;"
+                >
+                  <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; text-align: left;">
+                    <span style="font-weight: bold; font-size: 12px; color: #166534; width: 24px; flex-shrink: 0;">#{{ idx + 1 }}</span>
+                    <span style="font-weight: 600; color: #0f172a; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      {{ row.suggested_item?.material_name || row.suggested_item?.category }} · {{ row.suggested_item?.model_spec }}
+                    </span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                    <span style="font-weight: 700; color: #2563eb; font-size: 13px;">{{ row.shipped_qty }} {{ row.unit || '件' }}</span>
+                    <span class="tag-badge success" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">🟢 标准型号</span>
+                  </div>
+                </div>
+
+                <!-- 场景 2: 存在语义矫正 / 多候选 / 非标件的行 (仅需决策的行才展开对比卡片) -->
+                <div
+                  v-else
+                  class="audit-row-card"
+                  :style="{
+                    border: '1px solid ' + (row.decision === 'standard' ? '#bbf7d0' : (row.match_type === 'none' ? '#e2e8f0' : '#fed7aa')),
+                    background: row.decision === 'standard' ? '#f0fdf4' : (row.match_type === 'none' ? '#f8fafc' : '#fff7ed'),
+                    borderRadius: '8px',
+                    padding: '10px 12px'
+                  }"
+                >
+                  <!-- 卡片顶栏 -->
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-weight: bold; font-size: 13px; color: #1e293b;">#{{ idx + 1 }}</span>
+                      <span style="font-weight: 600; color: #2563eb; font-size: 13px;">发货: {{ row.shipped_qty }} {{ row.unit || '件' }}</span>
+                    </div>
+                    <div>
+                      <span v-if="row.decision === 'standard'" class="tag-badge success" style="font-size: 11px;">🟢 采纳标准型号 (可自动扣减库存)</span>
+                      <span v-else class="tag-badge warning" style="font-size: 11px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;">ℹ️ 保留原样非标 (不扣减现货库存)</span>
+                    </div>
+                  </div>
+
+                  <!-- 左右对比/决策区 -->
+                  <div style="display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; font-size: 12px; text-align: left;">
+                    <!-- 左边: 原始输入 -->
+                    <div style="background: rgba(0,0,0,0.03); padding: 6px 8px; border-radius: 6px;">
+                      <div style="color: #64748b; font-size: 11px; margin-bottom: 2px;">您录入的原始信息:</div>
+                      <div style="font-weight: 600; color: #1e293b;">类型: {{ row.raw_fitting_type }}</div>
+                      <div style="color: #334155; word-break: break-all;">型号: {{ row.raw_model_spec }}</div>
+                    </div>
+
+                    <!-- 右边: 决策选项 -->
+                    <div style="background: #fff; padding: 6px 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                      <!-- 情况 A: 语义提取匹配到唯一标准项 -->
+                      <div v-if="row.match_type === 'dna_unique'">
+                        <div style="color: #0f766e; font-size: 11px; margin-bottom: 4px; font-weight: 600;">
+                          🔍 识别到标准对应物料:
+                        </div>
+                        <label style="display: flex; align-items: flex-start; gap: 6px; cursor: pointer; margin-bottom: 4px;">
+                          <input type="radio" :name="'decision_' + idx" value="standard" v-model="row.decision" style="margin-top: 2px;" />
+                          <div>
+                            <span style="font-weight: bold; color: #065f46;">{{ row.suggested_item?.material_name || row.suggested_item?.category }} · {{ row.suggested_item?.model_spec }}</span>
+                            <span style="color: #64748b; font-size: 11px; display: block;">大类: {{ row.suggested_item?.category }}</span>
+                          </div>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #64748b;">
+                          <input type="radio" :name="'decision_' + idx" value="raw" v-model="row.decision" />
+                          <span>保留原样提交（现场非标件，不采纳该标准型号）</span>
+                        </label>
+                      </div>
+
+                      <!-- 情况 B: 找到多个候选 -->
+                      <div v-else-if="row.match_type === 'candidates'">
+                        <div style="color: #c2410c; font-size: 11px; margin-bottom: 4px; font-weight: 600;">
+                          ⚠️ 找到 {{ row.candidates.length }} 个近似标准型号，请核对选择:
+                        </div>
+                        <select v-model="row.selected_candidate_key" @change="handleCandidateSelect(row)" class="input" style="width: 100%; font-size: 12px; padding: 3px 6px; margin-bottom: 4px;">
+                          <option v-for="cand in row.candidates" :key="cand._key" :value="cand._key">
+                            {{ cand.material_name || cand.category }} · {{ cand.model_spec }}
+                          </option>
+                          <option value="__RAW__">-- 都不符合，保留我的原样输入 --</option>
+                        </select>
+                        <div style="font-size: 11px; color: #64748b;">
+                          {{ row.decision === 'standard' ? '已选择该标准型号' : '已选择保留原始录入作为非标件' }}
+                        </div>
+                      </div>
+
+                      <!-- 情况 C: 标准库未收录 -->
+                      <div v-else>
+                        <div style="color: #64748b; font-size: 11px; margin-bottom: 2px; font-weight: 600;">
+                          ⚪ 标准价格库未收录该规格
+                        </div>
+                        <div style="color: #475569; font-size: 11.5px; line-height: 1.35;">
+                          系统将保留您的原始录入，作为【合同外非标物资】正常完成整车发货，但不参与现货库存自动扣减。
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部提交操作栏 -->
+          <div style="padding: 10px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="font-size: 13px; color: #334155; text-align: left;">
+              <span v-if="!hasNonStandardOrAmbiguousItems">
+                本次整车共 <strong style="color: #15803d; font-size: 14px;">{{ fittingAuditItems.length }}</strong> 笔明细全部为标准型号
+              </span>
+              <span v-else>
+                本次整车共 <strong style="color: #0f766e;">{{ fittingAuditItems.length }}</strong> 笔明细：
+                <span style="color: #16a34a; font-weight: 600;">{{ auditStandardCount }} 笔采纳标准</span>，
+                <span style="color: #ea580c; font-weight: 600;">{{ auditRawCount }} 笔保留非标</span>
+              </span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button
+                type="button"
+                class="btn ghost"
+                style="color: #64748b;"
+                @click="showFittingAuditModal = false"
+              >
+                ↩️ 返回表格修改
+              </button>
+              <button
+                type="button"
+                class="btn primary"
+                style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%) !important; border: none !important; font-weight: 600;"
+                :disabled="submitFittingLoading"
+                @click="confirmAuditAndProceedSubmit"
+              >
+                🚀 确认并提交整车发货
+              </button>
             </div>
           </div>
         </div>
@@ -2647,6 +2989,94 @@
         </div>
       </div>
     </div>
+
+    <!-- 3. 盘点导入未匹配物料核验报告模态框 -->
+    <div v-if="showUnmatchedImportModal" class="modal-overlay" @click.self="showUnmatchedImportModal = false">
+      <div class="modal-card elevated" style="max-width: 760px; width: 95%; background: #ffffff; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; max-height: 85vh;">
+        <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 19px;">🔍</span> 盘点导入识别报告：发现未匹配物料
+          </h3>
+          <button type="button" class="close-btn" @click="showUnmatchedImportModal = false" style="background: none; border: none; font-size: 22px; cursor: pointer; color: #94a3b8; line-height: 1;">×</button>
+        </div>
+
+        <div class="modal-body" style="padding: 18px 20px; font-size: 13.5px; line-height: 1.5; color: #334155; overflow-y: auto; flex: 1;">
+          <!-- 统计指标条 -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 12px; color: #64748b;">扫描数据项</div>
+              <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 2px;">{{ unmatchedImportReport.totalScanned }} 项</div>
+            </div>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 12px; color: #166534;">已对齐并填入表格</div>
+              <div style="font-size: 18px; font-weight: 700; color: #15803d; margin-top: 2px;">{{ unmatchedImportReport.matchedCount }} 项</div>
+            </div>
+            <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 12px; color: #9f1239;">未在标准库收录</div>
+              <div style="font-size: 18px; font-weight: 700; color: #e11d48; margin-top: 2px;">{{ unmatchedImportReport.unmatchedItems.length }} 项</div>
+            </div>
+          </div>
+
+          <!-- 提示说明框 -->
+          <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; color: #92400e;">
+            <strong>提示：</strong>以下 <b>{{ unmatchedImportReport.unmatchedItems.length }}</b> 项物料在当前供给主体【{{ unmatchedImportReport.entityName }}】的标准中标价格库中<b>未检索到对应型号</b>，因此<b>未填入</b>下方的现货库存盘点底表中。
+          </div>
+
+          <!-- 未匹配明细列表 -->
+          <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+            <div style="background: #f1f5f9; padding: 8px 12px; font-weight: 600; font-size: 12.5px; color: #475569; display: grid; grid-template-columns: 46px 65px 1.2fr 1.6fr 85px 1.4fr; gap: 8px; align-items: center;">
+              <div>序号</div>
+              <div>行号</div>
+              <div>Excel品名/类别</div>
+              <div>Excel规格型号</div>
+              <div style="text-align: right;">在库数量</div>
+              <div>原因说明</div>
+            </div>
+            <div style="max-height: 250px; overflow-y: auto;">
+              <div 
+                v-for="(it, idx) in unmatchedImportReport.unmatchedItems" 
+                :key="idx"
+                style="padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; display: grid; grid-template-columns: 46px 65px 1.2fr 1.6fr 85px 1.4fr; gap: 8px; align-items: center; background: #fff;"
+                :style="idx % 2 === 1 ? { background: '#f8fafc' } : {}"
+              >
+                <div style="color: #94a3b8; font-weight: 600;">{{ idx + 1 }}</div>
+                <div style="color: #64748b; font-size: 11.5px;">{{ it.excelRow ? `第${it.excelRow}行` : '-' }}</div>
+                <div style="font-weight: 600; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="it.name">{{ it.name }}</div>
+                <div style="font-family: monospace; color: #0284c7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="it.spec">{{ it.spec }}</div>
+                <div style="text-align: right; font-weight: 700; color: #d97706;">{{ it.qty }} <span style="font-size: 11px; font-weight: normal; color: #64748b;">{{ it.unit }}</span></div>
+                <div style="color: #64748b; font-size: 12px; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; flex-shrink: 0;"></span>
+                  <span>{{ it.reason }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p style="margin: 12px 0 0 0; font-size: 12px; color: #64748b; line-height: 1.5;">
+            * 业务说明：若上述物资属于合同外临时调拨或非标配件，不参与厂区标准在库底表盘点。供货商在发货时仍可选择手填原样发货。
+          </p>
+        </div>
+
+        <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+          <button 
+            type="button" 
+            class="btn ghost btn-sm" 
+            @click="handleExportUnmatchedList" 
+            style="border: 1px solid #cbd5e1; background: #ffffff; color: #334155; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 5px;"
+          >
+            📥 导出未匹配清单 (.xlsx)
+          </button>
+          <button 
+            type="button" 
+            class="btn primary" 
+            @click="showUnmatchedImportModal = false" 
+            style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; border: none; font-size: 13.5px; font-weight: 600; padding: 7px 20px; border-radius: 6px; box-shadow: 0 2px 4px rgba(37,99,235,0.2);"
+          >
+            我知道了，去核对表格
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -2935,6 +3365,43 @@ const handleDownloadTemplateFromModal = () => {
   showBadRecognitionModal.value = false
 }
 
+// --- 🔍 盘点导入未匹配物料核验报告控制 ---
+const showUnmatchedImportModal = ref(false)
+const unmatchedImportReport = reactive({
+  materialType: 'fitting', // 'pipe' | 'fitting'
+  entityName: '',
+  totalScanned: 0,
+  matchedCount: 0,
+  unmatchedItems: []
+})
+
+const handleExportUnmatchedList = () => {
+  if (!unmatchedImportReport.unmatchedItems.length) return
+  const isPipe = unmatchedImportReport.materialType === 'pipe'
+  const sheetData = [
+    ['序号', 'Excel行号', 'Excel物料名称', 'Excel规格型号', isPipe ? 'Excel在库米数' : 'Excel在库数量', '计量单位', '无法匹配原因', '备注/说明']
+  ]
+  unmatchedImportReport.unmatchedItems.forEach((it, idx) => {
+    sheetData.push([
+      idx + 1,
+      it.excelRow ? `第 ${it.excelRow} 行` : '',
+      it.name || '',
+      it.spec || '',
+      it.qty,
+      it.unit || (isPipe ? '米' : '件/个'),
+      it.reason || '标准价格库未收录',
+      it.remark || ''
+    ])
+  })
+  const ws = XLSX.utils.aoa_to_sheet(sheetData)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '未匹配物料核验清单')
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const entName = unmatchedImportReport.entityName || '供给方'
+  const matName = isPipe ? '保温管' : '管件'
+  XLSX.writeFile(wb, `【未匹配核验清单】_${entName}_${matName}盘点_${dateStr}.xlsx`)
+}
+
 const parseLenientNumber = (val) => {
   if (val === undefined || val === null) return 0
   if (typeof val === 'number') return Math.max(0, val)
@@ -2963,6 +3430,8 @@ const inventoryData = reactive({
   latest_previous_date: null,
   latest_previous_batch_no: null,
   total_previous_stock_qty: 0,
+  total_shipped_since_inventory: 0,
+  total_deducted_stock_qty: 0,
   total_stock_qty: 0,
   items: [],
 })
@@ -3005,6 +3474,35 @@ const pipeInventoryGridColumns = ref([
     size: 130,
     readonly: true,
     cellProperties: () => ({ style: { textAlign: 'right', color: '#64748b', backgroundColor: '#f8fafc', fontFamily: 'monospace' } })
+  },
+  {
+    prop: 'deducted_stock_qty',
+    name: '扣减后库存 (米)',
+    size: 140,
+    readonly: true,
+    cellProperties: (props) => {
+      const model = (props && props.model) ? props.model : (props || {})
+      const shipped = Number(model.shipped_qty_since_inventory) || 0
+      if (shipped > 0) {
+        return {
+          style: {
+            textAlign: 'right',
+            color: '#1d4ed8',
+            backgroundColor: '#eff6ff',
+            fontWeight: 'bold',
+            fontFamily: 'monospace'
+          }
+        }
+      }
+      return {
+        style: {
+          textAlign: 'right',
+          color: '#475569',
+          backgroundColor: '#f8fafc',
+          fontFamily: 'monospace'
+        }
+      }
+    }
   },
   {
     prop: 'stock_qty',
@@ -3054,6 +3552,15 @@ const formatPreviousInventoryBtnLabel = computed(() => {
 
 const computedTotalPreviousStock = computed(() => {
   return (inventoryData.items || []).reduce((sum, it) => sum + (Number(it.previous_stock_qty) || 0), 0)
+})
+
+const computedTotalPipeDeductedStock = computed(() => {
+  return (inventoryData.items || []).reduce((sum, it) => {
+    const val = it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null
+      ? Number(it.deducted_stock_qty)
+      : (Number(it.previous_stock_qty) || 0)
+    return sum + (Number.isNaN(val) ? 0 : val)
+  }, 0)
 })
 
 const computedTotalInventoryStock = computed(() => {
@@ -3127,12 +3634,18 @@ const loadInventoryData = async () => {
       inventoryData.latest_previous_date = inventoryData.latest_previous_time
       inventoryData.latest_previous_batch_no = d.latest_previous_batch_no || null
       inventoryData.total_previous_stock_qty = Number(d.total_previous_stock_qty) || 0
+      inventoryData.total_shipped_since_inventory = Number(d.total_shipped_since_inventory) || 0
+      inventoryData.total_deducted_stock_qty = Number(d.total_deducted_stock_qty) || 0
       inventoryData.total_stock_qty = Number(d.total_stock_qty) || 0
       inventoryData.items = (d.items || []).map((it) => ({
         ...it,
         unit: '米',
         stock_qty: Number(it.stock_qty) || 0,
         previous_stock_qty: Number(it.previous_stock_qty) || 0,
+        shipped_qty_since_inventory: Number(it.shipped_qty_since_inventory) || 0,
+        deducted_stock_qty: it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null
+          ? Number(it.deducted_stock_qty)
+          : (Number(it.previous_stock_qty) || 0),
         change_qty: Number(((Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0)).toFixed(1)),
         remark: it.remark || '',
       }))
@@ -3148,14 +3661,17 @@ const loadInventoryData = async () => {
 const applyPreviousInventory = () => {
   if (!inventoryData.items || !inventoryData.items.length) return
   inventoryData.items.forEach((it) => {
-    it.stock_qty = Number(it.previous_stock_qty) || 0
-    it.change_qty = 0
+    const baseQty = (it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null)
+      ? Number(it.deducted_stock_qty)
+      : (Number(it.previous_stock_qty) || 0)
+    it.stock_qty = baseQty
+    it.change_qty = Number((baseQty - (Number(it.previous_stock_qty) || 0)).toFixed(1))
   })
   if (pipeInventoryGridRef.value && typeof pipeInventoryGridRef.value.refresh === 'function') {
     pipeInventoryGridRef.value.refresh()
   }
   const timeDesc = inventoryData.latest_previous_time || '上次'
-  setInventoryActionMessage(`已成功沿用上次 (${timeDesc}) 盘点在库数值`, 'success', 3000)
+  setInventoryActionMessage(`已成功沿用上次 (${timeDesc}) 扣减后在库数值`, 'success', 3000)
 }
 
 const downloadPipeInventoryExcel = () => {
@@ -3427,11 +3943,12 @@ const handlePipeInventoryExcelFile = (event) => {
       let matchedCount = 0
       let totalQty = 0
       let scannedRows = 0
+      const unmatchedItems = []
 
       const startIdx = stdHeaderRowIdx !== -1 ? stdHeaderRowIdx + 1 : 0
       const dataRows = jsonData.slice(startIdx)
 
-      dataRows.forEach((row) => {
+      dataRows.forEach((row, rIdx) => {
         if (!row || !row.length) return
 
         const rowLine = row.map((c) => String(c || '').trim()).join(' ')
@@ -3482,6 +3999,17 @@ const handlePipeInventoryExcelFile = (event) => {
           if (remarkStr) targetItem.remark = remarkStr
           matchedCount++
           totalQty += targetItem.stock_qty
+        } else {
+          const num = parseLenientNumber(rawQty)
+          unmatchedItems.push({
+            excelRow: startIdx + rIdx + 1,
+            name: '直埋保温管',
+            spec: specStr,
+            qty: num,
+            unit: '米',
+            remark: remarkStr || '',
+            reason: '标准库未收录此直管规格'
+          })
         }
       })
 
@@ -3503,12 +4031,26 @@ const handlePipeInventoryExcelFile = (event) => {
         return
       }
 
-      // 5. 给出贴心、明确的识别与回填反馈
-      setInventoryActionMessage(
-        `✅ 成功从 Excel 导入并匹配 ${matchedCount} 种保温管型号，实盘在库总量合计 ${formatNumber(totalQty)} 米！请在下方表格核对无误后点击【提交本次盘点结果】正式入库。`,
-        'success',
-        6000
-      )
+      // 5. 给出贴心、明确的识别与回填反馈及未匹配报告
+      if (unmatchedItems.length > 0) {
+        unmatchedImportReport.materialType = 'pipe'
+        unmatchedImportReport.entityName = currentEntityName
+        unmatchedImportReport.totalScanned = scannedRows
+        unmatchedImportReport.matchedCount = matchedCount
+        unmatchedImportReport.unmatchedItems = unmatchedItems
+        showUnmatchedImportModal.value = true
+        setInventoryActionMessage(
+          `⚠️ 导入完成：精准匹配 ${matchedCount} 种标准保温管，发现 ${unmatchedItems.length} 项未在标准库收录（已弹出未匹配核验报告）`,
+          'warning',
+          7000
+        )
+      } else {
+        setInventoryActionMessage(
+          `✅ 完美对齐！成功从 Excel 导入并匹配全部 ${matchedCount} 种保温管型号，实盘在库总量合计 ${formatNumber(totalQty)} 米！请在下方表格核对无误后点击【提交本次盘点结果】正式入库。`,
+          'success',
+          6000
+        )
+      }
     } catch (err) {
       console.error('导入保温管盘点表格失败:', err)
       importModalMaterialType.value = 'pipe'
@@ -3584,6 +4126,8 @@ const fittingInventoryData = reactive({
   latest_previous_date: null,
   latest_previous_batch_no: null,
   total_previous_stock_qty: 0,
+  total_shipped_since_inventory: 0,
+  total_deducted_stock_qty: 0,
   total_stock_qty: 0,
   categories: [],
   items: [],
@@ -3599,6 +4143,15 @@ const getFittingCategoryCount = (category) => {
 
 const computedTotalFittingPreviousStock = computed(() => {
   return (fittingInventoryData.items || []).reduce((sum, it) => sum + (Number(it.previous_stock_qty) || 0), 0)
+})
+
+const computedTotalFittingDeductedStock = computed(() => {
+  return (fittingInventoryData.items || []).reduce((sum, it) => {
+    const val = it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null
+      ? Number(it.deducted_stock_qty)
+      : (Number(it.previous_stock_qty) || 0)
+    return sum + (Number.isNaN(val) ? 0 : val)
+  }, 0)
 })
 
 const computedTotalFittingInventoryStock = computed(() => {
@@ -3650,12 +4203,18 @@ const loadFittingInventoryData = async () => {
       fittingInventoryData.latest_previous_date = fittingInventoryData.latest_previous_time
       fittingInventoryData.latest_previous_batch_no = d.latest_previous_batch_no || null
       fittingInventoryData.total_previous_stock_qty = Number(d.total_previous_stock_qty) || 0
+      fittingInventoryData.total_shipped_since_inventory = Number(d.total_shipped_since_inventory) || 0
+      fittingInventoryData.total_deducted_stock_qty = Number(d.total_deducted_stock_qty) || 0
       fittingInventoryData.total_stock_qty = Number(d.total_stock_qty) || 0
       fittingInventoryData.categories = d.categories || []
       fittingInventoryData.items = (d.items || []).map((it) => ({
         ...it,
         stock_qty: Number(it.stock_qty) || 0,
         previous_stock_qty: Number(it.previous_stock_qty) || 0,
+        shipped_qty_since_inventory: Number(it.shipped_qty_since_inventory) || 0,
+        deducted_stock_qty: it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null
+          ? Number(it.deducted_stock_qty)
+          : (Number(it.previous_stock_qty) || 0),
         change_qty: (Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0),
         remark: it.remark || '',
       }))
@@ -3671,11 +4230,17 @@ const loadFittingInventoryData = async () => {
 const applyPreviousFittingInventory = () => {
   if (!fittingInventoryData.items || !fittingInventoryData.items.length) return
   fittingInventoryData.items.forEach((it) => {
-    it.stock_qty = Number(it.previous_stock_qty) || 0
-    it.change_qty = 0
+    const baseQty = (it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null)
+      ? Number(it.deducted_stock_qty)
+      : (Number(it.previous_stock_qty) || 0)
+    it.stock_qty = baseQty
+    it.change_qty = Number((baseQty - (Number(it.previous_stock_qty) || 0)).toFixed(2))
   })
+  if (fittingInventoryGridRef.value && typeof fittingInventoryGridRef.value.refresh === 'function') {
+    fittingInventoryGridRef.value.refresh()
+  }
   const timeDesc = fittingInventoryData.latest_previous_time || '上次'
-  setFittingInventoryActionMessage(`已成功沿用上次 (${timeDesc}) 管件实盘在库数值`, 'success', 3000)
+  setFittingInventoryActionMessage(`已成功沿用上次 (${timeDesc}) 扣减后在库数值`, 'success', 3000)
 }
 
 const resetFittingInventoryToZero = () => {
@@ -4057,8 +4622,8 @@ const handleFittingInventoryExcelFile = (event) => {
         const rowHeaders = row.map((c) => String(c || '').trim())
         const rowLine = rowHeaders.join(' ')
 
-        // 若前几行出现“分项名称”或“库存米数”或以“表”开头的标题，判定为多区块非标报表
-        if (/库存米数|分项名称|^表[一二三四五六七八九十\d]/.test(rowLine)) {
+        // 若前几行出现“库存米数”或以“表”开头的标题，判定为多区块非标报表
+        if (/库存米数|^表[一二三四五六七八九十\d]/.test(rowLine)) {
           isStandardFormat = false
           break
         }
@@ -4066,16 +4631,16 @@ const handleFittingInventoryExcelFile = (event) => {
         let fCat = -1, fName = -1, fSpec = -1, fQty = -1, fRemark = -1
         rowHeaders.forEach((h, idx) => {
           if (/管件大类|大类|类型|类别/.test(h)) fCat = idx
-          else if (/材料名称|品名|物资名称|物料名称/.test(h)) fName = idx
+          else if (/材料名称|品名|物资名称|物料名称|分项名称|分项/.test(h)) fName = idx
           else if (/规格型号|规格|型号/.test(h)) fSpec = idx
-          else if (/本次实盘在库量|实盘库存量|实盘在库量/.test(h)) fQty = idx
+          else if (/本次实盘在库量|实盘库存量|实盘在库量|现货库存量|现货库存/.test(h)) fQty = idx
           else if (/库存|实盘|数量|在库/.test(h) && !/上次|历史|参考|合同|计划|设计|采购|米数|理论|支数/.test(h)) {
             if (fQty === -1) fQty = idx
           }
           else if (/备注|说明/.test(h)) fRemark = idx
         })
 
-        if (fSpec !== -1 && fQty !== -1 && (hasStandardTemplateTitle || (fCat !== -1 && fName !== -1))) {
+        if (fSpec !== -1 && fQty !== -1 && (hasStandardTemplateTitle || fName !== -1 || (fCat !== -1 && fName !== -1))) {
           isStandardFormat = true
           stdHeaderRowIdx = r
           stdColMap = { cat: fCat, name: fName, spec: fSpec, qty: fQty, remark: fRemark }
@@ -4167,11 +4732,12 @@ const handleFittingInventoryExcelFile = (event) => {
       let totalQty = 0
       let pipeSkippedCount = 0
       let scannedFittingRowsCount = 0
+      const unmatchedItems = []
 
       if (isStandardFormat && stdHeaderRowIdx !== -1) {
         // ================= 分支 A: 标准单表头表格解析 =================
         const dataRows = jsonData.slice(stdHeaderRowIdx + 1)
-        dataRows.forEach((row) => {
+        dataRows.forEach((row, rIdx) => {
           if (!row || !row.length) return
           const cat = stdColMap.cat !== -1 ? String(row[stdColMap.cat] || '').trim() : ''
           const name = stdColMap.name !== -1 ? cleanFittingItemName(row[stdColMap.name]) : ''
@@ -4180,6 +4746,13 @@ const handleFittingInventoryExcelFile = (event) => {
           const remark = stdColMap.remark !== -1 ? String(row[stdColMap.remark] || '').trim() : ''
 
           if (!cat && !name && !spec && (rawQty === '' || rawQty === undefined || rawQty === null)) return
+
+          // 核心分流：若该行为保温直管（如“聚氨酯预制直埋保温管”），在管件盘点中自动跳过并计入直管过滤计数
+          if (name.includes('保温管') && !/弯头|三通|异径|变径|大小头|封头|支架|补偿器|球阀/.test(name)) {
+            pipeSkippedCount++
+            return
+          }
+
           scannedFittingRowsCount++
 
           const inferredCat = cat || inferFittingCategoryByName(name || spec)
@@ -4192,6 +4765,17 @@ const handleFittingInventoryExcelFile = (event) => {
             if (remark) targetItem.remark = remark
             matchedCount++
             totalQty += num
+          } else {
+            const num = parseLenientNumber(rawQty)
+            unmatchedItems.push({
+              excelRow: stdHeaderRowIdx + 1 + rIdx + 1,
+              name: name || inferredCat || '管件',
+              spec: spec || '(未填写规格)',
+              qty: num,
+              unit: '件/个',
+              remark: remark || '',
+              reason: !spec ? '未检测到有效规格参数' : '标准价格库未收录此品名与规格'
+            })
           }
         })
       } else {
@@ -4201,7 +4785,7 @@ const handleFittingInventoryExcelFile = (event) => {
         let lastKnownName = ''
         let currentColMap = { name: -1, spec: -1, stock_fitting: -1, stock_pipe: -1, contract: -1 }
 
-        jsonData.forEach((row) => {
+        jsonData.forEach((row, rowIdx) => {
           if (!row || !row.some((c) => c !== undefined && c !== null && String(c).trim() !== '')) return
           const rowStrs = row.map((c) => String(c || '').trim())
           const rowLine = rowStrs.join(' ')
@@ -4230,7 +4814,7 @@ const handleFittingInventoryExcelFile = (event) => {
               else if (/合同|计划|设计|采购/.test(h)) currentColMap.contract = idx
             })
 
-            if (rowLine.includes('库存米数') || rowLine.includes('直埋保温管') || rowLine.includes('分项名称')) {
+            if (rowLine.includes('库存米数') || (rowLine.includes('直埋保温管') && !/弯头|三通|异径|变径|大小头|封头|支架|补偿器|球阀/.test(rowLine))) {
               currentBlockType = 'pipe'
             } else {
               currentBlockType = 'fitting'
@@ -4250,8 +4834,14 @@ const handleFittingInventoryExcelFile = (event) => {
           }
           if (!isDataRow) return
 
-          // 4. 直管区块分流: 自动跳过并计数
-          if (currentBlockType === 'pipe' || (currentColMap.name !== -1 && String(row[currentColMap.name] || '').includes('保温管'))) {
+          // 4. 直管区块分流: 自动跳过并计数（支持自愈纠偏）
+          const rawRowNameStr = currentColMap.name !== -1 ? String(row[currentColMap.name] || '') : ''
+          const rawRowSpecStr = currentColMap.spec !== -1 ? String(row[currentColMap.spec] || '') : ''
+          const isExplicitFitting = /弯头|三通|异径|变径|大小头|封头|支架|补偿器|球阀/.test(rawRowNameStr || rawRowSpecStr)
+
+          if (isExplicitFitting) {
+            currentBlockType = 'fitting'
+          } else if (currentBlockType === 'pipe' || (rawRowNameStr.includes('保温管') && !isExplicitFitting)) {
             pipeSkippedCount++
             return
           }
@@ -4301,6 +4891,16 @@ const handleFittingInventoryExcelFile = (event) => {
             targetItem.change_qty = num - (Number(targetItem.previous_stock_qty) || 0)
             matchedCount++
             totalQty += num
+          } else {
+            unmatchedItems.push({
+              excelRow: rowIdx + 1,
+              name: rawName || currentBlockCatName || inferredCat || '管件',
+              spec: rawSpec,
+              qty: num,
+              unit: '件/个',
+              remark: '',
+              reason: !rawSpec ? '未检测到有效规格参数' : '标准价格库未收录此品名与规格'
+            })
           }
         })
       }
@@ -4319,17 +4919,29 @@ const handleFittingInventoryExcelFile = (event) => {
         return
       }
 
-      // 5. 给出贴心、明确的识别与回填反馈
+      // 5. 给出贴心、明确的识别与回填反馈及未匹配报告
       const autoSwitchHint = sheetSelectInfo.isAutoSwitched ? `（已智能优选工作表【${sheetSelectInfo.name}】）` : ''
-      if (pipeSkippedCount > 0) {
+      if (unmatchedItems.length > 0) {
+        unmatchedImportReport.materialType = 'fitting'
+        unmatchedImportReport.entityName = currentEntityName
+        unmatchedImportReport.totalScanned = scannedFittingRowsCount
+        unmatchedImportReport.matchedCount = matchedCount
+        unmatchedImportReport.unmatchedItems = unmatchedItems
+        showUnmatchedImportModal.value = true
         setFittingInventoryActionMessage(
-          `✅ 成功识别【厂家线下多区块综合报表】${autoSwitchHint}：精准匹配 ${matchedCount} 项管件物料，在库实盘合计 ${formatNumber(totalQty)} 个！（已自动过滤 ${pipeSkippedCount} 项保温直管数据）请在下方表格核对无误后点击【提交本次盘点结果】正式入库。`,
+          `⚠️ 导入完成${autoSwitchHint}：精准匹配 ${matchedCount} 项标准管件，发现 ${unmatchedItems.length} 项未在标准库收录（已弹出未匹配核验报告）`,
+          'warning',
+          7000
+        )
+      } else if (pipeSkippedCount > 0) {
+        setFittingInventoryActionMessage(
+          `✅ 成功识别【厂家线下多区块综合报表】${autoSwitchHint}：精准匹配全部 ${matchedCount} 项管件物料，在库实盘合计 ${formatNumber(totalQty)} 个！（已自动过滤 ${pipeSkippedCount} 项保温直管数据）请在下方表格核对无误后点击【提交本次盘点结果】正式入库。`,
           'success',
           7000
         )
       } else {
         setFittingInventoryActionMessage(
-          `✅ 成功从 Excel 导入并匹配 ${matchedCount} 项管件${autoSwitchHint}，在库实盘合计 ${formatNumber(totalQty)} 个！请在下方表格核对无误后点击【提交本次盘点结果】正式入库。`,
+          `✅ 完美对齐！成功从 Excel 导入并匹配全部 ${matchedCount} 项管件${autoSwitchHint}，在库实盘合计 ${formatNumber(totalQty)} 个！请在下方表格核对无误后点击【提交本次盘点结果】正式入库。`,
           'success',
           6000
         )
@@ -4438,7 +5050,36 @@ const fittingInventoryGridColumns = ref([
     name: '上次在库量',
     size: 110,
     readonly: true,
-    cellProperties: () => ({ style: { textAlign: 'right', color: '#64748b', backgroundColor: '#f8fafc' } })
+    cellProperties: () => ({ style: { textAlign: 'right', color: '#64748b', backgroundColor: '#f8fafc', fontFamily: 'monospace' } })
+  },
+  {
+    prop: 'deducted_stock_qty',
+    name: '扣减后库存',
+    size: 125,
+    readonly: true,
+    cellProperties: (props) => {
+      const model = (props && props.model) ? props.model : (props || {})
+      const shipped = Number(model.shipped_qty_since_inventory) || 0
+      if (shipped > 0) {
+        return {
+          style: {
+            textAlign: 'right',
+            color: '#1d4ed8',
+            backgroundColor: '#eff6ff',
+            fontWeight: 'bold',
+            fontFamily: 'monospace'
+          }
+        }
+      }
+      return {
+        style: {
+          textAlign: 'right',
+          color: '#475569',
+          backgroundColor: '#f8fafc',
+          fontFamily: 'monospace'
+        }
+      }
+    }
   },
   {
     prop: 'stock_qty',
@@ -4556,7 +5197,374 @@ const standardFittingTypes = ref([
   '固定节'
 ])
 
-const allowedFittingUnits = ref(['个', '套'])
+const allowedFittingUnits = ref(['个', '套', '件', '米', '根', '台'])
+
+// --- 管件发货助手与标准物料库状态 ---
+const fittingStandardLibrary = ref([])
+const fittingStandardLibraryLoading = ref(false)
+const showFittingHelperModal = ref(false)
+const fittingHelperSearchText = ref('')
+const fittingHelperSelectedCategory = ref('ALL')
+const fittingHelperSelectedMap = reactive({})
+
+// 加载当前供给主体的中标价格库标准物料
+const loadFittingStandardLibrary = async (force = false) => {
+  const entityId = selectedSupplyEntityId.value || ''
+  if (!entityId) {
+    fittingStandardLibrary.value = []
+    return
+  }
+  if (!force && fittingStandardLibrary.value.length > 0 && fittingStandardLibrary.value[0]?._entityId === entityId) {
+    return
+  }
+  fittingStandardLibraryLoading.value = true
+  try {
+    const res = await getTubeFittingSupplierInventory(PROJECT_KEY, {
+      supply_entity_id: entityId,
+    })
+    if (res && res.data && Array.isArray(res.data.items)) {
+      fittingStandardLibrary.value = res.data.items.map((it, idx) => ({
+        _key: `${it.fitting_type || it.category || '管件'}_${it.material_name || ''}_${it.model_spec}_${it.unit || '个'}_${idx}`,
+        _entityId: entityId,
+        category: it.fitting_type || it.category || '管件',
+        material_name: it.material_name || it.category || '管件',
+        model_spec: it.model_spec,
+        unit: it.unit || '个',
+        unit_price: it.unit_price || 0,
+      }))
+    } else {
+      fittingStandardLibrary.value = []
+    }
+  } catch (err) {
+    console.error('加载标准物料库失败:', err)
+  } finally {
+    fittingStandardLibraryLoading.value = false
+  }
+}
+
+const fittingHelperCategories = computed(() => {
+  const map = new Map()
+  fittingStandardLibrary.value.forEach(it => {
+    const cat = it.category || '其他'
+    map.set(cat, (map.get(cat) || 0) + 1)
+  })
+  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
+})
+
+const filteredFittingHelperItems = computed(() => {
+  let list = fittingStandardLibrary.value
+  if (fittingHelperSelectedCategory.value !== 'ALL') {
+    list = list.filter(it => it.category === fittingHelperSelectedCategory.value)
+  }
+  const kw = (fittingHelperSearchText.value || '').trim().toLowerCase()
+  if (!kw) return list
+
+  const parts = kw.split(/\s+/).filter(Boolean)
+  return list.filter(it => {
+    const fullText = `${it.category} ${it.material_name} ${it.model_spec}`.toLowerCase()
+    return parts.every(p => fullText.includes(p))
+  })
+})
+
+const selectedHelperItemCount = computed(() => {
+  let cnt = 0
+  for (const k in fittingHelperSelectedMap) {
+    if (Number(fittingHelperSelectedMap[k]) > 0) cnt++
+  }
+  return cnt
+})
+
+const totalHelperSelectedQty = computed(() => {
+  let total = 0
+  for (const k in fittingHelperSelectedMap) {
+    const q = Number(fittingHelperSelectedMap[k]) || 0
+    if (q > 0) total += q
+  }
+  return total
+})
+
+const stepHelperQty = (key, delta) => {
+  const cur = Number(fittingHelperSelectedMap[key]) || 0
+  const nxt = Math.max(0, cur + delta)
+  if (nxt === 0) {
+    delete fittingHelperSelectedMap[key]
+  } else {
+    fittingHelperSelectedMap[key] = nxt
+  }
+}
+
+const clearFittingHelperSelection = () => {
+  for (const k in fittingHelperSelectedMap) {
+    delete fittingHelperSelectedMap[k]
+  }
+}
+
+const openFittingHelperModal = async () => {
+  await loadFittingStandardLibrary()
+  fittingHelperSearchText.value = ''
+  fittingHelperSelectedCategory.value = 'ALL'
+  showFittingHelperModal.value = true
+}
+
+const importFittingHelperToGrid = () => {
+  const selectedEntries = []
+  fittingStandardLibrary.value.forEach(it => {
+    const qty = Number(fittingHelperSelectedMap[it._key]) || 0
+    if (qty > 0) {
+      selectedEntries.push({
+        fitting_type: it.material_name || it.category, // 使用价格表中的 material_name 字段 (如: 塑套钢预制保温弯头)
+        model_spec: it.model_spec,
+        shipped_qty: qty,
+        unit: '件', // 用户指定：导入后计量单位全部默认为“件”
+        remark: '',
+        _standardItem: it,
+      })
+    }
+  })
+
+  if (!selectedEntries.length) return
+
+  // 替换当前表格中全空的行，不足则在末尾追加
+  const curRows = fittingGridSource.value || []
+  const newRows = []
+  let entryIdx = 0
+
+  curRows.forEach(r => {
+    const isEmpty = !r.fitting_type && !r.model_spec && !r.shipped_qty
+    if (isEmpty && entryIdx < selectedEntries.length) {
+      newRows.push({ ...selectedEntries[entryIdx] })
+      entryIdx++
+    } else {
+      newRows.push({ ...r })
+    }
+  })
+
+  while (entryIdx < selectedEntries.length) {
+    newRows.push({ ...selectedEntries[entryIdx] })
+    entryIdx++
+  }
+
+  fittingGridSource.value = newRows
+  if (fittingGridRef.value && typeof fittingGridRef.value.refresh === 'function') {
+    fittingGridRef.value.refresh()
+  }
+
+  clearFittingHelperSelection()
+  showFittingHelperModal.value = false
+  setFittingActionMessage(`🎉 成功从标准库导入 ${selectedEntries.length} 项标准管件，单位已默认设为“件”，可随时修改。`, 'success', 5000)
+}
+
+// --- 全集符号清洗与语义匹配算法 ---
+function cleanFittingSymbolString(str) {
+  if (!str) return ''
+  let s = String(str).trim()
+  s = s.replace(/[\r\n\t]+/g, ' ')
+  s = s.replace(/（/g, '(').replace(/）/g, ')').replace(/／/g, '/').replace(/、/g, '/').replace(/\\/g, '/').replace(/，/g, ',')
+  s = s.replace(/[ΦφФф⌀]/g, 'DN')
+  s = s.replace(/度|deg/gi, '°')
+  s = s.replace(/[×xX\*]/g, '*')
+  s = s.replace(/\s+/g, ' ')
+  return s.trim()
+}
+
+function extractFittingDNA(fittingType, modelSpec) {
+  const raw = `${fittingType || ''} ${modelSpec || ''}`
+  const s = cleanFittingSymbolString(raw)
+
+  let family = null
+  if (/弯头|ELBOW/i.test(s)) family = '弯头'
+  else if (/三通|跨越三通|分支|TEE/i.test(s)) family = '三通'
+  else if (/变径|异径|大小头|REDUCER/i.test(s)) family = '变径管'
+  else if (/封头|管帽|CAP/i.test(s)) family = '封头'
+  else if (/弯管|BEND/i.test(s)) family = '弯管'
+  else if (/补偿器|膨胀节|波纹/i.test(s)) family = '补偿器'
+  else if (/平衡阀/i.test(s)) family = '物联网平衡阀'
+  else if (/球阀|阀门|VALVE/i.test(s)) family = '球阀'
+
+  let angle = null
+  let sNoAngle = s
+  const mAngle = s.match(/(\d+(?:\.\d+)?)°/)
+  if (mAngle) {
+    angle = mAngle[1] + '°'
+    sNoAngle = s.slice(0, mAngle.index) + ' ' + s.slice(mAngle.index + mAngle[0].length)
+  }
+
+  let radius = null
+  const mR = sNoAngle.match(/R\s*=\s*(\d+(?:\.\d+)?)\s*(?:DN|D)?/i)
+  if (mR) {
+    radius = `R=${mR[1]}DN`
+    sNoAngle = sNoAngle.slice(0, mR.index) + ' ' + sNoAngle.slice(mR.index + mR[0].length)
+  }
+
+  let dns = []
+  const dnExplicit = Array.from(sNoAngle.matchAll(/DN\s*(\d+)/gi)).map(m => m[1])
+  if (dnExplicit.length) {
+    dns = dnExplicit
+  } else {
+    const pair = sNoAngle.match(/(\d+)\s*[\/\*]\s*(\d+)/)
+    if (pair) {
+      dns = [pair[1], pair[2]]
+    } else {
+      dns = (sNoAngle.match(/\d+/g) || []).filter(n => Number(n) >= 15)
+    }
+  }
+
+  return { family, angle, radius, dns }
+}
+
+function matchSingleFittingItem(rawFittingType, rawModelSpec, library) {
+  const rawType = String(rawFittingType || '').trim()
+  const rawSpec = String(rawModelSpec || '').trim()
+  const cleanedRawSpec = cleanFittingSymbolString(rawSpec)
+  const inputDNA = extractFittingDNA(rawType, rawSpec)
+
+  // Pass 1: 完全或去空格归一化匹配
+  for (const std of library) {
+    const stdSpecCleaned = cleanFittingSymbolString(std.model_spec)
+    if (cleanedRawSpec.toLowerCase() === stdSpecCleaned.toLowerCase()) {
+      return {
+        match_type: 'exact',
+        suggested_item: std,
+        candidates: [std],
+        confidence: 1.0,
+      }
+    }
+  }
+
+  // Pass 2: 基于物理 DNA 语义唯一匹配与候选查找
+  const candidates = []
+  for (const std of library) {
+    const stdDNA = extractFittingDNA(std.category, std.model_spec)
+    if (inputDNA.family && stdDNA.family && inputDNA.family === stdDNA.family) {
+      if (stdDNA.family === '弯头') {
+        const angleMatch = !inputDNA.angle || (stdDNA.angle === inputDNA.angle)
+        const dnMatch = inputDNA.dns[0] && stdDNA.dns[0] && inputDNA.dns[0] === stdDNA.dns[0]
+        const radiusMatch = !inputDNA.radius || !stdDNA.radius || (inputDNA.radius === stdDNA.radius)
+        if (angleMatch && dnMatch && radiusMatch) {
+          candidates.push(std)
+        }
+      } else if (['三通', '变径管'].includes(stdDNA.family)) {
+        if (inputDNA.dns.length >= 2 && stdDNA.dns.length >= 2) {
+          if (inputDNA.dns[0] === stdDNA.dns[0] && inputDNA.dns[1] === stdDNA.dns[1]) {
+            candidates.push(std)
+          }
+        } else if (inputDNA.dns.length >= 1 && stdDNA.dns.length >= 1) {
+          if (inputDNA.dns[0] === stdDNA.dns[0]) {
+            candidates.push(std)
+          }
+        }
+      } else {
+        if (inputDNA.dns[0] && stdDNA.dns[0] && inputDNA.dns[0] === stdDNA.dns[0]) {
+          candidates.push(std)
+        }
+      }
+    }
+  }
+
+  if (candidates.length === 1) {
+    return {
+      match_type: 'dna_unique',
+      suggested_item: candidates[0],
+      candidates,
+      confidence: 0.95,
+    }
+  } else if (candidates.length > 1) {
+    return {
+      match_type: 'candidates',
+      suggested_item: candidates[0],
+      candidates,
+      confidence: 0.7,
+    }
+  }
+
+  return {
+    match_type: 'none',
+    suggested_item: null,
+    candidates: [],
+    confidence: 0,
+  }
+}
+
+// --- 提交智能核对与确认弹窗状态 ---
+const showFittingAuditModal = ref(false)
+const fittingAuditItems = ref([])
+
+const auditStandardCount = computed(() => {
+  return fittingAuditItems.value.filter(it => it.decision === 'standard').length
+})
+
+const auditRawCount = computed(() => {
+  return fittingAuditItems.value.filter(it => it.decision === 'raw').length
+})
+
+const hasNonStandardOrAmbiguousItems = computed(() => {
+  return fittingAuditItems.value.some(it => it.match_type !== 'exact')
+})
+
+const auditApplyAllStandard = () => {
+  fittingAuditItems.value.forEach(row => {
+    if (row.match_type !== 'none' && row.suggested_item) {
+      row.decision = 'standard'
+      if (row.match_type === 'candidates' && row.candidates.length) {
+        row.selected_candidate_key = row.candidates[0]._key
+      }
+    }
+  })
+}
+
+const auditKeepAllRaw = () => {
+  fittingAuditItems.value.forEach(row => {
+    row.decision = 'raw'
+    if (row.match_type === 'candidates') {
+      row.selected_candidate_key = '__RAW__'
+    }
+  })
+}
+
+const handleCandidateSelect = (row) => {
+  if (row.selected_candidate_key === '__RAW__') {
+    row.decision = 'raw'
+  } else {
+    row.decision = 'standard'
+    const found = (row.candidates || []).find(c => c._key === row.selected_candidate_key)
+    if (found) {
+      row.suggested_item = found
+    }
+  }
+}
+
+const confirmAuditAndProceedSubmit = async () => {
+  if (!pendingSubmitPayload.value) return
+
+  // 根据用户的审计决策重构提交的 items
+  const finalItems = fittingAuditItems.value.map(auditRow => {
+    if (auditRow.decision === 'standard' && auditRow.suggested_item) {
+      return {
+        fitting_type: auditRow.suggested_item.material_name || auditRow.suggested_item.category,
+        model_spec: auditRow.suggested_item.model_spec,
+        shipped_qty: auditRow.shipped_qty,
+        unit: auditRow.unit,
+        remark: auditRow.remark,
+        is_standard_material: true,
+      }
+    } else {
+      return {
+        fitting_type: auditRow.raw_fitting_type,
+        model_spec: auditRow.raw_model_spec,
+        shipped_qty: auditRow.shipped_qty,
+        unit: auditRow.unit,
+        remark: auditRow.remark,
+        is_standard_material: false,
+      }
+    }
+  })
+
+  pendingSubmitPayload.value.items = finalItems
+  showFittingAuditModal.value = false
+
+  // 走后序的同车牌预检与合并提交流程
+  await checkRecentAndProceed(pendingSubmitPayload.value)
+}
 
 const FITTING_ALIAS_MAP = {
   '异径管': '大小头',
@@ -5338,7 +6346,34 @@ const submitFittingForm = async () => {
     items: validItems,
   }
 
-  // 3. 检查是否包含非常用管件类型（二次确认弹窗）
+  // 3. 接入标准价格库智能比对与规范核验弹窗 (支持用户自主确认采纳标准或保留原样非标)
+  await loadFittingStandardLibrary()
+  if (fittingStandardLibrary.value && fittingStandardLibrary.value.length > 0) {
+    const auditList = validItems.map((it, idx) => {
+      const matchRes = matchSingleFittingItem(it.fitting_type, it.model_spec, fittingStandardLibrary.value)
+      const hasSuggestion = matchRes.suggested_item !== null
+      return {
+        row_num: idx + 1,
+        raw_fitting_type: it.fitting_type,
+        raw_model_spec: it.model_spec,
+        shipped_qty: it.shipped_qty,
+        unit: it.unit,
+        remark: it.remark,
+        match_type: matchRes.match_type,
+        suggested_item: matchRes.suggested_item,
+        candidates: matchRes.candidates || [],
+        selected_candidate_key: hasSuggestion ? matchRes.suggested_item._key : '__RAW__',
+        decision: hasSuggestion ? 'standard' : 'raw', // 默认有标准建议则推荐采纳，否则保留原样
+      }
+    })
+
+    fittingAuditItems.value = auditList
+    pendingSubmitPayload.value = payload
+    showFittingAuditModal.value = true
+    return
+  }
+
+  // 若无标准库（如临时/自定义供应商），检查是否包含非常用管件类型兜底
   const nonStandardList = validItems.filter(it => !isStandardFittingType(it.fitting_type))
   if (nonStandardList.length > 0) {
     pendingSubmitPayload.value = payload
@@ -6651,6 +7686,8 @@ watch(selectedSupplyEntityId, (value) => {
     deliveryForm.value.shipContactPhone = defaultPhone
     fittingForm.value.shipContactName = defaultName
     fittingForm.value.shipContactPhone = defaultPhone
+    fittingStandardLibrary.value = []
+    clearFittingHelperSelection()
     const validValues = new Set(supplyDemandViewOptions.value.map((opt) => opt.value))
     if (!validValues.has(supplyDemandViewMode.value)) {
       supplyDemandViewMode.value = 'summary'
@@ -9416,6 +10453,66 @@ input.no-spin,
   font-size: 12px;
   color: #64748b;
   font-family: monospace;
+}
+
+/* --- 发货助手与智能规范审核弹窗样式 --- */
+.category-pill-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 99px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+.category-pill-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+.category-pill-btn.active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+}
+
+.helper-item-card:hover {
+  border-color: #93c5fd !important;
+  background: #f8fafc !important;
+}
+.helper-item-card.has-qty {
+  border-color: #3b82f6 !important;
+  background: #eff6ff !important;
+  box-shadow: 0 1px 3px rgba(59, 130, 246, 0.1);
+}
+
+.step-btn:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+.step-btn:active {
+  background: #cbd5e1 !important;
+  transform: scale(0.96);
+}
+
+.custom-horizontal-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+.custom-horizontal-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.audit-row-card {
+  transition: all 0.2s ease;
+}
+.audit-row-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 </style>
 

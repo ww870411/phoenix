@@ -215,10 +215,10 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
         latest_batch_row = session.execute(text("""
             SELECT batch_no, reported_at, reported_by
             FROM tube.tube_fitting_supplier_inventory
-            WHERE supply_entity_id = :entity_id
+            WHERE LOWER(supply_entity_id) = :entity_id
             ORDER BY reported_at DESC, id DESC
             LIMIT 1;
-        """), {"entity_id": norm_entity_id}).mappings().first()
+        """), {"entity_id": norm_entity_id.lower()}).mappings().first()
 
         has_previous_record = latest_batch_row is not None
         latest_previous_batch_no = None
@@ -226,6 +226,10 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
         latest_previous_by = None
         previous_map: Dict[tuple, float] = {}
         total_previous_stock = 0.0
+
+        # 自上次盘点以来的发货统计字典与发货总量
+        shipped_map: Dict[tuple, float] = {}
+        total_shipped_since_inventory = 0.0
 
         if latest_batch_row:
             latest_previous_batch_no = latest_batch_row["batch_no"]
@@ -241,9 +245,9 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
             prev_rows = session.execute(text("""
                 SELECT fitting_type, material_name, model_spec, unit, stock_qty 
                 FROM tube.tube_fitting_supplier_inventory
-                WHERE supply_entity_id = :entity_id
+                WHERE LOWER(supply_entity_id) = :entity_id
                   AND batch_no = :batch_no;
-            """), {"entity_id": norm_entity_id, "batch_no": latest_previous_batch_no}).fetchall()
+            """), {"entity_id": norm_entity_id.lower(), "batch_no": latest_previous_batch_no}).fetchall()
 
             for pr in prev_rows:
                 f_type = str(pr[0] or "").strip()
@@ -257,6 +261,26 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
                 if not m_name:
                     previous_map[(f_type, "", m_spec, u)] = qty
                 total_previous_stock += qty
+
+            # 统计自盘点时间 rep_at 之后的实际发货量（状态非已撤销）
+            if rep_at:
+                shipped_rows = session.execute(text("""
+                    SELECT fitting_type, model_spec, unit, SUM(shipped_qty) AS shipped_sum
+                    FROM tube.tube_fitting_delivery
+                    WHERE LOWER(supply_entity_id) = :entity_id
+                      AND (created_at >= :rep_at OR shipped_at >= :rep_at)
+                      AND (status IS NULL OR status != 'cancelled')
+                    GROUP BY fitting_type, model_spec, unit;
+                """), {"entity_id": norm_entity_id.lower(), "rep_at": rep_at}).fetchall()
+
+                for sr in shipped_rows:
+                    f_type_s = str(sr[0] or "").strip()
+                    m_spec_s = str(sr[1] or "").strip()
+                    unit_s = str(sr[2] or "").strip()
+                    s_sum = float(sr[3] or 0)
+                    shipped_map[(f_type_s, m_spec_s, unit_s)] = shipped_map.get((f_type_s, m_spec_s, unit_s), 0.0) + s_sum
+                    shipped_map[(f_type_s, m_spec_s)] = shipped_map.get((f_type_s, m_spec_s), 0.0) + s_sum
+                    total_shipped_since_inventory += s_sum
 
         # 3. 从 tube.tube_material_price 查询该厂家的所有管件类型与型号清单
         # 关键: 使用 GROUP BY 进行多标段重复规格去重！彻底杜绝同一种管件出现多条！
@@ -287,6 +311,21 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
                 # 尝试三元组回退匹配
                 prev_stock = previous_map.get((f_type, "", m_spec, u), 0.0)
 
+            # 精准匹配盘点后发货量 (优先级: material_name + model_spec + unit -> material_name + model_spec -> fitting_type ...)
+            shipped_qty = 0.0
+            if shipped_map:
+                if (mat_name, m_spec, u) in shipped_map:
+                    shipped_qty = shipped_map[(mat_name, m_spec, u)]
+                elif (mat_name, m_spec) in shipped_map:
+                    shipped_qty = shipped_map[(mat_name, m_spec)]
+                elif (f_type, m_spec, u) in shipped_map:
+                    shipped_qty = shipped_map[(f_type, m_spec, u)]
+                elif (f_type, m_spec) in shipped_map:
+                    shipped_qty = shipped_map[(f_type, m_spec)]
+
+            # 发货扣减后的在库数量 (不低于0)
+            deducted_stock = max(0.0, prev_stock - shipped_qty) if prev_stock > 0 else 0.0
+
             cur_stock = 0.0  # 默认置 0，用户可一键沿用上次
             total_stock += cur_stock
 
@@ -298,6 +337,8 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
                 "unit_price": u_price,
                 "section_1_id": "",
                 "previous_stock_qty": prev_stock,
+                "shipped_qty_since_inventory": round(shipped_qty, 2),
+                "deducted_stock_qty": round(deducted_stock, 2),
                 "stock_qty": cur_stock,
                 "change_qty": cur_stock - prev_stock,
                 "remark": "",
@@ -314,6 +355,8 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
             key=lambda c: (FITTING_CATEGORY_ORDER.get(c, 99), c)
         )
 
+        total_deducted_stock = sum(it["deducted_stock_qty"] for it in items)
+
         return {
             "supply_entity_id": norm_entity_id,
             "is_custom": False,
@@ -324,6 +367,8 @@ def get_fitting_supplier_inventory_snapshot(supply_entity_id: str) -> Dict[str, 
             "latest_previous_date": latest_previous_time,
             "latest_previous_by": latest_previous_by,
             "total_previous_stock_qty": round(total_previous_stock, 2),
+            "total_shipped_since_inventory": round(total_shipped_since_inventory, 2),
+            "total_deducted_stock_qty": round(total_deducted_stock, 2),
             "total_stock_qty": round(total_stock, 2),
             "categories": sorted_categories,
             "items": items,
@@ -489,8 +534,59 @@ def get_latest_all_fitting_suppliers_inventory() -> List[Dict[str, Any]]:
             ORDER BY i.supply_entity_id ASC, i.fitting_type ASC, i.model_spec ASC;
         """)
         rows = session.execute(sql).mappings().all()
-        return [
-            {
+
+        # 统计各厂家在最新盘点时间后的发货量
+        shipped_map: Dict[tuple, float] = {}
+        try:
+            shipped_sql = text("""
+                WITH latest_batches AS (
+                    SELECT DISTINCT ON (supply_entity_id)
+                        supply_entity_id, batch_no, reported_at
+                    FROM tube.tube_fitting_supplier_inventory
+                    ORDER BY supply_entity_id, reported_at DESC, id DESC
+                )
+                SELECT LOWER(d.supply_entity_id) AS se_id, d.fitting_type, d.model_spec, d.unit, SUM(d.shipped_qty) AS shipped_sum
+                FROM tube.tube_fitting_delivery d
+                JOIN latest_batches lb ON LOWER(d.supply_entity_id) = LOWER(lb.supply_entity_id)
+                WHERE (d.created_at >= lb.reported_at OR d.shipped_at >= lb.reported_at)
+                  AND (d.status IS NULL OR d.status != 'cancelled')
+                GROUP BY LOWER(d.supply_entity_id), d.fitting_type, d.model_spec, d.unit;
+            """)
+            s_rows = session.execute(shipped_sql).fetchall()
+            for sr in s_rows:
+                seid = str(sr[0] or "").lower()
+                ft = str(sr[1] or "").strip()
+                ms = str(sr[2] or "").strip()
+                u = str(sr[3] or "").strip()
+                ssum = float(sr[4] or 0)
+                shipped_map[(seid, ft, ms, u)] = shipped_map.get((seid, ft, ms, u), 0.0) + ssum
+                shipped_map[(seid, ft, ms)] = shipped_map.get((seid, ft, ms), 0.0) + ssum
+        except Exception:
+            pass
+
+        result = []
+        for r in rows:
+            seid = str(r["supply_entity_id"] or "").lower()
+            ft = str(r["fitting_type"] or "").strip()
+            mn = str(r["material_name"] or "").strip()
+            ms = str(r["model_spec"] or "").strip()
+            u = str(r["unit"] or "个").strip()
+            orig_qty = float(r["stock_qty"] or 0)
+
+            # 匹配发货量
+            shipped_qty = 0.0
+            if (seid, mn, ms, u) in shipped_map:
+                shipped_qty = shipped_map[(seid, mn, ms, u)]
+            elif (seid, mn, ms) in shipped_map:
+                shipped_qty = shipped_map[(seid, mn, ms)]
+            elif (seid, ft, ms, u) in shipped_map:
+                shipped_qty = shipped_map[(seid, ft, ms, u)]
+            elif (seid, ft, ms) in shipped_map:
+                shipped_qty = shipped_map[(seid, ft, ms)]
+
+            deducted_qty = max(0.0, orig_qty - shipped_qty) if orig_qty > 0 else 0.0
+
+            result.append({
                 "id": r["id"],
                 "batch_no": r["batch_no"] or "",
                 "report_date": r["report_date"].isoformat() if r["report_date"] else "",
@@ -499,14 +595,16 @@ def get_latest_all_fitting_suppliers_inventory() -> List[Dict[str, Any]]:
                 "material_name": r["material_name"] or "",
                 "model_spec": r["model_spec"],
                 "unit": r["unit"] or "个",
-                "stock_qty": float(r["stock_qty"] or 0),
+                "original_stock_qty": orig_qty,
+                "shipped_qty_since_inventory": round(shipped_qty, 2),
+                "stock_qty": round(deducted_qty, 2),
+                "deducted_stock_qty": round(deducted_qty, 2),
                 "remark": r["remark"] or "",
                 "reported_by": r["reported_by"] or "",
                 "reported_at": r["reported_at"].isoformat() if r["reported_at"] else "",
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else "",
-            }
-            for r in rows
-        ]
+            })
+        return result
     finally:
         session.close()
 

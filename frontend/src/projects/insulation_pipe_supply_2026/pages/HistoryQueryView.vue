@@ -1549,7 +1549,7 @@
               <div class="flex items-center gap-2">
                 <span class="inventory-bar-icon">🏭</span>
                 <span class="inventory-bar-title">供给方保温管成品在库现货台账</span>
-                <span class="inventory-bar-tag">各厂家最新实盘 · 实盘量 &gt; 0</span>
+                <span class="inventory-bar-tag">各厂家最新盘点扣减发货 · 在库量 &gt; 0</span>
               </div>
 
               <div class="flex items-center gap-3 text-xs text-muted">
@@ -1778,10 +1778,10 @@
                         class="text-right sortable-th w-52" 
                         :class="{ 'sorted-col': isColumnSorted('supplier_inventory_latest', 'stock_qty') }"
                         @click="handleTableSort('supplier_inventory_latest', 'stock_qty')"
-                        title="点击按实盘在库量排序"
+                        title="点击按在库待发量排序"
                       >
                         <div class="th-inner-cell text-right">
-                          <span>📦 实盘在库待发 (米)</span>
+                          <span>📦 在库待发量 (米)</span>
                           <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_inventory_latest', 'stock_qty') }">
                             {{ getSortIcon('supplier_inventory_latest', 'stock_qty') }}
                           </span>
@@ -1906,7 +1906,7 @@
               <div class="flex items-center gap-2">
                 <span class="inventory-bar-icon">🏭</span>
                 <span class="inventory-bar-title">供给方管件成品在库现货台账</span>
-                <span class="inventory-bar-tag">各厂家最新实盘 · 实盘量 &gt; 0</span>
+                <span class="inventory-bar-tag">各厂家最新盘点扣减发货 · 在库量 &gt; 0</span>
               </div>
 
               <div class="flex items-center gap-3 text-xs text-muted">
@@ -2150,10 +2150,10 @@
                         class="text-right sortable-th w-48" 
                         :class="{ 'sorted-col': isColumnSorted('supplier_fitting_inventory_latest', 'stock_qty') }"
                         @click="handleTableSort('supplier_fitting_inventory_latest', 'stock_qty')"
-                        title="点击按实盘在库量排序"
+                        title="点击按在库待发量排序"
                       >
                         <div class="th-inner-cell text-right">
-                          <span>📦 实盘在库待发 (件)</span>
+                          <span>📦 在库待发量 (件)</span>
                           <span class="sort-arrow" :class="{ active: isColumnSorted('supplier_fitting_inventory_latest', 'stock_qty') }">
                             {{ getSortIcon('supplier_fitting_inventory_latest', 'stock_qty') }}
                           </span>
@@ -5946,6 +5946,8 @@ const aggregatedSupplierInventoryRows = computed(() => {
       groupsMap.set(groupKey, {
         ...dimValues,
         stock_qty: 0,
+        inventory_stock_qty: 0,
+        shipped_qty_since_inventory: 0,
         previous_stock_qty: 0,
         change_qty: 0,
         report_date: row.report_date || '—',
@@ -5958,6 +5960,8 @@ const aggregatedSupplierInventoryRows = computed(() => {
 
     const target = groupsMap.get(groupKey)
     target.stock_qty += Number(row.stock_qty) || 0
+    target.inventory_stock_qty += Number(row.inventory_stock_qty !== undefined ? row.inventory_stock_qty : row.stock_qty) || 0
+    target.shipped_qty_since_inventory += Number(row.shipped_qty_since_inventory) || 0
     target.previous_stock_qty += Number(row.previous_stock_qty) || 0
     target.change_qty += Number(row.change_qty) || 0
     target._count += 1
@@ -5972,6 +5976,8 @@ const aggregatedSupplierInventoryRows = computed(() => {
   const result = Array.from(groupsMap.values()).map(g => ({
     ...g,
     stock_qty: Math.round(g.stock_qty * 100) / 100,
+    inventory_stock_qty: Math.round(g.inventory_stock_qty * 100) / 100,
+    shipped_qty_since_inventory: Math.round(g.shipped_qty_since_inventory * 100) / 100,
     previous_stock_qty: Math.round(g.previous_stock_qty * 100) / 100,
     change_qty: Math.round(g.change_qty * 100) / 100,
     supplier_count: g._supplier_set.size,
@@ -6021,6 +6027,8 @@ const supplierInventoryKpi = computed(() => {
   let totalStock = 0
   let totalPrev = 0
   let totalChange = 0
+  let totalOrig = 0
+  let totalShipped = 0
   const supSet = new Set()
   const modelSet = new Set()
   const batchSet = new Set()
@@ -6031,9 +6039,13 @@ const supplierInventoryKpi = computed(() => {
     const qty = parseFloat(r.stock_qty || 0)
     const prev = parseFloat(r.previous_stock_qty || 0)
     const chg = parseFloat(r.change_qty || 0)
+    const orig = parseFloat(r.inventory_stock_qty !== undefined ? r.inventory_stock_qty : r.stock_qty || 0)
+    const shipped = parseFloat(r.shipped_qty_since_inventory || 0)
     totalStock += qty
     totalPrev += prev
     totalChange += chg
+    totalOrig += orig
+    totalShipped += shipped
     if (r.supply_entity_id) supSet.add(r.supply_entity_id)
     if (r.pipe_model_id) modelSet.add(r.pipe_model_id)
     if (r.batch_no) batchSet.add(r.batch_no)
@@ -6047,6 +6059,8 @@ const supplierInventoryKpi = computed(() => {
   return {
     total_stock_qty: Math.round(totalStock * 100) / 100,
     total_previous_qty: Math.round(totalPrev * 100) / 100,
+    total_inventory_qty: Math.round(totalOrig * 100) / 100,
+    total_shipped_qty: Math.round(totalShipped * 100) / 100,
     total_change_qty: Math.round(totalChange * 100) / 100,
     supplier_count: supSet.size || s.supplier_count || 0,
     model_count: modelSet.size || s.model_count || 0,
@@ -6120,10 +6134,12 @@ const aggregatedSupplierFittingInventoryRows = computed(() => {
         dimValues.fitting_type = val
         dimValues.category = val
       } else if (dim === 'model') {
-        const val = row.model_spec || '—'
-        keyParts.push(val)
-        dimValues.model_spec = val
-        dimValues.material_name = row.material_name || ''
+        const matName = row.material_name ? String(row.material_name).trim() : ''
+        const spec = row.model_spec ? String(row.model_spec).trim() : '—'
+        const fullModelKey = matName ? `${matName}____${spec}` : spec
+        keyParts.push(fullModelKey)
+        dimValues.model_spec = spec
+        dimValues.material_name = matName
       }
     }
 
@@ -6134,6 +6150,8 @@ const aggregatedSupplierFittingInventoryRows = computed(() => {
         ...dimValues,
         unit: row.unit || '件',
         stock_qty: 0,
+        inventory_stock_qty: 0,
+        shipped_qty_since_inventory: 0,
         previous_stock_qty: 0,
         change_qty: 0,
         report_date: row.report_date || '—',
@@ -6147,12 +6165,17 @@ const aggregatedSupplierFittingInventoryRows = computed(() => {
 
     const target = groupsMap.get(groupKey)
     target.stock_qty += Number(row.stock_qty) || 0
+    target.inventory_stock_qty += Number(row.inventory_stock_qty !== undefined ? row.inventory_stock_qty : row.stock_qty) || 0
+    target.shipped_qty_since_inventory += Number(row.shipped_qty_since_inventory) || 0
     target.previous_stock_qty += Number(row.previous_stock_qty) || 0
     target.change_qty += Number(row.change_qty) || 0
     target._count += 1
     if (row.supply_entity_name) target._supplier_set.add(row.supply_entity_name)
     if (row.fitting_type || row.category) target._category_set.add(row.fitting_type || row.category)
-    if (row.model_spec) target._model_set.add(row.model_spec)
+    if (row.model_spec) {
+      const fullModelKey = row.material_name ? `${row.material_name}____${row.model_spec}` : row.model_spec
+      target._model_set.add(fullModelKey)
+    }
     if (row.reported_at && (!target.reported_at || row.reported_at > target.reported_at)) {
       target.reported_at = row.reported_at
       target.report_date = row.report_date || (row.reported_at ? row.reported_at.split(' ')[0] : '—')
@@ -6162,6 +6185,8 @@ const aggregatedSupplierFittingInventoryRows = computed(() => {
   const result = Array.from(groupsMap.values()).map(g => ({
     ...g,
     stock_qty: Math.round(g.stock_qty),
+    inventory_stock_qty: Math.round(g.inventory_stock_qty),
+    shipped_qty_since_inventory: Math.round(g.shipped_qty_since_inventory),
     previous_stock_qty: Math.round(g.previous_stock_qty),
     change_qty: Math.round(g.change_qty),
     supplier_count: g._supplier_set.size,
@@ -6183,8 +6208,12 @@ const sortedSupplierFittingInventoryRows = computed(() => {
       if (firstDim === 'category') {
         const catComp = String(a.fitting_type || a.category || '').localeCompare(String(b.fitting_type || b.category || ''), 'zh-CN')
         if (catComp !== 0) return catComp
+        const matComp = String(a.material_name || '').localeCompare(String(b.material_name || ''), 'zh-CN')
+        if (matComp !== 0) return matComp
         return compareModelSpecs(a.model_spec, b.model_spec, 'desc')
       } else if (firstDim === 'model') {
+        const matComp = String(a.material_name || '').localeCompare(String(b.material_name || ''), 'zh-CN')
+        if (matComp !== 0) return matComp
         const comp = compareModelSpecs(a.model_spec, b.model_spec, 'desc')
         if (comp !== 0) return comp
         return String(a.supply_entity_name || '').localeCompare(String(b.supply_entity_name || ''), 'zh-CN')
@@ -6193,6 +6222,8 @@ const sortedSupplierFittingInventoryRows = computed(() => {
         if (supComp !== 0) return supComp
         const catComp = String(a.fitting_type || a.category || '').localeCompare(String(b.fitting_type || b.category || ''), 'zh-CN')
         if (catComp !== 0) return catComp
+        const matComp = String(a.material_name || '').localeCompare(String(b.material_name || ''), 'zh-CN')
+        if (matComp !== 0) return matComp
         return compareModelSpecs(a.model_spec, b.model_spec, 'desc')
       }
     })
@@ -6202,6 +6233,8 @@ const sortedSupplierFittingInventoryRows = computed(() => {
     let valA = a[state.key]
     let valB = b[state.key]
     if (state.key === 'model_spec' || state.key === 'model') {
+      const matComp = String(a.material_name || '').localeCompare(String(b.material_name || ''), 'zh-CN')
+      if (matComp !== 0) return state.order === 'asc' ? matComp : -matComp
       return compareModelSpecs(valA, valB, state.order)
     }
     if (typeof valA === 'number' && typeof valB === 'number') {
@@ -6218,6 +6251,8 @@ const supplierFittingInventoryKpi = computed(() => {
   let totalStock = 0
   let totalPrev = 0
   let totalChange = 0
+  let totalOrig = 0
+  let totalShipped = 0
   const supSet = new Set()
   const catSet = new Set()
   const modelSet = new Set()
@@ -6229,12 +6264,19 @@ const supplierFittingInventoryKpi = computed(() => {
     const qty = parseFloat(r.stock_qty || 0)
     const prev = parseFloat(r.previous_stock_qty || 0)
     const chg = parseFloat(r.change_qty || 0)
+    const orig = parseFloat(r.inventory_stock_qty !== undefined ? r.inventory_stock_qty : r.stock_qty || 0)
+    const shipped = parseFloat(r.shipped_qty_since_inventory || 0)
     totalStock += qty
     totalPrev += prev
     totalChange += chg
+    totalOrig += orig
+    totalShipped += shipped
     if (r.supply_entity_id) supSet.add(r.supply_entity_id)
     if (r.fitting_type || r.category) catSet.add(r.fitting_type || r.category)
-    if (r.model_spec) modelSet.add(r.model_spec)
+    if (r.model_spec) {
+      const fullModelKey = r.material_name ? `${r.material_name}____${r.model_spec}` : r.model_spec
+      modelSet.add(fullModelKey)
+    }
     if (r.batch_no) batchSet.add(r.batch_no)
     if (!latestTime || (r.reported_at && r.reported_at > latestTime)) {
       latestTime = r.reported_at
@@ -6246,6 +6288,8 @@ const supplierFittingInventoryKpi = computed(() => {
   return {
     total_stock_qty: Math.round(totalStock),
     total_previous_qty: Math.round(totalPrev),
+    total_inventory_qty: Math.round(totalOrig),
+    total_shipped_qty: Math.round(totalShipped),
     total_change_qty: Math.round(totalChange),
     supplier_count: supSet.size || s.supplier_count || 0,
     category_count: catSet.size || s.category_count || 0,
@@ -6956,7 +7000,7 @@ async function exportCurrentTabExcel() {
           '序号',
           ...dimHeaders,
           '单位',
-          '当前实盘在库待发(件)',
+          '当前在库待发量(件)',
           '环比增减(件)',
           '最新盘点日期'
         ])
@@ -7015,7 +7059,7 @@ async function exportCurrentTabExcel() {
         exportData.push([
           '序号',
           ...dimHeaders,
-          '当前实盘在库待发(米)',
+          '当前在库待发量(米)',
           '环比增减(米)',
           '最新盘点日期'
         ])

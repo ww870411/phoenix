@@ -1,3 +1,72 @@
+## 2026-10-05 综合数据查询中心管件数据接口与前端复合分组键全量核验说明（comprehensive_history_service.py）
+
+- **数据层契约核验**：
+  - 核心接口：`GET /api/v1/projects/insulation_pipe_supply_2026/comprehensive-history/supplier-inventory`
+  - 接口返回的 `items` 全量输出 145 项管件明细（无同口径合并、无字段覆盖），包含完整四元组属性（`supply_entity_id`, `fitting_type`, `material_name`, `model_spec`, `unit`）以及精准扣减后的 `stock_qty` 与历史 `inventory_stock_qty`；
+  - 数据库真实数据验证：
+    * `45°预制保温弯头 DN200`：实盘 18.0 件，发货 17.0 件，返回在库待发量 `stock_qty: 1.0`；
+    * `90°预制保温弯头 DN200`：实盘 172.0 件，发货 0.0 件，返回在库待发量 `stock_qty: 172.0`；
+  - 前后端协同：前端透视聚合层已升级为 `material_name____model_spec` 复合键，彻底消除同口径物料在前端展示层的误合并缺陷，全链路保证“数据库底表 ⇋ 后端 API ⇋ 前端看板”100% 严格一致。
+
+## 2026-10-05 综合数据查询中心供给方成品库存服务层对接实盘发货软扣减机制（comprehensive_history_service.py）
+
+- **关联后端服务与接口**：
+  - 综合历史查询-供给方库存接口：`GET /api/v1/projects/insulation_pipe_supply_2026/comprehensive-history/supplier-inventory`
+  - 核心服务函数：
+    * 管件在库历史与最新快照查询：[`query_fitting_supplier_inventory_history`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py#L2240-L2350)
+    * 保温管在库历史与最新快照查询：[`query_supplier_inventory_history`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py#L1920-L2035)
+- **业务逻辑与实现流程**：
+  1. **跨业务域软扣减统一对齐**：
+     - 在综合数据查询中心（`comprehensive_query`）中，“最新快照”模式原本直接拉取各供货商最新盘点底表（`tube.tube_fitting_supplier_inventory` / `tube.tube_supplier_inventory`），导致后续的发货操作无法实时反映在“在库待发量”中；
+     - 引入与现场管理工作台同构的“实盘基准时间戳软扣减机制”，打通盘点与发货（`tube.tube_fitting_delivery` / `tube.tube_delivery`）两大业务流；
+  2. **管件在库待发量动态计算与发货回溯**：
+     - 检索各供方最新批次实盘提交时间戳 $T_0$（`reported_at`）；
+     - 跨表查询 $T_0$ 之后创建或发运的所有有效管件发货单（排除已撤销 `cancelled`）；
+     - 支持 `(supply_entity_id, material_name, model_spec)`、`(supply_entity_id, fitting_type, model_spec)` 多维智能映射与发货件数累加；
+     - 输出标准字段：
+       * `stock_qty`: 动态扣减后在库待发量（`max(0.0, raw_stock - shipped_qty)`）；
+       * `inventory_stock_qty`: 原始实盘基准数量；
+       * `shipped_qty_since_inventory`: 盘点后发货累计件数；
+       * `deducted_stock_qty`: 等同于动态在库待发量；
+  3. **保温管在库待发量联动实现**：
+     - 针对保温直管，同样在最新模式下聚合 $T_0$ 之后的 `tube.tube_delivery` 发货米数，返回扣减后米数及实盘和发货明细；
+  4. **全网数据一致性验证**：
+     - 鑫瑞得 `45°预制保温弯头 DN200` 从实盘 18 件经发货 17 件后，综合查询中心返回 `stock_qty: 1.0`、`inventory_stock_qty: 18.0`、`shipped_qty_since_inventory: 17.0`；
+     - 全网管件动态在库待发总量从 15781 件精准回归至 **15764 件**，彻底消除前后端与多页面间的口径偏差。
+
+## 2026-10-05 现场管理工作台成品库存基于实盘时间戳的发货软扣减机制落地（管件与保温管）
+
+- **关联后端服务与接口**：
+  - 管件库存快照查询：`GET /api/v1/projects/insulation_pipe_supply_2026/tube-fitting-supplier-inventory?supply_entity_id={entity_id}`（[`fitting_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py)）
+  - 保温管库存快照查询：`GET /api/v1/projects/insulation_pipe_supply_2026/tube-supplier-inventory?supply_entity_id={entity_id}`（[`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)）
+  - 全厂家管件库存汇总：[`get_latest_all_fitting_suppliers_inventory`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py#L510-L558)
+  - 全厂家保温管库存汇总：[`get_latest_all_suppliers_inventory`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py#L477-L525)
+- **业务逻辑与实现流程**：
+  1. **实盘时间戳发货软扣减（非物理修改）**：
+     - 不直接篡改或物理更新上次盘点底表记录，保护审计追踪的法律凭据完整性；
+     - 取最近一次盘点批次的提交时间戳 $T_0$（`reported_at`），作为扣减基准；
+  2. **管件发货聚合计算**：
+     - 查询 `tube.tube_fitting_delivery` 中 `(created_at >= T_0 OR shipped_at >= T_0) AND (status IS NULL OR status != 'cancelled')` 的有效发货记录；
+     - 采用多级键位智能匹配：优先级依次为 `(material_name, model_spec, unit)` -> `(material_name, model_spec)` -> `(fitting_type, model_spec, unit)` -> `(fitting_type, model_spec)`；
+     - 动态计算：`deducted_stock_qty = max(0.0, prev_stock - shipped_qty)`；
+  3. **保温管发货聚合计算**：
+     - 查询 `tube.tube_delivery` 中 $T_0$ 之后的发货记录，按 `pipe_model_id` 汇总，计算并输出扣减后米数；
+  4. **接口返回字段扩充（平滑兼容）**：
+     - 返回结构中新增 `shipped_qty_since_inventory`（期间发货量）、`deducted_stock_qty`（扣减后待发量）、`total_shipped_since_inventory` 与 `total_deducted_stock_qty`，既有字段保持 100% 稳定兼容。
+
+## 2026-10-05 现场管理工作台管件发货标准库“发货助手”与规范审核机制契约说明（接口平滑兼容）
+
+- **关联后端服务与接口**：
+  - 供货商管件标准单价库接口：`GET /api/v1/projects/insulation_pipe_supply_2026/tube-fitting-supplier-inventory?supply_entity_id={entity_id}`
+  - 管件整车发货提交接口：`POST /api/v1/projects/insulation_pipe_supply_2026/workspace/fitting_deliveries/submit`
+- **系统架构与接口契约说明**：
+  1. **标准单价库数据源复用**：前端“发货助手”直接复用后端成熟的 `get_fitting_supplier_inventory_snapshot` 聚合接口，实时提取 `tube.tube_material_price` 中该供给主体的全量标准管件清单，支持零延迟检索与大类过滤；
+  2. **发货提交流水结构平滑兼容**：
+     - 发货提交继续沿用 `FittingDeliverySubmitPayload` 标准契约（`fitting_type`, `model_spec`, `shipped_qty`, `unit`, `remark`）；
+     - 允许前端单位默认为“件”提交，后端配置校验 `allowed_units` 已天然支持 `['个', '套', '件', '米', '根', '台']`；
+     - 经审核确认采纳标准的明细直接注入标准 `(category, model_spec)`，为后续现货库存“实盘时间戳软扣减机制”奠定 100% 同构的数据基石；
+     - 用户自主选择“保留原样”的非标明细原汁原味入库，保证现场极端工况零阻断。
+
 ## 2026-09-30 现场管理工作台发货记录长列表结构优化说明（接口保持稳定）
 
 - **关联后端服务与接口**：

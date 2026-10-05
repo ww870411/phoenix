@@ -1,3 +1,193 @@
+## 2026-10-05 [交互极简与数据修正：综合查询中心库存数值回归纯粹呈现，修复管件透视多维聚合缺失品名维度导致同口径型号合并与数量失真的根本缺陷]
+- **需求背景与现场问题**：
+  - 用户明确要求：
+    1. **视觉交互极简**：综合数据查询中心页面查询出的保温管、管件库存量，只显示最终扣减后的可用库存结果，不需要展示如“实盘 190 · 扣发 17”等辅助小字和徽章标签；
+    2. **深层数据质疑排查**：用户感觉“管件的数量与型号对不上，跟数据库表中的数据不一致”；
+  - **根本病因探查**：
+    1. **前端聚合 Key 遗漏材料品名字段**：在 `HistoryQueryView.vue` 的 `aggregatedSupplierFittingInventoryRows` 多维透视计算中，当聚合维度激活 `model` 时，原代码仅执行了 `keyParts.push(row.model_spec)`（如 `DN200`），未将 `row.material_name`（如 `45°预制保温弯头` vs `90°预制保温弯头`）纳入分组唯一键；
+    2. **同口径物料错误吞并**：由于丢失了品名区分，导致同口径的 45° 弯头（18件）与 90° 弯头（172件）被误判为同一物料，强行加总为 190 件，扣除发货 17 件后剩 173 件，且品名被后遍历项覆盖；
+    3. 全网多达 46 组同规格但不同品名的管件（如 45°/90°弯头、直三通/跨越三通等）全部发生错误合并与数量虚高，使得用户在页面上找不到真实的 45° 弯头（应为 1 件），只能看到失真的数据，直接引发数据与数据库不一致的感知。
+- **改动范围与实施方案**：
+  1. **管件多维透视聚合与型号唯一标识重构 (`HistoryQueryView.vue`)**：
+     - 在 `aggregatedSupplierFittingInventoryRows` 中，将 `model` 维度的分组唯一键重构为 `material_name____model_spec`（品名与规格口径强绑定复合键）；
+     - 确保 `45°预制保温弯头 DN200`（实盘 18 件，发货 17 件，剩余 1 件）与 `90°预制保温弯头 DN200`（实盘 172 件，剩余 172 件）独立分组、独立成行展示；
+     - `target._model_set` 与 KPI `modelSet` 同步更新为复合键统计，使在库管件规格品类种类数从被口径去重压缩的 99 种精准恢复为数据库真实的 145 种；
+  2. **管件表格排序逻辑优化 (`sortedSupplierFittingInventoryRows`)**：
+     - 在默认排序与按规格排序时，优先按 `material_name` 字典序聚类，再按 `model_spec` 口径数值降序排列，使同品名不同口径物料规整排列；
+  3. **全面清理辅助冗余文字，纯粹呈现最终库存数值 (`HistoryQueryView.vue`)**：
+     - **表格数据行单元格**：彻底移除“实盘 X · 扣发 Y”小字提示，保温管与管件单元格均纯净展示最终扣减后的可用库存数值（`{{ formatQty(row.stock_qty) }}` / `{{ formatCount(row.stock_qty) }}`）；
+     - **顶部 KPI 卡片底栏**：移除发货扣减徽章，恢复纯粹的环比增减徽章展示（`▲ +X` / `▼ -Y` / `● 持平`）；
+     - **表尾合计行**：移除实盘与发货明细小字，仅显示最终在库待发总量；
+     - **Excel 导出表头规范**：将导出列名由“当前实盘在库待发”规范更正为“当前在库待发量”。
+  4. **工程构建与生产打包验证**：
+     - 运行 `npm run build`，738 个前端模块全量通过编译，耗时 14.73s，产出生产包 `HistoryQueryView-CWBhHPgj.js` 与 `HistoryQueryView-DDqw182a.css`，零语法与类型报错。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-05 [问题排查与功能对齐：综合数据查询中心“供给方成品库存”对接实盘时间戳发货软扣减机制，实现管件与保温管在库待发量全链条统一]
+- **需求背景与现场问题**：
+  - 用户反馈在综合数据查询中心（`http://localhost:5173/projects/insulation_pipe_supply_2026/pages/comprehensive_query`）的“🏭 供给方成品库存”（Tab 3）中，管件现货库存数据与现场填报工作台的实盘数据和扣减量对不上，并要求协助全面核验保温管成品库存数据；
+  - **根本原因探查**：
+    1. 前端该页面调用综合历史查询 API：`GET /projects/{projectKey}/comprehensive-history/supplier-inventory`，底层由 [`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py) 驱动；
+    2. 在此前实现中，`query_fitting_supplier_inventory_history` 和 `query_supplier_inventory_history` 在最新快照模式（`view_mode == "latest"`）下，直接从盘点表（`tube.tube_fitting_supplier_inventory` / `tube.tube_supplier_inventory`）读取了原始实盘 `stock_qty`；
+    3. 由于未关联盘点时间戳 $T_0$（`reported_at`）之后的发货单（`tube.tube_fitting_delivery` / `tube.tube_delivery`），导致鑫瑞得 `45°预制保温弯头 DN200` 仍旧显示未扣减的 18 件，全网总数显示为 15781 件，与现场管理工作台发货 17 件后剩余的 1 件（全网 15764 件）产生口径脱节；
+    4. 保温管成品库存当前数据库中厂家尚未提交正式盘点批次（记录数为 0，综合查询为空属正常业务状态），但在底层架构上同样欠缺发货软扣减闭环。
+- **改动范围与实施方案**：
+  1. **综合历史查询服务层发货聚合与软扣减注入 (`comprehensive_history_service.py`)**：
+     - 在 `query_fitting_supplier_inventory_history` 中：
+       * 提取各厂家最新盘点批次的有效时间戳字典 `supplier_latest_reported_at`；
+       * 跨表查询 `tube.tube_fitting_delivery` 中在该厂家盘点时间 $T_0$ 之后创建或发运的有效管件发货记录（排除已撤销状态）；
+       * 按照 `(supply_entity_id, material_name, model_spec)` 与 `(supply_entity_id, fitting_type, model_spec)` 多级映射聚合盘点后发货件数 `shipped_qty_since_inventory`；
+       * 动态计算在库待发量：`deducted_qty = max(0.0, raw_stock - shipped_qty)`，重设对外口径 `row.stock_qty = deducted_qty`，并同时透出原始实盘基准 `inventory_stock_qty` 与扣发量；
+     - 在 `query_supplier_inventory_history` 中：
+       * 同样在最新模式下聚合 `tube.tube_delivery` 在厂家盘点时间后的发货米数，计算保温管动态扣减后在库量；
+     - 通过独立测试脚本实测验证：管件在库总量由 15781 件精准更新为 **15764 件**；鑫瑞得 `DN200 45°弯头` 实盘 18 件、扣发 17 件、在库待发量精准输出为 **1 件**！
+  2. **前端综合查询页面视觉与透视聚合呈现升级 (`HistoryQueryView.vue`)**：
+     - **透视聚合与 KPI 统计**：在 `aggregatedSupplierFittingInventoryRows` 与 `aggregatedSupplierInventoryRows` 聚合计算中补齐 `inventory_stock_qty` 与 `shipped_qty_since_inventory` 的多维累加，并在 KPI 顶部卡片中呈现 `total_inventory_qty` 与 `total_shipped_qty`；
+     - **管件与保温管 KPI 顶部卡片**：若存在盘点后发货，在第一张“厂区在库待发总量”卡片底栏自适应呈现提示徽章（如 `🚚 实盘 15781 · 扣发 17` / `🚚 实盘 X · 扣发 Y`）；
+     - **表格列头重命名**：将原列名“📦 实盘在库待发”统一规范更正为更加精确的“**📦 在库待发量**”；
+     - **表格数据行与表尾合计明细呈现**：
+       * 在库待发量主数值突出显示为 1 件（或对应在库米数）；
+       * 若该行有发货扣减，紧邻下方显示小字辅助标注：`(实盘 18 · 扣发 17)`，兼顾动态在库量与原始实盘溯源；
+       * 表尾合计行同步展示扣减明细，与顶部 KPI 完美呼应。
+  3. **工程打包与构建验证**：
+     - 运行 `npm run build`，738 个前端模块全量通过编译，耗时 13.19s，产出生产包 `HistoryQueryView-p_mvugzx.js` 与 `HistoryQueryView-D9eC5FwF.css`，零语法与类型报错。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-05 [功能上线：现场管理工作台现货库存表格支持发货软扣减，在“上次库存量”后新增“扣减后库存”动态列]
+- **需求背景与业务目标**：
+  - 用户在现场管理工作台导入管件（或保温管）现货实盘库存后，若后续进行了发货（例如某型号上次实盘库存 18 件，发货 17 件），用户返回填报现货库存表格时，希望在“上次库存量”之后直观看到发货扣减后的真实剩余库存（显示 1 件）；
+  - 核心设计原则：坚持基于“实盘时间戳 $T_0$ 的发货软扣减机制”，不直接物理 `UPDATE` 历史盘点底表，确保历史盘点审计链完整与可追溯；
+  - 联动体验：不仅表格新增动态列，点击“📋 沿用上次盘点”时也智能填充发货扣减后的库存数值，顶部汇总卡片同步呈现“上次实盘 / 期间发货 / 扣减后待发”的全貌。
+- **改动范围与实施方案**：
+  1. **管件库存服务层基于实盘基准时间的发货聚合扣减 (`fitting_supplier_inventory_service.py`)**：
+     - 在快照查询 `get_fitting_supplier_inventory_snapshot` 中，定位厂家最近一次盘点批次的 `reported_at` 时间戳；
+     - 查询发货表 `tube.tube_fitting_delivery` 中在该时间戳之后创建或发出的管件发货单（状态非已撤销）；
+     - 支持 `(material_name, model_spec)`、`(category, model_spec)` 等多层级智能映射，精准汇总盘点后发货量 `shipped_qty_since_inventory`；
+     - 计算扣减后库存：`deducted_stock_qty = max(0.0, prev_stock - shipped_qty)`；
+     - 在 `get_latest_all_fitting_suppliers_inventory` 中同步增加发货扣减，确保调度端与数字大屏数据一致性。
+  2. **保温管库存服务层发货扣减联动 (`supplier_inventory_service.py`)**：
+     - 同样在 `get_supplier_inventory_for_date` 与 `get_latest_all_suppliers_inventory` 中，统计盘点时间后在 `tube.tube_delivery` 中的发货米数，返回 `shipped_qty_since_inventory` 与 `deducted_stock_qty`。
+  3. **前端表格列配置与动态视觉呈现 (`SupplyManagementView.vue`)**：
+     - 在管件盘点 RevoGrid（`fittingInventoryGridColumns`）中，在“上次在库量”列后新增“扣减后库存”列（prop: `deducted_stock_qty`）；
+     - 若该行在盘点后发生过发货（`shipped_qty_since_inventory > 0`），以加粗科技蓝（`#1d4ed8`）和淡蓝高亮背景（`#eff6ff`）突出显示，使用等宽字体对齐；若无发货则展示为正常灰蓝色，视觉层级分明；
+     - 在保温管盘点 RevoGrid（`pipeInventoryGridColumns`）中，同样在“上次在库量 (米)”列后新增“扣减后库存 (米)”列；
+     - 顶部在库总量徽章增强：若盘点后发生过发货，展开显示 `(上次实盘: X，发货: Y，扣减后在库: Z)`；
+     - “📋 沿用上次盘点”按钮智能填充：优先沿用发货扣减后的在库数量，无需用户手动逐行口算。
+  4. **工程构建与生产打包验证**：
+     - 执行 `npm run build`，738 个前端模块全量通过编译（耗时 15.71s），产出生产包 `SupplyManagementView-hbJ0OUv0.js` 与 `SupplyManagementView-BEsBfioK.css`，零错误。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py)
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-05 [问题排查与缺陷修复：解决现场管理工作台管件库存导入“分项名称”表格完全无法识别的问题]
+- **需求背景与现场问题**：
+  - 用户反馈在现场管理工作台尝试导入【鑫瑞得】的管件现货库存时，使用实际业务表格 `configs/导入_10.5鑫瑞得_大连剩余发货数量表.xlsx`，系统完全无法识别且匹配项为 0；
+  - 经深入探查该 Excel 的结构与前端解析源码发现两大根本病因：
+    1. **表头字段误判**：表格第一行表头为 `['序号', '分项名称', '规格型号', '单位', '现货库存量']`，系统在探测表头时原本包含了硬编码规则 `if (/分项名称/.test(rowLine)) { isStandardFormat = false }`，本意是区分某些特定厂家的多区块报表，却误将“分项名称”（实质为品名列）当成了多区块非标标识；
+    2. **区块状态机被直管绑死误杀**：在非标状态机分支中，由于表头出现了“分项名称”，系统执行了 `currentBlockType = 'pipe'`（直管区块），而该表后续没有“表一/表二”等大标题，导致从第 2 行到第 159 行的所有管件数据全部在“直管分流”处被 `pipeSkippedCount++` 强制跳过，直接导致管件识别数为 0。
+- **改动范围与实施方案**：
+  1. **表头字段自适应探测增强 (`SupplyManagementView.vue` - `handleFittingInventoryExcelFile`)**：
+     - 剔除表头探测中针对“分项名称”的错误降级判定；
+     - 将“分项名称/分项”纳入标准品名列（`fName`），将“现货库存量/现货库存”纳入标准数量列（`fQty`），使包含这两种列名的表格能被精准识别为常规单表头表格；
+  2. **直管与管件混排逐行智能分流与自愈保护 (`SupplyManagementView.vue`)**：
+     - 在分支 A（标准单表头解析）中增加保温直管行的精准识别过滤：对品名包含“保温管”且不含“弯头/三通/变径/封头/补偿器/球阀”的前 13 行直管自动跳过（计入 `pipeSkippedCount`），管件单价库不被污染；
+     - 在分支 B（多区块 FSM 状态机）中清除“分项名称”作为直管判定的隐患，并增加数据行管件特征自愈纠偏逻辑（若行数据包含管件关键字，自动恢复 `currentBlockType = 'fitting'`）；
+  3. **真实业务数据验证**：
+     - 用 Python 真实比对鑫瑞得中标单价库与该 Excel：前 13 行保温直管被精准跳过，剩余 145 项管件物料与鑫瑞得标准库**100% 完美匹配（145 / 145 项全部命中，未匹配项为 0）**！
+  4. **工程打包与构建验证**：
+     - 运行 `npm run build`，738 个前端模块全量编译构建顺利通过（耗时 16.31s），产出生产包 `SupplyManagementView-CVCQlT97.js` 与 `SupplyManagementView-F0tOxCfx.css`，零语法报错。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-05 [功能增强：现场管理工作台现货库存导入未匹配物料核验报告弹窗与清单一键导出功能上线]
+- **需求背景与业务决策**：
+  - 用户询问在导入非标准盘点表格时，若表格中含有系统无法自动矫正或在标准价格库中未收录的型号，系统是否会明确提示用户；
+  - 经排查确认：系统原有逻辑具备宏观统计提醒与极端低匹配率警告，但缺少对“具体是哪几个型号未匹配、在 Excel 哪一行、数量是多少”的透明化明细清单展示；
+  - 为彻底消除导入盘点数据时的黑盒隐患，提升代供方导入库存的核实效率，系统全面落地“未匹配物料精准收集与核验报告弹窗”及“一键导出未匹配清单”能力。
+- **改动范围与实施方案**：
+  1. **未匹配数据多维采集与行号追踪 (`SupplyManagementView.vue`)**：
+     - 在保温管库存导入（`handlePipeInventoryExcelFile`）与管件库存多区块状态机（`handleFittingInventoryExcelFile` 分支 A 与分支 B）中，对穿透 4 级矫正后依然无法对齐标准库的非标物料行实时收集；
+     - 详细记录字段：`excelRow`（精准到原始表格行号）、`name`（品名/类别）、`spec`（原始规格）、`qty`（填报在库量）、`unit`（单位）、`reason`（无法匹配原因分析）等；
+  2. **“盘点导入识别报告：发现未匹配物料”模态框 (`showUnmatchedImportModal`)**：
+     - 导入解析完成后，若存在未匹配项自动弹出；
+     - 顶部设计 3 块色彩鲜明的数据卡片（扫描总数、成功匹配入表数、未在标准库收录数）；
+     - 中部嵌入紧凑细致的网格明细表，支持局部滚动浏览，清晰展示每一项未匹配的行号、品名、规格、在库量与原因说明；
+     - 底部业务说明：明确告知未匹配项未填入底表的原因（未在当前供给主体中标价格库收录），说明此类非标配件供货商在发货时仍可手填发货；
+  3. **“📥 导出未匹配清单 (.xlsx)”一键导出能力 (`handleExportUnmatchedList`)**：
+     - 弹窗左下角提供快捷导出按钮，自动生成规范 Excel 文件（如 `【未匹配核验清单】_唐山兴邦_管件盘点_20261005.xlsx`），方便用户直接发给供货厂家核对；
+  4. **全量完美对齐时极简正向反馈**：
+     - 若表格数据 100% 成功匹配标准库，则免弹窗打扰，顶部横幅直接提示“✅ 完美对齐！全部 X 项物料均已精确匹配并填入表格”，保证操作流程清爽丝滑。
+  5. **工程打包与构建验证**：
+     - 运行 `npm run build`，738 个前端模块全量编译构建顺利通过（耗时 13.48s），产出生产包 `SupplyManagementView-2OCiWWhh.js` 与 `SupplyManagementView-CAWzsB0H.css`，零语法报错。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-05 [界面与交互优化：现场管理工作台“提交整车管件发货单”按钮颜色与视觉质感全面对齐标准库按钮]
+- **需求背景与用户决策**：
+  - 用户反馈现场管理工作台管件填报工具栏中，“提交整车管件发货单”按钮原本为普通样式，希望将其颜色与新增的“从标准库中选择”按钮保持完全一致，以提升整车发货交互区域的主视觉统一感与操作指引性。
+- **改动范围与实施方案**：
+  1. **“提交整车管件发货单”主操作按钮视觉与动态交互对齐 (`SupplyManagementView.vue` Tab 4)**：
+     - 将原本的类名样式与 `:style` 进行整合重构，正常状态应用与“从标准库中选择”完全一致的高质感经典蓝渐变背景：`background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)`、无边框（`border: none`）、纯白加粗文字、精致立体阴影（`box-shadow: 0 2px 4px rgba(37,99,235,0.2)`）；
+     - 动态文案优化：当处于提交发货等待态（`submitFittingLoading === true`）时，按钮文案由原静态文字动态更新为“🚀 正在提交整车发货...”，提供清晰的异步加载反馈；
+     - 严格保持权限安全底线：全局只读观察员模式（`isReadOnlyViewer === true`）下自动优雅回退为灰色锁定态（`background: #94a3b8 !important`，`opacity: 0.5`，禁绝点击与事件穿透）。
+  2. **工程打包与构建验证**：
+     - 运行 `npm run build`，738 个前端模块全量编译构建顺利通过（耗时 15.42s），产出生产包 `SupplyManagementView-BJ08VoLo.js` 与 `SupplyManagementView-psfWwcyX.css`，零语法报错。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-05 [功能重构：现场管理工作台管件发货标准库“发货助手”与提交智能规范核对确认机制落地]
+- **需求背景与业务决策**：
+  - 用户指出供货商现货库存数据导入后，由于供货商盘点更新频次低，而发货每天发生，若发货不自动扣减库存，将导致“发货量不断增加但库存量纹丝不动”的严重视觉矛盾；
+  - 经深入排查发现：保温管发货严格按设计量表下拉选择，且直管规格集中收敛，可直接实现自动扣减；但管件存在“设计图纸量表、采购单价表、发货手填表”三项型号不一致的矛盾；
+  - 经双方深入探讨与系统穿透分析明确关键业务认知：
+    1. 本次导入的现货库存为当前时间点的现场实盘量，物理上已扣除历史所有发货，历史 1000 多条发货记录根本无需参与扣减，仅需扣减本次导入时间点之后的新增发货；
+    2. 单价表虽经标准化，但三层建模（大类+品名+核心规格）干净规范且与现货库存底表同构，绝无必要改回非标合同原样；
+    3. 为防止供方发货员反弹，既保留原有的手填与 Excel 复制粘贴习惯，又新增“从标准库中选择”捷径（发货助手），并在提交关口引入“全集符号清洗与物理 DNA 智能比对算法”，弹窗引导用户核对确认；
+    4. **核心容错原则**：充分尊重发货员自主权，用户可一键采纳标准型号，也可自主选择“保留原样提交”（作为合同外非标物资记账发货，不扣减现货库存，绝不卡车）。
+- **改动范围与实施方案**：
+  1. **管件发货电子表格工具栏新增“📦 从标准库中选择”按钮 (`SupplyManagementView.vue` Tab 4)**：
+     - 在“追加5行空行”与“清空电子表格”左侧提供醒目的渐变蓝操作按钮；
+     - 点击快速打开“发货助手”弹窗。
+  2. **“发货助手”标准管件选货弹窗 (`SupplyManagementView.vue`)**：
+     - 数据源动态绑定当前供给主体的中标价格库（`tube.tube_material_price` 去重集合）；
+     - 顶部支持多关键词模糊搜索（按口径、度数、品名实时秒搜）；
+     - 左侧提供大类胶囊标签切换（全部、弯头、三通、变径管、封头、补偿器、球阀等）；
+     - 明细列表支持直接输入发货件数或点击 `[-]` / `[+]` 快速微调，选中项高亮显色；
+     - 底部实时统计已选种类与总件数，点击“📥 导入发货表格”一键将物料注入发货表格；
+     - **字段映射精准对齐**：发货表“管件类型”列（`fitting_type`）由原本映射 `category` 优化为映射 **`material_name` 字段**（如：优先显示“塑套钢预制保温弯头”，而非泛泛的“弯头”）；
+     - 计量单位统一默认设为“件”，用户仍可在表格内按需修改。
+  3. **工业级全集符号清洗与物理 DNA 智能匹配算法 (`SupplyManagementView.vue`)**：
+     - **全集符号归一清洗 (`cleanFittingSymbolString`)**：全面覆盖全角半角、俄文西里尔字母、各类直径符号（`Φ`、`φ`、`Ф`、`ф`、`⌀`、`DN` 等全部规范化）；度数符号（`度`、`deg` -> `°`）；乘号（`×`、`*`、`x` -> `*`）；斜杠统一并去除换行与多余空格；
+     - **物理参数语义指纹提取 (`extractFittingDNA`)**：精准剥离角度，避免角度数字干扰口径提取；独立抽取品类族系、角度、公称口径、曲率半径（`R=1.5DN`）、压力等级等；
+     - **多阶段匹配执行器 (`matchSingleFittingItem`)**：Pass 1 文本完全归一匹配 -> Pass 2 物理 DNA 语义唯一匹配 -> Pass 3 模糊多候选查找 -> Pass 4 未收录非标识别。
+  4. **“发货数据智能规范与核对确认”弹窗精简化与紧凑单行免选重构 (`SupplyManagementView.vue`)**：
+     - **去除冗余文案**：删除顶栏多余的“系统依据【...】标准价格库核验本次整车 X 笔发货明细”副标题，标题保持精炼大气；
+     - **完全吻合条目紧凑免选呈现**：当某项发货记录与标准库完全吻合（如从标准库挑选）时，彻底去除左右两栏大卡片和 Radio 单选按钮，压缩为高度仅约 36px 的极简浅绿单行通栏条（序号 + 品名规格 + 发货件数 + 🟢标准型号标签），杜绝任何不必要的手动二次选择，信息密度成倍提升；
+     - **异常与差异条目聚焦决策**：仅在存在语义矫正、多候选或未收录非标时展开决策卡片；
+     - **整车全标准智能自适应**：若整车明细全部为标准型号，顶部自动精简为绿色成功提示，隐藏“全部采纳/全部保留”按钮，底部直接提示全部为标准型号，发货员扫一眼即可一键极速提交。
+  5. **工程构建与验证**：
+     - 运行 `npm run build`，738 个模块顺利编译打包（耗时 16.00s），生成生产包 `SupplyManagementView-6InJPzxo.js` 与 `SupplyManagementView-BQUwQK8j.css`，零错误。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
 ## 2026-09-30 [界面优化：现场管理工作台保温管物流记录与管件发货台账长列表独立滚动条与吸顶改造]
 - **需求背景与用户决策**：
   - 用户反馈在 `https://platform.smartview.top/projects/insulation_pipe_supply_2026/pages/supply_management?category=pipe&tab=history` 页面中，保温管发货记录是无限往下撑开渲染的，缺乏局部滚动条，导致页面越来越长，并且管件标签页中的历史发货记录也存在类似现象，要求进行优化改造。

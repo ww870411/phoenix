@@ -1928,6 +1928,32 @@ def query_supplier_inventory_history(
                 ORDER BY supply_entity_id ASC;
             """), {"batch_nos": latest_batch_numbers}).mappings().all()
 
+            # 统计各厂家在最新盘点时间后的保温管发货量
+            shipped_map: Dict[tuple, float] = {}
+            try:
+                shipped_sql = text("""
+                    WITH latest_batches AS (
+                        SELECT DISTINCT ON (supply_entity_id)
+                            supply_entity_id, batch_no, reported_at
+                        FROM tube.tube_supplier_inventory
+                        ORDER BY supply_entity_id, reported_at DESC, id DESC
+                    )
+                    SELECT LOWER(d.supply_entity_id) AS se_id, d.pipe_model_id, SUM(d.shipped_qty) AS shipped_sum
+                    FROM tube.tube_delivery d
+                    JOIN latest_batches lb ON LOWER(d.supply_entity_id) = LOWER(lb.supply_entity_id)
+                    WHERE (d.created_at >= lb.reported_at OR d.shipped_at >= lb.reported_at)
+                      AND (d.status IS NULL OR d.status != 'cancelled')
+                    GROUP BY LOWER(d.supply_entity_id), d.pipe_model_id;
+                """)
+                s_rows = session.execute(shipped_sql).fetchall()
+                for sr in s_rows:
+                    seid = str(sr[0] or "").lower()
+                    pm_s = str(sr[1] or "").strip()
+                    ssum = float(sr[2] or 0)
+                    shipped_map[(seid, pm_s)] = ssum
+            except Exception:
+                pass
+
             # 抓取 rnk=2 批次的库存映射 (supply_entity_id, pipe_model_id) -> prev_stock_qty
             prev_batch_numbers = [b for b in prev_batch_map.values() if b]
             prev_stock_map: Dict[Tuple[str, str], float] = {}
@@ -1980,7 +2006,11 @@ def query_supplier_inventory_history(
                     if kw not in text_corpus:
                         continue
 
-                stock_qty = float(r["stock_qty"] or 0)
+                orig_stock_qty = float(r["stock_qty"] or 0)
+                shipped_qty = shipped_map.get((sid.lower(), pm), 0.0)
+                deducted_stock_qty = max(0.0, orig_stock_qty - shipped_qty) if orig_stock_qty > 0 else 0.0
+                stock_qty = deducted_stock_qty
+
                 prev_stock_qty = prev_stock_map.get((sid, pm), 0.0)
                 change_qty = round(stock_qty - prev_stock_qty, 2)
 
@@ -2005,7 +2035,11 @@ def query_supplier_inventory_history(
                     "supply_entity_name": s_name,
                     "pipe_model_id": pm,
                     "pipe_model_name": pm_name,
+                    "unit": "米",
                     "stock_qty": stock_qty,
+                    "inventory_stock_qty": orig_stock_qty,
+                    "shipped_qty_since_inventory": round(shipped_qty, 1),
+                    "deducted_stock_qty": deducted_stock_qty,
                     "previous_stock_qty": prev_stock_qty,
                     "change_qty": change_qty,
                     "remark": remark,
@@ -2020,8 +2054,10 @@ def query_supplier_inventory_history(
                 "ok": True,
                 "view_mode": "latest",
                 "summary": {
-                    "total_stock_qty": round(total_stock, 2),
-                    "total_change_qty": round(total_change, 2),
+                    "total_stock_qty": round(total_stock, 1),
+                    "total_inventory_stock_qty": round(sum(it["inventory_stock_qty"] for it in items), 1),
+                    "total_shipped_since_inventory": round(sum(it["shipped_qty_since_inventory"] for it in items), 1),
+                    "total_change_qty": round(total_change, 1),
                     "supplier_count": len(unique_suppliers),
                     "model_count": len(unique_models),
                     "latest_report_time": latest_time_str,
@@ -2241,6 +2277,35 @@ def query_fitting_supplier_inventory_history(
                 ORDER BY supply_entity_id ASC;
             """), {"batch_nos": latest_batch_numbers}).mappings().all()
 
+            # 统计各厂家在最新盘点时间后的发货量
+            shipped_map: Dict[tuple, float] = {}
+            try:
+                shipped_sql = text("""
+                    WITH latest_batches AS (
+                        SELECT DISTINCT ON (supply_entity_id)
+                            supply_entity_id, batch_no, reported_at
+                        FROM tube.tube_fitting_supplier_inventory
+                        ORDER BY supply_entity_id, reported_at DESC, id DESC
+                    )
+                    SELECT LOWER(d.supply_entity_id) AS se_id, d.fitting_type, d.model_spec, d.unit, SUM(d.shipped_qty) AS shipped_sum
+                    FROM tube.tube_fitting_delivery d
+                    JOIN latest_batches lb ON LOWER(d.supply_entity_id) = LOWER(lb.supply_entity_id)
+                    WHERE (d.created_at >= lb.reported_at OR d.shipped_at >= lb.reported_at)
+                      AND (d.status IS NULL OR d.status != 'cancelled')
+                    GROUP BY LOWER(d.supply_entity_id), d.fitting_type, d.model_spec, d.unit;
+                """)
+                s_rows = session.execute(shipped_sql).fetchall()
+                for sr in s_rows:
+                    seid = str(sr[0] or "").lower()
+                    ft = str(sr[1] or "").strip()
+                    ms = str(sr[2] or "").strip()
+                    u = str(sr[3] or "").strip()
+                    ssum = float(sr[4] or 0)
+                    shipped_map[(seid, ft, ms, u)] = shipped_map.get((seid, ft, ms, u), 0.0) + ssum
+                    shipped_map[(seid, ft, ms)] = shipped_map.get((seid, ft, ms), 0.0) + ssum
+            except Exception:
+                pass
+
             prev_batch_numbers = [b for b in prev_batch_map.values() if b]
             prev_stock_map: Dict[Tuple[str, str, str, str], float] = {}
             if prev_batch_numbers:
@@ -2270,6 +2335,7 @@ def query_fitting_supplier_inventory_history(
                 ft = str(r["fitting_type"] or "").strip()
                 mn = str(r["material_name"] or "").strip()
                 ms = str(r["model_spec"] or "").strip()
+                u = str(r["unit"] or "个").strip()
 
                 if sup_filter_set and sid.lower() not in sup_filter_set:
                     continue
@@ -2291,7 +2357,23 @@ def query_fitting_supplier_inventory_history(
                     if kw not in text_corpus:
                         continue
 
-                stock_qty = float(r["stock_qty"] or 0)
+                orig_stock_qty = float(r["stock_qty"] or 0)
+
+                # 匹配发货扣减
+                shipped_qty = 0.0
+                seid_low = sid.lower()
+                if (seid_low, mn, ms, u) in shipped_map:
+                    shipped_qty = shipped_map[(seid_low, mn, ms, u)]
+                elif (seid_low, mn, ms) in shipped_map:
+                    shipped_qty = shipped_map[(seid_low, mn, ms)]
+                elif (seid_low, ft, ms, u) in shipped_map:
+                    shipped_qty = shipped_map[(seid_low, ft, ms, u)]
+                elif (seid_low, ft, ms) in shipped_map:
+                    shipped_qty = shipped_map[(seid_low, ft, ms)]
+
+                deducted_stock_qty = max(0.0, orig_stock_qty - shipped_qty) if orig_stock_qty > 0 else 0.0
+                stock_qty = deducted_stock_qty  # 真实在库待发量为扣减后库存
+
                 prev_stock_qty = prev_stock_map.get((sid, ft, mn, ms), 0.0)
                 change_qty = round(stock_qty - prev_stock_qty, 2)
 
@@ -2317,8 +2399,11 @@ def query_fitting_supplier_inventory_history(
                     "fitting_type": ft,
                     "material_name": mn,
                     "model_spec": ms,
-                    "unit": r["unit"] or "个",
+                    "unit": u,
                     "stock_qty": stock_qty,
+                    "inventory_stock_qty": orig_stock_qty,
+                    "shipped_qty_since_inventory": round(shipped_qty, 2),
+                    "deducted_stock_qty": deducted_stock_qty,
                     "previous_stock_qty": prev_stock_qty,
                     "change_qty": change_qty,
                     "remark": remark,
@@ -2335,6 +2420,8 @@ def query_fitting_supplier_inventory_history(
                 "view_mode": "latest",
                 "summary": {
                     "total_stock_qty": round(total_stock, 2),
+                    "total_inventory_stock_qty": round(sum(it["inventory_stock_qty"] for it in items), 2),
+                    "total_shipped_since_inventory": round(sum(it["shipped_qty_since_inventory"] for it in items), 2),
                     "total_change_qty": round(total_change, 2),
                     "supplier_count": len(unique_suppliers),
                     "model_count": len(unique_specs),
