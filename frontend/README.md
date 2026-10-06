@@ -1,3 +1,193 @@
+## 2026-10-06 展示大屏标段需求卡片“保温管/施工量/管件/阀门”文字标签原生结构与触发场景深度说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（需求主体卡片 `.demand-node-card`、进度指标行 `.sec-metric-line`、分类徽章标签 `.line-label`、数值与百分比 `.line-val`/`.line-pct`、双列立柱排布 `.demand-systems-split`、右侧战报流 `.live-feed-panel`）；
+- **前端结构与动态机制深度说明**：
+  1. **标段卡片原生 DOM 结构**：
+     - 在标段卡片模板中，进度条上方左侧固定渲染三个类别标签徽章：`【保温管】`（`.line-label.pipe-tag`）、`【施工量】`（`.line-label.construct-tag`）、`【管件/阀门】`（`.line-label.fitting-tag`）；
+     - 右侧原生仅展示数值（如 `10.0(+2.0) / 18.5 km`）与百分比（如 `64.9%`），代码中完全没有在右侧重复放置或通过 `v-if` 条件生成同名文字标签；
+  2. **用户所见“右侧某些时候显现出这三个标签”的 3 大现场触发场景**：
+     - **场景 1（左右双列立柱并排排布）**：大屏 10 个标段分为左列（高温水 1~4 + 低温水 1）和右列（低温水 2~6）并排，左列卡片右侧紧贴着右列卡片左侧的标签；在不同视口宽度、移动端滑动或窗口缩放时，右列卡片会动态滑入视口；
+     - **场景 2（右侧实时动态播报高亮联动）**：紧挨标段右侧的战报流（Live Feed）轮播或悬停时，战报卡片右上角带彩色徽章 `【保温管施工量确认】`、`【管件安装量确认】`，同时飞线触发对应标段卡片呼吸闪烁，形成动态下右侧亮起同名标签的强烈视觉焦点；
+     - **场景 3（浏览器原生悬停气泡 Tooltip）**：鼠标停在各轨道上等待超过 1 秒时，原生浮窗弹出显示“已安装施工 / 直管在途 / 管件在途”明细。
+
+## 2026-10-06 展示大屏供需拓扑标题已筛选标签移除与界面精简 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（供需流向拓扑面板标题 `.panel-title`、`.topo-filtered-pill` 按钮）；
+- **前端结构与交互变更**：
+  - 彻底移除了“供需流向拓扑”主标题右侧的 `<button class="topo-filtered-pill">` 胶囊标签（原显示“已筛选 X/Y 家 ⚙️”）；
+  - 供应商筛选控制与状态统一由右上角“调度控制中心”专属菜单及“核心供应商”指标卡片承载，拓扑标题恢复极简纯净的工业看板视觉。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.03s），产出生产包 `BigScreenDashboardView-DcgCdOfT.js`，零报错。
+
+## 2026-10-06 展示大屏供应商库存弹层移除与“管件/阀门”文案统一规范 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（供应商卡片 `supply-node-card`、核心指标面板、供需流向拓扑标段卡片、本周施工战报轮播组件）；
+- **前端结构与交互变更**：
+  1. **彻底移除供应商卡片悬停弹层**：
+     - 删除 `supply-node-card` 下的 `.sup-inventory-popover` 浮层组件，鼠标移动至供应商卡片时不再弹出庞大的库存明细弹窗，视野开阔且不阻挡拓扑图连线；
+  2. **“管件/阀门”业务口径全链路命名规范**：
+     - 核心指标卡片：将“管件全网发运情报”更名为“**管件/阀门全网发运情报**”；
+     - 进度条标题：将“全网管件供应进度”更名为“**全网管件/阀门供应进度**”；
+     - 供需拓扑标段卡片：高温水与低温水全部标段进度条标签由“管件”更名为“**管件/阀门**”，存量核算条标签由“管件库存量:”更名为“**管件/阀门库存量:**”；
+     - 右下角双战报轮播卡片：标题与 hover tooltip 同步更名为“**本周管件/阀门施工战报**”。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.33s），产出生产包 `BigScreenDashboardView-DmIMbp_-.js`，零报错。
+
+## 2026-10-06 数字指挥大屏“保供效能与履约保障”核心供应商数量动态联动 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（保供效能与履约保障模块、供需流向拓扑控制中心、`visibleSupplyNodes` 计算属性、`selectedSupplierIds` 响应式集合）；
+- **前端结构与交互变更**：
+  1. **核心供应商卡片动态响应式绑定**：
+     - 将“保供效能与履约保障”网格中“核心供应商”指标卡片数值由原静态 `supplyNodes.length`（固定全量 9 家）调整为计算属性 `{{ visibleSupplyNodes.length }} 家`；
+     - 增加动态 `:title` 悬停提示：未全选时显示 `已筛选显示 ${visibleSupplyNodes.length} 家 / 全网共 ${supplyNodes.length} 家核心供应商`，全选时显示 `全网共 ${supplyNodes.length} 家核心供应商`；
+  2. **筛选响应式追踪优化**：
+     - 在 `toggleSupplierVisibility`、`selectAllSuppliers`、`invertSuppliersSelection`、`clearSuppliersSelection` 中使用 `selectedSupplierIds.value = new Set(...)` 重建引用，确保 Vue 3 能够精准感知集合变更并驱动视图与卡片同步更新。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 12.80s），产出生产包 `BigScreenDashboardView-D_IKMLJz.js`，零报错。
+
+## 2026-10-06 现场管理工作台保温管盘点最新在库量默认为空而非“0”交互优化 (SupplyManagementView)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管厂区成品库存盘点 Tab `inventory`、网格编辑回调 `handlePipeInventoryGridAfterEdit`、数据加载 `loadInventoryData`）；
+- **前端结构与交互变更**：
+  1. **初始状态默认为空**：
+     - 在 `loadInventoryData` 中，未填写的 `stock_qty` 默认映射为 `null`（空白单元格），彻底消除原界面加载后全部显示“0”的理解偏差；
+  2. **编辑清空保持空白**：
+     - 在 `handlePipeInventoryGridAfterEdit` 中，双击清空或回退删除时保持为 `null`，输入具体数字时才转换为有效实盘数；
+     - 主动置零（“0️⃣ 默认置零”）与沿用（“📋 沿用上次盘点”）保持快捷辅助功能；
+  3. **保存与导出安全兜底**：
+     - 提交盘点时 `Number(it.stock_qty) || 0` 安全兜底入库；导出 Excel 时空值输出为空字符串。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 12.78s），产出生产包 `SupplyManagementView-DOsuYTWB.js`，零报错。
+
+## 2026-10-06 现场管理工作台保温管盘点列名与结构优化（更名三列并删除变动差额）(SupplyManagementView)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（保温管厂区成品库存盘点 Tab `inventory`、网格列定义 `pipeInventoryGridColumns`、数据源 `pipeInventoryGridSource`、Excel 导入导出模块）；
+- **前端结构与交互变更**：
+  1. **列名更名与结构精简**：
+     - 将原“上次在库量 (米)”更名为“**最近提交在库量**”，列宽设为 130px；
+     - 将原“扣减后库存 (米)”更名为“**当前自动在库量**”，列宽设为 145px；
+     - 将原“本次实盘在库量 (米) *”更名为“**（填报）最新在库量 \***”，列宽设为 170px；
+     - 彻底删除“变动差额”列与数据源中的 `change_qty` 属性；
+  2. **提示与看板协同更新**：
+     - 页面看板与操作引导同步更新为“最新填报在库总量”以及“💡 提示：双击【（填报）最新在库量】单元格直接编辑...”；
+  3. **Excel 导出与导入协同**：
+     - 导出 Excel 表头同步变更为“最近提交在库量 (米/参考)”与“（填报）最新在库量 (米/必填)”；
+     - 导入解析智能正则新增全角与半角括号形式的“（填报）最新在库量”并排除“最近”。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 12.76s），产出生产包 `SupplyManagementView-DSS8b0Aq.js`，零报错。
+
+## 2026-10-06 现场管理工作台管件盘点列名更名为“（填报）最新在库量” (SupplyManagementView)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（管件库存盘点 Tab `fitting_inventory`、电子表格 `fittingInventoryGridColumns`、Excel 导入导出模块）；
+- **前端结构与交互变更**：
+  1. **列名更名与列宽自适应**：
+     - 将原“请填报最新在库量 *”正式更名为“**（填报）最新在库量 \***”，`stock_qty` 字段列宽设置为 170px，规避表头文字折行与被遮挡；
+  2. **操作引导文案与导出导入协同**：
+     - 表格下方编辑引导提示语同步更新为包含【（填报）最新在库量】；
+     - 导出 Excel 模板标准表头同步更新为“（填报）最新在库量 (必填)”；
+     - 导入解析智能正则新增全角与半角括号形式的匹配（`（填报）最新在库量|\(填报\)最新在库量`）。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.85s），产出生产包 `SupplyManagementView-BOk9JGLQ.js`，零报错。
+
+## 2026-10-06 现场管理工作台管件盘点列名进一步精炼（当前自动在库量、最近提交在库量）(SupplyManagementView)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（管件库存盘点 Tab `fitting_inventory`、电子表格 `fittingInventoryGridColumns`、Excel 导入导出模块）；
+- **前端结构与交互变更**：
+  1. **列名精炼与尺寸微调**：
+     - 将“当前在库量（自动扣减发货）”进一步精炼命名为“**当前自动在库量**”，列宽由 195px 调整为 145px；
+     - 将“上次填报的在库量”进一步精炼命名为“**最近提交在库量**”，列宽由 135px 调整为 130px；
+  2. **Excel 导入导出协同更新**：
+     - 导出 Excel 表头同步变更为“最近提交在库量 (参考)”；
+     - 导入解析智能正则补齐“最近”排除词，强化外来报表识别鲁棒性。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.86s），产出生产包 `SupplyManagementView-DNbmnG3k.js`，零报错。
+
+## 2026-10-06 现场管理工作台管件库存盘点填报表格与列名语义精细化优化 (SupplyManagementView)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（管件库存盘点 Tab `fitting_inventory`、电子表格 `fittingInventoryGridColumns`、数据源 `filteredFittingInventoryGridSource`、Excel 导入导出模块）；
+- **前端结构与交互变更**：
+  1. **移除变动差额列**：
+     - 从 `fittingInventoryGridColumns` 中彻底删除 `change_qty`（“变动差额”）列，精简界面信息密度；
+  2. **最新在库量列名更新与默认全空交互**：
+     - 将列名“本次实盘在库量 *”变更为明确引导性的“**请填报最新在库量 \***”；
+     - 初始加载时 `stock_qty` 字段默认设为 `null`，电子表格单元格全部渲染为空白，彻底消除原“预填 0”造成的理解混淆；
+     - 双击编辑与 Backspace 清空保持为 `null`，一键置零或一键沿用时再按需回填具体数值；
+     - 提示文案与右侧微看板同步更新为“最新填报在库总量”与“双击【请填报最新在库量】单元格直接编辑”；
+  3. **发货扣减在库量列名语义规范**：
+     - 将列名“扣减后库存”更名为“**当前在库量（自动扣减发货）**”，列宽自适应调宽至 195px，直观体现盘点与发货动态联动的业务内涵；
+  4. **历史盘点列名语义规范**：
+     - 将列名“上次在库量”更名为“**上次填报的在库量**”，列宽调至 135px，与最新填报形成清晰对照；
+  5. **Excel 导入导出协同**：
+     - 导出 Excel 表头同步变更为“上次填报的在库量 (参考)”与“请填报最新在库量 (必填)”；
+     - 导入解析智能正则新增匹配规则，保障新老表格无缝导入。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 12.95s），产出生产包 `SupplyManagementView-CWM7RCjx.js`，零报错。
+
+## 2026-10-06 现场管理工作台管件库存盘点 Tab 路由守卫与品类自适应防呆修复 (SupplyManagementView)
+
+- **关联前端页面与组件**：
+  - 页面：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（Tab 导航系统、`watch(activeTab)`、智能自适应切换守卫 `watch([supportsPipe, supportsFitting, activeCategory])`、二级子标签头部模板）；
+- **前端结构与交互变更**：
+  1. **管件子标签白名单补齐**：
+     - 在 `watch(activeTab)` 路由侦听器中，将管件业务判断从 `['fitting', 'fitting_baseline']` 补齐为 `['fitting', 'fitting_inventory', 'fitting_baseline']`；
+     - 彻底修复管件供应商点击“管件库存盘点”子标签时被错误归入 `else` 分支并强制篡改为 `activeCategory.value = 'pipe'` 的核心缺陷；
+     - 在对应分支补齐 `else if (tab === 'fitting_inventory') { loadFittingInventoryData() }` 及保温管 `tab === 'inventory'` 的 `loadInventoryData()`；
+  2. **智能自适应品类守卫升级**：
+     - 联合侦听 `[supportsPipe, supportsFitting, activeCategory]`；
+     - 当主体仅支持管件（`!canPipe && canFitting`）但 `activeCategory` 发生偏离时，自动纠正回 `fitting` 和合法管件 Tab，杜绝任何途径导致的越权品类切换；
+  3. **二级子标签头部模板双重防呆**：
+     - 保温管二级标签头部增加权限防线：`v-if="activeCategory === 'pipe' && supportsPipe"`；
+     - 管件二级标签头部同步强化：`v-else-if="activeCategory === 'fitting' && supportsFitting"`。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 15.67s），产出生产包 `SupplyManagementView-CixHT-MP.js`，零报错。
+
+## 2026-10-06 数字指挥大屏调度控制中心交互优化与剔除供应商配置持久化 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（调度控制中心主按钮 `.control-trigger-btn`、供应商二级子菜单 `.supplier-cascading-submenu`、配置保存与恢复逻辑）；
+- **前端结构与交互变更**：
+  1. **主按钮纯粹展示（移除已选角标）**：
+     - 从主控制台触发按钮中移除动态角标（原 `已选8/9` 徽章），剔除厂商后主按钮始终稳定显示 `⚙️ 调度控制中心`，保持视觉纯粹无噪点；
+  2. **二级子菜单交互升级为显式点击触发**：
+     - 移除鼠标移入即触发的 `mouseenter` 监听，升级为纯 `@click.stop="toggleSupplierSubmenu"` 点击展开/折叠，防止用户在控制面板滑动鼠标时意外弹开二级侧滑栏；
+  3. **基于后端配置文件的供应商剔除持久化与刷新恢复机制**：
+     - 彻底解绑浏览器的临时本地缓存（移除 `localStorage` 的写入）；
+     - 状态模型中引入 `bsConfig.excluded_supplier_ids`（列表存储被排除的厂家 ID）；
+     - 勾选与反选操作仅在内存中驱动 Vue 响应式集合 `selectedSupplierIds`，实时重绘拓扑柱状高度与动态飞线；
+     - 若未点击“💾 保存设定”按钮，页面在刷新（F5）或静默数据轮询时，调用 `applyExcludedSuppliersFromConfig` 自动拉取服务端已保存的被剔除列表，实现未保存内容自动恢复；
+     - 点击主控制台底部的“💾 保存设定”按钮时，将当前剔除的厂家列表计算输出至 `bsConfig.excluded_supplier_ids` 并调用后端 API `updateTubeBigScreenConfig` 持久化入库。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 15.96s），产出生产包 `BigScreenDashboardView-BvgECSGW.js`，零报错。
+
+## 2026-10-06 数字指挥大屏拓扑供应商筛选控制、履约卡片文案规范与标段进度 100% 顶格保护 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（供需流向拓扑图区、保供效能与履约保障卡片、标段进度卡片 `col1Sections` / `col2Sections`）；
+- **前端结构与交互变更**：
+  1. **供需流向拓扑供应商显示控制全面重构为标准二级悬浮子菜单 (Cascading Submenu)**：
+     - **主菜单入口（`.popover-submenu-item`）**：在顶部右上角“调度控制中心”面板中，将原平铺的供应商复选列表替换为精致规范的二级菜单项（`🏭 拓扑显示供应商`，含当前勾选统计徽章 `全部 (9家)` 与侧滑指示箭头 `‹ / ◀`）；
+     - **二级悬浮面板（`.supplier-cascading-submenu`）**：鼠标悬停或点击入口项，二级子菜单自适应在主控制台左侧（`right: 544px`）独立展开，独立层级不触发主控制台高度伸缩；
+     - **子菜单功能体系**：内置品类快捷操作（“全选/反选/清空”）、单列供应商完整卡片、直管/管件品类标签与一键收起（`✕`）按钮；
+     - **拓扑联动微型指示器（`.topo-filtered-pill`）**：在厂家过滤时在拓扑标题旁呈现 `已筛选 X/9 家 ⚙️` 胶囊，点击直通打开控制中心并展开该二级子菜单；
+     - **多端与主题适配**：移动端自适应覆盖模态窗，深色暗夜与明亮浅色双主题无缝适配。
+  2. **“保供效能与履约保障”描述文案规范**：
+     - 履约保障指标网格第二项描述从“核心制造管厂”统一更新为“**核心供应商**”；
+  3. **各标段发货与安装施工进度 100% 顶格保护**：
+     - 新增 `formatProgressPercent(val)` 辅助函数，严格拦截超出 100 的数值并顶格返回 100（下限 0，保留 1 位小数）；
+     - 标段卡片中的“保温管发货”、“保温管施工安装”、“管件发货”及“已完工”判定均接入该函数，彻底解决由于实际发货量略超设计采购量导致百分比显示超过 100% 的视觉瑕疵；
+     - 在 `loadRealData` 静默轮询与初始化赋值中全面加入 `Math.min(..., 100)` 保护。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 18.02s），产出生产包 `BigScreenDashboardView-CqNKG6T4.js` 与 `BigScreenDashboardView-BxFWd_o0.css`，零语法报错。
+
 ## 2026-10-05 综合数据查询中心管件透视多维聚合品名规格复合键重构与库存纯粹呈现 (HistoryQueryView)
 
 - **关联前端页面与组件**：

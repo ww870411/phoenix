@@ -82,6 +82,26 @@
                 </div>
               </div>
 
+              <!-- 🏭 拓扑显示供应商 · 二级子菜单入口项 (不再平铺，点击开启左侧二级子菜单) -->
+              <div 
+                class="popover-submenu-item" 
+                :class="{ active: isSupplierSubmenuOpen, 'is-filtered': !isAllSuppliersSelected }"
+                @click.stop="toggleSupplierSubmenu"
+                title="点击打开/收起“拓扑显示供应商”二级子菜单"
+              >
+                <div class="submenu-item-left">
+                  <span class="submenu-item-icon">🏭</span>
+                  <span class="submenu-item-title">拓扑显示供应商</span>
+                  <span class="supplier-count-badge" :class="{ 'is-filtered': !isAllSuppliersSelected }">
+                    {{ selectedSupplierSummaryText }}
+                  </span>
+                </div>
+                <div class="submenu-item-right">
+                  <span class="submenu-nav-tip">{{ isSupplierSubmenuOpen ? '子菜单已打开' : '二级子菜单' }}</span>
+                  <span class="submenu-arrow">{{ isSupplierSubmenuOpen ? '◀' : '‹' }}</span>
+                </div>
+              </div>
+
               <!-- ⚙️ 核心：大屏运行参数与节律配置 (实时生效并持久化保存在 tube_config.json) -->
               <div class="popover-group settings-group">
                 <div class="group-title-with-action">
@@ -341,6 +361,65 @@
                   <span class="btn-icon">↩</span>
                   <span>返回标准看板</span>
                 </button>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 🏭 拓扑显示供应商 · 二级悬浮子菜单 (Cascading Submenu 紧邻主菜单左侧呈现) -->
+          <transition name="cascade-submenu-anim">
+            <div 
+              v-if="isControlMenuOpen && isSupplierSubmenuOpen" 
+              class="supplier-cascading-submenu" 
+              @click.stop
+            >
+              <div class="submenu-header">
+                <div class="submenu-title-box">
+                  <span class="submenu-title-icon">🏭</span>
+                  <span class="submenu-title">拓扑显示供应商</span>
+                  <span class="supplier-count-badge" :class="{ 'is-filtered': !isAllSuppliersSelected }">
+                    {{ selectedSupplierIds.size }}/{{ supplyNodes.length }}
+                  </span>
+                </div>
+                <button class="submenu-close-btn" type="button" @click.stop="isSupplierSubmenuOpen = false" title="收起子菜单">✕</button>
+              </div>
+
+              <!-- 快捷全选/反选/清空操作栏 -->
+              <div class="submenu-toolbar">
+                <div class="popover-actions-group">
+                  <button class="popover-action-link" type="button" @click="selectAllSuppliers">全选</button>
+                  <span class="action-divider">·</span>
+                  <button class="popover-action-link" type="button" @click="invertSuppliersSelection">反选</button>
+                  <span class="action-divider">·</span>
+                  <button class="popover-action-link" type="button" @click="clearSuppliersSelection">清空</button>
+                </div>
+                <span class="submenu-hint-small">点击切换拓扑显隐</span>
+              </div>
+
+              <!-- 供应商复选列表 -->
+              <div class="ctrl-suppliers-grid">
+                <div 
+                  v-for="sup in supplyNodes" 
+                  :key="sup.id"
+                  class="ctrl-supplier-item"
+                  :class="{ active: selectedSupplierIds.has(sup.id) }"
+                  @click="toggleSupplierVisibility(sup.id)"
+                  :title="sup.name"
+                >
+                  <div class="ctrl-sup-left">
+                    <span class="custom-checkbox" :class="{ checked: selectedSupplierIds.has(sup.id) }">
+                      <span v-if="selectedSupplierIds.has(sup.id)" class="check-tick">✓</span>
+                    </span>
+                    <span class="ctrl-sup-name">{{ sup.name }}</span>
+                  </div>
+                  <div class="ctrl-sup-right">
+                    <span v-if="sup.has_inventory && sup.stock_qty > 0" class="meta-tag pipe-tag">直管</span>
+                    <span v-if="sup.has_fitting_inventory && sup.fitting_stock_qty > 0" class="meta-tag fitting-tag">管件</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="supplier-control-hint">
+                <span>💡 实时重绘拓扑立柱与飞线；需点击“保存设定”永久生效</span>
               </div>
             </div>
           </transition>
@@ -622,7 +701,7 @@
                   <circle cx="12" cy="12" r="1.5" fill="#fbbf24"/>
                 </svg>
               </span>
-              <span>管件全网发运情报</span>
+              <span>管件/阀门全网发运情报</span>
             </div>
             <span class="panel-tag gold">10个大类</span>
           </div>
@@ -687,7 +766,7 @@
           <!-- 管件供应进度条 -->
           <div class="energy-progress-box">
             <div class="energy-progress-info">
-              <span>全网管件供应进度</span>
+              <span>全网管件/阀门供应进度</span>
               <strong class="gold-text">{{ fittingCoveragePercent }}%</strong>
             </div>
             <div class="energy-bar-track">
@@ -716,15 +795,15 @@
             <span class="panel-tag green">100% 履约受控</span>
           </div>
           <div class="safety-grid">
-            <div class="safety-card">
+            <div class="safety-card" :title="!isAllSuppliersSelected ? `已筛选显示 ${visibleSupplyNodes.length} 家 / 全网共 ${supplyNodes.length} 家核心供应商` : `全网共 ${supplyNodes.length} 家核心供应商`">
               <div class="safety-icon">
                 <svg class="safety-svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M2 20h20M4 20V9l5 3.5V9l5 3.5V4h6v16" stroke="#10b981" stroke-width="2" fill="rgba(16, 185, 129, 0.15)"/>
                 </svg>
               </div>
               <div class="safety-info">
-                <div class="safety-val">{{ supplyNodes.length }} 家</div>
-                <div class="safety-desc">核心制造管厂</div>
+                <div class="safety-val">{{ visibleSupplyNodes.length }} 家</div>
+                <div class="safety-desc">核心供应商</div>
               </div>
             </div>
             <div class="safety-card">
@@ -787,6 +866,7 @@
                 </svg>
               </span>
               <span>供需流向拓扑</span>
+
             </div>
 
             <!-- 图例说明 -->
@@ -874,7 +954,7 @@
               <div class="supply-hub-col">
                 <div class="supply-cards-stack">
                   <div 
-                    v-for="sup in supplyNodes" 
+                    v-for="sup in visibleSupplyNodes" 
                     :key="sup.id" 
                     class="supply-node-card"
                     :class="{ 
@@ -909,58 +989,20 @@
                       </div>
                     </div>
 
-                    <!-- 悬停弹层：展示该厂型号现货明细（直管 + 管件） -->
-                    <div 
-                      v-if="hoveredSupplierId === sup.id && ((sup.has_inventory && sup.inventory_models && sup.inventory_models.length > 0) || (sup.has_fitting_inventory && sup.fitting_inventory_items && sup.fitting_inventory_items.length > 0))" 
-                      class="sup-inventory-popover"
-                    >
-                      <div class="popover-header">
-                        <span class="popover-title">🏭 {{ sup.name }} · 现货储备</span>
-                        <span class="popover-time" v-if="sup.inventory_time || sup.fitting_inventory_time">
-                          {{ (sup.inventory_time || sup.fitting_inventory_time).split(' ')[0] }}
-                        </span>
-                      </div>
 
-                      <!-- 保温管现货明细 -->
-                      <div v-if="sup.inventory_models && sup.inventory_models.length > 0" class="popover-section-wrap">
-                        <div class="popover-sub-header">
-                          <span class="popover-sub-title green-text">保温管现货 ({{ formatNumber(sup.stock_km) }}km)</span>
-                        </div>
-                        <div class="popover-models-list">
-                          <div v-for="m in sup.inventory_models" :key="m.pipe_model_id" class="popover-model-item">
-                            <span class="popover-model-name">{{ m.pipe_model_id }}</span>
-                            <span class="popover-model-qty">{{ m.stock_qty }}m</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- 管件现货明细 -->
-                      <div v-if="sup.fitting_inventory_items && sup.fitting_inventory_items.length > 0" class="popover-section-wrap">
-                        <div class="popover-sub-header">
-                          <span class="popover-sub-title gold-text">管件现货 ({{ formatCount(sup.fitting_stock_qty) }}件)</span>
-                        </div>
-                        <div class="popover-models-list">
-                          <div v-for="(it, idx) in sup.fitting_inventory_items.slice(0, 8)" :key="idx" class="popover-model-item">
-                            <span class="popover-model-name" :title="it.material_name || it.fitting_type">{{ it.material_name || it.fitting_type }} {{ it.model_spec }}</span>
-                            <span class="popover-model-qty gold-text">{{ formatCount(it.stock_qty) }}{{ it.unit || '件' }}</span>
-                          </div>
-                          <div v-if="sup.fitting_inventory_items.length > 8" class="popover-model-item more-item">
-                            <span class="popover-model-name text-muted">等共 {{ sup.fitting_inventory_items.length }} 种规格...</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="popover-footer">
-                        <span v-if="sup.stock_qty > 0">保温管: <strong class="popover-stock-strong green-text">{{ formatNumber(sup.stock_km) }}km</strong></span>
-                        <span v-if="sup.stock_qty > 0 && sup.fitting_stock_qty > 0" style="margin: 0 4px; opacity: 0.5;">|</span>
-                        <span v-if="sup.fitting_stock_qty > 0">管件: <strong class="popover-stock-strong gold-text">{{ formatCount(sup.fitting_stock_qty) }}件</strong></span>
-                      </div>
-                    </div>
 
                     <!-- 物理对齐连接端口 (右锚点) -->
                     <div class="node-port port-out" :id="'port-out-' + sup.id" title="发运输出端口">
                       <span class="port-dot"></span>
                     </div>
+                  </div>
+
+                  <!-- 未勾选供应商时的友好提示与恢复引导 -->
+                  <div v-if="visibleSupplyNodes.length === 0" class="empty-supplier-notice">
+                    <div class="notice-icon">🏭</div>
+                    <div class="notice-title">未勾选任何供应商</div>
+                    <div class="notice-desc">请在上方筛选菜单中选择需要显示的供应商</div>
+                    <button class="notice-btn" type="button" @click="selectAllSuppliers">一键显示全部供应商</button>
                   </div>
                 </div>
               </div>
@@ -994,7 +1036,7 @@
                             dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || 
                                     (hoveredSectionId && hoveredSectionId !== sec.id) ||
                                     (isAnimationRunning && activeSectionId && activeSectionId !== sec.id && !hoveredSectionId && !hoveredSupplierId),
-                            completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
+                            completed: formatProgressPercent(sec.pipePercent) >= 100 && formatProgressPercent(sec.fittingPercent) >= 100
                           }
                         ]"
                         :id="'node-sec_' + sec.id"
@@ -1034,7 +1076,7 @@
                               <span class="line-val cyan-text">
                                 {{ sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm }}<span v-if="sec.transitKm > 0" class="transit-num-tag cyan-transit" title="在途运送量">(+{{ sec.transitKm }})</span> / {{ sec.designKm }} km
                               </span>
-                              <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
+                              <span class="line-pct cyan-text">{{ formatProgressPercent(sec.pipePercent) }}%</span>
                             </div>
                             <div class="micro-bar-bg" :title="`到货: ${sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm}km | 在途: ${sec.transitKm || 0}km | 设计: ${sec.designKm}km`">
                               <!-- 实体到货 (实色) -->
@@ -1069,7 +1111,7 @@
                                 <span>施工量</span>
                               </span>
                               <span class="line-val green-text">{{ sec.installedKm || '0.00' }} / {{ sec.designKm }} km</span>
-                              <span class="line-pct green-text">{{ sec.installedPercent || 0 }}%</span>
+                              <span class="line-pct green-text">{{ formatProgressPercent(sec.installedPercent) }}%</span>
                             </div>
                             <div class="micro-bar-bg" :title="`已安装施工: ${sec.installedKm || '0.00'} km`">
                               <div class="micro-bar-fill green" :style="{ width: Math.min(sec.installedPercent || 0, 100) + '%' }"></div>
@@ -1084,12 +1126,12 @@
                                   <path d="M12 2l7 4.5v9L12 20l-7-4.5v-9L12 2z"/>
                                   <circle cx="12" cy="11" r="3"/>
                                 </svg>
-                                <span>管件</span>
+                                <span>管件/阀门</span>
                               </span>
                               <span class="line-val gold-text">
                                 {{ sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings }}<span v-if="sec.transitFittings > 0" class="transit-num-tag gold-transit" title="在途运送量">(+{{ sec.transitFittings }})</span> / {{ sec.totalFittings }} 件
                               </span>
-                              <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
+                              <span class="line-pct gold-text">{{ formatProgressPercent(sec.fittingPercent) }}%</span>
                             </div>
                             <div class="micro-bar-bg" :title="`到货: ${sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings}件 | 在途: ${sec.transitFittings || 0}件 | 计划: ${sec.totalFittings}件`">
                               <!-- 实体到货 (实色) -->
@@ -1120,7 +1162,7 @@
                             <span class="stock-divider">/</span>
                             <div class="stock-item fitting-stock" :title="`管件现场可用库存: ${sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0))} 件 (到货 - 安装)`">
                               <span class="stock-dot gold"></span>
-                              <span class="stock-label">管件库存量:</span>
+                              <span class="stock-label">管件/阀门库存量:</span>
                               <strong class="stock-val gold-text">{{ sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0)) }}<span class="stock-unit">件</span></strong>
                             </div>
                           </div>
@@ -1147,7 +1189,7 @@
                             dimmed: (hoveredSupplierId && !isSuppliedBy(sec.id, hoveredSupplierId)) || 
                                     (hoveredSectionId && hoveredSectionId !== sec.id) ||
                                     (isAnimationRunning && activeSectionId && activeSectionId !== sec.id && !hoveredSectionId && !hoveredSupplierId),
-                            completed: sec.pipePercent >= 100 && sec.fittingPercent >= 100
+                            completed: formatProgressPercent(sec.pipePercent) >= 100 && formatProgressPercent(sec.fittingPercent) >= 100
                           }
                         ]"
                         :id="'node-sec_' + sec.id"
@@ -1187,7 +1229,7 @@
                               <span class="line-val cyan-text">
                                 {{ sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm }}<span v-if="sec.transitKm > 0" class="transit-num-tag cyan-transit" title="在途运送量">(+{{ sec.transitKm }})</span> / {{ sec.designKm }} km
                               </span>
-                              <span class="line-pct cyan-text">{{ sec.pipePercent }}%</span>
+                              <span class="line-pct cyan-text">{{ formatProgressPercent(sec.pipePercent) }}%</span>
                             </div>
                             <div class="micro-bar-bg" :title="`到货: ${sec.arrivedKm !== undefined ? sec.arrivedKm : sec.shippedKm}km | 在途: ${sec.transitKm || 0}km | 设计: ${sec.designKm}km`">
                               <!-- 实体到货 (实色) -->
@@ -1222,7 +1264,7 @@
                                 <span>施工量</span>
                               </span>
                               <span class="line-val green-text">{{ sec.installedKm || '0.00' }} / {{ sec.designKm }} km</span>
-                              <span class="line-pct green-text">{{ sec.installedPercent || 0 }}%</span>
+                              <span class="line-pct green-text">{{ formatProgressPercent(sec.installedPercent) }}%</span>
                             </div>
                             <div class="micro-bar-bg" :title="`已安装施工: ${sec.installedKm || '0.00'} km`">
                               <div class="micro-bar-fill green" :style="{ width: Math.min(sec.installedPercent || 0, 100) + '%' }"></div>
@@ -1237,12 +1279,12 @@
                                   <path d="M12 2l7 4.5v9L12 20l-7-4.5v-9L12 2z"/>
                                   <circle cx="12" cy="11" r="3"/>
                                 </svg>
-                                <span>管件</span>
+                                <span>管件/阀门</span>
                               </span>
                               <span class="line-val gold-text">
                                 {{ sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings }}<span v-if="sec.transitFittings > 0" class="transit-num-tag gold-transit" title="在途运送量">(+{{ sec.transitFittings }})</span> / {{ sec.totalFittings }} 件
                               </span>
-                              <span class="line-pct gold-text">{{ sec.fittingPercent }}%</span>
+                              <span class="line-pct gold-text">{{ formatProgressPercent(sec.fittingPercent) }}%</span>
                             </div>
                             <div class="micro-bar-bg" :title="`到货: ${sec.arrivedFittings !== undefined ? sec.arrivedFittings : sec.shippedFittings}件 | 在途: ${sec.transitFittings || 0}件 | 计划: ${sec.totalFittings}件`">
                               <!-- 实体到货 (实色) -->
@@ -1273,7 +1315,7 @@
                             <span class="stock-divider">/</span>
                             <div class="stock-item fitting-stock" :title="`管件现场可用库存: ${sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0))} 件 (到货 - 安装)`">
                               <span class="stock-dot gold"></span>
-                              <span class="stock-label">管件库存量:</span>
+                              <span class="stock-label">管件/阀门库存量:</span>
                               <strong class="stock-val gold-text">{{ sec.stockFittings !== undefined ? sec.stockFittings : Math.max(0, (sec.arrivedFittings || 0) - (sec.installedFittings || 0)) }}<span class="stock-unit">件</span></strong>
                             </div>
                           </div>
@@ -1454,7 +1496,7 @@
           @mouseleave="isWeeklyHovered = false"
         >
           <div class="panel-header">
-            <div class="panel-title" :title="activeWeeklyTab === 'pipe' ? `当前展示：本周保温管施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）` : `当前展示：本周管件施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）`">
+            <div class="panel-title" :title="activeWeeklyTab === 'pipe' ? `当前展示：本周保温管施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）` : `当前展示：本周管件/阀门施工战报（每 ${bsConfig.weekly_rotation_interval_sec || 10} 秒自动轮播）`">
               <transition name="weekly-title-anim" mode="out-in">
                 <div :key="activeWeeklyTab" class="panel-title-anim-box">
                   <span class="title-icon">
@@ -1473,7 +1515,7 @@
                       <circle cx="12" cy="12" r="1.8" fill="#fbbf24"/>
                     </svg>
                   </span>
-                  <span class="title-text">{{ activeWeeklyTab === 'pipe' ? '本周保温管施工战报' : '本周管件施工战报' }}</span>
+                  <span class="title-text">{{ activeWeeklyTab === 'pipe' ? '本周保温管施工战报' : '本周管件/阀门施工战报' }}</span>
                 </div>
               </transition>
             </div>
@@ -1604,7 +1646,8 @@ const bsConfig = reactive({
   weather_cache_duration_min: 15,
   transit_duration_min_hours: 1.0,
   transit_duration_max_hours: 36.0,
-  weekly_rotation_interval_sec: 10
+  weekly_rotation_interval_sec: 10,
+  excluded_supplier_ids: []
 })
 const isSavingConfig = ref(false)
 const configSaveStatus = ref(null)
@@ -1648,6 +1691,12 @@ async function handleSaveConfigToBackend() {
   }
   isSavingConfig.value = true
   try {
+    // 计算当前被剔除的供应商 ID 列表（全量 supplyNodes 中未选中的项，保存被剔除的对象）
+    const excludedList = supplyNodes.value
+      .map(s => s.id)
+      .filter(id => !selectedSupplierIds.value.has(id))
+    bsConfig.excluded_supplier_ids = excludedList
+
     applyConfigLocally()
     const res = await updateTubeBigScreenConfig(projectKey.value, bsConfig)
     if (res && res.ok) {
@@ -1682,6 +1731,8 @@ async function handleResetConfigToDefault() {
   bsConfig.transit_duration_min_hours = 1.0
   bsConfig.transit_duration_max_hours = 36.0
   bsConfig.weekly_rotation_interval_sec = 10
+  bsConfig.excluded_supplier_ids = []
+  selectAllSuppliers()
   await handleSaveConfigToBackend()
   showSaveStatus('🔄 已恢复出厂默认设定', 'success')
 }
@@ -1731,13 +1782,32 @@ function setMobileTab(tabKey) {
   }
 }
 
+const isSupplierSubmenuOpen = ref(false)
+
+function openSupplierSubmenu() {
+  isSupplierSubmenuOpen.value = true
+}
+
+function toggleSupplierSubmenu() {
+  isSupplierSubmenuOpen.value = !isSupplierSubmenuOpen.value
+}
+
+function openControlMenuWithSupplierSubmenu() {
+  isControlMenuOpen.value = true
+  isSupplierSubmenuOpen.value = true
+}
+
 function toggleControlMenu() {
   isControlMenuOpen.value = !isControlMenuOpen.value
+  if (!isControlMenuOpen.value) {
+    isSupplierSubmenuOpen.value = false
+  }
 }
 
 function handleGlobalClick(e) {
   if (isControlMenuOpen.value && controlMenuRef.value && !controlMenuRef.value.contains(e.target)) {
     isControlMenuOpen.value = false
+    isSupplierSubmenuOpen.value = false
   }
   if (isFeedFilterMenuOpen.value && feedFilterMenuRef.value && !feedFilterMenuRef.value.contains(e.target)) {
     isFeedFilterMenuOpen.value = false
@@ -2112,6 +2182,107 @@ const fittingCategoryCount = computed(() => {
 
 // 拓扑节点定义 (全网保供制造基地，首帧优先从本地持久化缓存恢复，杜绝跳变)
 const supplyNodes = ref(getInitialSupplyNodes())
+
+// --- 供应商手动勾选与显示控制 (供需流向拓扑 - 调度控制中心配置) ---
+// 初始勾选状态基于全量供应商；仅在点击“保存设定”后持久化至后端配置文件 tube_config.json
+const selectedSupplierIds = ref(new Set(supplyNodes.value.map(s => s.id)))
+
+// 根据后端持久化配置中的 excluded_supplier_ids (被剔除对象列表) 计算当前勾选的供应商集合
+function applyExcludedSuppliersFromConfig(excludedIds) {
+  const excludedSet = new Set(Array.isArray(excludedIds) ? excludedIds : [])
+  const newSet = new Set()
+  supplyNodes.value.forEach(s => {
+    if (!excludedSet.has(s.id)) {
+      newSet.add(s.id)
+    }
+  })
+  selectedSupplierIds.value = newSet
+}
+
+const isAllSuppliersSelected = computed(() => {
+  return supplyNodes.value.length > 0 && supplyNodes.value.every(s => selectedSupplierIds.value.has(s.id))
+})
+
+const selectedSupplierSummaryText = computed(() => {
+  if (supplyNodes.value.length === 0) return '加载中...'
+  const total = supplyNodes.value.length
+  const count = selectedSupplierIds.value.size
+  if (count === total) return `全部 (${total}家)`
+  if (count === 0) return '未勾选 (0家)'
+  if (count === 1) {
+    const single = supplyNodes.value.find(s => selectedSupplierIds.value.has(s.id))
+    if (single) {
+      return getSupplierShortName(single.name)
+    }
+  }
+  return `已选 ${count} / ${total} 家`
+})
+
+function getSupplierShortName(name) {
+  if (!name) return '供应商'
+  if (name.includes('开元')) return '大连开元'
+  if (name.includes('鑫瑞得')) return '河北鑫瑞得'
+  if (name.includes('能源') || name.includes('吴近')) return '集团管厂'
+  if (name.includes('沃圣')) return '江苏沃圣'
+  if (name.includes('卡尔斯')) return '天津卡尔斯'
+  if (name.includes('泽悦')) return '河北泽悦'
+  if (name.includes('天地龙')) return '天津天地龙'
+  if (name.includes('三维')) return '大连三维'
+  if (name.includes('泰德尔')) return '泰德尔'
+  return name.length > 6 ? name.slice(0, 5) : name
+}
+
+const visibleSupplyNodes = computed(() => {
+  return supplyNodes.value.filter(s => selectedSupplierIds.value.has(s.id))
+})
+
+function toggleSupplierVisibility(supId) {
+  const nextSet = new Set(selectedSupplierIds.value)
+  if (nextSet.has(supId)) {
+    nextSet.delete(supId)
+  } else {
+    nextSet.add(supId)
+  }
+  selectedSupplierIds.value = nextSet
+  nextTick(() => {
+    recalculateFlylines()
+  })
+}
+
+function selectAllSuppliers() {
+  selectedSupplierIds.value = new Set(supplyNodes.value.map(s => s.id))
+  nextTick(() => {
+    recalculateFlylines()
+  })
+}
+
+function invertSuppliersSelection() {
+  const nextSet = new Set()
+  supplyNodes.value.forEach(s => {
+    if (!selectedSupplierIds.value.has(s.id)) {
+      nextSet.add(s.id)
+    }
+  })
+  selectedSupplierIds.value = nextSet
+  nextTick(() => {
+    recalculateFlylines()
+  })
+}
+
+function clearSuppliersSelection() {
+  selectedSupplierIds.value = new Set()
+  nextTick(() => {
+    recalculateFlylines()
+  })
+}
+
+// 进度百分比格式化辅助函数：超过分母顶格显示 100%，不超 100%
+function formatProgressPercent(val) {
+  const num = Number(val) || 0
+  if (num <= 0) return 0
+  if (num >= 100) return 100
+  return Math.min(Math.round(num * 10) / 10, 100)
+}
 
 // 真实 10 大标段健康矩阵数据
 const sectionProgressList = ref([...defaultSectionList])
@@ -2953,9 +3124,18 @@ async function pollLiveRealData() {
       Object.assign(liveWeatherData, res.live_weather)
     }
 
-    // 3. 实时同步 10 大标段真实进度
+    // 3. 实时同步 10 大标段真实进度 (严格顶格 100%)
     if (Array.isArray(res.section_progress_list) && res.section_progress_list.length > 0) {
-      sectionProgressList.value = res.section_progress_list
+      sectionProgressList.value = res.section_progress_list.map(sec => ({
+        ...sec,
+        pipePercent: Math.min(Number(sec.pipePercent) || 0, 100),
+        installedPercent: Math.min(Number(sec.installedPercent) || 0, 100),
+        fittingPercent: Math.min(Number(sec.fittingPercent) || 0, 100),
+        arrivedPercent: Math.min(Number(sec.arrivedPercent) || 0, 100),
+        transitPercent: Math.min(Number(sec.transitPercent) || 0, 100),
+        arrivedFittingPercent: Math.min(Number(sec.arrivedFittingPercent) || 0, 100),
+        transitFittingPercent: Math.min(Number(sec.transitFittingPercent) || 0, 100)
+      }))
     }
 
     // 3.5 实时同步全网制造基地拓扑节点与实盘待发库存（过滤临时自定义供应商）
@@ -2965,6 +3145,9 @@ async function pollLiveRealData() {
       try {
         localStorage.setItem(STORAGE_KEY_SUPPLY_NODES, JSON.stringify(filtered))
       } catch (e) {}
+      if (selectedSupplierIds.value.size === 0) {
+        applyExcludedSuppliersFromConfig(bsConfig.excluded_supplier_ids)
+      }
     }
 
     // 4. 实时同步管件类型汇总
@@ -3000,7 +3183,7 @@ function recalculateFlylines() {
 
     // 1. 批量读取港口坐标，单次回流 (含移动端滚动偏移容错)
     const supRects = new Map()
-    supplyNodes.value.forEach(sup => {
+    visibleSupplyNodes.value.forEach(sup => {
       const el = document.getElementById('port-out-' + sup.id)
       if (el) {
         const r = el.getBoundingClientRect()
@@ -3025,7 +3208,7 @@ function recalculateFlylines() {
 
     // 2. 批量构建规整专属定向飞线 (精准直连负责标段，不再盲目全连)
     const newFlylines = []
-    supplyNodes.value.forEach((sup, sIdx) => {
+    visibleSupplyNodes.value.forEach((sup, sIdx) => {
       const p1 = supRects.get(sup.id)
       if (!p1) return
       const assignedIds = sup.assigned_section_ids || []
@@ -3112,7 +3295,7 @@ function triggerSimulateDelivery(mode = 'pipe') {
   }
 
   const timeNow = new Date().toTimeString().split(' ')[0].slice(0, 5)
-  const validSuppliers = supplyNodes.value.length > 0 ? supplyNodes.value : defaultSupplyNodes
+  const validSuppliers = visibleSupplyNodes.value.length > 0 ? visibleSupplyNodes.value : (supplyNodes.value.length > 0 ? supplyNodes.value : defaultSupplyNodes)
 
   // 1. 严格从当前供给方中选取管厂与可供标段
   const chosenSup = validSuppliers[Math.floor(Math.random() * validSuppliers.length)]
@@ -3516,9 +3699,18 @@ async function loadRealData(isForce = false) {
         fittingTypeSummary.value = res.fitting_type_summary
       }
 
-      // 3. 真实 10 大标段健康矩阵
+      // 3. 真实 10 大标段健康矩阵 (严格顶格 100%)
       if (Array.isArray(res.section_progress_list) && res.section_progress_list.length > 0) {
-        sectionProgressList.value = res.section_progress_list
+        sectionProgressList.value = res.section_progress_list.map(sec => ({
+          ...sec,
+          pipePercent: Math.min(Number(sec.pipePercent) || 0, 100),
+          installedPercent: Math.min(Number(sec.installedPercent) || 0, 100),
+          fittingPercent: Math.min(Number(sec.fittingPercent) || 0, 100),
+          arrivedPercent: Math.min(Number(sec.arrivedPercent) || 0, 100),
+          transitPercent: Math.min(Number(sec.transitPercent) || 0, 100),
+          arrivedFittingPercent: Math.min(Number(sec.arrivedFittingPercent) || 0, 100),
+          transitFittingPercent: Math.min(Number(sec.transitFittingPercent) || 0, 100)
+        }))
       }
 
       // 4. 真实全网动态战报流水 (100% 呈现数据库最新真实单据)
@@ -3536,9 +3728,12 @@ async function loadRealData(isForce = false) {
         } catch (e) {}
       }
 
-      // 5.5. 大屏持久化运行参数绑定
+      // 5.5. 大屏持久化运行参数绑定与供应商剔除恢复（若未保存，刷新即恢复为后端配置）
       if (res.big_screen_config) {
         Object.assign(bsConfig, res.big_screen_config)
+        applyExcludedSuppliersFromConfig(res.big_screen_config.excluded_supplier_ids)
+      } else {
+        applyExcludedSuppliersFromConfig(bsConfig.excluded_supplier_ids)
       }
 
       // 6. 真实 7 日双战报大盘（保温管 + 管件）
@@ -5255,6 +5450,389 @@ onBeforeUnmount(() => {
   background: rgba(56, 189, 248, 0.2);
   border-color: #38bdf8;
   color: #7dd3fc;
+}
+
+/* ==================== 调度控制中心 - 拓扑供应商二级子菜单 ==================== */
+.popover-submenu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(0, 242, 254, 0.22);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.popover-submenu-item:hover {
+  background: rgba(0, 242, 254, 0.1);
+  border-color: #00f2fe;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+}
+
+.popover-submenu-item.active {
+  background: rgba(0, 242, 254, 0.18);
+  border-color: #00f2fe;
+  box-shadow: 0 0 14px rgba(0, 242, 254, 0.25);
+}
+
+.popover-submenu-item .submenu-item-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.popover-submenu-item .submenu-item-icon {
+  font-size: 13.5px;
+  line-height: 1;
+}
+
+.popover-submenu-item .submenu-item-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: 0.3px;
+}
+
+.popover-submenu-item .submenu-item-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.popover-submenu-item .submenu-nav-tip {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.popover-submenu-item.active .submenu-nav-tip {
+  color: #00f2fe;
+}
+
+.popover-submenu-item .submenu-arrow {
+  font-size: 11px;
+  color: #00f2fe;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+/* 二级悬浮子菜单 (Cascading Submenu 贴紧主控制台左侧) */
+.supplier-cascading-submenu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 544px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 90px);
+  background: rgba(9, 14, 26, 0.97);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(0, 242, 254, 0.35);
+  border-radius: 14px;
+  padding: 13px 14px;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.85), 0 0 24px rgba(0, 242, 254, 0.18);
+  z-index: 1150;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow: hidden;
+}
+
+.supplier-cascading-submenu .submenu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.supplier-cascading-submenu .submenu-title-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.supplier-cascading-submenu .submenu-title-icon {
+  font-size: 14px;
+}
+
+.supplier-cascading-submenu .submenu-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.supplier-cascading-submenu .submenu-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.supplier-cascading-submenu .submenu-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.supplier-cascading-submenu .submenu-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.supplier-cascading-submenu .submenu-hint-small {
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* 级联子菜单进入与离开动画 */
+.cascade-submenu-anim-enter-active,
+.cascade-submenu-anim-leave-active {
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cascade-submenu-anim-enter-from,
+.cascade-submenu-anim-leave-to {
+  opacity: 0;
+  transform: translateX(12px) scale(0.97);
+}
+
+.supplier-count-badge {
+  font-size: 10px;
+  background: rgba(0, 242, 254, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.supplier-count-badge.is-filtered {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.mini-filtered-tag {
+  font-size: 10px;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+  padding: 1px 5px;
+  border-radius: 8px;
+  margin-left: 2px;
+  font-weight: 600;
+}
+
+.topo-filtered-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 2px 7px;
+  border-radius: 10px;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: all 0.2s ease;
+}
+
+.topo-filtered-pill:hover {
+  background: rgba(245, 158, 11, 0.28);
+  border-color: #fbbf24;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+.popover-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.popover-action-link {
+  font-size: 11px;
+  color: #38bdf8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.popover-action-link:hover {
+  color: #00f2fe;
+  background: rgba(0, 242, 254, 0.12);
+}
+
+.action-divider {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+}
+
+.ctrl-suppliers-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 242, 254, 0.3) transparent;
+}
+
+.ctrl-supplier-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.ctrl-supplier-item:hover {
+  background: rgba(0, 242, 254, 0.08);
+  border-color: rgba(0, 242, 254, 0.3);
+}
+
+.ctrl-supplier-item.active {
+  background: rgba(0, 242, 254, 0.12);
+  border-color: rgba(0, 242, 254, 0.45);
+}
+
+.ctrl-sup-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.ctrl-sup-name {
+  font-size: 11.5px;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctrl-supplier-item.active .ctrl-sup-name {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ctrl-sup-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.custom-checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid rgba(148, 163, 184, 0.5);
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.custom-checkbox.checked {
+  background: #00f2fe;
+  border-color: #00f2fe;
+}
+
+.check-tick {
+  color: #0a1220;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.meta-tag {
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.meta-tag.pipe-tag {
+  background: rgba(0, 242, 254, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 242, 254, 0.3);
+}
+
+.meta-tag.fitting-tag {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.supplier-control-hint {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* 拓扑空供应商状态卡片 */
+.empty-supplier-notice {
+  padding: 24px 12px;
+  border: 1px dashed rgba(0, 242, 254, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.4);
+  text-align: center;
+  margin: 10px 0;
+}
+
+.notice-icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+
+.notice-title {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.notice-desc {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.notice-btn {
+  background: rgba(0, 242, 254, 0.15);
+  border: 1px solid rgba(0, 242, 254, 0.4);
+  color: #00f2fe;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notice-btn:hover {
+  background: rgba(0, 242, 254, 0.3);
+  color: #ffffff;
 }
 
 .topology-legend {
@@ -7941,6 +8519,133 @@ onBeforeUnmount(() => {
   color: #64748b;
 }
 
+/* 浅色主题 - 调度控制中心 二级子菜单适配 */
+.bigscreen-container.light .popover-submenu-item {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.bigscreen-container.light .popover-submenu-item:hover {
+  background: #f0f9ff;
+  border-color: #0284c7;
+}
+
+.bigscreen-container.light .popover-submenu-item.active {
+  background: #e0f2fe;
+  border-color: #0284c7;
+}
+
+.bigscreen-container.light .popover-submenu-item .submenu-item-title {
+  color: #1e293b;
+}
+
+.bigscreen-container.light .supplier-cascading-submenu {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: #cbd5e1;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.15), 0 0 20px rgba(2, 132, 199, 0.12);
+}
+
+.bigscreen-container.light .supplier-cascading-submenu .submenu-header {
+  border-bottom-color: #e2e8f0;
+}
+
+.bigscreen-container.light .supplier-cascading-submenu .submenu-title {
+  color: #0f172a;
+}
+
+.bigscreen-container.light .supplier-cascading-submenu .submenu-close-btn {
+  color: #64748b;
+}
+
+.bigscreen-container.light .supplier-cascading-submenu .submenu-close-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.bigscreen-container.light .supplier-count-badge {
+  background: #e0f2fe;
+  color: #0284c7;
+  border-color: #bae6fd;
+}
+
+.bigscreen-container.light .supplier-count-badge.is-filtered {
+  background: #fef3c7;
+  color: #d97706;
+  border-color: #fde68a;
+}
+
+.bigscreen-container.light .mini-filtered-tag {
+  background: #fef3c7;
+  color: #d97706;
+  border-color: #fde68a;
+}
+
+.bigscreen-container.light .topo-filtered-pill {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.bigscreen-container.light .topo-filtered-pill:hover {
+  background: #fde68a;
+  border-color: #d97706;
+}
+
+.bigscreen-container.light .popover-action-link {
+  color: #0284c7;
+}
+
+.bigscreen-container.light .popover-action-link:hover {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.bigscreen-container.light .ctrl-supplier-item {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.bigscreen-container.light .ctrl-supplier-item:hover {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+}
+
+.bigscreen-container.light .ctrl-supplier-item.active {
+  background: #f0f9ff;
+  border-color: #0284c7;
+}
+
+.bigscreen-container.light .ctrl-sup-name {
+  color: #475569;
+}
+
+.bigscreen-container.light .ctrl-supplier-item.active .ctrl-sup-name {
+  color: #0f172a;
+}
+
+.bigscreen-container.light .custom-checkbox {
+  border-color: #94a3b8;
+  background: #ffffff;
+}
+
+.bigscreen-container.light .custom-checkbox.checked {
+  background: #0284c7;
+  border-color: #0284c7;
+}
+
+.bigscreen-container.light .check-tick {
+  color: #ffffff;
+}
+
+.bigscreen-container.light .empty-supplier-notice {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.bigscreen-container.light .empty-supplier-notice .notice-title {
+  color: #475569;
+}
+
 .bigscreen-container.light .topology-legend {
   color: #475569;
 }
@@ -9073,6 +9778,20 @@ onBeforeUnmount(() => {
     border-radius: 14px !important;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 242, 254, 0.25) !important;
     z-index: 2000 !important;
+  }
+
+  /* 移动端二级子菜单自适应覆盖弹窗 */
+  .supplier-cascading-submenu {
+    position: fixed !important;
+    top: 70px !important;
+    left: 16px !important;
+    right: 16px !important;
+    width: auto !important;
+    max-width: 480px !important;
+    max-height: calc(100dvh - 100px) !important;
+    margin: 0 auto !important;
+    z-index: 2100 !important;
+    border-radius: 14px !important;
   }
 
   /* 显现移动端导航选项卡 */

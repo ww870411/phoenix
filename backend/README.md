@@ -1,3 +1,104 @@
+## 2026-10-06 数字指挥大屏标段需求数据与前端展示契约协同说明 (workspace.py)
+
+- **业务口径协同**：
+  - 前端大屏标段卡片内部展示三轨进度指标（保温管、施工量、管件/阀门），其底层数据分别对应后端 `section_progress_list` 返回的 `designKm`、`shippedKm`、`arrivedKm`、`installedKm`、`totalFittings`、`shippedFittings` 等标准统计字段；
+  - 后端接口数据口径高度一致，纯净输出实体进度与状态，前端原生模板仅在左侧展示分类徽章，前后端契约规范稳定。
+
+## 2026-10-06 数字指挥大屏拓扑标题视觉精简前后端协同说明 (workspace.py)
+
+- **前后端协同与数据流向**：
+  - 前端大屏移除了“供需流向拓扑”标题右侧临时挂载的“已筛选 X/Y 家”标签按钮，页面视觉与交互层级更加清晰；
+  - 调度控制中心二级菜单的供应商勾选持久化配置接口 `POST /api/v1/projects/insulation_pipe_supply_2026/big-screen/config` 与后端读取服务保持完全一致，功能不受任何影响。
+
+## 2026-10-06 数字指挥大屏“管件/阀门”全链路口径统一及前端展示优化协同说明 (workspace.py)
+
+- **业务口径协同**：
+  - 前端大屏完成了全链路“管件/阀门”业务词条规范（含发运情报、供应进度、标段拓扑进度、现场存量微核算、周报轮播等模块），与后端数据库中管件及阀门合并统计的 `tube-fittings` 与 `fitting_supplier_inventory` 数据口径完全统一；
+  - 移除了供应商卡片上的悬停明细弹层，降低界面遮挡与不必要的长列表加载；后端大屏接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 契约保持 100% 稳定兼容。
+
+## 2026-10-06 数字指挥大屏供应商筛选配置与核心指标展示协同说明 (workspace.py)
+
+- **前后端协同与数据流向**：
+  - 前端大屏“保供效能与履约保障”面板中的“核心供应商”卡片数值现已与拓扑控制中心筛选状态（`visibleSupplyNodes.length`）动态联动；
+  - 该状态与后端配置持久化接口 `POST /api/v1/projects/insulation_pipe_supply_2026/big-screen/config`（字段 `excluded_supplier_ids`）以及初始数据接口 `GET /.../big-screen/data` 形成完整闭环：
+    - 前端筛选变更即时驱动大屏本地组件重算；
+    - 点击“保存设定”时，将排除的供应商列表持久化至后端 `tube_config.json`；
+    - 页面刷新时从后端加载最新排除列表并自动计算勾选集合，保证大屏展示与核心指标卡片的一致性。
+
+## 2026-10-06 现场管理工作台保温管盘点接口 stock_qty 默认置空契约说明（supplier_inventory_service.py）
+
+- **业务口径协同**：
+  - 后端 [`get_supplier_inventory_for_date`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py#L360-L380) 服务在返回 items 时，将当前待盘点的 `stock_qty` 默认值调整为 `None`（空值），契约上杜绝硬编码“0”；
+  - 保存接口 [`save_supplier_inventory`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py#L398-L460) 对收到的空值安全兜底为 `0.0` 入库，保持高可靠幂等性。
+
+## 2026-10-06 现场管理工作台保温管盘点列名与结构优化前后端协同说明（workspace.py）
+
+- **业务口径协同**：
+  - 前端保温管厂区成品库存盘点表格（Tab `inventory`）完成了与管件盘点的统一对齐：更名“最近提交在库量”、“当前自动在库量”、“（填报）最新在库量 *”，并删除了“变动差额”列；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/tube-supplier-inventory` 与 `POST /api/v1/projects/insulation_pipe_supply_2026/tube-supplier-inventory` 数据传输契约保持 100% 稳定，前后端无缝联动。
+
+## 2026-10-06 现场管理工作台管件盘点“（填报）最新在库量”前后端契约说明（fitting_supplier_inventory_service.py）
+
+- **业务口径协同**：
+  - 前端管件盘点填报表格核心列正式更名为“**（填报）最新在库量**”，底层对应提交字段 `stock_qty` 保持稳定；
+  - 后端接口 `POST /api/v1/projects/insulation_pipe_supply_2026/tube-fitting-supplier-inventory` 与查询接口 `GET /.../tube-fitting-supplier-inventory` 契约完全一致，服务层归档及发货自动扣减算法平稳运行。
+
+## 2026-10-06 现场管理工作台管件库存盘点列名精炼协同说明（fitting_supplier_inventory_service.py）
+
+- **业务口径协同**：
+  - 前端表格将“扣减后库存”进一步精简为“当前自动在库量”（`deducted_stock_qty`），将“上次在库量”精简为“最近提交在库量”（`previous_stock_qty`）；
+  - 后端接口底层字段名与数据返回结构保持 100% 不变，前后端契约稳定。
+
+## 2026-10-06 现场管理工作台管件库存盘点数据提交契约兼容性说明（fitting_supplier_inventory_service.py）
+
+- **数据提报兼容性保障**：
+  - 前端“请填报最新在库量”调整为默认全空（`null`）后，在提交保存时，未填写项安全兜底按 0 件提交至 `POST /api/v1/projects/insulation_pipe_supply_2026/tube-fitting-supplier-inventory`；
+  - 后端 [`save_fitting_supplier_inventory`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py#L380-L450) 服务层将正常归档新批次并计算实盘在库总量，历史快照与增量发货扣减链路 100% 保持稳定。
+
+## 2026-10-06 现场管理工作台管件库存盘点 Tab 前后端路由契约协同说明
+
+- **接口与服务协同**：
+  - 管件库存盘点查询接口：`GET /api/v1/projects/insulation_pipe_supply_2026/tube-fitting-supplier-inventory?supply_entity_id={entity_id}`
+  - 管件库存盘点保存接口：`POST /api/v1/projects/insulation_pipe_supply_2026/tube-fitting-supplier-inventory`
+  - 核心服务文件：[`fitting_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py)
+- **前后端协同与保障**：
+  - 本次修复了前端 `SupplyManagementView.vue` 在管件供应商身份下切换至 `tab=fitting_inventory` 时因白名单遗漏导致被错误重定向为保温管业务的 Bug；
+  - 后端管件盘点数据查询与快照写入接口保持 100% 稳定，前端在进入 `fitting_inventory` 时正常触发 `getTubeFittingSupplierInventory` 加载厂家价格目录与在库待发数据。
+
+## 2026-10-06 数字指挥大屏配置持久化支持被剔除供应商列表（workspace.py / tube_config.json）
+
+- **关联后端接口与文件**：
+  - 配置更新接口：`POST /api/v1/projects/insulation_pipe_supply_2026/big-screen/config`
+  - 大屏数据接口：`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`
+  - 核心文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 配置文件：[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)
+- **模型与数据层升级**：
+  1. **配置模型新增 `excluded_supplier_ids`**：
+     - 在请求体模型 `BigScreenConfigUpdatePayload` 中新增 `excluded_supplier_ids: Optional[List[str]] = Field(default_factory=list)` 字段，严格契约“保存被剔除的对象”；
+  2. **配置持久化与数据下发闭环**：
+     - 在 `save_big_screen_config` 中将收到的 `excluded_supplier_ids` 写入项目配置文件 `tube_config.json` 的 `big_screen_config` 字典中；
+     - 在 `get_big_screen_dashboard_data` 中将 `tube_config.json` 中的 `excluded_supplier_ids` 透出给前端，作为前端刷新后重置恢复的权威基准配置；
+  3. **静态编译与测试**：
+     - `python -m py_compile` 静态编译通过，零错误。
+
+## 2026-10-06 数字指挥大屏标段发运与施工进度 100% 顶格保护（workspace.py）
+
+- **关联后端接口与文件**：
+  - 接口：`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`
+  - 核心文件：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py#L1655-L1690) (`get_big_screen_dashboard_data`)
+- **计算逻辑与算法升级**：
+  1. **标段进度源头防溢出保护**：
+     - 在标段综合进度聚合（`section_progress_list`）计算逻辑中，各标段工程实际发货米数或管件件数在工程实际执行过程中可能由于供货微调而略超设计计划量（例如低温水标段2 设计 44.22km，实际发运 44.47km）；
+     - 将以下进度的百分比计算统一包裹 `min(..., 100.0)` 保护：
+       * 保温管直管发货进度：`p_percent`
+       * 保温管直管到货进度：`p_arrived_pct`
+       * 保温管下沟安装进度：`u_percent`
+       * 管件发货进度：`f_percent`
+       * 管件到货进度：`f_arrived_pct`
+       * 管件焊接安装进度：`f_installed_pct`
+  2. **契约与向后兼容性**：
+     - 数据结构字段保持 100% 稳定不变，在接口源头消除了大于 100.0% 的溢出值，与前端展示层双层联防，确保大屏数字看板视觉严肃严谨。
+
 ## 2026-10-05 综合数据查询中心管件数据接口与前端复合分组键全量核验说明（comprehensive_history_service.py）
 
 - **数据层契约核验**：

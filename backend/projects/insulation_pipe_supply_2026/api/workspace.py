@@ -1659,13 +1659,13 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             p_shipped_km = round(pipe_shipped_by_sec.get(sid, 0.0) / 1000, 2)
             p_arrived_km = round(pipe_arrived_by_sec.get(sid, 0.0) / 1000, 2)
             p_transit_km = round(max(p_shipped_km - p_arrived_km, 0.0), 2)
-            p_percent = round((p_shipped_km / p_design_km * 100), 1) if p_design_km > 0 else (100.0 if p_shipped_km > 0 else 0.0)
-            p_arrived_pct = round((p_arrived_km / p_design_km * 100), 1) if p_design_km > 0 else (100.0 if p_arrived_km > 0 else 0.0)
+            p_percent = min(round((p_shipped_km / p_design_km * 100), 1) if p_design_km > 0 else (100.0 if p_shipped_km > 0 else 0.0), 100.0)
+            p_arrived_pct = min(round((p_arrived_km / p_design_km * 100), 1) if p_design_km > 0 else (100.0 if p_arrived_km > 0 else 0.0), 100.0)
             p_transit_pct = round(max(p_percent - p_arrived_pct, 0.0), 1)
 
             u_m = float(sec_usage_map.get(sid, 0.0))
             u_km = round(u_m / 1000, 2)
-            u_percent = round((u_m / (pipe_design_by_sec.get(sid, 0.0) or 1)) * 100, 1) if pipe_design_by_sec.get(sid, 0.0) > 0 else 0.0
+            u_percent = min(round((u_m / (pipe_design_by_sec.get(sid, 0.0) or 1)) * 100, 1) if pipe_design_by_sec.get(sid, 0.0) > 0 else 0.0, 100.0)
             p_stock_km = round(max(p_arrived_km - u_km, 0.0), 2)
             p_stock_m = max(0.0, pipe_arrived_by_sec.get(sid, 0.0) - u_m)
 
@@ -1675,10 +1675,10 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             f_transit = max(f_shipped - f_arrived, 0)
             f_installed = sec_fit_usage_map.get(sid, 0)
             f_stock = max(0, f_arrived - f_installed)
-            f_percent = round((f_shipped / f_total * 100), 1) if f_total > 0 else (100.0 if f_shipped > 0 else 0.0)
-            f_arrived_pct = round((f_arrived / f_total * 100), 1) if f_total > 0 else (100.0 if f_arrived > 0 else 0.0)
+            f_percent = min(round((f_shipped / f_total * 100), 1) if f_total > 0 else (100.0 if f_shipped > 0 else 0.0), 100.0)
+            f_arrived_pct = min(round((f_arrived / f_total * 100), 1) if f_total > 0 else (100.0 if f_arrived > 0 else 0.0), 100.0)
             f_transit_pct = round(max(f_percent - f_arrived_pct, 0.0), 1)
-            f_installed_pct = round((f_installed / f_total * 100), 1) if f_total > 0 else 0.0
+            f_installed_pct = min(round((f_installed / f_total * 100), 1) if f_total > 0 else 0.0, 100.0)
 
             tag = "高温水系统" if "high" in sid else "低温水系统"
             status_text = d.get("construction_status") or "施工中"
@@ -2313,6 +2313,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             "transit_duration_min_hours": float(bs_config_raw.get("transit_duration_min_hours") if bs_config_raw.get("transit_duration_min_hours") is not None else 1.0),
             "transit_duration_max_hours": float(bs_config_raw.get("transit_duration_max_hours") if bs_config_raw.get("transit_duration_max_hours") is not None else 36.0),
             "weekly_rotation_interval_sec": int(bs_config_raw.get("weekly_rotation_interval_sec") or 10),
+            "excluded_supplier_ids": [str(x).strip() for x in (bs_config_raw.get("excluded_supplier_ids") or []) if str(x).strip()],
         }
 
         live_feed_list.sort(key=lambda x: x.get("raw_time") or "", reverse=True)
@@ -2725,6 +2726,7 @@ class BigScreenConfigUpdatePayload(BaseModel):
     transit_duration_min_hours: Optional[float] = 1.0
     transit_duration_max_hours: Optional[float] = 36.0
     weekly_rotation_interval_sec: Optional[int] = 10
+    excluded_supplier_ids: Optional[List[str]] = Field(default_factory=list)
 
 
 @router.post("/big-screen/config", summary="更新并持久化保存大屏运行参数与动效设定")
@@ -2751,6 +2753,7 @@ def save_big_screen_config(
         "transit_duration_min_hours": round(max(0.0, min(24.0, min_h)), 1),
         "transit_duration_max_hours": round(max(1.0, min(168.0, max_h)), 1),
         "weekly_rotation_interval_sec": max(3, min(120, int(payload_in.weekly_rotation_interval_sec or 10))),
+        "excluded_supplier_ids": [str(x).strip() for x in (payload_in.excluded_supplier_ids or []) if str(x).strip()],
     }
     payload["big_screen_config"] = new_bs
     save_tube_config(payload)

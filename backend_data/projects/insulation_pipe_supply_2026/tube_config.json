@@ -17,7 +17,10 @@
     "weather_cache_duration_min": 15,
     "transit_duration_min_hours": 1.0,
     "transit_duration_max_hours": 168.0,
-    "weekly_rotation_interval_sec": 15
+    "weekly_rotation_interval_sec": 15,
+    "excluded_supplier_ids": [
+      "sup_吴近"
+    ]
   },
   "fitting_config": {
     "allowed_units": [

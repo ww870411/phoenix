@@ -134,7 +134,7 @@
         <!-- 二级选项卡导航 (Responsive Sub-Tabs Header) -->
         <div class="tube-tabs-header-wrap">
           <!-- 保温管二级子标签 -->
-          <div class="tube-tabs-header" v-if="activeCategory === 'pipe'">
+          <div class="tube-tabs-header" v-if="activeCategory === 'pipe' && supportsPipe">
             <button 
               type="button" 
               :class="{ active: activeTab === 'demand' }" 
@@ -168,7 +168,7 @@
           </div>
 
           <!-- 管件二级子标签 -->
-          <div class="tube-tabs-header" v-else-if="activeCategory === 'fitting'">
+          <div class="tube-tabs-header" v-else-if="activeCategory === 'fitting' && supportsFitting">
             <button 
               type="button" 
               :class="{ active: activeTab === 'fitting' }" 
@@ -754,14 +754,14 @@
 
                 <!-- 右侧在库汇总徽章 -->
                 <div class="inventory-total-card">
-                  <span class="total-label">本次实盘在库总量:</span>
+                  <span class="total-label">最新填报在库总量:</span>
                   <strong class="total-val">{{ formatNumber(computedTotalInventoryStock) }} 米</strong>
                   <span v-if="inventoryData.has_previous_record" style="font-size: 12px; color: #64748b; margin-left: 6px;">
                     <template v-if="inventoryData.total_shipped_since_inventory > 0">
-                      (上次实盘: {{ formatNumber(computedTotalPreviousStock) }} 米，发货: {{ formatNumber(inventoryData.total_shipped_since_inventory) }} 米，扣减后在库: <strong style="color: #1d4ed8;">{{ formatNumber(computedTotalPipeDeductedStock) }}</strong> 米)
+                      (最近提交: {{ formatNumber(computedTotalPreviousStock) }} 米，发货: {{ formatNumber(inventoryData.total_shipped_since_inventory) }} 米，当前自动在库: <strong style="color: #1d4ed8;">{{ formatNumber(computedTotalPipeDeductedStock) }}</strong> 米)
                     </template>
                     <template v-else>
-                      (上次: {{ formatNumber(computedTotalPreviousStock) }} 米)
+                      (最近提交: {{ formatNumber(computedTotalPreviousStock) }} 米)
                     </template>
                   </span>
                 </div>
@@ -789,7 +789,7 @@
                 />
               </div>
               <div style="margin-top: 8px; font-size: 12px; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
-                <span>💡 提示：双击【本次实盘在库量】单元格直接编辑，支持键盘方向键跳格与回车；可直接复制 Excel 矩阵按 Ctrl+V 批量粘贴。</span>
+                <span>💡 提示：双击【（填报）最新在库量】单元格直接编辑，支持键盘方向键跳格与回车；可直接复制 Excel 矩阵按 Ctrl+V 批量粘贴。</span>
                 <span>当前显示 {{ pipeInventoryGridSource.length }} 种保温管规格型号</span>
               </div>
             </template>
@@ -1304,7 +1304,7 @@
 
                 <!-- 右侧在库汇总徽章 -->
                 <div class="inventory-total-card">
-                  <span class="total-label">本次实盘在库总量:</span>
+                  <span class="total-label">最新填报在库总量:</span>
                   <strong class="total-val">{{ formatNumber(computedTotalFittingInventoryStock) }} 个/套</strong>
                   <span v-if="fittingInventoryData.has_previous_record" style="font-size: 12px; color: #64748b; margin-left: 6px;">
                     <template v-if="fittingInventoryData.total_shipped_since_inventory > 0">
@@ -1339,7 +1339,7 @@
                 />
               </div>
               <div style="margin-top: 8px; font-size: 12px; color: #64748b; display: flex; justify-content: space-between;">
-                <span>💡 提示：双击【本次实盘在库量】单元格直接编辑，支持键盘方向键无缝跳格与回车；可直接复制 Excel 矩阵按 Ctrl+V 粘贴。</span>
+                <span>💡 提示：双击【（填报）最新在库量】单元格直接编辑，支持键盘方向键无缝跳格与回车；可直接复制 Excel 矩阵按 Ctrl+V 粘贴。</span>
                 <span>当前显示 {{ filteredFittingInventoryGridSource.length }} / {{ fittingInventoryData.items.length }} 项物料</span>
               </div>
             </template>
@@ -3441,7 +3441,6 @@ const pipeInventoryGridSource = computed(() => {
     ...it,
     _seq: idx + 1,
     unit: '米',
-    change_qty: Number(((Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0)).toFixed(1)),
   }))
 })
 
@@ -3470,15 +3469,15 @@ const pipeInventoryGridColumns = ref([
   },
   {
     prop: 'previous_stock_qty',
-    name: '上次在库量 (米)',
+    name: '最近提交在库量',
     size: 130,
     readonly: true,
     cellProperties: () => ({ style: { textAlign: 'right', color: '#64748b', backgroundColor: '#f8fafc', fontFamily: 'monospace' } })
   },
   {
     prop: 'deducted_stock_qty',
-    name: '扣减后库存 (米)',
-    size: 140,
+    name: '当前自动在库量',
+    size: 145,
     readonly: true,
     cellProperties: (props) => {
       const model = (props && props.model) ? props.model : (props || {})
@@ -3506,8 +3505,8 @@ const pipeInventoryGridColumns = ref([
   },
   {
     prop: 'stock_qty',
-    name: '本次实盘在库量 (米) *',
-    size: 180,
+    name: '（填报）最新在库量 *',
+    size: 170,
     readonly: false,
     cellProperties: () => ({
       style: {
@@ -3518,19 +3517,6 @@ const pipeInventoryGridColumns = ref([
         fontFamily: 'monospace'
       }
     })
-  },
-  {
-    prop: 'change_qty',
-    name: '变动差额 (米)',
-    size: 120,
-    readonly: true,
-    cellProperties: (props) => {
-      const model = (props && props.model) ? props.model : (props || {})
-      const val = Number(model.change_qty) || 0
-      if (val > 0) return { style: { textAlign: 'right', color: '#16a34a', fontWeight: 'bold', fontFamily: 'monospace' } }
-      if (val < 0) return { style: { textAlign: 'right', color: '#ea580c', fontWeight: 'bold', fontFamily: 'monospace' } }
-      return { style: { textAlign: 'right', color: '#94a3b8', fontFamily: 'monospace' } }
-    }
   },
   {
     prop: 'remark',
@@ -3590,9 +3576,12 @@ const handlePipeInventoryGridAfterEdit = (e) => {
   )
   if (target) {
     if (prop === 'stock_qty') {
-      const num = Math.max(0, parseFloat(val) || 0)
-      target.stock_qty = Number(num.toFixed(1))
-      target.change_qty = Number((target.stock_qty - (Number(target.previous_stock_qty) || 0)).toFixed(1))
+      if (val === '' || val === null || val === undefined) {
+        target.stock_qty = null
+      } else {
+        const num = parseFloat(val)
+        target.stock_qty = isNaN(num) ? null : Math.max(0, Number(num.toFixed(1)))
+      }
     } else if (prop === 'remark') {
       target.remark = String(val || '').trim()
     }
@@ -3603,7 +3592,6 @@ const resetPipeInventoryToZero = () => {
   if (!inventoryData.items || !inventoryData.items.length) return
   inventoryData.items.forEach((it) => {
     it.stock_qty = 0
-    it.change_qty = -Number(it.previous_stock_qty || 0)
   })
   if (pipeInventoryGridRef.value && typeof pipeInventoryGridRef.value.refresh === 'function') {
     pipeInventoryGridRef.value.refresh()
@@ -3640,13 +3628,14 @@ const loadInventoryData = async () => {
       inventoryData.items = (d.items || []).map((it) => ({
         ...it,
         unit: '米',
-        stock_qty: Number(it.stock_qty) || 0,
+        stock_qty: (it.stock_qty !== undefined && it.stock_qty !== null && it.stock_qty !== '' && it.stock_qty !== 0)
+          ? Number(it.stock_qty)
+          : null,
         previous_stock_qty: Number(it.previous_stock_qty) || 0,
         shipped_qty_since_inventory: Number(it.shipped_qty_since_inventory) || 0,
         deducted_stock_qty: it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null
           ? Number(it.deducted_stock_qty)
           : (Number(it.previous_stock_qty) || 0),
-        change_qty: Number(((Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0)).toFixed(1)),
         remark: it.remark || '',
       }))
     }
@@ -3665,7 +3654,6 @@ const applyPreviousInventory = () => {
       ? Number(it.deducted_stock_qty)
       : (Number(it.previous_stock_qty) || 0)
     it.stock_qty = baseQty
-    it.change_qty = Number((baseQty - (Number(it.previous_stock_qty) || 0)).toFixed(1))
   })
   if (pipeInventoryGridRef.value && typeof pipeInventoryGridRef.value.refresh === 'function') {
     pipeInventoryGridRef.value.refresh()
@@ -3688,7 +3676,7 @@ const downloadPipeInventoryExcel = () => {
   const aoaData = [
     [`【${entityName}】保温管成品库存盘点提报表`],
     [`提报单位：${entityName}    厂家编码：${entityId}    数量单位：米    基准日期：${todayStr}`],
-    ['序号', '保温管型号', '上次盘点数量 (米/参考)', '本次实盘在库量 (米/必填)', '备注']
+    ['序号', '保温管型号', '最近提交在库量 (米/参考)', '（填报）最新在库量 (米/必填)', '备注']
   ]
 
   items.forEach((it, idx) => {
@@ -3780,8 +3768,8 @@ const downloadPipeInventoryExcel = () => {
   worksheet['!cols'] = [
     { wch: 8 },  // 序号
     { wch: 28 }, // 保温管型号
-    { wch: 24 }, // 上次盘点数量 (米/参考)
-    { wch: 24 }, // 本次实盘在库量 (米/必填)
+    { wch: 26 }, // 最近提交在库量 (米/参考)
+    { wch: 26 }, // （填报）最新在库量 (米/必填)
     { wch: 28 }, // 备注
   ]
 
@@ -3880,9 +3868,9 @@ const handlePipeInventoryExcelFile = (event) => {
           }
 
           // 数量列优先提取【库存米数/实盘量】，次选通用【库存/数量】（排除合同/支数等干扰列）
-          if (/本次实盘在库量|实盘在库量|实盘库存量|库存米数/.test(h)) {
+          if (/（填报）最新在库量|\(填报\)最新在库量|最新在库量|本次实盘在库量|实盘在库量|实盘库存量|库存米数/.test(h)) {
             fQty = idx
-          } else if (fQty === -1 && /库存|实盘|数量|米数|在库/.test(h) && !/上次|历史|参考|合同|计划|设计|采购|支数/.test(h)) {
+          } else if (fQty === -1 && /库存|实盘|数量|米数|在库/.test(h) && !/上次|最近|历史|参考|合同|计划|设计|采购|支数/.test(h)) {
             fQty = idx
           }
 
@@ -3995,7 +3983,6 @@ const handlePipeInventoryExcelFile = (event) => {
         if (targetItem) {
           const num = parseLenientNumber(rawQty)
           targetItem.stock_qty = Number(num.toFixed(1))
-          targetItem.change_qty = Number((targetItem.stock_qty - (Number(targetItem.previous_stock_qty) || 0)).toFixed(1))
           if (remarkStr) targetItem.remark = remarkStr
           matchedCount++
           totalQty += targetItem.stock_qty
@@ -4165,7 +4152,6 @@ const filteredFittingInventoryGridSource = computed(() => {
   return list.map((it, idx) => ({
     ...it,
     _seq: idx + 1,
-    change_qty: (Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0),
   }))
 })
 
@@ -4209,13 +4195,14 @@ const loadFittingInventoryData = async () => {
       fittingInventoryData.categories = d.categories || []
       fittingInventoryData.items = (d.items || []).map((it) => ({
         ...it,
-        stock_qty: Number(it.stock_qty) || 0,
+        stock_qty: (it.stock_qty !== undefined && it.stock_qty !== null && it.stock_qty !== '' && it.stock_qty !== 0)
+          ? Number(it.stock_qty)
+          : null,
         previous_stock_qty: Number(it.previous_stock_qty) || 0,
         shipped_qty_since_inventory: Number(it.shipped_qty_since_inventory) || 0,
         deducted_stock_qty: it.deducted_stock_qty !== undefined && it.deducted_stock_qty !== null
           ? Number(it.deducted_stock_qty)
           : (Number(it.previous_stock_qty) || 0),
-        change_qty: (Number(it.stock_qty) || 0) - (Number(it.previous_stock_qty) || 0),
         remark: it.remark || '',
       }))
     }
@@ -4234,7 +4221,6 @@ const applyPreviousFittingInventory = () => {
       ? Number(it.deducted_stock_qty)
       : (Number(it.previous_stock_qty) || 0)
     it.stock_qty = baseQty
-    it.change_qty = Number((baseQty - (Number(it.previous_stock_qty) || 0)).toFixed(2))
   })
   if (fittingInventoryGridRef.value && typeof fittingInventoryGridRef.value.refresh === 'function') {
     fittingInventoryGridRef.value.refresh()
@@ -4247,9 +4233,11 @@ const resetFittingInventoryToZero = () => {
   if (!fittingInventoryData.items || !fittingInventoryData.items.length) return
   fittingInventoryData.items.forEach((it) => {
     it.stock_qty = 0
-    it.change_qty = -Number(it.previous_stock_qty || 0)
   })
-  setFittingInventoryActionMessage('已将所有管件实盘量置零，可重新输入实盘数', 'info', 3000)
+  if (fittingInventoryGridRef.value && typeof fittingInventoryGridRef.value.refresh === 'function') {
+    fittingInventoryGridRef.value.refresh()
+  }
+  setFittingInventoryActionMessage('已将所有管件在库量置零，可重新输入最新在库数', 'info', 3000)
 }
 
 const handleFittingInventoryGridAfterEdit = (e) => {
@@ -4267,9 +4255,12 @@ const handleFittingInventoryGridAfterEdit = (e) => {
   )
   if (target) {
     if (prop === 'stock_qty') {
-      const num = Math.max(0, parseFloat(val) || 0)
-      target.stock_qty = num
-      target.change_qty = num - (Number(target.previous_stock_qty) || 0)
+      if (val === '' || val === null || val === undefined) {
+        target.stock_qty = null
+      } else {
+        const num = parseFloat(val)
+        target.stock_qty = isNaN(num) ? null : Math.max(0, num)
+      }
     } else if (prop === 'remark') {
       target.remark = String(val || '').trim()
     }
@@ -4291,14 +4282,14 @@ const downloadFittingInventoryExcel = () => {
 
   // 1. 构建二维数组数据行 (AOA)
   // 按照用户要求包含“上次盘点数量(选填/参考)”共 7 列设计:
-  // 序号, 管件大类, 材料名称, 规格型号, 上次盘点数量 (选填/参考), 本次实盘在库量 (必填), 备注
+  // 序号, 管件大类, 材料名称, 规格型号, 最近提交在库量 (参考), （填报）最新在库量 (必填), 备注
   const aoaData = [
     // Row 0: 大标题
     [`【${entityName}】管件成品库存盘点提报表`],
     // Row 1: 元信息栏 (包含厂家编码用于导入防呆校验，注明数量单位)
     [`提报单位：${entityName}    厂家编码：${entityId}    数量单位：个    基准日期：${todayStr}`],
     // Row 2: 7列标准表头
-    ['序号', '管件大类', '材料名称', '规格型号', '上次盘点数量 (选填/参考)', '本次实盘在库量 (必填)', '备注']
+    ['序号', '管件大类', '材料名称', '规格型号', '最近提交在库量 (参考)', '（填报）最新在库量 (必填)', '备注']
   ]
 
   // Row 3起: 预置物料数据行 (已在后端排好大类->材料名称->规格型号降序)
@@ -4633,8 +4624,8 @@ const handleFittingInventoryExcelFile = (event) => {
           if (/管件大类|大类|类型|类别/.test(h)) fCat = idx
           else if (/材料名称|品名|物资名称|物料名称|分项名称|分项/.test(h)) fName = idx
           else if (/规格型号|规格|型号/.test(h)) fSpec = idx
-          else if (/本次实盘在库量|实盘库存量|实盘在库量|现货库存量|现货库存/.test(h)) fQty = idx
-          else if (/库存|实盘|数量|在库/.test(h) && !/上次|历史|参考|合同|计划|设计|采购|米数|理论|支数/.test(h)) {
+          else if (/（填报）最新在库量|\(填报\)最新在库量|请填报最新在库量|最新在库量|本次实盘在库量|实盘库存量|实盘在库量|现货库存量|现货库存/.test(h)) fQty = idx
+          else if (/库存|实盘|数量|在库/.test(h) && !/上次|最近|历史|参考|合同|计划|设计|采购|米数|理论|支数/.test(h)) {
             if (fQty === -1) fQty = idx
           }
           else if (/备注|说明/.test(h)) fRemark = idx
@@ -5047,15 +5038,15 @@ const fittingInventoryGridColumns = ref([
   },
   {
     prop: 'previous_stock_qty',
-    name: '上次在库量',
-    size: 110,
+    name: '最近提交在库量',
+    size: 130,
     readonly: true,
     cellProperties: () => ({ style: { textAlign: 'right', color: '#64748b', backgroundColor: '#f8fafc', fontFamily: 'monospace' } })
   },
   {
     prop: 'deducted_stock_qty',
-    name: '扣减后库存',
-    size: 125,
+    name: '当前自动在库量',
+    size: 145,
     readonly: true,
     cellProperties: (props) => {
       const model = (props && props.model) ? props.model : (props || {})
@@ -5083,8 +5074,8 @@ const fittingInventoryGridColumns = ref([
   },
   {
     prop: 'stock_qty',
-    name: '本次实盘在库量 *',
-    size: 140,
+    name: '（填报）最新在库量 *',
+    size: 170,
     readonly: false,
     cellProperties: () => ({
       style: {
@@ -5094,19 +5085,6 @@ const fittingInventoryGridColumns = ref([
         fontWeight: 'bold'
       }
     })
-  },
-  {
-    prop: 'change_qty',
-    name: '变动差额',
-    size: 100,
-    readonly: true,
-    cellProperties: (props) => {
-      const model = (props && props.model) ? props.model : (props || {})
-      const val = Number(model.change_qty) || 0
-      if (val > 0) return { style: { textAlign: 'right', color: '#16a34a', fontWeight: 'bold' } }
-      if (val < 0) return { style: { textAlign: 'right', color: '#ea580c', fontWeight: 'bold' } }
-      return { style: { textAlign: 'right', color: '#94a3b8' } }
-    }
   },
   {
     prop: 'remark',
@@ -6470,11 +6448,13 @@ const doRealSubmitFittingForm = async (directPayload = null) => {
 }
 
 watch(activeTab, (tab) => {
-  if (['fitting', 'fitting_baseline'].includes(tab)) {
+  if (['fitting', 'fitting_inventory', 'fitting_baseline'].includes(tab)) {
     activeCategory.value = 'fitting'
     lastFittingTab.value = tab
     if (tab === 'fitting') {
       loadFittingDeliveries()
+    } else if (tab === 'fitting_inventory') {
+      loadFittingInventoryData()
     } else if (tab === 'fitting_baseline') {
       if (!selectedFittingBaselineSection1Id.value && currentAssignedSection1Options.value?.length > 0) {
         selectedFittingBaselineSection1Id.value = currentAssignedSection1Options.value[0].section_1_id
@@ -6488,6 +6468,8 @@ watch(activeTab, (tab) => {
       loadDemandSummary()
     } else if (tab === 'history') {
       loadDeliveries()
+    } else if (tab === 'inventory') {
+      loadInventoryData()
     }
   }
   syncTabStateToUrl(activeCategory.value, tab)
@@ -7018,13 +7000,24 @@ const formatSupplyTypesBadge = (types) => {
 }
 
 // 智能自适应切换：若当前主体不支持当前激活分类，自动无缝切换至支持分类
-watch([supportsPipe, supportsFitting], ([canPipe, canFitting]) => {
-  if (!canPipe && canFitting && activeCategory.value === 'pipe') {
-    handleCategoryClick('fitting')
-  } else if (canPipe && !canFitting && activeCategory.value === 'fitting') {
-    handleCategoryClick('pipe')
+watch(
+  [supportsPipe, supportsFitting, activeCategory],
+  ([canPipe, canFitting, cat]) => {
+    if (!canPipe && canFitting && cat === 'pipe') {
+      activeCategory.value = 'fitting'
+      activeTab.value = ['fitting', 'fitting_inventory', 'fitting_baseline'].includes(lastFittingTab.value)
+        ? lastFittingTab.value
+        : 'fitting'
+      syncTabStateToUrl('fitting', activeTab.value)
+    } else if (canPipe && !canFitting && cat === 'fitting') {
+      activeCategory.value = 'pipe'
+      activeTab.value = ['demand', 'register', 'history', 'inventory'].includes(lastPipeTab.value)
+        ? lastPipeTab.value
+        : 'demand'
+      syncTabStateToUrl('pipe', activeTab.value)
+    }
   }
-})
+)
 
 const currentDeliverySupplyEntityLabel = computed(() => {
   const matched = allSupplyEntityOptions.value.find((item) => item.entity_id === deliveryForm.value.supplyEntityId)

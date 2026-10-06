@@ -359,10 +359,7 @@ def get_supplier_inventory_for_date(
             shipped_qty = shipped_map.get(pm, 0.0)
             deducted_stock = max(0.0, prev_stock - shipped_qty) if prev_stock > 0 else 0.0
 
-            # 方案 B：本次实盘在库量默认置 0，厂家需主动盘点录入或点击“沿用上次盘点”一键填充
-            cur_stock = 0.0
-            total_stock += cur_stock
-
+            # 方案 B：本次实盘在库量默认置空（None），厂家需主动盘点录入或点击“沿用上次盘点”一键填充
             items.append({
                 "pipe_model_id": pm,
                 "pipe_model_name": pm,
@@ -370,8 +367,8 @@ def get_supplier_inventory_for_date(
                 "previous_stock_qty": prev_stock,
                 "shipped_qty_since_inventory": round(shipped_qty, 1),
                 "deducted_stock_qty": round(deducted_stock, 1),
-                "stock_qty": cur_stock,
-                "change_qty": cur_stock - prev_stock,
+                "stock_qty": None,
+                "change_qty": 0.0,
                 "remark": "",
             })
 
