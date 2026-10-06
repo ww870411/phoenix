@@ -1,3 +1,11 @@
+## 2026-10-06 展示大屏供需拓扑供应商卡片“管件/阀门现货”规范化更新 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（供需流向拓扑供应商卡片 `supply-node-card`、管件现货徽章 `.fitting-badge`、微提示 `:title`）；
+- **前端结构与交互变更**：
+  - 供应商卡片中下方的管件现货徽章显示内容由 `管件现货：...件` 规范更新为 `管件/阀门现货：{{ formatCount(sup.fitting_stock_qty) }}件`；
+  - 悬停提示 `:title` 同步由 `'管件在库待发: '` 更新为 `'管件/阀门在库待发: '`，与大屏全网管件/阀门发运与库存指标体系保持严密一致。
+
 ## 2026-10-06 展示大屏标段需求卡片“保温管/施工量/管件/阀门”文字标签原生结构与触发场景深度说明 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：

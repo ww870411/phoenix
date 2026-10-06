@@ -1,3 +1,17 @@
+## 2026-10-06 [展示大屏供需拓扑供应商卡片“管件/阀门现货”规范化更新]
+- **需求背景与业务目标**：
+  - 用户反馈展示大屏（`BigScreenDashboardView.vue`）“供需流向拓扑”板块中，各个供应商节点卡片内部原“管件现货”字样口径需规范更新为“**管件/阀门现货**”，与全屏管件/阀门整体命名体系保持严密统一。
+- **改动范围与实施方案**：
+  1. **供应商卡片现货徽章规范化 (`BigScreenDashboardView.vue`)**：
+     - 修改 `supply-node-card` 中管件在库现货徽章（`.fitting-badge`）文本为 `管件/阀门现货：{{ formatCount(sup.fitting_stock_qty) }}件`；
+     - 同步更新悬停提示 `:title` 为 `'管件/阀门在库待发: ' + formatCount(sup.fitting_stock_qty) + '件'`，保持交互细节一致；
+  2. **工程构建与测试验证**：
+     - 执行前端全量构建打包 `npm run build`，确保零错误零告警。
+- **改动清单**：
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
 ## 2026-10-06 [大屏标段需求卡片“保温管/施工量/管件/阀门”文字标签排查与显示场景深度溯源]
 - **有效讨论与技术确认**：
   - 用户明确纠偏：所反馈的并非右侧数值区的在途胶囊角标 `(+2.0)`，而是显示为 `【保温管】`、`【施工量】`、`【管件/阀门】` 的文字标签，“本来只有左侧有，某些时候右侧也会显示出来（并非一直显示）”；

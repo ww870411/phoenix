@@ -981,10 +981,10 @@
                         </span>
                       </div>
 
-                      <!-- 管件现货在库（在下） -->
+                      <!-- 管件/阀门现货在库（在下） -->
                       <div v-if="sup.has_fitting_inventory && sup.fitting_stock_qty > 0" class="sup-stock-badge-row fitting-row">
-                        <span class="sup-stock-badge fitting-badge" :title="'管件在库待发: ' + formatCount(sup.fitting_stock_qty) + '件'">
-                          <span class="stock-pulse-dot gold"></span>管件现货：{{ formatCount(sup.fitting_stock_qty) }}件
+                        <span class="sup-stock-badge fitting-badge" :title="'管件/阀门在库待发: ' + formatCount(sup.fitting_stock_qty) + '件'">
+                          <span class="stock-pulse-dot gold"></span>管件/阀门现货：{{ formatCount(sup.fitting_stock_qty) }}件
                         </span>
                       </div>
                     </div>
