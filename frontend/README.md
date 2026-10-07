@@ -1,3 +1,54 @@
+## 2026-10-07 数字指挥大屏本周战报高清矢量微图例升级说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（战报趋势区标题栏 `.weekly-chart-heading`、原生 SVG 微图例 `.weekly-custom-legend`、ECharts 双轨折线图 `renderWeeklyChart`）；
+- **前端结构与视觉图例升级**：
+  1. **原生 SVG 矢量微图例替换 Canvas 内置图例**：
+     - 排查发现 ECharts 内置图例在 `14px` 宽度下因为中间强制插入 `6px` 圆点，将两端截断为 `4px` 短线，视觉上被误判为“三段式虚线”（导致实线像虚线），且无法展示完整虚线周期；
+     - 在趋势标题栏右侧开发了原生 `.weekly-custom-legend` 矢量组件：
+       - **发运量图例**：采用 24px 宽高清 SVG 虚线（`stroke-dasharray="4,2.5"`）贯穿 `r="3"` 空心圆环，清晰展现绿色虚线与空心节点特征；
+       - **施工量/安装量图例**：采用 24px 宽饱满光滑连续实线，中心嵌入 `r="3"` 实心圆点，彻底根治视觉错觉；
+  2. **ECharts 绘图区垂直空间优化**：
+     - 关闭 ECharts 内置图例（`legend.show = false`），将 `grid.top` 释放至 8px，提升图表有效绘图高度，避免元素相互遮挡；
+  3. **主题无缝自适应**：
+     - 在深色与浅色大屏主题下，微图例线条、圆环底色与文本对比度自适应渲染。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 16.82s，零报错）。
+
+## 2026-10-07 数字指挥大屏本周战报发运量“精致工程虚线型”视觉特征实装说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（战报趋势图 `renderWeeklyChart`、图例 `legend`、数据序列 `series[0]`）；
+- **前端结构与图表特征升级**：
+  1. **物流虚线语义实装 (`type: [6, 4]`)**：
+     - 发运量统一由实线转变为紧凑工程虚线（`type: [6, 4]`，2.2px 线宽），赋予在途动态运输语义；
+     - 施工量/安装量保持实体稳固实线，形成“动态虚线发运 vs 实体固化施工”的强烈视觉反差；
+  2. **空心雷达锚点与渐变层次优化**：
+     - 发运量数据锚点改为空心雷达环（背景色填充、2px 绿色边框），与施工量实心圆点明确区分；
+     - 调轻发运量面积渐变透明度（峰值降至 0.20），使底层的施工量/安装量渐变底座更加通透清爽；
+  3. **图例同步响应**：
+     - 图例宽度调宽至 14px，图例横条自适应呈现虚线样式，提升图表一眼识别效率。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 19.82s，零报错）。
+
+## 2026-10-07 数字指挥大屏本周战报“发运量”图例规范与双轨曲线颜色重构说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（战报面板 `.weekly-report-panel`、双 KPI 卡片 `.weekly-kpi-card`、ECharts 双轨图表 `renderWeeklyChart`）；
+- **前端结构与色彩体系升级**：
+  1. **图例文案与业务指标统一**：
+     - `series1Name` 统一规范为 `'发运量'`（彻底移除历史遗留的 `'发货量'` 文案），图例与 Tooltip 交互全链路一致；
+     - 面板顶部 KPI 卡片、副标题“双轨：发运 vs 施工”、复盘栏“发运峰值日”与“昨日发运 / 施工”同步规范；
+  2. **双轨折线色彩体系调换与对齐**：
+     - **发运量曲线**：两类战报（保温管 & 管件）一律采用翡翠绿（暗色 `#34d399`，浅色 `#059669`），配合同色发光阴影与轻柔渐变；
+     - **施工量/安装量曲线**：
+       - 保温管施工量：调换为天青蓝（暗色 `#00f2fe`，浅色 `#0284c7`），配合蓝色渐变；
+       - 管件安装量：保持琥珀金（暗色 `#fbbf24`，浅色 `#d97706`）；
+  3. **顶部 KPI 卡片同频响应**：
+     - 发运量卡片统一配置绿色圆点、绿字、绿边框；保温管施工量卡片对应蓝色圆点、蓝字、蓝边框；管件安装量保持金系，实现“卡片色彩 ➔ 折线色彩”视觉无缝对齐。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 20.22s，零报错）。
+
 ## 2026-10-07 数字指挥大屏拓扑飞线保温管累计发运量两位小数精度升级说明 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：

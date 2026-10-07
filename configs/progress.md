@@ -1,3 +1,63 @@
+## 2026-10-07 [大屏看板：本周战报趋势图图例重构为高清矢量微图例（彻底消除虚实倒错与尺寸缩放失真）]
+- **需求意向与图例视觉根因剖析**：
+  - 用户反馈：“图例中可能是太简短了，看不出发运量是虚线+空心圆点。同时施工量/安装量的图例倒像是虚线”；
+  - 深度根因排查：
+    1. **ECharts 内置 Legend 渲染机制缺陷**：ECharts 在为折线图绘制自带 legend 时，若带有 `symbol: 'circle'`，会在狭窄的小横条（14px 宽）正中硬塞一个 6px 实心点，使得两端只剩约 4px 短线，远看呈现“短线-点-短线”的断续结构，肉眼极易误判为“三段式虚线”；
+    2. **虚线周期与窄盒裁剪冲突**：发运量的工程虚线为 `[6, 4]`，在 14px 宽度内无法展开完整周期，中间空心点的底色在狭窄图例里与背景融为一体，导致看不出虚线+空心圆；
+  - 核心重构与实装：
+    1. **原生 SVG 矢量微图例组件 (`.weekly-custom-legend`)**：
+       - 在趋势区标题栏（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 的 `.weekly-chart-heading`）右侧实装高清矢量图例组件；
+       - **发运量图例项**：采用 24px 宽 SVG 矢量线，精确设置 `stroke-dasharray="4,2.5"` 均匀虚线，中心稳稳穿过 `r="3"` 的空心圆环（底色填充 + 绿色 1.8px 描边），比例舒展，一眼看清是“绿色虚线+空心环”；
+       - **施工量/安装量图例项**：采用 24px 饱满连续光滑实线（蓝色或金色），正中嵌入清晰的实心圆点（`r="3"`，白边微描），彻底杜绝了被视线误判为虚线的可能；
+    2. **ECharts 绘图空间释放与极简纯净呈现**：
+       - 关闭 ECharts 内置图例（`legend.show = false`），将 `grid.top` 从 18px 降至 8px，图表上下绘图区获得宝贵扩展空间，折线波动更显舒展，图例与趋势线彻底解耦、永不遮挡；
+    3. **自适应双色模式**：在深浅双色主题下自动适配 SVG 线条/圆环色彩与中英文字体字重。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包编译通过（738 modules transformed，耗时 16.82s，零报错）。
+
+## 2026-10-07 [大屏看板：本周战报发运量“精致工程虚线型”视觉特征实装 (方案1)]
+- **需求意向与辨识度提升**：
+  - 用户反馈：“我发现蓝色和绿色线条有点像，但我又不想改线条颜色，能否将两个图（保温管，管件/阀门）的发运量修改一种线型或者特征？试试方案1”；
+  - 核心排查与实装：
+    1. **线型语义升级 (`type: [6, 4]`)**：在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 的 `renderWeeklyChart` 中，将发运量（`series[0]`）由常规实线重构为精致紧凑的工业虚线（`type: [6, 4]`，线宽 `2.2px`），保留平滑曲率与翡翠绿荧光外发光（`shadowBlur: 6`），完美契合物流动态与在途运输的流动语义；
+    2. **空心雷达锚点微特征 (`itemStyle`)**：发运量数据节点配置为微型空心环（`itemStyle.color` 采用背景底色、外圈为 `series1Color` 2px 实线边框），与施工量/安装量的实心圆点形成鲜明的几何对比；
+    3. **轻透渐变分层与图例自适应**：
+       - 将发运量下方的面积渐变透明度调轻（峰值透明度从 0.32 优化为 0.20），让施工量实线与蓝色渐变底座更加清晰沉淀，消除了两层渐变交叉混色；
+       - 将图例宽度适度加宽至 `14px`，确保图例区域能够清晰呈现等间距虚线图标。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包编译通过（738 modules transformed，耗时 19.82s，零报错）。
+
+## 2026-10-07 [大屏看板：本周战报“发运量”图例规范与双轨曲线/KPI颜色体系重构]
+- **需求意向与视觉调优**：
+  - 用户反馈：
+    1. “本周保温管施工战报”下方“每日趋势 (km)”的两条曲线中，图例有一个“发货量”，请改名为“发运量”；
+    2. 将“本周保温管施工战报”和“本周管件/阀门施工战报”板块中各自的下方图中的曲线颜色修改一下：首先是“本周保温管施工战报”，调换发运量与施工量的曲线颜色（发运量为绿色，施工量为蓝色）；然后将“本周管件/阀门施工战报”中的发运量曲线改为同样的绿色。
+  - 核心排查与实装：
+    1. **图例与指标口径标准化 (`series1Name`)**：在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 的 `renderWeeklyChart` 中，将原先 `isPipe ? '发货量' : '发运量'` 统一订正为固定 `'发运量'`；同步升级模板中 7日累计发运量 KPI 标题、每日趋势副标题“双轨：发运 vs 施工”、复盘栏“发运峰值日”与“昨日发运 / 施工”；
+    2. **折线图双轨色彩重构 (`renderWeeklyChart`)**：
+       - **发运量曲线 (`series1Color`)**：两类战报中统一升级为翡翠绿（暗色 `#34d399`，浅色 `#059669`），绑定对应绿色阴影（`rgba(52, 211, 153, 0.4)`）与微渐变面积填充；
+       - **施工量/安装量曲线 (`series2Color`)**：
+         - 保温管施工量：调换为天青蓝（暗色 `#00f2fe`，浅色 `#0284c7`），绑定蓝色阴影（`rgba(0, 242, 254, 0.4)`）与线性渐变；
+         - 管件安装量：保持琥珀金（暗色 `#fbbf24`，浅色 `#d97706`）及金色渐变；
+    3. **顶部双 KPI 卡片颜色与曲线同频对齐**：
+       - 发运量卡片（`.ship-card`）：圆点为 `.kpi-dot.emerald`、主数值为 `.emerald-text`、左侧指示边框升级为翡翠绿；
+       - 保温管施工量卡片（`.pipe-usage-card`）：圆点为 `.kpi-dot.cyan`、主数值为 `.cyan-text`、左侧指示边框调换为天青蓝；
+       - 管件安装量卡片（`.usage-card`）：保持金色圆点、金文字、金边框；实现“卡片色彩 ➔ 折线色彩 ➔ 图例文案”全链路高度契合。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包编译通过（738 modules transformed，耗时 20.22s，零报错）。
+
 ## 2026-10-07 [大屏看板：拓扑飞线保温管累计发运量数值格式化升级（保留至小数点后2位）]
 - **需求意向与指标精度统一**：
   - 用户反馈：“飞线上的保温管累计发运量，保留至小数点后2位吧”；

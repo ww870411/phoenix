@@ -1585,10 +1585,10 @@
             <div :key="activeWeeklyTab" class="weekly-kpi-grid">
               <div class="weekly-kpi-card ship-card" :title="activeWeeklyTab === 'pipe' ? '近7日累计发运保温管总量' : '近7日累计发运管件总量'">
                 <div class="kpi-card-header">
-                  <span class="kpi-dot cyan"></span>
-                  <span class="kpi-title">{{ activeWeeklyTab === 'pipe' ? '7日累计发货量' : '7日累计发运量' }}</span>
+                  <span class="kpi-dot emerald"></span>
+                  <span class="kpi-title">7日累计发运量</span>
                 </div>
-                <div class="kpi-main-val cyan-text">
+                <div class="kpi-main-val emerald-text">
                   {{ activeWeeklyTab === 'pipe' ? formatWeeklyKm(weeklyReport.total_shipped_km) : formatWeeklyInt(weeklyFittingReport.total_shipped_pcs) }}
                   <span class="unit">{{ activeWeeklyTab === 'pipe' ? 'km' : '件' }}</span>
                 </div>
@@ -1597,14 +1597,14 @@
 
               <div
                 class="weekly-kpi-card"
-                :class="activeWeeklyTab === 'pipe' ? 'fit-usage-card' : 'usage-card'"
+                :class="activeWeeklyTab === 'pipe' ? 'pipe-usage-card' : 'usage-card'"
                 :title="activeWeeklyTab === 'pipe' ? '近7日现场累计施工使用（敷设）总量' : '近7日现场累计安装使用管件总量'"
               >
                 <div class="kpi-card-header">
-                  <span class="kpi-dot" :class="activeWeeklyTab === 'pipe' ? 'emerald' : 'gold'"></span>
+                  <span class="kpi-dot" :class="activeWeeklyTab === 'pipe' ? 'cyan' : 'gold'"></span>
                   <span class="kpi-title">{{ activeWeeklyTab === 'pipe' ? '7日累计施工量' : '7日累计安装量' }}</span>
                 </div>
-                <div class="kpi-main-val" :class="activeWeeklyTab === 'pipe' ? 'emerald-text' : 'gold-text'">
+                <div class="kpi-main-val" :class="activeWeeklyTab === 'pipe' ? 'cyan-text' : 'gold-text'">
                   {{ activeWeeklyTab === 'pipe' ? formatWeeklyKm(weeklyReport.total_usage_km) : formatWeeklyInt(weeklyFittingReport.total_usage_pcs) }}
                   <span class="unit">{{ activeWeeklyTab === 'pipe' ? 'km' : '件' }}</span>
                 </div>
@@ -1616,11 +1616,26 @@
           <!-- 2. 固定趋势区：根据 activeWeeklyTab 动态绘制折线 -->
           <div class="weekly-chart-heading">
             <transition name="weekly-fade-fast" mode="out-in">
-              <span :key="activeWeeklyTab">每日趋势 ({{ activeWeeklyTab === 'pipe' ? 'km' : '件' }})</span>
+              <span :key="activeWeeklyTab" class="chart-heading-title">每日趋势 ({{ activeWeeklyTab === 'pipe' ? 'km' : '件' }})</span>
             </transition>
-            <transition name="weekly-fade-fast" mode="out-in">
-              <span :key="activeWeeklyTab" style="font-size: 9.5px; opacity: 0.75;">{{ activeWeeklyTab === 'pipe' ? '双轨：发货 vs 施工' : '双轨：发运 vs 安装' }}</span>
-            </transition>
+            
+            <!-- 矢量微图例：高清呈现发运虚线+空心环 vs 施工/安装实线+实心点 -->
+            <div class="weekly-custom-legend">
+              <div class="custom-legend-item ship-item" title="发运量（绿色虚线 + 空心雷达环）">
+                <svg class="legend-line-svg" width="24" height="10" viewBox="0 0 24 10">
+                  <line x1="0" y1="5" x2="24" y2="5" :stroke="currentTheme === 'light' ? '#059669' : '#34d399'" stroke-width="2" stroke-dasharray="4,2.5" />
+                  <circle cx="12" cy="5" r="3" :fill="currentTheme === 'light' ? '#ffffff' : '#090e1a'" :stroke="currentTheme === 'light' ? '#059669' : '#34d399'" stroke-width="1.8" />
+                </svg>
+                <span class="legend-text">发运量</span>
+              </div>
+              <div class="custom-legend-item usage-item" :title="activeWeeklyTab === 'pipe' ? '施工量（蓝色实线 + 实心圆点）' : '安装量（金色实线 + 实心圆点）'">
+                <svg class="legend-line-svg" width="24" height="10" viewBox="0 0 24 10">
+                  <line x1="0" y1="5" x2="24" y2="5" :stroke="activeWeeklyTab === 'pipe' ? (currentTheme === 'light' ? '#0284c7' : '#00f2fe') : (currentTheme === 'light' ? '#d97706' : '#fbbf24')" stroke-width="2" />
+                  <circle cx="12" cy="5" r="3" :fill="activeWeeklyTab === 'pipe' ? (currentTheme === 'light' ? '#0284c7' : '#00f2fe') : (currentTheme === 'light' ? '#d97706' : '#fbbf24')" :stroke="currentTheme === 'light' ? '#ffffff' : '#090e1a'" stroke-width="1.2" />
+                </svg>
+                <span class="legend-text">{{ activeWeeklyTab === 'pipe' ? '施工量' : '安装量' }}</span>
+              </div>
+            </div>
           </div>
           <div class="weekly-chart-box">
             <div ref="weeklyChartRef" class="weekly-echarts-dom"></div>
@@ -1636,7 +1651,7 @@
           <transition name="weekly-insight-anim" mode="out-in">
             <div :key="activeWeeklyTab" class="weekly-insight-grid">
               <div>
-                <span>{{ activeWeeklyTab === 'pipe' ? '发货峰值日' : '发运峰值日' }}</span>
+                <span>发运峰值日</span>
                 <strong>{{ activeWeeklyTab === 'pipe' ? weeklyShipPeakText : weeklyFitShipPeakText }}</strong>
               </div>
               <div>
@@ -1644,7 +1659,7 @@
                 <strong>{{ activeWeeklyTab === 'pipe' ? weeklyUsagePeakText : weeklyFitUsagePeakText }}</strong>
               </div>
               <div>
-                <span>{{ activeWeeklyTab === 'pipe' ? '昨日发货 / 施工' : '昨日发运 / 安装' }}</span>
+                <span>{{ activeWeeklyTab === 'pipe' ? '昨日发运 / 施工' : '昨日发运 / 安装' }}</span>
                 <strong>{{ activeWeeklyTab === 'pipe' ? weeklyTodayText : weeklyFitTodayText }}</strong>
               </div>
             </div>
@@ -2746,7 +2761,7 @@ const weeklyTodayText = computed(() => (
 const weeklyShipNote = computed(() => (
   weeklyHasBusinessData.value
     ? `昨日 ${formatWeeklyKm(weeklyToday.value.shipped_km)} km`
-    : '本周暂无发货记录'
+    : '本周暂无发运记录'
 ))
 const weeklyUsageNote = computed(() => (
   weeklyHasBusinessData.value
@@ -2836,16 +2851,18 @@ function renderWeeklyChart() {
     const series1Data = days.map(d => isPipe ? (Number(d.shipped_km) || 0) : (Number(d.shipped_pcs) || 0))
     const series2Data = days.map(d => isPipe ? (Number(d.usage_km) || 0) : (Number(d.usage_pcs) || 0))
 
-    const series1Name = isPipe ? '发货量' : '发运量'
+    const series1Name = '发运量'
     const series2Name = isPipe ? '施工量' : '安装量'
     const unitStr = isPipe ? 'km' : '件'
 
     const textColor = isLight ? '#64748b' : '#94a3b8'
     const splitLineColor = isLight ? 'rgba(203, 213, 225, 0.6)' : 'rgba(255, 255, 255, 0.08)'
 
-    const series1Color = isLight ? '#0284c7' : '#00f2fe'
+    // 发运量统一采用翡翠绿（浅色 #059669，深色 #34d399）
+    const series1Color = isLight ? '#059669' : '#34d399'
+    // 施工量/安装量：保温管施工量调换为天青蓝（浅色 #0284c7，深色 #00f2fe）；管件安装量保持琥珀金（浅色 #d97706，深色 #fbbf24）
     const series2Color = isPipe
-      ? (isLight ? '#059669' : '#34d399')
+      ? (isLight ? '#0284c7' : '#00f2fe')
       : (isLight ? '#d97706' : '#fbbf24')
 
     const option = {
@@ -2857,7 +2874,7 @@ function renderWeeklyChart() {
       tooltip: {
         trigger: 'axis',
         backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(10, 20, 38, 0.96)',
-        borderColor: isLight ? '#cbd5e1' : (isPipe ? 'rgba(52, 211, 153, 0.4)' : 'rgba(251, 191, 36, 0.4)'),
+        borderColor: isLight ? '#cbd5e1' : (isPipe ? 'rgba(0, 242, 254, 0.4)' : 'rgba(251, 191, 36, 0.4)'),
         borderWidth: 1,
         padding: [8, 12],
         textStyle: {
@@ -2867,7 +2884,7 @@ function renderWeeklyChart() {
         axisPointer: {
           type: 'line',
           lineStyle: {
-            color: isLight ? 'rgba(2, 132, 199, 0.4)' : (isPipe ? 'rgba(52, 211, 153, 0.6)' : 'rgba(251, 191, 36, 0.6)'),
+            color: isLight ? 'rgba(5, 150, 105, 0.4)' : 'rgba(52, 211, 153, 0.6)',
             type: 'dashed',
             width: 1.2
           }
@@ -2889,20 +2906,10 @@ function renderWeeklyChart() {
         }
       },
       legend: {
-        top: 2,
-        right: 8,
-        itemWidth: 12,
-        itemHeight: 3,
-        itemGap: 10,
-        textStyle: {
-          color: isLight ? '#475569' : '#cbd5e1',
-          fontSize: 10.5,
-          fontWeight: 500
-        },
-        data: [series1Name, series2Name]
+        show: false
       },
       grid: {
-        top: 18,
+        top: 8,
         left: 2,
         right: 12,
         bottom: 2,
@@ -2946,16 +2953,17 @@ function renderWeeklyChart() {
           type: 'line',
           smooth: 0.35,
           symbol: 'circle',
-          symbolSize: 5,
+          symbolSize: 5.5,
           itemStyle: {
-            color: series1Color,
-            borderColor: isLight ? '#ffffff' : '#090e1a',
-            borderWidth: 1.5
+            color: isLight ? '#ffffff' : '#090e1a',
+            borderColor: series1Color,
+            borderWidth: 2
           },
           lineStyle: {
-            width: 2,
+            width: 2.2,
             color: series1Color,
-            shadowColor: isLight ? 'rgba(2, 132, 199, 0.25)' : 'rgba(0, 242, 254, 0.4)',
+            type: [6, 4], // 精致虚线：代表物流动态在途流动
+            shadowColor: isLight ? 'rgba(5, 150, 105, 0.35)' : 'rgba(52, 211, 153, 0.45)',
             shadowBlur: 6
           },
           areaStyle: {
@@ -2966,8 +2974,8 @@ function renderWeeklyChart() {
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: isLight ? 'rgba(2, 132, 199, 0.28)' : 'rgba(0, 242, 254, 0.38)' },
-                { offset: 1, color: isLight ? 'rgba(2, 132, 199, 0.0)' : 'rgba(0, 242, 254, 0.0)' }
+                { offset: 0, color: isLight ? 'rgba(5, 150, 105, 0.16)' : 'rgba(52, 211, 153, 0.2)' },
+                { offset: 1, color: isLight ? 'rgba(5, 150, 105, 0.0)' : 'rgba(52, 211, 153, 0.0)' }
               ]
             }
           },
@@ -2988,7 +2996,7 @@ function renderWeeklyChart() {
             width: 2.2,
             color: series2Color,
             shadowColor: isPipe
-              ? (isLight ? 'rgba(5, 150, 105, 0.3)' : 'rgba(52, 211, 153, 0.4)')
+              ? (isLight ? 'rgba(2, 132, 199, 0.25)' : 'rgba(0, 242, 254, 0.4)')
               : (isLight ? 'rgba(217, 119, 6, 0.3)' : 'rgba(251, 191, 36, 0.4)'),
             shadowBlur: 8
           },
@@ -3000,8 +3008,8 @@ function renderWeeklyChart() {
               x2: 0,
               y2: 1,
               colorStops: isPipe ? [
-                { offset: 0, color: isLight ? 'rgba(5, 150, 105, 0.24)' : 'rgba(52, 211, 153, 0.28)' },
-                { offset: 1, color: isLight ? 'rgba(5, 150, 105, 0.0)' : 'rgba(52, 211, 153, 0.0)' }
+                { offset: 0, color: isLight ? 'rgba(2, 132, 199, 0.28)' : 'rgba(0, 242, 254, 0.38)' },
+                { offset: 1, color: isLight ? 'rgba(2, 132, 199, 0.0)' : 'rgba(0, 242, 254, 0.0)' }
               ] : [
                 { offset: 0, color: isLight ? 'rgba(217, 119, 6, 0.24)' : 'rgba(251, 191, 36, 0.28)' },
                 { offset: 1, color: isLight ? 'rgba(217, 119, 6, 0.0)' : 'rgba(251, 191, 36, 0.0)' }
@@ -8216,6 +8224,12 @@ onBeforeUnmount(() => {
 }
 
 .weekly-kpi-card.ship-card {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-left: 3px solid #34d399;
+}
+
+.weekly-kpi-card.pipe-usage-card {
   background: linear-gradient(135deg, rgba(0, 242, 254, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%);
   border: 1px solid rgba(0, 242, 254, 0.25);
   border-left: 3px solid #00f2fe;
@@ -8301,10 +8315,40 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.weekly-chart-heading span:last-child {
-  color: #64748b;
-  font-size: 9px;
+.weekly-chart-heading .chart-heading-title {
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.weekly-custom-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+}
+
+.custom-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
   font-weight: 500;
+  color: #94a3b8;
+  cursor: default;
+  transition: opacity 0.2s ease;
+}
+
+.custom-legend-item .legend-line-svg {
+  display: block;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.custom-legend-item .legend-text {
+  font-family: 'JetBrains Mono', Consolas, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.2px;
 }
 
 /* 2. 固定趋势区：保留图表骨架，空数据时展示清晰状态 */
@@ -9560,6 +9604,12 @@ onBeforeUnmount(() => {
 
 .bigscreen-container.light .weekly-kpi-card.ship-card {
   background: #ffffff;
+  border-color: rgba(5, 150, 105, 0.3);
+  border-left: 3px solid #059669;
+}
+
+.bigscreen-container.light .weekly-kpi-card.pipe-usage-card {
+  background: #ffffff;
   border-color: rgba(2, 132, 199, 0.3);
   border-left: 3px solid #0284c7;
 }
@@ -9583,8 +9633,13 @@ onBeforeUnmount(() => {
   border-color: rgba(226, 232, 240, 0.9);
 }
 
-.bigscreen-container.light .weekly-chart-heading {
+.bigscreen-container.light .weekly-chart-heading,
+.bigscreen-container.light .weekly-chart-heading .chart-heading-title {
   color: #334155;
+}
+
+.bigscreen-container.light .custom-legend-item {
+  color: #64748b;
 }
 
 .bigscreen-container.light .weekly-empty-state {

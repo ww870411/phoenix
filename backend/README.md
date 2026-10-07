@@ -1,3 +1,21 @@
+## 2026-10-07 数字指挥大屏本周战报高清矢量微图例升级之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）战报趋势图图例升级为原生 SVG 矢量微图例组件；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 数据契约与业务逻辑完全稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏本周战报发运量虚线型特征升级之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）ECharts 图表发运量线型特征升级为工程虚线（`type: [6, 4]`）与微特征优化；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 数据契约与业务逻辑保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏本周战报图例与曲线颜色调整之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）本周战报图例命名（“发运量”）与双轨曲线颜色/KPI卡片样式优化；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 本周双轨战报（`weekly_report` & `weekly_fitting_report`）数据结构及聚合计算完全保持稳定，零后端改动。
+
 ## 2026-10-07 数字指挥大屏飞线发运量保留两位小数之后端状态保持 (Baseline Kept)
 
 - **后端架构与接口状态**：
