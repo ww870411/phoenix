@@ -1,3 +1,121 @@
+## 2026-10-07 数字指挥大屏供给主体卡片库存徽章恢复呼吸空格与纵向列级对齐说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（拓扑图供给节点卡片 `.supply-node-card .sup-card-content`、现货徽章 `.sup-stock-badge`、类别容器 `.badge-type-name`、微分割线 `.badge-sep`、数值容器 `.badge-val-text`）；
+- **前端结构与微排版视觉升级**：
+  1. **恢复呼吸间隙视觉设计**：
+     - 用户根据实机视觉感受要求恢复空格展示；
+     - 将外层 `.sup-stock-badge` 容器 flex `gap` 恢复为 `4px`，使“微竖线 `|`”前后重新获得左右各 4px 的舒缓呼吸间距，彻底消除字形粘连与压迫感；
+  2. **保持绝对纵向列级垂直对齐**：
+     - 保留类别名独立容器 `.badge-type-name`（`width: 48px; text-align: left;`），确保“保温管”与“管件/阀门”在徽章内横向基准线完全一致；
+     - 第一行与第二行的微竖线“`|`”处于同一纵向垂直参考线（X 坐标绝对对齐）；
+     - “现货待发：”文本与后方工程数值在纵向列同样保持完全对齐。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 15.46s，零报错）。
+
+## 2026-10-07 数字指挥大屏供给主体卡片库存徽章消除空格与幽灵网格对齐说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（拓扑图供给节点卡片 `.supply-node-card .sup-card-content`、现货徽章 `.sup-stock-badge`、类别容器 `.badge-type-name`、幽灵占位元素 `.type-ghost`、展示文本 `.type-text`、微分割线 `.badge-sep`、数值容器 `.badge-val-text`）；
+- **前端结构与微排版视觉升级**：
+  1. **消除竖线两侧一切空格（零间隙紧凑展示）**：
+     - 将 `.sup-stock-badge` 的 flex `gap` 设置为 `0`；
+     - 清除 `.badge-sep`、`.badge-type-name`、`.badge-val-text` 的所有内外边距；
+     - 彻底去除模板中的标签间空白字符，实现“管件/阀门|现货待发：...”物理 0 像素无缝紧凑连接；
+  2. **自适应 CSS Grid 幽灵占位层绝对对齐**：
+     - 利用 `.badge-type-name` 单单元格重叠网格（`grid-template-areas: "type-cell"`），内嵌不可见元素 `<span class="type-ghost">管件/阀门</span>`，自适应计算“管件/阀门”在宿主字体与DPI下的精确渲染宽度；
+     - 保温管文本左对齐，其后微竖线“`|`”与第二行“`|`”实现 100% 绝对垂直对齐，且两行数值“现货待发：”紧随微竖线无缝展开，完美满足用户对齐与去空格诉求。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 13.35s，零报错）。
+
+## 2026-10-07 数字指挥大屏供给主体卡片库存徽章微竖线与数值纵向列级对齐说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（拓扑图供给节点卡片 `.supply-node-card .sup-card-content`、现货徽章 `.sup-stock-badge`、类别容器 `.badge-type-name`、微分割线 `.badge-sep`、数值容器 `.badge-val-text`）；
+- **前端结构与微排版视觉升级**：
+  1. **品类名称固定列宽排版 (`.badge-type-name`)**：
+     - 将保温管与管件/阀门类别名置于独立容器 `.badge-type-name`，统一定义 `width: 48px; text-align: left; flex-shrink: 0;`；
+     - 确保第 2 行“管件/阀门”（4汉字+1斜杠）自然展开，第 1 行“保温管”（3汉字）左对齐，完美对齐左侧脉冲指示灯；
+  2. **分割线 `|` 与“现货待发：”绝对纵向对齐**：
+     - 分割线 `.badge-sep` 统一为居中无外边距微容器，由 Flex `gap: 4px` 精准驱动，使两行分割线横坐标绝对重合；
+     - 后续“现货待发：”文本及工程数量单位（km / 件）自动在相同基准线展开，形成如工整数据列表般的纵向秩序美。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 14.06s，零报错）。
+
+## 2026-10-07 数字指挥大屏供给主体卡片现货库存文案工业仪表微竖线分割优化说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（拓扑图供给节点卡片 `.supply-node-card .sup-card-content`、现货徽章 `.sup-stock-badge`、微分割元素 `.badge-sep`）；
+- **前端结构与微排版视觉升级**：
+  1. **工业仪表风格微竖线分割标签结构**：
+     - 用户选定方案 2（工业仪表微竖线 `|` 呼吸排版），解决间隔号“`·`”中文字体字距偏小、紧凑感过强的黏连问题；
+     - 将原中圆点替换为语义化微分割元素 `<span class="badge-sep">|</span>`：
+       - 保温管：`保温管<span class="badge-sep">|</span>现货待发：{{ formatNumber(sup.stock_km) }}km`；
+       - 管件/阀门：`管件/阀门<span class="badge-sep">|</span>现货待发：{{ formatCount(sup.fitting_stock_qty) }}件`；
+  2. **专属微分割视觉规范 (`.badge-sep`)**：
+     - 配置 `opacity: 0.4`、`margin: 0 4px`、`font-weight: 300`、`font-size: 9px` 及 `transform: scaleY(0.9)`；
+     - 左右物理撑开 4px 呼吸间隙，彻底杜绝文字粘连；微弱半透明竖线高度微缩，与两端徽章底色/呼吸灯点自然呼应，营造专业工业大屏工整感。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 15.07s，零报错）。
+
+## 2026-10-07 数字指挥大屏供给主体卡片现货库存文案间隔号优化说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（拓扑图供给节点卡片 `.supply-node-card .sup-card-content`、现货徽章 `.sup-stock-badge`）；
+- **前端结构与标签文案规范升级**：
+  1. **物资类别与库存状态增加间隔号分层**：
+     - 将保温管现货标签由“保温管现货待发：”更新为“**保温管·现货待发：**”；
+     - 将管件/阀门现货标签由“管件/阀门现货待发：”更新为“**管件/阀门·现货待发：**”；
+  2. **视觉层级与紧凑排版优化**：
+     - 增加间隔号（`·`）后，有效割分了品类前缀与物资现货状态，在紧凑徽章内呈现更强结构感，且保持原有呼吸圆点动画与单位排版。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 13.71s，零报错）。
+
+## 2026-10-07 数字指挥大屏全屏模式鼠标指针 3 秒闲置隐藏功能说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（大屏根容器 `.bigscreen-container`、全屏状态机 `isFullscreen`、指针隐藏状态 `isCursorHidden`、全屏监听器 `handleFullscreenChange`、活动感知器 `handleUserActivity`）；
+- **前端交互与控制流升级**：
+  1. **沉浸式无动作判定**：
+     - 用户点击“全屏展示”或调用系统全屏后，自动启动 3 秒无动作检测；
+     - 3 秒内无任何鼠标移动或点击，大屏根容器自动附带 `.cursor-hidden` 类，将全屏内全部元素光标强制设为 `cursor: none !important`；
+     - 一旦产生任何鼠标移动或操作交互，即刻唤醒显示光标，并平滑重置 3 秒闲置计时；
+  2. **系统全屏/ESC键多端状态同步**：
+     - 原生挂载 `fullscreenchange` 事件，无论通过右侧面板按钮切换，还是按键盘 `Esc` 键退出全屏，均能自动卸载移动监听器并瞬间复原光标正常可见状态；
+     - 组件销毁生命周期中彻底清理定时器与事件监听器，避免全局泄露。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 13.73s，零报错）。
+
+## 2026-10-07 数字指挥大屏左侧发运情报面板库存指标口径统一说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（保温管全网发运情报 `.panel-box.daily-kpi-panel`、指标网格 `.kpi-metric-grid`、全网供方储备条 `.supplier-stock-summary-bar`）；
+- **前端结构与指标命名规范升级**：
+  1. **供方待发储备指标语序对齐**：
+     - 将保温管发运情报面板中的储备条标题 `.sup-stock-title` 由原“在库现货待发：”统一规范为“**现货在库待发：**”；
+     - 彻底与管件/阀门发运情报面板中的“现货在库待发：”保持完全一致的主谓语序口径；
+  2. **标段现场库存指标名称精简统一**：
+     - 将保温管发运情报 KPI 网格第 4 项指标名称 `.metric-label` 由“现场库存总量”精简统一为“**现场库存量**”；
+     - 与管件/阀门发运情报 KPI 网格的“现场库存量”完全一致，统一了页面全域指标字数与排版规范；
+  3. **视觉布局与业务语义保持稳定**：
+     - 保留现场库存指标右侧的未来 3 日净缺口胶囊警告机制与交互不变。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 14.98s，零报错）。
+
+## 2026-10-07 数字指挥大屏各供给主体卡片现货库存量文案规范说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（拓扑图供给节点卡片 `.supply-node-card .sup-card-content`、现货徽章 `.sup-stock-badge`）；
+- **前端结构与标签文案规范升级**：
+  1. **供给主体卡片现货文案标准化**：
+     - 将保温管现货标签由“保温管现货：”更新为“**保温管现货待发：**”（保留对应单位 `km` 与脉冲呼吸圆点动效）；
+     - 将管件/阀门现货标签由“管件/阀门现货：”更新为“**管件/阀门现货待发：**”（保留对应单位 `件` 与琥珀金脉冲圆点）；
+  2. **与全网保供指标语义完全对齐**：
+     - 与全网 KPI 摘要栏的“在库现货待发”及“现货在库待发”指标保持完全一致的口径规范，清晰表达各管厂、管件厂已经完成出厂质检、随时可调拨发往工程现场的真实待发库存；
+     - 保持现有响应式弹性卡片尺寸与悬停气泡交互不变。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 14.21s，零报错）。
+
 ## 2026-10-07 数字指挥大屏本周战报高清矢量微图例升级说明 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：

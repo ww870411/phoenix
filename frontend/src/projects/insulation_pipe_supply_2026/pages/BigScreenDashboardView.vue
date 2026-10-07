@@ -1,5 +1,5 @@
 <template>
-  <div class="bigscreen-container" :class="[currentTheme, `mobile-tab-${activeMobileTab}`]" ref="containerRef">
+  <div class="bigscreen-container" :class="[currentTheme, `mobile-tab-${activeMobileTab}`, { 'cursor-hidden': isFullscreen && isCursorHidden }]" ref="containerRef">
     <!-- 顶部科技流光控制栏 -->
     <header class="bigscreen-header">
       <div class="header-left">
@@ -642,10 +642,10 @@
               </div>
             </div>
 
-            <!-- 4. 现场库存总量 + 缺口状态胶囊 -->
+            <!-- 4. 现场库存量 + 缺口状态胶囊 -->
             <div class="metric-item highlight-green">
               <div class="metric-label-box">
-                <span class="metric-label">现场库存总量</span>
+                <span class="metric-label">现场库存量</span>
                 <span 
                   class="metric-capsule" 
                   :class="kpiData.pipeThreeDayGapKm > 0 ? 'red-capsule alert-pulse' : 'gray-capsule'" 
@@ -665,7 +665,7 @@
           <div class="supplier-stock-summary-bar" :title="`全网供方最新实盘在库待发量: ${formatNumber(kpiData.supplierStockM)} 米`">
             <div class="sup-stock-summary-left">
               <span class="sup-stock-icon">🏭</span>
-              <span class="sup-stock-title">在库现货待发：</span>
+              <span class="sup-stock-title">现货在库待发：</span>
             </div>
             <div class="sup-stock-summary-right">
               <strong class="sup-stock-num green-text">{{ formatNumber(kpiData.supplierStockKm) }}</strong>
@@ -1020,14 +1020,20 @@
                       <!-- 保温管现货在库（在上） -->
                       <div v-if="sup.has_inventory && sup.stock_qty > 0" class="sup-stock-badge-row pipe-row">
                         <span class="sup-stock-badge pipe-badge" :title="'保温管在库待发: ' + sup.stock_qty + 'm (' + formatNumber(sup.stock_km) + 'km)'">
-                          <span class="stock-pulse-dot"></span>保温管现货：{{ formatNumber(sup.stock_km) }}km
+                          <span class="stock-pulse-dot"></span>
+                          <span class="badge-type-name">保温管</span>
+                          <span class="badge-sep">|</span>
+                          <span class="badge-val-text">现货待发：{{ formatNumber(sup.stock_km) }}km</span>
                         </span>
                       </div>
 
                       <!-- 管件/阀门现货在库（在下） -->
                       <div v-if="sup.has_fitting_inventory && sup.fitting_stock_qty > 0" class="sup-stock-badge-row fitting-row">
                         <span class="sup-stock-badge fitting-badge" :title="'管件/阀门在库待发: ' + formatCount(sup.fitting_stock_qty) + '件'">
-                          <span class="stock-pulse-dot gold"></span>管件/阀门现货：{{ formatCount(sup.fitting_stock_qty) }}件
+                          <span class="stock-pulse-dot gold"></span>
+                          <span class="badge-type-name">管件/阀门</span>
+                          <span class="badge-sep">|</span>
+                          <span class="badge-val-text">现货待发：{{ formatCount(sup.fitting_stock_qty) }}件</span>
                         </span>
                       </div>
                     </div>
@@ -1810,6 +1816,9 @@ const containerRef = ref(null)
 const topologyContainerRef = ref(null)
 const svgRef = ref(null)
 const isFullscreen = ref(false)
+const isCursorHidden = ref(false)
+let cursorIdleTimer = null
+const CURSOR_IDLE_DELAY_MS = 3000
 const configSummary = ref(null)
 const realShowDate = ref('')
 const currentTimeStr = ref('')
@@ -3766,17 +3775,57 @@ function toggleAutoDemo() {
   }
 }
 
+// 全屏状态下 3 秒无动作隐藏鼠标指针
+function handleUserActivity() {
+  if (!isFullscreen.value) return
+  if (isCursorHidden.value) {
+    isCursorHidden.value = false
+  }
+  if (cursorIdleTimer) {
+    clearTimeout(cursorIdleTimer)
+  }
+  cursorIdleTimer = setTimeout(() => {
+    if (isFullscreen.value) {
+      isCursorHidden.value = true
+    }
+  }, CURSOR_IDLE_DELAY_MS)
+}
+
+function handleFullscreenChange() {
+  const active = !!(
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement
+  )
+  isFullscreen.value = active
+  if (active) {
+    isCursorHidden.value = false
+    handleUserActivity()
+    window.addEventListener('mousemove', handleUserActivity, { passive: true })
+    window.addEventListener('mousedown', handleUserActivity, { passive: true })
+    window.addEventListener('pointermove', handleUserActivity, { passive: true })
+  } else {
+    isCursorHidden.value = false
+    if (cursorIdleTimer) {
+      clearTimeout(cursorIdleTimer)
+      cursorIdleTimer = null
+    }
+    window.removeEventListener('mousemove', handleUserActivity)
+    window.removeEventListener('mousedown', handleUserActivity)
+    window.removeEventListener('pointermove', handleUserActivity)
+  }
+}
+
 // 全屏切换
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
     if (containerRef.value?.requestFullscreen) {
-      containerRef.value.requestFullscreen()
-      isFullscreen.value = true
+      containerRef.value.requestFullscreen().catch(() => {})
     }
   } else {
     if (document.exitFullscreen) {
-      document.exitFullscreen()
-      isFullscreen.value = false
+      document.exitFullscreen().catch(() => {})
     }
   }
 }
@@ -3974,6 +4023,12 @@ onMounted(() => {
   window.addEventListener('resize', recalculateFlylines, { passive: true })
   window.addEventListener('resize', handleResizeWeeklyChart, { passive: true })
   window.addEventListener('click', handleGlobalClick)
+
+  // 全屏状态感知与鼠标指针闲置隐藏
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.addEventListener('mozfullscreenchange', handleFullscreenChange)
+  document.addEventListener('MSFullscreenChange', handleFullscreenChange)
 })
 
 onBeforeUnmount(() => {
@@ -3994,6 +4049,18 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', recalculateFlylines)
   window.removeEventListener('resize', handleResizeWeeklyChart)
   window.removeEventListener('click', handleGlobalClick)
+
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('mozfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('MSFullscreenChange', handleFullscreenChange)
+  window.removeEventListener('mousemove', handleUserActivity)
+  window.removeEventListener('mousedown', handleUserActivity)
+  window.removeEventListener('pointermove', handleUserActivity)
+  if (cursorIdleTimer) {
+    clearTimeout(cursorIdleTimer)
+    cursorIdleTimer = null
+  }
 })
 </script>
 
@@ -4003,6 +4070,12 @@ onBeforeUnmount(() => {
    ========================================================================== */
 
 /* --- 默认深色科技主题 (Dark Theme) --- */
+/* 全屏 3 秒无动作自动隐藏鼠标指针 */
+.bigscreen-container.cursor-hidden,
+.bigscreen-container.cursor-hidden * {
+  cursor: none !important;
+}
+
 .bigscreen-container {
   width: 100vw;
   height: 100vh;
@@ -6461,6 +6534,34 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(251, 191, 36, 0.35);
   color: #fbbf24;
   box-shadow: 0 0 6px rgba(251, 191, 36, 0.15);
+}
+
+.badge-type-name {
+  display: inline-block;
+  width: 48px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.badge-sep {
+  opacity: 0.4;
+  margin: 0;
+  font-weight: 300;
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4px;
+  flex-shrink: 0;
+  transform: scaleY(0.9);
+  line-height: 1;
+}
+
+.badge-val-text {
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .stock-pulse-dot {

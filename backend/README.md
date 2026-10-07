@@ -1,3 +1,51 @@
+## 2026-10-07 数字指挥大屏供给主体卡片库存徽章恢复呼吸空格之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）供方卡片现货库存徽章恢复微竖线 `|` 前后呼吸空格，并维持纵向列级对齐；
+  - 后端服务及 API 契约保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏供给主体卡片库存徽章消除空格与幽灵网格对齐之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）供方卡片现货库存徽章消除“|”前后空格，并基于 CSS Grid 幽灵层对齐保温管与管件/阀门徽章；
+  - 后端服务及 API 契约保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏供给主体卡片库存徽章纵向列级对齐之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）供方卡片现货库存徽章中类别名称、微竖线 `|` 及现货待发数值进行纵向列级对齐；
+  - 后端服务及 API 契约保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏供给主体卡片微竖线分割优化之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）供方卡片现货库存文案优化为工业仪表微竖线分割（`保温管 | 现货待发：...` 与 `管件/阀门 | 现货待发：...`）；
+  - 后端服务及 API 契约保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏供给主体卡片文案微调之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）供方卡片现货库存文案加入间隔号（“保温管·现货待发：”与“管件/阀门·现货待发：”）；
+  - 后端服务及 API 契约保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏全屏鼠标指针闲置隐藏之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为纯前端交互功能（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）全屏模式下 3 秒无鼠标操作自动隐藏光标；
+  - 后端服务及 API 契约保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏左侧发运情报指标口径统一之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）左侧发运情报面板指标文案统一（“现货在库待发：”与“现场库存量”）；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 既有 KPI 指标（`supplierStockKm`、`supplierStockM`、`pipeStockKm`、`pipeThreeDayGapKm` 等）契约与业务逻辑保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏各供给主体卡片文案规范之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）供方卡片现货库存量文案更新（统一订正为“保温管现货待发：”与“管件/阀门现货待发：”）；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 供给主体在库待发库存统计字段（`stock_qty`、`stock_km`、`fitting_stock_qty` 等）契约与逻辑保持稳定，零后端改动。
+
 ## 2026-10-07 数字指挥大屏本周战报高清矢量微图例升级之后端状态保持 (Baseline Kept)
 
 - **后端架构与接口状态**：
