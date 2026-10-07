@@ -2445,7 +2445,8 @@ const activeMaterialType = computed(() => {
 function getFeedSourceOrAction(feed) {
   if (!feed) return ''
   if (feed.category_key === 'dispatch' || feed.category === '厂家发货') {
-    return feed.supplier || '管厂调度发运'
+    if (feed.supplier) return feed.supplier
+    return feed.type === 'fitting' ? '管件/阀门专线发运' : '保温管专线发运'
   }
   if (feed.category_key === 'arrival' || feed.category === '确认到货') {
     return feed.type === 'fitting' ? '管件进场到货' : '车辆进场到货'
@@ -3367,7 +3368,7 @@ function triggerSimulateDelivery(mode = 'pipe') {
         amount: `${meters} 米`,
         shipmentCode: 'DL-P-' + Math.floor(1000 + Math.random() * 9000),
         vehiclePlate: '辽B·' + Math.floor(1000 + Math.random() * 9000),
-        operator: '管厂调度发运',
+        operator: '保温管专线发运',
         time: timeNow,
         positiveTag: `保温管专车直达标段 +${meters}米 🚀`,
         isNew: true
@@ -3406,7 +3407,7 @@ function triggerSimulateDelivery(mode = 'pipe') {
         amount: `${pcs} 件套`,
         shipmentCode: 'FT-SH-' + Math.floor(1000 + Math.random() * 9000),
         vehiclePlate: '冀B·' + Math.floor(1000 + Math.random() * 9000),
-        operator: '管厂调度发运',
+        operator: '管件/阀门专线发运',
         time: timeNow,
         positiveTag: `关键配件专车直达 +${pcs}件 ✨`,
         isNew: true
@@ -7454,7 +7455,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 90px;
+  max-width: 140px;
 }
 
 .feed-time {

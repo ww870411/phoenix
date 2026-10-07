@@ -1,3 +1,52 @@
+## 2026-10-07 [数字指挥大屏：发运动态经办人标签分类重构（保温管专线发运 / 管件/阀门专线发运）]
+- **需求背景与业务目标**：
+  - 用户明确优化需求：对大屏右上方“全网工程实时动态播报”中的厂家发货类卡片标签重新规范：
+    1. 保温管发货：标签统一规范显示为“**保温管专线发运**”；
+    2. 管件/阀门发货：标签统一规范显示为“**管件/阀门专线发运**”。
+- **改动范围与实施方案**：
+  1. **后端大屏数据服务重构 (`workspace.py`)**：
+     - 在直管出厂发货事件（`p_ship_{id}`）派生逻辑中，将经办人由 `"管厂调度发运"` 升级为 `"保温管专线发运"`；
+     - 在管件出厂发货事件（`f_ship_{id}`）派生逻辑中，将经办人由 `"管厂调度发运"` 升级为 `"管件/阀门专线发运"`；
+  2. **前端大屏组件与流向函数适配 (`BigScreenDashboardView.vue`)**：
+     - 重构 `getFeedSourceOrAction` 函数：当发货单据缺失管厂名称时，依据 `feed.type === 'fitting'` 分流保底为 `'管件/阀门专线发运'` 或 `'保温管专线发运'`；
+     - 同步更新前端沙盘脉冲心跳中的直管发货（`'保温管专线发运'`）与管件发货（`'管件/阀门专线发运'`）；
+     - 将 CSS 类 `.feed-operator-tag` 的最大宽度 `max-width` 由 `90px` 调整为 `140px`，确保“管件/阀门专线发运”全称饱满展现，彻底避免省略号截断；
+  3. **质量与构建验证**：
+     - 后端执行 `python -m py_compile` 语法校验通过（退出码 0）；
+     - 前端执行全量打包构建 `npm run build`，确保编译正常。
+- **改动清单**：
+  - 后端：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-07 [数字指挥大屏：动态播报“管厂调度发运”出现场景与业务链路全量溯源]
+- **有效讨论与技术答疑**：
+  - 用户咨询：在数字指挥大屏页面（`http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen`）右上方的“全网工程实时动态播报”中，看到有的卡片写着“管厂调运发货”（代码与界面标准文案为“**管厂调度发运**”），要求列出该字样出现的所有情况；
+  - 经全链路代码与数据审计，得出确凿溯源结论：
+    1. **卡片视觉位置**：
+       - **位置 1（经办人徽章 `feed-operator-tag`）**：卡片 Row 1 紧随 `【厂家发货】` 之后的经办人信息 `👤 管厂调度发运`；
+       - **位置 2（起点来源兜底 `route-source`）**：卡片 Row 2 流向行，若单据缺失管厂名称时作为兜底来源显示（`管厂调度发运 ──► XX标段`）；
+    2. **出现的 4 大具体业务场景**：
+       - **场景 A（真实直管发货）**：后端直管发货表 `tube.tube_delivery` 中 `shipped_at` 有值，生成直管发运战报；
+       - **场景 B（真实管件发货）**：后端管件发货表 `tube.tube_fitting_delivery` 中 `shipped_at` 有值，生成关键配件发运战报；
+       - **场景 C（前端沙盘直管发货模拟）**：前端模拟心跳脉冲生成的直管发货事件；
+       - **场景 D（前端沙盘管件发货模拟）**：前端模拟心跳脉冲生成的管件发货事件；
+    3. **为何“有的写、有的没写”**：动态播报覆盖物流施工全生命周期 6 大环节（厂家发货、确认到货、施工收货、库管确认、施工量确认、需求量申报）；仅在第一环节“厂家发货”时经办人为“管厂调度发运”，其他环节分别对应“现场负责人”、“现场施工接收员”、“专职库管员”、“施工技术员”等。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-10-07 [CLI 输出详细程度配置提示释义（Verbosity 提示说明）]
+- **有效讨论与技术答疑**：
+  - 用户咨询终端系统提示“Verbosity now defaults to medium ┃ Verbosity is now medium by default, so tool calls and thoughts roll up into summaries. You can change your preferred verbosity anytime in /config > Verbosity.”；
+  - 核心释义向用户系统说明：
+    1. **Verbosity 定义**：表示 CLI 界面输出的详细级别；当前版本默认值统一调整为 `medium`（中等）；
+    2. **交互体验变化**：在该模式下，智能体调用的工具过程（tool calls）与内部思考过程（thoughts）将自动折叠汇总为一句话摘要（summaries），控制台不再铺天盖地输出原生参数与调用细节，大幅提升阅读体验与终端清爽度；
+    3. **切换方式**：用户可随时在交互终端输入 `/config` 命令，进入 `Verbosity` 菜单按需自由切换为全展开（`high`）或极简（`low`）；
+    4. **业务影响**：纯属控制台视觉渲染层调整，对代码生成能力、工具执行准确性与项目业务逻辑零影响。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
 ## 2026-10-06 [展示大屏供需拓扑供应商卡片“管件/阀门现货”规范化更新]
 - **需求背景与业务目标**：
   - 用户反馈展示大屏（`BigScreenDashboardView.vue`）“供需流向拓扑”板块中，各个供应商节点卡片内部原“管件现货”字样口径需规范更新为“**管件/阀门现货**”，与全屏管件/阀门整体命名体系保持严密统一。

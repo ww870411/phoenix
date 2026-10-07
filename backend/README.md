@@ -1,3 +1,20 @@
+## 2026-10-07 数字指挥大屏动态播报发货事件经办人映射分类重构规范 (workspace.py)
+
+- **业务口径与接口映射**：
+  - 接口：`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`（对应服务：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）；
+  - 数据模型与事件派生：
+    1. **直管发货事件（`tube.tube_delivery`）**：单据中 `shipped_at` 存在时生成 `p_ship_{id}` 发货事件，经办人规范映射为 `"operator": "保温管专线发运"`；
+    2. **管件发货事件（`tube.tube_fitting_delivery`）**：单据中 `shipped_at` 存在时生成 `f_ship_{id}` 发货事件，经办人规范映射为 `"operator": "管件/阀门专线发运"`；
+    3. 到货、收货、库管核销等下游环节分别由单据中的 `arrived_by`、`received_by`、`warehouse_by` 字段赋值，不显示该经办人。
+- **语法校验**：
+  - `python -m py_compile` 静态编译校验一次性通过，零语法异常。
+
+## 2026-10-07 工程环境状态与后端接口保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮对话为 CLI 环境与控制台交互提示答疑（关于终端 `Verbosity` 输出模式变更），后端代码及 API 接口契约保持不变；
+  - 后端各服务与数据库存储层稳定运行。
+
 ## 2026-10-06 数字指挥大屏供应商现货储备“管件/阀门”口径协同说明 (workspace.py)
 
 - **业务口径协同**：

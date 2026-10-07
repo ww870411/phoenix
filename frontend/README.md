@@ -1,3 +1,26 @@
+## 2026-10-07 数字指挥大屏发运动态经办人标签分类重构规范 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（全网工程指挥大屏 - 实时动态播报卡片 `.feed-card`、`getFeedSourceOrAction` 函数、沙盘发运事件生成器、经办人标签样式 `.feed-operator-tag`）；
+- **前端结构与交互变更**：
+  1. **发货经办人标签按物资分类重构**：
+     - 保温管直管发货卡片：标签规范显示为 `👤 保温管专线发运`；
+     - 管件/阀门发货卡片：标签规范显示为 `👤 管件/阀门专线发运`；
+  2. **流向来源兜底适配 (`getFeedSourceOrAction`)**：
+     - 若发货单据缺失管厂供货主体名称，依据 `feed.type === 'fitting'` 分流保底为 `'管件/阀门专线发运'` 或 `'保温管专线发运'`；
+  3. **样式宽度与截断优化**：
+     - 将 `.feed-operator-tag` 的 `max-width` 从 `90px` 调整为 `140px`，确保较长的“管件/阀门专线发运”在任何分辨率下均完整显示，无文本截断；
+  4. **沙盘脉冲心跳联动**：
+     - 直管模拟脉冲与管件模拟脉冲同步应用新规范标签；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 17.14s），产出生产包 `BigScreenDashboardView-BfdPCVxu.js`，零报错。
+
+## 2026-10-07 工程环境状态与前端结构保持 (Baseline Kept)
+
+- **前端架构与组件状态**：
+  - 本轮对话为 CLI 环境与控制台交互提示答疑（关于终端 `Verbosity` 输出模式变更），前端代码及组件结构保持不变；
+  - 前端各业务项目模块及构建基线稳定运行。
+
 ## 2026-10-06 展示大屏供需拓扑供应商卡片“管件/阀门现货”规范化更新 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：
