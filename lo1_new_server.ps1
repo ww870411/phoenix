@@ -88,4 +88,4 @@ Write-Output "SUCCESS: 所有镜像（ARM64 / HTTP ONLY）已成功推送到 Doc
 Show-PhaseSummary
 Write-Output "--------------------------------------------------------"
 Write-Output "请使用以下时间戳更新您的 lo1_new_server.yml 文件中的镜像标签: $timestamp"
-Write-Output "下一步: 请在服务器上执行 'docker-compose -f lo1_new_server.yml up -d'。"
+Write-Output "下一步: 请在服务器上执行 './lo1.sh'（默认 5 秒自动平滑更新，无需守候）。"

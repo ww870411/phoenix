@@ -1,3 +1,54 @@
+## 2026-10-07 数字指挥大屏飞线胶囊前缀调整之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端拓扑飞线微徽章文案及样式调整（规范订正为“累计发运：”前缀）；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 契约及各服务逻辑保持稳定，零后端改动。
+
+## 2026-10-07 数字指挥大屏焦点战报卡片动效升级之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）战报卡片呼吸光晕动效补齐；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 契约及气象服务保持稳定，零后端改动。
+
+## 2026-10-07 气象服务高德天气 API 自适应双协议改造说明 (weather_service.py)
+
+- **气象服务升级与网络容灾**：
+  - 服务：[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)（`_fetch_amap_weather_json`、`get_live_weather_for_dashboard`、`fetch_amap_weather`）；
+  - 核心变更：
+    1. **规避本地 TUN/代理虚拟网卡 SSL 握手超时**：开发机运行网络代理或 TUN 模式时，请求 `https://restapi.amap.com` 会因 SSL Handshake 超时触发兜底；通过封装 `_fetch_amap_weather_json`，默认优先使用高德原生全面支持的 HTTP 明文协议直连，1 秒即可成功返回；若异常自动无缝回退 HTTPS，双向兜底；
+    2. **实况数据真实激活**：大屏气象服务恢复 100% 真实高德实况（大连市主城区，当前晴、温度 20°C、全天预报 18°C ~ 24°C），`is_live_source` 返回 `True`，大屏状态由“仿真”自动切换为“实况”。
+- **语法校验**：
+  - `python -m py_compile` 静态编译校验一次性通过，零语法异常。
+
+## 2026-10-07 数字指挥大屏供需明细发运矩阵接口增强说明 (workspace.py)
+
+- **业务口径与接口新增字段**：
+  - 接口：`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`（服务：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）；
+  - 数据模型与发运矩阵聚合：
+    1. **供需双轨发运矩阵 (`supplier_section_matrix`)**：
+       - 分别从直管发运表 `tube.tube_delivery` 和管件发运表 `tube.tube_fitting_delivery` 执行 `GROUP BY LOWER(supply_entity_id), section_1_id` 聚合；
+       - 构建两层字典结构：`{ [canonical_supplier_id]: { [section_1_id]: { pipe_m, pipe_km, fitting_pcs, has_shipped } } }`，支持对中英文别名、小写 ID 及 `sup_` 前缀的自动清洗归一化；
+       - 向前端提供各厂家对各标段物理颗粒度的真实发运实绩，解决多厂家服务同标段时的判定串线问题；
+    2. 后端接口向后兼容，全量字段及其他既有结构保持完全一致。
+- **语法校验**：
+  - `python -m py_compile` 静态编译校验一次性通过，零语法异常。
+
+## 2026-10-07 数字指挥大屏供需拓扑发货量胶囊微徽章前后端口径对齐说明 (workspace.py)
+
+- **业务口径与接口字段协同**：
+  - 接口：`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`（服务：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）；
+  - 数据模型与前端微徽章消费：
+    1. **标段发运数据对齐**：前端流向线条上的胶囊徽章消费 `section_progress_list` 中的 `shippedKm`（保温管直管已发运总量）与 `shippedFittings`（管件/阀门已发运总量）；
+    2. **供方产品属性分流**：前端依据供货主体类别智能呈现对应物资发运实绩，与后端 `tube.tube_delivery` 及 `tube.tube_fitting_delivery` 责任划分保持紧密一致；
+    3. 后端接口协议与数据库表结构保持零改动稳定运行。
+
+## 2026-10-07 服务器多命令打包运行与后端容器重启运维说明 (lo1.sh)
+
+- **后端服务部署与容器管理**：
+  - 后端镜像 `ww870411/phoenix-backend:<timestamp>` 依赖 PostgreSQL 容器并挂载数据目录 `/home/ww870411/25-26/backend_data`；
+  - 针对服务器每次镜像更新需逐条执行命令的问题，项目提供服务器端一键部署脚本 [`lo1.sh`](file:///D:/编程项目/phoenix/lo1.sh)，支持交互式选择与 5 秒倒计时免守候机制，默认通过 `pull && up -d` 仅对后端和 Web 服务做原地秒级交替，数据库容器持续健康运行无需重启；
+  - 本地构建推送脚本 [`lo1_new_server.ps1`](file:///D:/编程项目/phoenix/lo1_new_server.ps1) 自动提示运行 `./lo1.sh`，后端各模块 API 接口与数据库存储结构在本轮保持稳定运行。
+
 ## 2026-10-07 数字指挥大屏动态播报发货事件经办人映射分类重构规范 (workspace.py)
 
 - **业务口径与接口映射**：

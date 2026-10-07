@@ -1,3 +1,82 @@
+## 2026-10-07 数字指挥大屏拓扑飞线胶囊徽章“累计发运：”前缀语义增强说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（流向微徽章 `.flow-capsule-tag`、前缀标签 `.flow-prefix`、发运数值 `.flow-val`）；
+- **前端结构与排版升级**：
+  1. **条件渲染语义前缀**：
+     - 当通道具备实际直管或管件发运实绩时（`line.pipeShippedKm > 0 || line.fittingShipped > 0`），徽章前置呈现 `<span class="flow-prefix">累计发运:</span>`，清晰明确指标口径；
+     - 未发货的规划通道保持纯净的“待发运”，不携带前缀；
+  2. **双色模式微排版**：
+     - `.flow-prefix` 采用 8.5px 紧凑字号与柔和灰调，突出后方青/金色实绩数值。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过，零报错。
+
+## 2026-10-07 数字指挥大屏焦点战报卡片呼吸光晕动画实装说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（战报流 `.feed-card.is-active-feed`、流向箭头 `.route-arrow`、呼吸关键帧 `@keyframes feed-active-pulse-*`）；
+- **前端动效与交互升级**：
+  1. **1.6s 周期呼吸动画覆盖**：
+     - 为激活状态的战报卡片实装与供需两端（管厂 `.is-shipping-source` 与标段 `.is-event-target`）严格同频的 1.6 秒缓动呼吸关键帧；
+     - 区分直管（青色光晕扩散）、管件（琥珀金光晕扩散）、进场到货（天蓝）、施工铺设（翡翠绿）、现货盘点（荧光绿）、要料计划（玫瑰红）全套光影；
+  2. **流向箭头微动协同**：
+     - 激活卡片内的 `──►` 箭头绑定微动效，向右位移引导流向意图；
+  3. **深浅双色模式自适应**：
+     - 浅色模式同步适配柔和光晕，杜绝强光刺眼。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过，零报错。
+
+## 2026-10-07 数字指挥大屏实时天气实况标签与动态环境感知说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（天气卡片 `.weather-summary-box`、`liveWeatherData` 响应式对象、城市与数据源状态标签 `.loc-time`、温度与全天预报展示区）；
+- **数据源状态与渲染机制**：
+  - 城市与数据源标注：`<span class="loc-time">{{ liveWeatherData.is_live_source === false ? '仿真' : '实况' }}</span>`；
+  - 当后端成功拉取高德官方气象（`is_live_source === true`）时，标签自动点亮为 `实况`，显示大连主城区当前真实温度（如 20°C 晴）、风力、湿度与全天预报；
+  - 仅在极端网络完全中断时，后端返回保底兜底数据并标记 `is_live_source === false`，大屏自动提示 `仿真`。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过，零报错。
+
+## 2026-10-07 数字指挥大屏供需拓扑连线状态判定与供需发运矩阵消费重构 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（供需流向拓扑 SVG 飞线层、`supplierSectionMatrix` 响应式矩阵字典、`getSupplierSectionDelivery` 供需通道发运实绩解析器、`isLineShipped` 连线活跃状态计算器、`recalculateFlylines` 飞线几何与发货标记构建器）；
+- **前端结构与逻辑变更**：
+  1. **供需明细发运矩阵消费 (`supplierSectionMatrix`)**：
+     - 在初始加载 `loadRealData` 与实时心跳 `pollLiveRealData` 中完整消费后端返回的 `supplier_section_matrix`，建立厂家至标段物理颗粒度的实绩感知；
+  2. **供需通道发运实绩精准解算 (`getSupplierSectionDelivery`)**：
+     - 依据供货商 ID 与标段 ID 直接检索对应专线发运数据，并提供物资属性隔离降级机制（管厂不借用配件、配件不借用管材，`low_lot_1` 针对直管显式防御）；
+  3. **连线已发货/未发货状态精准判定 (`isLineShipped`)**：
+     - 彻底废除使用全局标段累计发货量的粗粒度逻辑，改为优先使用飞线对象自带的 `line.hasShipment` 或 `getSupplierSectionDelivery` 状态；
+     - 鑫瑞得向 `low_lot_1` 连线恢复为标准细静止虚线（1.6px、`unshipped`、无流动光带），徽章显示灰色“待发运”；真正有发货实绩的线路（如 `low_lot_2`）呈现加粗动态流光；
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 17.42s），产出生产包零报错。
+
+## 2026-10-07 数字指挥大屏供需拓扑线条“发货量胶囊微徽章”功能落地 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（供需流向拓扑 SVG 飞线层、`.topology-flow-tags-layer` 徽章层、`.flow-capsule-tag` 胶囊徽章、`recalculateFlylines` 贝塞尔曲线计算器、`getSupplierMaterialCategory` 供方材质适配器、`formatLineKm` 数据格式化函数）；
+- **前端结构与交互变更**：
+  1. **拓扑流量胶囊微徽章层 (`.topology-flow-tags-layer`)**：
+     - 在 SVG 飞线图层上层新增绝对定位标签层，跟随线条的显隐状态（悬停激活或发货激光脉冲时）同步浮现；
+  2. **三次贝塞尔曲线高精定位 (`t=0.54`)**：
+     - 在 `recalculateFlylines()` 中采用三次贝塞尔方程计算曲线中偏右位置点坐标（`t=0.54`），确保从同一供给主体发向不同标段的各个胶囊在 Y 轴平滑分散排布，杜绝文字重叠；
+  3. **双轨物资发运量智能匹配与呈现**：
+     - 保温管直管发货量：采用科技青色微发光（`#00f2fe`），如 `12.0km`；
+     - 管件/阀门发货量：采用琥珀金色微发光（`#fbbf24`），如 `280件`；
+     - 依据供货主体经营范围（`getSupplierMaterialCategory`）智能分流，管厂仅显直管量、阀门/配件厂仅显管件量，兼营主体支持双轨同框（如 `12.0km / 280件`），未开工未发货标段显示灰色 `待发运`；
+  4. **深浅色双主题无缝适配**：
+     - 深色模式采用 `rgba(9, 14, 26, 0.94)` 毛玻璃滤镜 + 青色微发光边框；浅色模式采用白底微透与深蓝/金棕对比色。
+- **打包与构建**：
+  - `npm run build` 全量打包一次性通过（738 modules transformed，耗时 16.34s），产出生产包 `BigScreenDashboardView-uhTXy7qc.js` 与 `BigScreenDashboardView-Bttw9RGH.css`，零报错。
+
+## 2026-10-07 服务器多命令打包运行与前端容器重启运维说明 (lo1.sh)
+
+- **前端镜像部署与容器管理**：
+  - 前端镜像 `ww870411/phoenix-web:<timestamp>` 通过 Docker Compose 挂载端口 `8001:80`，由宿主机 NPM (Nginx Proxy Manager) 反向代理；
+  - 针对服务器每次镜像更新需逐条执行命令的问题，项目提供服务器端一键部署脚本 [`lo1.sh`](file:///D:/编程项目/phoenix/lo1.sh)，支持交互式选择与 5 秒倒计时免守候机制，默认通过 `pull && up -d` 实现前端容器毫秒级替换，旧容器拉取期间不中断外部用户访问；
+  - 本地构建推送脚本 [`lo1_new_server.ps1`](file:///D:/编程项目/phoenix/lo1_new_server.ps1) 自动提示运行 `./lo1.sh`，前端代码及项目页面结构在本轮保持稳定运行。
+
 ## 2026-10-07 数字指挥大屏发运动态经办人标签分类重构规范 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：

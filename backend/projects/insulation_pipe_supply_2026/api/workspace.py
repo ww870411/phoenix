@@ -1569,6 +1569,108 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
         # 现场真实可用库存 = 累计确认到货 - 累计有效安装
         fitting_stock_total_pcs = max(0, fitting_arrived_total_pcs - fitting_installed_total_pcs)
 
+        # 2.5 供需明细发运矩阵 (真实厂家针对各标段的累计直管与管件发运量)
+        supplier_matrix_sql = text("""
+            SELECT 
+                LOWER(TRIM(supply_entity_id)) AS sup_id,
+                section_1_id,
+                SUM(COALESCE(shipped_qty, 0)) AS pipe_shipped_m,
+                COUNT(id) AS pipe_batches
+            FROM tube.tube_delivery
+            WHERE status != 'cancelled'
+            GROUP BY LOWER(TRIM(supply_entity_id)), section_1_id
+        """)
+        try:
+            supplier_pipe_matrix_rows = session.execute(supplier_matrix_sql).mappings().all()
+        except Exception as e:
+            print("⚠️ 查询直管供需矩阵异常:", e)
+            supplier_pipe_matrix_rows = []
+
+        supplier_fit_matrix_sql = text("""
+            SELECT 
+                LOWER(TRIM(supply_entity_id)) AS sup_id,
+                section_1_id,
+                SUM(COALESCE(shipped_qty, 0)) AS fitting_shipped_pcs,
+                COUNT(id) AS fitting_batches
+            FROM tube.tube_fitting_delivery
+            WHERE status != 'cancelled'
+            GROUP BY LOWER(TRIM(supply_entity_id)), section_1_id
+        """)
+        try:
+            supplier_fit_matrix_rows = session.execute(supplier_fit_matrix_sql).mappings().all()
+        except Exception as e:
+            print("⚠️ 查询管件供需矩阵异常:", e)
+            supplier_fit_matrix_rows = []
+
+        # 归一化实体 ID 映射
+        sup_canon_map = {
+            "xinruide": "xinruide",
+            "kaiyuan": "kaiyuan",
+            "tiandilong": "tiandilong",
+            "wosheng": "wosheng",
+            "kaersi": "kaersi",
+            "zeyue": "zeyue",
+            "sanwei": "sanwei",
+            "taideer": "taideer",
+            "吴近": "吴近",
+            "bh": "吴近",
+            "beihai": "吴近",
+            "河北鑫瑞得管道设备有限公司": "xinruide",
+            "大连开元热力管道股份有限公司": "kaiyuan",
+            "天津天地龙管业股份有限公司": "tiandilong",
+            "江苏沃圣阀业有限公司": "wosheng",
+            "天津卡尔斯阀门股份有限公司": "kaersi",
+            "河北泽悦节能设备科技有限公司": "zeyue",
+            "大连三维膨胀节有限公司": "sanwei",
+            "泰德尔物联(辽宁)有限公司": "taideer",
+            "能源集团保温管厂": "吴近",
+        }
+        for s in supply_entities:
+            sid_raw = str(s.get("entity_id") or "").strip().lower()
+            sname_raw = str(s.get("entity_name") or "").strip().lower()
+            if sid_raw:
+                sup_canon_map[sid_raw] = sid_raw
+                sup_canon_map[f"sup_{sid_raw}"] = sid_raw
+            if sname_raw:
+                sup_canon_map[sname_raw] = sid_raw
+
+        def _resolve_sup_key(raw_val: Any) -> str:
+            k = str(raw_val or "").strip().lower()
+            return sup_canon_map.get(k, k.replace("sup_", ""))
+
+        supplier_section_matrix_builder: Dict[str, Dict[str, Any]] = defaultdict(lambda: defaultdict(lambda: {
+            "pipe_m": 0.0,
+            "pipe_km": 0.0,
+            "fitting_pcs": 0,
+            "has_shipped": False
+        }))
+
+        for r in supplier_pipe_matrix_rows:
+            c_sup = _resolve_sup_key(r["sup_id"])
+            sec_id = str(r["section_1_id"] or "").strip()
+            pm = float(r["pipe_shipped_m"] or 0.0)
+            if c_sup and sec_id:
+                item = supplier_section_matrix_builder[c_sup][sec_id]
+                item["pipe_m"] += pm
+                item["pipe_km"] = round(item["pipe_m"] / 1000.0, 2)
+                if item["pipe_m"] > 0:
+                    item["has_shipped"] = True
+
+        for r in supplier_fit_matrix_rows:
+            c_sup = _resolve_sup_key(r["sup_id"])
+            sec_id = str(r["section_1_id"] or "").strip()
+            fp = int(float(r["fitting_shipped_pcs"] or 0))
+            if c_sup and sec_id:
+                item = supplier_section_matrix_builder[c_sup][sec_id]
+                item["fitting_pcs"] += fp
+                if item["fitting_pcs"] > 0 or item["pipe_m"] > 0:
+                    item["has_shipped"] = True
+
+        serialized_supplier_matrix = {
+            sup: {sec: dict(data) for sec, data in sec_map.items()}
+            for sup, sec_map in supplier_section_matrix_builder.items()
+        }
+
         # 3. 针对全量 10 个真实标段进行精准聚合，并关联真实库管员与施工单位
         sec_name_map = {d["section_1_id"]: d.get("section_1_name") or d["section_1_id"] for d in demand_entities}
         construction_units = get_config_list(payload, "construction_units")
@@ -2709,7 +2811,8 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
             "pipe_models": [pm.get("pipe_model_name") or pm.get("id") or str(pm) for pm in pipe_models if pm],
             "supply_entities_raw": supply_entities,
             "demand_entities_raw": demand_entities,
-            "live_weather": weather_service.get_live_weather_for_dashboard()
+            "live_weather": weather_service.get_live_weather_for_dashboard(),
+            "supplier_section_matrix": serialized_supplier_matrix
         }
     finally:
         session.close()

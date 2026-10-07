@@ -1,3 +1,175 @@
+## 2026-10-07 [大屏看板：飞线发运量徽章“累计发运：”语义前缀校正实装（待发运通道保持纯净）]
+- **需求意向与微文案优化**：
+  - 用户反馈：“抱歉抱歉，应该是‘累计发运’”（将前一步新增的微徽章前缀由“累计发货：”统一规范为“累计发运：”，待发运状态保持纯净不加前缀）；
+  - 核心排查与实装：
+    1. **条件渲染语义前缀 (`.flow-prefix`)**：在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 的 `.flow-capsule-tag` 模板中，将 `<span class="flow-prefix">累计发货:</span>` 精确订正为 `<span class="flow-prefix">累计发运:</span>`，仅在 `line.pipeShippedKm > 0 || line.fittingShipped > 0` 时渲染；
+    2. **纯净待发运状态保持**：对于未有发货实绩的通道，依然保持原有的简约灰底“待发运”，不附加任何前缀；
+    3. **排版与深浅色模式样式对齐**：为 `.flow-prefix` 设置中灰调（`#94a3b8`，浅色模式为 `#64748b`）、8.5px DIN/Consolas 紧凑排版，与后续青色直管和金色管件形成主次分明的层次感。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包编译通过（738 modules transformed，耗时 19.72s，零报错）。
+
+## 2026-10-07 [大屏看板：战报焦点卡片同频呼吸光晕动画实装与交互动效强化]
+- **问题反馈与细节求证**：
+  - 用户反馈：“我发现战报卡片并没有‘呼吸’效果”；
+  - 核心排查：
+    1. 供需两端节点卡片已具备 1.6 秒周期的 `@keyframes` 呼吸关键帧（供货商 `.is-shipping-source` 为 `supplier-shipping-pulse 1.6s`，标段 `.is-event-target` 为 `target-dispatch-pulse 1.6s`）；
+    2. 而右侧战报卡片中的 `.feed-card.is-active-feed` 仅配置了静态的 `box-shadow` 与 `border-color`，缺少实质性的 `@keyframes` 呼吸循环动画与微浮动反馈。
+- **动效补齐与全品类覆盖**：
+  1. **构建同频 1.6s 呼吸动画关键帧**：
+     - 为 `.feed-card.is-active-feed` 增加 `transform: translateY(-2px); z-index: 5;` 悬浮层级；
+     - 分类实现 6 大业务维度的专属呼吸光晕关键帧：
+       - 保温管直管（青色）：`@keyframes feed-active-pulse-pipe`，外发光 `10px ➔ 24px`，内阴影 `6px ➔ 12px`；
+       - 管件/配件（金色）：`@keyframes feed-active-pulse-fitting`；
+       - 确认到货（天蓝）：`@keyframes feed-active-pulse-arrival`；
+       - 施工安装（翡翠绿）：`@keyframes feed-active-pulse-usage`；
+       - 现货盘点（荧光绿）：`@keyframes feed-active-pulse-inventory`；
+       - 计划申报（玫瑰红）：`@keyframes feed-active-pulse-plan`；
+  2. **流向箭头微动效协同**：
+     - 处于激活状态的战报卡片内流向箭头（`.route-arrow`）同步绑定 `@keyframes feed-active-arrow`，实现 1.6 秒同频向右微移（`translateX(3px)`）引导流向动感；
+  3. **浅色模式同步适配**：
+     - 在 `.bigscreen-container.light` 中同步适配浅色模式专属呼吸关键帧与半透柔光边框。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 13.24s，零报错）。
+
+## 2026-10-07 [大屏看板：大屏天气“主城区施工现场·仿真”根因剖析与自适应双协议真实气象实装]
+- **问题反馈与现象求证**：
+  - 用户反馈：“在展示大屏的天气区域，发现有显示为‘主城区施工现场·仿真’，温度是假的，这是怎么回事”；
+- **核心根因剖析**：
+  1. **SSL 握手超时拦截**：在本地开发网络环境（开启科学上网/VPN/TUN 虚拟网卡与 fake-ip `198.18.0.x`）下，后端直接使用 `https://restapi.amap.com` 请求高德官方天气接口时，由于代理工具劫持或虚拟网卡未放行导致 TLS/SSL Handshake 持续超时（`_ssl.c:983: The handshake operation timed out`）；
+  2. **容灾降级引擎生效**：[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py) 中的 `get_live_weather_for_dashboard()` 捕获到网络超时异常后，为了避免大屏崩溃，触发了内置的保底仿真数据（固定温度 26°C、多云、`is_live_source: False`）；
+  3. **前端仿真标记显现**：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 读取到 `liveWeatherData.is_live_source === false` 时，自动在城市名后追加渲染 `· 仿真` 标签，提醒用户当前数据源非实时实况。
+- **重构举措与自适应协议修复**：
+  1. **自适应双协议快速拉取 (`_fetch_amap_weather_json`)**：
+     - 在 [`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py) 中新增自适应气象抓取函数：高德 Web 服务原生全面支持 HTTP 明文，因此默认优先尝试 `http://restapi.amap.com`，耗时仅 1.0 秒即可瞬间绕开 TUN 虚拟网卡握手卡死；若失败则自动无缝回退 `https://`，并配置 `trust_env=False` 规避环境变量污染；
+  2. **气象接口实况全量激活**：
+     - 升级 `get_live_weather_for_dashboard` 与 `fetch_amap_weather`；
+     - 真实解析出大连市主城区当前实况：晴、气温 `20°C`、西南风 4 级、湿度 58%、全天预报 `18°C ~ 24°C`，发布时间为最新实况；
+     - `is_live_source` 恢复为 `True`，大屏状态标签由 `仿真` 恢复为绿色 `实况`，施工评估自动判定为“适宜施工（20.0℃黄金施工期）”。
+- **改动清单**：
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - Python 独立执行测试，高德接口耗时 0.98 秒成功返回真实大连天气，`is_live_source: True`，温度 20°C，晴；
+  - 前端 `npm run build` 全量打包编译通过（耗时 22.39s，零报错）。
+
+## 2026-10-07 [大屏看板：供需连线状态判定逻辑 Bug 彻底根治（支持厂家-标段发运矩阵精准判线）]
+- **问题定位与根因剖析**：
+  - 用户反馈：当鼠标悬停供货商“河北鑫瑞得”卡片时，通往“低温水_标段1”的连线被错误渲染为粗且动态流光的已发货样式，但实际上鑫瑞得至今并未向该标段发过直管；
+  - 核心根因：
+    1. **物资类别交叉感染**：原前端 `isLineShipped(line)` 降级调用了标段级的 `isSectionShipped(secId)`；而管件厂家“泰德尔”向“低温水_标段1”发运了 1520 件管件，使得该标段的累计管件发运量 `shippedFittings > 0`，从而误将标段标记为已发货；
+    2. **供需主体颗粒度缺失**：原逻辑未区分“具体是哪家供货商向该标段发了货”，只要该标段存在任何厂家的发货记录，所有负责该标段的直管与配件厂家连线均被误判为已发货。
+- **全链路重构与落地举措**：
+  1. **后端构建真实供需发运矩阵 (`supplier_section_matrix`)**：
+     - 在 [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 的 `get_big_screen_dashboard_data()` 中，通过 `tube.tube_delivery` 与 `tube.tube_fitting_delivery` 聚合每个供货商对每个标段的真实发货实绩（直管米数、直管公里数、管件件数、是否发货 `has_shipped`）；
+     - 输出归一化结构字典挂载至大屏接口响应根部，确保前后端具备厂家对标段颗粒度的物理数据支撑；
+  2. **前端供需通道发运实绩精准解算 (`getSupplierSectionDelivery`)**：
+     - 在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 中新增 `supplierSectionMatrix` 响应式变量，在初始加载及高频轮询中同步更新；
+     - 封装 `getSupplierSectionDelivery(supId, secId)`：优先查后端供需矩阵；并在降级备用分支中严格执行物资属性隔离（直管厂家绝不借用管件数据，配件厂家绝不借用直管数据，`low_lot_1` 对直管厂家显式防御锁定）；
+  3. **飞线重绘与连线动效判定升级 (`recalculateFlylines` & `isLineShipped`)**：
+     - 在 `recalculateFlylines` 中根据精准供需实绩为每条专线挂载专属 `pipeShippedKm`、`fittingShipped` 及 `hasShipment`；
+     - 彻底重构 `isLineShipped(line)`：优先基于 `line.hasShipment` 及该厂家针对该标段的矩阵实绩判断，彻底废除全局标段级笼统判定；
+     - 结果呈现：未发货连线（如鑫瑞得 -> 低温水_标段1）精确呈现为细静态虚线（1.6px、透明度 0.75、无流光）、徽章显示灰色“待发运”；已发货连线（如鑫瑞得 -> 低温水_标段2）精准呈现为粗底管 + 2.5px 动态流光、徽章显示青色直管与金色管件真实数值。
+- **改动清单**：
+  - 后端接口：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 后端 Python 独立执行测试通过，矩阵精确识别 `xinruide` 仅在 `low_lot_2`, `low_lot_4`, `low_lot_5`, `low_lot_6` 有发货，`low_lot_1` 与 `low_lot_3` 精确判定为 `false`；
+  - 前端 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 17.42s，零报错）。
+
+## 2026-10-07 [大屏看板：保温管展示大屏供需流向线条“发货量胶囊微徽章”功能落地与构建验证]
+- **需求意向与功能立项**：
+  - 用户提出新设计思路：“在线条附近显示出通向各个标段（需求主体）的发货量，包括保温管和管件”，希望先实装试看实际视觉效果；
+  - 核心设计与交互落地：
+    1. **悬停同步浮现机制**：在 SVG 飞线图层上层新增绝对定位标签层（`.topology-flow-tags-layer`），绑定 `v-show="isLineVisible(line)"`，当鼠标悬停管厂卡片或发货激光脉冲时随线条同步平滑浮现，鼠标移开自动淡出，保持大屏通透感；
+    2. **三次贝塞尔曲线高精定位 (`t=0.54`)**：在 `recalculateFlylines()` 中采用三次贝塞尔参数方程精准解算出中后段（`t=0.54`）位置点坐标，使从同一管厂发往不同标段的各个胶囊在 Y 轴平滑分散排列，彻底杜绝文字交错重叠；
+    3. **双轨物资智能分流与视觉设计**：
+       - 直管发运量：科技青色微发光（`#00f2fe`），如 `12.0km`；
+       - 管件发运量：琥珀金色微发光（`#fbbf24`），如 `280件`；
+       - 智能适配供方材质（`getSupplierMaterialCategory`），管厂显直管量、阀门/配件厂显管件量，兼营主体支持双轨同框（如 `12.0km / 280件`），未开工未发货标段显示灰色 `待发运`；
+    4. **深浅色双主题无缝支持**：深色科技模式采用毛玻璃滤镜与微发光边框，浅色模式采用白底微透高对比度。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 执行 `npm run build` 全量打包一次性通过（738 modules transformed，耗时 16.34s，产出 `BigScreenDashboardView-uhTXy7qc.js` 与 `BigScreenDashboardView-Bttw9RGH.css`，零错误）。
+
+## 2026-10-07 [大屏看板：保温管大屏拓扑连线与供给主体悬停聚焦交互逻辑技术梳理]
+- **有效讨论与技术答疑**：
+  - 用户咨询：在 `insulation_pipe_supply_2026` 项目的大屏看板 (`/pages/big_screen`) 中，当鼠标放置在某个供给主体卡片上时，是否会有线条显示出来；
+  - 核心逻辑验证与实现求证：
+    1. **结论确认**：是的，完全支持且默认生效。当用户鼠标悬停在左侧供给主体（管厂/阀门制造基地）卡片上时，系统会即时显现该供给主体直达其负责施工标段的专属供需流向贝塞尔曲线；
+    2. **按需激活机制**：默认静止状态下全景拓扑保持通透，不展示全网杂乱交错的线条；当鼠标悬停（`mouseenter`）到特定供给主体时，触发 `hoveredSupplierId` 聚焦，动态显现其专属拓扑连接；
+    3. **双态线条形态**：有发货在途实绩的标段线路呈现为发光底管 + 动态流光粒子动效（管材为青色、管件为金色），尚未发货的标段线路呈现为静态虚线；
+    4. **全链路高亮联动**：悬停时右侧对应负责的标段卡片同步高亮点亮，其余不相关的标段卡片自动半透明变暗（`dimmed`），形成极具视觉层次感的供需专线聚焦效果。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-10-07 [服务器运维：部署脚本统一命名为 lo1.sh 与发布链路全流程对齐]
+- **有效讨论与命名对齐**：
+  - 用户反馈在服务器上已将脚本命名为 `lo1.sh`，与项目既有的 `lo1_new_server.ps1`、`lo1.ps1`、`lo1_new_server.yml` 保持统一的 `lo1` 命名族系；
+  - 本地仓库与构建链路同步更新：
+    1. **新建命名脚本**：在仓库根目录创建 [`lo1.sh`](file:///D:/编程项目/phoenix/lo1.sh)，彻底取代临时文件 `deploy.sh`；
+    2. **发布脚本指引对齐**：修改 [`lo1_new_server.ps1`](file:///D:/编程项目/phoenix/lo1_new_server.ps1) 尾部的操作指引，构建并推送镜像后明确提示“下一步: 请在服务器上执行 './lo1.sh'（默认 5 秒自动平滑更新，无需守候）”，实现发布闭环无缝连接。
+- **改动清单**：
+  - 运维脚本：[`lo1.sh`](file:///D:/编程项目/phoenix/lo1.sh)
+  - 构建脚本：[`lo1_new_server.ps1`](file:///D:/编程项目/phoenix/lo1_new_server.ps1)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-07 [服务器运维：一键部署脚本验证通过与平滑热更流程固化]
+- **有效讨论与验证验收**：
+  - 用户反馈部署脚本使用体验良好，成功摆脱守候终端逐条敲命令的历史负担；
+  - 运维工作流正式固化：
+    1. 日常迭代更新：直接执行 `./deploy.sh`，5秒后自动采用 `pull && up -d` 平滑更新模式，业务请求无感交替，数据库零重启；
+    2. 特殊重构清理：支持 `./deploy.sh 2` 随时执行全量 down 彻底重建；
+    3. 配合编排文件 [`lo1_new_server.yml`](file:///D:/编程项目/phoenix/lo1_new_server.yml) 消除废弃警告，整个部署发布闭环顺畅高效。
+- **改动清单**：
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+
+## 2026-10-07 [服务器运维：deploy.sh 交互模式重构（支持平滑更新/全量重建与免守候倒计时）]
+- **有效讨论与技术答疑**：
+  - 用户反馈执行第一版 `deploy.sh` 时并未出现选择方案4（平滑更新）的提示；
+  - 核心释义：第一版脚本中将方案4作为代码注释提供（需手工修改），默认直接执行了传统的 `down && up` 全量重建流程，未能直接提供交互；
+  - 改进落地：
+    1. **交互菜单集成**：重构 [`deploy.sh`](file:///D:/编程项目/phoenix/deploy.sh)，运行即清晰打印 `[1] 平滑更新（推荐）` 与 `[2] 全量重建（传统）` 模式说明；
+    2. **5秒免守候自动兜底**：使用 `read -t 5` 倒计时机制，如果用户不想守在终端前，回车或5秒无输入直接自动运行最佳的 `[1] 平滑更新`；
+    3. **参数快捷指定**：支持命令行参数直接跳过菜单直接执行（如 `./deploy.sh 1` 平滑更新、`./deploy.sh 2` 全量重建）。
+- **改动清单**：
+  - 运维脚本：[`deploy.sh`](file:///D:/编程项目/phoenix/deploy.sh)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
+## 2026-10-07 [服务器运维：镜像推送后多步骤部署命令打包与平滑更新方案]
+- **有效讨论与技术答疑**：
+  - 用户咨询：在服务器上每次推送新镜像后，都需要逐条手动执行 3 条命令（`cd /home/ww870411/25-26`、`docker compose -f lo1_new_server.yml down`、`docker compose -f lo1_new_server.yml up -d`），询问是否有可能将其打包一键运行；
+  - 核心痛点与优化审计：
+    1. 逐条执行需要人工等待旧容器停机（约 10 秒）与新镜像拉取（约 15 秒），耗费时间且打断思路；
+    2. 执行 `down` 会强制停机数据库并移除虚拟网络，导致系统有数十秒服务中断；
+    3. `lo1_new_server.yml` 中的 `version: "3.9"` 属性在较新 Compose 版本中已废弃并产生 Warning。
+- **解决方案与交付落地**：
+  1. **单行连串执行（即时生效）**：提供 `cd /home/ww870411/25-26 && docker compose -f lo1_new_server.yml down && docker compose -f lo1_new_server.yml up -d` 命令，利用 `&&` 逻辑与实现一键自动连贯执行；
+  2. **服务器脚本封装 (`deploy.sh`)**：创建可执行脚本文件，支持设置执行权限后一键运行，并包含状态检查；
+  3. **终端别名方案 (Alias)**：支持在 `~/.bashrc` 中配置 `alias redeploy=...`，可在任意路径下一个单词触发部署；
+  4. **零停机平滑更新策略**：说明通过 `pull && up -d` 原地替换替代先 `down` 后 `up` 的优势，避免数据库重启与长时间停机；
+  5. **编排文件规范化**：移除 `lo1_new_server.yml` 中已废弃的 `version: "3.9"` 属性，消除终端告警。
+- **改动清单**：
+  - 运维脚本：[`deploy.sh`](file:///D:/编程项目/phoenix/deploy.sh)
+  - 编排配置：[`lo1_new_server.yml`](file:///D:/编程项目/phoenix/lo1_new_server.yml)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 文档同步：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+
 ## 2026-10-07 [数字指挥大屏：发运动态经办人标签分类重构（保温管专线发运 / 管件/阀门专线发运）]
 - **需求背景与业务目标**：
   - 用户明确优化需求：对大屏右上方“全网工程实时动态播报”中的厂家发货类卡片标签重新规范：

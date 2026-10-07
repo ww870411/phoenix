@@ -94,19 +94,38 @@ def get_weather_db_stats() -> Dict[str, Any]:
         session.close()
 
 
+def _fetch_amap_weather_json(path_and_query: str, timeout: float = 4.0) -> Optional[Dict[str, Any]]:
+    """优先尝试 HTTP 请求以规避本地 TUN/代理虚拟网卡 SSL Handshake 握手超时问题，若失败自动回退 HTTPS，双向重试保底"""
+    for scheme in ["http", "https"]:
+        url = f"{scheme}://restapi.amap.com{path_and_query}"
+        try:
+            with httpx.Client(timeout=timeout, trust_env=False) as client:
+                resp = client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("status") == "1":
+                        return data
+        except Exception:
+            continue
+    return None
+
+
 def fetch_amap_weather(payload: Dict[str, Any]) -> Dict[str, Any]:
     """连线高德地图 REST API 获取大连市 (adcode: 210200) 权威官方预报数据并解析"""
     from backend.projects.insulation_pipe_supply_2026.services.config_service import get_configured_amap_config
     amap_cfg = get_configured_amap_config(payload)
     api_key = amap_cfg.get("api_key") or "7939c670de3699077dc6b498cd95346f"
     
-    url = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=all&key={api_key}"
-    try:
-        res = httpx.get(url, timeout=15.0)
-        res.raise_for_status()
-        res_json = res.json()
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"连线高德官方天气 API 失败。异常: {exc}")
+    # 优先使用自适应双协议拉取，若全败则回退传统 https
+    res_json = _fetch_amap_weather_json(f"/v3/weather/weatherInfo?city=210200&extensions=all&key={api_key}", timeout=6.0)
+    if not res_json:
+        url = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=all&key={api_key}"
+        try:
+            res = httpx.get(url, timeout=15.0)
+            res.raise_for_status()
+            res_json = res.json()
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"连线高德官方天气 API 失败。异常: {exc}")
 
     if res_json.get("status") != "1" or not res_json.get("forecasts"):
         infocode = str(res_json.get("infocode") or "")
@@ -851,42 +870,39 @@ def get_live_weather_for_dashboard(force_refresh: bool = False) -> Dict[str, Any
         amap_cfg = get_configured_amap_config(payload)
         api_key = amap_cfg.get("api_key") or "7939c670de3699077dc6b498cd95346f"
 
-        # 1. 实时实况
-        url_base = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=base&key={api_key}"
-        res_base = httpx.get(url_base, timeout=5.0)
-        res_json = res_base.json()
-
-        # 2. 全天预报
-        url_all = f"https://restapi.amap.com/v3/weather/weatherInfo?city=210200&extensions=all&key={api_key}"
-        res_all = httpx.get(url_all, timeout=5.0)
-        all_json = res_all.json()
+        # 1. 实时实况与全天预报通过自适应双协议拉取 (优先 HTTP 绕开本地 TUN/代理虚拟网卡 SSL 握手超时，备用 HTTPS)
+        res_json = _fetch_amap_weather_json(f"/v3/weather/weatherInfo?city=210200&extensions=base&key={api_key}")
+        all_json = _fetch_amap_weather_json(f"/v3/weather/weatherInfo?city=210200&extensions=all&key={api_key}") or {}
 
         today_cast = {}
-        if all_json.get("status") == "1" and all_json.get("forecasts"):
+        if all_json.get("forecasts"):
             casts = all_json["forecasts"][0].get("casts") or []
             if casts:
                 today_cast = casts[0]
 
-        if res_json.get("status") == "1" and res_json.get("lives"):
+        if res_json and res_json.get("lives"):
             live = res_json["lives"][0]
-            weather_text = live.get("weather") or "多云"
-            temp_val = live.get("temperature") or "26"
-            wind_dir = live.get("winddirection") or "微风"
-            wind_pwr = live.get("windpower") or "≤3"
-            humidity_val = live.get("humidity") or "65"
+            weather_text = live.get("weather") or "晴"
+            temp_val = live.get("temperature") or "20"
+            wind_dir = live.get("winddirection") or "西南"
+            wind_pwr = live.get("windpower") or "4"
+            humidity_val = live.get("humidity") or "58"
             report_time_str = live.get("reporttime") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             impact = evaluate_construction_impact(weather_text, wind_pwr, temp_val)
 
             day_weather = today_cast.get("dayweather") or weather_text
             night_weather = today_cast.get("nightweather") or weather_text
-            temp_min = str(today_cast.get("nighttemp") or "24")
-            temp_max = str(today_cast.get("daytemp") or "29")
-            day_wind = f"{today_cast.get('daywind') or '南'}风 {today_cast.get('daypower') or '1-3'}级"
-            night_wind = f"{today_cast.get('nightwind') or '南'}风 {today_cast.get('nightpower') or '1-3'}级"
+            temp_min = str(today_cast.get("nighttemp") or "18")
+            temp_max = str(today_cast.get("daytemp") or "24")
+            day_wind = f"{today_cast.get('daywind') or wind_dir}风 {today_cast.get('daypower') or wind_pwr}级"
+            night_wind = f"{today_cast.get('nightwind') or wind_dir}风 {today_cast.get('nightpower') or wind_pwr}级"
+
+            city_name = live.get("city") or "大连市"
+            display_city = f"{city_name}主城区施工现场" if not city_name.endswith("施工现场") else city_name
 
             weather_obj = {
-                "city": "主城区施工现场",
+                "city": display_city,
                 "weather": weather_text,
                 "temperature": str(temp_val),
                 "wind_direction": str(wind_dir),

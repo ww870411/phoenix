@@ -948,6 +948,49 @@
               </g>
             </svg>
 
+            <!-- 拓扑线条流向发货量胶囊微徽章层 (在悬停激活或发货流向时同步呈现) -->
+            <div class="topology-flow-tags-layer">
+              <div 
+                v-for="line in flylines" 
+                :key="'flow-tag-' + line.id"
+                class="flow-capsule-tag"
+                :class="{
+                  'is-shipped': isLineShipped(line),
+                  'is-unshipped': !isLineShipped(line)
+                }"
+                :style="{
+                  left: line.tagX + 'px',
+                  top: line.tagY + 'px'
+                }"
+                v-show="isLineVisible(line)"
+              >
+                <!-- 累计发运前缀（仅在有实际发运量时呈现，待发运不加） -->
+                <span v-if="line.pipeShippedKm > 0 || line.fittingShipped > 0" class="flow-prefix">累计发运:</span>
+
+                <!-- 保温管发运量 -->
+                <span v-if="line.pipeShippedKm > 0" class="flow-val pipe-val" :title="`保温管累计发运: ${line.pipeShippedKm} km`">
+                  <span class="flow-dot pipe-dot"></span>
+                  <span class="flow-num">{{ formatLineKm(line.pipeShippedKm) }}</span>
+                  <small class="unit">km</small>
+                </span>
+
+                <!-- 管道/管件分隔符 -->
+                <span v-if="line.pipeShippedKm > 0 && line.fittingShipped > 0" class="flow-divider">/</span>
+
+                <!-- 管件发运量 -->
+                <span v-if="line.fittingShipped > 0" class="flow-val fitting-val" :title="`管件累计发运: ${line.fittingShipped} 件`">
+                  <span class="flow-dot fitting-dot"></span>
+                  <span class="flow-num">{{ line.fittingShipped }}</span>
+                  <small class="unit">件</small>
+                </span>
+
+                <!-- 规划中暂未发运 -->
+                <span v-if="!line.pipeShippedKm && !line.fittingShipped" class="flow-val unshipped-val">
+                  待发运
+                </span>
+              </div>
+            </div>
+
             <!-- 拓扑节点排版架构：左管厂 (230px) + 中通道 (50px) + 右双系统立柱 (1fr) -->
             <div class="topology-layout-grid">
               <!-- 1. 左侧：供给制造基地 (Supply Hub) -->
@@ -2287,6 +2330,9 @@ function formatProgressPercent(val) {
 // 真实 10 大标段健康矩阵数据
 const sectionProgressList = ref([...defaultSectionList])
 
+// 供需明细发运矩阵字典 (厂家对各标段真实发货量: pipe_m, pipe_km, fitting_pcs, has_shipped)
+const supplierSectionMatrix = ref({})
+
 // 高温水与低温水系统立柱分离（均衡分配为两列各 5 个标段，避免底部留白）
 const highWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'high'))
 const lowWaterSections = computed(() => sectionProgressList.value.filter(s => s.system_type === 'low'))
@@ -2316,7 +2362,50 @@ function isSupplierOfSection(supId, secId) {
   return isSuppliedBy(secId, supId)
 }
 
-// 判断指定标段是否有实际发货/到货履约流水（发货实绩 > 0）
+// 获取特定供货商向特定标段的精准发运实绩（彻底杜绝标段级与其他厂家串线混淆）
+function getSupplierSectionDelivery(supId, secId) {
+  if (!supId || !secId) return { pipeKm: 0, pipeM: 0, fittingPcs: 0, hasShipped: false }
+  const cleanSup = String(supId).replace(/^sup_/, '').trim().toLowerCase()
+  const cleanSec = String(secId).replace(/^sec_/, '').trim()
+
+  // 1. 优先查后端精准供需矩阵
+  const matrix = supplierSectionMatrix.value || {}
+  const supMap = matrix[cleanSup] || matrix[supId] || matrix[String(supId).toLowerCase()]
+  if (supMap && supMap[cleanSec]) {
+    const item = supMap[cleanSec]
+    const pKm = Number(item.pipe_km) || 0
+    const pM = Number(item.pipe_m) || 0
+    const fPcs = Number(item.fitting_pcs) || 0
+    const shipped = Boolean(item.has_shipped || pM > 0 || fPcs > 0)
+    return {
+      pipeKm: pKm,
+      pipeM: pM,
+      fittingPcs: fPcs,
+      hasShipped: shipped
+    }
+  }
+
+  // 2. 降级备用逻辑：必须严格根据厂家的物资类别进行隔离，禁止管件带偏直管！
+  const supCat = getSupplierMaterialCategory(supId)
+  const sec = sectionProgressList.value.find(s => s.id === cleanSec)
+  if (!sec) return { pipeKm: 0, pipeM: 0, fittingPcs: 0, hasShipped: false }
+
+  // 明确防御：low_lot_1 直管发运精确为0，直管厂家绝不判定为已发货
+  if (cleanSec === 'low_lot_1' && supCat === 'pipe') {
+    return { pipeKm: 0, pipeM: 0, fittingPcs: 0, hasShipped: false }
+  }
+
+  const pKm = (supCat === 'pipe' || supCat === 'all') ? (Number(sec.shippedKm) || 0) : 0
+  const fPcs = (supCat === 'fitting' || supCat === 'all') ? (Number(sec.shippedFittings) || 0) : 0
+  return {
+    pipeKm: pKm,
+    pipeM: Math.round(pKm * 1000),
+    fittingPcs: fPcs,
+    hasShipped: pKm > 0 || fPcs > 0
+  }
+}
+
+// 判断指定标段是否有实际发货/到货履约流水（标段整体发货实绩 > 0）
 function isSectionShipped(secId) {
   if (!secId) return false
   const cleanId = String(secId).replace(/^sec_/, '')
@@ -2329,7 +2418,7 @@ function isSectionShipped(secId) {
   return shippedKm > 0 || shippedFittings > 0 || arrivedKm > 0 || arrivedFittings > 0
 }
 
-// 判断指定连线是否属于实际发生发货的活跃通道
+// 判断指定连线是否属于实际发生发货的活跃通道 (已发货: 加粗+动态流光; 未发货: 更细+静态虚线)
 function isLineShipped(line) {
   if (!line) return false
   // 实时战报发货播报或临时激光粒子激活
@@ -2339,21 +2428,44 @@ function isLineShipped(line) {
       return true
     }
   }
-  return isSectionShipped(line.secId || line.toId)
+  // 核心 1：若连线对象中已挂载精确的 hasShipment 标记，直接以此为准
+  if (typeof line.hasShipment === 'boolean') {
+    return line.hasShipment
+  }
+  // 核心 2：根据【供货商 ID】与【标段 ID】从矩阵中检索真实发货状态，绝不串线
+  const deliv = getSupplierSectionDelivery(line.supId || line.fromId, line.secId || line.toId)
+  return deliv.hasShipped
 }
 
 // 获取指定连线的主材质色彩类型 ('pipe' | 'fitting')
 function getLineMaterialType(line) {
   if (activeMaterialType.value) return activeMaterialType.value
   if (!line) return 'pipe'
-  const cleanId = String(line.secId || line.toId || '').replace(/^sec_/, '')
-  const sec = sectionProgressList.value.find(s => s.id === cleanId)
-  if (!sec) return 'pipe'
-  const shippedKm = Number(sec.shippedKm) || 0
-  const shippedFittings = Number(sec.shippedFittings) || 0
-  if (shippedKm > 0) return 'pipe'
-  if (shippedFittings > 0) return 'fitting'
-  return 'pipe'
+  if (line.type) return line.type
+  const deliv = getSupplierSectionDelivery(line.supId || line.fromId, line.secId || line.toId)
+  if (deliv.pipeKm > 0) return 'pipe'
+  if (deliv.fittingPcs > 0) return 'fitting'
+  const supCat = getSupplierMaterialCategory(line.supId || line.fromId)
+  return supCat === 'fitting' ? 'fitting' : 'pipe'
+}
+
+// 获取供应商的主要材质属性 ('pipe' | 'fitting' | 'all')，使连线发货量标签更精准匹配供方产品
+function getSupplierMaterialCategory(supId) {
+  const sup = supplyNodes.value.find(s => s.id === supId)
+  if (!sup) return 'all'
+  const name = sup.name || ''
+  const isFitting = name.includes('阀') || name.includes('膨胀节') || name.includes('沃圣') || name.includes('卡尔斯') || name.includes('泽悦') || name.includes('三维') || name.includes('泰德尔')
+  const isPipe = name.includes('管') || name.includes('开元') || name.includes('鑫瑞得') || name.includes('天地龙') || name.includes('吴近') || name.includes('能源')
+  if (isFitting && !isPipe) return 'fitting'
+  if (isPipe && !isFitting) return 'pipe'
+  return 'all'
+}
+
+// 格式化飞线胶囊微徽章中的保温管公里数（短小精炼）
+function formatLineKm(val) {
+  const num = Number(val) || 0
+  if (num <= 0) return '0'
+  return num % 1 === 0 ? String(num) : num.toFixed(1)
 }
 
 function getSupplierStats(sup) {
@@ -3164,6 +3276,12 @@ async function pollLiveRealData() {
       weeklyFittingReport.value = res.weekly_fitting_report
     }
 
+    // 6. 实时同步供需明细发运矩阵并重绘飞线状态
+    if (res.supplier_section_matrix && typeof res.supplier_section_matrix === 'object') {
+      supplierSectionMatrix.value = res.supplier_section_matrix
+    }
+    recalculateFlylines()
+
   } catch (err) {
     console.warn('实时心跳拉取异常:', err)
   }
@@ -3228,14 +3346,47 @@ function recalculateFlylines() {
             const cx2 = p2.x - dx * 0.45
             const cy2 = p2.y
             const d = `M ${p1.x} ${p1.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p2.x} ${p2.y}`
+
+            // 三次贝塞尔曲线 t=0.54 处计算流量胶囊微徽章的准确视口定位点 (偏右标段通道，各标段Y轴分散不重叠)
+            const t = 0.54
+            const omt = 1 - t
+            const omt3 = omt * omt * omt
+            const t3 = t * t * t
+            const c1 = 3 * omt * omt * t
+            const c2 = 3 * omt * t * t
+            const tagX = Math.round(omt3 * p1.x + c1 * cx1 + c2 * cx2 + t3 * p2.x)
+            const tagY = Math.round(omt3 * p1.y + c1 * cy1 + c2 * cy2 + t3 * p2.y)
+
+            // 从供需发运矩阵获取该供货商向该标段的真实发运实绩
+            const deliv = getSupplierSectionDelivery(sup.id, sec.id)
+            const pKm = deliv.pipeKm
+            const fPcs = deliv.fittingPcs
+            const hasShipment = deliv.hasShipped
+
+            // 材质类型：优先以该供货商实际发运品种决定，未发运时按厂家业务属性呈现
+            let lineMatType = 'pipe'
+            if (pKm > 0) {
+              lineMatType = 'pipe'
+            } else if (fPcs > 0) {
+              lineMatType = 'fitting'
+            } else {
+              const supCat = getSupplierMaterialCategory(sup.id)
+              lineMatType = supCat === 'fitting' ? 'fitting' : 'pipe'
+            }
+
             newFlylines.push({
               id: `flyline-${sup.id}-${sec.id}`,
               fromId: sup.id,
               toId: 'sec_' + sec.id,
               supId: sup.id,
               secId: sec.id,
-              type: 'pipe',
-              d
+              type: lineMatType,
+              d,
+              tagX,
+              tagY,
+              pipeShippedKm: pKm,
+              fittingShipped: fPcs,
+              hasShipment: hasShipment
             })
           }
         }
@@ -3754,6 +3905,11 @@ async function loadRealData(isForce = false) {
       }
       if (Array.isArray(res.pipe_models)) {
         rawPipeModels = res.pipe_models
+      }
+
+      // 8. 真实供需发运明细矩阵 (按供货商对各标段发运量精准归集)
+      if (res.supplier_section_matrix && typeof res.supplier_section_matrix === 'object') {
+        supplierSectionMatrix.value = res.supplier_section_matrix
       }
 
       initialDataLoaded = true
@@ -5967,6 +6123,143 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+/* 拓扑线条流向发货量胶囊微徽章层 */
+.topology-flow-tags-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 25;
+}
+
+.flow-capsule-tag {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1.5px 6.5px;
+  border-radius: 9px;
+  background: rgba(9, 14, 26, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 242, 254, 0.38);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.7), 0 0 10px rgba(0, 242, 254, 0.2);
+  white-space: nowrap;
+  font-family: 'DIN Alternate', 'JetBrains Mono', Consolas, sans-serif;
+  font-size: 10px;
+  line-height: 1.15;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+  user-select: none;
+  pointer-events: none;
+}
+
+.flow-capsule-tag.is-unshipped {
+  border-color: rgba(148, 163, 184, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  background: rgba(11, 19, 34, 0.9);
+}
+
+.flow-prefix {
+  font-size: 8.5px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-right: 1px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.flow-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+}
+
+.flow-val.pipe-val {
+  color: #00f2fe;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(0, 242, 254, 0.4);
+}
+
+.flow-val.pipe-val .flow-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #00f2fe;
+  box-shadow: 0 0 5px #00f2fe;
+  flex-shrink: 0;
+}
+
+.flow-val.fitting-val {
+  color: #fbbf24;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+}
+
+.flow-val.fitting-val .flow-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 5px #fbbf24;
+  flex-shrink: 0;
+}
+
+.flow-val.unshipped-val {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.flow-divider {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 9px;
+  margin: 0 1px;
+}
+
+.flow-capsule-tag .unit {
+  font-size: 8.5px;
+  font-weight: 500;
+  margin-left: 0.5px;
+  opacity: 0.85;
+}
+
+/* 浅色主题兼容 */
+.light .flow-capsule-tag {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(2, 132, 199, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 8px rgba(2, 132, 199, 0.15);
+}
+
+.light .flow-capsule-tag.is-unshipped {
+  border-color: rgba(203, 213, 225, 0.6);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.light .flow-val.pipe-val {
+  color: #0284c7;
+  text-shadow: none;
+}
+
+.light .flow-val.fitting-val {
+  color: #d97706;
+  text-shadow: none;
+}
+
+.light .flow-val.unshipped-val {
+  color: #94a3b8;
+}
+
+.light .flow-divider {
+  color: rgba(0, 0, 0, 0.22);
+}
+
+.light .flow-prefix {
+  color: #64748b;
+}
+
 /* 拓扑主排版三栏布局 (左: 供货单位基地随窗口弹性缩放 clamp(120px, 24%, 260px), 中: 28px 通道, 右: 1fr 需求标段) */
 .topology-layout-grid {
   position: absolute;
@@ -7265,40 +7558,124 @@ onBeforeUnmount(() => {
 }
 
 .feed-card.is-active-feed {
-  background: linear-gradient(135deg, rgba(0, 242, 254, 0.12) 0%, #13243d 100%);
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.16) 0%, #13243d 100%);
   border-color: #00f2fe;
-  box-shadow: 0 0 16px rgba(0, 242, 254, 0.45);
+  animation: feed-active-pulse-pipe 1.6s infinite ease-in-out;
+  transform: translateY(-2px);
+  z-index: 5;
 }
 
 .feed-card.is-active-feed.mat-fitting,
 .feed-card.is-active-feed.is-fitting-event {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.14) 0%, #1a2233 100%);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.18) 0%, #1a2233 100%);
   border-color: #fbbf24;
-  box-shadow: 0 0 16px rgba(251, 191, 36, 0.45);
+  animation: feed-active-pulse-fitting 1.6s infinite ease-in-out;
 }
 
 .feed-card.is-active-feed.arrival:not(.mat-fitting) {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, #13243d 100%);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16) 0%, #13243d 100%);
   border-color: #38bdf8;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+  animation: feed-active-pulse-arrival 1.6s infinite ease-in-out;
 }
 
 .feed-card.is-active-feed.usage {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14) 0%, #112620 100%);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, #112620 100%);
   border-color: #10b981;
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  animation: feed-active-pulse-usage 1.6s infinite ease-in-out;
 }
 
 .feed-card.is-active-feed.inventory {
-  background: linear-gradient(135deg, rgba(0, 255, 135, 0.14) 0%, #112620 100%);
+  background: linear-gradient(135deg, rgba(0, 255, 135, 0.18) 0%, #112620 100%);
   border-color: #00ff87;
-  box-shadow: 0 0 16px rgba(0, 255, 135, 0.4);
+  animation: feed-active-pulse-inventory 1.6s infinite ease-in-out;
 }
 
 .feed-card.is-active-feed.plan {
-  background: linear-gradient(135deg, rgba(244, 63, 94, 0.14) 0%, #201322 100%);
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.18) 0%, #201322 100%);
   border-color: #f43f5e;
-  box-shadow: 0 0 16px rgba(244, 63, 94, 0.4);
+  animation: feed-active-pulse-plan 1.6s infinite ease-in-out;
+}
+
+.feed-card.is-active-feed .route-arrow {
+  animation: feed-active-arrow 1.6s infinite ease-in-out;
+}
+
+/* 战报卡片专属呼吸动画帧：边框光晕与内阴影规律律动，与供需两端 1.6s 严格同频 */
+@keyframes feed-active-pulse-pipe {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(0, 242, 254, 0.35), inset 0 0 6px rgba(0, 242, 254, 0.12);
+    border-color: rgba(0, 242, 254, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(0, 242, 254, 0.85), inset 0 0 12px rgba(0, 242, 254, 0.3);
+    border-color: #00f2fe;
+  }
+}
+
+@keyframes feed-active-pulse-fitting {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.35), inset 0 0 6px rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(251, 191, 36, 0.85), inset 0 0 12px rgba(251, 191, 36, 0.3);
+    border-color: #fbbf24;
+  }
+}
+
+@keyframes feed-active-pulse-arrival {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.35), inset 0 0 6px rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(56, 189, 248, 0.85), inset 0 0 12px rgba(56, 189, 248, 0.3);
+    border-color: #38bdf8;
+  }
+}
+
+@keyframes feed-active-pulse-usage {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.35), inset 0 0 6px rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.85), inset 0 0 12px rgba(16, 185, 129, 0.3);
+    border-color: #10b981;
+  }
+}
+
+@keyframes feed-active-pulse-inventory {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(0, 255, 135, 0.35), inset 0 0 6px rgba(0, 255, 135, 0.12);
+    border-color: rgba(0, 255, 135, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(0, 255, 135, 0.85), inset 0 0 12px rgba(0, 255, 135, 0.3);
+    border-color: #00ff87;
+  }
+}
+
+@keyframes feed-active-pulse-plan {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(244, 63, 94, 0.35), inset 0 0 6px rgba(244, 63, 94, 0.12);
+    border-color: rgba(244, 63, 94, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(244, 63, 94, 0.85), inset 0 0 12px rgba(244, 63, 94, 0.3);
+    border-color: #f43f5e;
+  }
+}
+
+@keyframes feed-active-arrow {
+  0%, 100% {
+    transform: translateX(0);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(3px);
+    opacity: 1;
+  }
 }
 
 /* 6 大核心业务分类卡片左侧标识色 */
@@ -9339,28 +9716,70 @@ onBeforeUnmount(() => {
 }
 
 .bigscreen-container.light .feed-card.is-active-feed {
-  background: linear-gradient(135deg, rgba(2, 132, 199, 0.1) 0%, #ffffff 100%);
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, #ffffff 100%);
   border-color: #0284c7;
-  box-shadow: 0 0 14px rgba(2, 132, 199, 0.3);
+  animation: feed-active-pulse-pipe-light 1.6s infinite ease-in-out;
+  transform: translateY(-2px);
+  z-index: 5;
 }
 
 .bigscreen-container.light .feed-card.is-active-feed.mat-fitting,
 .bigscreen-container.light .feed-card.is-active-feed.is-fitting-event {
-  background: linear-gradient(135deg, rgba(217, 119, 6, 0.1) 0%, #ffffff 100%);
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12) 0%, #ffffff 100%);
   border-color: #d97706;
-  box-shadow: 0 0 14px rgba(217, 119, 6, 0.35);
+  animation: feed-active-pulse-fitting-light 1.6s infinite ease-in-out;
 }
 
 .bigscreen-container.light .feed-card.is-active-feed.usage {
-  background: linear-gradient(135deg, rgba(5, 150, 105, 0.1) 0%, #ffffff 100%);
+  background: linear-gradient(135deg, rgba(5, 150, 105, 0.12) 0%, #ffffff 100%);
   border-color: #059669;
-  box-shadow: 0 0 14px rgba(5, 150, 105, 0.35);
+  animation: feed-active-pulse-usage-light 1.6s infinite ease-in-out;
 }
 
 .bigscreen-container.light .feed-card.is-active-feed.plan {
-  background: linear-gradient(135deg, rgba(225, 29, 72, 0.1) 0%, #ffffff 100%);
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.12) 0%, #ffffff 100%);
   border-color: #e11d48;
-  box-shadow: 0 0 14px rgba(225, 29, 72, 0.35);
+  animation: feed-active-pulse-plan-light 1.6s infinite ease-in-out;
+}
+
+@keyframes feed-active-pulse-pipe-light {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(2, 132, 199, 0.25);
+    border-color: rgba(2, 132, 199, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(2, 132, 199, 0.65);
+    border-color: #0284c7;
+  }
+}
+
+@keyframes feed-active-pulse-fitting-light {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(217, 119, 6, 0.25);
+    border-color: rgba(217, 119, 6, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(217, 119, 6, 0.65);
+    border-color: #d97706;
+  }
+}
+
+@keyframes feed-active-pulse-usage-light {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(5, 150, 105, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(5, 150, 105, 0.65);
+  }
+}
+
+@keyframes feed-active-pulse-plan-light {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(225, 29, 72, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(225, 29, 72, 0.65);
+  }
 }
 
 /* --- 关键帧动画 Keyframes --- */

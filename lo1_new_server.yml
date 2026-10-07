@@ -5,9 +5,7 @@
 # 2. 在本文件所在目录下创建一个名为 .env 的文件，配置数据库变量。
 # 3. 在 NPM 中配置 platform2.smartview.top 转发至 http://<服务器IP>:8001
 # 4. 执行命令: docker-compose -f lo1_new_server.yml up -d
-
-version: "3.9"
-
+# version 字段在较新版本的 Docker Compose 中已废弃，无需声明
 services:
   backend:
     image: ww870411/phoenix-backend:20260308210740
