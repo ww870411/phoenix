@@ -1,3 +1,18 @@
+## 2026-10-07 数字指挥大屏拓扑飞线保温管累计发运量两位小数精度升级说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（流向微徽章 `.flow-capsule-tag`、保温管发运数值 `.flow-num`、格式化器 `formatLineKm`、Tooltip 属性 `:title`）；
+- **前端结构与精度升级**：
+  1. **格式化器精度统一 (`formatLineKm`)**：
+     - 将飞线胶囊上保温管公里数的显示精度由“整数或一位小数”升级为固定的**保留小数点后 2 位**（`num.toFixed(2)`）；
+     - 非正数值安全保底返回 `'0.00'`；
+  2. **Tooltip 提示文案对齐**：
+     - 徽章悬浮提示中的保温管累计发运量同步使用 `formatLineKm` 输出，杜绝浮点精度长尾，界面与浮窗完全一致；
+  3. **胶囊微排版稳固**：
+     - 保持 10px 等宽字体与 `white-space: nowrap` 布局，保证双精度展示下胶囊微徽章比例自然、不换行。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 22.58s，零报错）。
+
 ## 2026-10-07 数字指挥大屏拓扑飞线胶囊徽章“累计发运：”前缀语义增强说明 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：

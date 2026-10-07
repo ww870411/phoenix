@@ -1,3 +1,9 @@
+## 2026-10-07 数字指挥大屏飞线发运量保留两位小数之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端拓扑飞线胶囊徽章保温管公里数数值格式化精度调整（固定保留至小数点后 2 位）；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 供需矩阵 `supplier_section_matrix` 既有 `pipe_km`（`round(pipe_m / 1000.0, 2)`）数值契约保持稳定，零后端改动。
+
 ## 2026-10-07 数字指挥大屏飞线胶囊前缀调整之后端状态保持 (Baseline Kept)
 
 - **后端架构与接口状态**：

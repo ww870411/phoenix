@@ -1,3 +1,17 @@
+## 2026-10-07 [大屏看板：拓扑飞线保温管累计发运量数值格式化升级（保留至小数点后2位）]
+- **需求意向与指标精度统一**：
+  - 用户反馈：“飞线上的保温管累计发运量，保留至小数点后2位吧”；
+  - 核心排查与实装：
+    1. **解算与格式化函数重构 (`formatLineKm`)**：在 [`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue) 中，原先针对小于等于 0 返回 `'0'`、整除返回整数、非整除使用 `toFixed(1)` 的紧凑逻辑，统一升级为高精度工程口径：所有保温管公里数统一执行 `num.toFixed(2)`（数值非正时安全返回 `'0.00'`）；
+    2. **Tooltip 悬浮提示文案对齐**：将模板中 `.pipe-val` 的 `:title` 由原始浮点值属性改为与界面严格统一的 ``保温管累计发运: ${formatLineKm(line.pipeShippedKm)} km``，规避 JS 浮点长精度杂斑；
+    3. **自适应排版保持**：`.flow-capsule-tag` 具备 `white-space: nowrap` 与 `DIN Alternate`/`Consolas` 等宽数字字体，`1.20 km`、`0.85 km` 等双精度数字在胶囊徽章内横向居中居优，保持紧凑高级质感。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 进度记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包编译通过（738 modules transformed，耗时 22.58s，零报错）。
+
 ## 2026-10-07 [大屏看板：飞线发运量徽章“累计发运：”语义前缀校正实装（待发运通道保持纯净）]
 - **需求意向与微文案优化**：
   - 用户反馈：“抱歉抱歉，应该是‘累计发运’”（将前一步新增的微徽章前缀由“累计发货：”统一规范为“累计发运：”，待发运状态保持纯净不加前缀）；

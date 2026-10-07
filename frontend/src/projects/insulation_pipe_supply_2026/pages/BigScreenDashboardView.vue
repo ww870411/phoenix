@@ -968,7 +968,7 @@
                 <span v-if="line.pipeShippedKm > 0 || line.fittingShipped > 0" class="flow-prefix">累计发运:</span>
 
                 <!-- 保温管发运量 -->
-                <span v-if="line.pipeShippedKm > 0" class="flow-val pipe-val" :title="`保温管累计发运: ${line.pipeShippedKm} km`">
+                <span v-if="line.pipeShippedKm > 0" class="flow-val pipe-val" :title="`保温管累计发运: ${formatLineKm(line.pipeShippedKm)} km`">
                   <span class="flow-dot pipe-dot"></span>
                   <span class="flow-num">{{ formatLineKm(line.pipeShippedKm) }}</span>
                   <small class="unit">km</small>
@@ -2461,11 +2461,11 @@ function getSupplierMaterialCategory(supId) {
   return 'all'
 }
 
-// 格式化飞线胶囊微徽章中的保温管公里数（短小精炼）
+// 格式化飞线胶囊微徽章中的保温管公里数（保留至小数点后2位）
 function formatLineKm(val) {
   const num = Number(val) || 0
-  if (num <= 0) return '0'
-  return num % 1 === 0 ? String(num) : num.toFixed(1)
+  if (num <= 0) return '0.00'
+  return num.toFixed(2)
 }
 
 function getSupplierStats(sup) {
