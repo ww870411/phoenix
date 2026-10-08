@@ -1135,7 +1135,16 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
         except Exception:
             pass
 
-    users_map = accounts_data.get("users", {})
+    raw_users = accounts_data.get("users", {})
+    group_to_users: Dict[str, List[Dict[str, Any]]] = {}
+    user_to_obj: Dict[str, Dict[str, Any]] = {}
+    if isinstance(raw_users, dict):
+        for uname, uinfo in raw_users.items():
+            if isinstance(uinfo, dict):
+                item = {"username": str(uname), **uinfo}
+                user_to_obj[str(uname)] = item
+                for grp in uinfo.get("groups", []):
+                    group_to_users.setdefault(str(grp), []).append(item)
 
     # 1. 动态扫描数据库中实际发货的主体与标段关联
     db_ent_sec_map: Dict[str, Set[str]] = {}
@@ -1171,7 +1180,7 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
     # 2. 供给主体列表 (配置主体 + 数据库动态主体融合)
     suppliers = []
     seen_ent_ids = set()
-    supplier_users = users_map.get("tube_supplier_admin", []) + users_map.get("tube_supplier", [])
+    supplier_users = group_to_users.get("tube_supplier_admin", []) + group_to_users.get("tube_supplier", [])
     
     for ent in supply_options:
         ent_id = str(ent.get("entity_id") or ent.get("supplier_id") or "").strip()
@@ -1222,9 +1231,9 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
                 "accounts": ["tube_supplier_1"],
             })
 
-    # 2. 施工需求主体列表 (仅列出已明确配置施工单位的企业与标段，空缺不列出)
+    # 3. 施工需求主体列表 (仅列出已明确配置施工单位的企业与标段，空缺不列出)
     demand_sections = []
-    construct_users = users_map.get("tube_site_manager", []) + users_map.get("tube_construction_unit", [])
+    construct_users = group_to_users.get("tube_site_manager", []) + group_to_users.get("tube_construction_unit", [])
     
     for c in construct_options:
         unit_name = str(c.get("unit_name") or c.get("unit_id") or "").strip()
@@ -1259,7 +1268,7 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
             "accounts": matched_users if matched_users else c_secs,
         })
 
-    # 3. 现场负责人列表 (Site Managers)
+    # 4. 现场负责人列表 (Site Managers)
     site_managers = []
     for m in manager_assignments:
         m_id = m.get("manager_id") or m.get("manager_name")
@@ -1283,47 +1292,77 @@ def query_entity_directory(project_key: str = PROJECT_KEY) -> Dict[str, Any]:
             "is_global": is_global,
         })
 
-    # 4. 库管仓储核验主体 (Warehouse Keepers 融合真实电话与管辖)
+    # 5. 库管仓储核验主体 (Warehouse Keepers 融合配置与账号中心)
     warehouse_keepers = []
-    wh_cfg_map = {str(w.get("keeper_id") or w.get("keeper_name")): w for w in get_config_list(cfg, "warehouse_keepers")}
-    wh_users = users_map.get("tube_warehouse_keeper", [])
-    
-    for u in wh_users:
-        u_name = u.get("username")
-        unit_scope = str(u.get("unit") or "")
-        
-        # 优先从配置提取电话，若无则从账号提取
-        cfg_match = wh_cfg_map.get(u_name, {})
-        phone = cfg_match.get("contact_phone") or u.get("phone") or "—"
+    seen_wh_keys = set()
+    wh_cfg_list = get_config_list(cfg, "warehouse_keepers")
+    wh_users = group_to_users.get("tube_warehouse_keeper", [])
 
-        # 解析管辖标段
-        managed_sec_ids = []
-        managed_sec_names = []
-        for s_code in unit_scope.split(","):
-            s_code = s_code.strip()
-            if s_code:
-                managed_sec_ids.append(s_code)
-                managed_sec_names.append(sec_name_map.get(s_code, s_code))
-        
-        is_global = len(managed_sec_ids) >= len(sec_options) or unit_scope == "物资仓库"
-        scope_str = "全项目物资仓库" if is_global else "、".join(managed_sec_names)
+    for w in wh_cfg_list:
+        k_id = str(w.get("keeper_id") or w.get("keeper_name") or "").strip()
+        if not k_id:
+            continue
+        seen_wh_keys.add(k_id)
+        k_name = str(w.get("keeper_name") or k_id)
+        phone = str(w.get("contact_phone") or "").strip()
+
+        # 匹配账户中心对象
+        u_obj = user_to_obj.get(k_id) or user_to_obj.get(k_name) or {}
+        u_name = u_obj.get("username") or k_id
+        if not phone or phone == "—":
+            phone = str(u_obj.get("phone") or "—").strip()
+
+        sec_ids = w.get("section_1_ids") or []
+        if isinstance(sec_ids, str):
+            sec_ids = [s.strip() for s in sec_ids.split(",") if s.strip()]
+
+        if not sec_ids and u_obj.get("unit"):
+            unit_val = str(u_obj.get("unit"))
+            sec_ids = [s.strip() for s in unit_val.split(",") if s.strip() and s.strip() != "物资仓库"]
+
+        managed_sec_names = [sec_name_map.get(sid, sid) for sid in sec_ids if sid]
+        is_global = len(sec_ids) >= len(sec_options) or k_id in ("库管", "kuguan") or "物资仓库" in str(u_obj.get("unit", ""))
+        scope_str = "全项目物资仓库" if is_global else ("、".join(managed_sec_names) if managed_sec_names else "标段物资核验")
 
         warehouse_keepers.append({
             "category": "物资库管员",
             "username": u_name,
-            "person_name": u_name,
-            "contact_name": u_name,
-            "contact_phone": phone,
+            "person_name": k_name,
+            "contact_name": k_name,
+            "contact_phone": phone if phone else "—",
             "managed_sections": managed_sec_names,
-            "managed_section_ids": managed_sec_ids,
+            "managed_section_ids": sec_ids,
             "scope_desc": f"负责 {scope_str} 到货核验与库管确认",
             "is_global": is_global,
         })
 
-    # 5. 全局管理与观察员
+    # 若账号中心还有其他未配置在 tube_config 中的库管账号，兜底补充
+    for u in wh_users:
+        u_name = str(u.get("username") or "").strip()
+        if u_name and u_name not in seen_wh_keys:
+            seen_wh_keys.add(u_name)
+            unit_scope = str(u.get("unit") or "")
+            managed_sec_ids = [s.strip() for s in unit_scope.split(",") if s.strip() and s.strip() != "物资仓库"]
+            managed_sec_names = [sec_name_map.get(s, s) for s in managed_sec_ids if s]
+            is_global = len(managed_sec_ids) >= len(sec_options) or unit_scope == "物资仓库" or not managed_sec_ids
+            scope_str = "全项目物资仓库" if is_global else "、".join(managed_sec_names)
+
+            warehouse_keepers.append({
+                "category": "物资库管员",
+                "username": u_name,
+                "person_name": u_name,
+                "contact_name": u_name,
+                "contact_phone": str(u.get("phone") or "—"),
+                "managed_sections": managed_sec_names,
+                "managed_section_ids": managed_sec_ids,
+                "scope_desc": f"负责 {scope_str} 到货核验与库管确认",
+                "is_global": is_global,
+            })
+
+    # 6. 全局管理与观察员
     global_members = []
-    g_admins = users_map.get("Global_admin", [])
-    g_viewers = users_map.get("tube_global_viewer", []) + users_map.get("tube_data_viewer", [])
+    g_admins = group_to_users.get("Global_admin", [])
+    g_viewers = group_to_users.get("tube_global_viewer", []) + group_to_users.get("tube_data_viewer", [])
     for u in g_admins:
         global_members.append({
             "category": "系统管理员",

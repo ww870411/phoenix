@@ -1,3 +1,51 @@
+## 2026-10-08 综合数据查询中心：责任主体与人员管辖矩阵库管员卡片与视图联动恢复说明 (HistoryQueryView.vue)
+
+- **关联前端页面与组件**：
+  - 页面文件：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)；
+  - 路由地址：`http://localhost:5173/projects/insulation_pipe_supply_2026/pages/comprehensive_query`（标签页 `activeTab === 'directory'`）；
+- **前端视图结构与交互联动**：
+  1. **按主体类别视图 (`directoryViewMode === 'by_category'`)**：
+     - 子胶囊药丸：点击“📦 物资库管 ({{ filteredWarehouseKeepers.length }})”，准确显示 10 位库管员；
+     - 折叠面板：展示“📦 物资仓储与库管核验人员”分组卡片（包含姓名、联系电话一键复制、管辖库区标签、系统登录账号等）；
+     - 标段过滤：顶部选定标段后，自动保留该标段专属库管员与全网总库管员；支持全局关键字搜索过滤；
+  2. **按标段综合穿透视图 (`directoryViewMode === 'by_section'`)**：
+     - 标段责任矩阵：每个标段卡片内部（如高区1~4标段展示左巨、赫心彤；低区2标段展示李春；低区5~6标段展示王世博、孟广胜等）准确内嵌对应“现场库管员”；
+     - 全网统筹底部卡片：展示“全局通用库管员（库管）”；
+  3. **数据流与导出**：
+     - 页面通过 `getComprehensiveEntityDirectory(projectKey)` 获取 `entityDirectoryData`；
+     - Excel 导出按钮支持将库管员及全部主体导出为《项目各标段责任主体与人员综合矩阵表.xlsx》；
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 12.53s，0 错误）。
+
+## 2026-10-08 各标段库管未确认订单 Excel 报表导出与数据交付说明 (BigScreen / Excel)
+
+- **关联前端页面与报表产物**：
+  - 关联页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（大屏“库管确认率”穿透台账）；
+  - 产物文件：[`全网各标段已到货但库管未确认订单汇报表_20261008.xlsx`](file:///D:/编程项目/phoenix/全网各标段已到货但库管未确认订单汇报表_20261008.xlsx)；
+  - 报表结构：双工作表架构（Sheet 1: 各标段未确认订单汇总表，含未确认单数从高到低排序与预警等级；Sheet 2: 718 笔未确认订单全量明细台账）；
+  - 状态保持：前端视图代码与结构保持稳定，零前端代码改动。
+
+## 2026-10-08 各标段库管未确认订单统计与汇报分析说明 (Dashboard / BigScreen)
+
+- **关联前端页面与指标联动**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)、[`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)；
+  - 统计口径说明：针对大屏展示的“库管确认率”（全网 44.3%），完成了全网 10 大标段的真实到货未确认订单排查与排序汇总，为生产调度与库管督办提供数据支撑；
+  - 状态保持：前端视图代码与结构保持稳定，零前端代码改动。
+
+## 2026-10-08 数字指挥大屏“库管确认率”算法核查与组件绑定说明 (BigScreenDashboardView)
+
+- **关联前端页面与组件**：
+  - 页面：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)（“保供效能与履约保障”面板 `.safety-panel .safety-grid`、第 3 张指标卡片 `.safety-card`）；
+- **前端展示与数据绑定口径**：
+  1. **响应式指标字段**：
+     - 主显示：`kpiData.warehouseConfirmRate`（保留 1 位小数的百分比字符串，兜底默认值 `100%`）；
+     - 提示浮层（Tooltip）：`库管确认率：已确认 ${kpiData.confirmedWarehouseOrders || 0} 单 / 已到货 ${kpiData.confirmedArrivedOrders || 0} 单（含保温管与管件）`；
+  2. **数据流转链路**：
+     - 前端通过 `getTubeBigScreenData()`（`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`）周期性/实时拉取后端聚合好的 `kpi` 对象；
+     - 包含指标 `warehouseConfirmRate`、`confirmedArrivedOrders`、`confirmedWarehouseOrders`，前后端字段完全对齐。
+- **状态保持**：
+  - 本轮为算法核查答疑，前端视图结构与样式完全稳定，零前端代码变动。
+
 ## 2026-10-07 数字指挥大屏供给主体卡片库存徽章恢复呼吸空格与纵向列级对齐说明 (BigScreenDashboardView)
 
 - **关联前端页面与组件**：

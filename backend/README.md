@@ -1,3 +1,46 @@
+## 2026-10-08 综合历史数据：责任主体与人员管辖速查矩阵库管员与用户角色全链路修复说明 (comprehensive_history_service.py)
+
+- **业务口径与接口修复**：
+  - 接口路由：`GET /api/v1/projects/insulation_pipe_supply_2026/comprehensive-history/entity-directory`（处理函数：`handle_comprehensive_entity_directory` -> 服务函数：`query_entity_directory`）；
+  - **缺陷原因分析**：
+    1. 账号中心 `账户信息.json` 中的 `users` 字典是以用户名为键（`Dict[username, user_obj]`），原逻辑误当做以角色组为键（执行 `users_map.get("tube_warehouse_keeper", [])`），导致提取结果恒为 `[]`；
+    2. 导致库管员 `warehouse_keepers` 循环 0 次、全局管理人员 `global_members` 为空、供货商和施工单位关联账号降级为兜底假数据；
+  - **服务层改造要点**：
+    1. **索引映射重构**：增加 `group_to_users`（用户组 -> 用户列表）与 `user_to_obj`（用户名 -> 用户数据）双向字典解析，支持按用户组准确匹配；
+    2. **权威配置驱动与账号中心融合**：以 `tube_config.json` 中的 `warehouse_keepers` 配置为主基准，准确提取 10 位库管员的真实姓名、手机号与标段管辖列表 `section_1_ids`，融合匹配账户中心登录账号，同时兜底补充账户中心其余库管人员；
+    3. **输出契约完备性**：
+       - `warehouse_keepers`：10 位库管员完整输出（包含 `person_name`, `username`, `contact_phone`, `managed_sections`, `managed_section_ids`, `is_global`, `scope_desc`）；
+       - `global_members`：完整输出 3 位系统管理与全局观察员；
+       - `suppliers` / `demand_sections`：真实匹配出各单位关联的业务账号；
+  - **验证**：Python 单元测试核验通过，输出完整的 10 位库管员与全量角色矩阵。
+
+## 2026-10-08 各标段库管未确认订单 Excel 报表导出说明 (openpyxl / tube_delivery)
+
+- **业务口径与文件生成**：
+  - 基于真实业务数据库 `tube.tube_delivery` 与 `tube.tube_fitting_delivery`，成功导出专业格式 Excel 汇报文件：[`全网各标段已到货但库管未确认订单汇报表_20261008.xlsx`](file:///D:/编程项目/phoenix/全网各标段已到货但库管未确认订单汇报表_20261008.xlsx)；
+  - 导出内容涵盖 10 大施工标段宏观指标汇总（按未确认数从高到低排序，附带全网合计）与 718 笔未确认订单逐笔明细台账（含厂家、单号、物料、到货时间、滞留时长小时数与天数、流转状态与预警等级）；
+  - 状态保持：后端 API 与数据表结构保持稳定，零后端代码变动。
+
+## 2026-10-08 各标段库管未确认订单统计与汇报分析说明 (workspace.py / tube_delivery)
+
+- **业务口径与数据排查**：
+  - 基于真实业务数据库 `tube.tube_delivery` 与 `tube.tube_fitting_delivery`，执行与 `get_big_screen_dashboard_data` 完全同构的底层聚合查询；
+  - 核心核查结果：全网 10 大施工标段中，未确认订单共 718 单，主要高度集中在低温水标段（L2 积压 311 单、L6 积压 224 单、L5 积压 107 单、L4 积压 72 单），高温水干线标段整体确认率高达 98.2%（除 H1 有 4 单刚进场车辆外，H2~H4 均为 100% 确认）；
+  - 状态保持：服务逻辑与数据库表保持稳定，零后端代码变动。
+
+## 2026-10-08 数字指挥大屏“库管确认率”算法核查与口径解析说明 (workspace.py)
+
+- **业务口径与接口实现**：
+  - 接口：`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`（对应服务：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py) 中的 `get_big_screen_dashboard_data`）；
+  - 数据模型与计算口径：
+    1. **数据合并统计范围**：合并直管发货表 `tube.tube_delivery` 与管件发货表 `tube.tube_fitting_delivery`，排除作废单据（`status != 'cancelled'`）；
+    2. **分母（已到货订单总数）**：已确认到货（`arrived_confirm_at IS NOT NULL`）或单据状态已流转至后续环节（`status IN ('pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve')`）的订单记录总数；
+    3. **分子（库管已确认订单总数）**：在分母范围内，库管已确认（`warehouse_confirm_at IS NOT NULL`）或单据终态完成（`status = 'completed'`）的订单记录总数；
+    4. **计算公式**：`round((total_confirmed_warehouse_orders / total_confirmed_arrived_orders) * 100, 1)`；分母为 0 时返回 `100.0%`；
+    5. **跨品类量纲统一**：保温管（米）与管件（件）采用“订单单据数”合并计算，有效规避了不同物理量纲不可直接求和的问题，指标设计合理自洽。
+- **状态保持**：
+  - 本轮为算法核查答疑，后端各服务与数据库存储层稳定运行，零后端代码变动。
+
 ## 2026-10-07 数字指挥大屏供给主体卡片库存徽章恢复呼吸空格之后端状态保持 (Baseline Kept)
 
 - **后端架构与接口状态**：

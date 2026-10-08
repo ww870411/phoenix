@@ -1,3 +1,83 @@
+## 2026-10-08 [综合数据查询：责任主体与人员管辖矩阵库管员信息查不到缺陷排查与全链路修复]
+- **问题诊断与根因排查**：
+  - 用户问题：在 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/comprehensive_query`（综合数据查询中心）中，“责任主体与人员管辖矩阵”标签页查不到库管人员信息；
+  - 核心根因：
+    1. **数据结构误解缺陷（核心断点）**：后端 [`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py) 中，系统读取 [`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json) 后的 `users` 字段本是以具体“用户名”为键的字典对象（`{ "ww870411": {...}, "左巨": {...} }`），但服务函数 `query_entity_directory` 误以为是以“用户组名称”为键的字典，执行了 `wh_users = users_map.get("tube_warehouse_keeper", [])`，导致 `wh_users` 恒为空列表 `[]`，库管员循环 0 次被全部跳过；
+    2. **连带波及其他角色**：该错误写法同样波及供货厂家（`tube_supplier_admin`）、施工单位（`tube_site_manager` / `tube_construction_unit`）以及全局管理人员（`Global_admin` / `tube_global_viewer`），导致全局管理观察员为空、厂家与施工单位账号 fallback 成了假数据；
+    3. **主权威数据源解耦**：库管员的真实权威配置已完整定义在 [`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 的 `warehouse_keepers` 列表中（含 10 位库管员的真实姓名、手机号与各标段管辖关系 `section_1_ids`），原后端未将其作为基准数据源驱动输出。
+- **高精细修复方案**：
+  - **建立双向索引**：在后端 `query_entity_directory` 中解析 `accounts_data["users"]` 时，同步构建 `group_to_users`（用户组 -> 用户列表）与 `user_to_obj`（用户名 -> 用户对象）索引字典；
+  - **权威配置驱动与账号中心融合**：以 `tube_config.json` 中的 `warehouse_keepers` 配置为主基准，准确提取姓名、联系电话与 `section_1_ids`，融合匹配账户中心登录账号，并兜底补全账户中心其余新增库管员；
+  - **全角色完整恢复**：库管员 10 人（1 位全局总库管 + 9 位标段现场库管员）、供货厂家 10 家、施工单位 8 家、现场主管 1 人、系统全局观察员 3 人全部精准呈现；
+  - **多模式无缝联动**：前端 `directoryViewMode` 无论是“按主体类别”（支持标段联动筛选、全局搜索、电话一键复制与卡片定位高亮）还是“按标段综合穿透”（按标段内嵌现场库管员、底部展示全网物资总库管），均 100% 恢复正常并支持 Excel 矩阵导出。
+- **改动清单**：
+  - 后端服务：[`backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)
+  - 过程记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 后端 Python 单测调用 `query_entity_directory()`：成功返回 10 位库管员（含姓名、账号、手机、管辖标段全量字段）、3 位全局管理观察员、10 家供货厂家与 8 家施工单位真实账号；
+  - 前端 `npm run build` 全量打包编译通过（耗时 12.53s，0 错误）。
+
+## 2026-10-08 [大屏看板：生成全网各标段“已到货但库管未确认订单”专属 Excel 汇报报表]
+- **需求意向与报表交付**：
+  - 用户需求：将全网各标段“已到货但库管未确认订单”汇报表格生成一个 xlsx 文件；
+  - 核心执行与产物：
+    1. **生成物理报表文件**：[`全网各标段已到货但库管未确认订单汇报表_20261008.xlsx`](file:///D:/编程项目/phoenix/全网各标段已到货但库管未确认订单汇报表_20261008.xlsx)（位于工程根目录，大小 78 KB）；
+    2. **工作表 1（各标段未确认订单汇总）**：
+       - 包含 10 大施工标段按照未确认订单量从高到低严格降序排列（L2、L6、L5、L4、H1 及闭环标段）；
+       - 涵盖：标段代号、名称、系统分类、施工状态、责任库管员、已到货总订单数、库管已确认单数、库管未确认单数、直管未确认、管件未确认、确认率、平均到货至今时长、最长滞留时长、滞留预警等级及全网汇总合计行；
+       - 配备专业工业报表配色（藏蓝表头、浅红/浅橙高亮警报底色、冻结窗格、自适应列宽）；
+    3. **工作表 2（未确认订单明细台账）**：
+       - 全量收录真实业务数据库中全部 718 笔未确认订单的逐笔台账记录（包含订单号、批次号、物资规格、数量单位、供货厂家、车牌号、发货与到货时间、流转状态、滞留小时数与天数、滞留超期等级），方便管理人员向各标段责任库管员定向下发与穿透督办。
+- **改动清单**：
+  - 报表输出：[`全网各标段已到货但库管未确认订单汇报表_20261008.xlsx`](file:///D:/编程项目/phoenix/全网各标段已到货但库管未确认订单汇报表_20261008.xlsx)
+  - 导出工具：[`scratch/export_unconfirmed_orders_excel.py`](file:///C:/Users/ww/.gemini/antigravity-cli/brain/b1be300b-662c-4afe-ba82-7a03e5ec8e56/scratch/export_unconfirmed_orders_excel.py)
+  - 过程记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 通过 `openpyxl` 校验，两张工作表生成完整，单元格数据和公式样式核验通过。
+
+## 2026-10-08 [大屏看板：各标段已确认到货但库管未确认订单统计与汇报分析]
+- **需求意向与数据核算**：
+  - 用户需求：根据实际数据，找到各标段已确认到货但库管未确认的订单，按未确认订单数从高到低排序，写出各标段已确认订单数、未确认订单数以及平均确认到货至今时长（小时数），生成汇报表格；
+  - 核心数据核算结果（基于当前生产数据库全量查询）：
+    1. **全网总量**：全网已到货订单总数 1,290 单，库管已确认 572 单，库管未确认 718 单（直管 152 单、管件 566 单），全网综合库管确认率 44.3%；
+    2. **标段排序（按未确认订单数从高到低）**：
+       - **第 1 名 低温水_标段2 (L2)**：已确认 155 单，未确认 **311 单**（直管 65、管件 246），平均滞留 **491.6 小时**（约 20.5 天），最大滞留 959.3 小时，且 100% 积压在 `pending_warehouse` 待库管确认节点，责任库管李春；
+       - **第 2 名 低温水_标段6 (L6)**：已确认 9 单，未确认 **224 单**（直管 45、管件 179），平均滞留 **280.8 小时**（约 11.7 天），最大滞留 745.8 小时，责任库管王世博、孟广胜；
+       - **第 3 名 低温水_标段5 (L5)**：已确认 55 单，未确认 **107 单**（直管 26、管件 81），平均滞留 **152.5 小时**（约 6.4 天），最大滞留 554.4 小时，责任库管王世博、孟广胜；
+       - **第 4 名 低温水_标段4 (L4)**：已确认 139 单，未确认 **72 单**（直管 12、管件 60），平均滞留 **13.9 小时**，主要流转在施工接收环节，责任库管王晟楠、辛宇满、杨毅；
+       - **第 5 名 高温水_标段1 (H1)**：已确认 84 单，未确认 **4 单**（直管 4、管件 0），平均滞留 **0.4 小时**（新进场车辆待接收），责任库管左巨、赫心彤；
+       - **第 6~10 名 (H2、H3、H4、L1、L3)**：未确认订单数均为 **0 单**，库管确认率 100.0%（L1、L3 暂未开工进场）。
+- **改动清单**：
+  - 过程记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 基于 PostgreSQL 数据库引擎执行联合聚合查询，与大屏核心算法逻辑完全一致，数据真实精准。
+
+## 2026-10-08 [大屏看板：展示大屏“库管确认率”核心算法全链路核查与口径解析]
+- **需求意向与算法核查**：
+  - 用户需求：检查展示大屏（`http://localhost:5173/projects/insulation_pipe_supply_2026/pages/big_screen`）中的“库管确认率”算法；
+  - 核心核查结论与全链路逻辑：
+    1. **前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）**：
+       - 展示位置：左侧栏底部“保供效能与履约保障”面板第 3 项指标卡片；
+       - 主数值：`kpiData.warehouseConfirmRate`（保留 1 位小数，格式如 `100.0%` 或 `95.5%`）；
+       - 提示浮层（Tooltip）：`库管确认率：已确认 ${kpiData.confirmedWarehouseOrders || 0} 单 / 已到货 ${kpiData.confirmedArrivedOrders || 0} 单（含保温管与管件）`。
+    2. **后端接口与数据源（[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）**：
+       - API 路径：`GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data`（函数 `get_big_screen_dashboard_data`）；
+       - 数据底表：合并查询直管发货表 `tube.tube_delivery` 与管件发货表 `tube.tube_fitting_delivery`，排除作废单据（`status != 'cancelled'`）；
+       - **分母（已到货订单总数）**：满足现场已确认到货（`arrived_confirm_at IS NOT NULL`）或单据状态已流转至后续节点（`status IN ('pending_receive', 'pending_warehouse', 'completed', 'pending_diff_approve')`）的订单数总和；
+       - **分子（库管已确认订单总数）**：在已到货订单中，库管已确认（`warehouse_confirm_at IS NOT NULL`）或单据已终态归档（`status = 'completed'`）的订单数总和；
+       - **计算公式**：`round((total_confirmed_warehouse_orders / total_confirmed_arrived_orders) * 100, 1)`；若分母为 0 则默认返回 `100.0`（无滞后受控状态）。
+    3. **业务合理性评估**：
+       - 统计粒度采用“订单单据数”而非“物理米数/件数”，妥善消除了直管（米）与管件（件）不同物理量纲不可直接相加的矛盾；
+       - 分子严格为分母的子集，杜绝溢出异常；边界除零保护完善。
+- **改动清单**：
+  - 过程记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 代码逻辑核查完毕，前后端口径完全吻合，算法健全稳固。
+
 ## 2026-10-07 [大屏看板：恢复供给主体卡片库存徽章呼吸空格并保持“|”与数值严格列级垂直对齐]
 - **需求意向与微排版回滚调整**：
   - 用户反馈：“不行，还是恢复有空格吧”；经实地对比，零间隙紧凑字形略显拥挤，恢复呼吸空格后视觉层次更舒展自然；
