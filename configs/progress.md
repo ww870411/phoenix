@@ -1,3 +1,27 @@
+## 2026-10-08 [数字指挥大屏：发货高亮连线“累计发运”标签模糊排查与高清锐化重构]
+- **需求意向与问题诊断**：
+  - 用户反馈：展示大屏（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）当最新动态战报为厂家发货时，供应商到需求主体的连线上显示的“累计发运”胶囊标签显示比较模糊；
+  - 核心根因排查：
+    1. **字号过小击穿汉字渲染极限（主因）**：原标签基准字号仅 `10px`，其中前缀 `.flow-prefix`（“累计发运:”）及单位 `.unit`（“km”）低至 `8.5px`，汉字复杂笔画（如“累”、“发”、“运”）在低于 12px 时操作系统抗锯齿引擎无法分配足够离散像素，字符黏连成灰斑，加之低对比灰度 `#94a3b8` 导致视觉极度模糊；
+    2. **大光晕阴影弥散散焦**：`.pipe-val` 与 `.fitting-val` 应用了 `text-shadow: 0 0 6px ...`，在仅 10px 且笔画仅约 1px 的细小文字上施加 6px 的大模糊羽化，导致数字四周弥漫半透明雾状光晕，形成严重“散焦发虚”感；
+    3. **Chromium 嵌套 3D 图层双线性插值滤波 Bug**：父容器 `.topology-container` 启用了 `transform: translateZ(0)`，而标签同时使用了 `transform: translate(-50%, -50%)` 与 `backdrop-filter: blur(8px)`，在偶数/奇数宽高导致的 `.5px` 亚像素网格上触发 GPU 纹理重采样，关闭了 ClearType 子像素抗锯齿并产生整块微模糊；
+    4. **缺少激活聚焦状态**：厂家发货连线处于强光流光和高亮飞线照射下，但中间的胶囊标签缺乏专属高亮聚光状态，对比度被强光冲淡。
+- **高精细修复方案**：
+  - **字号与对比度重塑**：
+    - 胶囊字号由 `10px` 提升至 `11px`，前缀“累计发运:”由 `8.5px` 提升至 `10px` 并改用明亮高对比度银白色 `#e2e8f0`（字重加粗为 600、字距 0.3px）；单位提升至 `9.5px`；
+  - **剔除模糊源，实现高清直出**：
+    - 移除不必要的 `backdrop-filter: blur(8px)`，改用高质感实色深空蓝底（`rgba(9, 14, 26, 0.97)`），彻底规避 Chromium 双线性纹理滤波模糊；
+    - 剔除 `text-shadow: 0 0 6px ...` 弥散光晕，替换为极微紧致阴影（`0 1px 1px rgba(0,0,0,0.85)`），数字笔画如刀刻般锐利清晰；
+    - 开启全局文字渲染保护：`-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;`；
+  - **增加联动高亮聚焦态 (`.flow-capsule-tag.is-active`)**：
+    - 在脚本中补充 `isLineHighlighted(line)` 函数，当处于动态战报发货高亮周期或鼠标悬停时，胶囊标签获得发光青色微边框、深蓝底色、高层级（`z-index: 30`）与 `scale(1.06)` 微聚焦动效，在大屏流光中脱颖而出、一眼即识。
+- **改动清单**：
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 过程记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包编译通过（耗时 12.28s，0 错误）。
+
 ## 2026-10-08 [综合数据查询：责任主体与人员管辖矩阵库管员信息查不到缺陷排查与全链路修复]
 - **问题诊断与根因排查**：
   - 用户问题：在 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/comprehensive_query`（综合数据查询中心）中，“责任主体与人员管辖矩阵”标签页查不到库管人员信息；

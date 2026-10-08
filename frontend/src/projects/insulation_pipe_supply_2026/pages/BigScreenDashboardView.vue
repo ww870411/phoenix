@@ -956,7 +956,8 @@
                 class="flow-capsule-tag"
                 :class="{
                   'is-shipped': isLineShipped(line),
-                  'is-unshipped': !isLineShipped(line)
+                  'is-unshipped': !isLineShipped(line),
+                  'is-active': isLineHighlighted(line)
                 }"
                 :style="{
                   left: line.tagX + 'px',
@@ -2654,6 +2655,19 @@ function isLineVisible(line) {
 
   // 3. 有临时触发的激光粒子运输时显现
   if (activeShipmentLineIds.value.has(line.id)) return true
+  return false
+}
+
+function isLineHighlighted(line) {
+  // 1. 当前处于动态战报“厂家发货”高亮周期内，高亮对应专线
+  if (isAnimationRunning.value && activeEventCategory.value === 'dispatch' && activeSupplierId.value && activeSectionId.value) {
+    if (line.fromId === activeSupplierId.value && line.toId === 'sec_' + activeSectionId.value) {
+      return true
+    }
+  }
+  // 2. 鼠标悬停管厂或标段时高亮直达专线
+  if (hoveredSupplierId.value && line.fromId === hoveredSupplierId.value) return true
+  if (hoveredSectionId.value && line.toId === 'sec_' + hoveredSectionId.value) return true
   return false
 }
 
@@ -6220,35 +6234,44 @@ onBeforeUnmount(() => {
   transform: translate(-50%, -50%);
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1.5px 6.5px;
+  gap: 3.5px;
+  padding: 2px 7.5px;
   border-radius: 9px;
-  background: rgba(9, 14, 26, 0.94);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(0, 242, 254, 0.38);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.7), 0 0 10px rgba(0, 242, 254, 0.2);
+  background: rgba(9, 14, 26, 0.97);
+  border: 1px solid rgba(0, 242, 254, 0.45);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.85), 0 0 8px rgba(0, 242, 254, 0.25);
   white-space: nowrap;
   font-family: 'DIN Alternate', 'JetBrains Mono', Consolas, sans-serif;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.15;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   user-select: none;
   pointer-events: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.flow-capsule-tag.is-active {
+  border-color: #00f2fe;
+  background: rgba(6, 12, 24, 0.98);
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.65), 0 4px 14px rgba(0, 0, 0, 0.9);
+  transform: translate(-50%, -50%) scale(1.06);
+  z-index: 30;
 }
 
 .flow-capsule-tag.is-unshipped {
-  border-color: rgba(148, 163, 184, 0.3);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-  background: rgba(11, 19, 34, 0.9);
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  background: rgba(11, 19, 34, 0.92);
 }
 
 .flow-prefix {
-  font-size: 8.5px;
-  color: #94a3b8;
-  font-weight: 500;
-  margin-right: 1px;
-  letter-spacing: 0.2px;
+  font-size: 10px;
+  color: #e2e8f0;
+  font-weight: 600;
+  margin-right: 1.5px;
+  letter-spacing: 0.3px;
   white-space: nowrap;
 }
 
@@ -6261,62 +6284,68 @@ onBeforeUnmount(() => {
 .flow-val.pipe-val {
   color: #00f2fe;
   font-weight: 700;
-  text-shadow: 0 0 6px rgba(0, 242, 254, 0.4);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.85);
 }
 
 .flow-val.pipe-val .flow-dot {
-  width: 4px;
-  height: 4px;
+  width: 4.5px;
+  height: 4.5px;
   border-radius: 50%;
   background: #00f2fe;
-  box-shadow: 0 0 5px #00f2fe;
+  box-shadow: 0 0 4px #00f2fe;
   flex-shrink: 0;
 }
 
 .flow-val.fitting-val {
   color: #fbbf24;
   font-weight: 700;
-  text-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.85);
 }
 
 .flow-val.fitting-val .flow-dot {
-  width: 4px;
-  height: 4px;
+  width: 4.5px;
+  height: 4.5px;
   border-radius: 50%;
   background: #fbbf24;
-  box-shadow: 0 0 5px #fbbf24;
+  box-shadow: 0 0 4px #fbbf24;
   flex-shrink: 0;
 }
 
 .flow-val.unshipped-val {
-  color: #64748b;
-  font-size: 9px;
-  font-weight: 500;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .flow-divider {
-  color: rgba(255, 255, 255, 0.25);
-  font-size: 9px;
-  margin: 0 1px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  margin: 0 1.5px;
 }
 
 .flow-capsule-tag .unit {
-  font-size: 8.5px;
-  font-weight: 500;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #cbd5e1;
   margin-left: 0.5px;
-  opacity: 0.85;
+  opacity: 0.95;
 }
 
 /* 浅色主题兼容 */
 .light .flow-capsule-tag {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(2, 132, 199, 0.35);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 8px rgba(2, 132, 199, 0.15);
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(2, 132, 199, 0.5);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15), 0 0 10px rgba(2, 132, 199, 0.2);
+}
+
+.light .flow-capsule-tag.is-active {
+  border-color: #0284c7;
+  box-shadow: 0 0 16px rgba(2, 132, 199, 0.45), 0 4px 14px rgba(0, 0, 0, 0.15);
 }
 
 .light .flow-capsule-tag.is-unshipped {
-  border-color: rgba(203, 213, 225, 0.6);
-  background: rgba(248, 250, 252, 0.92);
+  border-color: rgba(203, 213, 225, 0.7);
+  background: rgba(248, 250, 252, 0.95);
 }
 
 .light .flow-val.pipe-val {
@@ -6330,15 +6359,15 @@ onBeforeUnmount(() => {
 }
 
 .light .flow-val.unshipped-val {
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .light .flow-divider {
-  color: rgba(0, 0, 0, 0.22);
+  color: rgba(0, 0, 0, 0.3);
 }
 
 .light .flow-prefix {
-  color: #64748b;
+  color: #475569;
 }
 
 /* 拓扑主排版三栏布局 (左: 供货单位基地随窗口弹性缩放 clamp(120px, 24%, 260px), 中: 28px 通道, 右: 1fr 需求标段) */

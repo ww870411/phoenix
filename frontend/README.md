@@ -1,3 +1,22 @@
+## 2026-10-08 数字指挥大屏拓扑连线“累计发运”标签高清锐化与高亮聚焦升级说明 (BigScreenDashboardView.vue)
+
+- **关联前端页面与组件**：
+  - 页面文件：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)；
+  - 核心组件：拓扑舞台连线流向胶囊层（`.topology-flow-tags-layer .flow-capsule-tag`）；
+- **显示模糊排查与高清重构要点**：
+  1. **字号与可读性重塑**：
+     - 解决原前缀与单位在 `8.5px` 极端微小尺寸下汉字笔画粘连模糊的问题；
+     - 胶囊字号整体提升至 `11px`，前缀“累计发运:”提升至 `10px` 并改用高对比明亮银白 `#e2e8f0`（字重 600、字距 0.3px），单位升级为 `9.5px`；
+  2. **消除 GPU 毛玻璃与光晕失真**：
+     - 移除 `backdrop-filter: blur(8px)`，消除 Chromium 嵌套 3D 渲染图层双线性插值采样导致的模糊现象，改用纯净实色深空蓝底（`rgba(9, 14, 26, 0.97)`）；
+     - 剔除原本扩散 6px 的 `text-shadow` 弥散光晕，替换为极微紧致黑阴影（`0 1px 1px rgba(0, 0, 0, 0.85)`），数字笔画清晰挺拔；
+     - 配置 `-webkit-font-smoothing: antialiased;` 与 `text-rendering: optimizeLegibility;` 硬件文本平滑保护；
+  3. **战报厂家发货动态高亮联动 (`.is-active`)**：
+     - 增加 `isLineHighlighted(line)` 计算判定；
+     - 当最新动态战报处于厂家发货播报或鼠标悬停时，该连线上的胶囊微徽章同步激活聚焦态（青色发光边框、`scale(1.06)` 微聚焦与最高 `z-index: 30`），在大屏流光中脱颖而出；
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 15.41s，0 错误）。
+
 ## 2026-10-08 综合数据查询中心：责任主体与人员管辖矩阵库管员卡片与视图联动恢复说明 (HistoryQueryView.vue)
 
 - **关联前端页面与组件**：

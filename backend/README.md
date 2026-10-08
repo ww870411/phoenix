@@ -1,3 +1,9 @@
+## 2026-10-08 数字指挥大屏拓扑连线累计发运标签高清锐化之后端状态保持 (Baseline Kept)
+
+- **后端架构与接口状态**：
+  - 本轮改动为前端展示层（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）拓扑飞线“累计发运”标签样式重塑与文字高清抗锯齿升级；
+  - 后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/big-screen/data` 既有供需发运矩阵 `supplier_section_matrix`（包含 `pipe_km`、`fitting_pcs`、`has_shipped` 等）数据契约与聚合逻辑完全保持稳定，零后端改动。
+
 ## 2026-10-08 综合历史数据：责任主体与人员管辖速查矩阵库管员与用户角色全链路修复说明 (comprehensive_history_service.py)
 
 - **业务口径与接口修复**：
