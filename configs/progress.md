@@ -1,3 +1,18 @@
+## 2026-10-08 [数字指挥大屏：动态播报施工收货状态描述规范化更新为“施工单位完成实物接收”]
+- **需求意向与文案调整**：
+  - 用户需求：将大屏“全网工程实时动态播报”中施工收货环节的原状态描述“施工队完成实物卸车接收”更新为更规范正式的**“施工单位完成实物接收”**；
+  - 调整口径与全链路覆盖：
+    1. **后端数据接口（[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）**：在 `get_big_screen_dashboard_data` 的直管施工收货动态事件（`category: "施工单位收货"` / `received_confirm_at`）构造逻辑中，将 `positiveTag` 统一订正为 `f"施工单位完成实物接收"`；
+    2. **前端大屏视图（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）**：同步更新直管施工收货战报生成逻辑中的 `positiveTag` 为 `'施工单位完成实物接收'`，并同步规范管件收货主体为 `'施工单位完成特种管件核验签收'`；
+    3. **业务一致性**：使播报文案与集团项目责任矩阵中的“施工单位”称谓完全统一，文案更为严谨正式。
+- **改动清单**：
+  - 后端接口：[`backend/projects/insulation_pipe_supply_2026/api/workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)
+  - 前端视图：[`frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)
+  - 过程记录：[`configs/progress.md`](file:///D:/编程项目/phoenix/configs/progress.md)
+  - 结构文档：[`frontend/README.md`](file:///D:/编程项目/phoenix/frontend/README.md)、[`backend/README.md`](file:///D:/编程项目/phoenix/backend/README.md)
+- **验证结果**：
+  - 前端 `npm run build` 全量打包编译通过（耗时 14.88s，0 错误）。
+
 ## 2026-10-08 [数字指挥大屏：发货高亮连线“累计发运”标签模糊排查与高清锐化重构]
 - **需求意向与问题诊断**：
   - 用户反馈：展示大屏（[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)）当最新动态战报为厂家发货时，供应商到需求主体的连线上显示的“累计发运”胶囊标签显示比较模糊；

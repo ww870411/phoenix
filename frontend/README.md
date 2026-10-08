@@ -1,3 +1,15 @@
+## 2026-10-08 数字指挥大屏动态播报状态描述更新为“施工单位完成实物接收”说明 (BigScreenDashboardView.vue)
+
+- **关联前端页面与组件**：
+  - 页面文件：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)；
+  - 核心组件：动态播报卡片正向状态标签（`.feed-card-footer .feed-pos-tag`）；
+- **文案与主体规范化**：
+  - 将原直管收货状态描述“施工队完成实物卸车接收”统一更新为更正式规范的**“施工单位完成实物接收”**；
+  - 将管件收货主体同步规范为“施工单位完成特种管件核验签收”；
+  - 保持与集团项目责任主体“施工单位”称谓完全统一；
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（738 modules transformed，耗时 14.88s，0 错误）。
+
 ## 2026-10-08 数字指挥大屏拓扑连线“累计发运”标签高清锐化与高亮聚焦升级说明 (BigScreenDashboardView.vue)
 
 - **关联前端页面与组件**：

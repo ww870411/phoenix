@@ -1971,7 +1971,7 @@ def get_big_screen_dashboard_data() -> Dict[str, Any]:
                         "vehiclePlate": plate_str,
                         "operator": rec_op,
                         "time": t_str,
-                        "positiveTag": f"施工队完成实物卸车接收",
+                        "positiveTag": f"施工单位完成实物接收",
                         "isNew": False,
                         "raw_time": raw_t
                     })

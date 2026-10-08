@@ -3672,7 +3672,7 @@ function triggerSimulateDelivery(mode = 'pipe') {
       vehiclePlate: '辽B·' + Math.floor(1000 + Math.random() * 9000),
       operator: '现场施工接收员',
       time: timeNow,
-      positiveTag: matType === 'fitting' ? '施工队完成特种管件核验签收' : '施工队完成实物卸车接收',
+      positiveTag: matType === 'fitting' ? '施工单位完成特种管件核验签收' : '施工单位完成实物接收',
       isNew: true
     }
 
