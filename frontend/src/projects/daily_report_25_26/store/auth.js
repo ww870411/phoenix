@@ -210,6 +210,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   }
 
   const isAuthenticated = computed(() => Boolean(token.value))
+  const isLoggedIn = computed(() => Boolean(token.value || user.value))
   function normalizeProjectKey(projectKey) {
     return typeof projectKey === 'string' ? projectKey.trim() : ''
   }
@@ -414,6 +415,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     lastError,
     rememberLogin,
     isAuthenticated,
+    isLoggedIn,
     canSubmit,
     canApprove,
     canRevoke,

@@ -1,3 +1,168 @@
+## 2026-10-09 联合会审 under_review 状态 CHECK 约束自愈与物流白名单穿透说明 (Backend Constraint Migration)
+
+- **数据库约束自愈与接口契约升级清单**：
+  1. **PostgreSQL 物理状态 CHECK 约束自愈 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `ensure_joint_review_tables` 内部接入 `_ensure_status_constraints(session)` 自动检测与自愈逻辑；
+     - 检查元表 `pg_constraint`：当 `tube.tube_delivery` 的 `chk_tube_delivery_status` 约束未包含 `'under_review'` 时，安全热更新约束白名单，彻底消除更新单据状态为 `under_review` 时的 `chk_tube_delivery_status` 约束冲突 500 报错；
+     - 同步对 `tube.tube_fitting_delivery` 的 `chk_tube_fitting_status` 补齐 `'under_review'` 与 `'pending_diff_approve'`，并升级 `chk_tube_fitting_state_evidence` 豁免 `(status = 'under_review')` 挂起单据；
+  2. **系统 DDL 初始规范更新 ([`tube_schema_init.sql`](file:///D:/编程项目/phoenix/backend/sql/tube_schema_init.sql))**：
+     - 在 `tube_schema_init.sql` 中全面同步更新两表的 `CHECK` 状态约束，保证新初始化数据库实例与运行期完全对齐；
+  3. **需求侧物流明细与在途汇总白名单穿透 ([`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py))**：
+     - 在物流履约明细查询 `get_demand_management_logistics_records` 中将 `under_review` 纳入状态集合，避免单据提请会审后在物流列表中被错误排除；
+     - 在待办发货单汇总 `get_demand_management_pending_deliveries_summary` 中加入 `under_review` 状态查询与 `⚖️ 联合会审中` 规范标签映射；
+     - 在标段大盘统计 `del_pipe_sql` 与 `del_fit_sql` 中纳入 `under_review` 单据。
+
+## 2026-10-08 联合会审与审计日志 JSON 序列化加固及 Decimal 异常自愈说明 (Backend Robustness)
+
+- **服务健壮性与序列化防护升级清单**：
+  1. **联合会审服务安全序列化器构建 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 引入自定义类型处理器 `_json_serialize_default(obj)` 与统一序列化函数 `_dumps_json(data)`；
+     - 自动拦截 PostgreSQL `NUMERIC` 字段映射所得的 `decimal.Decimal` 对象，按精度安全转为 `int` 或 `float`；拦截 `datetime`/`date` 格式化为标准 ISO 字符串；
+     - 全面替换 `create_joint_review` 中对 `original_snapshot`、`proposed_patch`、`attachments`、`required_entities` 的标准库 `json.dumps()` 调用，并在 `vote_joint_review` 中保护 `approved_entities` / `rejected_entities` 的落库序列化，彻底消除 `TypeError: Object of type Decimal is not JSON serializable` 导致的 500 报错。
+  2. **操作审计日志防御加固 ([`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py))**：
+     - 显式导入 `Decimal`，在 `save_operation_log` 内部序列化函数 `_log_serialize_default` 中增加对 `Decimal` 类型的针对性数值归一化处理，杜绝日志记录阶段因数值类型引起的静默异常或事务回滚。
+
+## 2026-10-08 联合会审直管超长型号原值前端呈现优化对齐说明 (Client UI Sync)
+
+- **前端消费端展示对齐**：
+  - 前端在 `InitiateJointReviewModal.vue` 中将保温管规格型号卡片调整为全宽展示，并解除了原值标签的最大宽度截断，确保超长工程规格型号字符串在会审提请阶段 100% 完整可见；
+  - 后端接口契约与补丁入参字段保持一致，无需服务层改动。
+
+## 2026-10-08 联合会审管件车次级锁定与多明细条目原子补丁支持说明 (Backend Review Enhancement)
+
+- **服务与契约升级清单 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+  1. **管件允许修正字段白名单拓展**：
+     - `FITTING_ALLOWED_PATCH_FIELDS` 新增 `"items"` 字段；
+     - `items` 格式校验：必须为列表，每个元素必须包含 `id`（`tube_fitting_delivery` 主键），且若存在 `shipped_qty` 必须数值且 `> 0`；
+  2. **车次级单据物理锁定与还原联动**：
+     - 当管件订单具备运输车次号 `shipment_no` 时，发起会审自动将该车次下的所有条目同步标记为 `under_review`，彻底阻断常规入库与接收并发冲突；
+     - 会审撤销、驳回时，自动联动恢复该车次下所有条目的前置状态；
+  3. **会审生效后原子修单与车次级车牌覆盖**：
+     - 若补丁包含 `vehicle_plate_no`，自动覆盖更新该车次号下的全部明细记录；
+     - 若补丁包含 `items`，逐条原子修补对应的品类 `fitting_type`、规格描述 `model_spec` 与发货数量 `shipped_qty`，保障多方会审表决结果在底层生产数据中的精准落地与状态解锁。
+
+## 2026-10-08 现场物流履约记录表格扁平化与单行极致高密度排版对齐 (Client Table Sync)
+
+- **前端消费端表单与接口对齐**：
+  - 前端在 `DemandManagementView.vue` 中将保温管订单物流表格全面扁平化为 13 离散专业单列，放开 `min-width: 1580px` 与横向滚动，严格限制单行行高为 38px；
+  - 表格各动作（确认到货、施工接收、差异审批、提请会审、凭据穿透）维持原有 RESTful 接口协议不变，全链路兼容。
+
+## 2026-10-08 多方联合会审前后端契约对齐与表单提请闭环说明 (Backend Review Contract)
+
+- **接口与契约对齐**：
+  - 会审提请接口：`POST /api/v1/projects/insulation_pipe_supply_2026/joint-reviews/create`（处理函数 `handle_create_joint_review`）；
+  - 数据模型与字段校验：
+    - `order_category`: 规范为 `'pipe'`（直管）或 `'fitting'`（管件）；
+    - `delivery_id`: 原发货单自增主键 ID，强转数值整型防空防 NaN；
+    - `proposed_patch`: 包含白名单更正字段字典（发货量、规格、车牌等），支持纯现场异议协商（空 patch）；
+    - `review_reason`: 提请事由不少于 4 个字符，保障多方核准凭据充分；
+  - 状态互斥锁与闭环保护：
+    - 原单状态无缝置为 `'under_review'`，同时保存 `pre_review_status`，物理阻断常规流转并发确认；
+    - 会审通过后还原为原待办状态供责任主体亲自复核归档，撤销或驳回时原样恢复；
+  - 前端工作台联调支持：
+    - 针对 `demand_management?category=pipe&tab=logistics` 订单表格进行高密度 8 列紧凑重构；
+    - 联合会审弹窗支持快捷工程短语填报与行内变动微计算，与后端白名单字段严格契合。
+
+## 2026-10-08 登录接口 404 故障排查与路由导入自愈修复说明 (Backend Hotfix)
+
+- **故障原因与影响链路**：
+  - 现象：`POST /api/v1/auth/login HTTP/1.1 404 Not Found`。
+  - 根因：[`main.py`](file:///D:/编程项目/phoenix/backend/main.py) 对 `from .api.v1.routes import router` 采用了防御性捕获；而本轮在 [`system_messages.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/system_messages.py) 中误导入了不存在的 `dependencies` 模块，导致主路由树导入报错，触发回退保护将 `v1_router` 置为 `None`，致使包括认证接口在内的所有 `/api/v1` 路由整体未挂载。
+- **修复方案与落地**：
+  - 将 [`system_messages.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/system_messages.py) 中的认证依赖修正为系统标准的 [`backend.services.auth_manager`](file:///D:/编程项目/phoenix/backend/services/auth_manager.py) (`AuthSession`, `get_current_session`)；
+  - 容器 Uvicorn 热重载后，全部 243 个 API 端点恢复正常注册。
+- **状态验证**：
+  - 接口路由探针：`POST /api/v1/auth/login` 恢复为正常业务鉴权响应（`401 {"detail":"用户名或密码错误"}`，完全消除 404）；
+  - 全量请求恢复：容器运行正常，后续业务轮询请求全链路均为 `200 OK`。
+
+## 2026-10-08 系统消息中心与“收件箱”后端服务交付说明 (Backend Delivery)
+
+- **后端架构、服务与数据模型落地清单**：
+  1. **数据模型建设 (`logs` Schema)**：
+     - 在 PostgreSQL `logs` 模式下创建 `logs.system_messages` 数据表，内置自动检测自愈 DDL 逻辑（具备字段增量对齐与索引自动创建）；
+     - 字段规范：`id` (主键自增), `project_key`, `msg_type` (review/broadcast/direct/system), `category`, `sender_username`, `sender_name`, `sender_role`, `receiver_username` (支持个人用户名、全员广播 `'ALL'`、角色组广播 `'ROLE:xxx'`), `receiver_entity_id`, `title`, `content`, `action_url`, `biz_type`, `biz_id`, `extra_data` (JSONB), `is_read`, `read_at`, `created_at`；
+     - 优化索引：`idx_sys_msg_receiver`, `idx_sys_msg_created`, `idx_sys_msg_biz`。
+  2. **核心业务服务 ([`system_message_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/system_message_service.py))**：
+     - 提供用户收件箱多维检索（按分类、阅读状态筛选并分页）；
+     - 极速未读消息计数与动态汇总；
+     - 单条标读与一键全部标读原子事务；
+     - 会审流转自动推送通知：在发起会审时向各责任主体批量推送会审待签消息，在全票通过自动修单后向发起人推送结案通知；
+     - 具备全员广播（管理员广播）、角色广播与个人互联（点对点私信）底层驱动能力。
+  3. **REST 路由接口 ([`system_messages.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/system_messages.py))**：
+     - `GET /api/v1/projects/{project_key}/system-messages/my`：收件箱列表分页查询
+     - `GET /api/v1/projects/{project_key}/system-messages/unread-count`：未读消息实时计数
+     - `POST /api/v1/projects/{project_key}/system-messages/{id}/read`：标记单条已读
+     - `POST /api/v1/projects/{project_key}/system-messages/read-all`：一键全部标记为已读
+     - `POST /api/v1/projects/{project_key}/system-messages/send-direct`：发送站内点对点消息
+     - `POST /api/v1/projects/{project_key}/system-messages/broadcast`：发布全员/角色广播公告
+     - 路由挂载至 [`router.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/router.py)。
+- **验证与测试**：
+  - 后端 Python 静态编译检查（`python -m py_compile`）0 错误通过。
+
+## 2026-10-08 联合会审大厅天平标识规范化说明 (Backend / Config Sync)
+
+- **配置与数据模型状态**：
+  - 在 [`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json) 中将 `insulation_pipe_supply_2026` 的页面名称由“联合会审大厅”统一规范化为 **“⚖️ 联合会审大厅”**；
+  - 后端核心服务与 REST 端点保持平稳运行。
+
+## 2026-10-08 物资流转全生命周期“联合会审大厅”多方协同治理后端全量交付 (Backend Delivery)
+
+- **后端架构、服务与数据模型落地清单**：
+  1. **数据模型扩展 (`tube` Schema)**：
+     - 建有 `tube.tube_order_reviews`（会审主表）与 `tube.tube_review_votes`（多方表决记录表），并内置自动检测自愈 DDL 机制，服务启动首次调用自动完成数据库建表；
+     - 增加 `status = 'under_review'` 物理状态，挂起常规流转。
+  2. **核心业务服务 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - **发起会审**：支持直管与管件订单；白名单校验允许修正字段，冻结核心不可变字段；生成唯一会审单号（如 `REV-PIPE-20261008-XXXX`）；单据物理状态置为 `under_review`，原待办节点暂存 `pre_status`；
+     - **主体表决矩阵**：按主体（厂家实体、现场负责人）精准鉴权；
+       - 场景 1（待到货）：供货厂家 1 票；
+       - 场景 2（待接收）：供货厂家 + 现场负责人 2 票；
+       - 场景 3（待入库）：供货厂家 + 现场负责人 2 票（**工程实战严格排除施工方，杜绝死锁**）；
+     - **自动修单引擎（方式 1）**：全票同意后自动触发原子事务修单；单据恢复为 `pre_status`，由发起人亲自确认闭环；原发货备注完整保留，结构化追加《联合会审决议纪要》并归档 `logs.tube_operation_logs`；
+     - **发起人撤回与超管终局仲裁**：支持发起方随时主动撤销（单据自动回滚至 `pre_status`）；超管具备强制闭环仲裁通道；
+     - **未办统计与分页列表**：根据当前登录账号所属主体，动态聚合“待我联审”待办数与清单。
+  3. **REST 路由接口 ([`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py))**：
+     - `POST /api/v1/projects/{project_key}/joint-reviews/create`：提请会审
+     - `POST /api/v1/projects/{project_key}/joint-reviews/{review_id}/vote`：主体签署表决
+     - `POST /api/v1/projects/{project_key}/joint-reviews/{review_id}/cancel`：发起人主动撤销
+     - `POST /api/v1/projects/{project_key}/joint-reviews/{review_id}/admin-arbitrate`：管理员终局仲裁
+     - `GET /api/v1/projects/{project_key}/joint-reviews/list`：会审列表（支持待我联审/我发起的/历史档案/全部）
+     - `GET /api/v1/projects/{project_key}/joint-reviews/notifications`：当前用户待办会审统计
+     - `GET /api/v1/projects/{project_key}/joint-reviews/{review_id}`：会审单据穿透详情
+  4. **权限矩阵配置**：
+     - 在 [`permissions/insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json) 为全部 8 类角色开放会审大厅页面访问权限。
+- **验证与测试**：
+  - 后端 Python 静态编译检查（`python -m py_compile`）0 错误通过。
+
+## 2026-10-08 物资流转全生命周期“联合会审大厅”多方协同治理后端架构规划 (Backend Blueprint)
+
+- **后端架构与服务体系规划**：
+  1. **数据模型扩展 (`tube` Schema)**：
+     - 新建会审主单表 `tube.tube_order_reviews`：承载会审单号、关联单据类别（直管/管件）、触发场景、发起人、修改前快照、拟修正补丁数据、凭据附件及办结状态；
+     - 新建会审表决表 `tube.tube_review_votes`：记录各责任主体（供货厂家、现场主管、超级管理员等）的投票决策、表决时间与审核附言；
+     - 单据主表支持：`tube.tube_delivery` 与 `tube.tube_fitting_delivery` 支持 `status = 'under_review'` 会审挂起状态；
+  2. **核心业务服务 (`joint_review_service.py`)**：
+     - **发起与防呆互斥锁**：检查白名单字段合法性（数量、型号、车牌等允许修改；单号、供方、标段冻结不可改），同一订单强校验全局单流水唯一性；
+     - **主体表决判定与自动修单引擎**：
+       - 精确主体矩阵：场景 1 供方 1 票；场景 2 供方 + 现场主管 2 票；场景 3 供方 + 现场主管 2 票（精准排除施工方）；
+       - 全票同意触发事务级原子修单，生成《联合会审决议纪要》追加至原 `remark` 并写入审计日志，单据恢复为原待办状态；
+       - 单方异议挂起，支持发起方主动撤回与数据回退；
+       - 超级管理员终局仲裁支持（强制通过/强制撤回）；
+  3. **通知与待办契约 API**：
+     - 提供待办会审统计、各主体表决接口及列表分页查询服务。
+- **状态保持**：
+  - 本轮为方案研讨与架构定稿，既有后端服务与数据库存储层保持稳定。
+
+## 2026-10-08 服务器 Docker 历史镜像清理与宿主机存储瘦身说明 (Docker Ops)
+
+- **生产运维与部署健康度**：
+  - 用户反馈服务器历史版本更新迭代频繁，累计产生 291 个镜像，占用 25.34 GB 磁盘；
+  - 通过 `docker image prune -a -f` 实施深度安全清理：
+    - 安全剔除 286 个无引用历史构建旧镜像；
+    - 净释放磁盘空间 **22.05 GB**（从 25.34GB 降至 3.287GB）；
+    - 当前仅保留 5 个活跃业务容器（PostgreSQL、FastAPI 后端、前端等）所绑定的镜像；
+    - 数据库存储卷 `Local Volumes`（218.7MB）完好无损，服务运行正常；
+  - 建议在后续部署更新脚本中将 `docker image prune -f` 作为标准后置清理动作。
+
 ## 2026-10-08 数字指挥大屏动态播报接口状态描述更新为“施工单位完成实物接收”说明 (workspace.py)
 
 - **业务口径与接口更新**：

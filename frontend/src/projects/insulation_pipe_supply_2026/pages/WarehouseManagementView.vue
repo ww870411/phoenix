@@ -506,15 +506,27 @@
                     </td>
                     <td class="cell-elapsed" style="font-size: 11px; white-space: nowrap;">{{ formatDeliveryElapsedDisplay(row) }}</td>
                     <td style="text-align: center;">
-                      <button
-                        type="button"
-                        class="btn ghost btn-sm"
-                        style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;"
-                        title="查看单据流转凭证"
-                        @click.stop="openDeliveryDetailModal(row)"
-                      >
-                        📜 凭证
-                      </button>
+                      <div style="display: inline-flex; align-items: center; gap: 4px;">
+                        <button
+                          type="button"
+                          class="btn ghost btn-sm"
+                          style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;"
+                          title="查看单据流转凭证"
+                          @click.stop="openDeliveryDetailModal(row)"
+                        >
+                          📜 凭证
+                        </button>
+                        <button
+                          v-if="row.status === 'pending_warehouse'"
+                          type="button"
+                          class="btn ghost btn-sm"
+                          style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
+                          title="发现型号规格或数量有误时提请联合会审"
+                          @click.stop="openJointReviewModal(row, 'pipe')"
+                        >
+                          ⚖️ 会审
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -613,15 +625,27 @@
                 <td class="cell-datetime">{{ formatDateTime(row.shipped_at) }}</td>
                 <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
                 <td style="text-align: center;">
-                  <button
-                    type="button"
-                    class="btn ghost btn-sm"
-                    style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px;"
-                    title="查看单据流转凭证"
-                    @click.stop="openDeliveryDetailModal(row)"
-                  >
-                    📜 凭证
-                  </button>
+                  <div style="display: inline-flex; align-items: center; gap: 4px;">
+                    <button
+                      type="button"
+                      class="btn ghost btn-sm"
+                      style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;"
+                      title="查看单据流转凭证"
+                      @click.stop="openDeliveryDetailModal(row)"
+                    >
+                      📜 凭证
+                    </button>
+                    <button
+                      v-if="row.status === 'pending_warehouse'"
+                      type="button"
+                      class="btn ghost btn-sm"
+                      style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
+                      title="发现型号规格或数量有误时提请联合会审"
+                      @click.stop="openJointReviewModal(row, 'pipe')"
+                    >
+                      ⚖️ 会审
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -1038,7 +1062,8 @@
                       <strong>{{ group.totalQty }} 个</strong>
                     </div>
                     <!-- 状态 Badge -->
-                    <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="fitting-status-badge is-shipped">🚚 待到货确认</span>
+                    <span v-if="group.status === 'under_review'" class="fitting-status-badge is-under-review" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa;">⚖️ 联合会审中</span>
+                    <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="fitting-status-badge is-shipped">🚚 待到货确认</span>
                     <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="fitting-status-badge is-arrived">✅ 待施工接收</span>
                     <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="fitting-status-badge is-pending-warehouse">👷 待库管确认</span>
                     <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="fitting-status-badge is-warehouse-confirmed">🏢 库管已确认</span>
@@ -1047,13 +1072,24 @@
 
                     <!-- 包含待确认项时显示“整车批量确认”按钮 -->
                     <button 
-                      v-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received' || group.items.some(i => i.status === 'construction_confirmed' || i.status === 'pending_warehouse' || i.status === 'received')"
+                      v-if="group.status !== 'under_review' && (group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received' || group.items.some(i => i.status === 'construction_confirmed' || i.status === 'pending_warehouse' || i.status === 'received'))"
                       type="button" 
                       class="btn primary btn-sm fitting-archive-button"
                       :disabled="fittingActionLoading"
                       @click.stop="handleConfirmFittingWarehouse(group.items)"
                     >
                       🏢 整车批量确认
+                    </button>
+
+                    <button 
+                      v-if="group.status !== 'under_review' && (group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received')"
+                      type="button" 
+                      class="btn ghost btn-sm"
+                      style="height: 26px; padding: 0 7px; font-size: 11px; color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
+                      title="发现管件规格或数量有误时提请联合会审"
+                      @click.stop="openJointReviewModal(group, 'fitting')"
+                    >
+                      ⚖️ 会审
                     </button>
 
                     <button 
@@ -1114,7 +1150,8 @@
 
                         <!-- 履约状态列 -->
                         <td style="text-align: center;">
-                          <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 1px 6px;">🚚 待到货确认</span>
+                          <span v-if="item.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px; padding: 1px 6px;">⚖️ 联合会审中</span>
+                          <span v-else-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 1px 6px;">🚚 待到货确认</span>
                           <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 1px 6px;">✅ 待施工接收</span>
                           <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管确认</span>
                           <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已确认</span>
@@ -1330,6 +1367,16 @@
       :merge-columns="exportMergeColumns"
       @close="showExportModal = false"
     />
+
+    <!-- ⚖️ 多方联合会审发起弹窗 -->
+    <InitiateJointReviewModal
+      v-if="jointReviewModalVisible"
+      :visible="jointReviewModalVisible"
+      :order="selectedReviewOrder"
+      :order-data="selectedReviewOrder"
+      @close="jointReviewModalVisible = false"
+      @success="handleJointReviewSuccess"
+    />
   </div>
 </template>
 
@@ -1340,6 +1387,7 @@ import * as XLSX from 'xlsx'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, DELIVERY_STATUS_DICT, getDeliveryStatus, navigateToUserInDirectory } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
+import InitiateJointReviewModal from '../components/InitiateJointReviewModal.vue'
 import {
   confirmTubeWarehouseDeliveryWarehouse,
   getTubeWarehouseManagementDeliveries,
@@ -1347,6 +1395,74 @@ import {
   getFittingDeliveriesList,
   confirmFittingDeliveryWarehouse,
 } from '../../daily_report_25_26/services/api'
+
+// 联合会审弹窗状态
+const jointReviewModalVisible = ref(false)
+const selectedReviewOrder = ref(null)
+
+function openJointReviewModal(rowOrGroup, category = 'pipe') {
+  if (!rowOrGroup) return
+  if (category === 'fitting') {
+    const isGroup = Array.isArray(rowOrGroup.items) && rowOrGroup.items.length > 0
+    const firstItem = isGroup ? rowOrGroup.items[0] : rowOrGroup
+    selectedReviewOrder.value = {
+      order_category: 'fitting',
+      order_id: firstItem.id || firstItem.deliveryId,
+      delivery_id: firstItem.id || firstItem.deliveryId,
+      order_no: isGroup ? (rowOrGroup.shipmentNo || `车次 ${rowOrGroup.shipmentNo}`) : (firstItem.order_no || firstItem.deliveryCode || firstItem.shipment_no),
+      shipment_no: rowOrGroup.shipmentNo || firstItem.shipment_no || firstItem.shipmentNo || '',
+      vehicle_plate_no: rowOrGroup.vehiclePlateNo || firstItem.vehicle_plate_no || firstItem.vehiclePlateNo || '',
+      supply_entity_id: rowOrGroup.supplyEntityId || firstItem.supply_entity_id || firstItem.supplyEntityId || '',
+      supply_entity_name: rowOrGroup.supplyEntityName || firstItem.supply_entity_name || firstItem.supplyEntityName || '',
+      section_1_id: rowOrGroup.section_1_id || firstItem.section_1_id || firstItem.section1Id || '',
+      section_1_name: rowOrGroup.section_1_name || firstItem.section_1_name || firstItem.section1Name || '',
+      status: rowOrGroup.status || firstItem.status,
+      shipped_at: rowOrGroup.shippedAt || firstItem.shipped_at || firstItem.shippedAt || '',
+      items: isGroup ? rowOrGroup.items.map(it => ({
+        id: it.id,
+        order_no: it.order_no || '—',
+        fitting_type: it.fitting_type || '',
+        model_spec: it.model_spec || '',
+        shipped_qty: it.shipped_qty,
+        unit: it.unit || '件',
+        status: it.status,
+      })) : [{
+        id: firstItem.id,
+        order_no: firstItem.order_no || '—',
+        fitting_type: firstItem.fitting_type || '',
+        model_spec: firstItem.model_spec || '',
+        shipped_qty: firstItem.shipped_qty,
+        unit: firstItem.unit || '件',
+        status: firstItem.status,
+      }]
+    }
+  } else {
+    selectedReviewOrder.value = {
+      ...rowOrGroup,
+      order_category: 'pipe',
+      order_id: rowOrGroup.id || rowOrGroup.deliveryId,
+      delivery_id: rowOrGroup.id || rowOrGroup.deliveryId,
+      order_no: rowOrGroup.order_no || rowOrGroup.deliveryCode || rowOrGroup.delivery_code,
+      shipment_no: rowOrGroup.shipmentNo || rowOrGroup.shipment_no || '',
+      pipe_model_id: rowOrGroup.pipe_model_id || rowOrGroup.pipeModelId || '',
+      pipe_model_name: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      model_name: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      specification: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      shipped_qty: rowOrGroup.shipped_qty !== undefined ? rowOrGroup.shipped_qty : rowOrGroup.shippedQty,
+      vehicle_plate_no: rowOrGroup.vehicle_plate_no || rowOrGroup.vehiclePlateNo || rowOrGroup.plateNo || '',
+      supply_entity_name: rowOrGroup.supply_entity_name || rowOrGroup.supplyEntityName || rowOrGroup.supplyName || '',
+      section_1_name: rowOrGroup.section_1_name || rowOrGroup.section1Name || '',
+      status: rowOrGroup.status,
+    }
+  }
+  jointReviewModalVisible.value = true
+}
+
+function handleJointReviewSuccess() {
+  jointReviewModalVisible.value = false
+  pageMessage.value = '⚖️ 联合会审已成功提请，相关主体已收到会签通知并物理锁定常规确认！'
+  reloadAll()
+}
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -1386,6 +1502,23 @@ const syncTabStateToUrl = (tab) => {
 const { breadcrumbItems, goProjectPages, errorMessage: shellError, managementMode, modeLabels } = useTubePageShell('库管员管理入口')
 
 const activeTab = ref(getInitialTab())
+
+// 响应外部路由 Query 参数，实现从会审大厅或消息中心一键直达对应业务标签页
+watch(
+  () => route.query,
+  (query) => {
+    if (!query) return
+    const qTab = String(query.tab || '').trim()
+    const qSub = String(query.sub || query.fittingSub || '').trim()
+    if (VALID_TABS.includes(qTab)) {
+      activeTab.value = qTab
+    }
+    if (qSub && ['all', 'pending_arrival', 'pending_construction', 'pending_warehouse', 'completed'].includes(qSub)) {
+      fittingSubTab.value = qSub
+    }
+  },
+  { immediate: true, deep: true }
+)
 
 const options = ref(null)
 const section1Options = computed(() => options.value?.section_1s || [])
@@ -2068,6 +2201,7 @@ const deliveryStatusLabelMap = computed(() => {
   for (const key of Object.keys(DELIVERY_STATUS_DICT)) {
     result[key] = DELIVERY_STATUS_DICT[key].label
   }
+  result['under_review'] = '⚖️ 联合会审中'
   for (const item of deliveryStatusOptions.value) {
     if (!result[item.value]) {
       result[item.value] = item.label

@@ -4385,7 +4385,7 @@ def get_demand_management_logistics_records(
     filtered_rows = [
         row
         for row in rows
-        if row.get("section_1_id") == section_1_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve", "completed"}
+        if row.get("section_1_id") == section_1_id and row.get("status") in {"pending_arrival", "pending_receive", "pending_warehouse", "pending_diff_approve", "completed", "under_review"}
     ]
     normalized_order_no = str(order_no or "").strip().upper()
     normalized_shipment_no = str(shipment_no or "").strip().upper()
@@ -4501,7 +4501,7 @@ def get_demand_management_pending_deliveries_summary(
                 is_timeout_receive
             FROM tube.tube_delivery
             WHERE section_1_id = ANY(:section_ids)
-              AND status IN ('pending_arrival', 'pending_receive', 'pending_diff_approve')
+              AND status IN ('pending_arrival', 'pending_receive', 'pending_diff_approve', 'under_review')
             ORDER BY shipped_at ASC
             """
         )
@@ -4546,6 +4546,11 @@ def get_demand_management_pending_deliveries_summary(
                     else:
                         unconfirmed_secs = elapsed_secs
                         unconfirmed_display = format_delivery_elapsed(shipped_at)
+                elif st == "under_review":
+                    st_label = "⚖️ 联合会审中"
+                    st_group = "under_review"
+                    unconfirmed_secs = elapsed_secs
+                    unconfirmed_display = format_delivery_elapsed(shipped_at)
                 else:
                     st_label = st
                     st_group = st
@@ -4642,7 +4647,7 @@ def get_demand_management_pending_deliveries_summary(
                 is_timeout_receive
             FROM tube.tube_fitting_delivery
             WHERE section_1_id = ANY(:section_ids)
-              AND status IN ('shipped', 'pending_arrival', 'arrived', 'pending_receive')
+              AND status IN ('shipped', 'pending_arrival', 'arrived', 'pending_receive', 'under_review')
             ORDER BY shipped_at ASC
             """
         )
@@ -4678,6 +4683,11 @@ def get_demand_management_pending_deliveries_summary(
                     else:
                         unconfirmed_secs = elapsed_secs
                         unconfirmed_display = format_delivery_elapsed(shipped_at)
+                elif st == "under_review":
+                    st_label = "⚖️ 联合会审中"
+                    st_group = "under_review"
+                    unconfirmed_secs = elapsed_secs
+                    unconfirmed_display = format_delivery_elapsed(shipped_at)
                 else:
                     st_label = st
                     st_group = st
@@ -5006,7 +5016,7 @@ def get_demand_management_governance_overview(
                 arrived_confirm_at
             FROM tube.tube_delivery
             WHERE section_1_id = ANY(:section_ids)
-              AND status IN ('pending_arrival', 'pending_receive', 'pending_diff_approve')
+              AND status IN ('pending_arrival', 'pending_receive', 'pending_diff_approve', 'under_review')
             """
         )
         del_pipe_rows = session_db.execute(del_pipe_sql, {"section_ids": target_section_ids}).mappings().all()
@@ -5020,7 +5030,7 @@ def get_demand_management_governance_overview(
                 arrived_confirm_at
             FROM tube.tube_fitting_delivery
             WHERE section_1_id = ANY(:section_ids)
-              AND status IN ('shipped', 'pending_arrival', 'arrived', 'pending_receive')
+              AND status IN ('shipped', 'pending_arrival', 'arrived', 'pending_receive', 'under_review')
             """
         )
         del_fit_rows = session_db.execute(del_fit_sql, {"section_ids": target_section_ids}).mappings().all()

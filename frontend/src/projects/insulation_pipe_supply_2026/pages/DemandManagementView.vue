@@ -932,18 +932,19 @@
               <table class="data-table logistics-table">
                 <thead>
                   <tr>
-                    <th class="cell-status">状态</th>
-                    <th>订单号</th>
-                    <th>运输车次号</th>
-                    <th>车牌号</th>
-                    <th>供给主体</th>
-                    <th>型号</th>
-                    <th>发货量（米）</th>
-                    <th>发货时间</th>
-                    <th>确认到货时间</th>
-                    <th>在途时长</th>
-                    <th>确认量（米）</th>
-                    <th>确认操作</th>
+                    <th class="col-th-status" style="width: 105px;">流转状态</th>
+                    <th class="col-th-code" style="width: 140px;">发货单号</th>
+                    <th class="col-th-shipment" style="width: 100px;">车次号</th>
+                    <th class="col-th-plate" style="width: 95px;">运输车牌</th>
+                    <th class="col-th-supplier" style="width: 145px;">供给主体</th>
+                    <th class="col-th-model" style="width: 150px;">规格型号</th>
+                    <th class="col-th-shipped text-right" style="width: 95px;">发货量(米)</th>
+                    <th class="col-th-time-ship" style="width: 130px;">发货时间</th>
+                    <th class="col-th-time-arrive" style="width: 130px;">确认到货时间</th>
+                    <th class="col-th-elapsed text-center" style="width: 95px;">在途时长</th>
+                    <th class="col-th-confirm text-right" style="width: 120px;">现场核验量(米)</th>
+                    <th class="col-th-action" style="width: 220px;">协同流转操作</th>
+                    <th class="col-th-detail text-center" style="width: 50px;">凭证</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -954,108 +955,197 @@
                     title="点击整行可查看单据全生命周期凭证与发货备注"
                     @click="handleLogisticsRowClick($event, row)"
                   >
-                    <td class="cell-status col-status">
-                      <div class="status-pill-group">
+                    <!-- 1. 流转状态 -->
+                    <td class="col-td-status">
+                      <div class="status-cell-inline">
                         <span 
                           class="status-pill clickable-pill" 
                           :class="row.status === 'pending_diff_approve' ? 'pending_receive' : (row.isTimeoutReceive ? 'pending_warehouse' : row.status)"
                         >
                           {{ row.statusLabel }}
                         </span>
-                        <span v-if="row.abnormalFlag" class="status-pill abnormal">
+                        <span v-if="row.abnormalFlag" class="status-pill abnormal inline-abnormal-badge" :title="getAbnormalLabel(row)">
                           {{ getAbnormalLabel(row) }}
                         </span>
                       </div>
                     </td>
-                    <td class="cell-code col-code-order"><span class="val-text">{{ row.deliveryCode || row.deliveryId }}</span></td>
-                    <td class="cell-code col-code-shipment"><span class="val-text">{{ row.shipmentNo || '—' }}</span></td>
-                    <td class="cell-text col-text-plate" :title="row.vehiclePlateNo || '—'"><span class="plate-badge">{{ row.vehiclePlateNo || '—' }}</span></td>
-                    <td class="cell-text col-text-supply" :title="row.supplyEntityName"><span class="val-text">🏭 {{ row.supplyEntityName }}</span></td>
-                    <td class="cell-text col-text-model" :title="row.pipeModelName"><strong class="val-text" style="color: #1e293b; font-size: 13.5px;">{{ row.pipeModelName }}</strong></td>
-                    <td class="cell-number col-shipped-qty"><strong style="color: #2563eb;">{{ formatNumber(row.shippedQty) }} 米</strong></td>
-                    <td class="cell-datetime col-shipped-time"><span>{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</span></td>
-                    <td class="cell-datetime col-arrived-time"><span>{{ formatDateTimeDisplay(row.arrivedConfirmAt) || '—' }}</span></td>
-                    <td class="cell-elapsed col-elapsed"><span>⏱️ {{ formatDeliveryElapsedDisplay(row) }}</span></td>
-                    <td class="col-confirm-qty">
-                      <div v-if="row.status === 'pending_arrival'" class="stack-controls" style="display: inline-flex; align-items: center; gap: 4px;">
+
+                    <!-- 2. 发货单号 -->
+                    <td class="col-td-code">
+                      <span class="order-code-badge font-mono" :title="row.deliveryCode || row.deliveryId">
+                        {{ row.deliveryCode || row.deliveryId }}
+                      </span>
+                    </td>
+
+                    <!-- 3. 车次号 -->
+                    <td class="col-td-shipment">
+                      <span class="shipment-code-mono font-mono" v-if="row.shipmentNo" :title="'车次号: ' + row.shipmentNo">
+                        {{ row.shipmentNo }}
+                      </span>
+                      <span class="text-muted-dash" v-else>—</span>
+                    </td>
+
+                    <!-- 4. 运输车牌 -->
+                    <td class="col-td-plate">
+                      <span class="plate-capsule" v-if="row.vehiclePlateNo" :title="'车牌号: ' + row.vehiclePlateNo">
+                        {{ row.vehiclePlateNo }}
+                      </span>
+                      <span class="text-muted-dash" v-else>—</span>
+                    </td>
+
+                    <!-- 5. 供给主体 -->
+                    <td class="col-td-supplier" :title="row.supplyEntityName">
+                      <span class="supplier-text-single">{{ row.supplyEntityName || '—' }}</span>
+                    </td>
+
+                    <!-- 6. 物料规格 -->
+                    <td class="col-td-model" :title="row.pipeModelName">
+                      <strong class="model-spec-text-single">{{ row.pipeModelName }}</strong>
+                    </td>
+
+                    <!-- 7. 发货量(米) -->
+                    <td class="col-td-shipped text-right">
+                      <span class="qty-val font-mono">{{ formatNumber(row.shippedQty) }}</span>
+                    </td>
+
+                    <!-- 8. 发货时间 -->
+                    <td class="col-td-time-ship">
+                      <span class="time-val-mono font-mono">{{ formatDateTimeDisplay(row.shippedAt) || '—' }}</span>
+                    </td>
+
+                    <!-- 9. 确认到货时间 -->
+                    <td class="col-td-time-arrive">
+                      <span class="time-val-mono font-mono" v-if="row.arrivedConfirmAt">{{ formatDateTimeDisplay(row.arrivedConfirmAt) }}</span>
+                      <span class="text-muted-dash" v-else>—</span>
+                    </td>
+
+                    <!-- 10. 在途时长 -->
+                    <td class="col-td-elapsed text-center">
+                      <span class="elapsed-tag" :class="{ 'is-timeout': row.isTimeoutReceive }" :title="'在途时长: ' + formatDeliveryElapsedDisplay(row)">
+                        ⏱️ {{ formatDeliveryElapsedDisplay(row) }}
+                      </span>
+                    </td>
+
+                    <!-- 11. 现场核验量(米) -->
+                    <td class="col-td-confirm text-right">
+                      <div v-if="row.status === 'pending_arrival'" class="confirm-input-wrap">
                         <input
                           v-model.number="row.arrivalConfirmQty"
                           type="number"
                           min="0"
                           :max="row.shippedQty"
                           step="1"
-                          style="width: 70px; padding: 2px 4px; border: 1px solid #059669; border-radius: 4px; text-align: right; font-weight: bold; color: #047857;"
+                          placeholder="实到量"
+                          class="compact-qty-input arrival-focus"
                         />
-                        <span style="font-size: 11px; color: #64748b;">米</span>
+                        <span class="input-unit">米</span>
                       </div>
-                      <div v-else-if="row.status === 'pending_receive'" class="stack-controls" style="display: inline-flex; align-items: center; gap: 4px;">
+                      <div v-else-if="row.status === 'pending_receive'" class="confirm-input-wrap">
                         <input
                           v-model.number="row.receiptConfirmQty"
                           type="number"
                           min="0"
                           :max="row.arrivedQty"
                           step="1"
-                          style="width: 70px; padding: 2px 4px; border: 1px solid #7c3aed; border-radius: 4px; text-align: right; font-weight: bold; color: #6b21a8;"
+                          placeholder="接收量"
+                          class="compact-qty-input receipt-focus"
                         />
-                        <span style="font-size: 11px; color: #64748b;">米</span>
+                        <span class="input-unit">米</span>
                       </div>
-                      <span v-else-if="row.status === 'pending_diff_approve'" class="cell-number" style="color: #f97316; font-weight: bold;">
-                        {{ formatNumber(row.receivedQty) }} 米 (待审批)
-                      </span>
-                      <span v-else class="cell-number" style="color: #059669; font-weight: bold;">{{ formatNumber(row.receivedQty || row.arrivedQty) }} 米</span>
+                      <div v-else-if="row.status === 'pending_diff_approve'" class="diff-notice-single" :title="'差异待审批，实收: ' + formatNumber(row.receivedQty)">
+                        <span class="diff-val font-mono">{{ formatNumber(row.receivedQty) }}</span>
+                        <span class="diff-tag">待审</span>
+                      </div>
+                      <div v-else class="confirmed-val-single">
+                        <span class="confirmed-num font-mono">{{ formatNumber(row.receivedQty || row.arrivedQty) }}</span>
+                        <span class="input-unit">米</span>
+                      </div>
                     </td>
-                    <td class="col-action-btns">
-                      <div v-if="row.status === 'pending_arrival' || row.status === 'pending_receive'" class="action-stack action-inline">
+
+                    <!-- 12. 协同流转操作 -->
+                    <td class="col-td-action">
+                      <div v-if="row.status === 'pending_arrival' || row.status === 'pending_receive'" class="compact-action-group">
                         <button
                           type="button"
-                          class="primary-button action-button arrival-button"
-                          :class="{ 'is-active': canClickArrival(row) }"
+                          class="step-action-btn arrival-step-btn"
+                          :class="{ 'is-active': canClickArrival(row), 'is-done': row.status !== 'pending_arrival' }"
                           :disabled="deliveryActionLoadingKey === `arrival-${row.deliveryId}` || !canClickArrival(row)"
-                          @click="confirmArrival(row)"
+                          @click.stop="confirmArrival(row)"
                         >
                           {{
                             deliveryActionLoadingKey === `arrival-${row.deliveryId}`
-                              ? '确认中...'
+                              ? '处理中...'
                               : row.status === 'pending_arrival'
                                 ? '确认到货'
-                                : '到货已确认'
+                                : '✓ 已到货'
                           }}
                         </button>
                         <button
                           type="button"
-                          class="primary-button action-button receipt-button"
+                          class="step-action-btn receipt-step-btn"
                           :class="{ 'is-active': canClickReceipt(row) }"
                           :disabled="deliveryActionLoadingKey === `receipt-${row.deliveryId}` || !canClickReceipt(row)"
-                          @click="confirmReceipt(row)"
+                          @click.stop="confirmReceipt(row)"
                         >
                           {{
                             deliveryActionLoadingKey === `receipt-${row.deliveryId}`
-                              ? '确认中...'
+                              ? '处理中...'
                               : row.status === 'pending_receive'
                                 ? '施工接收'
-                                : '等待到货'
+                                : '等待中'
                           }}
                         </button>
-                      </div>
-                      <div v-else-if="row.status === 'pending_diff_approve' && isSiteManager" class="action-stack action-inline">
                         <button
                           type="button"
-                          class="primary-button action-button arrival-button is-active"
-                          :disabled="deliveryActionLoadingKey === `approve-${row.deliveryId}` || deliveryActionLoadingKey === `reject-${row.deliveryId}`"
-                          @click="handleDiffApprove(row, true)"
+                          class="joint-review-trigger-btn"
+                          title="发现单据错误或争议时提请多方联合会审"
+                          @click.stop="openJointReviewModal(row, 'pipe')"
                         >
-                          {{ deliveryActionLoadingKey === `approve-${row.deliveryId}` ? '处理中...' : '同意差异' }}
+                          ⚖️ 会审
+                        </button>
+                      </div>
+                      <div v-else-if="row.status === 'under_review'" class="review-lock-badge" title="该单据已进入多方联合会审流程，常规流转确认已物理锁定">
+                        <span class="lock-indicator">⚖️</span>
+                        <span>会审中 (锁定)</span>
+                      </div>
+                      <div v-else-if="row.status === 'pending_diff_approve' && isSiteManager" class="compact-action-group">
+                        <button
+                          type="button"
+                          class="step-action-btn approve-btn is-active"
+                          :disabled="deliveryActionLoadingKey === `approve-${row.deliveryId}` || deliveryActionLoadingKey === `reject-${row.deliveryId}`"
+                          @click.stop="handleDiffApprove(row, true)"
+                        >
+                          {{ deliveryActionLoadingKey === `approve-${row.deliveryId}` ? '处理中...' : '同意' }}
                         </button>
                         <button
                           type="button"
-                          class="primary-button action-button receipt-button"
-                          style="border-color: #ef4444; color: #ef4444;"
+                          class="step-action-btn reject-btn"
                           :disabled="deliveryActionLoadingKey === `approve-${row.deliveryId}` || deliveryActionLoadingKey === `reject-${row.deliveryId}`"
-                          @click="handleDiffApprove(row, false)"
+                          @click.stop="handleDiffApprove(row, false)"
                         >
-                          {{ deliveryActionLoadingKey === `reject-${row.deliveryId}` ? '处理中...' : '驳回并更正' }}
+                          {{ deliveryActionLoadingKey === `reject-${row.deliveryId}` ? '处理中...' : '驳回' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="joint-review-trigger-btn"
+                          title="提请多方联合会审"
+                          @click.stop="openJointReviewModal(row, 'pipe')"
+                        >
+                          ⚖️ 会审
                         </button>
                       </div>
+                    </td>
+
+                    <!-- 13. 凭证快捷入口 -->
+                    <td class="col-td-detail text-center">
+                      <button
+                        type="button"
+                        class="detail-view-btn"
+                        title="查看随车凭单、地磅单与全生命周期流转轨迹"
+                        @click.stop="showDeliveryDetail(row)"
+                      >
+                        📜
+                      </button>
                     </td>
                   </tr>
                 </tbody>
@@ -1181,7 +1271,8 @@
 
                     <!-- 履约状态 Badge -->
                     <div class="status-badge-container">
-                      <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🚚 待到货确认</span>
+                      <span v-if="group.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px; padding: 1px 6px; white-space: nowrap;">⚖️ 联合会审中</span>
+                      <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🚚 待到货确认</span>
                       <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">✅ 待施工接收</span>
                       <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">👷 待库管确认</span>
                       <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🏢 库管已确认</span>
@@ -1191,8 +1282,17 @@
 
                     <!-- 操作按钮组 -->
                     <div class="action-btn-container" @click.stop>
+                      <span 
+                        v-if="group.status === 'under_review'"
+                        class="tag-badge warning"
+                        style="height: 26px; padding: 0 8px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; border-radius: 5px; display: inline-flex; align-items: center;"
+                        title="该单据已进入多方联合会审流程，常规确认已被物理锁定"
+                      >
+                        ⚖️ 会审中 (已锁定)
+                      </span>
+
                       <button 
-                        v-if="(group.status === 'shipped' || group.status === 'pending_arrival' || !group.status || group.items.some(i => i.status === 'shipped' || i.status === 'pending_arrival' || !i.status)) && canConfirmArrival"
+                        v-else-if="(group.status === 'shipped' || group.status === 'pending_arrival' || !group.status || group.items.some(i => i.status === 'shipped' || i.status === 'pending_arrival' || !i.status)) && canConfirmArrival"
                         type="button" 
                         class="btn primary btn-sm" 
                         style="height: 26px; padding: 0 8px; font-size: 11.5px; background: #059669; border-color: #059669; color: #fff; cursor: pointer; font-weight: 600; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
@@ -1209,6 +1309,17 @@
                         @click.stop="openFittingConstructionModal(group)"
                       >
                         👷 施工接收
+                      </button>
+
+                      <button 
+                        v-if="group.status !== 'under_review' && (canConfirmArrival || canConfirmReceipt)"
+                        type="button" 
+                        class="btn ghost btn-sm" 
+                        style="height: 26px; padding: 0 7px; font-size: 11px; color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
+                        title="发现规格、型号或数量有误时提请联合会审"
+                        @click.stop="openJointReviewModal(group, 'fitting')"
+                      >
+                        ⚖️ 会审
                       </button>
 
                       <button 
@@ -4067,6 +4178,16 @@
         </div>
       </div>
     </Transition>
+
+    <!-- ⚖️ 多方联合会审发起弹窗 -->
+    <InitiateJointReviewModal
+      v-if="jointReviewModalVisible"
+      :visible="jointReviewModalVisible"
+      :order="selectedReviewOrder"
+      :order-data="selectedReviewOrder"
+      @close="jointReviewModalVisible = false"
+      @success="handleJointReviewSuccess"
+    />
   </div>
 </template>
 
@@ -4079,6 +4200,81 @@ import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, getDeliveryStatus, navigateToUserInDirectory } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
 import DeliveryBillOcrTool from './DeliveryBillOcrTool.vue'
+import InitiateJointReviewModal from '../components/InitiateJointReviewModal.vue'
+
+// 联合会审弹窗状态
+const jointReviewModalVisible = ref(false)
+const selectedReviewOrder = ref(null)
+
+function openJointReviewModal(rowOrGroup, category = 'pipe') {
+  if (!rowOrGroup) return
+  if (category === 'fitting') {
+    const isGroup = Array.isArray(rowOrGroup.items) && rowOrGroup.items.length > 0
+    const firstItem = isGroup ? rowOrGroup.items[0] : rowOrGroup
+    selectedReviewOrder.value = {
+      order_category: 'fitting',
+      order_id: firstItem.id || firstItem.deliveryId,
+      delivery_id: firstItem.id || firstItem.deliveryId,
+      order_no: isGroup ? (rowOrGroup.shipmentNo || `车次 ${rowOrGroup.shipmentNo}`) : (firstItem.order_no || firstItem.deliveryCode || firstItem.shipment_no),
+      shipment_no: rowOrGroup.shipmentNo || firstItem.shipment_no || firstItem.shipmentNo || '',
+      vehicle_plate_no: rowOrGroup.vehiclePlateNo || firstItem.vehicle_plate_no || firstItem.vehiclePlateNo || '',
+      supply_entity_id: rowOrGroup.supplyEntityId || firstItem.supply_entity_id || firstItem.supplyEntityId || '',
+      supply_entity_name: rowOrGroup.supplyEntityName || firstItem.supply_entity_name || firstItem.supplyEntityName || '',
+      section_1_id: rowOrGroup.section_1_id || firstItem.section_1_id || firstItem.section1Id || '',
+      section_1_name: rowOrGroup.section_1_name || firstItem.section_1_name || firstItem.section1Name || '',
+      status: rowOrGroup.status || firstItem.status,
+      shipped_at: rowOrGroup.shippedAt || firstItem.shipped_at || firstItem.shippedAt || '',
+      items: isGroup ? rowOrGroup.items.map(it => ({
+        id: it.id,
+        order_no: it.order_no || '—',
+        fitting_type: it.fitting_type || '',
+        model_spec: it.model_spec || '',
+        shipped_qty: it.shipped_qty,
+        unit: it.unit || '件',
+        status: it.status,
+      })) : [{
+        id: firstItem.id,
+        order_no: firstItem.order_no || '—',
+        fitting_type: firstItem.fitting_type || '',
+        model_spec: firstItem.model_spec || '',
+        shipped_qty: firstItem.shipped_qty,
+        unit: firstItem.unit || '件',
+        status: firstItem.status,
+      }]
+    }
+  } else {
+    selectedReviewOrder.value = {
+      ...rowOrGroup,
+      order_category: 'pipe',
+      order_id: rowOrGroup.id || rowOrGroup.deliveryId,
+      delivery_id: rowOrGroup.id || rowOrGroup.deliveryId,
+      order_no: rowOrGroup.order_no || rowOrGroup.deliveryCode || rowOrGroup.delivery_code,
+      shipment_no: rowOrGroup.shipmentNo || rowOrGroup.shipment_no || '',
+      pipe_model_id: rowOrGroup.pipe_model_id || rowOrGroup.pipeModelId || '',
+      pipe_model_name: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      model_name: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      specification: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      shipped_qty: rowOrGroup.shipped_qty !== undefined ? rowOrGroup.shipped_qty : rowOrGroup.shippedQty,
+      vehicle_plate_no: rowOrGroup.vehicle_plate_no || rowOrGroup.vehiclePlateNo || rowOrGroup.plateNo || '',
+      supply_entity_name: rowOrGroup.supply_entity_name || rowOrGroup.supplyEntityName || rowOrGroup.supplyName || '',
+      section_1_name: rowOrGroup.section_1_name || rowOrGroup.section1Name || '',
+      status: rowOrGroup.status,
+    }
+  }
+  jointReviewModalVisible.value = true
+}
+
+function handleJointReviewSuccess() {
+  jointReviewModalVisible.value = false
+  setActionMessage('success', '⚖️ 联合会审已成功提请，相关主体已收到会签通知并物理锁定常规确认！')
+  // 刷新物流记录和可能关联的管件列表
+  if (typeof loadLogisticsRecords === 'function') {
+    loadLogisticsRecords()
+  }
+  if (typeof fetchFittingDeliveries === 'function') {
+    fetchFittingDeliveries()
+  }
+}
 import {
   confirmTubeDemandManagementDeliveryArrival,
   confirmTubeDemandManagementDeliveryReceipt,
@@ -4179,6 +4375,34 @@ const activeCategory = ref(initialSelection.category) // 'pipe' | 'fitting'
 const lastPipeTab = ref(initialSelection.category === 'pipe' ? initialSelection.tab : 'usage') // 记忆直管最后选中的子标签
 const lastFittingTab = ref(initialSelection.category === 'fitting' ? initialSelection.tab : 'fitting') // 记忆管件最后选中的子标签
 const activeTab = ref(initialSelection.tab)
+
+// 响应外部路由 Query 参数，实现从会审大厅或消息中心一键直达对应业务标签页
+watch(
+  () => route.query,
+  (query) => {
+    if (!query) return
+    const qTab = String(query.tab || '').trim()
+    const qCat = String(query.category || '').trim()
+    if (VALID_TABS.includes(qTab)) {
+      activeTab.value = qTab
+      if (['fitting', 'fitting_usage', 'fitting_baseline'].includes(qTab) || qCat === 'fitting') {
+        activeCategory.value = 'fitting'
+        lastFittingTab.value = qTab
+      } else {
+        activeCategory.value = 'pipe'
+        lastPipeTab.value = qTab
+      }
+    } else if (qCat && VALID_CATEGORIES.includes(qCat)) {
+      activeCategory.value = qCat
+      if (qCat === 'fitting') {
+        activeTab.value = lastFittingTab.value || 'fitting'
+      } else if (qCat === 'pipe') {
+        activeTab.value = lastPipeTab.value || 'usage'
+      }
+    }
+  },
+  { immediate: true, deep: true }
+)
 const showExportModal = ref(false)
 const blockModalVisible = ref(false)
 const blockModalData = ref(null)
@@ -6656,6 +6880,9 @@ function normalizePendingRows(rows) {
     vehiclePlateNo: row.vehicle_plate_no || row.vehiclePlateNo || '',
     supplyEntityName: row.supply_entity_name || row.supplyEntityName || row.supply_entity_id || row.supplyEntityId || '—',
     pipeModelName: row.pipe_model_name || row.pipeModelName || '未命名型号',
+    pipe_model_name: row.pipe_model_name || row.pipeModelName || '未命名型号',
+    pipeModelId: row.pipe_model_id || row.pipeModelId || '',
+    pipe_model_id: row.pipe_model_id || row.pipeModelId || '',
     section_1_id: row.section_1_id || row.section1Id || '',
     section_1_name: row.section_1_name || row.section1Name || '',
     status: row.status || '',
@@ -8522,8 +8749,12 @@ function jumpToUsageTab() {
 
 .logistics-table-wrap {
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 8px;
   background: #ffffff;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  overflow-x: auto;
+  max-height: 720px;
+  overflow-y: auto;
 }
 
 .data-table {
@@ -8535,15 +8766,16 @@ function jumpToUsageTab() {
 .data-table th,
 .data-table td {
   border-bottom: 1px solid #e2e8f0;
-  padding: 14px 16px !important;
+  padding: 10px 14px;
   text-align: left;
   vertical-align: middle !important;
 }
 
 .data-table th {
-  color: #334155;
+  color: #475569;
   background: #f8fafc;
   font-weight: 600;
+  font-size: 12px;
 }
 
 .cell-editor {
@@ -8553,88 +8785,331 @@ function jumpToUsageTab() {
 }
 
 .logistics-table {
-  min-width: 1460px;
+  width: 100%;
+  min-width: 1580px;
+  border-collapse: collapse;
+  table-layout: auto;
 }
 
 .logistics-table-row {
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.1s ease;
+  height: 38px;
 }
 
-.logistics-table-row:hover {
-  background-color: #f1f5f9 !important;
+.logistics-table-row:hover td {
+  background-color: #f8fafc !important;
 }
 
 .logistics-table th {
-  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8fafc;
+  border-bottom: 2px solid #cbd5e1;
+  padding: 6px 10px !important;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+  height: 36px;
+  line-height: 1.2;
 }
 
 .logistics-table td {
-  white-space: normal;
-}
-
-.cell-code {
-  min-width: 140px;
-  font-family: "Consolas", "Courier New", monospace;
-  font-size: 14px;
-  color: #0f172a;
-  word-break: break-all;
-}
-
-.cell-text {
-  min-width: 160px;
+  padding: 4px 10px !important;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12.5px;
+  vertical-align: middle !important;
   white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  background: #ffffff;
+  height: 38px;
+  line-height: 1.2;
 }
 
-.cell-number {
-  min-width: 90px;
+/* 单行内联流转状态 */
+.status-cell-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   white-space: nowrap;
 }
 
-.cell-datetime {
-  min-width: 132px;
-  white-space: nowrap;
+.inline-abnormal-badge {
+  font-size: 11px !important;
+  padding: 1px 5px !important;
+}
+
+/* 单号与车次 */
+.order-code-badge {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.shipment-code-mono {
+  font-size: 12px;
   color: #334155;
+  font-weight: 600;
 }
 
-.cell-elapsed {
-  min-width: 96px;
+.plate-capsule {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  font-family: monospace;
+}
+
+/* 供给主体与物料规格 - 单行省略 */
+.supplier-text-single {
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
+  color: #475569;
+  font-size: 12px;
 }
 
-.cell-status {
-  min-width: 118px;
+.model-spec-text-single {
+  display: inline-block;
+  max-width: 145px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 12.5px;
 }
 
-.stack-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.action-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 120px;
-}
-
-.action-inline {
-  flex-direction: row;
-  flex-wrap: nowrap;
-  min-width: 232px;
-}
-
-.action-button {
-  min-width: 118px;
-}
-
-.action-placeholder {
-  color: #64748b;
+/* 发货量与时间 */
+.qty-val {
   font-size: 13px;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.time-val-mono {
+  font-size: 12px;
+  color: #475569;
+}
+
+.elapsed-tag {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.elapsed-tag.is-timeout {
+  background: #fef2f2;
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* 现场核验量 */
+.confirm-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  padding: 1px 4px;
+  transition: all 0.15s ease;
+}
+
+.confirm-input-wrap:focus-within {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.compact-qty-input {
+  width: 58px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  text-align: right;
+  font-weight: 700;
+  font-size: 12px;
+  color: #0f172a;
+  outline: none;
+  font-family: inherit;
+  padding: 0 2px;
+}
+
+.input-unit {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.confirmed-val-single {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.confirmed-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: #059669;
+}
+
+.diff-notice-single {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diff-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ea580c;
+}
+
+.diff-tag {
+  font-size: 10px;
+  color: #ea580c;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+/* 协同流转操作组 */
+.compact-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.step-action-btn {
+  height: 25px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-action-btn.arrival-step-btn.is-active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
+}
+
+.step-action-btn.arrival-step-btn.is-active:hover {
+  background: #1d4ed8;
+}
+
+.step-action-btn.arrival-step-btn.is-done {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+  cursor: default;
+}
+
+.step-action-btn.receipt-step-btn.is-active {
+  background: #059669;
+  border-color: #047857;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(5, 150, 105, 0.15);
+}
+
+.step-action-btn.receipt-step-btn.is-active:hover {
+  background: #047857;
+}
+
+.joint-review-trigger-btn {
+  height: 25px;
+  padding: 0 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.joint-review-trigger-btn:hover {
+  background: #ffedd5;
+  border-color: #fb923c;
+  box-shadow: 0 1px 3px rgba(234, 88, 12, 0.15);
+}
+
+.review-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  animation: reviewPulse 2s infinite ease-in-out;
+}
+
+@keyframes reviewPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; box-shadow: 0 0 8px rgba(249, 115, 22, 0.2); }
+}
+
+.detail-view-btn {
+  width: 25px;
+  height: 25px;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.detail-view-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: scale(1.05);
+}
+
+.text-right {
+  text-align: right !important;
+}
+
+.text-center {
+  text-align: center !important;
 }
 
 .status-pill {
@@ -9015,20 +9490,30 @@ function jumpToUsageTab() {
   }
 
   /* 状态与车牌 */
-  .logistics-table tbody td.col-status {
+  .logistics-table tbody td.col-status,
+  .logistics-table tbody td.col-td-status {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     margin-bottom: 2px !important;
   }
 
-  .logistics-table tbody td.col-code-order::before { content: "单号: "; color: #94a3b8; font-size: 11.5px; }
-  .logistics-table tbody td.col-code-shipment::before { content: "车次: "; color: #94a3b8; font-size: 11.5px; }
-  .logistics-table tbody td.col-shipped-time::before { content: "发货时间: "; color: #94a3b8; font-size: 11.5px; }
-  .logistics-table tbody td.col-arrived-time::before { content: "确认时间: "; color: #94a3b8; font-size: 11.5px; }
+  .logistics-table tbody td.col-td-order {
+    padding-bottom: 4px !important;
+  }
+
+  .logistics-table tbody td.col-td-timeline {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
   
   .logistics-table tbody td.col-shipped-qty,
-  .logistics-table tbody td.col-confirm-qty {
+  .logistics-table tbody td.col-td-shipped,
+  .logistics-table tbody td.col-confirm-qty,
+  .logistics-table tbody td.col-td-confirm {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
@@ -9039,22 +9524,28 @@ function jumpToUsageTab() {
     font-size: 12px !important;
   }
 
-  .logistics-table tbody td.col-shipped-qty::before { content: "工厂发货量"; color: #64748b; font-weight: 500; }
-  .logistics-table tbody td.col-confirm-qty::before { content: "到货/接收确认量"; color: #047857; font-weight: 500; }
+  .logistics-table tbody td.col-td-shipped::before { content: "工厂发货量"; color: #64748b; font-weight: 500; }
+  .logistics-table tbody td.col-td-confirm::before { content: "到货/接收核验量"; color: #047857; font-weight: 500; }
 
-  .logistics-table tbody td.col-text-model strong {
+  .logistics-table tbody td.col-text-model strong,
+  .logistics-table tbody td.col-td-model strong {
     font-size: 14px !important;
     color: #0f172a !important;
   }
 
   /* 确认量与操作按钮行 */
-  .logistics-table tbody td.col-action-btns {
+  .logistics-table tbody td.col-action-btns,
+  .logistics-table tbody td.col-td-action {
     display: flex !important;
     align-items: center !important;
     justify-content: flex-end !important;
     margin-top: 4px !important;
     padding-top: 6px !important;
     border-top: 1px dashed #e2e8f0 !important;
+  }
+
+  .logistics-table tbody td.col-td-detail {
+    display: none !important;
   }
 }
 

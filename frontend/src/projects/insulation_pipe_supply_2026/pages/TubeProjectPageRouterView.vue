@@ -29,6 +29,7 @@ const SupplyManagementView = defineAsyncComponent(() => import('./SupplyManageme
 const WarehouseManagementView = defineAsyncComponent(() => import('./WarehouseManagementView.vue'))
 const HistoryQueryView = defineAsyncComponent(() => import('./HistoryQueryView.vue'))
 const GisMapView = defineAsyncComponent(() => import('./GisMapView.vue'))
+const JointReviewHallView = defineAsyncComponent(() => import('./JointReviewHallView.vue'))
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -45,6 +46,7 @@ const pageComponentMap = {
   demand_management: DemandManagementView,
   supply_management: SupplyManagementView,
   warehouse_management: WarehouseManagementView,
+  joint_review_hall: JointReviewHallView,
 }
 
 const pageTitleMap = {
@@ -57,6 +59,7 @@ const pageTitleMap = {
   demand_management: '需求侧管理入口',
   supply_management: '供给侧管理入口',
   warehouse_management: '库管员管理入口',
+  joint_review_hall: '⚖️ 联合会审大厅',
 }
 
 const pageTitle = computed(() => pageTitleMap[pageKey.value] || pageKey.value)

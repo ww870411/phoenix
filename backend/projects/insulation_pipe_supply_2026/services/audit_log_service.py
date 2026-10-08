@@ -4,6 +4,7 @@ tube 项目操作审计日志服务。
 """
 import json
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
@@ -34,8 +35,15 @@ def save_operation_log(
     )
     
     # 序列化为 JSON 字符串以存入 JSONB 字段
-    before_json = json.dumps(before_value) if before_value is not None else None
-    after_json = json.dumps(after_value) if after_value is not None else None
+    def _log_serialize_default(obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return float(obj) if (obj % 1 > 0) else int(obj)
+        if hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        return str(obj)
+
+    before_json = json.dumps(before_value, default=_log_serialize_default, ensure_ascii=False) if before_value is not None else None
+    after_json = json.dumps(after_value, default=_log_serialize_default, ensure_ascii=False) if after_value is not None else None
     
     session = SessionLocal()
     try:

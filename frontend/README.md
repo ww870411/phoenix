@@ -1,3 +1,202 @@
+## 2026-10-09 联合会审 under_review 状态下发与物流履约列表呈现对齐说明 (Client-Server Sync)
+
+- **前端状态消费与列表展示对齐**：
+  - 后端放开 PostgreSQL `under_review` 状态约束并在物流接口 `logistics-records` 及在途汇总 `pending-deliveries-summary` 白名单中纳入该状态；
+  - 前端工作台（[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) 与 [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）发起会审后，单据可平滑维持在当前物流列表中，并正确展示 `⚖️ 联合会审中` 物理互斥锁定徽章，常规流转按钮禁用，状态流转闭环一致；
+  - `npm run build` 全量打包编译通过（耗时 16.41s，748 模块零错误）。
+
+## 2026-10-08 联合会审提请链路 500 异常修复与数据提请通道顺畅对齐说明 (Client-Server Sync)
+
+- **接口联调与提请链路对齐**：
+  - 会审提请弹窗调用 `POST /api/v1/projects/insulation_pipe_supply_2026/joint-reviews/create` 时，后端已消除原快照数据中 `Decimal` 无法序列化引起的 ASGI 500 崩溃；
+  - 前端传参格式保持完全一致，直管与管件会审提请、多明细批量变更提交及状态流转已全部恢复顺畅通行。
+
+## 2026-10-08 提请会审弹窗超长直管规格型号原值完整展示与排版优化 (Frontend Polish)
+
+- **组件优化与排版演进清单**：
+  1. **提请会审弹窗排版优化 ([`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue))**：
+     - **规格型号独占整行**：将保温管规格型号卡片调整为 `grid-column: 1 / -1;` 全宽呈现，发货数量与送货车牌并排置于第一行；
+     - **解除 140px 硬性截断**：彻底移除 `.orig-tag` 的 `max-width: 140px;` 与 `text-overflow: ellipsis;`，并配套更精致的浅灰背景徽章与深色加粗字体（`.orig-val-text`）；
+     - **档案卡型号列宽优化**：将顶栏单据档案卡中直管规格型号列宽比例由 1.2fr 扩充至 1.8fr，确保长规格型号（如 `Φ1120×13/Φ1260×16.0 预制直埋保温管`）100% 完整展现不被省略截断。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 13.54s，748 模块零错误）。
+
+## 2026-10-08 联合会审直管规格型号穿透、司机字段清除与管件车次多明细更正说明 (Frontend Evolution)
+
+- **组件优化与交互重塑清单**：
+  1. **提请会审弹窗架构重构 ([`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue))**：
+     - **直管型号完整穿透**：修复 `orderPipeModelName` 提取链路与初始值同步，档案卡与更正输入卡片全面呈现真实直管规格型号，带原值与变动徽章；
+     - **彻底删除“随车司机与电话”争议项**：从界面表单、响应式数据模型、Diff 计算中完全清除司机姓名与电话，聚焦物资核心参数；
+     - **管件按车次多单更正**：
+       * 上方【整车公共信息】：送货车牌号独立更正输入；
+       * 下方【车载订单明细】：列表展示车内各订单，每笔订单提供管件品类、规格描述、发货数量独立编辑卡片与行内 Diff 徽章；
+  2. **需求侧与库管侧工作台会审触发对齐 ([`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue), [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue))**：
+     - 管件车次会审按钮统一直接传入 `group`，自动解析 `group.items` 映射至弹窗模型；
+     - 保留并输出 `pipe_model_id`、`pipeModelId` 与 `pipe_model_name`，保障直管订单全属性传递；
+  3. **会审大厅比对面板升级 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - 对 `proposed_patch.items` 数组渲染专用紧凑明细表格，清晰展示单号、品类、规格与拟更正发货量。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 15.46s，748 模块零错误）。
+
+## 2026-10-08 保温管物流履约表格彻底扁平化、支持横向滚动与紧凑单行行高演进说明 (Frontend Polish)
+
+- **组件优化与视觉演进清单**：
+  1. **现场物流履约记录表格彻底扁平化 ([`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue))**：
+     - **解除强制纵向堆叠，还原为 13 离散专业单列**：
+       * 彻底抛弃单元格内双行堆叠设计（原单号+车次、物料+供方、发货时间+到货时间）；
+       * 恢复为 13 个独立单列：`流转状态`、`发货单号`、`车次号`、`运输车牌`、`供给主体`、`规格型号`、`发货量(米)`、`发货时间`、`确认到货时间`、`在途时长`、`现场核验量(米)`、`协同流转操作`、`凭证`；
+     - **自然横向滚动与极致单行行高**：
+       * 表格包裹层 `.logistics-table-wrap` 开启平滑 `overflow-x: auto`，表格最小宽度设定为 `1580px`；
+       * 强制单行不折行（`white-space: nowrap !important;`）与居中对齐（`vertical-align: middle !important;`）；
+       * 记录单行高度收缩至 **38px**，内边距收敛为 `4px 10px`，单屏可轻松浏览 15~20 笔单据；
+       * 输入框（22px）与操作按钮（25px）微型化、精致化，杜绝笨重占用。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 14.50s，748 模块零错误）。
+
+## 2026-10-08 物流记录表格高密度排版与会审弹窗现代审批重构说明 (Frontend Polish)
+
+- **组件优化与视觉演进清单**：
+  1. **现场物流履约记录表格 ([`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue))**：
+     - **列宽精简与信息聚合**：将原 12 列（最小宽度 1460px）科学收敛为 8 列（1100px），单号与车次、规格与供方、发货时间与在途历时分别复合排版；
+     - **吸顶表头与高密度网格**：引入 Sticky Header，内边距优化为 8-10px，提升首屏有效可见行数 40% 以上；
+     - **组件化核验输入框**：`.confirm-input-wrap` 现代设计，带单位后缀与聚焦光晕；
+     - **规整动作组**：【确认到货】、【施工接收】、【⚖️ 会审】尺寸统一，会审中带有动态发光呼吸徽章；
+     - **独立凭据入口**：新增 `📜` 凭据入口，支持直接弹窗穿透核查随车单据。
+  2. **提请联合会审弹窗 ([`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue))**：
+     - **一体化单据与会签概览 (Dossier Brief)**：融合单据基准信息与会签责任主体为紧凑双栏档案卡，释放 110px+ 纵向高度；
+     - **对比型字段卡片 (Diff-Aware Cards)**：行内实时显示变动计算徽章（如 `更正: 20 ➔ 18 (-2米)`），剔除冗余黄色大卡片；
+     - **快捷事由短语 Chips**：内置 5 种工程高频事由模板（实收短缺/磅单差异/规格更正/车牌变更/外观异议），一键填报；
+     - **字符计数指示器**：动态校验不少于 4 字要求；
+     - **状态底栏一体化 (Sticky Footer)**：左侧状态引导，右侧操作按钮，杜绝多层滚动条。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 15.86s，748 模块零错误）。
+
+## 2026-10-08 提请会审弹窗 Props 命名对齐与表单渲染链路修复说明 (Frontend Hotfix)
+
+- **排查原因与优化清单**：
+  1. **Props 跨组件传参彻底对齐**：
+     - 在 [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue) 中声明 `order` 与 `orderData` 双 Prop，并通过响应式计算属性 `order = computed(() => props.order || props.orderData || null)` 统一解析；
+     - 在需求侧工作台（[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)）与库管工作台（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）中同步传递 `:order="selectedReviewOrder" :order-data="selectedReviewOrder"`；
+  2. **解决表单未渲染与点击无响应**：
+     - 彻底消除因 `order` 为 null 导致的 `<div class="modal-body" v-if="order">` 整体未被渲染的问题；
+     - 恢复全部业务输入框（发货数量、规格、车牌、司机、会审事由、照片凭据）的完整呈现与初始值自动回填；
+     - 修正 `handleSubmit` 中订单 ID 与类别的安全读取，保障提请会审接口顺利提交。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 17.73s，0 错误）。
+
+## 2026-10-08 提请会审弹窗确认按钮死锁解除与交互引导重构说明 (Frontend Polish)
+
+- **排查原因与优化清单**：
+  1. **彻底解除按钮硬置灰死锁**：
+     - 在 [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue) 中移除 `:disabled="submitting || changedFieldsCount === 0"` 的死锁条件，按钮仅在网络请求中（`submitting`）处于 disabled；
+  2. **双模式智能支持**：
+     - **数据修正模式**：修改了发货数量、规格、车牌等字段，自动展示 Diff 前后变动对照卡片；
+     - **现场异议协商模式**：即便数值字段保持原样（未修改），只要填报了现场实况事由（≥4字），同样支持合法发起【实物核验/现场异议协商会审】；
+  3. **智能交互引导条与自动聚焦**：
+     - 底部新增动态状态条，根据输入情况实时变换指引；
+     - 未填写完整直接点击时，弹出友好指导并自动将光标聚焦至事由文本框。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 19.58s，0 错误）。
+
+## 2026-10-08 收件箱解耦会审专用链接回归全站综合消息中心说明 (Frontend Refinement)
+
+- **产品设计与交互规范**：
+  - 响应用户指令：“收件箱并非为了会审而特别存在，因此不必设置专门的‘⚖️ 进入联合会审大厅 ➔’链接”。
+  - 将收件箱（[`TopInboxDropdown.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/TopInboxDropdown.vue)）回归纯粹的全站通用消息中心定位：
+    - 移除了卡片底部专用固定链接栏（`.inbox-dropdown-footer`）及相关跳转函数；
+    - 保持消息驱动的直达体验：具体的业务通知（如某笔待办会审单据）通过其自身的卡片 `action_url` 精准穿透直达，无需在弹窗底部强行捆绑特定页面；
+    - 卡片尺寸更紧凑，聚焦消息浏览、已读操作与分类检索。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 17.35s，0 错误）。
+
+## 2026-10-08 顶栏收件箱显示逻辑与登录状态计算属性加固说明 (Frontend Hotfix)
+
+- **排查原因与优化清单**：
+  1. **登录状态属性对齐**：
+     - 在 Pinia 状态树 [`auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js) 中补齐并导出 `isLoggedIn` 计算属性（关联 `token.value || user.value`），与既有 `isAuthenticated` 保持语义协同；
+  2. **顶栏组件挂载防护**：
+     - 在 [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue) 中，将收件箱组件 `<TopInboxDropdown>` 与每日强提醒弹窗 `<DailyReviewNoticeModal>` 的渲染条件加固为 `v-if="auth.isLoggedIn || auth.isAuthenticated || auth.user"`；
+     - 将异步懒加载方式调整为静态同帧加载，消除异步分包加载延迟；
+     - 收件箱按钮本身无条件恒定展示在用户名左侧，无论是否有新消息均可见；有未读消息时展示呼吸红点和未读数，无未读消息时展示常规胶囊按钮。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 18.41s，0 错误）。
+
+## 2026-10-08 系统消息中心“收件箱”、面包屑规范与工作台标签页精准直达说明 (Frontend Updates)
+
+- **前端新增组件与交互优化清单**：
+  1. **消息中心与“📥 收件箱”交互组件**：
+     - 新增 [`TopInboxDropdown.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/TopInboxDropdown.vue)：全站顶栏通知与消息中心收件箱微件。采用毛玻璃 Glassmorphism 质感卡片设计，包含动态红点呼吸灯指示、未读计数胶囊、四大类目切换（全部、⚖️ 会审会签、📢 系统广播、💬 站内互动）、单条已读标记、全部标读以及点击直达会审大厅/关联业务页；具备 30 秒轮询与窗口激活自刷新机制。
+     - 新增 [`systemMessageApi.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/services/systemMessageApi.js)：系统消息客户端，封装 `/my`、`/unread-count`、`/{id}/read`、`/read-all`、`/send-direct`、`/broadcast` 等端点。
+     - 顶栏挂载：在 [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue) 中将 `TopInboxDropdown` 精准挂载在用户名（`userLabel`）左侧，与原有顶栏元素自然融合。
+  2. **会审大厅面包屑视觉标准化**：
+     - 在 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 中移除原本偏细小的私有 CSS 面包屑条，统一替换为系统标准公共组件 `<Breadcrumbs :items="breadcrumbItems" />`，确保字号、行距、图标和边距与全站其他业务模块完全统一。
+  3. **“➕ 如何提请会审 / 定位订单”精准直达对应标签页**：
+     - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)：增加 `watch(() => route.query)`，支持响应式直达“直管物流（`category=pipe&tab=logistics`）”与“特种管件（`category=fitting&tab=fitting`）”；
+     - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)：增加 `watch(() => route.query)`，支持响应式直达“直管待入库台账（`tab=pipe`）”与“管件待入库台账（`tab=fitting&sub=pending_warehouse`）”；
+     - 在会审大厅操作指引弹窗中细分为 6 组“一键直达并定位对应标签页”按钮，彻底解决 SPA 同页面复用时不切换 Tab 的痛点。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（748 modules transformed，耗时 15.26s，0 错误）。
+
+## 2026-10-08 联合会审大厅天平标识规范化与提请会审入口指引强化说明 (Frontend UI/UX Polish)
+
+- **前端视觉与交互增强**：
+  1. **页面标识规范**：
+     - 在 [`项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)、[`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue) 及 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 面包屑与 `document.title` 中统一冠以 **`⚖️ 联合会审大厅`** 天平图标；
+  2. **会审大厅提请指引与工作台直达**：
+     - 在大厅顶栏新增高亮金色按钮【➕ 如何提请会审 / 定位订单】；
+     - 增加抽屉卡片指引模态框（展示现场主管、施工单位、库管员 3 种待办业务场景及提请路径，并提供一键直达“需求侧工作台”与“库管员工作台”）；
+     - 明确解答了用户在何处提交会审的操作路径。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（耗时 18.37s，0 错误）。
+
+## 2026-10-08 物资流转全生命周期“联合会审大厅”多方协同治理前端全量交付 (Frontend Delivery)
+
+- **前端新增页面、组件与模块清单**：
+  1. **核心页面**：
+     - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)：联合会审大厅一级路由页面，包含 4 大 KPI 数据看板、4 种分类筛选 Tab（待我联审、我发起的、历史档案、全部会审）、会审流转卡片、前后差异 Diff 预演、会审表决弹窗、管理员终局仲裁弹窗与单据现场凭证大图查看。
+  2. **通知与待办微件**：
+     - [`TopNotificationBell.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/TopNotificationBell.vue)：全局顶栏通知铃铛，包含未读待签微标徽章、下拉气泡卡片、一键直达大厅。
+     - [`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)：每日登录待办联合会审强提醒轻量弹窗，支持一键前往会审与“今日不再弹出”（LocalStorage 隔离）。
+     - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)：提请会审弹窗，严格执行白名单可修改字段、原值/新值高亮对比、修改理由必填与现场凭证照片上传。
+  3. **API 交互模块**：
+     - [`jointReviewApi.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/services/jointReviewApi.js)：封装 `createJointReview`、`voteJointReview`、`cancelJointReview`、`adminArbitrateJointReview`、`getJointReviewList`、`getJointReviewDetail`、`getPendingReviewNotifications` 等 7 大 REST 接口。
+  4. **路由挂载与工作台集成**：
+     - [`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)：映射 `joint_review_hall` 路由。
+     - [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue)：登录态挂载 `TopNotificationBell` 与 `DailyReviewNoticeModal`。
+     - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)：现场到货与施工接收列表集成“⚖️ 提请会审”按钮；对 `under_review` 单据应用物理互斥锁，禁用常规确认。
+     - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)：库管列表集成“⚖️ 提请会审”按钮；对 `under_review` 单据应用物理互斥锁，禁用勾选与常规入库。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（743 modules transformed，耗时 15.17s，0 错误）。
+
+## 2026-10-08 物资流转全生命周期“联合会审大厅”多方协同治理前端架构规划 (Frontend Blueprint)
+
+- **前端新增组件与架构规划**：
+  1. **顶栏消息通知体系（全站通用）**：
+     - 在系统顶栏右侧用户角色区嵌入科技感【通知铃铛】图标与待办数字徽标（红点）；
+     - 下拉弹出轻量待办卡片列表，展示当前主体待参与会审的单据摘要，点击直达成会审处理；
+  2. **每日首次登录待办弹窗组件**：
+     - 全局路由监听挂载，当检测到当前主体存在“待我联审”单据时，弹出会审提醒；
+     - 支持“前往会审”与“今日不再提醒”（基于 LocalStorage 记录当前日期，每日限弹 1 次）；
+  3. **全新一级页面：联合会审大厅 (`JointReviewHallView.vue`)**：
+     - 路由设计：`/projects/insulation_pipe_supply_2026/pages/joint_review_hall`；
+     - 与“供给侧管理入口”、“综合查询中心”平级；
+     - 包含三大功能 Tab：
+       - **Tab 1: 待我联审**（待办高亮、拟修改前后差异对比面板、快速同意 / 填写理由拒绝）；
+       - **Tab 2: 我发起的会审**（时间轴展示各前序主体表决进度、支持一键撤销会审）；
+       - **Tab 3: 历史会审档案**（全量已办结/已撤销档案检索，支持穿透查看全套会签记录与现场凭据照片）；
+  4. **各业务工作台防呆与状态互斥联动**：
+     - 单据处于 `under_review` 期间，工作台操作列表展示金黄色 `〔会审中〕` 徽章，常规流转按钮（确认到货、确认接收、确认入库）强制置灰禁用并给出防呆提示；
+     - 在各待办环节提供“提请联合会审”入口，支持修改字段白名单校验与现场凭证照片上传。
+- **状态保持**：
+  - 本轮为方案研讨与架构定稿，既有前端代码保持稳定。
+
+## 2026-10-08 生产容器化环境历史镜像清理与磁盘空间回收说明 (Docker Baseline)
+
+- **容器化部署环境状态**：
+  - 本轮执行服务器 Docker 深度瘦身（`docker image prune -a -f`），成功回收 22GB+ 磁盘空间；
+  - 前端运行容器与 Node/Nginx 运行镜像完好无损，业务端口（5173 / 80）访问正常；
+  - 零前端代码变动，前端工程结构与视图逻辑完全保持稳定。
+
 ## 2026-10-08 数字指挥大屏动态播报状态描述更新为“施工单位完成实物接收”说明 (BigScreenDashboardView.vue)
 
 - **关联前端页面与组件**：

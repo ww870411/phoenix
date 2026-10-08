@@ -11,7 +11,8 @@
         "global_management",
         "supply_management",
         "demand_management",
-        "warehouse_management"
+        "warehouse_management",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [
@@ -37,7 +38,8 @@
         "dashboard",
         "supply_management",
         "comprehensive_query",
-        "history_query"
+        "history_query",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [
@@ -63,7 +65,8 @@
         "dashboard",
         "supply_management",
         "comprehensive_query",
-        "history_query"
+        "history_query",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [
@@ -89,7 +92,8 @@
         "dashboard",
         "demand_management",
         "comprehensive_query",
-        "history_query"
+        "history_query",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [
@@ -115,7 +119,8 @@
         "dashboard",
         "demand_management",
         "comprehensive_query",
-        "history_query"
+        "history_query",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [
@@ -141,7 +146,8 @@
         "dashboard",
         "warehouse_management",
         "comprehensive_query",
-        "history_query"
+        "history_query",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [
@@ -169,7 +175,8 @@
         "history_query",
         "supply_management",
         "demand_management",
-        "warehouse_management"
+        "warehouse_management",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [
@@ -197,7 +204,8 @@
         "history_query",
         "supply_management",
         "demand_management",
-        "warehouse_management"
+        "warehouse_management",
+        "joint_review_hall"
       ],
       "sheet_rules": {},
       "units_access": [

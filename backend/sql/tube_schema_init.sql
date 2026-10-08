@@ -117,7 +117,8 @@ CREATE TABLE IF NOT EXISTS tube.tube_delivery (
                 'pending_receive',
                 'pending_warehouse',
                 'completed',
-                'pending_diff_approve'
+                'pending_diff_approve',
+                'under_review'
             )
         )
 );
@@ -248,9 +249,10 @@ CREATE TABLE IF NOT EXISTS tube.tube_fitting_delivery (
     CONSTRAINT chk_tube_fitting_shipped_qty_positive
         CHECK (shipped_qty > 0),
     CONSTRAINT chk_tube_fitting_status
-        CHECK (status IN ('pending_arrival', 'pending_receive', 'pending_warehouse', 'completed', 'cancelled')),
+        CHECK (status IN ('pending_arrival', 'pending_receive', 'pending_warehouse', 'completed', 'cancelled', 'pending_diff_approve', 'under_review')),
     CONSTRAINT chk_tube_fitting_state_evidence
         CHECK (
+            (status = 'under_review') OR
             (status = 'pending_arrival' AND arrived_confirm_at IS NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL) OR
             (status = 'pending_receive' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL) OR
             (status = 'pending_warehouse' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NOT NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL) OR
