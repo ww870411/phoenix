@@ -3892,10 +3892,15 @@ def get_warehouse_management_deliveries(
             continue
         if selected_pipe_models and _normalize_pipe_model_id(row["pipe_model_id"]) not in selected_pipe_models:
             continue
-        if selected_section_1s and sec_id not in selected_section_1s:
-            continue
-        if selected_statuses and row["status"] not in selected_statuses:
-            continue
+        if selected_statuses:
+            row_status = str(row.get("status") or "").strip()
+            row_pre_status = str(row.get("pre_review_status") or "").strip()
+            # 状态匹配规则：当前状态直接匹配；或处于联合会审挂起中(under_review)且挂起前的前置状态命中筛选集合时均予保留
+            is_matched = (row_status in selected_statuses) or (
+                row_status == "under_review" and (row_pre_status in selected_statuses or not row_pre_status)
+            )
+            if not is_matched:
+                continue
         if normalized_shipment_no and str(row.get("shipment_no") or "").strip().upper() != normalized_shipment_no:
             continue
         if normalized_order_no and normalized_order_no not in str(row.get("order_no") or row.get("delivery_code") or "").strip().upper():
@@ -4444,6 +4449,7 @@ def get_demand_management_pending_deliveries_summary(
                 "total_count": 0,
                 "pending_arrival_count": 0,
                 "pending_receive_count": 0,
+                "under_review_count": 0,
                 "severe_delay_count": 0,
                 "pipe_count": 0,
                 "fitting_count": 0,
@@ -4754,6 +4760,7 @@ def get_demand_management_pending_deliveries_summary(
     total_count = len(rows)
     pending_arrival_count = sum(1 for r in rows if r["status_group"] == "pending_arrival")
     pending_receive_count = sum(1 for r in rows if r["status_group"] == "pending_receive")
+    under_review_count = sum(1 for r in rows if r["status_group"] == "under_review")
     severe_delay_count = sum(1 for r in rows if r["is_severe_delay"])
     pipe_count = sum(1 for r in rows if r["category"] == "pipe")
     fitting_count = sum(1 for r in rows if r["category"] == "fitting")
@@ -4789,6 +4796,7 @@ def get_demand_management_pending_deliveries_summary(
             "total_count": total_count,
             "pending_arrival_count": pending_arrival_count,
             "pending_receive_count": pending_receive_count,
+            "under_review_count": under_review_count,
             "severe_delay_count": severe_delay_count,
             "pipe_count": pipe_count,
             "fitting_count": fitting_count,

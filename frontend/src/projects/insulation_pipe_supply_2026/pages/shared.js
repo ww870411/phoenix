@@ -161,6 +161,12 @@ export const DELIVERY_STATUS_DICT = {
     class: 'status-pending-receive',
     icon: '⚠️',
     color: '#f97316',
+  },
+  under_review: {
+    label: '⚖️ 联合会审中',
+    class: 'status-under-review',
+    icon: '⚖️',
+    color: '#ea580c',
   }
 }
 

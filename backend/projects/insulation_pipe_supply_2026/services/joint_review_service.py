@@ -44,6 +44,39 @@ def _dumps_json(data: Any) -> str:
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 PROJECT_KEY = "insulation_pipe_supply_2026"
 
+# 终局裁决/仲裁权默认白名单（首批特许裁决人员）
+DEFAULT_ARBITRATOR_ACCOUNTS: Set[str] = {"王玮", "李绍", "张亮"}
+
+
+def get_arbitrator_accounts() -> Set[str]:
+    """获取拥有联合会审终局裁决/仲裁权的用户账号列表（支持 tube_config.json 动态配置 + 默认底线兜底）。"""
+    accounts = set(DEFAULT_ARBITRATOR_ACCOUNTS)
+    try:
+        from backend.projects.insulation_pipe_supply_2026.services.config_service import load_tube_config
+        cfg = load_tube_config() or {}
+        custom_accounts = (
+            cfg.get("arbitration_config", {}).get("arbitrator_accounts")
+            or cfg.get("arbitrator_accounts")
+            or cfg.get("joint_review_config", {}).get("arbitrators")
+            or []
+        )
+        if isinstance(custom_accounts, list):
+            for acc in custom_accounts:
+                if acc and isinstance(acc, str):
+                    accounts.add(acc.strip())
+    except Exception as e:
+        logger.warning(f"读取裁决员配置失败，使用默认底线名单: {e}")
+    return accounts
+
+
+def check_user_can_arbitrate(session_username: str, session_group: str) -> bool:
+    """判定用户是否具备联合会审终局裁决/仲裁权（超级管理员或特许裁决员）。"""
+    if session_group in ("Global_admin", "dev_admin"):
+        return True
+    if session_username and session_username.strip() in get_arbitrator_accounts():
+        return True
+    return False
+
 # 修正字段白名单
 PIPE_ALLOWED_PATCH_FIELDS = {
     "shipped_qty",
@@ -868,6 +901,7 @@ def vote_joint_review(
 
         if is_all_approved:
             # 🚀 全票通过：执行订单自动修正
+            pre_status = review.get("pre_status") or "pending_arrival"
             patch = review["proposed_patch"]
             if isinstance(patch, str):
                 patch = json.loads(patch)
@@ -1088,10 +1122,10 @@ def admin_arbitrate_joint_review(
     session_group: str,
     client_ip: str = "",
 ) -> Dict[str, Any]:
-    """超级管理员终局裁决：防止死锁的一锤定音特权。"""
+    """终局裁决：防止死锁的一锤定音特权通道（超级管理员及特许裁决员）。"""
     ensure_joint_review_tables()
-    if session_group not in ("Global_admin", "dev_admin"):
-        raise HTTPException(status_code=403, detail="仅系统超级管理员 (Global_admin) 拥有终局裁决仲裁权")
+    if not check_user_can_arbitrate(session_username, session_group):
+        raise HTTPException(status_code=403, detail="您没有终局裁决权限（仅系统超级管理员或特许裁决员拥有该权限）")
 
     if not arbitration_reason or len(arbitration_reason.strip()) < 3:
         raise HTTPException(status_code=422, detail="终局裁决必须填写详细的裁决理由依据")
@@ -1131,10 +1165,10 @@ def admin_arbitrate_joint_review(
                     if k not in ("items", "ship_remark"):
                         summary_parts.append(f"{k}={v}")
 
-            patch_summary_str = "; ".join(summary_parts) if summary_parts else "管理员核实更正一致"
+            patch_summary_str = "; ".join(summary_parts) if summary_parts else "裁决人员核实更正一致"
             resolution_text = (
-                f"【管理员终局裁决强制通过】单号: {review['review_no']} | "
-                f"仲裁管理员: {session_username} | 理由: {arbitration_reason.strip()} | "
+                f"【终局裁决强制通过】单号: {review['review_no']} | "
+                f"裁决人: {session_username} | 理由: {arbitration_reason.strip()} | "
                 f"更正项: [{patch_summary_str}] | "
                 f"生效时间: {datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')}"
             )
@@ -1158,7 +1192,7 @@ def admin_arbitrate_joint_review(
                 operator=session_username,
                 operator_group=session_group,
                 action_type="ADMIN_ARBITRATE_APPROVE",
-                action_desc=f"管理员终局裁决强制通过会审 [{review['review_no']}]: 关联订单 {review['order_no']}，更正为 [{patch_summary_str}]",
+                action_desc=f"终局裁决强制通过会审 [{review['review_no']}]: 关联订单 {review['order_no']}，更正为 [{patch_summary_str}]",
                 resource_id=str(review_id),
                 after_value={"decision": "force_approve", "reason": arbitration_reason},
                 client_ip=client_ip,
@@ -1168,13 +1202,13 @@ def admin_arbitrate_joint_review(
                 "ok": True,
                 "review_id": review_id,
                 "review_status": "approved",
-                "message": "管理员终局裁决已强制生效，数据已修正并恢复原待办状态。",
+                "message": "终局裁决已强制生效，数据已修正并恢复原待办状态。",
             }
         else:
             # force_reject
             _revert_review_order_status(db_session, review)
 
-            resolution_text = f"【管理员终局裁决终止驳回】仲裁管理员: {session_username} | 理由: {arbitration_reason.strip()}"
+            resolution_text = f"【终局裁决终止驳回】裁决人: {session_username} | 理由: {arbitration_reason.strip()}"
             update_rev_sql = text("""
                 UPDATE tube.tube_order_reviews
                 SET review_status = 'rejected',
@@ -1191,7 +1225,7 @@ def admin_arbitrate_joint_review(
                 operator=session_username,
                 operator_group=session_group,
                 action_type="ADMIN_ARBITRATE_REJECT",
-                action_desc=f"管理员终局裁决终止驳回会审 [{review['review_no']}]: 关联订单 {review['order_no']}，原单已恢复为 [{pre_status}]",
+                action_desc=f"终局裁决终止驳回会审 [{review['review_no']}]: 关联订单 {review['order_no']}，原单已恢复为 [{pre_status}]",
                 resource_id=str(review_id),
                 after_value={"decision": "force_reject", "reason": arbitration_reason},
                 client_ip=client_ip,
@@ -1201,7 +1235,7 @@ def admin_arbitrate_joint_review(
                 "ok": True,
                 "review_id": review_id,
                 "review_status": "rejected",
-                "message": "管理员终局裁决已驳回并关闭会审，原单已恢复为发起前待办状态。",
+                "message": "终局裁决已驳回并关闭会审，原单已恢复为发起前待办状态。",
             }
     except Exception:
         db_session.rollback()
@@ -1305,6 +1339,7 @@ def list_joint_reviews(
 
         items = []
         is_global_admin = session_group in ("Global_admin", "dev_admin")
+        can_arbitrate_user = check_user_can_arbitrate(session_username, session_group)
 
         for r in rows:
             r_dict = dict(r)
@@ -1324,10 +1359,24 @@ def list_joint_reviews(
             r_dict["section_1_name"] = _resolve_section_name(cfg, r_dict["section_1_id"])
             r_dict["supply_entity_name"] = _resolve_supplier_name(cfg, r_dict["supply_entity_id"])
 
+            # 丰富各主体表决记录展示元数据
+            req_ents = r_dict.get("required_entities") or []
+            ent_lookup = {f"{e.get('entity_type')}_{e.get('entity_id')}": e for e in req_ents}
+            for v in r_votes:
+                k = f"{v.get('entity_type')}_{v.get('entity_id')}"
+                if k in ent_lookup:
+                    v["entity_name"] = ent_lookup[k].get("entity_name")
+                    v["role_desc"] = ent_lookup[k].get("role_desc")
+                else:
+                    v["entity_name"] = v.get("voter_name")
+                    v["role_desc"] = "协同核验方"
+
             if r_dict.get("created_at"):
                 r_dict["created_at"] = r_dict["created_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
             if r_dict.get("finalized_at"):
                 r_dict["finalized_at"] = r_dict["finalized_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+            if r_dict.get("updated_at"):
+                r_dict["updated_at"] = r_dict["updated_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
             # 判断当前用户是否需要表决
             needs_my_vote = False
@@ -1356,7 +1405,7 @@ def list_joint_reviews(
             r_dict["my_vote_decision"] = my_vote_decision
             r_dict["is_mine"] = r_dict["initiator_username"] == session_username
             r_dict["can_cancel"] = (r_dict["is_mine"] or is_global_admin) and r_dict["review_status"] == "voting"
-            r_dict["can_arbitrate"] = is_global_admin and r_dict["review_status"] == "voting"
+            r_dict["can_arbitrate"] = can_arbitrate_user and r_dict["review_status"] == "voting"
 
             # 客户端过滤 tab == 'pending_my_vote'
             if tab == "pending_my_vote" and not needs_my_vote:
@@ -1399,9 +1448,18 @@ def get_joint_review_detail(review_id: int, session_username: str = "", session_
         # 查表决
         v_sql = text("SELECT * FROM tube.tube_review_votes WHERE review_id = :rid ORDER BY voted_at ASC")
         votes = [dict(v) for v in db_session.execute(v_sql, {"rid": review_id}).mappings().all()]
+        req_ents = r_dict.get("required_entities") or []
+        ent_lookup = {f"{e.get('entity_type')}_{e.get('entity_id')}": e for e in req_ents}
         for v in votes:
             if v.get("voted_at"):
                 v["voted_at"] = v["voted_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+            k = f"{v.get('entity_type')}_{v.get('entity_id')}"
+            if k in ent_lookup:
+                v["entity_name"] = ent_lookup[k].get("entity_name")
+                v["role_desc"] = ent_lookup[k].get("role_desc")
+            else:
+                v["entity_name"] = v.get("voter_name")
+                v["role_desc"] = "协同核验方"
 
         r_dict["votes"] = votes
         r_dict["section_1_name"] = _resolve_section_name(cfg, r_dict["section_1_id"])
@@ -1411,6 +1469,8 @@ def get_joint_review_detail(review_id: int, session_username: str = "", session_
             r_dict["created_at"] = r_dict["created_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
         if r_dict.get("finalized_at"):
             r_dict["finalized_at"] = r_dict["finalized_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        if r_dict.get("updated_at"):
+            r_dict["updated_at"] = r_dict["updated_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
         is_global_admin = session_group in ("Global_admin", "dev_admin")
         can_i_vote = False
@@ -1425,7 +1485,7 @@ def get_joint_review_detail(review_id: int, session_username: str = "", session_
         r_dict["can_i_vote"] = can_i_vote
         r_dict["needs_my_vote"] = needs_my_vote
         r_dict["can_cancel"] = (r_dict["initiator_username"] == session_username or is_global_admin) and r_dict["review_status"] == "voting"
-        r_dict["can_arbitrate"] = is_global_admin and r_dict["review_status"] == "voting"
+        r_dict["can_arbitrate"] = check_user_can_arbitrate(session_username, session_group) and r_dict["review_status"] == "voting"
 
         return {"ok": True, "data": r_dict}
     finally:

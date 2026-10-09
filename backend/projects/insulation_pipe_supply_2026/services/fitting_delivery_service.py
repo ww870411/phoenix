@@ -728,6 +728,9 @@ def list_fitting_deliveries(
         timeout_receive_select = (
             "is_timeout_receive" if "is_timeout_receive" in existing_columns else "FALSE AS is_timeout_receive"
         )
+        pre_review_status_select = (
+            "pre_review_status" if "pre_review_status" in existing_columns else "NULL::TEXT AS pre_review_status"
+        )
         total = int(session.execute(text(f"SELECT COUNT(*) FROM tube.tube_fitting_delivery {where_sql}"), params).scalar_one())
         rows = session.execute(
             text(
@@ -740,7 +743,7 @@ def list_fitting_deliveries(
                        received_confirm_at, received_confirm_by, received_remark,
                        warehouse_confirm_at, warehouse_confirm_by, warehouse_remark,
                        {cancelled_at_select}, {cancelled_by_select}, {cancel_reason_select},
-                       {timeout_receive_select}
+                       {timeout_receive_select}, {pre_review_status_select}
                 FROM tube.tube_fitting_delivery
                 {where_sql}
                 ORDER BY shipped_at DESC, id DESC
@@ -769,6 +772,7 @@ def list_fitting_deliveries(
                     "ship_contact_phone": _clean(row["ship_contact_phone"]),
                     "ship_remark": _clean(row["ship_remark"]),
                     "status": _clean(row["status"]),
+                    "pre_review_status": _clean(row.get("pre_review_status")),
                     "created_at": _serialize_time(row["created_at"]),
                     "created_by": _clean(row["created_by"]),
                     "operator": _clean(row["created_by"]),

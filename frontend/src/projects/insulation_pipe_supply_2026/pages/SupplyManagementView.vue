@@ -1024,7 +1024,8 @@
                         <strong style="font-size: 13.5px; color: #059669;">发货总计: {{ group.totalQty }} {{ getGroupUnitLabel(group) }}</strong>
                       </div>
                       <!-- 状态 Badge -->
-                      <span v-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
+                      <span v-if="group.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11.5px;">⚖️ 联合会审中</span>
+                      <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
                       <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11.5px;">✅ 待施工接收</span>
                       <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11.5px;">👷 待库管确认</span>
                       <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11.5px;">🏢 库管已确认</span>
@@ -1111,6 +1112,9 @@
                             <td class="col-status" style="text-align: center;">
                               <span v-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px;" :title="item.cancel_reason ? `撤销原因: ${item.cancel_reason}` : '已撤销'">
                                 ❌ 已撤销
+                              </span>
+                              <span v-else-if="item.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px;">
+                                ⚖️ 联合会审中
                               </span>
                               <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px;">
                                 🏢 库管已确认
@@ -2054,7 +2058,7 @@
     <!-- 发货数据智能规范与核对确认 Modal 弹窗 -->
     <Transition name="fade">
       <div v-if="showFittingAuditModal" class="block-modal-overlay" @click.self="showFittingAuditModal = false">
-        <div class="block-modal-container fitting-audit-modal-container" style="max-width: 880px; width: 92vw; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);">
+        <div class="block-modal-container fitting-audit-modal-container" style="max-width: 760px; width: 90vw; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 14px; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);">
           <div class="block-modal-header" style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%) !important; padding: 12px 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
               <div style="display: flex; align-items: center; gap: 10px;">
@@ -2066,21 +2070,16 @@
           </div>
 
           <!-- 顶部提示与快捷操作栏 -->
-          <div style="padding: 9px 18px; background: #f0fdfa; border-bottom: 1px solid #ccfbf1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <div style="font-size: 12.5px; color: #115e59; line-height: 1.5; text-align: left;">
-              <span v-if="!hasNonStandardOrAmbiguousItems">
-                ✨ 本次整车 <strong>{{ fittingAuditItems.length }}</strong> 笔明细全部符合标准价格库，请核对数量后直接点击下方按钮提交发货。
-              </span>
-              <span v-else>
-                💡 <strong>核对说明</strong>：标绿条目为标准物料；对于存在差异或非标条目，您可采纳标准建议，也可自主选择“保留原样提交”。
-              </span>
+          <div style="padding: 8px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="font-size: 12.5px; color: #475569; text-align: left;">
+              请核对条目及库存扣减规则：
             </div>
-            <div v-if="hasNonStandardOrAmbiguousItems" style="display: flex; gap: 8px;">
-              <button type="button" class="btn ghost btn-sm" style="background: #fff; color: #0f766e; border: 1px solid #5eead4; font-size: 12px; font-weight: 600;" @click="auditApplyAllStandard">
-                ✨ 全部采纳推荐标准
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn ghost btn-sm" style="background: #fff; color: #0f766e; border: 1px solid #99f6e4; font-size: 12px; font-weight: 600;" @click="auditApplyAllStandard">
+                ✨ 全部采纳标准
               </button>
               <button type="button" class="btn ghost btn-sm" style="background: #fff; color: #64748b; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 500;" @click="auditKeepAllRaw">
-                📝 全部保留原样输入
+                📝 全部保留原样
               </button>
             </div>
           </div>
@@ -2089,100 +2088,130 @@
           <div style="flex: 1; overflow-y: auto; padding: 12px 18px; max-height: calc(88vh - 200px);" class="custom-scroll-container">
             <div style="display: flex; flex-direction: column; gap: 8px;">
               <div v-for="(row, idx) in fittingAuditItems" :key="idx">
-                <!-- 场景 1: 完全吻合的标准型号 (极简紧凑单行条目，单行高度约 36px，无任何单选框打扰用户) -->
+                <!-- 场景 1: 完全吻合的标准型号 (极简紧凑单行条目) -->
                 <div
                   v-if="row.match_type === 'exact'"
-                  style="display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; gap: 10px;"
+                  class="audit-exact-strip"
+                  :class="row.decision === 'standard' ? 'is-standard' : 'is-raw'"
                 >
                   <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; text-align: left;">
-                    <span style="font-weight: bold; font-size: 12px; color: #166534; width: 24px; flex-shrink: 0;">#{{ idx + 1 }}</span>
+                    <span class="index-badge">#{{ idx + 1 }}</span>
                     <span style="font-weight: 600; color: #0f172a; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                      {{ row.suggested_item?.material_name || row.suggested_item?.category }} · {{ row.suggested_item?.model_spec }}
+                      <template v-if="row.decision === 'standard'">
+                        {{ row.suggested_item?.material_name || row.suggested_item?.category }} · {{ row.suggested_item?.model_spec }}
+                      </template>
+                      <template v-else>
+                        {{ row.raw_fitting_type }} · {{ row.raw_model_spec }}
+                      </template>
+                    </span>
+                    <span class="stock-pill" :class="row.decision === 'standard' ? 'deduct' : 'no-deduct'">
+                      {{ row.decision === 'standard' ? '🟢 扣减库存' : '⚪ 不扣减库存' }}
                     </span>
                   </div>
-                  <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                  <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                     <span style="font-weight: 700; color: #2563eb; font-size: 13px;">{{ row.shipped_qty }} {{ row.unit || '件' }}</span>
-                    <span class="tag-badge success" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">🟢 标准型号</span>
+                    <button
+                      v-if="row.decision === 'standard'"
+                      type="button"
+                      class="btn ghost btn-xs"
+                      style="font-size: 11px; padding: 2px 7px; color: #64748b; border: 1px dashed #cbd5e1; background: #fff;"
+                      @click="row.decision = 'raw'"
+                    >
+                      转为原样
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      class="btn ghost btn-xs"
+                      style="font-size: 11px; padding: 2px 7px; color: #0f766e; border: 1px solid #5eead4; background: #fff;"
+                      @click="row.decision = 'standard'"
+                    >
+                      采纳标准
+                    </button>
                   </div>
                 </div>
 
-                <!-- 场景 2: 存在语义矫正 / 多候选 / 非标件的行 (仅需决策的行才展开对比卡片) -->
+                <!-- 场景 2: 存在语义矫正 / 多候选 / 非标件的行 -->
                 <div
                   v-else
                   class="audit-row-card"
-                  :style="{
-                    border: '1px solid ' + (row.decision === 'standard' ? '#bbf7d0' : (row.match_type === 'none' ? '#e2e8f0' : '#fed7aa')),
-                    background: row.decision === 'standard' ? '#f0fdf4' : (row.match_type === 'none' ? '#f8fafc' : '#fff7ed'),
-                    borderRadius: '8px',
-                    padding: '10px 12px'
-                  }"
+                  :class="[row.decision === 'standard' ? 'is-standard' : 'is-raw']"
                 >
-                  <!-- 卡片顶栏 -->
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <span style="font-weight: bold; font-size: 13px; color: #1e293b;">#{{ idx + 1 }}</span>
-                      <span style="font-weight: 600; color: #2563eb; font-size: 13px;">发货: {{ row.shipped_qty }} {{ row.unit || '件' }}</span>
+                  <!-- 卡片顶栏：序号 + 原始录入 + 发货数量 + 实时库存扣减胶囊 -->
+                  <div class="audit-card-topbar">
+                    <div class="left-badges">
+                      <span class="index-badge">#{{ idx + 1 }}</span>
+                      <span class="raw-pill">原始: {{ row.raw_fitting_type }} · {{ row.raw_model_spec }}</span>
+                      <span class="qty-pill">发货: <strong>{{ row.shipped_qty }}</strong> {{ row.unit || '件' }}</span>
                     </div>
-                    <div>
-                      <span v-if="row.decision === 'standard'" class="tag-badge success" style="font-size: 11px;">🟢 采纳标准型号 (可自动扣减库存)</span>
-                      <span v-else class="tag-badge warning" style="font-size: 11px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;">ℹ️ 保留原样非标 (不扣减现货库存)</span>
+                    <div class="status-indicator">
+                      <span class="stock-pill" :class="row.decision === 'standard' ? 'deduct' : 'no-deduct'">
+                        {{ row.decision === 'standard' ? '🟢 扣减库存' : '⚪ 不扣减库存' }}
+                      </span>
                     </div>
                   </div>
 
-                  <!-- 左右对比/决策区 -->
-                  <div style="display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; font-size: 12px; text-align: left;">
-                    <!-- 左边: 原始输入 -->
-                    <div style="background: rgba(0,0,0,0.03); padding: 6px 8px; border-radius: 6px;">
-                      <div style="color: #64748b; font-size: 11px; margin-bottom: 2px;">您录入的原始信息:</div>
-                      <div style="font-weight: 600; color: #1e293b;">类型: {{ row.raw_fitting_type }}</div>
-                      <div style="color: #334155; word-break: break-all;">型号: {{ row.raw_model_spec }}</div>
+                  <!-- 决策选项交互 Deck -->
+                  <div class="audit-decision-deck">
+                    <!-- 情况 A: 唯一推荐标准项 (极简双卡片对比) -->
+                    <div v-if="row.match_type === 'dna_unique'" class="decision-options-grid">
+                      <!-- 选项 1: 推荐标准型号 -->
+                      <div
+                        class="decision-choice-card choice-standard"
+                        :class="{ active: row.decision === 'standard' }"
+                        @click="row.decision = 'standard'"
+                      >
+                        <div class="choice-body">
+                          <div class="choice-title-row">
+                            <span class="choice-tag recommend">标准型号</span>
+                            <span class="choice-material-name">{{ row.suggested_item?.material_name || row.suggested_item?.category }}</span>
+                          </div>
+                          <div class="choice-spec-row">
+                            <span class="choice-spec-text">规格: <strong>{{ row.suggested_item?.model_spec }}</strong></span>
+                            <span class="stock-pill deduct mini">🟢 扣减库存</span>
+                          </div>
+                        </div>
+                        <div v-if="row.decision === 'standard'" class="choice-check-mark">✓</div>
+                      </div>
+
+                      <!-- 选项 2: 保留原始非标 -->
+                      <div
+                        class="decision-choice-card choice-raw"
+                        :class="{ active: row.decision === 'raw' }"
+                        @click="row.decision = 'raw'"
+                      >
+                        <div class="choice-body">
+                          <div class="choice-title-row">
+                            <span class="choice-tag raw">保留原样</span>
+                            <span class="choice-material-name">{{ row.raw_fitting_type }} · {{ row.raw_model_spec }}</span>
+                          </div>
+                          <div class="choice-spec-row">
+                            <span class="choice-spec-text">按原填报发货</span>
+                            <span class="stock-pill no-deduct mini">⚪ 不扣减库存</span>
+                          </div>
+                        </div>
+                        <div v-if="row.decision === 'raw'" class="choice-check-mark">✓</div>
+                      </div>
                     </div>
 
-                    <!-- 右边: 决策选项 -->
-                    <div style="background: #fff; padding: 6px 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                      <!-- 情况 A: 语义提取匹配到唯一标准项 -->
-                      <div v-if="row.match_type === 'dna_unique'">
-                        <div style="color: #0f766e; font-size: 11px; margin-bottom: 4px; font-weight: 600;">
-                          🔍 识别到标准对应物料:
-                        </div>
-                        <label style="display: flex; align-items: flex-start; gap: 6px; cursor: pointer; margin-bottom: 4px;">
-                          <input type="radio" :name="'decision_' + idx" value="standard" v-model="row.decision" style="margin-top: 2px;" />
-                          <div>
-                            <span style="font-weight: bold; color: #065f46;">{{ row.suggested_item?.material_name || row.suggested_item?.category }} · {{ row.suggested_item?.model_spec }}</span>
-                            <span style="color: #64748b; font-size: 11px; display: block;">大类: {{ row.suggested_item?.category }}</span>
-                          </div>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #64748b;">
-                          <input type="radio" :name="'decision_' + idx" value="raw" v-model="row.decision" />
-                          <span>保留原样提交（现场非标件，不采纳该标准型号）</span>
-                        </label>
-                      </div>
-
-                      <!-- 情况 B: 找到多个候选 -->
-                      <div v-else-if="row.match_type === 'candidates'">
-                        <div style="color: #c2410c; font-size: 11px; margin-bottom: 4px; font-weight: 600;">
-                          ⚠️ 找到 {{ row.candidates.length }} 个近似标准型号，请核对选择:
-                        </div>
-                        <select v-model="row.selected_candidate_key" @change="handleCandidateSelect(row)" class="input" style="width: 100%; font-size: 12px; padding: 3px 6px; margin-bottom: 4px;">
+                    <!-- 情况 B: 找到多个候选 (极简下拉选择) -->
+                    <div v-else-if="row.match_type === 'candidates'" class="candidates-decision-panel">
+                      <div class="candidates-select-wrapper">
+                        <select v-model="row.selected_candidate_key" @change="handleCandidateSelect(row)" class="custom-audit-select">
                           <option v-for="cand in row.candidates" :key="cand._key" :value="cand._key">
-                            {{ cand.material_name || cand.category }} · {{ cand.model_spec }}
+                            🟢 [标准] {{ cand.material_name || cand.category }} · {{ cand.model_spec }} (扣减库存)
                           </option>
-                          <option value="__RAW__">-- 都不符合，保留我的原样输入 --</option>
+                          <option value="__RAW__">
+                            ⚪ [原样] 保留填报：{{ row.raw_fitting_type }} · {{ row.raw_model_spec }} (不扣减库存)
+                          </option>
                         </select>
-                        <div style="font-size: 11px; color: #64748b;">
-                          {{ row.decision === 'standard' ? '已选择该标准型号' : '已选择保留原始录入作为非标件' }}
-                        </div>
                       </div>
+                    </div>
 
-                      <!-- 情况 C: 标准库未收录 -->
-                      <div v-else>
-                        <div style="color: #64748b; font-size: 11px; margin-bottom: 2px; font-weight: 600;">
-                          ⚪ 标准价格库未收录该规格
-                        </div>
-                        <div style="color: #475569; font-size: 11.5px; line-height: 1.35;">
-                          系统将保留您的原始录入，作为【合同外非标物资】正常完成整车发货，但不参与现货库存自动扣减。
-                        </div>
-                      </div>
+                    <!-- 情况 C: 标准库未收录 (极简单行) -->
+                    <div v-else class="none-match-panel">
+                      <span class="none-match-text">⚪ 标准库未收录，将按原始输入完成发货</span>
+                      <span class="stock-pill no-deduct mini">⚪ 不扣减库存</span>
                     </div>
                   </div>
                 </div>
@@ -2193,14 +2222,9 @@
           <!-- 底部提交操作栏 -->
           <div style="padding: 10px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div style="font-size: 13px; color: #334155; text-align: left;">
-              <span v-if="!hasNonStandardOrAmbiguousItems">
-                本次整车共 <strong style="color: #15803d; font-size: 14px;">{{ fittingAuditItems.length }}</strong> 笔明细全部为标准型号
-              </span>
-              <span v-else>
-                本次整车共 <strong style="color: #0f766e;">{{ fittingAuditItems.length }}</strong> 笔明细：
-                <span style="color: #16a34a; font-weight: 600;">{{ auditStandardCount }} 笔采纳标准</span>，
-                <span style="color: #ea580c; font-weight: 600;">{{ auditRawCount }} 笔保留非标</span>
-              </span>
+              本次整车共 <strong>{{ fittingAuditItems.length }}</strong> 笔明细：
+              <span style="color: #16a34a; font-weight: 600;">{{ auditStandardCount }} 笔扣减库存</span>，
+              <span style="color: #64748b; font-weight: 600;">{{ auditRawCount }} 笔不扣减库存</span>
             </div>
             <div style="display: flex; gap: 10px;">
               <button
@@ -2416,11 +2440,13 @@
                   <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">
                     {{ isFittingDeliveryModal ? (it.fitting_type || it.fittingType || '管件') : '保温管' }}
                     <span v-if="it.status === 'cancelled'" class="tag-badge" style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-size: 10px; margin-left: 4px;">已撤销</span>
+                    <span v-else-if="it.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 10px; margin-left: 4px;">⚖️ 联合会审中</span>
                   </td>
                   <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ isFittingDeliveryModal ? (it.model_spec || it.modelSpec || '—') : (it.pipe_model_id || it.pipeModelName || deliveryDetailModalData.pipeModelName || '未填') }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold;" :style="{ color: it.status === 'cancelled' ? '#94a3b8' : '#2563eb', textDecoration: it.status === 'cancelled' ? 'line-through' : 'none', whiteSpace: 'nowrap' }">{{ formatNumber(it.shipped_qty || it.shippedQty) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
                     <span v-if="it.status === 'cancelled'" style="color: #ef4444; font-size: 11px;">已撤销</span>
+                    <span v-else-if="it.status === 'under_review'" style="color: #ea580c; font-size: 11px;">⚖️ 会审中</span>
                     <span v-else-if="Boolean(deliveryDetailModalData.arrivedConfirmAt || (it.status && it.status !== 'shipped' && it.status !== 'pending_arrival') || (deliveryDetailModalData.status && deliveryDetailModalData.status !== 'shipped' && deliveryDetailModalData.status !== 'pending_arrival'))" style="color: #059669;">
                       {{ formatNumber(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined && it.arrivedQty !== null ? it.arrivedQty : 0)) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}
                     </span>
@@ -5333,6 +5359,14 @@ const importFittingHelperToGrid = () => {
 }
 
 // --- 全集符号清洗与语义匹配算法 ---
+// 常用供暖钢管外径 (mm) 到公称通径 DN 映射字典
+const FITTING_OD_TO_DN_MAP = {
+  32: 25, 38: 32, 42: 32, 45: 40, 48: 40, 57: 50, 76: 65, 89: 80,
+  108: 100, 114: 100, 133: 125, 140: 125, 159: 150, 168: 150,
+  219: 200, 273: 250, 325: 300, 377: 350, 426: 400, 478: 450,
+  529: 500, 630: 600, 720: 700, 820: 800, 920: 900, 1020: 1000
+}
+
 function cleanFittingSymbolString(str) {
   if (!str) return ''
   let s = String(str).trim()
@@ -5351,13 +5385,17 @@ function extractFittingDNA(fittingType, modelSpec) {
 
   let family = null
   if (/弯头|ELBOW/i.test(s)) family = '弯头'
-  else if (/三通|跨越三通|分支|TEE/i.test(s)) family = '三通'
-  else if (/变径|异径|大小头|REDUCER/i.test(s)) family = '变径管'
-  else if (/封头|管帽|CAP/i.test(s)) family = '封头'
+  else if (/(?:排气|放气|疏水|放水|泄水)?(?:阀门|球阀|平衡阀|蝶阀|截止阀|阀)/i.test(s) && !/三通/i.test(s)) {
+    if (/平衡阀/i.test(s)) family = '物联网平衡阀'
+    else family = '球阀'
+  }
+  else if (/三通|跨越三通|直三通|分支|TEE|排气|放气|疏水|放水|泄水/i.test(s)) family = '三通'
+  else if (/变径|异径|大小头|同心|偏心|REDUCER/i.test(s)) family = '变径管'
+  else if (/封头|管帽|盲板|堵头|CAP/i.test(s)) family = '封头'
   else if (/弯管|BEND/i.test(s)) family = '弯管'
   else if (/补偿器|膨胀节|波纹/i.test(s)) family = '补偿器'
-  else if (/平衡阀/i.test(s)) family = '物联网平衡阀'
-  else if (/球阀|阀门|VALVE/i.test(s)) family = '球阀'
+  else if (/固定节|固定支架|固定墩|ANCHOR/i.test(s)) family = '固定节'
+  else if (/密封节/i.test(s)) family = '密封节'
 
   let angle = null
   let sNoAngle = s
@@ -5375,15 +5413,21 @@ function extractFittingDNA(fittingType, modelSpec) {
   }
 
   let dns = []
-  const dnExplicit = Array.from(sNoAngle.matchAll(/DN\s*(\d+)/gi)).map(m => m[1])
-  if (dnExplicit.length) {
-    dns = dnExplicit
+  // 优先匹配双口径成对形式，支持 / * - 等连接符
+  const pair = sNoAngle.match(/(?:DN)?\s*(\d+)\s*[\/\*\-]\s*(?:DN)?\s*(\d+)/i)
+  if (pair) {
+    const d1 = Number(pair[1])
+    const d2 = Number(pair[2])
+    const dn1 = FITTING_OD_TO_DN_MAP[d1] || d1
+    const dn2 = FITTING_OD_TO_DN_MAP[d2] || d2
+    dns = [String(dn1), String(dn2)]
   } else {
-    const pair = sNoAngle.match(/(\d+)\s*[\/\*]\s*(\d+)/)
-    if (pair) {
-      dns = [pair[1], pair[2]]
+    const dnExplicit = Array.from(sNoAngle.matchAll(/DN\s*(\d+)/gi)).map(m => m[1])
+    if (dnExplicit.length) {
+      dns = dnExplicit
     } else {
-      dns = (sNoAngle.match(/\d+/g) || []).filter(n => Number(n) >= 15)
+      const nums = (sNoAngle.match(/\d+/g) || []).map(Number).filter(n => n >= 15)
+      dns = nums.map(n => String(FITTING_OD_TO_DN_MAP[n] || n))
     }
   }
 
@@ -5396,23 +5440,42 @@ function matchSingleFittingItem(rawFittingType, rawModelSpec, library) {
   const cleanedRawSpec = cleanFittingSymbolString(rawSpec)
   const inputDNA = extractFittingDNA(rawType, rawSpec)
 
-  // Pass 1: 完全或去空格归一化匹配
+  // Pass 1: 品类族一致且规格型号完全吻合 (Strict Exact Match)
+  const exactCandidates = []
   for (const std of library) {
+    const stdDNA = extractFittingDNA(`${std.category || ''} ${std.material_name || ''}`, std.model_spec)
     const stdSpecCleaned = cleanFittingSymbolString(std.model_spec)
-    if (cleanedRawSpec.toLowerCase() === stdSpecCleaned.toLowerCase()) {
-      return {
-        match_type: 'exact',
-        suggested_item: std,
-        candidates: [std],
-        confidence: 1.0,
-      }
+    const specExact = (cleanedRawSpec.toLowerCase() === stdSpecCleaned.toLowerCase())
+    const familyMatch = Boolean(
+      (inputDNA.family && stdDNA.family && inputDNA.family === stdDNA.family) ||
+      (!inputDNA.family && (std.category?.includes(rawType) || std.material_name?.includes(rawType)))
+    )
+    if (specExact && familyMatch) {
+      exactCandidates.push(std)
     }
   }
 
-  // Pass 2: 基于物理 DNA 语义唯一匹配与候选查找
+  if (exactCandidates.length === 1) {
+    return {
+      match_type: 'exact',
+      suggested_item: exactCandidates[0],
+      candidates: exactCandidates,
+      confidence: 1.0,
+    }
+  } else if (exactCandidates.length > 1) {
+    // 存在多个同规格同品类物料 (如跨越三通 vs 直三通)，作为 candidates 让用户自主选择
+    return {
+      match_type: 'candidates',
+      suggested_item: exactCandidates[0],
+      candidates: exactCandidates,
+      confidence: 0.9,
+    }
+  }
+
+  // Pass 2: 基于物理 DNA 语义唯一匹配与候选查找 (Semantic Match)
   const candidates = []
   for (const std of library) {
-    const stdDNA = extractFittingDNA(std.category, std.model_spec)
+    const stdDNA = extractFittingDNA(`${std.category || ''} ${std.material_name || ''}`, std.model_spec)
     if (inputDNA.family && stdDNA.family && inputDNA.family === stdDNA.family) {
       if (stdDNA.family === '弯头') {
         const angleMatch = !inputDNA.angle || (stdDNA.angle === inputDNA.angle)
@@ -5423,7 +5486,10 @@ function matchSingleFittingItem(rawFittingType, rawModelSpec, library) {
         }
       } else if (['三通', '变径管'].includes(stdDNA.family)) {
         if (inputDNA.dns.length >= 2 && stdDNA.dns.length >= 2) {
-          if (inputDNA.dns[0] === stdDNA.dns[0] && inputDNA.dns[1] === stdDNA.dns[1]) {
+          // 双口径支持无序比对 (如 80/50 匹配 50/80)
+          const exactPair = (inputDNA.dns[0] === stdDNA.dns[0] && inputDNA.dns[1] === stdDNA.dns[1])
+          const reversedPair = (inputDNA.dns[0] === stdDNA.dns[1] && inputDNA.dns[1] === stdDNA.dns[0])
+          if (exactPair || reversedPair) {
             candidates.push(std)
           }
         } else if (inputDNA.dns.length >= 1 && stdDNA.dns.length >= 1) {
@@ -5451,7 +5517,24 @@ function matchSingleFittingItem(rawFittingType, rawModelSpec, library) {
       match_type: 'candidates',
       suggested_item: candidates[0],
       candidates,
-      confidence: 0.7,
+      confidence: 0.75,
+    }
+  }
+
+  // Pass 3: 规格相同但品类未识别的候选兜底推荐 (供用户人工选择，不武断认定)
+  const specFallbackCandidates = []
+  for (const std of library) {
+    const stdSpecCleaned = cleanFittingSymbolString(std.model_spec)
+    if (cleanedRawSpec.toLowerCase() === stdSpecCleaned.toLowerCase()) {
+      specFallbackCandidates.push(std)
+    }
+  }
+  if (specFallbackCandidates.length > 0) {
+    return {
+      match_type: 'candidates',
+      suggested_item: specFallbackCandidates[0],
+      candidates: specFallbackCandidates,
+      confidence: 0.5,
     }
   }
 
@@ -5545,11 +5628,32 @@ const confirmAuditAndProceedSubmit = async () => {
 }
 
 const FITTING_ALIAS_MAP = {
+  '变径管': '大小头',
+  '同心变径管': '大小头',
+  '偏心变径管': '大小头',
   '异径管': '大小头',
   '大小头(异径管)': '大小头',
   '异径管(大小头)': '大小头',
   '波纹补偿器': '补偿器',
-  '弯管': '直缝弯管'
+  '套筒补偿器': '补偿器',
+  '跨越三通': '三通',
+  '直三通': '三通',
+  '焊接三通': '三通',
+  '排气三通': '三通',
+  '放气三通': '三通',
+  '疏水三通': '三通',
+  '放水三通': '三通',
+  '泄水三通': '三通',
+  '排气': '三通',
+  '放气': '三通',
+  '疏水': '三通',
+  '放水': '三通',
+  '泄水': '三通',
+  '冲压弯头': '弯头',
+  '预制保温弯头': '弯头',
+  '弯管': '直缝弯管',
+  '固定支架': '固定节',
+  '固定墩': '固定节'
 }
 
 function getNormalizedFittingType(typeStr) {
@@ -5899,6 +6003,7 @@ const allFittingDeliveries = ref([])
 
 const getFittingExportStatusText = (status) => {
   if (status === 'cancelled') return '已撤销'
+  if (status === 'under_review') return '⚖️ 联合会审中'
   if (status === 'warehouse_confirmed' || status === 'completed') return '库管已确认'
   if (status === 'construction_confirmed' || status === 'pending_warehouse' || status === 'received') return '待库管确认'
   if (status === 'arrived' || status === 'pending_receive') return '待施工接收'
@@ -6011,6 +6116,7 @@ const groupedFittingDeliveries = computed(() => {
 
   // 短板状态判定原则：若多条明细中有任何一条状态落后于其它条目，外层 group.status 展现该落后状态
   const statusRankMap = {
+    'under_review': -0.5,
     'shipped': 0,
     'pending_arrival': 0,
     'arrived': 1,
@@ -8739,6 +8845,7 @@ input.no-spin,
 .status-pending_receive { background: #fef3c7; color: #92400e; }
 .status-pending_warehouse { background: #ede9fe; color: #6d28d9; }
 .status-completed { background: #dcfce7; color: #166534; }
+.status-under_review { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
 .status-cancelled { background: #fee2e2; color: #b91c1c; }
 .status-abnormal { background: #fff1f2; color: #be123c; }
 
@@ -10501,11 +10608,293 @@ input.no-spin,
   border-radius: 4px;
 }
 
-.audit-row-card {
+/* 紧凑条目样式 (完全吻合项) */
+.audit-exact-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   transition: all 0.2s ease;
 }
+.audit-exact-strip.is-standard {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
+.audit-exact-strip.is-raw {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+/* 库存扣减标识胶囊 */
+.stock-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.stock-pill.deduct {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+.stock-pill.no-deduct {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+.stock-pill.mini {
+  font-size: 10.5px;
+  padding: 1px 5px;
+}
+
+.audit-row-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.audit-row-card.is-standard {
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 40%);
+}
+.audit-row-card.is-raw {
+  border-color: #cbd5e1;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 40%);
+}
 .audit-row-card:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.audit-card-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.audit-card-topbar .left-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.audit-card-topbar .index-badge, .audit-exact-strip .index-badge {
+  font-weight: 700;
+  font-size: 11px;
+  background: #0f766e;
+  color: #ffffff;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.raw-pill {
+  font-size: 12px;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.audit-card-topbar .qty-pill {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #1e293b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.audit-card-topbar .qty-pill strong {
+  color: #2563eb;
+  font-size: 13.5px;
+}
+
+.audit-raw-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.audit-raw-strip .raw-title {
+  color: #64748b;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.audit-raw-strip .raw-chip {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.audit-raw-strip .type-chip {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.audit-raw-strip .spec-chip {
+  background: #f1f5f9;
+  color: #334155;
+}
+.audit-raw-strip .raw-hint {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* 决策选项网格 (并排对比大卡片) */
+.decision-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.decision-choice-card {
+  position: relative;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.decision-choice-card:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+.decision-choice-card.active {
+  border-color: #0d9488;
+  background: #f0fdfa;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.12);
+}
+.decision-choice-card.choice-raw.active {
+  border-color: #64748b;
+  background: #f8fafc;
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.12);
+}
+.decision-choice-card .choice-radio {
+  margin-top: 2px;
+}
+.decision-choice-card .choice-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+.choice-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.choice-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.choice-tag.recommend {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+.choice-tag.raw {
+  background: #f1f5f9;
+  color: #475569;
+}
+.choice-material-name {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.choice-spec-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #334155;
+  flex-wrap: wrap;
+}
+.choice-check-mark {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  background: #0d9488;
+  color: #fff;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.decision-choice-card.choice-raw .choice-check-mark {
+  background: #64748b;
+}
+
+/* 多候选下拉面板 */
+.candidates-decision-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.custom-audit-select {
+  width: 100%;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.2s ease;
+}
+.custom-audit-select:focus {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+/* 未收录非标面板 */
+.none-match-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  text-align: left;
+}
+.none-match-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .decision-options-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 

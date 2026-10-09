@@ -20,7 +20,7 @@
         <div class="topbar-actions">
           <button type="button" class="btn primary btn-initiate-guide" @click="howToInitiateModalVisible = true">
             <span class="btn-icon">➕</span>
-            <span>如何提请会审 / 定位订单</span>
+            <span>提请会审流程说明</span>
           </button>
           <button type="button" class="btn ghost btn-back" @click="goProjectPages">
             ⬅️ 返回功能页
@@ -79,7 +79,7 @@
           :class="{ active: currentTab === 'history' }"
           @click="switchTab('history')"
         >
-          <span>📚 历史会审档案</span>
+          <span>📚 已完结会审档案</span>
         </button>
         <button
           type="button"
@@ -98,7 +98,7 @@
             <span>物料类型</span>
             <select v-model="filterCategory" @change="handleFilterChange">
               <option value="">全部物料</option>
-              <option value="pipe">🔥 保温直管</option>
+              <option value="pipe">🔥 保温管</option>
               <option value="fitting">🔩 管件与阀门</option>
             </select>
           </div>
@@ -148,202 +148,308 @@
           </p>
         </div>
 
-        <div v-else class="review-cards-list">
-          <div
-            v-for="rev in reviewItems"
-            :key="rev.id"
-            class="review-item-card"
-            :class="[`status-${rev.review_status}`, { 'needs-me': rev.needs_my_vote }]"
-          >
-            <!-- 卡片顶栏 -->
-            <div class="card-header-row">
-              <div class="header-left">
-                <span class="cat-pill" :class="rev.order_category">
-                  {{ rev.order_category === 'pipe' ? '🔥 保温直管' : '🔩 管件阀门' }}
-                </span>
-                <span class="review-no font-mono">{{ rev.review_no }}</span>
-                <span class="order-ref font-mono">订单号: {{ rev.order_no }}</span>
+        <template v-else>
+          <!-- 列表折叠与批量控制栏 -->
+          <div class="list-control-bar">
+            <div class="control-left">
+              <span class="total-text">共找到 <strong>{{ totalCount }}</strong> 笔会审提案</span>
+              <span class="fold-hint-text">（默认已折叠，点击卡片或按钮可展开查看明细）</span>
+            </div>
+            <div class="control-right">
+              <button type="button" class="btn ghost btn-xs btn-ctrl-fold" @click="expandAll">
+                展开全部 ▾
+              </button>
+              <button type="button" class="btn ghost btn-xs btn-ctrl-fold" @click="collapseAll">
+                收起全部 ▴
+              </button>
+            </div>
+          </div>
+
+          <div class="review-cards-list">
+            <div
+              v-for="rev in reviewItems"
+              :key="rev.id"
+              class="review-item-card"
+              :class="[
+                `status-${rev.review_status}`,
+                { 'needs-me': rev.needs_my_vote, 'is-card-collapsed': !isExpanded(rev.id) }
+              ]"
+            >
+              <!-- 卡片顶栏（整行支持点击展开/折叠） -->
+              <div
+                class="card-header-row clickable-head"
+                @click="toggleExpand(rev.id)"
+                :title="isExpanded(rev.id) ? '点击收起提案详情' : '点击展开提案详情'"
+              >
+                <div class="header-left">
+                  <span class="fold-arrow" :class="{ 'is-open': isExpanded(rev.id) }">
+                    {{ isExpanded(rev.id) ? '▼' : '▶' }}
+                  </span>
+                  <span class="cat-pill" :class="rev.order_category">
+                    {{ rev.order_category === 'pipe' ? '🔥 保温管' : '🔩 管件阀门' }}
+                  </span>
+                  <span class="review-no font-mono">{{ rev.review_no }}</span>
+                  <span class="order-ref font-mono">订单号: {{ rev.order_no }}</span>
+                </div>
+                <div class="header-right">
+                  <!-- 待我表决高亮红标 -->
+                  <span v-if="rev.needs_my_vote" class="needs-vote-badge">
+                    ⚡ 待我表决
+                  </span>
+                  <!-- 状态徽章 -->
+                  <span class="status-badge" :class="`badge-${rev.review_status}`">
+                    {{ formatReviewStatus(rev) }}
+                  </span>
+                  <!-- 折叠/展开独立按钮 -->
+                  <button
+                    type="button"
+                    class="btn ghost btn-xs btn-fold-toggle"
+                    @click.stop="toggleExpand(rev.id)"
+                  >
+                    {{ isExpanded(rev.id) ? '收起 ▴' : '展开 ▾' }}
+                  </button>
+                </div>
               </div>
-              <div class="header-right">
-                <span class="status-badge" :class="`badge-${rev.review_status}`">
-                  {{ formatReviewStatus(rev) }}
-                </span>
+
+              <!-- 折叠态紧凑摘要条 (默认展示) -->
+              <div v-if="!isExpanded(rev.id)" class="folded-summary-strip" @click="toggleExpand(rev.id)">
+                <div class="summary-left">
+                  <span class="sum-tag">👤 提请人：<strong>{{ rev.initiator_name }}</strong> ({{ rev.initiator_role }})</span>
+                  <span class="sum-tag">📍 {{ rev.section_1_name }}</span>
+                  <span class="sum-tag">🏭 {{ rev.supply_entity_name }}</span>
+                  <span class="sum-patch-preview">
+                    📝 拟更正：<strong>{{ formatPatchSummary(rev.proposed_patch) }}</strong>
+                  </span>
+                  <span v-if="rev.review_status === 'approved'" class="sum-tag tag-success font-mono">
+                    ✅ 办结生效: {{ rev.finalized_at || rev.updated_at }}
+                  </span>
+                  <span v-else-if="rev.review_status === 'rejected'" class="sum-tag tag-reject font-mono">
+                    🛑 异议终止: {{ rev.finalized_at || rev.updated_at }}
+                  </span>
+                  <span v-else-if="rev.review_status === 'cancelled'" class="sum-tag tag-cancel font-mono">
+                    ⚪ 已撤回: {{ rev.finalized_at || rev.updated_at }}
+                  </span>
+                </div>
+                <div class="summary-right">
+                  <span class="sum-reason-text" :title="rev.review_reason">事由: {{ rev.review_reason }}</span>
+                </div>
               </div>
-            </div>
 
-            <!-- 主体与元数据条 -->
-            <div class="meta-strip">
-              <span class="meta-item">📍 需求标段：<strong>{{ rev.section_1_name }}</strong></span>
-              <span class="meta-item">🏭 供货厂家：<strong>{{ rev.supply_entity_name }}</strong></span>
-              <span class="meta-item">👤 提请人：<strong>{{ rev.initiator_name }}</strong> ({{ rev.initiator_role }})</span>
-              <span class="meta-item time">🕒 提请时间：{{ rev.created_at }}</span>
-            </div>
+              <!-- 展开态完整详情区 (展开后展示) -->
+              <div v-if="isExpanded(rev.id)" class="expanded-details-body">
+                <!-- 主体与元数据条 -->
+                <div class="meta-strip">
+                  <span class="meta-item">📍 需求标段：<strong>{{ rev.section_1_name }}</strong></span>
+                  <span class="meta-item">🏭 供货厂家：<strong>{{ rev.supply_entity_name }}</strong></span>
+                  <span class="meta-item">👤 提请人：<strong>{{ rev.initiator_name }}</strong> ({{ rev.initiator_role }})</span>
+                  <span class="meta-item time">🕒 提请时间：{{ rev.created_at }}</span>
+                </div>
 
-            <!-- 提请事由说明 -->
-            <div class="reason-quote-box">
-              <div class="quote-title">📢 提请校核事由：</div>
-              <div class="quote-content">{{ rev.review_reason }}</div>
-            </div>
+                <!-- 提请事由说明 -->
+                <div class="reason-quote-box">
+                  <div class="quote-title">📢 提请校核事由：</div>
+                  <div class="quote-content">{{ rev.review_reason }}</div>
+                </div>
 
-            <!-- 拟更正内容对比面板 (Diff Panel) -->
-            <div class="diff-block">
-              <div class="diff-title">📝 拟更正内容比对：</div>
-              <div class="diff-items-grid">
-                <template v-for="(val, key) in rev.proposed_patch" :key="key">
-                  <!-- 车载订单明细列表 -->
-                  <div v-if="key === 'items' && Array.isArray(val)" class="diff-items-full-block">
-                    <div class="diff-items-header-bar">
-                      <span class="prop-name">📦 车载各订单明细调整 (共 {{ val.length }} 项)：</span>
+                <!-- 拟更正内容对比面板 (Diff Panel) -->
+                <div class="diff-block">
+                  <div class="diff-title">📝 拟更正内容比对：</div>
+                  <div class="diff-items-grid">
+                    <template v-for="(val, key) in rev.proposed_patch" :key="key">
+                      <!-- 车载订单明细列表 -->
+                      <div v-if="key === 'items' && Array.isArray(val)" class="diff-items-full-block">
+                        <div class="diff-items-header-bar">
+                          <span class="prop-name">📦 车载各订单明细调整 (共 {{ val.length }} 项)：</span>
+                        </div>
+                        <div class="diff-items-mini-table-wrap">
+                          <table class="diff-items-mini-table">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>单号</th>
+                                <th>拟更正品类</th>
+                                <th>拟更正规格型号</th>
+                                <th>更正发货量</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="(it, itIdx) in val" :key="it.id || itIdx">
+                                <td>{{ itIdx + 1 }}</td>
+                                <td class="font-mono">{{ it.order_no || '—' }}</td>
+                                <td>{{ it.fitting_type || '—' }}</td>
+                                <td>{{ it.model_spec || '—' }}</td>
+                                <td class="font-mono font-bold" style="color: #ea580c;">
+                                  {{ it.shipped_qty }} {{ it.unit || '件' }}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <!-- 常规单值更正 -->
+                      <div v-else class="diff-grid-row">
+                        <span class="prop-name">{{ formatPatchKey(key) }}：</span>
+                        <span class="prop-old" title="原订单数据">{{ formatSnapshotVal(rev.original_snapshot, key) }}</span>
+                        <span class="prop-arrow">➔</span>
+                        <span class="prop-new" title="更正目标值">{{ val }}</span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- 现场凭据图片预览 -->
+                <div v-if="rev.attachments && rev.attachments.length" class="attachments-strip">
+                  <span class="att-title">📷 现场照片凭据：</span>
+                  <div class="att-thumbs-row">
+                    <img
+                      v-for="(att, idx) in rev.attachments"
+                      :key="idx"
+                      :src="att.url"
+                      :alt="att.name"
+                      class="att-img"
+                      @click="openImageViewer(att.url)"
+                      title="点击查看高清大图"
+                    />
+                  </div>
+                </div>
+
+                <!-- 多方会签流转矩阵 (Consensus Pipeline) -->
+                <div class="pipeline-section">
+                  <div class="pipeline-title">
+                    <span>👥 责任主体联审表决进度 (全票同意即生效)：</span>
+                    <span class="pipeline-ratio font-mono">
+                      已同意 {{ getApprovedVoteCount(rev) }} / {{ getTotalVoteCount(rev) }} 方
+                    </span>
+                  </div>
+
+                  <div class="entities-vote-list">
+                    <!-- 发起人专属卡片（发起人主动提请，默认计入法定赞成票） -->
+                    <div class="entity-vote-card is-approved initiator-entity-card">
+                      <div class="card-ent-top">
+                        <div class="ent-info">
+                          <span class="ent-role-tag initiator-pill">{{ rev.initiator_role || '现场负责人' }} · 提请人</span>
+                          <strong class="ent-name">{{ rev.initiator_name || '提请主体' }}</strong>
+                        </div>
+                        <span class="vote-tag approved">✓ 发起并同意 (默认1票)</span>
+                      </div>
+                      <div class="card-vote-audit">
+                        <div class="audit-row">
+                          <span class="audit-signer">✍️ 提请经办: <strong>{{ rev.initiator_name }}</strong></span>
+                          <span class="audit-time">🕒 {{ rev.created_at }}</span>
+                        </div>
+                        <div class="audit-opinion" :title="rev.review_reason">
+                          💬 提请附言: {{ rev.review_reason }}
+                        </div>
+                      </div>
                     </div>
-                    <div class="diff-items-mini-table-wrap">
-                      <table class="diff-items-mini-table">
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>单号</th>
-                            <th>拟更正品类</th>
-                            <th>拟更正规格型号</th>
-                            <th>更正发货量</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="(it, itIdx) in val" :key="it.id || itIdx">
-                            <td>{{ itIdx + 1 }}</td>
-                            <td class="font-mono">{{ it.order_no || '—' }}</td>
-                            <td>{{ it.fitting_type || '—' }}</td>
-                            <td>{{ it.model_spec || '—' }}</td>
-                            <td class="font-mono font-bold" style="color: #ea580c;">
-                              {{ it.shipped_qty }} {{ it.unit || '件' }}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
+
+                    <!-- 协同表决主体卡片 -->
+                    <div
+                      v-for="ent in rev.required_entities"
+                      :key="`${ent.entity_type}_${ent.entity_id}`"
+                      class="entity-vote-card"
+                      :class="getEntityVoteClass(rev, ent)"
+                    >
+                      <div class="card-ent-top">
+                        <div class="ent-info">
+                          <span class="ent-role-tag">{{ ent.role_desc || ent.entity_type }}</span>
+                          <strong class="ent-name">{{ ent.entity_name }}</strong>
+                        </div>
+                        <template v-if="hasEntityApproved(rev, ent)">
+                          <span class="vote-tag approved">✓ 已同意核准</span>
+                        </template>
+                        <template v-else-if="hasEntityRejected(rev, ent)">
+                          <span class="vote-tag rejected">✕ 提出异议</span>
+                        </template>
+                        <template v-else>
+                          <span class="vote-tag pending">⌛ 待表决</span>
+                        </template>
+                      </div>
+
+                      <!-- 审计详情：经办人、时间、签署意见 -->
+                      <div v-if="getEntityVote(rev, ent)" class="card-vote-audit" :class="{ 'is-reject': hasEntityRejected(rev, ent) }">
+                        <div class="audit-row">
+                          <span class="audit-signer">✍️ 经办签署: <strong>{{ getEntityVote(rev, ent).voter_name || getEntityVote(rev, ent).voter_username }}</strong></span>
+                          <span class="audit-time">🕒 {{ getEntityVote(rev, ent).voted_at }}</span>
+                        </div>
+                        <div class="audit-opinion" :class="{ 'text-danger': hasEntityRejected(rev, ent) }">
+                          💬 {{ hasEntityApproved(rev, ent) ? '核准意见' : '异议说明' }}：{{ getEntityVote(rev, ent).vote_opinion || (hasEntityApproved(rev, ent) ? '经核验事实无误，同意更正' : '未填写具体理由') }}
+                        </div>
+                      </div>
+                      <div v-else-if="hasEntityRejected(rev, ent) && getEntityRejectOpinion(rev, ent)" class="card-vote-audit is-reject">
+                        <div class="audit-opinion text-danger">
+                          💬 异议说明：{{ getEntityRejectOpinion(rev, ent) }}
+                        </div>
+                      </div>
+                      <div v-else class="card-vote-audit is-pending">
+                        <span class="audit-wait-text">⌛ 待该主体经办人会签表决</span>
+                      </div>
                     </div>
                   </div>
-                  <!-- 常规单值更正 -->
-                  <div v-else class="diff-grid-row">
-                    <span class="prop-name">{{ formatPatchKey(key) }}：</span>
-                    <span class="prop-old" title="原订单数据">{{ formatSnapshotVal(rev.original_snapshot, key) }}</span>
-                    <span class="prop-arrow">➔</span>
-                    <span class="prop-new" title="更正目标值">{{ val }}</span>
+                </div>
+
+                <!-- 最终决议记录（若已办结） -->
+                <div v-if="rev.resolution_summary" class="resolution-summary-box">
+                  <span class="res-title">🏁 最终决议记录：</span>
+                  <span class="res-text">{{ rev.resolution_summary }}</span>
+                </div>
+
+                <!-- 操作动作工具栏 -->
+                <div class="card-actions-bar">
+                  <!-- 待我表决操作组 -->
+                  <div v-if="rev.needs_my_vote" class="action-group my-vote-group">
+                    <button
+                      type="button"
+                      class="btn primary btn-approve"
+                      @click="openApproveModal(rev)"
+                      :disabled="actionLoading"
+                    >
+                      ✓ 同意更正
+                    </button>
+                    <button
+                      type="button"
+                      class="btn danger-outline btn-reject"
+                      @click="openRejectModal(rev)"
+                      :disabled="actionLoading"
+                    >
+                      ✕ 提出异议
+                    </button>
                   </div>
-                </template>
-              </div>
-            </div>
 
-            <!-- 现场凭据图片预览 -->
-            <div v-if="rev.attachments && rev.attachments.length" class="attachments-strip">
-              <span class="att-title">📷 现场照片凭据：</span>
-              <div class="att-thumbs-row">
-                <img
-                  v-for="(att, idx) in rev.attachments"
-                  :key="idx"
-                  :src="att.url"
-                  :alt="att.name"
-                  class="att-img"
-                  @click="openImageViewer(att.url)"
-                  title="点击查看高清大图"
-                />
-              </div>
-            </div>
-
-            <!-- 多方会签流转矩阵 (Consensus Pipeline) -->
-            <div class="pipeline-section">
-              <div class="pipeline-title">
-                <span>👥 责任主体联审表决进度 (全票同意即生效)：</span>
-                <span class="pipeline-ratio font-mono">
-                  已同意 {{ (rev.approved_entities || []).length }} / {{ (rev.required_entities || []).length }} 方
-                </span>
-              </div>
-
-              <div class="entities-vote-list">
-                <div
-                  v-for="ent in rev.required_entities"
-                  :key="`${ent.entity_type}_${ent.entity_id}`"
-                  class="entity-vote-card"
-                  :class="getEntityVoteClass(rev, ent)"
-                >
-                  <div class="ent-info">
-                    <span class="ent-role-tag">{{ ent.role_desc || ent.entity_type }}</span>
-                    <strong class="ent-name">{{ ent.entity_name }}</strong>
+                  <div v-else-if="rev.my_voted" class="my-voted-hint">
+                    <span class="hint-icon">✓</span>
+                    <span>您名下主体已表决：<strong>{{ rev.my_vote_decision === 'approve' ? '已同意' : '已提异议' }}</strong></span>
                   </div>
-                  <div class="vote-result">
-                    <template v-if="hasEntityApproved(rev, ent)">
-                      <span class="vote-tag approved">✓ 已同意核准</span>
-                    </template>
-                    <template v-else-if="hasEntityRejected(rev, ent)">
-                      <span class="vote-tag rejected">✕ 提出异议</span>
-                      <p class="reject-reason-tip" v-if="getEntityRejectOpinion(rev, ent)">
-                        理由: {{ getEntityRejectOpinion(rev, ent) }}
-                      </p>
-                    </template>
-                    <template v-else>
-                      <span class="vote-tag pending">⌛ 待表决</span>
-                    </template>
+
+                  <div class="actions-right">
+                    <!-- 发起人撤回 -->
+                    <button
+                      v-if="rev.can_cancel"
+                      type="button"
+                      class="btn ghost btn-cancel-rev"
+                      @click="openCancelModal(rev)"
+                      :disabled="actionLoading"
+                    >
+                      撤回会审
+                    </button>
+
+                    <!-- 终局裁决仲裁（超级管理员及特许裁决员特权通道） -->
+                    <button
+                      v-if="rev.can_arbitrate"
+                      type="button"
+                      class="btn warning btn-arbitrate"
+                      @click="openArbitrateModal(rev)"
+                      :disabled="actionLoading"
+                      title="作为特许裁决员或超级管理员行使终局裁决权，打破死锁直接通过或驳回会审"
+                    >
+                      ⚖️ 终局裁决
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- 决议摘要（若已办结） -->
-            <div v-if="rev.resolution_summary" class="resolution-summary-box">
-              <span class="res-title">🏁 最终决议记录：</span>
-              <span class="res-text">{{ rev.resolution_summary }}</span>
-            </div>
-
-            <!-- 操作动作工具栏 -->
-            <div class="card-actions-bar">
-              <!-- 待我表决操作组 -->
-              <div v-if="rev.needs_my_vote" class="action-group my-vote-group">
-                <button
-                  type="button"
-                  class="btn primary btn-approve"
-                  @click="handleVoteClick(rev, 'approve')"
-                  :disabled="actionLoading"
-                >
-                  ✓ 同意更正
-                </button>
-                <button
-                  type="button"
-                  class="btn danger-outline btn-reject"
-                  @click="openRejectModal(rev)"
-                  :disabled="actionLoading"
-                >
-                  ✕ 提出异议
-                </button>
-              </div>
-
-              <div v-else-if="rev.my_voted" class="my-voted-hint">
-                <span class="hint-icon">✓</span>
-                <span>您名下主体已表决：<strong>{{ rev.my_vote_decision === 'approve' ? '已同意' : '已提异议' }}</strong></span>
-              </div>
-
-              <div class="actions-right">
-                <!-- 发起人撤回 -->
-                <button
-                  v-if="rev.can_cancel"
-                  type="button"
-                  class="btn ghost btn-cancel-rev"
-                  @click="handleCancelClick(rev)"
-                  :disabled="actionLoading"
-                >
-                  撤回会审
-                </button>
-
-                <!-- 超级管理员仲裁 -->
-                <button
-                  v-if="rev.can_arbitrate"
-                  type="button"
-                  class="btn warning btn-arbitrate"
-                  @click="openArbitrateModal(rev)"
-                  :disabled="actionLoading"
-                >
-                  🛡️ 管理员终局裁决
-                </button>
-              </div>
-            </div>
           </div>
-        </div>
+        </template>
 
         <!-- 分页栏 -->
         <div v-if="totalCount > pageSize" class="pagination-bar">
@@ -368,22 +474,22 @@
       </section>
     </main>
 
-    <!-- 弹窗 1：填写异议理由弹窗 -->
+    <!-- 弹窗 1：提出异议弹窗 -->
     <div v-if="rejectModalVisible" class="modal-backdrop" @click.self="rejectModalVisible = false">
       <div class="modal-dialog">
         <div class="modal-head">
-          <h4>提出不同意异议</h4>
+          <h4>提出异议</h4>
           <button type="button" class="btn-x" @click="rejectModalVisible = false">✕</button>
         </div>
         <div class="modal-content">
           <p class="modal-tip">
-            选择不同意时，该会审将保持挂起状态，请详细说明您核对出的事实、不同意的理由或现场实际情况：
+            选择提出异议时，该会审将保持挂起状态，请详细说明您核对出的事实、不同意的理由或现场实际情况：
           </p>
           <textarea
             v-model="rejectReasonInput"
             rows="4"
             class="modal-textarea"
-            placeholder="例：我方经核实出厂磅单与随车GPS记录，发货数量确为 20 根无误，现场吊装卸车可能存在分段堆放未清点齐全，不同意直接扣减发货量，建议双方现场再次复点。"
+            placeholder="请详细说明您核对出的事实、不同意的理由或现场实际情况..."
           ></textarea>
         </div>
         <div class="modal-foot">
@@ -395,16 +501,76 @@
       </div>
     </div>
 
+    <!-- 弹窗：同意更正确认弹窗 -->
+    <div v-if="approveModalVisible" class="modal-backdrop" @click.self="approveModalVisible = false">
+      <div class="modal-dialog">
+        <div class="modal-head">
+          <h4>✓ 同意更正确认</h4>
+          <button type="button" class="btn-x" @click="approveModalVisible = false">✕</button>
+        </div>
+        <div class="modal-content">
+          <p class="modal-tip">
+            您即将代表名下责任主体对会审单据 <strong>[{{ approvingReview?.review_no }}]</strong>（订单号：{{ approvingReview?.order_no }}）签署【同意更正】意见。
+          </p>
+          <div class="modal-field">
+            <label style="font-size: 12.5px; font-weight: 600; color: #475569; margin-bottom: 4px; display: block;">签署核准意见（可选）</label>
+            <textarea
+              v-model="approveOpinionInput"
+              rows="3"
+              class="modal-textarea"
+              placeholder="请输入核准意见..."
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" @click="approveModalVisible = false">取消</button>
+          <button type="button" class="btn primary" @click="submitApproveVote" :disabled="actionLoading">
+            确认同意更正
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 弹窗：撤回会审确认弹窗 -->
+    <div v-if="cancelModalVisible" class="modal-backdrop" @click.self="cancelModalVisible = false">
+      <div class="modal-dialog">
+        <div class="modal-head">
+          <h4>↩ 撤回联合会审</h4>
+          <button type="button" class="btn-x" @click="cancelModalVisible = false">✕</button>
+        </div>
+        <div class="modal-content">
+          <p class="modal-tip">
+            确定撤回对单据 <strong>[{{ cancelingReview?.review_no }}]</strong> 发起的联合会审吗？撤回后单据将自动解锁并恢复常规流转。
+          </p>
+          <div class="modal-field">
+            <label style="font-size: 12.5px; font-weight: 600; color: #475569; margin-bottom: 4px; display: block;">撤回原因说明（可选）</label>
+            <textarea
+              v-model="cancelReasonInput"
+              rows="3"
+              class="modal-textarea"
+              placeholder="请输入撤回理由..."
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" @click="cancelModalVisible = false">取消</button>
+          <button type="button" class="btn danger" @click="submitCancelReview" :disabled="actionLoading">
+            确认撤回会审
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 弹窗 2：超级管理员终局裁决弹窗 -->
     <div v-if="arbitrateModalVisible" class="modal-backdrop" @click.self="arbitrateModalVisible = false">
       <div class="modal-dialog">
         <div class="modal-head">
-          <h4>🛡️ 管理员终局裁决仲裁 (特权通道)</h4>
+          <h4>⚖️ 终局裁决仲裁 (特许通道)</h4>
           <button type="button" class="btn-x" @click="arbitrateModalVisible = false">✕</button>
         </div>
         <div class="modal-content">
           <p class="modal-tip">
-            注意：作为系统超级管理员，您的裁决将具有一锤定音的终局法律效力，直接打破基层死锁：
+            注意：作为特许终局裁决员或超级管理员，您的裁决将具有一锤定音的终局效力，直接打破流转僵局或协商争议：
           </p>
           <div class="arbitrate-choice-row">
             <label class="choice-item">
@@ -449,60 +615,114 @@
         <div class="modal-head">
           <div class="head-title-wrap">
             <span class="guide-icon">⚖️</span>
-            <h4>如何提请多方联合会审？</h4>
+            <div>
+              <h4>如何提请多方联合会审？</h4>
+              <p class="guide-subtitle">业务节点原位发起 · 全流程协同会签 · 实时纠错生效</p>
+            </div>
           </div>
           <button type="button" class="btn-x" @click="howToInitiateModalVisible = false">✕</button>
         </div>
         <div class="modal-content guide-content">
-          <p class="guide-intro">
-            为保障单据流转的严肃性与责任主体溯源，联合会审由当前<strong>待办节点责任主体</strong>在各自业务工作台中针对具体待办单据提起：
-          </p>
+          <!-- 导语 Banner -->
+          <div class="guide-banner">
+            <span class="banner-badge">📌 设立宗旨</span>
+            <p class="guide-intro">
+              为保障物流信息流转的准确性与及时性，降低沟通成本，故设立本功能。联合会审由当前<strong>待办节点责任主体</strong>在各自业务工作台中针对具体待办订单提起：
+            </p>
+          </div>
+
+          <!-- 三大业务场景卡片 -->
           <div class="guide-steps-grid">
+            <!-- 场景 1 -->
             <div class="guide-step-card">
-              <div class="step-badge">场景 1 · 待到货环节</div>
-              <h5>🚚 现场主管提请</h5>
-              <p>供方已发货，现场核对实物或随车小票发现规格、数量或车牌有误。</p>
-              <div class="step-action">
-                <span>位置：需求侧工作台 ➔ 物流台账 / 管件卡片</span>
+              <div class="card-top-row">
+                <div class="badge-and-title">
+                  <span class="step-num-badge">场景 1</span>
+                  <span class="step-title-text">已发货，待现场负责人确认到货环节</span>
+                </div>
+                <span class="role-pill">🚚 现场负责人提请。</span>
+              </div>
+              <div class="card-detail-body">
+                <div class="detail-item">
+                  <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
+                  <span class="detail-text">供货商已发货，现场核对实物及随车单据中发现规格、数量或车牌号有误。</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
+                  <span class="detail-text path-tag">需求侧工作台 ➔ 保温管物流台账 / 管件（阀门）物流台账</span>
+                </div>
+              </div>
+              <div class="card-action-bar">
+                <span class="action-label">⚡ 快捷直达：</span>
                 <div class="action-btn-group">
-                  <button type="button" class="btn primary btn-xs" @click="goToDemandWorkbench('pipe', 'logistics')">
-                    直达直管物流 ➔
+                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('pipe', 'logistics')">
+                    直达保温管物流台账 ➔
                   </button>
-                  <button type="button" class="btn ghost btn-xs" @click="goToDemandWorkbench('fitting', 'fitting')">
-                    直达管件发货 ➔
+                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('fitting', 'fitting')">
+                    直达管件/阀门物流台账 ➔
                   </button>
                 </div>
               </div>
             </div>
 
+            <!-- 场景 2 -->
             <div class="guide-step-card">
-              <div class="step-badge">场景 2 · 待接收环节</div>
-              <h5>👷 施工单位提请</h5>
-              <p>现场已确认到货，施工承包队领用/进场时发现实物与单据规格不符。</p>
-              <div class="step-action">
-                <span>位置：需求侧工作台 ➔ 物流台账 / 管件卡片</span>
+              <div class="card-top-row">
+                <div class="badge-and-title">
+                  <span class="step-num-badge">场景 2</span>
+                  <span class="step-title-text">现场已确认到货，待施工单位接收环节</span>
+                </div>
+                <span class="role-pill">👷 施工单位提请</span>
+              </div>
+              <div class="card-detail-body">
+                <div class="detail-item">
+                  <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
+                  <span class="detail-text">现场已确认到货，施工单位领用时发现实物与系统内订单规格或数量不符。</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
+                  <span class="detail-text path-tag">需求侧工作台 ➔ 保温管物流台账 / 管件（阀门）物流台账</span>
+                </div>
+              </div>
+              <div class="card-action-bar">
+                <span class="action-label">⚡ 快捷直达：</span>
                 <div class="action-btn-group">
-                  <button type="button" class="btn primary btn-xs" @click="goToDemandWorkbench('pipe', 'logistics')">
-                    直达直管接收 ➔
+                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('pipe', 'logistics')">
+                    直达保温管物流台账 ➔
                   </button>
-                  <button type="button" class="btn ghost btn-xs" @click="goToDemandWorkbench('fitting', 'fitting')">
-                    直达管件接收 ➔
+                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('fitting', 'fitting')">
+                    直达管件/阀门物流台账 ➔
                   </button>
                 </div>
               </div>
             </div>
 
+            <!-- 场景 3 -->
             <div class="guide-step-card">
-              <div class="step-badge">场景 3 · 待入库环节</div>
-              <h5>🏢 库管人员提请</h5>
-              <p>施工已确认接收，库管员在办结入库手续时发现台账有错漏。</p>
-              <div class="step-action">
-                <span>位置：库管员工作台 ➔ 库管台账</span>
+              <div class="card-top-row">
+                <div class="badge-and-title">
+                  <span class="step-num-badge">场景 3</span>
+                  <span class="step-title-text">待库管确认环节</span>
+                </div>
+                <span class="role-pill">🏢 库管人员提请</span>
+              </div>
+              <div class="card-detail-body">
+                <div class="detail-item">
+                  <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
+                  <span class="detail-text">施工单位已确认接收，库管人员在办结入库手续时发现台账与单据的规格型号、数量货车牌号等信息存在不一致。</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
+                  <span class="detail-text path-tag">库管员工作台 ➔ 库管台账</span>
+                </div>
+              </div>
+              <div class="card-action-bar">
+                <span class="action-label">⚡ 快捷直达：</span>
                 <div class="action-btn-group">
-                  <button type="button" class="btn primary btn-xs" @click="goToWarehouseWorkbench('pipe')">
+                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToWarehouseWorkbench('pipe')">
                     直达保温管台账 ➔
                   </button>
-                  <button type="button" class="btn ghost btn-xs" @click="goToWarehouseWorkbench('fitting', 'pending_warehouse')">
+                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToWarehouseWorkbench('fitting', 'pending_warehouse')">
                     直达管件待入库 ➔
                   </button>
                 </div>
@@ -510,12 +730,57 @@
             </div>
           </div>
 
+          <!-- 四步流转闭环流程可视化卡片 -->
+          <div class="guide-workflow-strip">
+            <div class="workflow-title">
+              <span class="strip-icon">🧭</span>
+              <span>业务操作闭环（四步指引）</span>
+            </div>
+            <div class="workflow-steps">
+              <div class="wf-step">
+                <div class="wf-step-idx">1</div>
+                <div class="wf-step-content">
+                  <div class="wf-step-name">定位待办订单</div>
+                  <div class="wf-step-desc">进入对应工作台列表</div>
+                </div>
+              </div>
+              <div class="wf-arrow">➔</div>
+              <div class="wf-step">
+                <div class="wf-step-idx">2</div>
+                <div class="wf-step-content">
+                  <div class="wf-step-name">点击【⚖️ 提请会审】</div>
+                  <div class="wf-step-desc">右侧橙黄色专属按钮</div>
+                </div>
+              </div>
+              <div class="wf-arrow">➔</div>
+              <div class="wf-step">
+                <div class="wf-step-idx">3</div>
+                <div class="wf-step-content">
+                  <div class="wf-step-name">录入更正与凭证</div>
+                  <div class="wf-step-desc">修改数据/原因/上传照片</div>
+                </div>
+              </div>
+              <div class="wf-arrow">➔</div>
+              <div class="wf-step highlight">
+                <div class="wf-step-idx success">✓</div>
+                <div class="wf-step-content">
+                  <div class="wf-step-name">全票同意·即刻生效</div>
+                  <div class="wf-step-desc">单据变更并保留纪要</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 操作提示卡片 -->
           <div class="guide-note-box">
-            💡 <strong>操作提示</strong>：在对应工作台中找到该笔待办订单，点击右侧橙黄色的 <strong>【⚖️ 提请会审】</strong> 按钮，录入拟修改的数据（数量/型号/车牌等）、原因并上传现场照片。提请后单据将自动锁定，相关前序主体会收到会签通知并进入大厅表决！
+            <span class="note-icon">💡</span>
+            <div class="note-content">
+              <strong>操作提示</strong>：在对应工作台中找到该笔待办订单，点击右侧橙黄色的 <strong>【⚖️ 提请会审】</strong> 按钮，录入拟修改的数据（数量/型号/车牌等）、原因并上传现场照片。提请后单据将自动锁定，相关前序主体会收到会签通知并进入大厅表决！取得一致同意后，订单信息立即变更，并保留会议纪要
+            </div>
           </div>
         </div>
-        <div class="modal-foot">
-          <button type="button" class="btn secondary" @click="howToInitiateModalVisible = false">了解并关闭</button>
+        <div class="modal-foot guide-modal-foot">
+          <button type="button" class="btn primary btn-know" @click="howToInitiateModalVisible = false">了解并关闭</button>
         </div>
       </div>
     </div>
@@ -555,6 +820,72 @@ const actionLoading = ref(false)
 const reviewItems = ref([])
 const totalCount = ref(0)
 
+// 折叠/展开提案状态控制（默认全部折叠）
+const expandedReviewIds = ref(new Set())
+
+function isExpanded(revId) {
+  return expandedReviewIds.value.has(revId)
+}
+
+function toggleExpand(revId) {
+  if (expandedReviewIds.value.has(revId)) {
+    expandedReviewIds.value.delete(revId)
+  } else {
+    expandedReviewIds.value.add(revId)
+  }
+}
+
+function expandAll() {
+  for (const r of reviewItems.value) {
+    if (r && r.id) {
+      expandedReviewIds.value.add(r.id)
+    }
+  }
+}
+
+function collapseAll() {
+  expandedReviewIds.value.clear()
+}
+
+// 统计总表决方数：发起人 1 票 + 被邀协同主体 N 票
+function getTotalVoteCount(rev) {
+  if (!rev) return 1
+  return 1 + ((rev.required_entities || []).length)
+}
+
+// 统计已赞成方数：发起人提请即代表同意（默认 1 票） + 各已同意主体
+function getApprovedVoteCount(rev) {
+  if (!rev) return 0
+  if (rev.review_status === 'cancelled') return 0
+  if (rev.review_status === 'approved') return getTotalVoteCount(rev)
+  return 1 + ((rev.approved_entities || []).length)
+}
+
+function getVoteProgressClass(rev) {
+  if (rev.review_status === 'approved') return 'progress-all-approved'
+  if ((rev.rejected_entities || []).length > 0) return 'progress-has-reject'
+  const total = getTotalVoteCount(rev)
+  const approved = getApprovedVoteCount(rev)
+  if (approved === total) return 'progress-all-approved'
+  return 'progress-partial'
+}
+
+function formatPatchSummary(patch) {
+  if (!patch || typeof patch !== 'object') return '无变更数据'
+  const keys = Object.keys(patch)
+  if (keys.length === 0) return '现场事实认定 / 澄清会签'
+  const parts = []
+  for (const k of keys) {
+    if (k === 'items' && Array.isArray(patch[k])) {
+      parts.push(`明细更正(${patch[k].length}项)`)
+    } else {
+      const label = formatPatchKey(k)
+      parts.push(`${label}: ${patch[k]}`)
+    }
+  }
+  return parts.slice(0, 3).join('；') + (parts.length > 3 ? ' 等' : '')
+}
+
 // 统计值
 const myPendingCount = ref(0)
 const myInitiatedCount = ref(0)
@@ -564,6 +895,14 @@ const approvedCount = ref(0)
 const rejectModalVisible = ref(false)
 const rejectingReview = ref(null)
 const rejectReasonInput = ref('')
+
+const approveModalVisible = ref(false)
+const approvingReview = ref(null)
+const approveOpinionInput = ref('经核验事实无误，同意更正')
+
+const cancelModalVisible = ref(false)
+const cancelingReview = ref(null)
+const cancelReasonInput = ref('经核实现场无误，自愿撤回')
 
 const arbitrateModalVisible = ref(false)
 const arbitratingReview = ref(null)
@@ -648,6 +987,7 @@ async function loadReviews() {
     if (res && res.ok) {
       reviewItems.value = res.items || []
       totalCount.value = res.total || 0
+      expandedReviewIds.value.clear() // 默认保持全部折叠
       if (currentTab.value === 'pending_my_vote') {
         myPendingCount.value = res.total || 0
       }
@@ -690,14 +1030,14 @@ function changePage(page) {
 
 function formatReviewStatus(rev) {
   const st = rev.review_status
+  const totalVotes = getTotalVoteCount(rev)
+  const appVotes = getApprovedVoteCount(rev)
   if (st === 'voting') {
-    const appCount = (rev.approved_entities || []).length
-    const reqCount = (rev.required_entities || []).length
     const rejCount = (rev.rejected_entities || []).length
-    if (rejCount > 0) return `🔴 存在异议挂起 (${appCount}/${reqCount})`
-    return `🟡 会审中 (${appCount}/${reqCount} 已同意)`
+    if (rejCount > 0) return `🔴 存在异议挂起 (${appVotes}/${totalVotes})`
+    return `🟡 会审中 (${appVotes}/${totalVotes} 已同意)`
   }
-  if (st === 'approved') return '🟢 全票通过已生效'
+  if (st === 'approved') return `🟢 全票通过已生效 (${totalVotes}/${totalVotes})`
   if (st === 'rejected') return '🔴 终局驳回'
   if (st === 'cancelled') return '⚪ 已撤销'
   return st
@@ -747,17 +1087,90 @@ function getEntityVoteClass(rev, ent) {
   return 'is-pending'
 }
 
-async function handleVoteClick(rev, decision) {
-  if (!confirm(`确定代表您名下责任主体对单据 [${rev.order_no}] 签署【同意更正】意见吗？`)) {
-    return
+function getEntityVote(rev, ent) {
+  if (!rev || !rev.votes || !ent) return null
+  return rev.votes.find(
+    (v) =>
+      v.entity_type === ent.entity_type &&
+      String(v.entity_id).toLowerCase() === String(ent.entity_id).toLowerCase()
+  ) || null
+}
+
+function getPendingEntities(rev) {
+  if (!rev || !rev.required_entities) return []
+  const votes = rev.votes || []
+  return rev.required_entities.filter(
+    (ent) =>
+      !votes.some(
+        (v) =>
+          v.entity_type === ent.entity_type &&
+          String(v.entity_id).toLowerCase() === String(ent.entity_id).toLowerCase()
+      )
+  )
+}
+
+function formatPreStatus(status) {
+  const map = {
+    pending_arrival: '待到货确认',
+    pending_receive: '待施工接收',
+    pending_diff_approve: '差异待审核',
+    pending_warehouse: '待库管确认',
+    completed: '已入库办结',
+    under_review: '会审挂起中',
   }
+  return map[status] || status || '待办流转中'
+}
+
+function formatTimelineStatus(rev) {
+  if (!rev) return ''
+  const map = {
+    approved: '🟢 全票通过·已办结生效',
+    rejected: '🔴 存在异议·已驳回终止',
+    cancelled: '⚪ 已主动撤销',
+    voting: '🟡 会审中·协同签署中',
+  }
+  return map[rev.review_status] || rev.review_status
+}
+
+function getFinalStepBadge(rev) {
+  if (!rev) return ''
+  if (rev.review_status === 'approved') return '全票共识·自动生效'
+  if (rev.review_status === 'rejected') return '异议终止·维持原单'
+  if (rev.review_status === 'cancelled') return '已主动撤销'
+  return '等待全员达成共识'
+}
+
+function getFinalStepOperator(rev) {
+  if (!rev) return ''
+  if (rev.review_status === 'approved') {
+    if (rev.finalized_by === 'SYSTEM_CONSENSUS') return '🤖 系统共识自动闭环'
+    return `👤 ${rev.finalized_by || '系统自动处理'}`
+  }
+  if (rev.review_status === 'rejected') {
+    return `👤 ${rev.finalized_by || '会审异议/管理员裁决'}`
+  }
+  if (rev.review_status === 'cancelled') {
+    return `👤 提请人: ${rev.initiator_name}`
+  }
+  return '系统自动化监测中'
+}
+
+function openApproveModal(rev) {
+  approvingReview.value = rev
+  approveOpinionInput.value = '经核验事实无误，同意更正'
+  approveModalVisible.value = true
+}
+
+async function submitApproveVote() {
+  if (!approvingReview.value) return
   actionLoading.value = true
   try {
-    const res = await voteJointReview(rev.id, {
-      vote_decision: decision,
-      vote_opinion: '经核验事实无误，同意更正',
+    const res = await voteJointReview(approvingReview.value.id, {
+      vote_decision: 'approve',
+      vote_opinion: approveOpinionInput.value.trim() || '经核验事实无误，同意更正',
     })
     alert(res.message || '表决已提交')
+    approveModalVisible.value = false
     loadReviews()
     loadStats()
   } catch (err) {
@@ -775,7 +1188,7 @@ function openRejectModal(rev) {
 
 async function submitRejectVote() {
   if (!rejectReasonInput.value || rejectReasonInput.value.trim().length < 2) {
-    alert('提出不同意时，必须填写具体理由说明')
+    alert('提出异议时，必须填写具体理由说明')
     return
   }
   actionLoading.value = true
@@ -795,13 +1208,21 @@ async function submitRejectVote() {
   }
 }
 
-async function handleCancelClick(rev) {
-  const reason = prompt('请输入撤回本次联合会审的理由（可选）：', '经核实现场无误，自愿撤回')
-  if (reason === null) return
+function openCancelModal(rev) {
+  cancelingReview.value = rev
+  cancelReasonInput.value = '经核实现场无误，自愿撤回'
+  cancelModalVisible.value = true
+}
+
+async function submitCancelReview() {
+  if (!cancelingReview.value) return
   actionLoading.value = true
   try {
-    const res = await cancelJointReview(rev.id, { cancel_reason: reason })
+    const res = await cancelJointReview(cancelingReview.value.id, {
+      cancel_reason: cancelReasonInput.value.trim() || '经核实现场无误，自愿撤回',
+    })
     alert(res.message || '会审已撤销')
+    cancelModalVisible.value = false
     loadReviews()
     loadStats()
   } catch (err) {
@@ -864,9 +1285,11 @@ function goProjectPages() {
 }
 
 .tube-page-main {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 16px 20px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 18px;
+  padding-bottom: 60px;
 }
 
 .breadcrumbs-bar {
@@ -1131,6 +1554,51 @@ function goProjectPages() {
   font-size: 16px;
 }
 
+.list-control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  margin-bottom: -4px;
+}
+
+.total-text {
+  color: #334155;
+}
+.total-text strong {
+  color: #2563eb;
+}
+.fold-hint-text {
+  color: #64748b;
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.control-right {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-ctrl-fold {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-size: 11.5px !important;
+  padding: 3px 10px !important;
+  border-radius: 5px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-ctrl-fold:hover {
+  background: #f8fafc !important;
+  border-color: #3b82f6 !important;
+  color: #2563eb !important;
+}
+
 .review-cards-list {
   display: flex;
   flex-direction: column;
@@ -1151,6 +1619,10 @@ function goProjectPages() {
 .review-item-card:hover {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
 }
+.review-item-card.is-card-collapsed {
+  padding: 12px 18px;
+  gap: 8px;
+}
 .review-item-card.needs-me {
   border: 2px solid #ef4444;
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
@@ -1162,6 +1634,156 @@ function goProjectPages() {
   justify-content: space-between;
   border-bottom: 1px solid #f1f5f9;
   padding-bottom: 12px;
+}
+
+.card-header-row.clickable-head {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.card-header-row.clickable-head:hover .review-no {
+  color: #2563eb;
+}
+
+.fold-arrow {
+  font-size: 11px;
+  color: #64748b;
+  width: 14px;
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+.fold-arrow.is-open {
+  color: #2563eb;
+}
+
+.needs-vote-badge {
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  animation: pulseBadge 1.5s infinite;
+}
+
+.vote-progress-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+}
+.vote-progress-pill.progress-all-approved {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.vote-progress-pill.progress-partial {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.vote-progress-pill.progress-has-reject {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.btn-fold-toggle {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.btn-fold-toggle:hover {
+  border-color: #3b82f6 !important;
+  color: #2563eb !important;
+  background: #f8fafc !important;
+}
+
+.folded-summary-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  gap: 12px;
+}
+.folded-summary-strip:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.summary-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sum-tag {
+  color: #475569;
+  font-size: 12px;
+}
+
+.sum-patch-preview {
+  color: #0369a1;
+  background: #e0f2fe;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.summary-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.sum-reason-text {
+  color: #64748b;
+  font-size: 12px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.click-unfold-tip {
+  color: #2563eb;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.expanded-details-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.initiator-entity-card {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+}
+
+.initiator-pill {
+  color: #065f46 !important;
+  font-weight: 700;
 }
 
 .header-left {
@@ -1420,11 +2042,12 @@ function goProjectPages() {
 .entity-vote-card {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   background: #ffffff;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.15s ease;
 }
 .entity-vote-card.is-approved {
   border-color: #86efac;
@@ -1433,6 +2056,62 @@ function goProjectPages() {
 .entity-vote-card.is-rejected {
   border-color: #fca5a5;
   background: #fef2f2;
+}
+
+.card-ent-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-vote-audit {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.card-vote-audit.is-reject {
+  border-top-color: #fca5a5;
+}
+.card-vote-audit.is-pending {
+  border-top-color: #e2e8f0;
+}
+
+.audit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audit-signer {
+  color: #334155;
+  font-size: 11.5px;
+}
+.audit-time {
+  color: #64748b;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.audit-opinion {
+  color: #0f172a;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 5px 8px;
+  border-radius: 4px;
+  line-height: 1.4;
+  word-break: break-all;
+  font-size: 12px;
+}
+.audit-wait-text {
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-style: italic;
 }
 
 .ent-info {
@@ -1475,6 +2154,18 @@ function goProjectPages() {
   font-size: 11px;
   color: #dc2626;
   max-width: 200px;
+}
+.sum-tag.tag-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+.sum-tag.tag-reject {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.sum-tag.tag-cancel {
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .resolution-summary-box {
@@ -1714,17 +2405,44 @@ function goProjectPages() {
 
 /* 提请指引弹窗样式 */
 .guide-dialog {
-  max-width: 680px;
+  max-width: 880px;
+  max-height: 90vh;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.35);
+}
+
+.modal-head {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .head-title-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .guide-icon {
-  font-size: 20px;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.modal-head h4 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.guide-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 400;
 }
 
 .btn-initiate-guide {
@@ -1739,84 +2457,322 @@ function goProjectPages() {
   background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
 }
 
+.guide-content {
+  padding: 20px 24px;
+  overflow-y: auto;
+  gap: 16px;
+  background: #fcfdfe;
+}
+
+/* 顶部导语 Banner */
+.guide-banner {
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 12px 16px;
+  position: relative;
+}
+
+.banner-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e40af;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 6px;
+}
+
 .guide-intro {
   font-size: 13.5px;
-  color: #334155;
-  margin-bottom: 16px;
+  color: #1e293b;
+  margin: 0;
   line-height: 1.6;
 }
 
+/* 业务场景卡片列表 */
 .guide-steps-grid {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 16px;
 }
 
 .guide-step-card {
-  background: #f8fafc;
+  background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 14px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
-.step-badge {
-  align-self: flex-start;
-  font-size: 11px;
-  font-weight: 600;
-  color: #4f46e5;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
-  padding: 1px 6px;
-  border-radius: 4px;
+.guide-step-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
-.guide-step-card h5 {
-  margin: 0;
+.card-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.badge-and-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.step-num-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #3b82f6;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.2px;
+}
+
+.step-title-text {
   font-size: 14px;
   font-weight: 700;
   color: #0f172a;
 }
 
-.guide-step-card p {
-  margin: 0;
-  font-size: 12.5px;
-  color: #64748b;
-  line-height: 1.5;
+.role-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
-.step-action {
+.card-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.detail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.detail-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: #475569;
+  min-width: 76px;
+  font-size: 12px;
+}
+
+.label-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.label-dot.red { background: #ef4444; }
+.label-dot.blue { background: #3b82f6; }
+
+.detail-text {
+  color: #334155;
+  font-size: 12.5px;
+}
+
+.path-tag {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.card-action-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px dashed #e2e8f0;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+}
+
+.action-label {
   font-size: 12px;
-  color: #475569;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .action-btn-group {
   display: inline-flex;
+  gap: 8px;
+}
+
+.btn-jump {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  padding: 5px 12px !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.btn-jump:hover {
+  background: #f8fafc !important;
+  border-color: #3b82f6 !important;
+  color: #2563eb !important;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.15);
+  transform: translateY(-1px);
+}
+
+/* 4 步流转闭环条 */
+.guide-workflow-strip {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workflow-title {
+  display: flex;
+  align-items: center;
   gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
 }
 
-.btn-xs {
-  font-size: 11.5px;
-  padding: 4px 10px;
-  border-radius: 5px;
+.workflow-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
+.wf-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  flex: 1;
+}
+
+.wf-step.highlight {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.wf-step-idx {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wf-step-idx.success {
+  background: #16a34a;
+}
+
+.wf-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.wf-step-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.wf-step-desc {
+  font-size: 10.5px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-arrow {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* 操作提示框 */
 .guide-note-box {
   background: #fffbeb;
   border: 1px solid #fde68a;
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.note-icon {
+  font-size: 18px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.note-content {
   font-size: 12.5px;
   color: #92400e;
   line-height: 1.6;
+}
+
+.guide-modal-foot {
+  padding: 12px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-know {
+  padding: 6px 20px;
+  font-size: 13px;
+  font-weight: 600;
 }
 </style>

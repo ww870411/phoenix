@@ -26,7 +26,7 @@
             </div>
             <div class="dossier-cell">
               <span class="dossier-lbl">物资品类</span>
-              <span class="dossier-val">{{ isPipe ? '🔥 保温直管' : '🔩 特种管件/阀门' }}</span>
+              <span class="dossier-val">{{ isPipe ? '🔥 保温管' : '🔩 特种管件/阀门' }}</span>
             </div>
             <div class="dossier-cell" v-if="isPipe">
               <span class="dossier-lbl">规格型号</span>

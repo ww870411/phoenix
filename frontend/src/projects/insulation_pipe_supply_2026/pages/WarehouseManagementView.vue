@@ -284,6 +284,9 @@
             >
               <span>🏢 待库管确认</span>
               <strong>{{ deliverySummary.pendingWarehouse }} 项</strong>
+              <small v-if="deliverySummary.pendingWarehouseUnderReview > 0" style="font-size: 11px; color: #ea580c; font-weight: 500; margin-top: 2px;">
+                （含 {{ deliverySummary.pendingWarehouseUnderReview }} 项会审中）
+              </small>
             </div>
             <div 
               class="fitting-summary-item is-completed"
@@ -477,8 +480,9 @@
                     @click="toggleDeliverySelection(row)"
                   >
                     <td style="text-align: center;" @click.stop>
+                      <span v-if="row.status === 'under_review'" style="font-size: 13px; cursor: help;" title="单据处于多方联合会审中，入库操作已挂起锁定">⚖️</span>
                       <input
-                        v-if="row.status === 'pending_warehouse'"
+                        v-else-if="row.status === 'pending_warehouse'"
                         type="checkbox"
                         :checked="isDeliverySelected(row.id)"
                         @click.stop
@@ -517,14 +521,24 @@
                           📜 凭证
                         </button>
                         <button
-                          v-if="row.status === 'pending_warehouse'"
+                          v-if="row.status === 'under_review'"
+                          type="button"
+                          class="btn ghost btn-sm"
+                          style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; font-weight: 600;"
+                          title="查看此单据的多方联合会审表决详情"
+                          @click.stop="goToJointReview(row)"
+                        >
+                          ⚖️ 查看会审
+                        </button>
+                        <button
+                          v-else-if="row.status === 'pending_warehouse'"
                           type="button"
                           class="btn ghost btn-sm"
                           style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
                           title="发现型号规格或数量有误时提请联合会审"
                           @click.stop="openJointReviewModal(row, 'pipe')"
                         >
-                          ⚖️ 会审
+                          ⚖️ 提请会审
                         </button>
                       </div>
                     </td>
@@ -589,8 +603,9 @@
                 @click="toggleDeliverySelection(row)"
               >
                 <td class="cell-checkbox" @click.stop>
+                  <span v-if="row.status === 'under_review'" style="font-size: 13px; cursor: help;" title="单据处于多方联合会审中，入库操作已挂起锁定">⚖️</span>
                   <input
-                    v-if="row.status === 'pending_warehouse'"
+                    v-else-if="row.status === 'pending_warehouse'"
                     type="checkbox"
                     :checked="isDeliverySelected(row.id)"
                     @click.stop
@@ -636,14 +651,24 @@
                       📜 凭证
                     </button>
                     <button
-                      v-if="row.status === 'pending_warehouse'"
+                      v-if="row.status === 'under_review'"
+                      type="button"
+                      class="btn ghost btn-sm"
+                      style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; font-weight: 600;"
+                      title="查看此单据的多方联合会审表决详情"
+                      @click.stop="goToJointReview(row)"
+                    >
+                      ⚖️ 查看会审
+                    </button>
+                    <button
+                      v-else-if="row.status === 'pending_warehouse'"
                       type="button"
                       class="btn ghost btn-sm"
                       style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
                       title="发现型号规格或数量有误时提请联合会审"
                       @click.stop="openJointReviewModal(row, 'pipe')"
                     >
-                      ⚖️ 会审
+                      ⚖️ 提请会审
                     </button>
                   </div>
                 </td>
@@ -998,6 +1023,9 @@
             >
               <span>🏢 待库管确认</span>
               <strong>{{ fittingSummary.pendingWarehouse }} 项</strong>
+              <small v-if="fittingSummary.pendingWarehouseUnderReview > 0" style="font-size: 11px; color: #ea580c; font-weight: 500; margin-top: 2px;">
+                （含 {{ fittingSummary.pendingWarehouseUnderReview }} 项会审中）
+              </small>
             </div>
             <div 
               class="fitting-summary-item is-completed" 
@@ -1089,7 +1117,18 @@
                       title="发现管件规格或数量有误时提请联合会审"
                       @click.stop="openJointReviewModal(group, 'fitting')"
                     >
-                      ⚖️ 会审
+                      ⚖️ 提请会审
+                    </button>
+
+                    <button 
+                      v-if="group.status === 'under_review' || group.items.some(i => i.status === 'under_review')"
+                      type="button" 
+                      class="btn ghost btn-sm"
+                      style="height: 26px; padding: 0 7px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; font-weight: 600;"
+                      title="查看此车次的多方联合会审表决详情"
+                      @click.stop="goToJointReview(group)"
+                    >
+                      ⚖️ 查看会审
                     </button>
 
                     <button 
@@ -1464,6 +1503,15 @@ function handleJointReviewSuccess() {
   reloadAll()
 }
 
+function goToJointReview(rowOrGroup) {
+  if (!rowOrGroup) return
+  const searchKey = rowOrGroup.order_no || rowOrGroup.delivery_code || rowOrGroup.shipmentNo || rowOrGroup.shipment_no || rowOrGroup.orderNo || ''
+  router.push({
+    path: `/projects/${projectKey}/pages/joint_review_hall`,
+    query: searchKey ? { search: String(searchKey).trim() } : {}
+  })
+}
+
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
@@ -1705,7 +1753,12 @@ const filteredFittingRows = computed(() => {
     return validRows.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
   }
   if (fittingSubTab.value === 'pending_warehouse') {
-    return validRows.filter(r => r.status === 'construction_confirmed' || r.status === 'pending_warehouse' || r.status === 'received')
+    return validRows.filter(r => 
+      r.status === 'construction_confirmed' || 
+      r.status === 'pending_warehouse' || 
+      r.status === 'received' ||
+      (r.status === 'under_review' && (r.pre_review_status === 'pending_warehouse' || !r.pre_review_status))
+    )
   }
   if (fittingSubTab.value === 'completed') {
     return validRows.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
@@ -1750,6 +1803,7 @@ const groupedWarehouseFittingRows = computed(() => {
     'construction_confirmed': 2,
     'pending_warehouse': 2,
     'received': 2,
+    'under_review': 2.5,
     'warehouse_confirmed': 3,
     'completed': 3
   }
@@ -1810,6 +1864,7 @@ const fittingSummary = computed(() => {
   let pendingArrival = 0
   let pendingConstruction = 0
   let pendingWarehouse = 0
+  let pendingWarehouseUnderReview = 0
   let completed = 0
 
   for (const r of fittingRows.value) {
@@ -1820,6 +1875,9 @@ const fittingSummary = computed(() => {
       pendingConstruction++
     } else if (st === 'construction_confirmed' || st === 'pending_warehouse' || st === 'received') {
       pendingWarehouse++
+    } else if (st === 'under_review' && (r.pre_review_status === 'pending_warehouse' || !r.pre_review_status)) {
+      pendingWarehouse++
+      pendingWarehouseUnderReview++
     } else if (st === 'warehouse_confirmed' || st === 'completed') {
       completed++
     }
@@ -1830,6 +1888,7 @@ const fittingSummary = computed(() => {
     pendingArrival,
     pendingConstruction,
     pendingWarehouse,
+    pendingWarehouseUnderReview,
     completed,
   }
 })
@@ -2359,6 +2418,8 @@ const groupedPipeDeliveries = computed(() => {
       group.overallStatus = 'pending_receive'
     } else if (group.statuses.has('pending_warehouse')) {
       group.overallStatus = 'pending_warehouse'
+    } else if (group.statuses.has('under_review')) {
+      group.overallStatus = 'under_review'
     } else if (group.statuses.has('completed') && group.statuses.size === 1) {
       group.overallStatus = 'completed'
     } else {
@@ -2428,13 +2489,20 @@ const deliverySummary = computed(() => {
     pendingArrival: 0,
     pendingReceive: 0,
     pendingWarehouse: 0,
+    pendingWarehouseUnderReview: 0,
     completed: 0,
   }
   for (const row of source) {
     if (row.status === 'pending_arrival' || row.status === 'shipped') summary.pendingArrival += 1
     else if (row.status === 'pending_receive' || row.status === 'arrived') summary.pendingReceive += 1
-    else if (row.status === 'pending_warehouse' || row.status === 'construction_confirmed' || row.status === 'received') summary.pendingWarehouse += 1
-    else if (row.status === 'completed' || row.status === 'warehouse_confirmed') summary.completed += 1
+    else if (row.status === 'pending_warehouse' || row.status === 'construction_confirmed' || row.status === 'received') {
+      summary.pendingWarehouse += 1
+    } else if (row.status === 'under_review' && (row.pre_review_status === 'pending_warehouse' || !row.pre_review_status)) {
+      summary.pendingWarehouse += 1
+      summary.pendingWarehouseUnderReview += 1
+    } else if (row.status === 'completed' || row.status === 'warehouse_confirmed') {
+      summary.completed += 1
+    }
   }
   return summary
 })

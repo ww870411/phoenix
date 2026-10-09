@@ -943,7 +943,7 @@
                     <th class="col-th-time-arrive" style="width: 130px;">确认到货时间</th>
                     <th class="col-th-elapsed text-center" style="width: 95px;">在途时长</th>
                     <th class="col-th-confirm text-right" style="width: 120px;">现场核验量(米)</th>
-                    <th class="col-th-action" style="width: 220px;">协同流转操作</th>
+                    <th class="col-th-action" style="width: 240px;">协同流转操作</th>
                     <th class="col-th-detail text-center" style="width: 50px;">凭证</th>
                   </tr>
                 </thead>
@@ -1101,7 +1101,7 @@
                           title="发现单据错误或争议时提请多方联合会审"
                           @click.stop="openJointReviewModal(row, 'pipe')"
                         >
-                          ⚖️ 会审
+                          ⚖️ 提请会审
                         </button>
                       </div>
                       <div v-else-if="row.status === 'under_review'" class="review-lock-badge" title="该单据已进入多方联合会审流程，常规流转确认已物理锁定">
@@ -1131,7 +1131,7 @@
                           title="提请多方联合会审"
                           @click.stop="openJointReviewModal(row, 'pipe')"
                         >
-                          ⚖️ 会审
+                          ⚖️ 提请会审
                         </button>
                       </div>
                     </td>
@@ -1319,7 +1319,7 @@
                         title="发现规格、型号或数量有误时提请联合会审"
                         @click.stop="openJointReviewModal(group, 'fitting')"
                       >
-                        ⚖️ 会审
+                        ⚖️ 提请会审
                       </button>
 
                       <button 
@@ -1382,7 +1382,8 @@
                             <span v-else style="color: #94a3b8; font-size: 11px; font-weight: normal;">待到货 (0)</span>
                           </td>
                           <td style="text-align: center; white-space: nowrap;">
-                            <span v-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10.5px; padding: 1px 6px;">🚚 待到货确认</span>
+                            <span v-if="item.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 10.5px; padding: 1px 6px;">⚖️ 联合会审中</span>
+                            <span v-else-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10.5px; padding: 1px 6px;">🚚 待到货确认</span>
                             <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10.5px; padding: 1px 6px;">✅ 待施工接收</span>
                             <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 10.5px; padding: 1px 6px;">👷 待库管确认</span>
                             <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 10.5px; padding: 1px 6px;">🏢 库管已确认</span>
@@ -2832,11 +2833,13 @@
                   <td style="padding: 6px 6px; font-weight: 600; color: #0f172a; word-break: break-word;">
                     {{ isFittingDeliveryModal ? (it.fitting_type || it.fittingType || '管件') : '保温管' }}
                     <span v-if="it.status === 'cancelled'" class="tag-badge" style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-size: 10px; margin-left: 4px;">已撤销</span>
+                    <span v-else-if="it.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 10px; margin-left: 4px;">⚖️ 联合会审中</span>
                   </td>
                   <td style="padding: 6px 6px; color: #334155; font-family: monospace; word-break: break-word;">{{ isFittingDeliveryModal ? (it.model_spec || it.modelSpec || '—') : (it.pipe_model_id || it.pipeModelName || deliveryDetailModalData.pipeModelName || '未填') }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold;" :style="{ color: it.status === 'cancelled' ? '#94a3b8' : '#2563eb', textDecoration: it.status === 'cancelled' ? 'line-through' : 'none', whiteSpace: 'nowrap' }">{{ formatNumber(it.shipped_qty || it.shippedQty) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}</td>
                   <td style="padding: 6px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
                     <span v-if="it.status === 'cancelled'" style="color: #ef4444; font-size: 11px;">已撤销</span>
+                    <span v-else-if="it.status === 'under_review'" style="color: #ea580c; font-size: 11px;">⚖️ 会审中</span>
                     <span v-else-if="Boolean(deliveryDetailModalData.arrivedConfirmAt || (it.status && it.status !== 'shipped' && it.status !== 'pending_arrival') || (deliveryDetailModalData.status && deliveryDetailModalData.status !== 'shipped' && deliveryDetailModalData.status !== 'pending_arrival'))" style="color: #059669;">
                       {{ formatNumber(it.arrived_qty !== undefined && it.arrived_qty !== null ? it.arrived_qty : (it.arrivedQty !== undefined && it.arrivedQty !== null ? it.arrivedQty : 0)) }} {{ it.unit || (isFittingDeliveryModal ? '个' : '米') }}
                     </span>
@@ -3852,6 +3855,14 @@
                 >
                   🏗️ 待施工接收 ({{ pendingSummaryStats.pending_receive_count || 0 }})
                 </button>
+                <button
+                  type="button"
+                  class="capsule-item"
+                  :class="{ active: pendingSummaryFilter.status === 'under_review' }"
+                  @click="setPendingSummaryStatusFilter('under_review')"
+                >
+                  ⚖️ 联合会审中 ({{ pendingSummaryStats.under_review_count || 0 }})
+                </button>
               </div>
 
               <!-- 标段筛选下拉 -->
@@ -3966,7 +3977,7 @@
                         <td style="text-align: center;">
                           <span
                             class="clean-status-badge"
-                            :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : 'st-diff')"
+                            :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : (row.status === 'under_review' ? 'st-review' : 'st-diff'))"
                           >
                             {{ row.status_label }}
                           </span>
@@ -4065,7 +4076,7 @@
                         </span>
                         <span
                           class="clean-status-badge"
-                          :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : 'st-diff')"
+                          :class="row.status === 'pending_arrival' ? 'st-arriving' : (row.status === 'pending_receive' ? 'st-receiving' : (row.status === 'under_review' ? 'st-review' : 'st-diff'))"
                         >
                           {{ row.status_label }}
                         </span>
@@ -4903,6 +4914,7 @@ const pendingSummaryStats = ref({
   total_count: 0,
   pending_arrival_count: 0,
   pending_receive_count: 0,
+  under_review_count: 0,
   severe_delay_count: 0,
   pipe_count: 0,
   fitting_count: 0
@@ -9168,6 +9180,12 @@ function jumpToUsageTab() {
   color: #b91c1c;
 }
 
+.status-pill.under_review {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
 .status-pill.abnormal {
   background: #fff1f2;
   color: #be123c;
@@ -11872,6 +11890,12 @@ function jumpToUsageTab() {
   background: #fef2f2;
   color: #b91c1c;
   border: 1px solid #fecaca;
+}
+
+.clean-status-badge.st-review {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
 }
 
 .clean-section-tag {
