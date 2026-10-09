@@ -1,3 +1,114 @@
+## 2026-10-09 直管到货数量约束实际定义核对
+
+- 只读查询当前 `pg_constraint`：`tube.tube_delivery.chk_tube_delivery_arrived_qty_range` 定义为 `CHECK (arrived_qty IS NULL OR (arrived_qty >= 0 AND arrived_qty <= shipped_qty))`。
+- 到货10、发货拟改8时由上界拒绝。若取消这一业务上界，应替换为仅保留空值/非负校验，避免整项删除同时丢失非负限制。本轮未执行DDL，其他数量与状态约束不变。
+
+## 2026-10-09 联合会审上线前服务检查
+
+- `joint_review_service.py` 已补充通知署名变量与标准库日志对象，会审编号由截断时间改为日期+UUID，避免同10毫秒窗口碰撞。历史编号不改写，无数据库迁移；外部依赖旧编号长度的报表需核查。
+- 机械性修复隔离回归3/3、Python语法检查通过。探针提取真实函数并模拟SQL与消息，不触发业务模块初始化或真实数据写入。
+- 尚未修复的关键问题：发起/现场主管表决缺少标段归属校验；管件明细缺少车次归属核验；冻结与恢复范围不一致；发起阶段缺少事务互斥；数量一致性缺口；白名单字段未全部生效；个人待办先分页后过滤；厂家通知ENTITY目标与收件箱契约不一致。
+- 本机只读数据库检查确认混合状态车次5个，在审议案0个。真实生命周期、并发与通知投递验收未完成，暂不建议上线。报告：`configs/_qa_joint_review_prelaunch/review.md`。
+
+## 2026-10-09 环境与智能体配置：移除 Serena MCP
+
+- 本轮仅针对本地开发环境配置文件中失效的 Serena MCP 配置进行清理，后端接口、数据库与服务结构无改动。
+
+## 2026-10-09 会审大厅顶栏文案调整 (前端展示优化)
+
+- 本轮仅对前端会审大厅 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 顶栏导语文案进行精简，后端接口与服务无改动，无数据迁移。
+
+## 2026-10-09 全网会审总数取数契约核对
+
+- `services/joint_review_service.py::list_joint_reviews` 在 `tab='all'`、无筛选时，以 `COUNT(*)` 统计会审记录，分页 `LIMIT/OFFSET` 只作用于返回明细，返回 `total` 可供全网 KPI 使用。
+- 前端本轮复用现有 `/joint-reviews/list` 契约，以 `tab=all&limit=1` 独立取全网总数；后端与数据库无修改、无迁移。
+- 本轮另发现 `pending_my_vote` 分页后过滤资格并返回本页 `len(items)`，个人待办统计可能不完整，已记录为未修复项；不影响 `tab=all` 的全网计数。
+
+## 2026-10-09 会审大厅顶栏辅助按钮移除与界面聚焦 (前端视图精简)
+
+- 本轮按用户要求移除会审大厅 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 顶部的“返回功能页”与“刷新会审列表”辅助按钮，页面跳转继续由标准面包屑支持；后端接口与数据逻辑无变动。
+
+## 2026-10-09 会审大厅顶栏操作按钮单行排版优化 (前端布局调整)
+
+- 本轮仅针对前端会审大厅 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 顶栏按钮进行 Flexbox 防挤压单行布局重构与响应式适配，后端会审接口契约与数据服务保持稳定，无任何改动。
+
+## 2026-10-09 折叠议题展开明细提示移除
+
+- 本轮仅删除前端折叠摘要的“展开明细”提示及样式，后端会审接口与服务无改动，无数据迁移。
+
+## 2026-10-09 会审卡片展开异常：前端修复边界
+
+- 卡片展开失败在前端详情渲染时复现：`isAdminUser` 引用了未初始化的 `auth`，不是本轮发现的会审列表接口错误。
+- 前端沿用现有认证存储初始化登录状态；本轮未修改 `joint_review.py`、`joint_review_service.py` 或数据库，表决、撤销、裁决接口契约与权限规则无需迁移。
+- 组件回归在固定 API 返回下验证普通用户和管理员均可正常展开；本轮未用真实账户发送业务写入请求。
+
+## 2026-10-09 联合会审大厅继续完善：后端接入记录
+
+- 接口入口：`projects/insulation_pipe_supply_2026/api/joint_review.py`；业务服务：`services/joint_review_service.py`。
+- 已通过符号检索定位 `create_joint_review`、`vote_joint_review`、`cancel_joint_review`、`admin_arbitrate_joint_review`、`list_joint_reviews` 和 `get_joint_review_detail`。
+- 现有调用链为前端 API 客户端进入会审路由，再调用业务服务。本轮仅确认模块位置，未验证接口运行结果，未修改后端或业务数据；具体完善范围待用户说明。
+
+## 2026-10-09 会审大厅前端交互根治优化与后端服务稳定性说明 (Joint Review Hall Frontend Optimization & Backend Stability)
+
+- **接口契约与数据交互说明**：
+  - 本轮迭代聚焦于前端联合会审大厅（[`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)）议案卡片展开/收起的幂等赋值重构与全域事件捕获；
+  - 后端 [`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py) 与 [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py) 接口契约保持高标准稳定，继续支持各状态过滤、特许人员终局裁决及管理员多主体身份代签，前后端交互丝滑契合。
+
+## 2026-10-09 会审大厅跨标段数据过滤边界与可见性机制说明 (Joint Review Hall Cross-Lot Query Visibility)
+
+- **服务层查询边界与数据隔离现状 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py#L1279-L1355))**：
+  - **接口函数**：`list_joint_reviews(tab, order_category, section_1_id, ...)`；
+  - **SQL 过滤机制**：
+    - 当请求 `tab="all"` 或 `tab="history"` 时，后端未注入基于请求者单位标段的隐式过滤（`r.section_1_id` 仅在客户端显式传参筛选时生效）；
+    - 因此如“翁永鑫”（`high_lot_1` 施工单位）等基层人员，在全网台账与历史档案中**可以检索和查阅全网所有标段的会审单**；
+  - **操作权限硬隔离**：
+    - 针对每笔单据，系统严格计算 `can_i_vote`（基于 `required_entities` 与 `_check_user_can_vote_entity`）、`is_mine`、`can_cancel` 与 `can_arbitrate`；
+    - 确保非当事主体的跨标段查看仅具只读公示属性，杜绝越权代投或恶意篡改。
+
+## 2026-10-09 联合会审大厅 (joint_review_hall) 权限矩阵与账号覆盖架构说明 (Joint Review Hall Permission Matrix & Account Coverage)
+
+- **权限解析机制与核心配置**：
+  - **核心服务与入口**：[`auth_manager.py`](file:///D:/编程项目/phoenix/backend/services/auth_manager.py)；
+  - **项目专属权限配置**：[`permissions/insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)；
+  - **数据口径**：在 `insulation_pipe_supply_2026.json` 中，系统将 `"joint_review_hall"` 页面加入到了该项目下所有 8 个业务角色组的 `page_access` 清单中；
+  - **账号数据源**：[`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)；
+- **用户覆盖结论**：
+  - 系统当前 81 个注册账户中，归属于保温管物流链系统的全部 **61 个用户** 均具备进入会审大厅的页面访问权限；
+  - 纯属于其他子项目（如供热生产日报）的 20 个账户因没有配置该项目的 `page_access`，无法访问该页面；
+  - 会审数据接口 [`handle_list_joint_reviews`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py) 依托 `AuthSession` 进行会话认证，并在服务层 [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py) 根据 `session_username`、`session_group` 精准细分 `is_mine`、`can_vote`（必审主体表决权）、`can_cancel`（发起人撤回权）与 `can_arbitrate`（超管/特许人员裁决权）。
+
+## 2026-10-09 会审列表接口 KeyError is_mine 异常修复说明 (Joint Review List KeyError is_mine Fix)
+
+- **问题与修复实现 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+  - **根因分析**：在 `list_joint_reviews` 中返回字典组装时，因上一轮编辑覆盖导致 `r_dict["is_mine"]` 声明遗失，在后续评估撤回权限 `r_dict["can_cancel"] = (r_dict["is_mine"] or is_global_admin)...` 时触发 `KeyError: 'is_mine'`，导致 `GET /joint-reviews/list` 报 500；
+  - **修复措施**：补全 `r_dict["is_mine"] = r_dict.get("initiator_username") == session_username`，恢复安全判定；
+  - **验证**：静态语法编译无误，容器服务热重载正常，接口恢复 200 响应。
+
+## 2026-10-09 联合会审管理员多主体身份代签与异议议题“挂起中”过滤契约说明 (Admin Entity Picker & Suspended Status Filter)
+
+- **服务接口与业务逻辑架构演进**：
+  1. **表决接口载荷扩展 ([`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py))**：
+     - `VoteJointReviewPayload` 新增可选参数：
+       - `target_entity_type: Optional[str] = None`（管理员代为表决的目标主体类型，如 `supplier`, `site_manager`, `construction_unit`）
+       - `target_entity_id: Optional[str] = None`（管理员代为表决的目标主体 ID）
+     - 端点 `POST /projects/insulation_pipe_supply_2026/joint-reviews/{review_id}/vote` 平稳兼容普通用户自动权责匹配与管理员显式指定主体两种模式。
+  2. **多主体身份签署与署名留痕 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - **主体动态匹配升级**：在 `vote_joint_review` 中，若 `session_group in ("Global_admin", "dev_admin")`：
+       - 若传入目标主体信息，精准定位 `required_entities` 中对应的责任主体；若未传入，智能优先选取尚未表决的主体；
+     - **签署署名与责任归因**：
+       - 表决记录表 `tube_review_votes` 的 `voter_name` 记录为 `{entity_name} (管理员{username}代签)`；
+       - 操作日志（`tube_operation_logs`）记录操作类型及动作说明 `联合会审表决登记 (管理员代签): 代表主体 [{entity_name}]`，确保责任可追溯。
+  3. **“挂起中”状态全链路过滤契约 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - **业务口径确立**：当出现异议/驳回票（`rejected_entities` 不为空）且议题处于 `voting` 期间时，议题正式定义为“**挂起中**”；
+     - **列表多维过滤增强 (`list_joint_reviews`)**：
+       - 过滤参数 `review_status="suspended"`：自动生成 SQL `r.review_status = 'voting' AND jsonb_array_length(COALESCE(r.rejected_entities, '[]'::jsonb)) > 0`，实现精准拉取异议挂起议题；
+       - 过滤参数 `review_status="voting_normal"`：精准拉取尚无异议的在审议题；
+       - 数据项输出追加布尔值 `is_suspended` 与状态文案 `display_status`；
+     - 表决接口响应数据增加 `"is_suspended": is_suspended` 与 `"status_display": "挂起中" if is_suspended else "会审中"`。
+- **验证结果**：
+  - `python -m py_compile` 静态编译检查通过（Exit code 0）；
+  - 容器服务热重载正常，相关 API 契约平稳运行。
+
 ## 2026-10-09 联合会审终局裁决权限特许扩展与配置驱动设计说明 (Joint Review Final Arbitration Permissions & Config Driven)
 
 - **服务接口与权限校验架构演进 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：

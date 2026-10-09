@@ -13,10 +13,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set
 from zoneinfo import ZoneInfo
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -43,6 +45,7 @@ def _dumps_json(data: Any) -> str:
 
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 PROJECT_KEY = "insulation_pipe_supply_2026"
+logger = logging.getLogger(__name__)
 
 # 终局裁决/仲裁权默认白名单（首批特许裁决人员）
 DEFAULT_ARBITRATOR_ACCOUNTS: Set[str] = {"王玮", "李绍", "张亮"}
@@ -267,11 +270,10 @@ ensure_joint_review_tables()
 
 
 def _generate_review_no() -> str:
-    """生成带日期的唯一会审单号，例如 REV-20261008-123456。"""
+    """生成日期加 UUID 的会审单号，避免同一毫秒窗口并发提请编号碰撞。"""
     now = datetime.now(BEIJING_TZ)
     date_str = now.strftime("%Y%m%d")
-    micro_str = now.strftime("%H%M%S%f")[:8]
-    return f"REV-{date_str}-{micro_str}"
+    return f"REV-{date_str}-{uuid4().hex}"
 
 
 def _get_delivery_info(session, order_category: str, delivery_id: int) -> Optional[Dict[str, Any]]:
@@ -335,6 +337,8 @@ def create_joint_review(
     """
     ensure_joint_review_tables()
     order_category = order_category.strip().lower()
+    # 通知署名与主单署名统一，避免通知阶段引用未定义变量。
+    initiator_name = operator_name or operator_username
     if order_category not in ("pipe", "fitting"):
         raise HTTPException(status_code=400, detail="物料类别必须为 pipe (直管) 或 fitting (管件)")
 
@@ -787,13 +791,15 @@ def vote_joint_review(
     session_name: str,
     session_group: str,
     client_ip: str = "",
+    target_entity_type: Optional[str] = None,
+    target_entity_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     责任主体表决会签：
-    1. 校验当前主体合法性；
+    1. 校验当前主体合法性（Global_admin 支持指定代表的具体主体身份）；
     2. 记录表决结果；
     3. 全票同意时自动触发原子修单并恢复待办状态；
-    4. 存在异议时保持会审挂起。
+    4. 存在异议时将会审明确置为挂起中（suspended）。
     """
     ensure_joint_review_tables()
     vote_decision = vote_decision.strip().lower()
@@ -818,12 +824,35 @@ def vote_joint_review(
         if isinstance(required_entities, str):
             required_entities = json.loads(required_entities)
 
+        is_admin = session_group in ("Global_admin", "dev_admin")
+
         # 查找当前用户能代表的必审主体
         matched_entity = None
-        for ent in required_entities:
-            if _check_user_can_vote_entity(ent, session_username, session_group, cfg):
-                matched_entity = ent
-                break
+        if is_admin and target_entity_type and target_entity_id:
+            # 管理员显式指定以哪个主体身份签署意见
+            for ent in required_entities:
+                if ent.get("entity_type") == target_entity_type and str(ent.get("entity_id") or "").lower() == str(target_entity_id).lower():
+                    matched_entity = ent
+                    break
+            if not matched_entity:
+                raise HTTPException(status_code=422, detail=f"指定的目标主体 [{target_entity_type}::{target_entity_id}] 不属于本次会审的必审主体列表")
+        elif is_admin:
+            # 管理员未显式指定：优先选择该会审单中尚未表决的主体，若都已表决则默认选第 1 个
+            voted_sql = text("SELECT entity_type, entity_id FROM tube.tube_review_votes WHERE review_id = :rid")
+            voted_keys = {f"{v['entity_type']}::{v['entity_id']}" for v in db_session.execute(voted_sql, {"rid": review_id}).mappings().all()}
+            for ent in required_entities:
+                ek = f"{ent.get('entity_type')}::{ent.get('entity_id')}"
+                if ek not in voted_keys:
+                    matched_entity = ent
+                    break
+            if not matched_entity and required_entities:
+                matched_entity = required_entities[0]
+        else:
+            # 普通用户按角色与责任归属权责精准匹配
+            for ent in required_entities:
+                if _check_user_can_vote_entity(ent, session_username, session_group, cfg):
+                    matched_entity = ent
+                    break
 
         if not matched_entity:
             raise HTTPException(status_code=403, detail="您当前登录的角色不属于本次会审的必审主体，无表决权限")
@@ -831,6 +860,9 @@ def vote_joint_review(
         ent_type = matched_entity["entity_type"]
         ent_id = matched_entity["entity_id"]
         voter_display_name = session_name or session_username
+        if is_admin:
+            ent_label = matched_entity.get("entity_name") or matched_entity.get("role_desc") or ent_type
+            voter_display_name = f"{ent_label} (管理员{session_name or session_username}代签)"
 
         # 检查是否已表决
         existing_vote_sql = text("""
@@ -1004,19 +1036,21 @@ def vote_joint_review(
             db_session.commit()
 
             action_type = "JOINT_REVIEW_REJECTED_VOTE" if vote_decision == "reject" else "JOINT_REVIEW_APPROVED_VOTE"
+            action_desc_prefix = "联合会审表决登记 (管理员代签)" if is_admin else "联合会审表决登记"
             save_operation_log(
                 operator=session_username,
                 operator_group=session_group,
                 action_type=action_type,
-                action_desc=f"联合会审表决登记: 主体 [{matched_entity.get('entity_name')}] 投票 [{vote_decision}] (附言: {vote_opinion or '无'})，单号 {review['review_no']}",
+                action_desc=f"{action_desc_prefix}: 代表主体 [{matched_entity.get('entity_name')}] 投票 [{vote_decision}] (附言: {vote_opinion or '无'})，单号 {review['review_no']}",
                 resource_id=str(review_id),
-                after_value={"decision": vote_decision, "opinion": vote_opinion, "approved_count": len(approved_list), "total_count": len(required_entities)},
+                after_value={"decision": vote_decision, "opinion": vote_opinion, "approved_count": len(approved_list), "total_count": len(required_entities), "entity": matched_entity},
                 client_ip=client_ip,
             )
 
+            is_suspended = len(rejected_list) > 0
             msg = "表决已登记成功。"
             if vote_decision == "reject":
-                msg += " 由于您提出了异议，该会审将保持挂起状态，所有参与方均可查阅您的异议说明以继续协商。"
+                msg += " 由于提出了异议，该会审状态已变更为【挂起中】，所有参与方均可查阅异议说明以继续协商或由管理员仲裁。"
             else:
                 msg += f" 当前已同意 {len(approved_list)}/{len(required_entities)} 方，待其他主体表决。"
 
@@ -1025,6 +1059,8 @@ def vote_joint_review(
                 "review_id": review_id,
                 "review_no": review["review_no"],
                 "review_status": "voting",
+                "is_suspended": is_suspended,
+                "status_display": "挂起中" if is_suspended else "会审中",
                 "is_finalized": False,
                 "approved_count": len(approved_list),
                 "total_required": len(required_entities),
@@ -1277,8 +1313,14 @@ def list_joint_reviews(
             params["supply_entity_id"] = supply_entity_id.strip().lower()
 
         if review_status:
-            where_clauses.append("r.review_status = :review_status")
-            params["review_status"] = review_status.strip().lower()
+            r_st = review_status.strip().lower()
+            if r_st == "suspended":
+                where_clauses.append("r.review_status = 'voting' AND jsonb_array_length(COALESCE(r.rejected_entities, '[]'::jsonb)) > 0")
+            elif r_st == "voting_normal":
+                where_clauses.append("r.review_status = 'voting' AND jsonb_array_length(COALESCE(r.rejected_entities, '[]'::jsonb)) = 0")
+            else:
+                where_clauses.append("r.review_status = :review_status")
+                params["review_status"] = r_st
 
         if tab == "my_initiated":
             where_clauses.append("r.initiator_username = :my_user")
@@ -1403,7 +1445,15 @@ def list_joint_reviews(
             r_dict["needs_my_vote"] = needs_my_vote
             r_dict["my_voted"] = my_voted
             r_dict["my_vote_decision"] = my_vote_decision
-            r_dict["is_mine"] = r_dict["initiator_username"] == session_username
+            r_dict["is_mine"] = r_dict.get("initiator_username") == session_username
+            rej_ents = r_dict.get("rejected_entities") or []
+            is_suspended = len(rej_ents) > 0 and r_dict["review_status"] == "voting"
+            r_dict["is_suspended"] = is_suspended
+            if r_dict["review_status"] == "voting":
+                r_dict["display_status"] = "suspended" if is_suspended else "voting"
+            else:
+                r_dict["display_status"] = r_dict["review_status"]
+
             r_dict["can_cancel"] = (r_dict["is_mine"] or is_global_admin) and r_dict["review_status"] == "voting"
             r_dict["can_arbitrate"] = can_arbitrate_user and r_dict["review_status"] == "voting"
 

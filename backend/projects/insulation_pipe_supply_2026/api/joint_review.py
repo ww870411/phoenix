@@ -42,6 +42,8 @@ class CreateJointReviewPayload(BaseModel):
 class VoteJointReviewPayload(BaseModel):
     vote_decision: str = Field(..., description="表决意见: approve (同意) 或 reject (不同意)")
     vote_opinion: Optional[str] = Field(default="", description="表决补充说明或不同意理由")
+    target_entity_type: Optional[str] = Field(default=None, description="管理员代为表决的目标主体类型 (例如 supplier, site_manager, construction_unit)")
+    target_entity_id: Optional[str] = Field(default=None, description="管理员代为表决的目标主体 ID")
 
 
 class CancelJointReviewPayload(BaseModel):
@@ -91,6 +93,8 @@ def handle_vote_joint_review(
         session_name=display_name,
         session_group=session.group,
         client_ip=client_ip,
+        target_entity_type=payload.target_entity_type,
+        target_entity_id=payload.target_entity_id,
     )
 
 

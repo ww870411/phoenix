@@ -14,19 +14,13 @@
             <span class="live-status-pill">共识会签机制</span>
           </div>
           <p class="topbar-desc">
-            全生命周期订单信息协同校核中心。在待到货、待接收、待入库环节，任何正当修正诉求通过圆桌多方会审、全票同意后自动更正生效，共识免责、全程留痕。
+            在待到货、待接收、待入库环节，任何正当修正诉求通过圆桌多方会审、全票同意后自动更正生效，共识免责、全程留痕。
           </p>
         </div>
         <div class="topbar-actions">
           <button type="button" class="btn primary btn-initiate-guide" @click="howToInitiateModalVisible = true">
             <span class="btn-icon">➕</span>
             <span>提请会审流程说明</span>
-          </button>
-          <button type="button" class="btn ghost btn-back" @click="goProjectPages">
-            ⬅️ 返回功能页
-          </button>
-          <button type="button" class="btn secondary" @click="loadReviews" :disabled="loading">
-            🔄 {{ loading ? '同步中...' : '刷新会审列表' }}
           </button>
         </div>
       </header>
@@ -50,7 +44,7 @@
         </div>
         <div class="kpi-card" @click="switchTab('all')">
           <span class="kpi-label">🌐 全网会审总单数</span>
-          <span class="kpi-val text-slate">{{ totalCount }} <small>笔</small></span>
+          <span class="kpi-val text-slate">{{ allReviewCount ?? '—' }} <small>笔</small></span>
         </div>
       </section>
 
@@ -107,9 +101,11 @@
             <span>会审状态</span>
             <select v-model="filterStatus" @change="handleFilterChange">
               <option value="">全部状态</option>
-              <option value="voting">🟡 会审中</option>
+              <option value="voting">🟡 会审中 (含推进中与挂起中)</option>
+              <option value="suspended">🟠 挂起中 (存在异议协商中)</option>
+              <option value="voting_normal">🟡 会审推进中 (尚无异议)</option>
               <option value="approved">🟢 已全票通过</option>
-              <option value="rejected">🔴 存在异议/已驳回</option>
+              <option value="rejected">🔴 终局裁决驳回</option>
               <option value="cancelled">⚪ 已撤销</option>
             </select>
           </div>
@@ -172,13 +168,18 @@
               class="review-item-card"
               :class="[
                 `status-${rev.review_status}`,
-                { 'needs-me': rev.needs_my_vote, 'is-card-collapsed': !isExpanded(rev.id) }
+                {
+                  'needs-me': rev.needs_my_vote,
+                  'is-card-collapsed': !isExpanded(rev.id),
+                  'is-suspended': rev.review_status === 'voting' && (rev.rejected_entities || []).length > 0
+                }
               ]"
+              @click="handleCardClick($event, rev.id)"
             >
               <!-- 卡片顶栏（整行支持点击展开/折叠） -->
               <div
                 class="card-header-row clickable-head"
-                @click="toggleExpand(rev.id)"
+                @click.stop="handleHeaderClick(rev.id)"
                 :title="isExpanded(rev.id) ? '点击收起提案详情' : '点击展开提案详情'"
               >
                 <div class="header-left">
@@ -197,22 +198,22 @@
                     ⚡ 待我表决
                   </span>
                   <!-- 状态徽章 -->
-                  <span class="status-badge" :class="`badge-${rev.review_status}`">
+                  <span class="status-badge" :class="getStatusBadgeClass(rev)">
                     {{ formatReviewStatus(rev) }}
                   </span>
                   <!-- 折叠/展开独立按钮 -->
                   <button
                     type="button"
                     class="btn ghost btn-xs btn-fold-toggle"
-                    @click.stop="toggleExpand(rev.id)"
+                    @click.stop="isExpanded(rev.id) ? collapseCard(rev.id) : expandCard(rev.id)"
                   >
                     {{ isExpanded(rev.id) ? '收起 ▴' : '展开 ▾' }}
                   </button>
                 </div>
               </div>
 
-              <!-- 折叠态紧凑摘要条 (默认展示) -->
-              <div v-if="!isExpanded(rev.id)" class="folded-summary-strip" @click="toggleExpand(rev.id)">
+              <!-- 折叠态紧凑摘要条 (默认展示，点击任意位置一键顺畅展开) -->
+              <div v-if="!isExpanded(rev.id)" class="folded-summary-strip" @click.stop="expandCard(rev.id)">
                 <div class="summary-left">
                   <span class="sum-tag">👤 提请人：<strong>{{ rev.initiator_name }}</strong> ({{ rev.initiator_role }})</span>
                   <span class="sum-tag">📍 {{ rev.section_1_name }}</span>
@@ -224,10 +225,16 @@
                     ✅ 办结生效: {{ rev.finalized_at || rev.updated_at }}
                   </span>
                   <span v-else-if="rev.review_status === 'rejected'" class="sum-tag tag-reject font-mono">
-                    🛑 异议终止: {{ rev.finalized_at || rev.updated_at }}
+                    🛑 终局驳回: {{ rev.finalized_at || rev.updated_at }}
                   </span>
                   <span v-else-if="rev.review_status === 'cancelled'" class="sum-tag tag-cancel font-mono">
                     ⚪ 已撤回: {{ rev.finalized_at || rev.updated_at }}
+                  </span>
+                  <span v-else-if="(rev.rejected_entities || []).length > 0" class="sum-tag tag-suspended font-mono">
+                    🟠 挂起中: 存在异议待协商/裁决
+                  </span>
+                  <span v-else class="sum-tag tag-voting font-mono">
+                    🟡 会审中: 待全员达成共识
                   </span>
                 </div>
                 <div class="summary-right">
@@ -235,8 +242,8 @@
                 </div>
               </div>
 
-              <!-- 展开态完整详情区 (展开后展示) -->
-              <div v-if="isExpanded(rev.id)" class="expanded-details-body">
+              <!-- 展开态完整详情区 (展开后展示，阻止内部冒泡) -->
+              <div v-if="isExpanded(rev.id)" class="expanded-details-body" @click.stop>
                 <!-- 主体与元数据条 -->
                 <div class="meta-strip">
                   <span class="meta-item">📍 需求标段：<strong>{{ rev.section_1_name }}</strong></span>
@@ -396,8 +403,11 @@
 
                 <!-- 操作动作工具栏 -->
                 <div class="card-actions-bar">
-                  <!-- 待我表决操作组 -->
-                  <div v-if="rev.needs_my_vote" class="action-group my-vote-group">
+                  <!-- 待我表决操作组 / 管理员代签入口 -->
+                  <div v-if="rev.needs_my_vote || (isAdminUser && rev.review_status === 'voting')" class="action-group my-vote-group">
+                    <span v-if="isAdminUser" class="admin-sign-badge" title="系统超级管理员可指定代表任意主体进行表决或覆盖签署">
+                      👑 管理员代签
+                    </span>
                     <button
                       type="button"
                       class="btn primary btn-approve"
@@ -444,6 +454,16 @@
                     >
                       ⚖️ 终局裁决
                     </button>
+
+                    <!-- 快捷收起按钮 -->
+                    <button
+                      type="button"
+                      class="btn ghost btn-xs btn-collapse-bottom"
+                      @click.stop="collapseCard(rev.id)"
+                      title="收起此提案详情"
+                    >
+                      收起 ▴
+                    </button>
                   </div>
                 </div>
               </div>
@@ -483,8 +503,20 @@
         </div>
         <div class="modal-content">
           <p class="modal-tip">
-            选择提出异议时，该会审将保持挂起状态，请详细说明您核对出的事实、不同意的理由或现场实际情况：
+            选择提出异议时，该会审将变更为【挂起中】状态，请详细说明您核对出的事实、不同意的理由或现场实际情况：
           </p>
+
+          <!-- 管理员代为表决主体身份选择器 -->
+          <div v-if="isAdminUser" class="modal-field admin-identity-picker">
+            <label>👑 管理员表决身份主体：</label>
+            <select v-model="adminSelectedEntityKey" class="modal-select">
+              <option v-for="ent in getSelectableEntities(rejectingReview)" :key="ent.key" :value="ent.key">
+                {{ ent.role_desc }} - {{ ent.entity_name }} {{ ent.statusText }}
+              </option>
+            </select>
+            <small class="field-hint">作为超级管理员，请指定您本次发表异议代表的具体主体</small>
+          </div>
+
           <textarea
             v-model="rejectReasonInput"
             rows="4"
@@ -510,8 +542,20 @@
         </div>
         <div class="modal-content">
           <p class="modal-tip">
-            您即将代表名下责任主体对会审单据 <strong>[{{ approvingReview?.review_no }}]</strong>（订单号：{{ approvingReview?.order_no }}）签署【同意更正】意见。
+            您即将对会审单据 <strong>[{{ approvingReview?.review_no }}]</strong>（订单号：{{ approvingReview?.order_no }}）签署【同意更正】意见。
           </p>
+
+          <!-- 管理员代为表决主体身份选择器 -->
+          <div v-if="isAdminUser" class="modal-field admin-identity-picker">
+            <label>👑 管理员表决身份主体：</label>
+            <select v-model="adminSelectedEntityKey" class="modal-select">
+              <option v-for="ent in getSelectableEntities(approvingReview)" :key="ent.key" :value="ent.key">
+                {{ ent.role_desc }} - {{ ent.entity_name }} {{ ent.statusText }}
+              </option>
+            </select>
+            <small class="field-hint">作为超级管理员，请指定您本次签署同意代表的具体主体</small>
+          </div>
+
           <div class="modal-field">
             <label style="font-size: 12.5px; font-weight: 600; color: #475569; margin-bottom: 4px; display: block;">签署核准意见（可选）</label>
             <textarea
@@ -790,6 +834,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import {
@@ -801,6 +846,8 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+// 展开详情和代签弹窗需要读取当前登录身份。
+const auth = useAuthStore()
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -819,32 +866,74 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const reviewItems = ref([])
 const totalCount = ref(0)
+// 全网统计独立于当前列表的标签、筛选和分页；尚未取到统计时显示横线。
+const allReviewCount = ref(null)
 
-// 折叠/展开提案状态控制（默认全部折叠）
-const expandedReviewIds = ref(new Set())
+// 折叠/展开提案状态控制（响应式字典，确保精确触发 Vue 3 重新渲染）
+const expandedMap = ref({})
 
 function isExpanded(revId) {
-  return expandedReviewIds.value.has(revId)
+  if (revId == null) return false
+  return !!expandedMap.value[String(revId)]
+}
+
+// 展开卡片（幂等赋值 true，无论调用多少次均确保为展开态）
+function expandCard(revId) {
+  if (revId == null) return
+  expandedMap.value = {
+    ...expandedMap.value,
+    [String(revId)]: true,
+  }
+}
+
+// 折叠卡片（幂等赋值 false）
+function collapseCard(revId) {
+  if (revId == null) return
+  expandedMap.value = {
+    ...expandedMap.value,
+    [String(revId)]: false,
+  }
+}
+
+// 卡片容器点击：折叠态下点击卡片任意空白区域或文字，均 100% 顺畅展开
+function handleCardClick(event, revId) {
+  if (revId == null) return
+  if (!isExpanded(revId)) {
+    expandCard(revId)
+  }
+}
+
+// 顶栏点击：根据当前状态明确执行收起或展开
+function handleHeaderClick(revId) {
+  if (revId == null) return
+  if (isExpanded(revId)) {
+    collapseCard(revId)
+  } else {
+    expandCard(revId)
+  }
 }
 
 function toggleExpand(revId) {
-  if (expandedReviewIds.value.has(revId)) {
-    expandedReviewIds.value.delete(revId)
-  } else {
-    expandedReviewIds.value.add(revId)
+  if (revId == null) return
+  const k = String(revId)
+  expandedMap.value = {
+    ...expandedMap.value,
+    [k]: !expandedMap.value[k],
   }
 }
 
 function expandAll() {
+  const next = {}
   for (const r of reviewItems.value) {
-    if (r && r.id) {
-      expandedReviewIds.value.add(r.id)
+    if (r && r.id != null) {
+      next[String(r.id)] = true
     }
   }
+  expandedMap.value = next
 }
 
 function collapseAll() {
-  expandedReviewIds.value.clear()
+  expandedMap.value = {}
 }
 
 // 统计总表决方数：发起人 1 票 + 被邀协同主体 N 票
@@ -890,6 +979,44 @@ function formatPatchSummary(patch) {
 const myPendingCount = ref(0)
 const myInitiatedCount = ref(0)
 const approvedCount = ref(0)
+const suspendedCount = ref(0)
+
+// 管理员代签主体身份
+const adminSelectedEntityKey = ref('')
+
+const isAdminUser = computed(() => {
+  const grp = auth.user?.group
+  return grp === 'Global_admin' || grp === 'dev_admin' || auth.canAccessAdminConsole
+})
+
+function getSelectableEntities(rev) {
+  if (!rev || !rev.required_entities) return []
+  const req = rev.required_entities || []
+  const votes = rev.votes || []
+  const voteMap = {}
+  for (const v of votes) {
+    voteMap[`${v.entity_type}::${v.entity_id}`] = v
+  }
+
+  return req.map((ent) => {
+    const key = `${ent.entity_type}::${ent.entity_id}`
+    const v = voteMap[key]
+    let statusText = '【待签署】'
+    if (v) {
+      statusText = v.vote_decision === 'approve' ? '【已同意】' : '【已提异议】'
+    }
+    return {
+      key,
+      entity_type: ent.entity_type,
+      entity_id: ent.entity_id,
+      entity_name: ent.entity_name || ent.entity_id,
+      role_desc: ent.role_desc || '必审主体',
+      hasVoted: !!v,
+      votedDecision: v ? v.vote_decision : null,
+      statusText,
+    }
+  })
+}
 
 // 弹窗状态
 const rejectModalVisible = ref(false)
@@ -936,9 +1063,6 @@ const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value) |
 
 // 读取 URL 参数以自适应定位
 onMounted(() => {
-  if (typeof document !== 'undefined') {
-    document.title = '⚖️ 联合会审大厅 - 保温管物流链管理系统'
-  }
   if (route.query.tab) {
     currentTab.value = String(route.query.tab)
   }
@@ -960,17 +1084,23 @@ watch(
 )
 
 async function loadStats() {
-  try {
-    // 异步拉取各 Tab 的统计概况
-    const [pRes, mRes, aRes] = await Promise.all([
-      listJointReviews({ tab: 'pending_my_vote', limit: 1 }),
-      listJointReviews({ tab: 'my_initiated', limit: 1 }),
-      listJointReviews({ review_status: 'approved', limit: 1 }),
-    ])
-    if (pRes && pRes.ok) myPendingCount.value = pRes.total || 0
-    if (mRes && mRes.ok) myInitiatedCount.value = mRes.total || 0
-    if (aRes && aRes.ok) approvedCount.value = aRes.total || 0
-  } catch (e) {}
+  // 各项统计独立取数，个别请求失败不会丢弃其余成功结果。
+  const counts = [myPendingCount, myInitiatedCount, approvedCount, suspendedCount, allReviewCount]
+  const results = await Promise.allSettled([
+    listJointReviews({ tab: 'pending_my_vote', limit: 1 }),
+    listJointReviews({ tab: 'my_initiated', limit: 1 }),
+    listJointReviews({ tab: 'all', review_status: 'approved', limit: 1 }),
+    listJointReviews({ tab: 'all', review_status: 'suspended', limit: 1 }),
+    listJointReviews({ tab: 'all', limit: 1 }),
+  ])
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled' && result.value?.ok) {
+      counts[index].value = result.value.total ?? 0
+    } else {
+      if (counts[index] === allReviewCount) allReviewCount.value = null
+      console.warn('加载联合会审统计失败', result.status === 'rejected' ? result.reason : result.value)
+    }
+  })
 }
 
 async function loadReviews() {
@@ -987,7 +1117,7 @@ async function loadReviews() {
     if (res && res.ok) {
       reviewItems.value = res.items || []
       totalCount.value = res.total || 0
-      expandedReviewIds.value.clear() // 默认保持全部折叠
+      expandedMap.value = {} // 默认保持全部折叠
       if (currentTab.value === 'pending_my_vote') {
         myPendingCount.value = res.total || 0
       }
@@ -1034,13 +1164,20 @@ function formatReviewStatus(rev) {
   const appVotes = getApprovedVoteCount(rev)
   if (st === 'voting') {
     const rejCount = (rev.rejected_entities || []).length
-    if (rejCount > 0) return `🔴 存在异议挂起 (${appVotes}/${totalVotes})`
+    if (rejCount > 0) return `🟠 挂起中 (${rejCount}方异议·${appVotes}/${totalVotes}同意)`
     return `🟡 会审中 (${appVotes}/${totalVotes} 已同意)`
   }
   if (st === 'approved') return `🟢 全票通过已生效 (${totalVotes}/${totalVotes})`
-  if (st === 'rejected') return '🔴 终局驳回'
+  if (st === 'rejected') return '🔴 终局裁决驳回'
   if (st === 'cancelled') return '⚪ 已撤销'
   return st
+}
+
+function getStatusBadgeClass(rev) {
+  if (rev.review_status === 'voting' && (rev.rejected_entities || []).length > 0) {
+    return 'badge-suspended'
+  }
+  return `badge-${rev.review_status}`
 }
 
 function formatPatchKey(key) {
@@ -1123,11 +1260,16 @@ function formatPreStatus(status) {
 
 function formatTimelineStatus(rev) {
   if (!rev) return ''
+  if (rev.review_status === 'voting') {
+    if ((rev.rejected_entities || []).length > 0) {
+      return '🟠 挂起中·存在异议待协商或裁决'
+    }
+    return '🟡 会审中·协同签署中'
+  }
   const map = {
     approved: '🟢 全票通过·已办结生效',
-    rejected: '🔴 存在异议·已驳回终止',
+    rejected: '🔴 终局裁决驳回终止',
     cancelled: '⚪ 已主动撤销',
-    voting: '🟡 会审中·协同签署中',
   }
   return map[rev.review_status] || rev.review_status
 }
@@ -1135,8 +1277,9 @@ function formatTimelineStatus(rev) {
 function getFinalStepBadge(rev) {
   if (!rev) return ''
   if (rev.review_status === 'approved') return '全票共识·自动生效'
-  if (rev.review_status === 'rejected') return '异议终止·维持原单'
+  if (rev.review_status === 'rejected') return '终局驳回·维持原单'
   if (rev.review_status === 'cancelled') return '已主动撤销'
+  if (rev.review_status === 'voting' && (rev.rejected_entities || []).length > 0) return '存在异议·挂起协商中'
   return '等待全员达成共识'
 }
 
@@ -1158,6 +1301,13 @@ function getFinalStepOperator(rev) {
 function openApproveModal(rev) {
   approvingReview.value = rev
   approveOpinionInput.value = '经核验事实无误，同意更正'
+  if (isAdminUser.value) {
+    const ents = getSelectableEntities(rev)
+    const unvoted = ents.find((e) => !e.hasVoted)
+    adminSelectedEntityKey.value = unvoted ? unvoted.key : (ents[0]?.key || '')
+  } else {
+    adminSelectedEntityKey.value = ''
+  }
   approveModalVisible.value = true
 }
 
@@ -1165,10 +1315,16 @@ async function submitApproveVote() {
   if (!approvingReview.value) return
   actionLoading.value = true
   try {
-    const res = await voteJointReview(approvingReview.value.id, {
+    const payload = {
       vote_decision: 'approve',
       vote_opinion: approveOpinionInput.value.trim() || '经核验事实无误，同意更正',
-    })
+    }
+    if (isAdminUser.value && adminSelectedEntityKey.value) {
+      const [etype, eid] = adminSelectedEntityKey.value.split('::')
+      payload.target_entity_type = etype
+      payload.target_entity_id = eid
+    }
+    const res = await voteJointReview(approvingReview.value.id, payload)
     alert(res.message || '表决已提交')
     approveModalVisible.value = false
     loadReviews()
@@ -1183,6 +1339,13 @@ async function submitApproveVote() {
 function openRejectModal(rev) {
   rejectingReview.value = rev
   rejectReasonInput.value = ''
+  if (isAdminUser.value) {
+    const ents = getSelectableEntities(rev)
+    const unvoted = ents.find((e) => !e.hasVoted)
+    adminSelectedEntityKey.value = unvoted ? unvoted.key : (ents[0]?.key || '')
+  } else {
+    adminSelectedEntityKey.value = ''
+  }
   rejectModalVisible.value = true
 }
 
@@ -1193,10 +1356,16 @@ async function submitRejectVote() {
   }
   actionLoading.value = true
   try {
-    const res = await voteJointReview(rejectingReview.value.id, {
+    const payload = {
       vote_decision: 'reject',
       vote_opinion: rejectReasonInput.value.trim(),
-    })
+    }
+    if (isAdminUser.value && adminSelectedEntityKey.value) {
+      const [etype, eid] = adminSelectedEntityKey.value.split('::')
+      payload.target_entity_type = etype
+      payload.target_entity_id = eid
+    }
+    const res = await voteJointReview(rejectingReview.value.id, payload)
     alert(res.message || '异议已登记')
     rejectModalVisible.value = false
     loadReviews()
@@ -1321,19 +1490,26 @@ function goProjectPages() {
 .topbar.premium-topbar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
+  gap: 20px;
   background: #ffffff;
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin-bottom: 16px;
 }
 
+.topbar-title-block {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .title-with-badge {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .title-icon {
@@ -1345,6 +1521,7 @@ function goProjectPages() {
   font-size: 20px;
   font-weight: 800;
   color: #0f172a;
+  white-space: nowrap;
 }
 
 .live-status-pill {
@@ -1354,6 +1531,7 @@ function goProjectPages() {
   background: #dbeafe;
   color: #1e40af;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .topbar-desc {
@@ -1361,12 +1539,55 @@ function goProjectPages() {
   font-size: 13px;
   color: #64748b;
   line-height: 1.5;
-  max-width: 800px;
 }
 
 .topbar-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.topbar-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.topbar-actions .btn-refresh {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.topbar-actions .btn-refresh:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+@media (max-width: 860px) {
+  .topbar.premium-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 20px;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 .kpi-banner-grid {
@@ -1622,6 +1843,13 @@ function goProjectPages() {
 .review-item-card.is-card-collapsed {
   padding: 12px 18px;
   gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.review-item-card.is-card-collapsed:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  background: #fbfdff;
 }
 .review-item-card.needs-me {
   border: 2px solid #ef4444;
@@ -1707,6 +1935,20 @@ function goProjectPages() {
   background: #f8fafc !important;
 }
 
+.btn-collapse-bottom {
+  border: 1px solid #cbd5e1 !important;
+  color: #64748b !important;
+  font-size: 11.5px !important;
+  padding: 3px 8px !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+}
+.btn-collapse-bottom:hover {
+  border-color: #94a3b8 !important;
+  color: #1e293b !important;
+  background: #f1f5f9 !important;
+}
+
 .folded-summary-strip {
   display: flex;
   justify-content: space-between;
@@ -1722,8 +1964,8 @@ function goProjectPages() {
   gap: 12px;
 }
 .folded-summary-strip:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+  background: #eff6ff;
+  border-color: #60a5fa;
 }
 
 .summary-left {
@@ -1830,6 +2072,11 @@ function goProjectPages() {
 .badge-voting {
   background: #fef3c7;
   color: #92400e;
+}
+.badge-suspended {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
 }
 .badge-approved {
   background: #d1fae5;
@@ -2166,6 +2413,57 @@ function goProjectPages() {
 .sum-tag.tag-cancel {
   background: #f1f5f9;
   color: #64748b;
+}
+.sum-tag.tag-suspended {
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
+.sum-tag.tag-voting {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.admin-sign-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c2d12;
+  background: #ffedd5;
+  border: 1px solid #fed7aa;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.admin-identity-picker {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.admin-identity-picker label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 6px;
+  display: block;
+}
+.admin-identity-picker .modal-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+  font-size: 13px;
+  background: #ffffff;
+  color: #0f172a;
+}
+.admin-identity-picker .field-hint {
+  display: block;
+  font-size: 11.5px;
+  color: #64748b;
+  margin-top: 4px;
 }
 
 .resolution-summary-box {

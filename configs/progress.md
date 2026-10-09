@@ -1,3 +1,267 @@
+## 2026-10-09 会审数量更正相关数据库约束核对
+
+- 用户咨询应删除哪项约束。只读当前本机数据库确认：`tube.tube_delivery` 的 `chk_tube_delivery_arrived_qty_range` 为 `arrived_qty IS NULL OR (arrived_qty >= 0 AND arrived_qty <= shipped_qty)`，其中上界阻止到货10、发货更正8。
+- 若业务允许更正后到货量超过发货量，应调整该项、仅移除 `arrived_qty <= shipped_qty`，保留到货量非负。未执行DDL或修改数量规则；`received_qty_range` 与发货正数约束仍独立存在。
+- 本轮仅通过apply_patch同步三份文档并登记Serena，无数据库迁移；文档回滚可删除本段。
+
+## 2026-10-09 联合会审上线前检查及机械性缺陷修复
+
+- 检查结论：暂不建议上线。完整报告见 `configs/_qa_joint_review_prelaunch/review.md`，含11项尚未修复的问题、其他展示/通知/初始化问题及验收顺序。
+- 隔离执行真实函数复现跨标段发起、明细ID无车次归属限定、整车恢复范围过大、数量一致性缺口、字段忽略和个人待办分页计数等问题；未在业务数据库创建测试单。并发风险为源码证据，真实双事务验收未完成。
+- 已修复 `joint_review_service.py` 三项机械性缺陷：通知缺失 initiator_name、裁决配置异常缺失logger、10毫秒窗口编号碰撞（改为标准库UUID）。厂家ENTITY收件目标未被收件箱识别仍未修复，不能宣称通知全链路正常。
+- 回归：机械性修复3/3，前端组件5/5，Python语法编译通过。只读本机数据库发现混合状态车次5个、在审议案0个；容器运行且近期列表请求200，不等于业务验收。
+- 未完成：JR-01～JR-11修复、登录后浏览器验收、真实数据库生命周期与并发/看板回归。当前不满足上线条件。
+- 通过apply_patch修改局部Python和仓库内测试/报告/三文档，并登记本轮可用Serena。无数据库或配置修改；回滚仅撤销本轮补丁，保留其他工作区改动。新编号格式长度变化需核查外部报表，历史编号保持原样。
+
+## 2026-10-09 [移除 Serena MCP 相关配置]
+- **需求与背景**：
+  - 用户反馈：“我发现serena这个mcp，并不能在agy中正常工作，请你帮我删掉它在配置文件中的部分”；
+- **配置清理实施**：
+  1. [`C:/Users/ww/.gemini/antigravity-cli/mcp_config.json`](file:///C:/Users/ww/.gemini/antigravity-cli/mcp_config.json)：从 agy (antigravity-cli) 配置文件中移除 `mcpServers.Serena`；
+  2. [`C:/Users/ww/.gemini/config/mcp_config.json`](file:///C:/Users/ww/.gemini/config/mcp_config.json)：从全局 MCP 配置文件中移除 `Serena` 与 `serena`；
+  3. [`C:/Users/ww/.gemini/antigravity/mcp_config.json`](file:///C:/Users/ww/.gemini/antigravity/mcp_config.json)：从 Antigravity 核心配置中移除 `Serena`。
+- **验证结果**：
+  - 所有修改后的配置文件均经过 JSON 语法校验，结构合规，保留了其他正常运行的 MCP 服务（context7、amap-maps、desktop-commander、filesystem）。
+- **未尽事宜与说明**：
+  - 静态工具 schema 缓存目录位于 `~/.gemini/antigravity-cli/mcp/Serena/` 与 `~/.gemini/antigravity/mcp/serena/`，由于配置文件中已剥离，agy 重启或重载后将不再注入 Serena 工具。
+
+## 2026-10-09 [会审大厅顶栏导语文字说明精简]
+- **需求与优化背景**：
+  - 用户要求：“页面的文字说明‘全生命周期订单信息协同校核中心。在待到货、待接收、待入库环节，任何正当修正诉求通过圆桌多方会审、全票同意后自动更正生效，共识免责、全程留痕。’改为‘在待到货、待接收、待入库环节，任何正当修正诉求通过圆桌多方会审、全票同意后自动更正生效，共识免责、全程留痕。’”；
+- **重构与修改实施 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - 精简顶部 `<header class="topbar premium-topbar">` 内 `<div class="topbar-title-block">` 下的 `<p class="topbar-desc">` 说明文案；
+  - 剔除冗长的主旨前缀“全生命周期订单信息协同校核中心。”，直接呈现核心业务说明；
+  - 配合前序解绑硬编码宽度与 Flex 布局优化，顶栏导语整体更加凝练舒展，主次分明。
+- **验证结果**：
+  - 前端执行 `npm run build` 全量打包编译通过（745 modules transformed，耗时 13.72s，0 错误，退出码 0）。
+
+## 2026-10-09 全网会审总单数口径修复
+
+- 根因：第四张 KPI 卡片绑定 `totalCount`，而该变量由 `loadReviews()` 按当前标签、筛选和搜索结果覆盖；因此个人待办、本人发起、历史或筛选结果会被显示成全网总数。
+- 修复：`JointReviewHallView.vue` 新增 `allReviewCount`，`loadStats()` 独立请求 `listJointReviews({ tab: 'all', limit: 1 })`，不传物料、状态或搜索筛选，读取返回 `total`。列表计数与分页继续使用原 `totalCount`。
+- 各统计通过 `Promise.allSettled` 独立处理；全网请求失败或尚未完成显示“—”，成功返回零时显示 0。进入页面及表决、异议、撤回、裁决成功后沿用现有 `loadStats()` 更新。
+- 保留工作区同步发生的顶部刷新按钮删除，不恢复按钮或添加自动轮询。无后端、数据库或接口迁移。
+- 验证：新增回归修复前复现全网 53/0 被个人列表 25 覆盖；最终组件回归 5/5 通过，覆盖标签、搜索、分页、重新进入、统计失败及原展开交互。前端构建通过（17.65 秒、退出码 0），有原有分块大小提示；登录后浏览器实测仍未完成。
+- 附带发现但本轮未修改：后端 `pending_my_vote` 在 SQL 分页后按投票资格过滤并返回 `len(items)`，其 `limit: 1` 统计存在个人待办总数的分页口径问题；该问题与本次第四张全网卡片取数已分离。
+- Vue 局部修改、测试和三份 Markdown 通过 `apply_patch` 完成，并写入 Serena；回滚只撤销本轮统计相关补丁，保留其他同时发生的界面改动。
+
+## 2026-10-09 [会审大厅顶栏冗余“返回功能页”与“刷新会审列表”按钮彻底剥离]
+- **需求与优化背景**：
+  - 用户要求：“页面上方的‘⬅️ 返回功能页’和‘🔄 刷新会审列表’两个按钮去掉”；
+  - 架构合理性研判：
+    1. 会审大厅顶部常驻标准全局面包屑导航 [`Breadcrumbs.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/Breadcrumbs.vue)，用户随时可点击“2026年度保温管、管件物流链管理系统”一键返回功能页，独立的“返回功能页”按钮属于视觉重复；
+    2. 会审大厅在切换 Tab、搜索过滤或各项业务交互后均具备自动数据联动机制，常驻的“刷新会审列表”按钮使用率低且占用顶栏视觉空间。
+- **重构与修改实施 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - 从顶部 `<header class="topbar premium-topbar">` 的 `.topbar-actions` 中彻底移除 `btn-back`（返回功能页）和 `btn-refresh`（刷新会审列表）两枚按钮；
+  - 顶栏右侧唯一保留核心功能入口 **`➕ 提请会审流程说明`**，视觉结构极其聚焦利落；
+  - 面包屑导航继续完备承担页面跳转与返回职责。
+- **验证结果**：
+  - 前端执行 `npm run build` 全量打包编译通过（745 modules transformed，耗时 13.74s，0 错误）；
+  - 顶栏左右对齐舒展自然，不再有多按钮挤占空间或串行可能。
+
+## 2026-10-09 [会审大厅顶栏操作按钮“串行”错位排版彻底根治]
+- **问题反馈与现象定位**：
+  - 用户反馈：“上方的几个按钮，‘➕提请会审流程说明、⬅️ 返回功能页、🔄 刷新会审列表’都串行了，解决一下”；
+  - 根因排查：
+    1. **Flexbox 空间争夺挤压**：顶栏 `.topbar.premium-topbar` 内左侧 `.topbar-title-block` 包含长达 70 汉字的段落说明，且默认 `min-width: auto`，在大容器内占据了极大空间；
+    2. **右侧操作区缺乏收缩防线**：`.topbar-actions` 未配置 `flex-shrink: 0` 和 `white-space: nowrap`，在总内容区限制为 1160px（或中等分辨率屏、页面缩放）时，右侧容器宽度被急剧挤压至不足以并排放置三个按钮；
+    3. **按钮内部及按钮之间折行**：三个按钮缺乏强制单行不换行限制，在可用宽度不足时被迫垂直折断换行，三个按钮参差散落为两行或三行堆叠，呈现严重的“串行”错位现象。
+- **重构实现与修复方案 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  1. **弹性双列与防挤压基准**：
+     - `.topbar.premium-topbar` 设置 `align-items: center; gap: 20px;`；
+     - 左侧 `.topbar-title-block` 增加 `flex: 1 1 auto; min-width: 0;`，`.topbar-desc` 移除固定 `max-width: 800px`，允许其在左侧剩余区域内自适应优雅排布；
+  2. **操作按钮区硬性平铺防串行**：
+     - `.topbar-actions` 明确设置 `flex-shrink: 0; white-space: nowrap; align-items: center; gap: 10px;`，坚决禁止被左侧挤压变形；
+     - 对 `.topbar-actions .btn` 统一赋予 `display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; white-space: nowrap; flex-shrink: 0;`，确保文字与图标始终水平居中且绝不单字折行；
+     - 为“🔄 刷新会审列表”补充专有的 `.btn-refresh` 柔和边框与 hover 交互；
+  3. **小屏响应式断点平滑降级**：
+     - 增加 `@media (max-width: 860px)` 媒体查询，在极窄视口下转为规范的纵向两段式排版，各按钮依然保持规整平铺。
+- **验证结果**：
+  - 前端执行 `npm run build` 全量打包编译通过（745 modules transformed，耗时 13.55s，0 错误）；
+  - 三个顶栏按钮无论在任何分辨率、视口宽度或中等缩放级别下，均保持整齐水平一字排开，彻底消除“串行”折行问题。
+
+## 2026-10-09 移除折叠议题右侧展开明细提示
+
+- 按用户要求删除 `JointReviewHallView.vue` 折叠摘要右侧的“展开明细 ▾”元素及 `.click-to-expand-badge` 专用样式。
+- 保留事由文字、顶部展开/收起按钮及点击折叠摘要展开逻辑；后端、数据和接口无需迁移。
+- 验证：源文件不再含提示文字及专用类；既有组件点击回归 2/2 通过，未新增测试。浏览器实测受此前连接限制，未完成。
+- Vue 模板/样式局部删除与三份 Markdown 同步通过 `apply_patch` 完成，Serena 留痕；回滚可恢复本轮删除元素及样式。
+
+## 2026-10-09 会审议案展开失败：登录状态缺失修复
+
+- 用户反馈每条议案点击展开需要多次。真实组件回归确认单次展开会触发 `ReferenceError: auth is not defined`。
+- 根因：`JointReviewHallView.vue` 的 `isAdminUser` 计算属性读取未声明的 `auth`；折叠时详情不渲染，展开后操作栏才访问该计算属性，导致详情渲染失败。原有阻止冒泡与展开赋值逻辑无需改写。
+- 修复：导入项目现有 `useAuthStore` 并初始化 `const auth = useAuthStore()`，补充中文注释。不涉及后端、数据库或权限规则迁移。
+- 新增 `frontend/tests/joint-review-hall.test.mjs`，编译真实 Vue 模板并用 Vue 渲染器模拟点击，固定路由、登录态和 API；普通用户、管理员两组修复前均复现该异常，修复后 2/2 通过。覆盖按钮单次展开/收起、摘要条展开、底部收起、全部展开及管理员代签入口显示差异。原生输入框指令与真实网络留待浏览器验收。
+- 前端构建通过：`npm --prefix frontend run build`，745 模块，14.07 秒，退出码 0；存在原有分块体积提示，不影响本次构建。浏览器连接仍受此前原生连接桥故障限制，未宣称登录后页面实测通过。
+- 文本局部修改及新建测试通过 `apply_patch` 完成；回滚可撤销页面三行补充、测试文件及本轮三份文档记录。Serena 记录保存定位、复现与验证证据。
+
+## 2026-10-09 联合会审大厅继续完善：上下文接入
+
+- 本轮需求：协助继续完善 `joint_review_hall`，具体功能或问题待用户进一步说明。
+- 已定位页面 `JointReviewHallView.vue`、客户端 `jointReviewApi.js`、接口 `api/joint_review.py` 与服务 `services/joint_review_service.py`；代码存在待我联审、本人发起、历史档案、全网台账及表决、撤销、管理员裁决入口。
+- Serena 项目激活成功；当前接入未提供 `check_onboarding_performed`，已读取初始指令。未修改业务代码，未执行表决或数据库写入。
+- 浏览器技能连接失败，提示原生连接桥不可用；本轮未完成登录后页面验收，不将已有文档的历史验证作为本轮实测。
+- 普通 Markdown 文档采用 `apply_patch` 同步本文件与前后端 README；回滚只需删除本轮新增记录。无需接口迁移。
+
+## 2026-10-09 [会审大厅浏览器页签标题规范统一 (移除侵入性 document.title 恢复平台名称)]
+- **问题反馈与用户诉求**：
+  - 用户反馈：“打开会审大厅页面时，浏览器的标签显示为‘联合会审大厅xxx’，我不想让浏览器标签这样显示，就像其他页面一样，显示平台的名字即可”；
+  - 核心要求：去除会审大厅特立独行的浏览器标签改写，与全站其他所有页面保持 100% 步调一致，统一呈现平台的官方大名。
+- **根因分析与代码定位**：
+  1. 全站其他所有页面（如看板、需求侧管理、发货管理、库管等）均未修改 `document.title`，默认统一继承 [`index.html`](file:///D:/编程项目/phoenix/frontend/index.html) 中定义的权威站点标题 `<title>大连洁净能源集团生产经营数据智算平台</title>`；
+  2. 唯独在 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 的 `onMounted` 钩子中，历史代码显式执行了 `document.title = '⚖️ 联合会审大厅 - 保温管物流链管理系统'`，导致用户一旦进入该页面，浏览器标签被强行篡改；
+  3. 此外，[`index.html`](file:///D:/编程项目/phoenix/frontend/index.html) 的 `<body>` 中存在一行历史多余的 `<title>Phoenix</title>` 残留标签。
+- **修复方案与落地实施**：
+  1. 在 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 中彻底移除 `onMounted` 内侵入式修改 `document.title` 的逻辑；
+  2. 在 [`index.html`](file:///D:/编程项目/phoenix/frontend/index.html) 中清理冗余的 `<title>Phoenix</title>` 标签，确保页面标题完全且唯一由 `<head>` 权威标题 `大连洁净能源集团生产经营数据智算平台` 接管；
+  3. 无论用户是在会审大厅刷新、通过路由进入或返回其他页面，浏览器标签页均统一、稳定显示平台官方大名。
+
+## 2026-10-09 [会审大厅议案卡片展开/收起交互根治优化 (幂等展开赋值与整卡全域响应)]
+- **问题反馈与根因分析**：
+  - 用户反馈：“我试了，我要点好几下才能展开，只要点一下就能折叠”；
+  - 根因定位：
+    1. **外层卡片容器事件监听空白**：折叠状态下，整张 `.review-item-card` 包含 `12px 18px` 的 padding 以及 `8px` 的 gap。原代码仅在顶栏文本和摘要条内部监听点击，用户点击卡片边缘空白或元素间隙时毫无反应；
+    2. **Toggle（布尔值反转）双向竞争问题**：原代码统一使用 `toggleExpand`（`!value`）。当用户以为没反应连点两下，或内部子元素事件传播导致连击时，状态瞬间经历 `false -> true -> false`，导致卡片展开后瞬间又被收起；只有碰巧在奇数次点击停下时才展开；
+    3. **为何“只要点一下就能折叠”**：展开后摘要条已隐藏，卡片面积变大，用户只能精准点击顶部的【收起 ▴】按钮或顶栏，因而只触发单次点击，故能一下收起。
+- **重构与优化实施 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  1. **幂等赋值驱动替代单纯布尔反转**：
+     - 新增 `expandCard(revId)`：显式将 `expandedMap.value[String(revId)] = true`。无论连点多少次，卡片坚决处于展开状态，绝不反转；
+     - 新增 `collapseCard(revId)`：显式将 `expandedMap.value[String(revId)] = false`；
+     - 新增 `handleCardClick(event, revId)`：在折叠状态下，点击卡片任意空白区域或文字，均 100% 触发 `expandCard(revId)` 一键顺畅展开；
+     - 新增 `handleHeaderClick(revId)`：根据当前状态明确调用 `collapseCard` 或 `expandCard`。
+  2. **模板与事件流精细化绑定**：
+     - 卡片容器绑定 `@click="handleCardClick($event, rev.id)"`；
+     - 顶栏与折叠按钮使用 `@click.stop` 显式分流；
+     - 折叠态摘要条点击直接绑定 `@click.stop="expandCard(rev.id)"`，并在右侧补充 `展开明细 ▾` 胶囊标记引导；
+     - 展开态详情区容器增加 `@click.stop` 阻断冒泡，并在操作区右侧新增【收起 ▴】辅助按钮，方便长内容快速收起。
+  3. **视觉与交互手势感知增强**：
+     - 为 `.review-item-card.is-card-collapsed` 增加 `cursor: pointer` 和 hover 柔和蓝边发光效果（`border-color: #93c5fd; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);`），给用户极强的“整卡可点”暗示。
+- **验证结果**：
+  - 前端运行 `npm run build` 打包构建成功无报错（13.79s），卡片无论点在空白处、文字、摘要条还是按钮，均可单次瞬时顺畅展开与收起。
+
+## 2026-10-09 [会审大厅跨标段议题数据可见性边界审计与实测验证 (翁永鑫标段跨界可见性)]
+- **审计咨询背景**：
+  - 用户深入询问：“比如‘翁永鑫’（所属角色为施工单位 `tube_construction_unit`，所属范围为 `high_lot_1`），他进入会审大厅后，能看到 `high_lot_1` 之外、不涉及到他本人的议题吗？”
+- **代码分析与真实数据库验证结论**：
+  1. **结论：能看到（按 Tab 分区区分）**：
+     - 在 **【🌐 全网会审台账】（`tab = all`）** 与 **【📚 已完结会审档案】（`tab = history`）** 下，翁永鑫**能够看到全网所有标段**（包括 `high_lot_2~4`, `low_lot_1~6` 等所有其他标段）的议题；
+     - 在 **【🔥 待我联审】（`tab = pending_my_vote`）** 与 **【📋 我发起的会审】（`tab = my_initiated`）** 下，**严格隔离**，绝不会看到与自身无关或不需要自身表决的议题。
+  2. **代码级根因 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py#L1279-L1355))**：
+     - `list_joint_reviews` 服务在处理 `tab = 'all'` 与 `tab = 'history'` 时，底层 SQL 查询仅以会审状态或搜索关键字为过滤条件（`WHERE 1=1 AND r.review_status ...`），未将当前请求者的分管标段 `section_1_id` 加入隐式强制过滤，设计上定位于全网阳光透明的会审台账；
+     - 真实数据库实测：模拟翁永鑫账号请求 `list_joint_reviews(tab='all')`，真实返回了属于低压 6 标段的会审单（`id=5, section_1_id='low_lot_6'`）。
+  3. **数据安全与操作权限硬性闭环**：
+     - 尽管翁永鑫在公开台账 Tab 下能看到其他标段议题的基本流转卡片与时光轴，但在数据计算层，`can_i_vote`、`needs_my_vote`、`can_cancel`、`can_arbitrate` 均计算为 `False`，所有表决和终局操作入口对非相关人员完全关闭，仅具备只读查看属性。
+
+## 2026-10-09 [保温管物流链联合会审大厅(joint_review_hall)页面访问权限审计与账号清单梳理]
+- **审计背景与业务诉求**：
+  - 用户明确咨询：目前系统内哪些用户有权限看到 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/joint_review_hall`（联合会审大厅页面）；
+  - 全面排查前端路由守卫、组件视图级权限阻断、后端会审数据接口控制以及账号与权限矩阵配置源。
+- **权限判定架构与工作机制**：
+  1. **前端双重鉴权守卫**：
+     - **第一道（全局路由守卫）**：在 [`router/index.js`](file:///D:/编程项目/phoenix/frontend/src/router/index.js) 中，拦截 `/projects/insulation_pipe_supply_2026/pages/:pageKey`，执行 `auth.hasPageAccess('insulation_pipe_supply_2026', 'joint_review_hall')` 校验。未登录跳转登录页，未授权重定向至 `/forbidden`；
+     - **第二道（动态视图容器守卫）**：在 [`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue) 中，计算 `isAuthorized`。若权限不匹配，渲染 403 Forbidden 提示卡片，阻断会审大厅核心组件加载。
+  2. **权限矩阵配置源**：
+     - 数据来源于 [`permissions/insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)。配置中为保温管物流链系统的全部 8 个业务角色组配置了 `"joint_review_hall"` 的 `page_access` 权限：
+       - `Global_admin`（系统超级管理员）
+       - `tube_supplier_admin`（管厂管理员）
+       - `tube_supplier`（物资供应商）
+       - `tube_site_manager`（工地现场工程师/标段负责人）
+       - `tube_construction_unit`（施工单位代表）
+       - `tube_warehouse_keeper`（物资库管员）
+       - `tube_global_viewer`（项目全局浏览）
+       - `tube_data_viewer`（数据查询员）
+  3. **账号映射与实测统计（基于 [`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)）**：
+     - 平台现有 81 个账号中，**共有 61 个账号有权限进入并看到该页面**；
+     - 其余 20 个账号（主要为供热生产日报等其他项目的填报与管理账号，如 `Group_admin`、`Unit_admin`、`unit_filler` 等）由于所属组未在 `insulation_pipe_supply_2026.json` 中授权，访问时均被拦截；
+     - 需明确“页面查看权”与“单据操作权”的边界：虽然 61 个账号均可进入大厅查看会审进展，但只有被列为必审主体的账号拥有表决权，只有发起人/超管拥有撤回权，只有超管与特许人员拥有终局裁决权。
+
+## 2026-10-09 [会审大厅议案卡片展开/折叠响应式失效Bug彻底排查与Vue3对象代理重构]
+- **问题反馈与现象定位**：
+  - 用户反馈在会审大厅页面点击提案卡片头部或【展开 ▾】按钮时，卡片完全无响应、无法展开详情；
+  - 根因分析：
+    - `JointReviewHallView.vue` 内部采用 `const expandedReviewIds = ref(new Set())` 进行折叠状态管理；
+    - 当用户触发点击事件执行 `expandedReviewIds.value.add(revId)` 或 `delete(revId)` 时，调用的是原生的 `Set.prototype` 内部方法，**并未改变 `expandedReviewIds.value` 这个对象本身的引用指针**，且 Vue 3 的响应式追踪器无法通过函数调用 `isExpanded(rev.id)` 自动建立对 Set 内部 mutation 的依赖收集；
+    - 导致点击操作后内部虽然加入了 ID，但 Vue 完全未被通知更新，组件视图不触发重新渲染，卡片始终保持在折叠状态。
+- **重构实现与修复方案**：
+  - 在 [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) 中，将 Set 集合重构为符合 Vue 3 响应式规范的响应式普通字典对象：
+    ```javascript
+    const expandedMap = ref({})
+    function isExpanded(revId) {
+      if (revId == null) return false
+      return !!expandedMap.value[String(revId)]
+    }
+    function toggleExpand(revId) {
+      if (revId == null) return
+      const k = String(revId)
+      expandedMap.value = {
+        ...expandedMap.value,
+        [k]: !expandedMap.value[k],
+      }
+    }
+    function expandAll() {
+      const next = {}
+      for (const r of reviewItems.value) {
+        if (r && r.id != null) next[String(r.id)] = true
+      }
+      expandedMap.value = next
+    }
+    function collapseAll() {
+      expandedMap.value = {}
+    }
+    ```
+  - `loadReviews` 加载数据后同步重置 `expandedMap.value = {}`；
+  - 对象的扩展操作 `{ ...expandedMap.value, [k]: !expandedMap.value[k] }` 100% 触发 ref 的 setter 机制，确保 Vue 3 瞬间捕捉依赖并重新执行卡片折叠/展开动画与 DOM 渲染。
+- **验证结果**：
+  - 前端执行 `npm run build` 全量打包编译通过（745 modules transformed，耗时 13.77s，0 错误）；
+  - 单个提案点击顶栏、点击紧凑摘要条、点击操作栏展开/收起以及顶部【展开全部】/【收起全部】响应极速流畅。
+
+## 2026-10-09 [会审列表接口KeyError is_mine异常紧急修复与健壮性加固]
+- **问题反馈与根因定位**：
+  - 用户调用 `GET /api/v1/projects/insulation_pipe_supply_2026/joint-reviews/list` 报 500 Internal Server Error；
+  - 报错栈：`KeyError: 'is_mine'`（位于 `joint_review_service.py` 第 1452 行 `r_dict["can_cancel"] = (r_dict["is_mine"] or is_global_admin)...`）；
+  - 根因：在上一轮重构 `list_joint_reviews` 返回项中注入 `is_suspended` 与 `display_status` 时，不慎将 `r_dict["is_mine"]` 的赋值语句覆盖缺失，导致取值时报 `KeyError`。
+- **修复方案与实现**：
+  - 在 [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py) 中，使用安全提取方式重新恢复 `r_dict["is_mine"] = r_dict.get("initiator_username") == session_username`；
+  - 执行 `python -m py_compile` 静态编译检查通过。
+- **验证结果**：
+  - 容器服务热重载完成，会审列表查询接口恢复正常 200 响应。
+
+## 2026-10-09 [收件箱组件彻底剥离、Global_admin会审多重身份代签与异议议题“挂起中”状态全链路确立]
+- **需求与业务背景**：
+  1. **收件箱组件彻底剥离**：用户要求去除“收件箱”这一功能组件，并去除相关逻辑流程和机制，保持顶栏清爽，避免不必要的轮询与视觉干扰；
+  2. **Global_admin 会审发表意见选择主体身份**：对于超级管理员（`Global_admin` / `dev_admin`），在会审大厅发表核验意见（同意更正或提出异议）时，以往由于自动匹配逻辑会默认命中第一个主体，无法代表特定责任主体（如指定的供货厂家、项目部现场代表或施工单位）表决。现要求在表决弹窗中支持管理员显式选择“以哪个责任主体身份”签署意见；
+  3. **否决议题业务状态确认与全链路修正为“挂起中”**：确认会审机制核心口径——当有任何责任主体投出不同意/否决票时，会审议题并不被物理废弃或关闭，而是明确变更为“**挂起中**”（`suspended` / 存在异议挂起待协商），等待多方线下协商、发起人撤回重新提请、或特许管理员终局裁决。要求在会审大厅列表徽章、筛选下拉、时光轴和紧凑摘要条中全链路统一展示为“挂起中”。
+- **系统架构与关键模块实现**：
+  1. **收件箱入口与轮询机制彻底解耦 ([`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue))**：
+     - 从顶栏彻底移除 `<TopInboxDropdown>` 标签与组件导入；
+     - 全局前端不再发起站内信未读数轮询，彻底消除了后台定时请求开销与顶栏冗余控件。
+  2. **Global_admin 多身份表决代签机制 ([`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py) / [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - **API Payload 扩展**：`VoteJointReviewPayload` 新增可选参数 `target_entity_type` 与 `target_entity_id`；
+     - **后端精确主体绑定**：`vote_joint_review` 判定当操作人为 `Global_admin` 或 `dev_admin` 时，若指定了目标主体，则精准匹配到该 `required_entity`，支持管理员代表指定主体进行表决；
+     - **签署署名与审计留痕**：管理员代签时，`tube_review_votes` 记录署名为 `{entity_name} (管理员{username}代签)`，操作日志精准记录 `联合会审表决登记 (管理员代签): 代表主体 [{entity_name}]`，确保责任清晰且审计不可抵赖；
+     - **前端模态窗主体下拉选择器 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+       - 在【同意更正】与【提出异议】弹窗中，若当前用户为管理员，激活 `admin-identity-picker` 下拉框；
+       - 下拉框遍历该单据的 `required_entities`，标注各主体的签署状态（`【待签署】`、`【已同意】`、`【已提异议】`），并自动预选第一个未签署的主体；
+       - 管理员可在卡片操作栏随时点击进入代签模式，并展示专属 `👑 管理员代签` 徽章。
+  3. **“挂起中”状态全链路口径与高精细渲染 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py) / [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - **后端列表筛选增强**：`list_joint_reviews` 的 `review_status` 参数扩容支持 `suspended`（筛选已出现异议的会审单）与 `voting_normal`（筛选尚无异议的在审单），返回结果追加 `is_suspended` 与 `display_status`；
+     - **前端徽章与紧凑摘要更新**：
+       - `formatReviewStatus`：当存在驳回票时规范输出为 `🟠 挂起中 (${rejCount}方异议·${appVotes}/${totalVotes}同意)`；
+       - 状态徽章与折叠摘要条增设专属橙色视觉样式 `.badge-suspended` 与 `.sum-tag.tag-suspended`；
+       - 筛选下拉栏新增“🟠 挂起中 (存在异议协商中)”与“🟡 会审推进中 (尚无异议)”专属选项；
+       - 时光轴终点状态更新为“🟠 挂起中·存在异议待协商或裁决”；
+       - 顶部 KPI 大盘增加 `suspendedCount` 统计拉取。
+- **改动文件清单**：
+  1. [`frontend/src/projects/daily_report_25_26/components/AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue)
+  2. [`backend/projects/insulation_pipe_supply_2026/api/joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)
+  3. [`backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)
+  4. [`frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)
+- **验证结果**：
+  - 后端 Python 静态编译检查 `py_compile` 通过（0 语法错误）；
+  - 前端执行 `npm run build` 全量打包编译通过（745 modules transformed，耗时 15.58s，0 错误）；
+  - 顶栏收件箱已彻底消失，系统无报错。
+
 ## 2026-10-09 [tube项目联合会审特许终局裁决权限赋权（王玮/李绍/张亮首批裁决特权与配置化）]
 - **需求与业务背景**：
   - 用户提出在 tube 项目（`insulation_pipe_supply_2026`）中，增加特定现场骨干账号的联合会审“最终裁决权限”，打破基层死锁争议，首批账号名单为：“王玮”、“李绍”、“张亮”三个账号。

@@ -66,8 +66,6 @@
         >
           进入后台
         </button>
-        <!-- 个人收件箱消息中心微件 (位于用户名左侧) -->
-        <TopInboxDropdown v-if="auth.isLoggedIn || auth.isAuthenticated || auth.user" />
         <span v-if="userLabel" class="user-info">{{ userLabel }}</span>
         <button class="btn" @click="logout">退出</button>
       </nav>
@@ -82,7 +80,6 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-import TopInboxDropdown from '../../insulation_pipe_supply_2026/components/TopInboxDropdown.vue'
 import DailyReviewNoticeModal from '../../insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue'
 
 const router = useRouter()

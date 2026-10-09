@@ -1,3 +1,160 @@
+## 2026-10-09 数量更正约束核对
+
+- 当前直管会审修改发货量受数据库 `chk_tube_delivery_arrived_qty_range` 的 `arrived_qty <= shipped_qty` 限制。本轮仅核对并解释，不改前端、数据库或会审数量规则。
+
+## 2026-10-09 联合会审上线前页面检查
+
+- 本轮前端业务代码未修改，现有组件回归5/5通过，但未完成登录后浏览器验收。
+- 待修复：个人待办KPI被当前筛选结果覆盖；普通异议方失去重新表决入口；隐藏状态筛选仍传入其他标签；异步旧响应可覆盖新列表；通知review_id未定位议案；管理员裁决通过被标成全票同意；多明细缺少逐项原值快照。
+- 上线阻塞项与验收步骤详见 `configs/_qa_joint_review_prelaunch/review.md`，本轮结论为暂不建议上线。
+
+## 2026-10-09 环境与智能体配置：移除 Serena MCP
+
+- 本轮仅针对本地开发环境配置文件中失效的 Serena MCP 配置进行清理，前端工程代码、依赖与运行结构无改动。
+
+## 2026-10-09 会审大厅顶栏说明文案精简 (Topbar Description Streamlined)
+
+- **文案精简 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - 精简顶栏 `.topbar-desc` 描述文字，去除冗余前缀“全生命周期订单信息协同校核中心。”，更新为：“在待到货、待接收、待入库环节，任何正当修正诉求通过圆桌多方会审、全票同意后自动更正生效，共识免责、全程留痕。”；
+  - 排版与视觉：文字更短更清晰，配合自适应 Flexbox 弹性布局，消除视觉压迫感；
+  - 构建打包：`npm run build` 成功完成，0 错误（耗时 13.72s，退出码 0）。
+
+## 2026-10-09 全网会审 KPI 独立统计
+
+- `JointReviewHallView.vue` 的第四张卡片使用独立 `allReviewCount`，由 `loadStats()` 无筛选请求 `tab: 'all', limit: 1` 获取全网 `total`；当前列表的 `totalCount` 只用于结果数量和分页。
+- 切换标签、物料/状态筛选、搜索或翻页不会覆盖全网统计。进入页面和会审操作成功后更新；请求未完成或失败显示“—”，真实零条显示 0。不同统计请求分别处理失败，不新增自动重试或轮询。
+- 保留当前已移除顶部刷新按钮的界面。`tests/joint-review-hall.test.mjs` 回归 5/5 通过，构建通过；实际登录后浏览器验收尚未完成。
+
+## 2026-10-09 折叠议题摘要简化
+
+- `JointReviewHallView.vue` 移除摘要右侧“展开明细 ▾”提示与对应专用样式；保留事由、顶部展开按钮和摘要点击展开交互。
+
+## 2026-10-09 会审卡片展开运行时异常修复
+
+- `JointReviewHallView.vue` 补充导入 `useAuthStore` 并初始化 `auth`。展开详情的操作栏读取 `isAdminUser` 时，现可正常使用当前用户身份，消除 `auth is not defined` 渲染异常。
+- 本轮无需调整点击事件或展开状态策略。新增回归 `tests/joint-review-hall.test.mjs`，执行 `node --test frontend/tests/joint-review-hall.test.mjs`（仓库根目录）可验证普通用户和管理员的按钮单次展开/收起、摘要条展开和批量展开。
+- 两组修复前均复现错误，修复后 2/2 通过；前端构建通过（745 模块、14.07 秒、退出码 0），有原有分块体积提示。原生表单与登录后浏览器验收尚未完成，接口及权限规则无迁移。
+
+## 2026-10-09 联合会审大厅继续完善：前端接入记录
+
+- 页面入口：`src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue`；请求客户端：`services/jointReviewApi.js`。
+- 当前模板包含四类会审列表、物料与状态筛选、搜索及刷新入口；本轮仅定位现有实现，具体完善范围待用户说明。
+- 业务代码未修改；浏览器连接失败，尚未验证登录后实际显示与操作。仅同步文档，不涉及构建或接口迁移。
+
+## 2026-10-09 会审大厅议案卡片展开/收起幂等驱动与全域点击响应根治优化说明 (Joint Review Hall Card Expansion UX Overhaul)
+
+- **交互体验痛点与根因剖析 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - **用户反馈痛点**：“我要点好几下才能展开，只要点一下就能折叠”；
+  - **根因剖析**：
+    1. **折叠卡片外层容器无事件监听**：`.review-item-card` 包含内边距（`12px 18px`）与元素间隙，用户若点击在卡片内边距空白处完全无响应；
+    2. **Toggle 布尔值反转缺陷**：原实现使用 `!value` 反转。用户若因没反应而下意识连点、或子元素发生事件重入时，状态瞬间由 `false -> true -> false`，导致卡片展开后瞬间被反转回折叠，只有单数次停下时才处于展开态；
+    3. **为何折叠只需点一下**：卡片展开后紧凑摘要条隐藏，卡片面积大，用户通常精准点击右上角的【收起 ▴】或顶栏整行，单次点击只触发一次反转，故能一次收起。
+- **架构重构与交互升级方案**：
+  1. **幂等赋值驱动替代布尔值反转**：
+     - 新增 `expandCard(revId)`：显式令 `expandedMap.value[String(revId)] = true`。无论连点多少次，卡片坚决处于展开状态，绝对不会被意外反转折叠；
+     - 新增 `collapseCard(revId)`：显式令 `expandedMap.value[String(revId)] = false`；
+     - 新增 `handleCardClick(event, revId)`：折叠状态下，整张卡片任意位置（包括文字、标签、内边距空白）均一键顺畅触发 `expandCard(revId)`；
+     - 新增 `handleHeaderClick(revId)`：顶栏根据当前状态明确调用 `collapseCard` 或 `expandCard`。
+  2. **模板事件流与辅助操作布局**：
+     - 卡片容器添加 `@click="handleCardClick($event, rev.id)"`，顶栏与右上角按钮使用 `@click.stop` 显式路由；
+     - 折叠态摘要条点击直接绑定 `@click.stop="expandCard(rev.id)"`，并在右侧补充 `展开明细 ▾` 胶囊标记引导；
+     - 展开态详情容器添加 `@click.stop` 阻断冒泡，并在操作条右侧补充【收起 ▴】辅助按钮，方便长内容快速收起。
+  3. **视觉与手势暗示增强**：
+     - 折叠态卡片 `.review-item-card.is-card-collapsed` 增加 `cursor: pointer` 手势与 hover 柔和蓝边发光效果（`border-color: #93c5fd; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);`），提供清晰的“整卡可点”暗示。
+- **构建验证**：
+  - 前端执行 `npm run build`，745 模块无报错构建完成（13.79s）。
+
+## 2026-10-09 会审大厅顶栏操作区精简与冗余按钮剥离 (Topbar Actions Streamlined)
+
+- **前端视觉与交互精简 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - **组件精简**：按用户要求从顶栏 `.topbar-actions` 中彻底移除“⬅️ 返回功能页”与“🔄 刷新会审列表”两枚冗余按钮；
+  - **交互闭环**：返回上一级由常驻的面包屑导航 [`Breadcrumbs.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/Breadcrumbs.vue) 统一承载；数据刷新依托切换 Tab、变更筛选项及业务提交后的自适应联动；
+  - **视觉呈现**：顶栏右侧仅保留高亮的主功能引导按钮“➕ 提请会审流程说明”，排版极为清爽，彻底根绝横向空间挤占问题；
+  - **构建打包**：`npm run build` 成功完成，0 错误（耗时 13.74s）。
+
+## 2026-10-09 会审大厅顶栏操作按钮单行排版与防串行布局重构 (Topbar Actions Inline Layout & Anti-Wrap)
+
+- **前端布局优化 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - **根因分析**：顶栏 `.topbar-title-block` 带有长段描述文字且默认 `min-width: auto`，在 1160px 容器下挤压右侧操作区；而 `.topbar-actions` 缺乏 `flex-shrink: 0` 与 `white-space: nowrap` 保护，导致“➕提请会审流程说明”、“⬅️ 返回功能页”、“🔄 刷新会审列表”三枚按钮被迫换行折断，呈现上下错落“串行”现象；
+  - **样式与结构重构**：
+    - `.topbar-title-block` 注入 `flex: 1 1 auto; min-width: 0;`，标题与状态药丸支持自适应换行，描述文字解除硬编码最大宽度；
+    - `.topbar-actions` 强制设定 `flex-shrink: 0; white-space: nowrap; align-items: center; gap: 10px;`，坚决锁定水平行布局；
+    - 按钮统一规范为 `display: inline-flex; align-items: center; justify-content: center; height: 36px; white-space: nowrap; flex-shrink: 0;`，图标与文字以 span 标准包裹；
+    - 引入 `@media (max-width: 860px)` 极小屏响应式断点，防止视口收窄时溢出；
+  - **打包编译**：
+    - `npm run build` 全量通过（745 modules transformed，耗时 13.55s，0 错误）。
+
+## 2026-10-09 会审大厅浏览器页签标题规范统一说明 (Joint Review Hall Page Title Consistency)
+
+- **前端页签标题机制对齐 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue) & [`index.html`](file:///D:/编程项目/phoenix/frontend/index.html))**：
+  - **根因消除**：排查发现全站仅在会审大厅的 `onMounted` 钩子中写有 `document.title = '⚖️ 联合会审大厅 - 保温管物流链管理系统'`，导致用户打开此页面时浏览器标签被独立篡改；同时清理了 `index.html` body 中的历史残留 `<title>Phoenix</title>`；
+  - **规范对齐**：彻底移除会审大厅对 `document.title` 的侵入改写，使其与系统其他所有页面（看板、需求侧、发货、库管等）完全一致，统一常驻呈现系统全局权威平台标题 **「大连洁净能源集团生产经营数据智算平台」**；
+  - **打包编译**：`npm run build` 构建编译全量通过（745 modules transformed，耗时 18.34s，0 错误）。
+
+## 2026-10-09 会审大厅 Tab 视图数据边界与跨标段可见性说明 (Joint Review Hall Tab Scopes & Cross-Lot Visibility)
+
+- **前端 Tab 呈现与可见性机制 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - **默认首页【🔥 待我联审】 (`currentTab = 'pending_my_vote'`)**：
+    - 前端仅展示经后端校验后 `needs_my_vote === true` 的议题；非责任主体（如翁永鑫对于其他标段）不会在此 Tab 中出现；
+  - **【📋 我发起的会审】 (`currentTab = 'my_initiated'`)**：
+    - 仅展示当前用户本人亲自提请的会审单；
+  - **【🌐 全网会审台账】 (`currentTab = 'all'`) 与【📚 已完结会审档案】 (`currentTab = 'history'`)**：
+    - 大厅定位于协同公示台账，未对前端列表进行标段隐藏；任何有权进入大厅的用户（如翁永鑫）均可切换查看全网各标段议题的流转全景；
+    - 卡片内层操作按钮由 `can_i_vote`、`can_cancel`、`can_arbitrate` 精准受控，非相关标段单据不提供任何操作入口。
+
+## 2026-10-09 联合会审大厅 (joint_review_hall) 页面权限与路由守卫架构说明 (Joint Review Hall Access & Guard)
+
+- **路由与鉴权调用链**：
+  - **访问路径**：`/projects/insulation_pipe_supply_2026/pages/joint_review_hall`；
+  - **第一道防线（全局路由守卫 [`router/index.js`](file:///D:/编程项目/phoenix/frontend/src/router/index.js)）**：
+    - `router.beforeEach` 捕获到目标项目为 `insulation_pipe_supply_2026` 且页面为 `joint_review_hall`；
+    - 执行 `auth.hasPageAccess('insulation_pipe_supply_2026', 'joint_review_hall')` 校验；
+    - 未登录账号统一重定向至 `/login`，已登录但无该页面访问权限的账号重定向至 `/forbidden`；
+  - **第二道防线（页面容器守卫 [`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)）**：
+    - 容器内部响应式计算 `isAuthorized = computed(() => auth.hasPageAccess('insulation_pipe_supply_2026', pageKey.value))`；
+    - 若无权访问，则拦截动态组件加载，就地展示 403 Forbidden 提示及大厅回退导航。
+- **页面访问权限覆盖范围**：
+  - 由 [`permissions/insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json) 控制，开放给保温管物流链系统的全部 8 类角色（`Global_admin`, `tube_supplier_admin`, `tube_supplier`, `tube_site_manager`, `tube_construction_unit`, `tube_warehouse_keeper`, `tube_global_viewer`, `tube_data_viewer`），对应系统中 61 个有效业务账号；
+  - 非本系统角色组（如 `Unit_admin`、`unit_filler` 等 20 个纯日报账号）均被完全阻断。
+
+## 2026-10-09 会审大厅议案卡片折叠/展开响应式修复说明 (Joint Review Hall Card Expansion Reactivity Fix)
+
+- **前端交互与响应式状态加固 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+  - **问题根因**：原本折叠状态采用 `const expandedReviewIds = ref(new Set())` 进行管理。调用 `Set.prototype.add` / `delete` 时不改变对象指针，Vue 3 的响应式追踪器无法捕获 Set 内部成员的增删变更，导致模板内 `v-if="isExpanded(rev.id)"` 不触发 Re-render，呈现“点击卡片头部或展开按钮无反应”的假死现象；
+  - **修复重构**：将 Set 重构为响应式对象字典 `const expandedMap = ref({})`，并在 `toggleExpand` 中通过对象解构重新赋值（`expandedMap.value = { ...expandedMap.value, [k]: !expandedMap.value[k] }`），确保 100% 触发 Vue 3 核心响应式更新；
+  - **全部展开/收起联动**：`expandAll()` 与 `collapseAll()` 同样通过整体对象赋值更新，确保批量展开与折叠丝滑响应；
+- **打包验证**：
+  - `npm run build` 全量打包编译通过（745 modules transformed，耗时 13.77s，0 错误）。
+
+## 2026-10-09 收件箱组件剥离、Global_admin会审多主体身份代签与异议议题“挂起中”全链路交互说明 (Inbox Removal, Admin Identity Picker & Suspended State)
+
+- **前端架构演进与交互优化**：
+  1. **收件箱组件彻底剥离 ([`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue))**：
+     - 从公共顶栏彻底移除 `<TopInboxDropdown>` 标签与组件引用；
+     - 彻底消除站内信未读数轮询，系统顶栏更聚焦于在线人员、进入后台与个人账户注销操作。
+  2. **Global_admin 会审发表意见选择“身份”([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - **管理员专属主体选择器 (`admin-identity-picker`)**：
+       - 当当前登录用户为超级管理员（`Global_admin` / `dev_admin`）时，点击【同意更正】或【提出异议】弹窗中，自动展示“👑 管理员表决身份主体”下拉选择器；
+       - 下拉菜单完整遍历会审单的必审主体清单（`required_entities`），实时标注各主体签署状态（`【待签署】`、`【已同意】`、`【已提异议】`）；
+       - 默认智能预选第一个尚未签署的主体，并允许管理员自主切换代签主体；
+     - **卡片操作入口常驻与代签标识**：
+       - 管理员在面对任何进行中的会审单据时，操作栏均开放表决按钮，并展示专属 `👑 管理员代签` 徽章；
+       - 提交时自动携带 `target_entity_type` 与 `target_entity_id` 提交给后端服务。
+  3. **“挂起中”状态全链路高精细渲染 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - **业务口径**：一旦有任何主体提出异议，议题状态正式确立为“**挂起中**”；
+     - **状态徽章与折叠紧凑条**：
+       - `formatReviewStatus` 格式化为 `🟠 挂起中 (${rejCount}方异议·${appVotes}/${totalVotes}同意)`；
+       - 卡片外层与徽章赋予 `.badge-suspended` 与 `.is-suspended` 专属暖橙视觉样式；
+       - 折叠摘要条中增加专属橙色标签 `<span class="sum-tag tag-suspended font-mono">🟠 挂起中: 存在异议待协商/裁决</span>`；
+     - **状态筛选下拉栏扩容**：
+       - 新增“🟠 挂起中 (存在异议协商中)”与“🟡 会审推进中 (尚无异议)”细分选项；
+     - **会审时光轴终节点明确**：
+       - 显示为“🟠 挂起中·存在异议待协商或裁决”以及“存在异议·挂起协商中”；
+     - **顶部大盘指标联动**：
+       - 新增拉取全网异议挂起单量 `suspendedCount`。
+- **打包与构建**：
+  - `npm run build` 全量打包编译通过（745 modules transformed，耗时 15.58s，0 错误）。
+
 ## 2026-10-09 会审大厅特许终局裁决操作与权限感知说明 (Joint Review Hall Final Arbitration UX)
 
 - **前端会审大厅操作栏与弹窗交互演进 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
