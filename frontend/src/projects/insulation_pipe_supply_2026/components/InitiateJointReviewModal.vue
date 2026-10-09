@@ -72,7 +72,7 @@
               <div class="input-with-unit">
                 <input
                   type="number"
-                  step="any"
+                  step="0.01"
                   min="0.01"
                   v-model.number="form.shipped_qty"
                   placeholder="实到准确数量"
@@ -128,7 +128,7 @@
           <!-- 上方：整车公共信息修正 -->
           <div class="section-header-row">
             <span class="section-title">🚚 整车公共信息更正</span>
-            <span class="section-hint">修正本车运输公共要素</span>
+            <span class="section-hint">仅更正本标段、本厂家且处于同一待办节点的明细</span>
           </div>
 
           <div class="form-field-card" :class="{ 'is-modified': form.vehicle_plate_no && form.vehicle_plate_no.trim() !== (order.vehicle_plate_no || order.plateNo || '') }">
@@ -172,7 +172,7 @@
                   </div>
                 </div>
 
-                <div class="fitting-item-card-inputs">
+                <fieldset class="fitting-item-card-inputs" :disabled="!isFittingItemEditable(item)" style="border: 0; padding: 0; margin: 0; min-width: 0;">
                   <div class="sub-input-col col-type">
                     <label class="sub-col-label">管件品类</label>
                     <input
@@ -207,7 +207,8 @@
                       :class="{ 'input-changed': Number(item.shipped_qty) !== Number(item.orig_shipped_qty) }"
                     />
                   </div>
-                </div>
+                </fieldset>
+                <p v-if="!isFittingItemEditable(item)" class="section-hint">该明细处于其他节点，不参与本次会审。</p>
 
                 <div class="diff-indicator" v-if="isFittingItemModified(item)" style="margin-top: 4px;">
                   <span class="diff-chip">
@@ -217,6 +218,11 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="form-field-card">
+          <div class="field-header"><label>发货备注更正</label><span class="orig-tag">会审决议会自动附在更正备注后</span></div>
+          <textarea v-model="form.ship_remark" rows="2" class="field-input" placeholder="如需更正发货备注，请在此填写"></textarea>
         </div>
 
         <!-- 3. 事由说明与事实凭据区 (Reason & Attachment) -->
@@ -391,8 +397,12 @@ const submitError = ref('')
 const fileInputRef = ref(null)
 const reasonTextareaRef = ref(null)
 
+function isFittingItemEditable(item) {
+  return !item.status || !order.value?.status || item.status === order.value.status
+}
+
 function isFittingItemModified(item) {
-  if (!item) return false
+  if (!item || !isFittingItemEditable(item)) return false
   const typeChanged = (item.fitting_type || '').trim() !== (item.orig_fitting_type || '').trim()
   const specChanged = (item.model_spec || '').trim() !== (item.orig_model_spec || '').trim()
   const qtyChanged = item.shipped_qty !== null && item.shipped_qty !== '' && Number(item.shipped_qty) !== Number(item.orig_shipped_qty)
@@ -524,6 +534,9 @@ const diffList = computed(() => {
     })
   }
 
+  if ((form.ship_remark || '') !== (o.ship_remark || '')) {
+    list.push({ key: 'ship_remark', label: '发货备注', oldVal: o.ship_remark || '空', newVal: form.ship_remark || '空' })
+  }
   return list
 })
 
@@ -625,6 +638,14 @@ async function handleSubmit() {
     }
   }
 
+  if ((form.ship_remark || '') !== (currentOrder.ship_remark || '')) {
+    patch.ship_remark = form.ship_remark || ''
+  }
+  const quantities = [patch.shipped_qty, ...(patch.items || []).map(item => item.shipped_qty)].filter(value => value !== undefined)
+  if (quantities.some(value => !Number.isFinite(value) || value <= 0 || Math.abs(value * 100 - Math.round(value * 100)) > 0.000001)) {
+    submitError.value = '发货数量必须为有限正数，最多2位小数'
+    return
+  }
   const deliveryId = currentOrder.id || currentOrder.delivery_id || currentOrder.order_id
   const orderCategory = currentOrder.order_category || currentOrder.category || (isPipe.value ? 'pipe' : 'fitting')
 

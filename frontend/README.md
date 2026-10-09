@@ -1,3 +1,25 @@
+## 2026-10-09 管件发货标准化型号匹配算法修复 (Fitting Standardization Matching Fix)
+
+- **涉及页面与模块**：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)（发货管理 -> 管件发货 Tab -> `matchSingleFittingItem` 算法函数）；
+- **行为变更与修复**：
+  - **修复前缺陷**：在 Pass 1 严格匹配中仅判断品类大类与纯规格（DN50），未校验角度。导致录入“90°预制保温弯头”时，标准物料库中的“45°预制保温弯头 · DN50”与“90°预制保温弯头 · DN50”均被判定为精确候选，且因库内排序“45°”在先，弹窗默认首选项被错误推荐为 45° 弯头；
+  - **修复后行为**：Pass 1 阶段补充关键物理属性强校验，要求角度（`angleMatch`）、弯曲半径（`radiusMatch`）及子品类（`subtypeMatch`）必须严格吻合。若录入明确指定为 90°，则仅 90° 弯头被判定为完全吻合，首选即为 90° 弯头（置信度 1.0）；当有多个候选项时引入名称相似度亲和度排序；
+- **构建结果**：执行 `npm run build` 全量打包编译通过（0 错误，退出码 0）。
+
+## 2026-10-09 联合会审上线检查问题修复
+
+- 用户确认服务器发货表缺少pre_review_status；部署会审功能时需同步后端字段迁移，前端无需填报该字段。它记录会审前节点，保证解锁后回到原待办。
+
+- 拉取服务器数据后的字段复核：本机直管与管件发货表的pre_review_status均存在，用于保存会审前流转状态；字段由后端维护，前端无新增字段输入。
+
+- JointReviewHallView按can_i_vote及在审状态保留改票入口；KPI独立于列表；all以外不提交隐藏状态筛选；请求版本防止旧响应覆盖新列表或loading。
+- 通知review_id直接加载详情并展开，显示定位提示和返回列表入口；裁决通过按真实票数显示，不称为全票；多明细增加原值对照。InitiateJointReviewModal补充备注输入/比对/载荷、有限正数2位小数校验、其他状态明细禁改。
+- 页面SFC/Vue回归10/10，Vite构建通过；已登录Chrome核验单击展开、筛选列表与全网统计独立、通知打开已办结旧议案。实际业务写入验收边界见 `../configs/_qa_joint_review_prelaunch/fix_validation.md`。
+
+## 2026-10-09 数量约束调整生效确认
+
+- 用户执行SQL后，只读确认直管到货量约束已仅保留空值/非负校验，取消到货量不得超过发货量的上界。前端未改动，真实会审全流程仍待验收。
+
 ## 2026-10-09 数量更正约束核对
 
 - 当前直管会审修改发货量受数据库 `chk_tube_delivery_arrived_qty_range` 的 `arrived_qty <= shipped_qty` 限制。本轮仅核对并解释，不改前端、数据库或会审数量规则。

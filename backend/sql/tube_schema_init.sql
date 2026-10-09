@@ -101,7 +101,8 @@ CREATE TABLE IF NOT EXISTS tube.tube_delivery (
     CONSTRAINT chk_tube_delivery_shipped_qty_positive
         CHECK (shipped_qty > 0),
     CONSTRAINT chk_tube_delivery_arrived_qty_range
-        CHECK (arrived_qty IS NULL OR (arrived_qty >= 0 AND arrived_qty <= shipped_qty)),
+        -- 会审允许更正发货量小于已确认到货量，保留到货量非负校验。
+        CHECK (arrived_qty IS NULL OR arrived_qty >= 0),
     CONSTRAINT chk_tube_delivery_received_qty_range
         CHECK (
             received_qty IS NULL OR (

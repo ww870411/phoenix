@@ -57,6 +57,166 @@ const hasClass = name => node => String(node.props.class || '').split(' ').inclu
 const flush = async () => { await new Promise(resolve => setImmediate(resolve)); await Vue.nextTick() }
 const nodeText = node => node.text + node.children.map(nodeText).join('')
 
+test('提请弹窗备注更正写入载荷，其他状态明细不能更正，非法数量拒绝提交', async () => {
+  const modalFile = new URL('../src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue', import.meta.url)
+  const { descriptor: modalDescriptor } = parse(readFileSync(modalFile, 'utf8'))
+  const code = compileScript(modalDescriptor, { id: 'modal-regression', inlineTemplate: true,
+    templateOptions: { compilerOptions: { hoistStatic: false } } }).content
+    .replace(/import\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"];?/g, (_, bindings, path) =>
+      `const ${bindings.replace(/\bas\b/g, ':')} = ${path === 'vue' ? 'Vue' : 'deps'};`)
+    .replace('export default', 'return')
+  const factory = new Function('Vue', 'deps', code)
+  const calls = []
+  const root = makeNode('root')
+  const order = { id: 1, category: 'fitting', status: 'pending_arrival', ship_remark: '原备注',
+    items: [{ id: 1, status: 'pending_arrival', fitting_type: '弯头', model_spec: 'DN100', shipped_qty: 10 },
+      { id: 2, status: 'completed', fitting_type: '三通', model_spec: 'DN200', shipped_qty: 20 }] }
+  const app = renderer.createApp(factory(testVue, { createJointReview: async payload => { calls.push(payload); return { ok: true } } }),
+    { visible: true, order })
+  app.mount(root)
+  try {
+    await flush()
+    const fields = findNodes(root, node => node.type === 'fieldset')
+    assert.equal(fields[0].props.disabled, false)
+    assert.equal(fields[1].props.disabled, true)
+    const remark = findNodes(root, node => node.type === 'textarea' && node.props.placeholder?.includes('发货备注'))[0]
+    remark.props['onUpdate:modelValue']('新备注')
+    const reason = findNodes(root, node => node.type === 'textarea' && node.props.placeholder?.includes('实况'))[0]
+    reason.props['onUpdate:modelValue']('现场核实更正')
+    await flush()
+    findNodes(root, hasClass('btn-submit'))[0].props.onClick()
+    await flush()
+    assert.deepEqual(calls[0].proposed_patch, { ship_remark: '新备注' })
+    const quantity = findNodes(fields[0], node => node.type === 'input' && node.props.type === 'number')[0]
+    quantity.props['onUpdate:modelValue'](Infinity)
+    await flush()
+    findNodes(root, hasClass('btn-submit'))[0].props.onClick()
+    await flush()
+    assert.equal(calls.length, 1)
+    assert.ok(nodeText(root).includes('有限正数'))
+  } finally { app.unmount() }
+})
+
+function mountHall(overrides = {}) {
+  const emptyComponent = { render: () => null }
+  const deps = {
+    useRoute: () => ({ query: {}, path: '/hall' }),
+    useRouter: () => ({ push() {}, replace() {} }),
+    useAuthStore: () => ({ user: { group: 'tube_supplier' } }),
+    AppHeader: emptyComponent, Breadcrumbs: emptyComponent,
+    listJointReviews: async () => ({ ok: true, total: 0, items: [] }),
+    ...overrides,
+  }
+  const root = makeNode('root')
+  const app = renderer.createApp(makeComponent(testVue, deps))
+  const errors = []
+  app.config.errorHandler = error => errors.push(error)
+  app.mount(root)
+  return { app, root, errors }
+}
+
+test('异议方可以重新表决，裁决通过展示实际票数', async () => {
+  const review = {
+    id: 1, order_category: 'pipe', review_status: 'voting', can_i_vote: true,
+    my_voted: true, my_vote_decision: 'reject', needs_my_vote: false,
+    required_entities: [{ entity_type: 'supplier', entity_id: 'SUP' }],
+    approved_entities: [], rejected_entities: [], proposed_patch: {},
+  }
+  const { app, root, errors } = mountHall({
+    listJointReviews: async params => ({ ok: true, total: 1, items: params.limit === 1 ? [] : [review] }),
+  })
+  try {
+    await flush()
+    findNodes(root, hasClass('btn-fold-toggle'))[0].props.onClick({ stopPropagation() {} })
+    await flush()
+    assert.equal(findNodes(root, hasClass('btn-approve')).length, 1)
+    findNodes(root, hasClass('btn-approve'))[0].props.onClick()
+    await flush()
+    assert.ok(nodeText(root).includes('同意更正确认'))
+    assert.deepEqual(errors, [])
+  } finally { app.unmount() }
+  const next = mountHall({
+    listJointReviews: async params => ({ ok: true, total: 1, items: params.limit === 1 ? [] : [{
+      ...review, review_status: 'approved', finalized_by: '管理员', approval_type: 'arbitration',
+    }] }),
+  })
+  try {
+    await flush()
+    assert.ok(nodeText(next.root).includes('终局裁决通过已生效 (1/2 同意)'))
+    assert.ok(!nodeText(next.root).includes('全票通过已生效'))
+  } finally { next.app.unmount() }
+})
+
+test('隐藏状态筛选不传到其他标签，筛选结果不覆盖个人全局KPI', async () => {
+  const calls = []
+  const { app, root } = mountHall({
+    listJointReviews: async params => {
+      calls.push(params)
+      return { ok: true, total: params.limit === 1 ? 12 : 2, items: [] }
+    },
+  })
+  try {
+    await flush()
+    const clickTab = async text => {
+      findNodes(root, hasClass('hall-tab-btn')).find(node => nodeText(node).includes(text)).props.onClick()
+      await flush()
+    }
+    await clickTab('全网会审台账')
+    const statusSelect = findNodes(root, node => node.type === 'select').find(node => nodeText(node).includes('已通过'))
+    statusSelect.props['onUpdate:modelValue']('approved')
+    statusSelect.props.onChange()
+    await flush()
+    await clickTab('待我联审')
+    const latest = calls.filter(params => params.limit === 20).at(-1)
+    assert.equal(latest.review_status, undefined)
+    const pendingCard = findNodes(root, hasClass('kpi-card')).find(node => nodeText(node).includes('待我联审表决'))
+    assert.ok(nodeText(pendingCard).includes('12'))
+    const search = findNodes(root, node => node.type === 'input' && node.props.placeholder?.includes('搜索会审单号'))[0]
+    search.props['onUpdate:modelValue']('关键词')
+    findNodes(root, hasClass('btn-query'))[0].props.onClick()
+    await flush()
+    assert.ok(nodeText(pendingCard).includes('12'))
+  } finally { app.unmount() }
+})
+
+test('慢旧响应不会覆盖新标签列表或提前结束加载', async () => {
+  let finishOld, finishNew
+  const { app, root } = mountHall({
+    listJointReviews: params => params.limit === 1 ? Promise.resolve({ ok: true, total: 0 })
+      : new Promise(resolve => { if (params.tab === 'pending_my_vote') finishOld = resolve; else finishNew = resolve }),
+  })
+  try {
+    await flush()
+    findNodes(root, hasClass('hall-tab-btn')).find(node => nodeText(node).includes('全网会审台账')).props.onClick()
+    await flush()
+    finishOld({ ok: true, total: 100, items: [] })
+    await flush()
+    assert.equal(findNodes(root, hasClass('loading-state')).length, 1)
+    finishNew({ ok: true, total: 1, items: [{ id: 5, order_category: 'pipe', review_status: 'voting', proposed_patch: {} }] })
+    await flush()
+    assert.ok(nodeText(root).includes('共找到 1 笔'))
+  } finally { app.unmount() }
+})
+
+test('通知ID直接加载旧议案详情并展开，不依赖首屏或个人待办', async () => {
+  const calls = []
+  const { app, root, errors } = mountHall({
+    useRoute: () => ({ query: { tab: 'pending_my_vote', review_id: '99' }, path: '/hall' }),
+    getJointReviewDetail: async id => {
+      calls.push(id)
+      return { ok: true, data: { id, review_no: 'OLD-99', order_category: 'pipe', review_status: 'approved',
+        required_entities: [], proposed_patch: {}, approved_entities: [], finalized_by: 'SYSTEM_CONSENSUS' } }
+    },
+  })
+  try {
+    await flush()
+    assert.deepEqual(calls, [99])
+    assert.equal(findNodes(root, hasClass('expanded-details-body')).length, 1)
+    assert.ok(nodeText(root).includes('OLD-99'))
+    assert.deepEqual(errors, [])
+  } finally { app.unmount() }
+})
+
 for (const initialGlobalTotal of [53, 0]) {
   test(`全网总数 ${initialGlobalTotal} 独立于标签、筛选和分页，重新进入页面更新统计`, async () => {
     let globalTotal = initialGlobalTotal

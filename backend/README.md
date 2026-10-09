@@ -1,3 +1,27 @@
+## 2026-10-09 管件物料标准库字段结构与前端匹配契约说明
+
+- **涉及数据表与服务**：`tube.tube_material_price`（中标价格库）与 [`fitting_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py)；
+- **数据结构与契约阐明**：
+  - 在后端管件价格库中，弯头物料存储结构为：大类 `category='弯头'`、品名 `material_name='45°预制保温弯头'`/`'90°预制保温弯头'`、规格 `model_spec='DN50'`；
+  - 后端接口 `GET /supply-management/fitting-inventory` 返回排序规则稳定（按分类升序、品名升序、规格降序），“45°”物料自然排在“90°”之前；
+  - 本轮后端无需修改代码，但已确认数据结构契约完整清晰，前端匹配算法已依据此结构对齐物理 DNA（`angle` / `radius` / `subtype`）强校验，保证前后端数据契约无缝闭环。
+
+## 2026-10-09 联合会审业务缺陷修复
+
+- 服务器字段缺失已由用户确认：上线前为tube.tube_delivery和tube.tube_fitting_delivery分别执行ADD COLUMN IF NOT EXISTS pre_review_status VARCHAR(32)。冻结时保存每行前状态，解锁时恢复并清空；普通历史记录NULL合法，不应统一回填为pending_arrival。本轮未执行服务器DDL。
+
+- 本轮再次只读核实 `tube.tube_delivery.pre_review_status` 与 `tube.tube_fitting_delivery.pre_review_status` 均已存在，类型VARCHAR(32)、可空。上轮调用ensure_joint_review_tables补齐，本次未执行DDL；当前服务器是否有该字段未验证。
+
+- joint_review_service复用配置归属解析校验发起/表决标段；相同订单/车次使用事务锁和有序行锁；快照存精确冻结集合，_lock_review_rows和_restore_rows逐行恢复并保留备注，不影响同车其他阶段。生效前重新校验明细ID、白名单、NUMERIC(18,2)数量和文本长度。
+- 提请/通过支持完整白名单字段；改票审计保留前次意见；待我联审先资格过滤再统计分页；详情复用资格字段。通知通过AuthManager.list_user_identities解析实际收件账号，避免ENTITY消息不可见及跨标段广播。
+- 初始化DDL事务串行，表/状态约束失败向上抛出；补齐pending_diff_approve状态证据。本机已补齐缺失的会审字段与状态CHECK，未改业务记录。到货量非负规则同步tube_schema_init.sql，其他环境迁移见sql/migrate_tube_joint_review_arrived_qty.sql。
+- 真实PostgreSQL隔离回归10/10，含32生命周期组合、混合车次、权限、明细、字段、非法值、初始化失败及并发竞态；测试schema清理后数量0。验证范围与回滚见 `../configs/_qa_joint_review_prelaunch/fix_validation.md`，真实投递/库存与生产部署未验收。
+
+## 2026-10-09 直管到货数量约束调整验证
+
+- 用户自行执行SQL后，只读核实 `chk_tube_delivery_arrived_qty_range` 当前定义为 `CHECK (arrived_qty IS NULL OR arrived_qty >= 0)`，已验证（`convalidated=true`）。本轮未执行DDL或业务数据写入。
+- 该约束不再阻止到货10、发货更正8；实际会审提交/通过未验收，其他上线检查问题仍待处理。
+
 ## 2026-10-09 直管到货数量约束实际定义核对
 
 - 只读查询当前 `pg_constraint`：`tube.tube_delivery.chk_tube_delivery_arrived_qty_range` 定义为 `CHECK (arrived_qty IS NULL OR (arrived_qty >= 0 AND arrived_qty <= shipped_qty))`。

@@ -2655,6 +2655,13 @@ class AuthManager:
 
 
 
+    def list_user_identities(self) -> List[Dict[str, str]]:
+        """供站内业务按责任归属派发通知，仅提供账号与角色，不暴露密码或会话。"""
+        self._ensure_loaded()
+        with self._lock:
+            return [{"username": record.username, "group": record.group}
+                    for record in self._users_by_name.values()]
+
     def list_known_units(self) -> List[str]:
 
         self._ensure_loaded()

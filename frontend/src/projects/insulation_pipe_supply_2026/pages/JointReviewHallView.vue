@@ -39,7 +39,7 @@
           <span class="kpi-val text-blue">{{ myInitiatedCount }} <small>笔</small></span>
         </div>
         <div class="kpi-card" @click="switchTab('history')">
-          <span class="kpi-label">✓ 已全票通过更正</span>
+          <span class="kpi-label">✓ 已通过更正</span>
           <span class="kpi-val text-emerald">{{ approvedCount }} <small>笔</small></span>
         </div>
         <div class="kpi-card" @click="switchTab('all')">
@@ -104,7 +104,7 @@
               <option value="voting">🟡 会审中 (含推进中与挂起中)</option>
               <option value="suspended">🟠 挂起中 (存在异议协商中)</option>
               <option value="voting_normal">🟡 会审推进中 (尚无异议)</option>
-              <option value="approved">🟢 已全票通过</option>
+              <option value="approved">🟢 已通过（含裁决）</option>
               <option value="rejected">🔴 终局裁决驳回</option>
               <option value="cancelled">⚪ 已撤销</option>
             </select>
@@ -149,9 +149,10 @@
           <div class="list-control-bar">
             <div class="control-left">
               <span class="total-text">共找到 <strong>{{ totalCount }}</strong> 笔会审提案</span>
-              <span class="fold-hint-text">（默认已折叠，点击卡片或按钮可展开查看明细）</span>
+              <span class="fold-hint-text">{{ focusedReviewId ? '（已定位通知关联议案）' : '（默认已折叠，点击卡片或按钮可展开查看明细）' }}</span>
             </div>
             <div class="control-right">
+              <button v-if="focusedReviewId" type="button" class="btn ghost btn-xs" @click="showReviewList">返回当前列表</button>
               <button type="button" class="btn ghost btn-xs btn-ctrl-fold" @click="expandAll">
                 展开全部 ▾
               </button>
@@ -274,6 +275,7 @@
                               <tr>
                                 <th>#</th>
                                 <th>单号</th>
+                                <th>原始记录（品类 / 规格 / 数量）</th>
                                 <th>拟更正品类</th>
                                 <th>拟更正规格型号</th>
                                 <th>更正发货量</th>
@@ -283,6 +285,7 @@
                               <tr v-for="(it, itIdx) in val" :key="it.id || itIdx">
                                 <td>{{ itIdx + 1 }}</td>
                                 <td class="font-mono">{{ it.order_no || '—' }}</td>
+                                <td>{{ formatOriginalItem(rev, it) }}</td>
                                 <td>{{ it.fitting_type || '—' }}</td>
                                 <td>{{ it.model_spec || '—' }}</td>
                                 <td class="font-mono font-bold" style="color: #ea580c;">
@@ -404,7 +407,7 @@
                 <!-- 操作动作工具栏 -->
                 <div class="card-actions-bar">
                   <!-- 待我表决操作组 / 管理员代签入口 -->
-                  <div v-if="rev.needs_my_vote || (isAdminUser && rev.review_status === 'voting')" class="action-group my-vote-group">
+                  <div v-if="rev.review_status === 'voting' && (rev.can_i_vote || rev.needs_my_vote || isAdminUser)" class="action-group my-vote-group">
                     <span v-if="isAdminUser" class="admin-sign-badge" title="系统超级管理员可指定代表任意主体进行表决或覆盖签署">
                       👑 管理员代签
                     </span>
@@ -841,6 +844,7 @@ import {
   adminArbitrateJointReview,
   cancelJointReview,
   listJointReviews,
+  getJointReviewDetail,
   voteJointReview,
 } from '../services/jointReviewApi'
 
@@ -862,6 +866,10 @@ const searchKeyword = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 
+// 只允许最新请求更新列表和统计，旧响应不能覆盖用户当前操作。
+let listRequestVersion = 0
+let statsRequestVersion = 0
+const focusedReviewId = ref(null)
 const loading = ref(false)
 const actionLoading = ref(false)
 const reviewItems = ref([])
@@ -946,7 +954,6 @@ function getTotalVoteCount(rev) {
 function getApprovedVoteCount(rev) {
   if (!rev) return 0
   if (rev.review_status === 'cancelled') return 0
-  if (rev.review_status === 'approved') return getTotalVoteCount(rev)
   return 1 + ((rev.approved_entities || []).length)
 }
 
@@ -986,7 +993,7 @@ const adminSelectedEntityKey = ref('')
 
 const isAdminUser = computed(() => {
   const grp = auth.user?.group
-  return grp === 'Global_admin' || grp === 'dev_admin' || auth.canAccessAdminConsole
+  return grp === 'Global_admin' || grp === 'dev_admin'
 })
 
 function getSelectableEntities(rev) {
@@ -1061,29 +1068,62 @@ function goToWarehouseWorkbench(tab = 'pipe', sub = 'all') {
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value) || 1)
 
-// 读取 URL 参数以自适应定位
+// 通知按ID直接打开，不受首屏分页或已表决后待办筛选影响。
+function applyRouteQuery(query) {
+  const tab = String(query.tab || 'pending_my_vote')
+  currentTab.value = ['pending_my_vote', 'my_initiated', 'history', 'all'].includes(tab) ? tab : 'all'
+  searchKeyword.value = String(query.search || '')
+  const id = Number(query.review_id)
+  focusedReviewId.value = Number.isSafeInteger(id) && id > 0 ? id : null
+  currentPage.value = 1
+}
 onMounted(() => {
-  if (route.query.tab) {
-    currentTab.value = String(route.query.tab)
-  }
-  if (route.query.search) {
-    searchKeyword.value = String(route.query.search)
-  }
+  applyRouteQuery(route.query)
   loadReviews()
   loadStats()
 })
-
-watch(
-  () => route.query,
-  (newQ) => {
-    if (newQ.tab && newQ.tab !== currentTab.value) {
-      currentTab.value = String(newQ.tab)
-      loadReviews()
+watch(() => route.query, (query, previous) => {
+  const id = Number(query.review_id)
+  const nextId = Number.isSafeInteger(id) && id > 0 ? id : null
+  let changed = false
+  if (query.tab !== previous.tab) {
+    const tab = String(query.tab || 'pending_my_vote')
+    const normalized = ['pending_my_vote', 'my_initiated', 'history', 'all'].includes(tab) ? tab : 'all'
+    if (currentTab.value !== normalized) {
+      currentTab.value = normalized
+      changed = true
     }
   }
-)
+  if (nextId !== focusedReviewId.value) {
+    focusedReviewId.value = nextId
+    changed = true
+  }
+  if (query.search !== previous.search && String(query.search || '') !== searchKeyword.value) {
+    searchKeyword.value = String(query.search || '')
+    changed = true
+  }
+  if (changed) {
+    currentPage.value = 1
+    loadReviews()
+  }
+})
+
+function clearFocusedReview() {
+  focusedReviewId.value = null
+  if (route.query.review_id) {
+    const { review_id, ...query } = route.query
+    router.replace({ path: route.path, query })
+  }
+}
+
+function showReviewList() {
+  clearFocusedReview()
+  currentPage.value = 1
+  loadReviews()
+}
 
 async function loadStats() {
+  const version = ++statsRequestVersion
   // 各项统计独立取数，个别请求失败不会丢弃其余成功结果。
   const counts = [myPendingCount, myInitiatedCount, approvedCount, suspendedCount, allReviewCount]
   const results = await Promise.allSettled([
@@ -1093,6 +1133,7 @@ async function loadStats() {
     listJointReviews({ tab: 'all', review_status: 'suspended', limit: 1 }),
     listJointReviews({ tab: 'all', limit: 1 }),
   ])
+  if (version !== statsRequestVersion) return
   results.forEach((result, index) => {
     if (result.status === 'fulfilled' && result.value?.ok) {
       counts[index].value = result.value.total ?? 0
@@ -1104,48 +1145,51 @@ async function loadStats() {
 }
 
 async function loadReviews() {
+  const version = ++listRequestVersion
+  const focusId = focusedReviewId.value
   loading.value = true
   try {
-    const res = await listJointReviews({
+    const res = focusId ? await getJointReviewDetail(focusId) : await listJointReviews({
       tab: currentTab.value,
       order_category: filterCategory.value || undefined,
-      review_status: filterStatus.value || undefined,
+      review_status: currentTab.value === 'all' ? (filterStatus.value || undefined) : undefined,
       search: searchKeyword.value ? searchKeyword.value.trim() : undefined,
       page: currentPage.value,
       limit: pageSize.value,
     })
+    if (version !== listRequestVersion) return
     if (res && res.ok) {
-      reviewItems.value = res.items || []
-      totalCount.value = res.total || 0
-      expandedMap.value = {} // 默认保持全部折叠
-      if (currentTab.value === 'pending_my_vote') {
-        myPendingCount.value = res.total || 0
-      }
+      reviewItems.value = focusId ? [res.data] : (res.items || [])
+      totalCount.value = focusId ? 1 : (res.total || 0)
+      expandedMap.value = focusId ? { [String(focusId)]: true } : {}
     }
   } catch (err) {
-    alert(err.message || '加载联合会审列表失败')
+    if (version === listRequestVersion) alert(err.message || '加载联合会审列表失败')
   } finally {
-    loading.value = false
+    if (version === listRequestVersion) loading.value = false
   }
 }
 
 function switchTab(tabKey) {
   if (currentTab.value === tabKey) return
+  focusedReviewId.value = null
   currentTab.value = tabKey
   currentPage.value = 1
   router.replace({
     path: route.path,
-    query: { ...route.query, tab: tabKey },
+    query: { ...route.query, tab: tabKey, review_id: undefined },
   })
   loadReviews()
 }
 
 function handleFilterChange() {
+  clearFocusedReview()
   currentPage.value = 1
   loadReviews()
 }
 
 function resetFilters() {
+  clearFocusedReview()
   filterCategory.value = ''
   filterStatus.value = ''
   searchKeyword.value = ''
@@ -1154,6 +1198,7 @@ function resetFilters() {
 }
 
 function changePage(page) {
+  clearFocusedReview()
   currentPage.value = page
   loadReviews()
 }
@@ -1167,7 +1212,9 @@ function formatReviewStatus(rev) {
     if (rejCount > 0) return `🟠 挂起中 (${rejCount}方异议·${appVotes}/${totalVotes}同意)`
     return `🟡 会审中 (${appVotes}/${totalVotes} 已同意)`
   }
-  if (st === 'approved') return `🟢 全票通过已生效 (${totalVotes}/${totalVotes})`
+  if (st === 'approved') return isArbitrationApproval(rev)
+    ? `🟢 终局裁决通过已生效 (${appVotes}/${totalVotes} 同意)`
+    : `🟢 全票通过已生效 (${appVotes}/${totalVotes})`
   if (st === 'rejected') return '🔴 终局裁决驳回'
   if (st === 'cancelled') return '⚪ 已撤销'
   return st
@@ -1178,6 +1225,17 @@ function getStatusBadgeClass(rev) {
     return 'badge-suspended'
   }
   return `badge-${rev.review_status}`
+}
+
+function isArbitrationApproval(rev) {
+  return rev.approval_type === 'arbitration' ||
+    (rev.finalized_by && rev.finalized_by !== 'SYSTEM_CONSENSUS')
+}
+
+function formatOriginalItem(rev, item) {
+  const rows = rev.original_snapshot?.items || rev.original_snapshot?._review_rows || []
+  const before = rows.find(row => String(row.id) === String(item.id))
+  return before ? `${before.fitting_type || '—'} / ${before.model_spec || '—'} / ${before.shipped_qty ?? '—'} ${before.unit || '件'}` : '历史议案未留存该项原值'
 }
 
 function formatPatchKey(key) {
@@ -1267,7 +1325,7 @@ function formatTimelineStatus(rev) {
     return '🟡 会审中·协同签署中'
   }
   const map = {
-    approved: '🟢 全票通过·已办结生效',
+    approved: isArbitrationApproval(rev) ? '🟢 终局裁决通过·已办结生效' : '🟢 全票通过·已办结生效',
     rejected: '🔴 终局裁决驳回终止',
     cancelled: '⚪ 已主动撤销',
   }
@@ -1276,7 +1334,7 @@ function formatTimelineStatus(rev) {
 
 function getFinalStepBadge(rev) {
   if (!rev) return ''
-  if (rev.review_status === 'approved') return '全票共识·自动生效'
+  if (rev.review_status === 'approved') return isArbitrationApproval(rev) ? '终局裁决·通过生效' : '全票共识·自动生效'
   if (rev.review_status === 'rejected') return '终局驳回·维持原单'
   if (rev.review_status === 'cancelled') return '已主动撤销'
   if (rev.review_status === 'voting' && (rev.rejected_entities || []).length > 0) return '存在异议·挂起协商中'

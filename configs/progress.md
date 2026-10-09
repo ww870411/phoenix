@@ -1,3 +1,36 @@
+## 2026-10-09 [管件标准化型号匹配根因分析与算法修复]
+- **问题现象与排查定位**：
+  - 用户反馈在管件发货填报时，以“鑫瑞得”为例，当管件类型录入“90°预制保温弯头”、规格填“DN50”时，点击提交发货单弹窗中建议的标准型号有两个，且首选为“45°预制保温弯头 · DN50”，次选才是“90°预制保温弯头 · DN50”；
+  - **根因剖析**：
+    1. 数据库存储结构分离：在中标价格库（`tube.tube_material_price`）中，管件的 `category` 为“弯头”，`model_spec` 为“DN50”，而角度（45°/90°）实际存储在 `material_name` 中；
+    2. Pass 1 严格匹配漏判角度：前端 `matchSingleFittingItem` 在 Pass 1（Strict Exact Match）阶段只判断了品类族（`familyMatch`，二者均为“弯头”）与规格字符串（`cleanedRawSpec === stdSpecCleaned`，二者均为“DN50”），未对角度（`angle`）、弯曲半径（`radius`）及三通等子属性做强一致性校验；
+    3. 短路返回导致多候选：45° 与 90° 弯头均被错误判定为完全吻合，进入 `exactCandidates`。此时列表长度为 2，直接短路进入 `candidates` 分支并返回，阻断了 Pass 2 的语义比对；
+    4. 排序自然前置：后端物料库按字母排序时“45°”排在“90°”之前，导致 `exactCandidates[0]` 取到了 45° 弯头作为首选项推荐。
+- **算法精细化修复 ([`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue))**：
+  - 在 Pass 1 判定中补齐 `angleMatch`（角度若存在必须完全一致）、`radiusMatch`（弯曲半径必须完全一致）及 `subtypeMatch`（如三通是否含“跨越”子品类校验）；
+  - 补充同规格多候选时的亲和度二次排序逻辑，将品名中包含输入关键词或角度完全相同的候选项优先置顶；
+  - 修复后，输入“90°预制保温弯头 DN50”将 100% 精准唯一命中“90°预制保温弯头 · DN50”（置信度 1.0），不再受到 45° 弯头干扰，彻底杜绝扣错库存风险。
+- **验证与构建**：
+  - 通过单测脚本验证各种极端场景（45°/90°弯头、未指定角度的弯头、跨越三通 vs 直三通等）均 100% 符合预期；
+  - 前端执行 `npm run build` 全量打包编译通过（745 modules transformed，0 错误，退出码 0）。
+
+## 2026-10-09 会审剩余问题修复与数据库回归
+
+- 用户已确认服务器两张发货表缺少pre_review_status。字段保存订单会审前状态，冻结时写入、通过/撤回/终止时恢复并清空；服务器部署须为tube.tube_delivery、tube.tube_fitting_delivery分别ADD COLUMN IF NOT EXISTS pre_review_status VARCHAR(32)。普通历史订单允许NULL，无需统一回填。本轮仅说明迁移要求，未连接或修改服务器数据库。
+
+- 用户说明刚从服务器拉取最新数据，可能覆盖本机表结构。本轮重新只读确认 `tube.tube_delivery` 和 `tube.tube_fitting_delivery` 均存在 `pre_review_status VARCHAR(32)`，允许空值；上轮已由会审初始化补齐。本次未重复执行DDL，服务器字段状态未查询。
+
+- 已修复最初报告JR-01～JR-11及通知定位、裁决票数、多明细快照、初始化失败处理。详细模块、实现和边界见 `configs/_qa_joint_review_prelaunch/fix_validation.md`；原报告保留历史发现并链接最新记录。
+- 服务通过标段资格校验、车次事务锁、准确冻结ID快照及逐行恢复执行会审；最终生效再次核验字段和冻结状态。前端修复改票、独立KPI、筛选、异步竞态、通知详情和备注更正。
+- PostgreSQL隔离回归10/10（含32种生命周期组合及真实双事务）、前端10/10、机械性3/3、构建与语法检查通过。已登录Chrome确认展开、筛选统计独立及通知直接展开旧议案。测试schema已清理，未改写真实订单/议案/表决，通知和审计在测试中捕获。
+- 当前数据库在过程中出现会审字段/状态约束缺失，原因未证实；已执行现有初始化补齐两表pre_review_status和状态CHECK，均验证成功。用户的到货量非负规则同步初始化源码并提供其他环境迁移SQL。
+- 边界：未发布生产；业务账号真实收件箱、库存看板及容量验收未完成；容器无coverage组件，未声称90%覆盖率。文本使用apply_patch，三份文档与Serena同步，回滚按本轮补丁及报告执行。
+
+## 2026-10-09 用户执行数量约束调整后的验证
+
+- 用户已自行执行SQL；只读查询本机数据库确认 `tube.tube_delivery.chk_tube_delivery_arrived_qty_range` 已变为 `CHECK (arrived_qty IS NULL OR arrived_qty >= 0)`，`convalidated=true`。
+- 到货10、发货更正8不再被该项约束拦截；未执行真实会审通过测试，不能据此认定整个机制已通过上线验收。本轮仅同步文档，未修改数据库或业务代码。
+
 ## 2026-10-09 会审数量更正相关数据库约束核对
 
 - 用户咨询应删除哪项约束。只读当前本机数据库确认：`tube.tube_delivery` 的 `chk_tube_delivery_arrived_qty_range` 为 `arrived_qty IS NULL OR (arrived_qty >= 0 AND arrived_qty <= shipped_qty)`，其中上界阻止到货10、发货更正8。

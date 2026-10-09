@@ -28,6 +28,8 @@ from backend.projects.insulation_pipe_supply_2026.services.audit_log_service imp
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
     get_config_list,
     load_tube_config,
+    resolve_accessible_section_1_ids,
+    resolve_accessible_supply_entity_ids,
 )
 
 def _json_serialize_default(obj: Any) -> Any:
@@ -181,6 +183,8 @@ def ensure_joint_review_tables() -> None:
 
     session = SessionLocal()
     try:
+        # 多进程初始化串行化，检查失败必须阻止业务继续使用未就绪的表。
+        session.execute(text("SELECT pg_advisory_xact_lock(20261009, 1)"))
         for stmt in ddl_statements:
             session.execute(text(stmt))
         _ensure_status_constraints(session)
@@ -189,7 +193,7 @@ def ensure_joint_review_tables() -> None:
     except Exception as exc:
         session.rollback()
         import logging
-        logging.getLogger("uvicorn.error").warning(f"联合会审数据表初始化异常: {exc}")
+        raise RuntimeError("联合会审数据表初始化失败") from exc
     finally:
         session.close()
 
@@ -204,7 +208,7 @@ def _ensure_status_constraints(session) -> None:
             JOIN pg_namespace n ON n.oid = c.connamespace
             WHERE n.nspname = 'tube' AND c.conname = 'chk_tube_delivery_status';
         """)).scalar()
-        if res_del and "'under_review'" not in res_del:
+        if not res_del or "'under_review'" not in res_del:
             session.execute(text("ALTER TABLE tube.tube_delivery DROP CONSTRAINT IF EXISTS chk_tube_delivery_status;"))
             session.execute(text("""
                 ALTER TABLE tube.tube_delivery ADD CONSTRAINT chk_tube_delivery_status
@@ -226,7 +230,7 @@ def _ensure_status_constraints(session) -> None:
             JOIN pg_namespace n ON n.oid = c.connamespace
             WHERE n.nspname = 'tube' AND c.conname = 'chk_tube_fitting_status';
         """)).scalar()
-        if res_fit_st and "'under_review'" not in res_fit_st:
+        if not res_fit_st or "'under_review'" not in res_fit_st:
             session.execute(text("ALTER TABLE tube.tube_fitting_delivery DROP CONSTRAINT IF EXISTS chk_tube_fitting_status;"))
             session.execute(text("""
                 ALTER TABLE tube.tube_fitting_delivery ADD CONSTRAINT chk_tube_fitting_status
@@ -248,14 +252,14 @@ def _ensure_status_constraints(session) -> None:
             JOIN pg_namespace n ON n.oid = c.connamespace
             WHERE n.nspname = 'tube' AND c.conname = 'chk_tube_fitting_state_evidence';
         """)).scalar()
-        if res_fit_ev and "under_review" not in res_fit_ev:
+        if not res_fit_ev or "under_review" not in res_fit_ev or "pending_diff_approve" not in res_fit_ev:
             session.execute(text("ALTER TABLE tube.tube_fitting_delivery DROP CONSTRAINT IF EXISTS chk_tube_fitting_state_evidence;"))
             session.execute(text("""
                 ALTER TABLE tube.tube_fitting_delivery ADD CONSTRAINT chk_tube_fitting_state_evidence
                     CHECK (
                         (status = 'under_review') OR
                         (status = 'pending_arrival' AND arrived_confirm_at IS NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL) OR
-                        (status = 'pending_receive' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL) OR
+                        (status IN ('pending_receive', 'pending_diff_approve') AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL) OR
                         (status = 'pending_warehouse' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NOT NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NULL) OR
                         (status = 'completed' AND arrived_qty IS NOT NULL AND arrived_confirm_at IS NOT NULL AND received_confirm_at IS NOT NULL AND warehouse_confirm_at IS NOT NULL AND cancel_at IS NULL) OR
                         (status = 'cancelled' AND arrived_confirm_at IS NULL AND received_confirm_at IS NULL AND warehouse_confirm_at IS NULL AND cancel_at IS NOT NULL)
@@ -263,7 +267,7 @@ def _ensure_status_constraints(session) -> None:
             """))
     except Exception as exc:
         import logging
-        logging.getLogger("uvicorn.error").warning(f"状态约束自愈检查异常: {exc}")
+        raise RuntimeError("联合会审订单状态约束初始化失败") from exc
 
 
 ensure_joint_review_tables()
@@ -276,7 +280,7 @@ def _generate_review_no() -> str:
     return f"REV-{date_str}-{uuid4().hex}"
 
 
-def _get_delivery_info(session, order_category: str, delivery_id: int) -> Optional[Dict[str, Any]]:
+def _get_delivery_info(session, order_category: str, delivery_id: int, for_update: bool = False) -> Optional[Dict[str, Any]]:
     """查询指定直管或管件发货单详情。"""
     if order_category == "pipe":
         sql = text("""
@@ -296,6 +300,8 @@ def _get_delivery_info(session, order_category: str, delivery_id: int) -> Option
             FROM tube.tube_fitting_delivery
             WHERE id = :id
         """)
+    if for_update:
+        sql = text(str(sql) + " FOR UPDATE")
     row = session.execute(sql, {"id": delivery_id}).mappings().first()
     return dict(row) if row else None
 
@@ -314,6 +320,142 @@ def _resolve_section_name(cfg: Dict[str, Any], section_1_id: str) -> str:
         if sid.lower() == section_1_id.lower():
             return str(item.get("section_1_name") or sid)
     return section_1_id
+
+
+
+def _validate_patch(order_category: str, patch: Dict[str, Any], rows: List[Dict[str, Any]], delivery_id: int) -> None:
+    """提请与生效共用校验，明细必须属于本会审冻结集合；允许到货量超过更正发货量。"""
+    if not isinstance(patch, dict):
+        raise HTTPException(status_code=422, detail="更正内容必须为对象")
+    allowed = PIPE_ALLOWED_PATCH_FIELDS if order_category == "pipe" else FITTING_ALLOWED_PATCH_FIELDS
+    if set(patch) - allowed:
+        raise HTTPException(status_code=422, detail="包含不支持的更正字段")
+    by_id = {int(row["id"]): row for row in rows}
+
+    def validate_values(values, row):
+        for key, value in values.items():
+            if key not in allowed - {"items"}:
+                continue
+            if key == "shipped_qty":
+                try:
+                    quantity = Decimal(str(value))
+                    # 数据库数量为 NUMERIC(18,2)，提请时即拒绝溢出、非法精度与非有限值。
+                    if not quantity.is_finite() or quantity <= 0 or quantity >= Decimal("10000000000000000"):
+                        raise ValueError()
+                    if quantity != quantity.quantize(Decimal("0.01")):
+                        raise ValueError()
+                except (ValueError, ArithmeticError):
+                    raise HTTPException(status_code=422, detail="发货数量必须为有限正数，最多2位小数且不得超出数据库范围")
+                values[key] = str(quantity)
+                # 无到货量时，接收量约束以发货量为上界，提前给出可理解的错误。
+                if row.get("arrived_qty") is None and row.get("received_qty") is not None:
+                    if Decimal(str(row["received_qty"])) > quantity:
+                        raise HTTPException(status_code=422, detail="更正发货量不得低于当前已确认接收量")
+            elif value is None or not isinstance(value, str):
+                raise HTTPException(status_code=422, detail=f"更正字段 {key} 必须填写文本")
+            elif len(value) > {"pipe_model_id": 64, "fitting_type": 64, "model_spec": 128, "unit": 32,
+                               "vehicle_plate_no": 32, "ship_contact_name": 128, "ship_contact_phone": 64}.get(key, 1000000):
+                raise HTTPException(status_code=422, detail=f"更正字段 {key} 超出数据库长度限制")
+            elif key in {"pipe_model_id", "fitting_type", "model_spec", "unit"} and not value.strip():
+                raise HTTPException(status_code=422, detail=f"更正字段 {key} 不能为空")
+
+    if delivery_id not in by_id:
+        raise HTTPException(status_code=409, detail="原订单不在本会审冻结明细中")
+    validate_values(patch, by_id[delivery_id])
+    if "items" in patch:
+        if not isinstance(patch["items"], list) or not patch["items"]:
+            raise HTTPException(status_code=422, detail="管件更正明细必须为非空列表")
+        seen = set()
+        for item in patch["items"]:
+            if not isinstance(item, dict) or isinstance(item.get("id"), bool):
+                raise HTTPException(status_code=422, detail="管件更正明细必须包含有效ID")
+            try:
+                item_id = int(str(item.get("id")))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=422, detail="管件更正明细ID无效")
+            if item_id in seen or item_id not in by_id:
+                raise HTTPException(status_code=422, detail="更正明细重复或不属于本车次、标段、厂家及待办节点")
+            if set(item) - {"id", "order_no", "fitting_type", "model_spec", "shipped_qty", "unit"}:
+                raise HTTPException(status_code=422, detail="管件明细包含不支持的字段")
+            if not (set(item) & {"fitting_type", "model_spec", "shipped_qty", "unit"}):
+                raise HTTPException(status_code=422, detail="管件明细没有更正内容")
+            item["id"] = item_id
+            item["order_no"] = by_id[item_id]["order_no"]
+            seen.add(item_id)
+            validate_values(item, by_id[item_id])
+
+
+def _lock_review_rows(db_session, review: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """按快照中的准确ID锁定冻结记录，历史议案保守限定相同厂家、标段和前状态。"""
+    snapshot = review.get("original_snapshot") or {}
+    if isinstance(snapshot, str):
+        snapshot = json.loads(snapshot)
+    frozen = snapshot.get("_review_rows")
+    table = "tube.tube_delivery" if review["order_category"] == "pipe" else "tube.tube_fitting_delivery"
+    if frozen:
+        ids = [int(row["id"]) for row in frozen]
+        rows = [dict(row) for row in db_session.execute(
+            text(f"SELECT * FROM {table} WHERE id = ANY(:ids) ORDER BY id FOR UPDATE"),
+            {"ids": ids},
+        ).mappings().all()]
+        expected = {int(row["id"]): row for row in frozen}
+        if len(rows) != len(expected):
+            raise HTTPException(status_code=409, detail="会审冻结明细缺失，无法办结")
+        for row in rows:
+            before = expected[int(row["id"])]
+            if (row["status"] != "under_review"
+                    or row.get("pre_review_status") != before["status"]
+                    or row["section_1_id"] != before["section_1_id"]
+                    or row["supply_entity_id"] != before["supply_entity_id"]
+                    or row.get("shipment_no") != before.get("shipment_no")):
+                raise HTTPException(status_code=409, detail="会审冻结明细状态或归属已变化，请核对后处理")
+        return rows
+    delivery = _get_delivery_info(db_session, review["order_category"], review["delivery_id"], for_update=True)
+    if not delivery or delivery["status"] != "under_review":
+        raise HTTPException(status_code=409, detail="原订单已不处于会审冻结状态")
+    if (delivery["section_1_id"] != review["section_1_id"]
+            or delivery["supply_entity_id"] != review["supply_entity_id"]
+            or delivery.get("pre_review_status") != review["pre_status"]):
+        raise HTTPException(status_code=409, detail="历史会审原单归属或前状态已变化")
+    if review["order_category"] == "fitting" and delivery.get("shipment_no"):
+        overlapping = db_session.execute(text("""
+            SELECT r.id FROM tube.tube_order_reviews r
+            JOIN tube.tube_fitting_delivery d ON d.id = r.delivery_id
+            WHERE r.order_category = 'fitting' AND r.review_status = 'voting'
+              AND r.id <> :review_id AND d.shipment_no = :shipment LIMIT 1
+        """), {"review_id": review["id"], "shipment": delivery["shipment_no"]}).scalar()
+        if overlapping:
+            raise HTTPException(status_code=409, detail="历史车次存在重叠会审，无法自动确定冻结归属")
+        rows = db_session.execute(text(f"""
+            SELECT * FROM {table} WHERE shipment_no = :shipment
+              AND section_1_id = :section AND supply_entity_id = :supplier
+              AND status = 'under_review' AND pre_review_status = :pre_status
+            ORDER BY id FOR UPDATE
+        """), {"shipment": delivery["shipment_no"], "section": review["section_1_id"],
+               "supplier": review["supply_entity_id"], "pre_status": review["pre_status"]}).mappings().all()
+        return [dict(row) for row in rows]
+    return [delivery]
+
+
+def _restore_rows(db_session, review: Dict[str, Any], rows: List[Dict[str, Any]], patch=None, resolution_text="") -> None:
+    """只更新本议案冻结记录，逐行保留前状态和备注，白名单获批字段全部写回。"""
+    table = "tube.tube_delivery" if review["order_category"] == "pipe" else "tube.tube_fitting_delivery"
+    item_patches = {int(item["id"]): item for item in (patch or {}).get("items", [])}
+    shared_fields = {"vehicle_plate_no", "ship_contact_name", "ship_contact_phone", "ship_remark"}
+    for row in rows:
+        values = {}
+        if patch is not None:
+            values.update({key: value for key, value in patch.items() if key in shared_fields})
+            if int(row["id"]) == int(review["delivery_id"]):
+                values.update({key: value for key, value in patch.items() if key not in shared_fields | {"items"}})
+            values.update({key: value for key, value in item_patches.get(int(row["id"]), {}).items()
+                           if key not in {"id", "order_no"}})
+            values["ship_remark"] = f'{values.get("ship_remark", row.get("ship_remark") or "")}\n{resolution_text}'.strip()
+        values["status"] = row.get("pre_review_status") or review["pre_status"]
+        assignments = [f"{key} = :{key}" for key in values]
+        assignments += ["pre_review_status = NULL", "updated_at = NOW()"]
+        db_session.execute(text(f"UPDATE {table} SET {', '.join(assignments)} WHERE id = :row_id AND status = 'under_review'"),
+                           {**values, "row_id": row["id"]})
 
 
 def create_joint_review(
@@ -345,40 +487,6 @@ def create_joint_review(
     if not review_reason or len(review_reason.strip()) < 4:
         raise HTTPException(status_code=422, detail="提请联合会审必须填写充分的事由说明（不少于4个字符）")
 
-    # 白名单字段校验
-    allowed_keys = PIPE_ALLOWED_PATCH_FIELDS if order_category == "pipe" else FITTING_ALLOWED_PATCH_FIELDS
-    for k in proposed_patch.keys():
-        if k in FROZEN_FIELDS:
-            raise HTTPException(status_code=422, detail=f"严禁在会审中修改核心标识字段: {k}")
-        if k not in allowed_keys:
-            raise HTTPException(status_code=422, detail=f"不支持修改字段: {k}")
-
-    # 数量校验
-    if "shipped_qty" in proposed_patch:
-        try:
-            qty_val = float(proposed_patch["shipped_qty"])
-            if qty_val <= 0:
-                raise ValueError()
-            proposed_patch["shipped_qty"] = qty_val
-        except Exception:
-            raise HTTPException(status_code=422, detail="发货数量必须大于 0")
-
-    # 管件订单明细校验
-    if "items" in proposed_patch and proposed_patch["items"]:
-        if not isinstance(proposed_patch["items"], list):
-            raise HTTPException(status_code=422, detail="管件订单明细更正项必须为列表格式")
-        for it in proposed_patch["items"]:
-            if not isinstance(it, dict) or not it.get("id"):
-                raise HTTPException(status_code=422, detail="管件订单明细更正项必须包含有效的订单记录 ID")
-            if "shipped_qty" in it and it["shipped_qty"] is not None:
-                try:
-                    q = float(it["shipped_qty"])
-                    if q <= 0:
-                        raise ValueError()
-                    it["shipped_qty"] = q
-                except Exception:
-                    raise HTTPException(status_code=422, detail=f"订单 {it.get('order_no') or it.get('id')} 发货数量必须大于 0")
-
     db_session = SessionLocal()
     try:
         # 查询原单
@@ -386,6 +494,12 @@ def create_joint_review(
         if not delivery:
             raise HTTPException(status_code=404, detail="关联的发货单据不存在")
 
+        # 同车不同主明细使用同一个事务锁；先事务锁再行锁，避免互相等待成环。
+        lock_key = f"joint-review:{order_category}:{delivery.get('shipment_no') if order_category == 'fitting' and delivery.get('shipment_no') else delivery_id}"
+        db_session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"), {"lock_key": lock_key})
+        delivery = _get_delivery_info(db_session, order_category, delivery_id, for_update=True)
+        if not delivery:
+            raise HTTPException(status_code=404, detail="关联单据不存在")
         current_status = delivery.get("status") or ""
         if current_status == "under_review":
             raise HTTPException(status_code=409, detail="该单据已处于联合会审中，请勿重复提请")
@@ -409,6 +523,22 @@ def create_joint_review(
         # 场景界定与发起人资格校验
         is_global_admin = operator_group in ("Global_admin", "dev_admin")
         cfg = load_tube_config() or {}
+        if not is_global_admin:
+            allowed_sections = resolve_accessible_section_1_ids(cfg, operator_username, operator_group)
+            if str(delivery["section_1_id"]).lower() not in {str(key).lower() for key in allowed_sections}:
+                raise HTTPException(status_code=403, detail="您没有该订单所属标段的会审发起权限")
+        frozen_rows = [delivery]
+        if order_category == "fitting" and delivery.get("shipment_no"):
+            shipment_rows = [dict(row) for row in db_session.execute(text("""
+                SELECT * FROM tube.tube_fitting_delivery WHERE shipment_no = :shipment
+                ORDER BY id FOR UPDATE
+            """), {"shipment": delivery["shipment_no"]}).mappings().all()]
+            if any(row["status"] == "under_review" for row in shipment_rows):
+                raise HTTPException(status_code=409, detail="同车次已有明细处于会审中，请勿重复提请")
+            frozen_rows = [row for row in shipment_rows if row["status"] == current_status
+                           and row["section_1_id"] == delivery["section_1_id"]
+                           and row["supply_entity_id"] == delivery["supply_entity_id"]]
+        _validate_patch(order_category, proposed_patch, frozen_rows, delivery_id)
         sup_name = _resolve_supplier_name(cfg, delivery["supply_entity_id"])
         sec_name = _resolve_section_name(cfg, delivery["section_1_id"])
 
@@ -485,6 +615,10 @@ def create_joint_review(
             else:
                 original_snapshot[k] = v
 
+        # 多明细快照保留逐行原值与实际冻结集合，后续不能以整车号扩大处理范围。
+        original_snapshot["_review_rows"] = frozen_rows
+        original_snapshot["items"] = frozen_rows
+
         # 1. 插入会审主单
         insert_review_sql = text("""
             INSERT INTO tube.tube_order_reviews (
@@ -523,45 +657,13 @@ def create_joint_review(
         })
         review_id = res.scalar()
 
-        # 2. 挂起原发货单：修改 status 为 'under_review'，记录 pre_review_status
-        if order_category == "pipe":
-            update_delivery_sql = text("""
-                UPDATE tube.tube_delivery
-                SET status = 'under_review',
-                    pre_review_status = :pre_status,
-                    updated_at = NOW()
-                WHERE id = :delivery_id
-            """)
-            db_session.execute(update_delivery_sql, {
-                "pre_status": pre_status,
-                "delivery_id": delivery_id,
-            })
-        else:
-            # Fitting: 如果属于整车车次，批量挂起该车次下的全部订单明细
-            if delivery.get("shipment_no"):
-                update_delivery_sql = text("""
-                    UPDATE tube.tube_fitting_delivery
-                    SET status = 'under_review',
-                        pre_review_status = :pre_status,
-                        updated_at = NOW()
-                    WHERE shipment_no = :s_no AND (status = :pre_status OR status = 'under_review')
-                """)
-                db_session.execute(update_delivery_sql, {
-                    "pre_status": pre_status,
-                    "s_no": delivery["shipment_no"],
-                })
-            else:
-                update_delivery_sql = text("""
-                    UPDATE tube.tube_fitting_delivery
-                    SET status = 'under_review',
-                        pre_review_status = :pre_status,
-                        updated_at = NOW()
-                    WHERE id = :delivery_id
-                """)
-                db_session.execute(update_delivery_sql, {
-                    "pre_status": pre_status,
-                    "delivery_id": delivery_id,
-                })
+        # 精确冻结同节点、同厂家、同标段的记录，每行保留自己的状态。
+        table = "tube.tube_delivery" if order_category == "pipe" else "tube.tube_fitting_delivery"
+        for row in frozen_rows:
+            db_session.execute(text(f"""
+                UPDATE {table} SET status = 'under_review', pre_review_status = :pre_status, updated_at = NOW()
+                WHERE id = :delivery_id AND status = :pre_status
+            """), {"pre_status": row["status"], "delivery_id": row["id"]})
 
         db_session.commit()
 
@@ -580,18 +682,16 @@ def create_joint_review(
         # 同步写入 logs.system_messages 消息中心收件箱
         try:
             from backend.projects.insulation_pipe_supply_2026.services.system_message_service import create_system_message
-            for ent in required_entities:
-                target_user = ent.get("entity_id") or "ALL"
-                if ent.get("entity_type") == "site_manager":
-                    recv = "ROLE:tube_site_manager"
-                elif ent.get("entity_type") == "supplier":
-                    recv = f"ENTITY:{target_user}"
-                else:
-                    recv = "ROLE:Global_admin"
-
+            from backend.services.auth_manager import auth_manager
+            recipients = set()
+            for identity in auth_manager.list_user_identities():
+                if any(_check_user_can_vote_entity(ent, identity["username"], identity["group"], cfg,
+                                                  str(delivery["section_1_id"])) for ent in required_entities):
+                    recipients.add(identity["username"])
+            for recv in sorted(recipients):
                 create_system_message(
                     receiver_username=recv,
-                    receiver_entity_id=target_user,
+                    receiver_entity_id=delivery["section_1_id"],
                     title=f"【联合会审待办】订单 {delivery['order_no']} 提请会签",
                     content=f"【{initiator_name}】就订单 {delivery['order_no']}（{sec_name}）提请了联合会审。事由：{review_reason.strip()}。请及时在联合会审大厅会签表决。",
                     msg_type="joint_review",
@@ -628,6 +728,7 @@ def _check_user_can_vote_entity(
     session_username: str,
     session_group: str,
     cfg: Dict[str, Any],
+    section_1_id: str = "",
 ) -> bool:
     """核验当前登录人是否代表必审主体表决。"""
     if session_group in ("Global_admin", "dev_admin"):
@@ -640,147 +741,34 @@ def _check_user_can_vote_entity(
         if session_group not in ("tube_supplier_admin", "tube_supplier"):
             return False
         # 匹配厂家 entity_id
-        from backend.projects.insulation_pipe_supply_2026.api.workspace import resolve_accessible_supply_entity_ids
         accessible = resolve_accessible_supply_entity_ids(cfg, session_username, session_group)
         accessible_low = {s.lower() for s in accessible}
         return ent_id in accessible_low
 
     if ent_type == "site_manager":
-        return session_group in ("tube_site_manager", "Global_admin")
+        return session_group == "tube_site_manager" and str(section_1_id).lower() in {
+            str(key).lower() for key in resolve_accessible_section_1_ids(cfg, session_username, session_group)
+        }
 
     if ent_type == "construction_unit":
-        return session_group in ("tube_construction_unit", "tube_site_manager", "Global_admin")
+        return session_group in ("tube_construction_unit", "tube_site_manager") and str(section_1_id).lower() in {
+            str(key).lower() for key in resolve_accessible_section_1_ids(cfg, session_username, session_group)
+        }
 
     return False
 
 
 def _revert_review_order_status(db_session, review: Dict[str, Any]) -> None:
-    """会审撤销或强制终止时，将订单状态从 under_review 恢复为 pre_review_status。"""
-    order_cat = review["order_category"]
-    deliv_id = review["delivery_id"]
-    pre_status = review["pre_status"]
-
-    if order_cat == "pipe":
-        revert_sql = text("""
-            UPDATE tube.tube_delivery
-            SET status = :pre_status, updated_at = NOW()
-            WHERE id = :deliv_id AND status = 'under_review'
-        """)
-        db_session.execute(revert_sql, {"pre_status": pre_status, "deliv_id": deliv_id})
-    else:
-        deliv = _get_delivery_info(db_session, "fitting", deliv_id)
-        if deliv and deliv.get("shipment_no"):
-            revert_sql = text("""
-                UPDATE tube.tube_fitting_delivery
-                SET status = :pre_status, updated_at = NOW()
-                WHERE shipment_no = :s_no AND status = 'under_review'
-            """)
-            db_session.execute(revert_sql, {"pre_status": pre_status, "s_no": deliv["shipment_no"]})
-        else:
-            revert_sql = text("""
-                UPDATE tube.tube_fitting_delivery
-                SET status = :pre_status, updated_at = NOW()
-                WHERE id = :deliv_id AND status = 'under_review'
-            """)
-            db_session.execute(revert_sql, {"pre_status": pre_status, "deliv_id": deliv_id})
+    """撤销或终止只恢复本议案实际冻结的记录。"""
+    rows = _lock_review_rows(db_session, review)
+    _restore_rows(db_session, review, rows)
 
 
 def _apply_review_patch_to_order(db_session, review: Dict[str, Any], patch: Dict[str, Any], resolution_text: str) -> None:
-    """会审全票通过或管理员强制通过后，原子更新业务订单（保温直管单条或管件整车车次/多明细）。"""
-    order_cat = review["order_category"]
-    deliv_id = review["delivery_id"]
-    pre_status = review["pre_status"]
-
-    if order_cat == "pipe":
-        orig_sql = text("SELECT ship_remark FROM tube.tube_delivery WHERE id = :id")
-        orig_remark = db_session.execute(orig_sql, {"id": deliv_id}).scalar() or ""
-        merged_remark = f"{orig_remark}\n{resolution_text}".strip()
-
-        update_clauses = ["status = :restored_status", "ship_remark = :merged_remark", "updated_at = NOW()"]
-        update_params: Dict[str, Any] = {
-            "restored_status": pre_status,
-            "merged_remark": merged_remark,
-            "deliv_id": deliv_id,
-        }
-        for field_name, field_val in patch.items():
-            if field_name in ("ship_remark", "items"):
-                continue
-            update_clauses.append(f"{field_name} = :{field_name}")
-            update_params[field_name] = field_val
-
-        db_session.execute(text(f"UPDATE tube.tube_delivery SET {', '.join(update_clauses)} WHERE id = :deliv_id"), update_params)
-    else:
-        # 管件 (fitting): 支持整车车牌公共属性与各订单细项独立修正
-        delivery = _get_delivery_info(db_session, "fitting", deliv_id)
-        shipment_no = delivery.get("shipment_no") if delivery else None
-
-        # 1. 更新整车车牌
-        if "vehicle_plate_no" in patch and patch["vehicle_plate_no"]:
-            if shipment_no:
-                db_session.execute(text("""
-                    UPDATE tube.tube_fitting_delivery
-                    SET vehicle_plate_no = :v_plate, updated_at = NOW()
-                    WHERE shipment_no = :s_no
-                """), {"v_plate": patch["vehicle_plate_no"], "s_no": shipment_no})
-            else:
-                db_session.execute(text("""
-                    UPDATE tube.tube_fitting_delivery
-                    SET vehicle_plate_no = :v_plate, updated_at = NOW()
-                    WHERE id = :deliv_id
-                """), {"v_plate": patch["vehicle_plate_no"], "deliv_id": deliv_id})
-
-        # 2. 更新具体订单细项
-        if "items" in patch and isinstance(patch["items"], list):
-            for it in patch["items"]:
-                it_id = it.get("id")
-                if not it_id:
-                    continue
-                it_clauses = ["updated_at = NOW()"]
-                it_params = {"it_id": it_id}
-                for col in ("fitting_type", "model_spec", "shipped_qty", "unit"):
-                    if col in it and it[col] is not None:
-                        it_clauses.append(f"{col} = :{col}")
-                        it_params[col] = it[col]
-                db_session.execute(text(f"""
-                    UPDATE tube.tube_fitting_delivery
-                    SET {', '.join(it_clauses)}
-                    WHERE id = :it_id
-                """), it_params)
-        else:
-            single_clauses = ["updated_at = NOW()"]
-            single_params = {"deliv_id": deliv_id}
-            for col in ("fitting_type", "model_spec", "shipped_qty", "unit"):
-                if col in patch and patch[col] is not None:
-                    single_clauses.append(f"{col} = :{col}")
-                    single_params[col] = patch[col]
-            if len(single_clauses) > 1:
-                db_session.execute(text(f"""
-                    UPDATE tube.tube_fitting_delivery
-                    SET {', '.join(single_clauses)}
-                    WHERE id = :deliv_id
-                """), single_params)
-
-        # 3. 恢复订单流转状态并合并决议备注
-        if shipment_no:
-            orig_remark = db_session.execute(text("SELECT ship_remark FROM tube.tube_fitting_delivery WHERE shipment_no = :s_no LIMIT 1"), {"s_no": shipment_no}).scalar() or ""
-            merged_remark = f"{orig_remark}\n{resolution_text}".strip()
-            db_session.execute(text("""
-                UPDATE tube.tube_fitting_delivery
-                SET status = :restored_status,
-                    ship_remark = :merged_remark,
-                    updated_at = NOW()
-                WHERE shipment_no = :s_no
-            """), {"restored_status": pre_status, "merged_remark": merged_remark, "s_no": shipment_no})
-        else:
-            orig_remark = db_session.execute(text("SELECT ship_remark FROM tube.tube_fitting_delivery WHERE id = :id"), {"id": deliv_id}).scalar() or ""
-            merged_remark = f"{orig_remark}\n{resolution_text}".strip()
-            db_session.execute(text("""
-                UPDATE tube.tube_fitting_delivery
-                SET status = :restored_status,
-                    ship_remark = :merged_remark,
-                    updated_at = NOW()
-                WHERE id = :deliv_id
-            """), {"restored_status": pre_status, "merged_remark": merged_remark, "deliv_id": deliv_id})
+    """最终生效前重新核验冻结范围与拟改值，并原子执行逐行更正和恢复。"""
+    rows = _lock_review_rows(db_session, review)
+    _validate_patch(review["order_category"], patch, rows, int(review["delivery_id"]))
+    _restore_rows(db_session, review, rows, patch, resolution_text)
 
 
 def vote_joint_review(
@@ -850,7 +838,7 @@ def vote_joint_review(
         else:
             # 普通用户按角色与责任归属权责精准匹配
             for ent in required_entities:
-                if _check_user_can_vote_entity(ent, session_username, session_group, cfg):
+                if _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(review["section_1_id"])):
                     matched_entity = ent
                     break
 
@@ -866,7 +854,7 @@ def vote_joint_review(
 
         # 检查是否已表决
         existing_vote_sql = text("""
-            SELECT id, vote_decision FROM tube.tube_review_votes
+            SELECT id, vote_decision, vote_opinion, voter_username, voter_name FROM tube.tube_review_votes
             WHERE review_id = :rid AND entity_type = :etype AND entity_id = :eid
         """)
         exist_vote = db_session.execute(existing_vote_sql, {
@@ -987,8 +975,8 @@ def vote_joint_review(
                 action_type="JOINT_REVIEW_APPROVED",
                 action_desc=f"联合会审全票通过并自动修正订单: 会审单 [{review['review_no']}] 对应订单 {review['order_no']}，更正为 [{patch_summary_str}]，单据已恢复为待办 [{pre_status}]",
                 resource_id=str(review_id),
-                before_value={"patch": patch, "status": "under_review"},
-                after_value={"new_status": pre_status, "resolution": resolution_text},
+                before_value={"patch": patch, "status": "under_review", "previous_vote": dict(exist_vote) if exist_vote else None},
+                after_value={"new_status": pre_status, "resolution": resolution_text, "decision": vote_decision, "opinion": vote_opinion, "entity": matched_entity},
                 client_ip=client_ip,
             )
 
@@ -1043,6 +1031,7 @@ def vote_joint_review(
                 action_type=action_type,
                 action_desc=f"{action_desc_prefix}: 代表主体 [{matched_entity.get('entity_name')}] 投票 [{vote_decision}] (附言: {vote_opinion or '无'})，单号 {review['review_no']}",
                 resource_id=str(review_id),
+                before_value={"previous_vote": dict(exist_vote) if exist_vote else None},
                 after_value={"decision": vote_decision, "opinion": vote_opinion, "approved_count": len(approved_list), "total_count": len(required_entities), "entity": matched_entity},
                 client_ip=client_ip,
             )
@@ -1291,6 +1280,7 @@ def list_joint_reviews(
     limit: int = 20,
     session_username: str = "",
     session_group: str = "",
+    review_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """多维分页查询联合会审列表。"""
     ensure_joint_review_tables()
@@ -1299,6 +1289,9 @@ def list_joint_reviews(
     try:
         where_clauses = ["1=1"]
         params: Dict[str, Any] = {}
+        if review_id is not None:
+            where_clauses.append("r.id = :review_id")
+            params["review_id"] = review_id
 
         if order_category:
             where_clauses.append("r.order_category = :order_category")
@@ -1349,12 +1342,13 @@ def list_joint_reviews(
         params["limit"] = limit
         params["offset"] = offset
 
+        paging_sql = "" if tab == "pending_my_vote" else "LIMIT :limit OFFSET :offset"
         list_sql = text(f"""
             SELECT r.*
             FROM tube.tube_order_reviews r
             WHERE {where_sql}
-            ORDER BY r.created_at DESC
-            LIMIT :limit OFFSET :offset
+            ORDER BY r.created_at DESC, r.id DESC
+            {paging_sql}
         """)
         rows = db_session.execute(list_sql, params).mappings().all()
 
@@ -1397,6 +1391,9 @@ def list_joint_reviews(
                     except Exception:
                         pass
 
+            r_dict["approval_type"] = (
+                "consensus" if r_dict.get("finalized_by") == "SYSTEM_CONSENSUS" else "arbitration"
+            ) if r_dict["review_status"] == "approved" else None
             r_dict["votes"] = r_votes
             r_dict["section_1_name"] = _resolve_section_name(cfg, r_dict["section_1_id"])
             r_dict["supply_entity_name"] = _resolve_supplier_name(cfg, r_dict["supply_entity_id"])
@@ -1429,7 +1426,7 @@ def list_joint_reviews(
             if r_dict["review_status"] == "voting":
                 req_ents = r_dict.get("required_entities") or []
                 for ent in req_ents:
-                    if _check_user_can_vote_entity(ent, session_username, session_group, cfg):
+                    if _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(r_dict["section_1_id"])):
                         can_i_vote = True
                         # 检查该主体是否已投过票
                         voted_for_this = any(v["entity_type"] == ent["entity_type"] and v["entity_id"] == ent["entity_id"] for v in r_votes)
@@ -1463,9 +1460,13 @@ def list_joint_reviews(
 
             items.append(r_dict)
 
+        # 待办资格先计算再分页，limit=1 的统计仍返回完整匹配总数。
+        if tab == "pending_my_vote":
+            total = len(items)
+            items = items[offset:offset + limit]
         return {
             "ok": True,
-            "total": total if tab != "pending_my_vote" else len(items),
+            "total": total,
             "page": page,
             "limit": limit,
             "items": items,
@@ -1475,71 +1476,12 @@ def list_joint_reviews(
 
 
 def get_joint_review_detail(review_id: int, session_username: str = "", session_group: str = "") -> Dict[str, Any]:
-    """查询单笔会审详情。"""
-    res = list_joint_reviews(tab="all", search=None, page=1, limit=1, session_username=session_username, session_group=session_group)
-    db_session = SessionLocal()
-    try:
-        sql = text("SELECT r.* FROM tube.tube_order_reviews r WHERE r.id = :id")
-        r = db_session.execute(sql, {"id": review_id}).mappings().first()
-        if not r:
-            raise HTTPException(status_code=404, detail="会审单不存在")
-
-        cfg = load_tube_config() or {}
-        r_dict = dict(r)
-
-        for j_key in ("attachments", "original_snapshot", "proposed_patch", "required_entities", "approved_entities", "rejected_entities"):
-            val = r_dict.get(j_key)
-            if isinstance(val, str):
-                try:
-                    r_dict[j_key] = json.loads(val)
-                except Exception:
-                    pass
-
-        # 查表决
-        v_sql = text("SELECT * FROM tube.tube_review_votes WHERE review_id = :rid ORDER BY voted_at ASC")
-        votes = [dict(v) for v in db_session.execute(v_sql, {"rid": review_id}).mappings().all()]
-        req_ents = r_dict.get("required_entities") or []
-        ent_lookup = {f"{e.get('entity_type')}_{e.get('entity_id')}": e for e in req_ents}
-        for v in votes:
-            if v.get("voted_at"):
-                v["voted_at"] = v["voted_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            k = f"{v.get('entity_type')}_{v.get('entity_id')}"
-            if k in ent_lookup:
-                v["entity_name"] = ent_lookup[k].get("entity_name")
-                v["role_desc"] = ent_lookup[k].get("role_desc")
-            else:
-                v["entity_name"] = v.get("voter_name")
-                v["role_desc"] = "协同核验方"
-
-        r_dict["votes"] = votes
-        r_dict["section_1_name"] = _resolve_section_name(cfg, r_dict["section_1_id"])
-        r_dict["supply_entity_name"] = _resolve_supplier_name(cfg, r_dict["supply_entity_id"])
-
-        if r_dict.get("created_at"):
-            r_dict["created_at"] = r_dict["created_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        if r_dict.get("finalized_at"):
-            r_dict["finalized_at"] = r_dict["finalized_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        if r_dict.get("updated_at"):
-            r_dict["updated_at"] = r_dict["updated_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
-
-        is_global_admin = session_group in ("Global_admin", "dev_admin")
-        can_i_vote = False
-        needs_my_vote = False
-        if r_dict["review_status"] == "voting":
-            for ent in r_dict.get("required_entities") or []:
-                if _check_user_can_vote_entity(ent, session_username, session_group, cfg):
-                    can_i_vote = True
-                    if not any(v["entity_type"] == ent["entity_type"] and v["entity_id"] == ent["entity_id"] for v in votes):
-                        needs_my_vote = True
-
-        r_dict["can_i_vote"] = can_i_vote
-        r_dict["needs_my_vote"] = needs_my_vote
-        r_dict["can_cancel"] = (r_dict["initiator_username"] == session_username or is_global_admin) and r_dict["review_status"] == "voting"
-        r_dict["can_arbitrate"] = check_user_can_arbitrate(session_username, session_group) and r_dict["review_status"] == "voting"
-
-        return {"ok": True, "data": r_dict}
-    finally:
-        db_session.close()
+    """按ID复用列表资格与表决元数据，通知可直接打开不在首屏的议案。"""
+    result = list_joint_reviews(tab="all", review_id=review_id, limit=1,
+                                session_username=session_username, session_group=session_group)
+    if not result["items"]:
+        raise HTTPException(status_code=404, detail="会审单不存在")
+    return {"ok": True, "data": result["items"][0]}
 
 
 def get_pending_review_notifications(session_username: str, session_group: str) -> Dict[str, Any]:
@@ -1579,7 +1521,7 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
                     req_ents = []
 
             for ent in req_ents:
-                if _check_user_can_vote_entity(ent, session_username, session_group, cfg):
+                if _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(r["section_1_id"])):
                     key = f"{r['id']}::{ent['entity_type']}::{ent['entity_id']}"
                     if key not in voted_set:
                         sec_name = _resolve_section_name(cfg, r["section_1_id"])

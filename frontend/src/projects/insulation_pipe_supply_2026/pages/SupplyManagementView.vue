@@ -5450,9 +5450,34 @@ function matchSingleFittingItem(rawFittingType, rawModelSpec, library) {
       (inputDNA.family && stdDNA.family && inputDNA.family === stdDNA.family) ||
       (!inputDNA.family && (std.category?.includes(rawType) || std.material_name?.includes(rawType)))
     )
-    if (specExact && familyMatch) {
+    // 关键物理属性一致性检验：角度、弯曲半径与子品类（防止 90° 弯头误匹配 45° 弯头）
+    const angleMatch = !inputDNA.angle || !stdDNA.angle || (inputDNA.angle === stdDNA.angle)
+    const radiusMatch = !inputDNA.radius || !stdDNA.radius || (inputDNA.radius === stdDNA.radius)
+
+    // 三通子品类校验：如“跨越三通” vs “直三通”
+    let subtypeMatch = true
+    if (inputDNA.family === '三通') {
+      const inputHasKuayue = /跨越/i.test(rawType)
+      const stdHasKuayue = /跨越/i.test(`${std.category || ''} ${std.material_name || ''}`)
+      if (inputHasKuayue !== stdHasKuayue) {
+        subtypeMatch = false
+      }
+    }
+
+    if (specExact && familyMatch && angleMatch && radiusMatch && subtypeMatch) {
       exactCandidates.push(std)
     }
+  }
+
+  if (exactCandidates.length > 1) {
+    // 若有多个同规格同品类候选，优先将名称包含输入关键词或角度完全吻合的排在首选
+    exactCandidates.sort((a, b) => {
+      const aName = `${a.material_name || ''} ${a.category || ''}`
+      const bName = `${b.material_name || ''} ${b.category || ''}`
+      const aScore = (inputDNA.angle && aName.includes(inputDNA.angle) ? 2 : 0) + (aName.includes(rawType) ? 1 : 0)
+      const bScore = (inputDNA.angle && bName.includes(inputDNA.angle) ? 2 : 0) + (bName.includes(rawType) ? 1 : 0)
+      return bScore - aScore
+    })
   }
 
   if (exactCandidates.length === 1) {
