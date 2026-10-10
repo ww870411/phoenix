@@ -1028,7 +1028,7 @@
 
                     <!-- 11. 现场核验量(米) -->
                     <td class="col-td-confirm text-right">
-                      <div v-if="row.status === 'pending_arrival'" class="confirm-input-wrap">
+                      <div v-if="row.status === 'pending_arrival'" class="confirm-input-wrap" @click.stop>
                         <input
                           v-model.number="row.arrivalConfirmQty"
                           type="number"
@@ -1040,7 +1040,7 @@
                         />
                         <span class="input-unit">米</span>
                       </div>
-                      <div v-else-if="row.status === 'pending_receive'" class="confirm-input-wrap">
+                      <div v-else-if="row.status === 'pending_receive'" class="confirm-input-wrap" @click.stop>
                         <input
                           v-model.number="row.receiptConfirmQty"
                           type="number"
@@ -9346,6 +9346,24 @@ function jumpToUsageTab() {
     gap: 10px !important;
   }
 
+  .panel-title-row .toolbar-actions {
+    flex-wrap: wrap !important;
+    width: 100% !important;
+  }
+
+  .panel-title-row .toolbar-actions .btn,
+  .panel-title-row .toolbar-actions .primary-button {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+  }
+
+  .compact-filter-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
   .fitting-card-header {
     flex-direction: column !important;
     align-items: stretch !important;
@@ -9470,7 +9488,18 @@ function jumpToUsageTab() {
   }
 
   /* 移动端 (<=720px) 到货与施工接收记录表格 (logistics-table) 响应式卡片化精细重构 */
+  .logistics-table-wrap {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
   .logistics-table {
+    display: block !important;
+    width: 100% !important;
     min-width: 0 !important;
     border: none !important;
     table-layout: auto !important;
@@ -9484,86 +9513,390 @@ function jumpToUsageTab() {
   .logistics-table tbody {
     display: flex !important;
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 12px !important;
+    width: 100% !important;
   }
 
   .logistics-table tbody tr.logistics-table-row {
-    display: flex !important;
-    flex-direction: column !important;
+    display: grid !important;
+    grid-template-columns: 1fr auto auto !important;
+    row-gap: 8px !important;
+    column-gap: 8px !important;
+    align-items: center !important;
     background: #ffffff !important;
     border: 1px solid #cbd5e1 !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     padding: 12px 14px !important;
-    gap: 6px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+    box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.05) !important;
     box-sizing: border-box !important;
+    height: auto !important;
+    min-height: unset !important;
+    max-height: none !important;
+    cursor: default !important;
+    position: relative !important;
   }
 
+  .logistics-table tbody tr.logistics-table-row:active {
+    background: #f8fafc !important;
+  }
+
+  /* 彻底破除桌面端单元格的高度锁死与不换行限制 */
   .logistics-table tbody td {
     border: none !important;
     padding: 0 !important;
-    text-align: left !important;
+    height: auto !important;
+    min-height: unset !important;
+    line-height: 1.4 !important;
+    white-space: normal !important;
+    background: transparent !important;
+    box-sizing: border-box !important;
+    width: auto !important;
+  }
+
+  /* 1. 流转状态：第 1 行左侧 */
+  .logistics-table tbody td.col-td-status {
+    grid-column: 1 / 2 !important;
+    grid-row: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    justify-self: start !important;
+  }
+
+  .logistics-table tbody td.col-td-status .status-cell-inline {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  .logistics-table tbody td.col-td-status .status-pill {
+    font-size: 11.5px !important;
+    padding: 2px 8px !important;
+    border-radius: 999px !important;
+    white-space: nowrap !important;
+  }
+
+  /* 2. 运输车牌：第 1 行中右侧 */
+  .logistics-table tbody td.col-td-plate {
+    grid-column: 2 / 3 !important;
+    grid-row: 1 !important;
+    justify-self: end !important;
+    align-self: center !important;
+  }
+
+  .logistics-table tbody td.col-td-plate .plate-capsule {
+    font-size: 11px !important;
+    padding: 2px 7px !important;
+    white-space: nowrap !important;
+  }
+
+  .logistics-table tbody td.col-td-plate .text-muted-dash {
+    display: none !important;
+  }
+
+  /* 3. 凭证快捷入口：第 1 行最右侧 */
+  .logistics-table tbody td.col-td-detail {
+    grid-column: 3 / 4 !important;
+    grid-row: 1 !important;
+    justify-self: end !important;
+    align-self: center !important;
+    display: block !important;
+  }
+
+  .logistics-table tbody td.col-td-detail .detail-view-btn {
+    width: auto !important;
+    height: 24px !important;
+    padding: 0 7px !important;
+    font-size: 11px !important;
+    color: #475569 !important;
+    background: #f1f5f9 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 5px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+    white-space: nowrap !important;
+  }
+
+  .logistics-table tbody td.col-td-detail .detail-view-btn::after {
+    content: "凭证";
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  /* 4. 物料规格：第 2 行全宽主标题 */
+  .logistics-table tbody td.col-td-model {
+    grid-column: 1 / -1 !important;
+    grid-row: 2 !important;
+    padding: 2px 0 !important;
+  }
+
+  .logistics-table tbody td.col-td-model strong.model-spec-text-single {
+    max-width: none !important;
+    white-space: normal !important;
+    font-size: 14.5px !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    line-height: 1.35 !important;
+    display: block !important;
+    word-break: break-all !important;
+  }
+
+  /* 5. 供给主体：第 3 行全宽展示 */
+  .logistics-table tbody td.col-td-supplier {
+    grid-column: 1 / -1 !important;
+    grid-row: 3 !important;
+    font-size: 12px !important;
+    color: #64748b !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+  }
+
+  .logistics-table tbody td.col-td-supplier::before {
+    content: "🏭 供货主体:";
+    font-weight: 500;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  .logistics-table tbody td.col-td-supplier .supplier-text-single {
+    max-width: none !important;
+    white-space: normal !important;
+    color: #475569 !important;
+    font-size: 12px !important;
+  }
+
+  /* 6. 单号与车次：第 4 行并排 */
+  .logistics-table tbody td.col-td-code {
+    grid-column: 1 / 2 !important;
+    grid-row: 4 !important;
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+  }
+
+  .logistics-table tbody td.col-td-code::before {
+    content: "单号:";
+    color: #94a3b8;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .logistics-table tbody td.col-td-code .order-code-badge {
+    font-size: 11.5px !important;
+    color: #334155 !important;
+    font-weight: 600 !important;
+  }
+
+  .logistics-table tbody td.col-td-shipment {
+    grid-column: 2 / -1 !important;
+    grid-row: 4 !important;
+    justify-self: end !important;
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+  }
+
+  .logistics-table tbody td.col-td-shipment::before {
+    content: "车次:";
+    color: #94a3b8;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .logistics-table tbody td.col-td-shipment .shipment-code-mono {
+    font-size: 11.5px !important;
+    color: #334155 !important;
+    font-weight: 600 !important;
+  }
+
+  /* 7. 核心数量核验区：第 5 行双栏微卡片 */
+  .logistics-table tbody td.col-td-shipped {
+    grid-column: 1 / 2 !important;
+    grid-row: 5 !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 7px 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    gap: 2px !important;
+  }
+
+  .logistics-table tbody td.col-td-shipped::before {
+    content: "工厂发货量";
+    font-size: 11px !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+    display: block !important;
+  }
+
+  .logistics-table tbody td.col-td-shipped .qty-val {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    color: #2563eb !important;
+  }
+
+  .logistics-table tbody td.col-td-shipped .qty-val::after {
+    content: " 米";
+    font-size: 11px !important;
+    font-weight: normal !important;
+    color: #64748b !important;
+  }
+
+  .logistics-table tbody td.col-td-confirm {
+    grid-column: 2 / -1 !important;
+    grid-row: 5 !important;
+    background: #f0fdf4 !important;
+    border: 1px solid #bbf7d0 !important;
+    border-radius: 8px !important;
+    padding: 7px 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    gap: 2px !important;
+  }
+
+  .logistics-table tbody td.col-td-confirm::before {
+    content: "现场核验量";
+    font-size: 11px !important;
+    color: #15803d !important;
+    font-weight: 500 !important;
+    display: block !important;
+  }
+
+  .logistics-table tbody td.col-td-confirm .confirm-input-wrap {
+    background: #ffffff !important;
+    border-color: #86efac !important;
+    padding: 2px 6px !important;
     width: 100% !important;
     box-sizing: border-box !important;
-  }
-
-  /* 状态与车牌 */
-  .logistics-table tbody td.col-status,
-  .logistics-table tbody td.col-td-status {
-    display: flex !important;
-    align-items: center !important;
     justify-content: space-between !important;
-    margin-bottom: 2px !important;
   }
 
-  .logistics-table tbody td.col-td-order {
-    padding-bottom: 4px !important;
-  }
-
-  .logistics-table tbody td.col-td-timeline {
-    background: #f8fafc !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 6px !important;
-    padding: 6px 10px !important;
-    font-size: 12px !important;
-  }
-  
-  .logistics-table tbody td.col-shipped-qty,
-  .logistics-table tbody td.col-td-shipped,
-  .logistics-table tbody td.col-confirm-qty,
-  .logistics-table tbody td.col-td-confirm {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    background: #f8fafc !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 6px !important;
-    padding: 6px 10px !important;
-    font-size: 12px !important;
-  }
-
-  .logistics-table tbody td.col-td-shipped::before { content: "工厂发货量"; color: #64748b; font-weight: 500; }
-  .logistics-table tbody td.col-td-confirm::before { content: "到货/接收核验量"; color: #047857; font-weight: 500; }
-
-  .logistics-table tbody td.col-text-model strong,
-  .logistics-table tbody td.col-td-model strong {
+  .logistics-table tbody td.col-td-confirm .compact-qty-input {
+    width: 65px !important;
     font-size: 14px !important;
-    color: #0f172a !important;
+    height: 24px !important;
   }
 
-  /* 确认量与操作按钮行 */
-  .logistics-table tbody td.col-action-btns,
+  .logistics-table tbody td.col-td-confirm .confirmed-num {
+    font-size: 15px !important;
+    color: #16a34a !important;
+    font-weight: 700 !important;
+  }
+
+  /* 8. 发货与到货时间：第 6 行并排 */
+  .logistics-table tbody td.col-td-time-ship {
+    grid-column: 1 / 2 !important;
+    grid-row: 6 !important;
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+  }
+
+  .logistics-table tbody td.col-td-time-ship::before {
+    content: "发货:";
+    font-size: 11px;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  .logistics-table tbody td.col-td-time-arrive {
+    grid-column: 2 / -1 !important;
+    grid-row: 6 !important;
+    justify-self: end !important;
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+  }
+
+  .logistics-table tbody td.col-td-time-arrive::before {
+    content: "到货:";
+    font-size: 11px;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  /* 9. 在途时长：第 7 行 */
+  .logistics-table tbody td.col-td-elapsed {
+    grid-column: 1 / -1 !important;
+    grid-row: 7 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+  }
+
+  .logistics-table tbody td.col-td-elapsed .elapsed-tag {
+    font-size: 11.5px !important;
+    padding: 2px 7px !important;
+  }
+
+  /* 10. 协同流转操作：第 8 行全宽底栏 */
   .logistics-table tbody td.col-td-action {
+    grid-column: 1 / -1 !important;
+    grid-row: 8 !important;
+    border-top: 1px dashed #e2e8f0 !important;
+    padding-top: 8px !important;
+    margin-top: 2px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: flex-end !important;
-    margin-top: 4px !important;
-    padding-top: 6px !important;
-    border-top: 1px dashed #e2e8f0 !important;
+    width: 100% !important;
   }
 
-  .logistics-table tbody td.col-td-detail {
+  .logistics-table tbody td.col-td-action:empty {
     display: none !important;
+  }
+
+  .logistics-table tbody td.col-td-action .compact-action-group {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .logistics-table tbody td.col-td-action .step-action-btn {
+    height: 30px !important;
+    padding: 0 12px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    flex: 1 1 auto !important;
+    min-width: 80px !important;
+  }
+
+  .logistics-table tbody td.col-td-action .joint-review-trigger-btn {
+    height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .logistics-table tbody td.col-td-action .review-lock-badge {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 5px 12px !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
+    box-sizing: border-box !important;
   }
 }
 

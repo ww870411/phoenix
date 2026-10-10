@@ -19,7 +19,14 @@
             :class="['card elevated page-card', { 'is-static': !isClickable }]"
             @click="isClickable ? openPage(page) : undefined"
           >
-            <div class="page-card-title">{{ page.page_name }}</div>
+            <div class="page-card-title">
+              <ScaleBalanceIcon
+                v-if="isReviewHallPage(page)"
+                :size="20"
+                class="page-card-title-icon"
+              />
+              <span class="page-card-title-text">{{ formatCardTitle(page) }}</span>
+            </div>
             <div class="page-card-desc">{{ pageDescription(page) }}</div>
           </component>
         </div>
@@ -113,10 +120,26 @@ import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { listPages } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
+import ScaleBalanceIcon from '../../insulation_pipe_supply_2026/components/ScaleBalanceIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
 const projectKey = String(route.params.projectKey ?? '')
+
+function isReviewHallPage(page) {
+  const key = String(page?.page_key || page?.page_url || '').toLowerCase()
+  const name = String(page?.page_name || '')
+  return key === 'joint_review_hall' || name.includes('会审')
+}
+
+function formatCardTitle(page) {
+  const name = String(page?.page_name || '')
+  if (isReviewHallPage(page)) {
+    // 剥离原生 Emoji ⚖️，由统一的矢量全彩 ScaleBalanceIcon 稳定渲染，杜绝跨系统黑白字体退化与毛刺
+    return name.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '').trim()
+  }
+  return name
+}
 
 const auth = useAuthStore()
 const PAGE_DESCRIPTION_MAP = Object.freeze({
@@ -452,6 +475,20 @@ function openPage(page) {
   font-size: 16px;
   font-weight: 600;
   color: var(--primary-700);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-card-title-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.page-card-title-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .page-card-desc {

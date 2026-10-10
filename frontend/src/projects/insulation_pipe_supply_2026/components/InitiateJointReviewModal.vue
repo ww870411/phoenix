@@ -4,7 +4,9 @@
       <!-- 弹窗顶栏 -->
       <div class="modal-header">
         <div class="modal-title-group">
-          <div class="modal-icon-badge">⚖️</div>
+          <div class="modal-icon-badge">
+            <ScaleBalanceIcon :size="20" color="#4f46e5" />
+          </div>
           <div>
             <h3>提请多方联合会审</h3>
             <p class="modal-subtitle">发起订单协同校核 · 前序关键责任主体全票会签更正</p>
@@ -326,6 +328,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { createJointReview } from '../services/jointReviewApi'
+import ScaleBalanceIcon from './ScaleBalanceIcon.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },

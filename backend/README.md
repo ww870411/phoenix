@@ -1,3 +1,107 @@
+## 2026-10-10 需求侧保温管发货记录移动端卡片化重构前后端契约保持 (Demand Logistics Mobile Card View Contract Sync)
+
+- **涉及服务与接口**：
+  - 物流单据查询与流转接口：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - API 路由：[`delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/delivery.py)（`GET /projects/insulation_pipe_supply_2026/delivery/pending`、`POST /projects/insulation_pipe_supply_2026/delivery/confirm-arrival` 等）。
+- **契约与架构对齐说明**：
+  - 本次改动为前端响应式排版卡片化升级，后端数据契约（包含发货单字段 `shipped_qty`、`arrival_confirm_qty`、`receipt_confirm_qty`、`status`、`delivery_code`、`shipment_no`、`vehicle_plate_no`、`supply_entity_name`、`pipe_model_name` 等）保持 100% 稳定，无需变更；
+  - 手机端流转确认、实到量录入与会审提请逻辑与既有接口协议完全无缝衔接。
+
+## 2026-10-09 会审通知接口透传拟更正内容与字段级比对支持 (Notifications Proposed Patch & Diff List Support)
+
+- **涉及服务与接口**：
+  - 服务：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - API 路由：[`joint_review.py`](file:///D:/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)（`GET /projects/insulation_pipe_supply_2026/joint-reviews/notifications`）；
+- **服务层改造说明**：
+  - 在待办通知轮询 SQL 中补充提取 `proposed_patch` 与 `original_snapshot` 原始快照字段；
+  - 自动对发货量、车牌、规格、管件车载明细等核心更正字段进行结构化解析，生成 `diff_list: List[Dict]` 对照条目数组（包含标签、更正前原值、拟更正新值），直接喂给前端强提醒弹窗渲染。
+
+## 2026-10-09 联合会审跨端全彩天平图标落地与前后端契约保持 (Universal Review Scale Icon Contract Sync)
+
+- **涉及服务与数据**：
+  - 项目配置：[`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)；
+  - 路由接口：[`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)；
+- **契约与架构对齐说明**：
+  - 后端接口返回的页面列表数据与各项目权限映射保持完全稳定；
+  - 前端采用全彩纯矢量 SVG 组件统一承接天平标志渲染，彻底免除服务端与各客户端不同字库对 Emoji 字符的平台兼容性依赖。
+
+## 2026-10-09 项目列表元数据页面名称 ⚖️ 标志还原 (Project List Metadata ⚖️ Restored)
+
+- **涉及数据配置与服务**：
+  - 项目配置：[`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)（`insulation_pipe_supply_2026.pages.joint_review_hall`）；
+  - 路由接口：[`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)（`GET /projects/{project_id}/pages`）；
+- **配置还原说明**：
+  - 依从用户视觉偏好，将 `joint_review_hall` 的 `"页面名称"` 恢复为 `"⚖️ 联合会审大厅"`；
+  - 接口直接返回带标志的完整名称，与前端页面卡片标题自然呼应。
+
+## 2026-10-09 管件发货台账列表布局紧凑化优化前后端契约核验 (Ledger Layout Optimization Contract Sync)
+
+- **涉及服务与接口**：
+  - 服务：[`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)；
+  - API 路由：[`fitting_delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/fitting_delivery.py)（`GET /projects/insulation_pipe_supply_2026/fitting-deliveries` 与车次操作系列接口）；
+- **前后端契约与数据流保持**：
+  - 本轮优化属于前端视觉与表格网格布局紧凑重构（解决未撤销记录卡片头部和操作列换行撑高、高度不统一问题）；
+  - 后端返回的车次状态字段 `status`、明细项字段结构保持 100% 稳定，前端按钮操作事件绑定的撤销/编辑调用链路不受影响，前后端契约完全一致。
+
+## 2026-10-09 联合会审待办通知接口发起人过滤与全量 ID 集合支持 (Joint Review Notifications Endpoint Enhancements)
+
+- **涉及服务与接口**：
+  - 服务：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)（`get_pending_review_notifications` 函数）；
+  - API 路由：[`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)（`GET /projects/insulation_pipe_supply_2026/joint-reviews/notifications`）；
+- **服务层优化与接口契约升级**：
+  1. **发起人自身催办过滤**：
+     - 查询 SQL 增加提取 `r.initiator_username`，并在待办收集循环中校验 `if r.get("initiator_username") == session_username: continue`；
+     - 提请人发起会审后，系统将自动排除其自身的催办弹窗，仅精准定向触达被涉及的前序责任主体人员；
+  2. **全量待办 ID 集合输出 (`all_pending_review_ids`)**：
+     - 返回结构中新增 `all_pending_review_ids: List[int]` 字段；
+     - 供前端做集合级增量比对，避免因前端展示切片限制（如 `pending_items[:20]`）导致未处理单据过多时出现新提醒误判。
+
+## 2026-10-09 项目列表元数据页面名称纯净化与 Emoji 剥离 (Project List Metadata Cleanup)
+
+- **涉及数据配置与服务**：
+  - 项目配置：[`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)（`insulation_pipe_supply_2026.pages.joint_review_hall`）；
+  - 路由接口：[`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)（`GET /projects/{project_id}/pages`）；
+- **配置优化说明**：
+  - **历史遗留问题**：在 `项目列表.json` 中，保温管项目的联合会审大厅页面配置了 `"页面名称": "⚖️ 联合会审大厅"`。混合字符型原生 Emoji 会导致部分客户端因字体库不全而渲染出黑白线框或字体毛刺；
+  - **规范变更**：将 `"页面名称"` 规范净化为纯文本 `"联合会审大厅"`。后端返回的页面元数据不再携带平台特定的 Emoji 字符，视觉图标统一交由前端专业矢量 SVG 组件（`ScaleBalanceIcon.vue`）负责，实现元数据与 UI 表现层的规范解耦；
+- **兼容性验证**：各模块与权限系统严格依赖 `page_key="joint_review_hall"`，改动后权限判断与页面寻址完全正常，接口返回稳定。
+
+## 2026-10-09 联合会审前序主体判断与通知接口支持评估 (Joint Review Notification Evaluation)
+
+- **涉及数据表与服务**：
+  - 数据表：`tube.tube_order_reviews`、`tube.tube_review_votes`、`logs.system_messages`；
+  - 核心服务：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - API 路由：[`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)（`GET /notifications`）；
+- **核心能力与条件排查结论**：
+  - **前序主体判定**：已在 `create_joint_review` 中依据触发阶段（待到货、待接收、待入库）动态生成 `required_entities`（分别精确定位到发货厂家、现场负责人等前序主体），并通过 `_check_user_can_vote_entity` 解析为具体用户账号，能力完全就绪；
+  - **待办提醒接口**：`GET /joint-reviews/notifications` 已稳定可用，支持入参当前登录用户会话，毫秒级返回待办总数 `pending_count` 及前 10 笔明细（含单号、标段名、提请人姓名/角色、事由、时间戳），可直接作为前端全局轮询与弹窗的数据源。
+
+## 2026-10-09 天地龙管件发货单排查与物料库比对记录 (Tiandilong Deliveries Audit)
+
+- **涉及服务与数据库表**：
+  - 数据表：`tube.tube_fitting_delivery`（管件发货流转表）、`tube.tube_material_price`（天地龙标准中标库）、`logs.tube_operation_logs`（操作审计日志）；
+  - 服务：[`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py) 与 [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+- **排查与比对核心结论**：
+  - **订单与车次定位**：
+    - 140 件车次：`FSSG-261006-001`（状态：`pending_warehouse`，施工已收）vs `FSSG-261009-001`（状态：`pending_arrival`，待到货）；
+    - 130 件车次：`FSSG-261006-002`（状态：`pending_warehouse`，施工已收）vs `FSSG-261009-002`（状态：`pending_receive`，已确认到货）；
+    - 172 件车次：`FSSG-261006-003`（状态：`pending_warehouse`，施工已收）vs `FSSG-261009-003`（状态：`pending_arrival`，待到货）；
+  - **型号规格比对**：
+    - 10-06 发货单使用非标口语化命名（`fitting_type='90°预制保温弯头'`, `model_spec='DN50'`；`fitting_type='预制保温跨越式三通'`）；
+    - 10-09 发货单采纳了 `tube.tube_material_price` 标准库命名（`fitting_type='塑套钢预制保温弯头'`, `model_spec='90° DN50'`；`fitting_type='塑套钢预制保温跨越三通'`）；
+    - 两日 3 车共 17 项明细对应的物理实物（口径、角度、三通规格、所属站点）100% 逐项吻合；
+  - **供应商误操作根因**：供应商误以为 10-06 的非标单据失效，于 10-09 11:42~11:49 重新按标准物料库再次提交发货，导致系统出现双重发货（Double-Billing）；
+- **数据一致性维护建议**：
+  - 在途单（001 与 003）建议供应商端执行取消撤销；
+  - 已到货单（002）需协同五标段发起会审撤回或退回，防止多计入库。
+
+## 2026-10-09 联合会审机制与物料标准化业务指南沉淀
+
+- **业务指南对应后端服务与数据表**：
+  - 【联合会审大厅】：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)（车次状态有序锁、行锁、在审冻结、全票通过生效原子事务与审计留痕）；
+  - 【管件发货标准化核验】：[`fitting_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py) 与表 `tube.tube_material_price`、`tube.tube_fitting_supplier_inventory`；
+- **文档沉淀**：业务白皮书已沉淀至 [`configs/2026-10-09_管件发货标准化与全生命周期联合会审业务操作指南.md`](file:///D:/编程项目/phoenix/configs/2026-10-09_管件发货标准化与全生命周期联合会审业务操作指南.md)。
+
 ## 2026-10-09 管件物料标准库字段结构与前端匹配契约说明
 
 - **涉及数据表与服务**：`tube.tube_material_price`（中标价格库）与 [`fitting_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py)；

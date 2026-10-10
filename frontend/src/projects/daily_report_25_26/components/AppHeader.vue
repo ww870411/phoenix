@@ -71,16 +71,12 @@
       </nav>
     </div>
   </header>
-
-  <!-- 每日首次待办联合会审强提醒轻量弹窗 -->
-  <DailyReviewNoticeModal v-if="auth.isLoggedIn || auth.isAuthenticated || auth.user" />
 </template>
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth'
-import DailyReviewNoticeModal from '../../insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue'
 
 const router = useRouter()
 const route = useRoute()

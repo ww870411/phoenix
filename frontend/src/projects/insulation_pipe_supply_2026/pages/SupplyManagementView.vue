@@ -999,55 +999,55 @@
                   <!-- 车次汇总卡片表头 (支持点击展开/折叠) -->
                   <div 
                     class="fitting-card-header"
-                    style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8fafc; cursor: pointer; user-select: none; border-bottom: 1px solid #e2e8f0;"
+                    style="display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: #f8fafc; cursor: pointer; user-select: none; border-bottom: 1px solid #e2e8f0; min-height: 42px; box-sizing: border-box;"
                     @click="toggleFittingGroup(group.groupKey)"
                   >
-                    <div class="header-left-meta" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                      <span style="font-size: 14px; color: #4f46e5; transition: transform 0.2s ease; font-weight: bold;" :style="{ transform: isFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }">
+                    <div class="header-left-meta" style="display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow: hidden;">
+                      <span style="font-size: 13px; color: #4f46e5; transition: transform 0.2s ease; font-weight: bold; flex-shrink: 0;" :style="{ transform: isFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }">
                         ▶
                       </span>
-                      <div style="display: flex; align-items: center; gap: 6px;">
+                      <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
                         <span style="font-size: 11px; color: #64748b; font-weight: 600;">车次:</span>
-                        <strong style="color: #4f46e5; font-family: monospace; font-size: 14px;">{{ group.shipmentNo }}</strong>
+                        <strong style="color: #4f46e5; font-family: monospace; font-size: 13.5px;">{{ group.shipmentNo }}</strong>
                       </div>
-                      <span class="plate-badge" style="margin-left: 2px; flex-shrink: 0;">{{ group.vehiclePlateNo }}</span>
-                      <div style="font-size: 12.5px; color: #334155; display: flex; align-items: center; gap: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="`发往标段: ${group.section1Name}`">
+                      <span class="plate-badge" style="margin-left: 2px; flex-shrink: 0; padding: 1px 6px; font-size: 11.5px;">{{ group.vehiclePlateNo }}</span>
+                      <div style="font-size: 12px; color: #334155; display: flex; align-items: center; gap: 4px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;" :title="`发往标段: ${group.section1Name}`">
                         <span style="color: #94a3b8; flex-shrink: 0;">➡️ 发往:</span>
                         <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ group.section1Name }}</strong>
                       </div>
-                      <span style="font-size: 11.5px; color: #64748b; font-family: monospace; flex-shrink: 0;">{{ formatDateTimeDisplay(group.shippedAt) }}</span>
+                      <span style="font-size: 11.5px; color: #64748b; font-family: monospace; flex-shrink: 0; margin-left: 4px;">{{ formatDateTimeDisplay(group.shippedAt) }}</span>
                     </div>
 
-                    <div class="header-right-meta" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                      <div style="text-align: right;">
-                        <span style="font-size: 12px; color: #64748b; margin-right: 6px;">共 {{ group.items.length }} 种管件</span>
-                        <strong style="font-size: 13.5px; color: #059669;">发货总计: {{ group.totalQty }} {{ getGroupUnitLabel(group) }}</strong>
+                    <div class="header-right-meta" style="display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; flex-shrink: 0;">
+                      <div style="text-align: right; white-space: nowrap; margin-right: 2px;">
+                        <span style="font-size: 11.5px; color: #64748b; margin-right: 5px;">共 {{ group.items.length }} 种管件</span>
+                        <strong style="font-size: 13px; color: #059669;">总计: {{ group.totalQty }} {{ getGroupUnitLabel(group) }}</strong>
                       </div>
                       <!-- 状态 Badge -->
-                      <span v-if="group.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11.5px;">⚖️ 联合会审中</span>
-                      <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11.5px;">🚚 待到货确认</span>
-                      <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11.5px;">✅ 待施工接收</span>
-                      <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11.5px;">👷 待库管确认</span>
-                      <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11.5px;">🏢 库管已确认</span>
-                      <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11.5px;">❌ 已撤销</span>
-                      <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11.5px;">⚠️ 含已撤销明细</span>
+                      <span v-if="group.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px; padding: 2px 7px; white-space: nowrap;">⚖️ 联合会审中</span>
+                      <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 7px; white-space: nowrap;">🚚 待到货确认</span>
+                      <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; padding: 2px 7px; white-space: nowrap;">✅ 待施工接收</span>
+                      <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 2px 7px; white-space: nowrap;">👷 待库管确认</span>
+                      <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 2px 7px; white-space: nowrap;">🏢 库管已确认</span>
+                      <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 2px 7px; white-space: nowrap;">❌ 已撤销</span>
+                      <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 11px; padding: 2px 7px; white-space: nowrap;">⚠️ 含撤销</span>
 
                       <button
                         v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup) && group.items && group.items.length > 0"
                         type="button"
                         class="btn primary btn-sm"
-                        style="padding: 4px 10px; font-size: 12px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; flex-shrink: 0;"
+                        style="padding: 3px 8px; font-size: 11.5px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
                         @click.stop="openEditFittingShipmentCommon(group)"
                         title="整车统一修改：统一修改本车次的车牌号、接收标段、发货时间与统一发货备注"
                       >
-                        🚚 整车修改与备注
+                        ✏️ 整车修改
                       </button>
 
                       <button
                         v-if="(group.status === 'shipped' || group.status === 'pending_arrival') && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
                         type="button"
                         class="btn ghost btn-sm"
-                        style="padding: 4px 10px; font-size: 12px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer; flex-shrink: 0;"
+                        style="padding: 3px 8px; font-size: 11.5px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
                         @click.stop="handleCancelFittingGroup(group)"
                       >
                         撤销发货
@@ -1056,32 +1056,32 @@
                       <button 
                         type="button" 
                         class="btn ghost btn-sm" 
-                        style="padding: 4px 10px; font-size: 12px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer; flex-shrink: 0;"
+                        style="padding: 3px 8px; font-size: 11.5px; color: #4f46e5; border-color: #c7d2fe; background: #eef2ff; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
                         @click.stop="showDeliveryDetail(group)"
                       >
-                        📜 流转凭证
+                        📜 凭证
                       </button>
                     </div>
                   </div>
 
                   <!-- 明细展开区 -->
-                  <div v-show="isFittingGroupExpanded(group.groupKey)" style="padding: 12px 16px; background: #ffffff;">
-                    <div v-if="group.shipRemark" style="font-size: 12px; color: #475569; background: #f1f5f9; padding: 6px 12px; border-radius: 6px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                  <div v-show="isFittingGroupExpanded(group.groupKey)" style="padding: 10px 14px; background: #ffffff;">
+                    <div v-if="group.shipRemark" style="font-size: 11.5px; color: #475569; background: #f1f5f9; padding: 5px 10px; border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
                       <span>📝 整车备注：</span>
                       <span style="color: #0f172a;">{{ group.shipRemark }}</span>
                     </div>
 
-                    <div class="table-responsive-wrapper" style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; margin-bottom: 4px;">
-                      <table class="data-table demand-fitting-table" style="margin: 0; min-width: 720px; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12.5px;">
+                    <div class="table-responsive-wrapper" style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; margin-bottom: 2px;">
+                      <table class="data-table demand-fitting-table" style="margin: 0; min-width: 780px; width: 100%; table-layout: fixed; border: 1px solid #edf2f7; border-radius: 6px; font-size: 12px;">
                         <thead style="background: #f8fafc;">
                           <tr>
-                            <th style="width: 38px; text-align: center;">#</th>
-                            <th style="width: 105px;">管件类型</th>
-                            <th style="min-width: 170px;">型号 / 规格描述</th>
-                            <th style="width: 90px; text-align: right;">发货件数</th>
-                            <th style="width: 135px;">订单号</th>
-                            <th style="width: 120px; text-align: center;">状态 / 备注</th>
-                            <th v-if="['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)" style="width: 140px; text-align: center;">操作</th>
+                            <th style="width: 36px; text-align: center; padding: 6px 4px;">#</th>
+                            <th style="width: 140px; padding: 6px 8px;">管件类型</th>
+                            <th style="min-width: 150px; padding: 6px 8px;">型号 / 规格描述</th>
+                            <th style="width: 85px; text-align: right; padding: 6px 8px;">发货件数</th>
+                            <th style="width: 145px; text-align: center; padding: 6px 8px;">订单号</th>
+                            <th style="width: 115px; text-align: center; padding: 6px 8px;">状态 / 备注</th>
+                            <th v-if="['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)" style="width: 155px; text-align: center; padding: 6px 8px;">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1091,64 +1091,64 @@
                             :class="['mobile-fitting-item-row', { 'is-cancelled-row': item.status === 'cancelled' }]"
                             :style="item.status === 'cancelled' ? { background: '#fef2f2', opacity: '0.85' } : {}"
                           >
-                            <td class="col-index" style="text-align: center; color: #94a3b8;">{{ idx + 1 }}</td>
-                            <td class="col-type">
-                              <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px;">{{ getNormalizedFittingType(item.fitting_type) }}</span>
-                              <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px;">⚠️ {{ item.fitting_type }}</span>
+                            <td class="col-index" style="text-align: center; color: #94a3b8; padding: 6px 4px; vertical-align: middle;">{{ idx + 1 }}</td>
+                            <td class="col-type" style="padding: 6px 8px; vertical-align: middle; white-space: nowrap;">
+                              <span v-if="isStandardFittingType(item.fitting_type)" class="tag-badge primary" style="font-size: 11.5px; white-space: nowrap; padding: 2px 7px;">{{ getNormalizedFittingType(item.fitting_type) }}</span>
+                              <span v-else class="tag-badge warning" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11.5px; white-space: nowrap; padding: 2px 7px;">⚠️ {{ item.fitting_type }}</span>
                             </td>
-                            <td class="col-model">
+                            <td class="col-model" style="padding: 6px 8px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="item.model_spec">
                               <strong :style="{ color: item.status === 'cancelled' ? '#94a3b8' : '#1e293b', textDecoration: item.status === 'cancelled' ? 'line-through' : 'none' }">
                                 {{ item.model_spec }}
                               </strong>
                             </td>
-                            <td class="col-shipped" style="text-align: right; font-weight: bold;" :style="{ color: item.status === 'cancelled' ? '#94a3b8' : '#2563eb', textDecoration: item.status === 'cancelled' ? 'line-through' : 'none' }">
+                            <td class="col-shipped" style="text-align: right; font-weight: bold; padding: 6px 8px; vertical-align: middle; white-space: nowrap;" :style="{ color: item.status === 'cancelled' ? '#94a3b8' : '#2563eb', textDecoration: item.status === 'cancelled' ? 'line-through' : 'none' }">
                               <span class="mobile-lbl" style="display: none;">发货: </span>
                               <span>{{ item.shipped_qty }} {{ item.unit || '个' }}</span>
                             </td>
-                            <td class="col-action">
+                            <td class="col-action" style="text-align: center; padding: 6px 8px; vertical-align: middle; white-space: nowrap;">
                               <span class="mobile-order-lbl" style="display: none; font-size: 11px; color: #94a3b8; margin-right: 4px;">单号:</span>
-                              <span style="font-family: monospace; font-size: 11.5px; color: #64748b;">{{ item.order_no }}</span>
+                              <span style="font-family: monospace; font-size: 11.5px; color: #64748b; white-space: nowrap;">{{ item.order_no }}</span>
                             </td>
-                            <td class="col-status" style="text-align: center;">
-                              <span v-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px;" :title="item.cancel_reason ? `撤销原因: ${item.cancel_reason}` : '已撤销'">
+                            <td class="col-status" style="text-align: center; padding: 6px 8px; vertical-align: middle; white-space: nowrap;">
+                              <span v-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; white-space: nowrap; padding: 2px 6px;" :title="item.cancel_reason ? `撤销原因: ${item.cancel_reason}` : '已撤销'">
                                 ❌ 已撤销
                               </span>
-                              <span v-else-if="item.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px;">
+                              <span v-else-if="item.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px; white-space: nowrap; padding: 2px 6px;">
                                 ⚖️ 联合会审中
                               </span>
-                              <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px;">
+                              <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; white-space: nowrap; padding: 2px 6px;">
                                 🏢 库管已确认
                               </span>
-                              <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px;">
+                              <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; white-space: nowrap; padding: 2px 6px;">
                                 👷 待库管确认
                               </span>
-                              <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px;">
+                              <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 11px; white-space: nowrap; padding: 2px 6px;">
                                 ✅ 待施工接收
                               </span>
-                              <span v-else class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px;">
+                              <span v-else class="tag-badge primary" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; white-space: nowrap; padding: 2px 6px;">
                                 🚚 待到货
                               </span>
-                              <div v-if="item.cancel_reason" class="mobile-cancel-reason" style="font-size: 10.5px; color: #b91c1c; margin-top: 2px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="'撤销原因: ' + item.cancel_reason">
+                              <div v-if="item.cancel_reason" class="mobile-cancel-reason" style="font-size: 10px; color: #b91c1c; margin-top: 1px; text-align: center; max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="'撤销原因: ' + item.cancel_reason">
                                 理由: {{ item.cancel_reason }}
                               </div>
                             </td>
-                            <td class="col-operate" v-if="['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)" style="text-align: center;">
-                              <div class="mobile-action-buttons" style="display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                            <td class="col-operate" v-if="['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)" style="text-align: center; padding: 6px 8px; vertical-align: middle; white-space: nowrap;">
+                              <div class="mobile-action-buttons" style="display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: nowrap; white-space: nowrap;">
                                 <button
                                   v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)"
                                   type="button"
                                   class="btn primary btn-sm"
-                                  style="padding: 2px 6px; font-size: 11px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; border-radius: 4px;"
+                                  style="padding: 2px 6px; font-size: 11px; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%) !important; color: #fff !important; border: none !important; cursor: pointer; border-radius: 4px; white-space: nowrap; flex-shrink: 0;"
                                   @click.stop="openSuperEditFitting(item, group)"
                                   title="单项明细编辑覆盖：修改此项管件的规格型号、件数或单项状态"
                                 >
-                                  ⚙️ 单项编辑
+                                  ⚙️ 编辑
                                 </button>
                                 <button
                                   v-if="(item.status === 'shipped' || item.status === 'pending_arrival' || !item.status) && ['Global_admin', 'tube_supplier_admin', 'tube_supplier', 'dev_admin'].includes(currentGroup)"
                                   type="button"
                                   class="btn ghost btn-sm"
-                                  style="padding: 2px 6px; font-size: 11px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer; border-radius: 4px;"
+                                  style="padding: 2px 6px; font-size: 11px; color: #b91c1c; border-color: #fecaca; background: #fef2f2; cursor: pointer; border-radius: 4px; white-space: nowrap; flex-shrink: 0;"
                                   @click.stop="handleCancelFittingItem(item, group)"
                                   title="局部撤销此项管件明细"
                                 >
@@ -9192,11 +9192,60 @@ input.no-spin,
   flex: 0 0 auto;
 }
 
+/* 📋 桌面端管件发货台账紧凑单行排版优化 */
+.demand-fitting-table {
+  border-collapse: collapse;
+}
+
+.demand-fitting-table tbody tr {
+  height: 38px;
+  transition: background-color 0.15s ease;
+}
+
+.demand-fitting-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.demand-fitting-table tbody tr.is-cancelled-row:hover {
+  background-color: #fee2e2 !important;
+}
+
+.demand-fitting-table tbody td {
+  vertical-align: middle !important;
+  white-space: nowrap;
+}
+
+.demand-fitting-table tbody td.col-model {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.demand-fitting-table tbody td.col-operate .mobile-action-buttons {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+}
+
+.demand-fitting-table tbody td.col-operate .btn {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.fitting-card-header .header-left-meta,
+.fitting-card-header .header-right-meta {
+  flex-wrap: nowrap !important;
+}
+
 @media (max-width: 900px) {
   .field-span-2 {
     grid-column: span 1;
   }
 }
+
 
 @media (max-width: 720px) {
   .tube-page-main {

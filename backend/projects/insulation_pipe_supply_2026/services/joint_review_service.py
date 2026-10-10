@@ -1495,8 +1495,8 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
         # 查询所有 voting 中的会审
         sql = text("""
             SELECT r.id, r.review_no, r.order_category, r.order_no, r.section_1_id,
-                   r.supply_entity_id, r.initiator_name, r.initiator_role, r.review_reason,
-                   r.required_entities, r.created_at
+                   r.supply_entity_id, r.initiator_name, r.initiator_role, r.initiator_username, r.review_reason,
+                   r.required_entities, r.proposed_patch, r.original_snapshot, r.created_at
             FROM tube.tube_order_reviews r
             WHERE r.review_status = 'voting'
             ORDER BY r.created_at DESC
@@ -1504,7 +1504,7 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
         rows = db_session.execute(sql).mappings().all()
 
         if not rows:
-            return {"ok": True, "pending_count": 0, "pending_items": []}
+            return {"ok": True, "pending_count": 0, "pending_items": [], "all_pending_review_ids": []}
 
         # 查所有已表决
         v_sql = text("SELECT review_id, entity_type, entity_id FROM tube.tube_review_votes")
@@ -1513,6 +1513,10 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
 
         pending_for_me = []
         for r in rows:
+            # 提请人自身无需弹窗催办自己
+            if r.get("initiator_username") and r.get("initiator_username") == session_username:
+                continue
+
             req_ents = r["required_entities"] or []
             if isinstance(req_ents, str):
                 try:
@@ -1528,6 +1532,58 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
                         sup_name = _resolve_supplier_name(cfg, r["supply_entity_id"])
                         cat_label = "保温直管" if r["order_category"] == "pipe" else "管件/阀门"
                         c_at = r["created_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M") if r["created_at"] else ""
+
+                        # 解析 proposed_patch 与 original_snapshot 生成直观的对照摘要
+                        patch = r.get("proposed_patch") or {}
+                        if isinstance(patch, str):
+                            try:
+                                patch = json.loads(patch)
+                            except Exception:
+                                patch = {}
+                        snapshot = r.get("original_snapshot") or {}
+                        if isinstance(snapshot, str):
+                            try:
+                                snapshot = json.loads(snapshot)
+                            except Exception:
+                                snapshot = {}
+
+                        diff_list = []
+                        field_labels = {
+                            "shipped_qty": "发货数量",
+                            "vehicle_plate_no": "送货车牌号",
+                            "pipe_model_id": "规格型号",
+                            "fitting_type": "管件大类",
+                            "model_spec": "规格型号",
+                            "unit": "计量单位",
+                            "ship_contact_name": "随车联系人",
+                            "ship_contact_phone": "联系电话",
+                            "ship_remark": "发货备注",
+                        }
+                        for f_key, f_label in field_labels.items():
+                            if f_key in patch:
+                                b_val = str(snapshot.get(f_key) if snapshot.get(f_key) is not None else "—")
+                                a_val = str(patch.get(f_key) if patch.get(f_key) is not None else "—")
+                                if f_key == "shipped_qty":
+                                    unit_str = snapshot.get("unit") or ("根/米" if r["order_category"] == "pipe" else "件")
+                                    b_val = f"{b_val} {unit_str}".strip()
+                                    a_val = f"{a_val} {unit_str}".strip()
+                                diff_list.append({
+                                    "key": f_key,
+                                    "label": f_label,
+                                    "before": b_val,
+                                    "after": a_val,
+                                })
+
+                        if "items" in patch and isinstance(patch["items"], list):
+                            total_items = len(snapshot.get("_review_rows") or snapshot.get("items") or [])
+                            changed_items = len(patch["items"])
+                            diff_list.append({
+                                "key": "items",
+                                "label": "车载管件明细",
+                                "before": f"原车次共 {total_items} 项" if total_items > 0 else "原明细记录",
+                                "after": f"更正其中 {changed_items} 项规格/数量",
+                            })
+
                         pending_for_me.append({
                             "review_id": r["id"],
                             "review_no": r["review_no"],
@@ -1540,13 +1596,18 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
                             "initiator_role": r["initiator_role"],
                             "review_reason": r["review_reason"],
                             "created_at": c_at,
+                            "proposed_patch": patch,
+                            "original_snapshot": snapshot,
+                            "diff_list": diff_list,
                         })
                         break
 
+        all_ids = [p["review_id"] for p in pending_for_me]
         return {
             "ok": True,
             "pending_count": len(pending_for_me),
-            "pending_items": pending_for_me[:10],
+            "pending_items": pending_for_me[:20],
+            "all_pending_review_ids": all_ids,
         }
     finally:
         db_session.close()

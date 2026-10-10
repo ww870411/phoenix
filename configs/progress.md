@@ -1,3 +1,202 @@
+## 2026-10-10 [需求侧保温管发货记录移动端排版卡片化重构与高度塌陷修复]
+- **问题反馈与现象定位**：
+  - 用户反馈访问页面 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/demand_management?category=pipe&tab=logistics`（需求侧保温管现场到货与接收确认）时，在手机端访问发货记录全都缩成了一团纸片状黑斑，完全无法浏览和操作；
+  - **根本根因剖析**：
+    1. **固定行高继承与 Flex 压缩致死**：桌面端表格为追求高密度紧凑，在 `.logistics-table-row` 和 `.logistics-table td` 上全局强制设定了 `height: 38px;` 和 `white-space: nowrap !important;`。移动端媒体查询（`<= 720px`）虽然将 `tr` 设为了 `display: flex; flex-direction: column;`，但未覆盖重置 `height: auto !important;` 和 `min-height: unset !important;`，导致每个发货卡片被死死锁死在 38px 固定高度中。其内部 13 个 `<td>` 单元格在 flex 默认 `flex-shrink: 1` 作用下被等比强行压缩至仅约 2.9px，文字与按钮全部层叠挤压成一条线；
+    2. **表格根容器样式冲突与内滚动卡滞**：外层 `.logistics-table-wrap` 继承了 `max-height: 720px; overflow-y: auto;`，原生 `table` 保持了 `display: table` 未转为 `display: block`，导致移动端浏览器表格格式化上下文计算错乱，页面极易在触摸滑动时内嵌卡滞；
+    3. **单元格类名脱节与文本截断**：原移动端 CSS 存在历史遗留废弃类名（如 `col-td-order`、`col-td-timeline`），无法匹配当前拆分后的 13 项 `<td>`，且桌面端 `max-width: 145px` 文本截断规则依然生效，物料规格被腰斩截断；
+    4. **凭证按钮暴力隐藏与输入框冒泡穿透**：原样式将凭证列 `col-td-detail` 直接 `display: none`，手机端无法查阅随车凭证与地磅单；输入框未拦截冒泡，点击实到量/接收量输入框时会误触发父级整行点击弹出凭证详情。
+- **高精细度前端重构与卡片化落地 ([`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue))**：
+  1. **彻底根除高度塌陷与锁死**：
+     - `.logistics-table tbody tr.logistics-table-row` 显式设置 `height: auto !important; min-height: unset !important; max-height: none !important;`，彻底破除 38px 限制；
+     - 所有 `td` 显式重置 `height: auto !important; white-space: normal !important; min-height: unset !important;`，解除单行不换行限制；
+     - 容器 `.logistics-table-wrap` 设为 `max-height: none !important; overflow: visible !important; border: none !important; background: transparent !important;`，恢复移动端顺畅自然纵向滚动；
+  2. **高保真 3 列响应式网格卡片分区排版**：
+     - `tr` 卡片重构为 3 列 CSS Grid（`grid-template-columns: 1fr auto auto;`），白底圆角立体卡片（`border-radius: 12px; box-shadow: 0 2px 6px -1px rgba(0,0,0,0.05);`）；
+     - **第 1 行（顶栏）**：左侧流转状态药丸（`col-td-status`）+ 右侧深蓝车牌胶囊（`col-td-plate`，无车牌自动隐去多余破折号）+ 最右侧带文字快捷凭证按钮（`col-td-detail`，展示 `📜 凭证`）；
+     - **第 2 行（物料主标题）**：`col-td-model` 全宽展示，解除 `max-width` 截断，大号粗体完整呈现物料规格（如 `DN500/630 聚氨酯预制保温管`）；
+     - **第 3 行（供货主体）**：`col-td-supplier` 带 `🏭 供货主体:` 前缀，清晰呈现供货厂家；
+     - **第 4 行（单号与车次）**：`col-td-code`（带 `单号:` 前缀）与 `col-td-shipment`（带 `车次:` 前缀）左右自然对齐；
+     - **第 5 行（数量核验双卡片）**：左侧蓝底浅卡片【工厂发货量】（大号粗体蓝字 + `米`）对比右侧绿底浅卡片【现场核验量】（若待到货/待接收，紧凑输入框居中；若已核验，大号绿字实收米数）；
+     - **第 6~7 行（流转时间与在途）**：`发货:` 与 `到货:` 时间左右排列，下方展示 `⏱️ 在途时长` 徽章；
+     - **第 8 行（操作栏底栏）**：顶部虚线分隔，按钮组全宽弹性填充（【确认到货】/【施工接收】/【⚖️ 提请会审】），触摸高度提升至 30px 便于触控；若是会审中状态，全宽渲染呼吸黄色锁定警示条；单据已完结无操作时自动收口不留白；
+  3. **交互防冒泡与筛选区自适应完善**：
+     - 给待到货与待接收实到量输入框容器 `.confirm-input-wrap` 增加 `@click.stop`，防止点击聚焦输入时误弹整行凭证抽屉；
+     - 顶部 `.panel-title-row .toolbar-actions` 在手机端开启 `flex-wrap: wrap` 弹性自适应宽度，多按钮自适应排布；筛选网格 `.compact-filter-grid` 在手机端固定双列网格，绝不横向撑破视口。
+- **验证与构建**：
+  - 前端执行 `npm run build` 全量生产打包编译通过（耗时 17.59s，747 个模块全部成功转换，零报错，退出码 0）。
+
+## 2026-10-09 [会审提醒强弹窗拟更正内容高亮对比与字段级明细透传]
+- **问题反馈与体验瓶颈**：
+  - 用户体验测试后反馈：“我刚试了一下提醒，确实能实现，但是似乎并没有标注提请修改什么内容”；
+  - **核心缺失点**：
+    1. 后端通知接口 `GET /projects/insulation_pipe_supply_2026/joint-reviews/notifications` 的 SQL 查询中，此前仅拉取了单据事由 `review_reason`，未查询 `proposed_patch`（拟更正内容）与 `original_snapshot`（原始快照）；
+    2. 前端待办弹窗卡片中只展示了提请人与事由文本，用户无法在弹窗中直接获知“到底要把哪项数据改成多少”，必须跳转大厅才能查验，决策与核对链路割裂。
+- **高精细度前后端全链路升级落地**：
+  1. **后端服务接口透传与结构化比对生成 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 查询 SQL 增加 `r.proposed_patch, r.original_snapshot`；
+     - 在循环中自动对发货数量（`shipped_qty`）、车牌号（`vehicle_plate_no`）、规格型号（`pipe_model_id`/`model_spec`）、管件大类（`fitting_type`）、联系人电话及车载管件明细（`items`）等核心字段进行原值与更正值智能提取，结构化输出 `diff_list` 数组及原始 JSON 数据；
+  2. **前端待办弹窗增加高亮对比卡片 ([`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue))**：
+     - 在事由说明下方新增 `.item-patch-box`（金黄色主题高亮比对区块）；
+     - 逐项渲染“【字段名】 `原值(红底删除线)` ➔ `更正值(绿底加粗)`”，与会审大厅内部的 Diff 对比视觉规范完全对齐；
+     - 新增 `getItemDiffs` 客户端容错解析函数，无论单直管更正还是整车管件明细调整，均能秒级直观呈现。
+- **验证与构建**：
+  - 后端 Python 语法编译通过（`py_compile` 零错误）；
+  - 前端执行 `npm run build` 全量生产打包编译通过（耗时 15.19s，747 个模块全部成功转换，零报错，退出码 0）。
+
+## 2026-10-09 [全系统跨操作系统统一全彩天平图标落地与大厅顶栏卡片一体化]
+- **需求与设计构想**：
+  - 用户提出关键构想：“能不能将这个符号弄成一个在各种操作系统上显示一致的图标？包括 `joint_review_hall` 中‘多方联合会审大厅 (Joint Review Hall)’前面的那个图标也统一为我们的页面卡片图标”；
+  - 彻底解决原生 Emoji `⚖️` 在部分旧版 Windows（Win7/8、无全彩字库系统）退化为黑白锯齿线条、以及不同客户端显示割裂的问题，同时摒弃抽象单色几何图标，完美复刻用户钟爱的经典金黄全彩“⚖️”天平。
+- **高精细度组件与页面一体化重构落地**：
+  1. **跨系统 100% 渲染一致的全彩矢量组件 ([`ScaleBalanceIcon.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/ScaleBalanceIcon.vue))**：
+     - 基于国际标准全彩天平（Twemoji 2696）规范与金属微质感渐变技术全面重构；
+     - 内置暖金高光渐变横梁（`#FCD34D`~`#D97706`）、深灰钢质悬吊索（`#64748B`）、微凹立体托盘与沉稳台基底座，色彩立体饱满、细节生动；
+     - 纯原生 SVG 矢量计算，尺寸自由缩放（`size` 传参），0 外部字库依赖，在 Windows 7/8/10/11、macOS、Linux、各种分辨率屏幕上 **100% 像素级高保真、完全一致、永不模糊或退化**；
+  2. **页面卡片统一 ([`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue))**：
+     - 在卡片标题前直接渲染统一的 `<ScaleBalanceIcon :size="20" class="page-card-title-icon" />`；
+     - 引入 `formatCardTitle` 自动剔除系统可能混入的原生字符，将全彩天平紧凑自然地嵌入标题文本前（`gap: 8px`，无突兀外框），呈现纯粹统一的“⚖️ 联合会审大厅”；
+  3. **会审大厅顶栏标题完全统一 ([`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - 移除生硬的紫色外挂方框 `.title-icon-badge`，标题前直接采用统一的 `<ScaleBalanceIcon :size="26" class="title-header-icon" />`；
+     - 增加柔和微立体阴影（`drop-shadow`），使大厅页面标题与页面卡片在视觉形象、色彩和质感上**完全统一呼应**！
+- **验证与构建**：
+  - 前端执行 `npm run build` 全量生产构建打包测试，耗时 16.80s，747 个模块全部成功转换，零报错（Exit Code 0）。
+
+## 2026-10-09 [联合会审大厅页面卡片 ⚖️ 标志还原与原生视觉体验对齐]
+- **需求与决策背景**：
+  - 用户明确指示更喜欢联合会审大厅页面卡片原本的原生“⚖️”天平标志（“其实对于联合会审大厅的页面卡片，我还是喜欢原本的‘⚖️’标志呢”）；
+  - 严格贯彻“用户命令绝对优先”原则，撤销对页面卡片的人工重绘徽章，恢复纯粹、直观、亲切的原生 Emoji 标题呈现。
+- **改动范围与实现细节**：
+  1. **数据源页面名称还原 ([`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json))**：
+     - 将 `joint_review_hall` 的 `"页面名称"` 恢复为带原生标志的 `"⚖️ 联合会审大厅"`；
+  2. **页面卡片标题组件精简与还原 ([`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue))**：
+     - 卡片模板还原为纯粹的 `<div class="page-card-title">{{ page.page_name }}</div>`；
+     - 移除卡片头部的外挂小徽章容器，移除 `cleanPageTitle` 过滤与 `ScaleBalanceIcon` 冗余引入，标题直接展示带有生动“⚖️”的天平全称；
+     - 样式恢复为简洁优雅的卡片标题文字样式；
+  3. **页面路由与顶栏统一 ([`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue))**：
+     - 将 `pageTitleMap.joint_review_hall` 对齐还原为 `'⚖️ 联合会审大厅'`，确保进入页面后顶栏面包屑与卡片名称 100% 一致。
+- **验证与构建**：
+  - 前端执行 `npm run build` 全量生产构建打包测试，耗时 13.76s，747 个模块全部成功转换，零报错（Exit Code 0）。
+
+## 2026-10-09 [管件发货台账列表未撤销记录折行串行优化与垂直高度紧凑重构]
+- **问题反馈与现象定位**：
+  - 用户反馈在页面 `http://localhost:5173/projects/insulation_pipe_supply_2026/pages/supply_management?category=fitting&tab=fitting`（管件发货记录台账）中，未撤销的发货记录显示串行折行，导致表格和卡片占用了极大的垂直高度空间，观感松散凌乱；
+  - **核心根因剖析**：
+    1. **车次汇总卡片头部 (`.fitting-card-header`)**：未撤销车次（`pending_arrival`）拥有多项操作按钮（“✏️ 整车修改与备注”、“撤销整车发货”、“流转凭证”）及多维统计信息。原样式容器设置了 `flex-wrap: wrap`，右侧放不下时操作按钮被挤入第二行，表头高度从 42px 骤增至 80px+；
+    2. **管件明细行操作列 (`col-operate`)**：列宽仅设为 140px，未撤销行渲染两个操作按钮【⚙️ 单项编辑】与【撤销此项】，按钮容器带 `flex-wrap: wrap`，导致【撤销此项】被强制挤至第二行，每行高度由单行 36px 暴增至 65~75px（而已撤销行仅显示单破折号 `—` 不折行，导致整表行高严重高低不齐）；
+    3. **管件类型列 (`col-type`)**：列宽仅设为 105px，容纳 11 个汉字的物料全称（如“塑套钢预制保温跨越三通”）时文本强制折成 2~3 行。
+- **高精细度前端重构落地 ([`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue))**：
+  1. **车次卡片表头单行锁定与内边距紧凑化**：
+     - 内边距收紧至 `padding: 8px 14px; min-height: 42px;`；
+     - 左右容器强制 `flex-wrap: nowrap; overflow: hidden;`；
+     - 按钮文字精炼为“✏️ 整车修改”（保留完整悬浮提示），操作区与元数据同一水平线对齐，杜绝换行撑高；
+  2. **表格列宽自适应重划与禁止折行**：
+     - 管件类型列自 105px 增宽至 140px，设置 `white-space: nowrap;`；
+     - 操作列增宽至 155px，操作按钮容器设置 `flex-wrap: nowrap !important; white-space: nowrap !important;`；
+     - 按钮微调为紧凑内边距（`padding: 2px 6px; font-size: 11px;`），两按钮同一基线紧密并排，杜绝换行；
+     - 订单号列从 120px 微调至 145px（`white-space: nowrap;`）；
+  3. **表格行高统一与垂直居中锁定**：
+     - 增加桌面端表格规则：`.demand-fitting-table tbody tr { height: 38px; }`，所有单元格 `vertical-align: middle !important; white-space: nowrap;`，消除高低不平，呈现平整、高密度的企业级专业台账外观。
+- **验证与构建**：
+  - 前端执行 `npm run build` 全量生产构建打包测试，耗时 15.70s，747 个模块全部成功转换，零报错（Exit Code 0）。
+
+## 2026-10-09 [联合会审全局强提醒弹窗与增量唤醒机制落地实现]
+- **需求与业务背景**：
+  - 用户要求实现联合会审强提醒弹窗：谁提请了会审，相关前序主体人员不论在任何页面均会收到弹窗提示；
+  - 核心要求：
+    1. 可选择“今日不再提醒”；
+    2. 若该主体又多了一条提醒，则突破静音、与之前未处理的一并再次提醒；
+    3. 设立直达链接直接跳转至待该主体处理的会审标签页（`?tab=pending_my_vote`）；
+    4. 逻辑严谨周到、无矛盾、体验细腻。
+- **后端服务与接口优化 ([`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+  - `get_pending_review_notifications` 增加发起人自身过滤：查出 `initiator_username`，若与当前登录人一致直接排除，避免提请人自己看到催办弹窗；
+  - 返回体新增 `all_pending_review_ids` 完整待办 ID 数组，供前端进行集合级别无损增量比对，防止切片遗漏。
+- **前端全局根级挂载与增量唤醒算法 ([`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue) & [`App.vue`](file:///D:/编程项目/phoenix/frontend/src/App.vue))**：
+  - **全页面 100% 覆盖**：将弹窗组件从局部组件剥离，直接挂载至应用唯一的根组件 `App.vue`，配合 45 秒心跳定时器、路由切换监听与窗口 `focus` 激活监听，无论用户在系统任何页面均能感知；
+  - **按用户隔离的 ID 快照存储**：`localStorage` 存储键为 `phoenix_review_notice_suppress_${username}`，存储当前日期与已抑制会审 ID 集合 `{ date, suppressedReviewIds }`；
+  - **新增突破静音与合并展示**：
+    - 若今天已点“不再提醒”，但检测到当前待办中出现新 ID（不在已抑制集合），立即打破静音，触发弹窗；
+    - 弹窗顶部呈现渐变提示条（“✨ 检测到 X 笔新提请会审，已连同历史未办一并呈报”），新单卡片带“🆕 新提请”动态闪烁徽标；
+    - 点击具体条目或“前往联合会审大厅 ➔”直接跳转至 `/joint_review_hall?tab=pending_my_vote` 并定位单据。
+- **验证与构建**：
+  - 后端 Python 语法编译通过；
+  - 前端执行 `npm run build` 全量生产构建打包成功（747 modules transformed，13.44s，0 错误，退出码 0）。
+
+## 2026-10-09 [联合会审大厅卡片与页面天平图标跨系统渲染修复与矢量化升级]
+- **问题反馈与根因分析**：
+  - 用户反馈在部分电脑（如 Windows 7/8、部分企业级 Windows 10 LTSC/精简系统及未安装 Segoe UI Emoji 全彩字体的设备）上，进入项目功能页面选择时，“联合会审大厅”页面卡片上的图标无法正常彩显、显示为粗糙难看的黑白线框文字符号或伴随方块乱码（“虽然也显示但是很难看”）；
+  - **根本原因**：
+    1. 配置源 `backend_data/shared/项目列表.json` 中配置了 `"页面名称": "⚖️ 联合会审大厅"`，直接混合了原生 Unicode Emoji 字符 `⚖️`（U+2696 U+FE0F 天平符号）；
+    2. `PageSelectView.vue` 及多处路由、顶栏均直接渲染该字符。在缺乏全彩 Emoji 字体的操作系统或浏览器中，系统回退（fallback）至中文字体内置的黑白线框点阵字形，导致不同设备间视觉表现不一致、毛刺明显、极为难看。
+- **高精细度修复与矢量化升级方案**：
+  1. **新建高保真矢量图标组件 ([`ScaleBalanceIcon.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/ScaleBalanceIcon.vue))**：
+     - 采用原生纯 SVG 绘制高精细天平（双秤盘微弧托底、悬链平衡梁、立柱顶环与底座），内置柔和透明度填充；
+     - 具有独立尺寸 (`size`)、色彩 (`color`) 配置，纯代码矢量计算渲染，彻底摆脱本地操作系统 Emoji 字体依赖，保证在任何屏幕（1080P/2K/4K/Retina）与任何平台（Windows/macOS/Linux）下 100% 高清、一致、锐利；
+  2. **页面选择卡片升级 ([`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue))**：
+     - 在“联合会审大厅”卡片标题前渲染带有淡雅紫蓝微渐变背景底色与精致细边框的 `.page-card-icon-badge`（28×28px，内部嵌入 18px 矢量天平），现代高级感大幅提升；
+     - 新增 `cleanPageTitle` 容错清洗函数，自动剥离任何历史或外部传入的系统 Emoji 字符，确保标题纯文本呈现；
+  3. **源头元数据清理 ([`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json))**：
+     - 将 `joint_review_hall` 的 `"页面名称"` 从 `"⚖️ 联合会审大厅"` 规范净化为纯文本 `"联合会审大厅"`，彻底清除源头 Emoji 污染；
+  4. **全链路配套图标升级与净化**：
+     - [`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)：同步清理页面标题映射中的 Emoji；
+     - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)：顶栏标题图标升级为 `.title-icon-badge` + `ScaleBalanceIcon`，面包屑统一为纯文本；
+     - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue) 与 [`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)：弹窗徽标与强提醒图标同步替换为 `ScaleBalanceIcon` 矢量组件。
+- **验证与构建**：
+  - 前端执行 `npm run build` 全量生产构建打包测试，耗时 17.82s，747 个模块全部成功转换，零警告与报错（Exit Code 0）。
+
+## 2026-10-09 [联合会审前序主体判定与全局弹窗提示条件评估]
+- **业务诉求与功能预研**：
+  - 用户计划开发联合会审强提醒弹窗：谁提请了会审，相关前序主体人员不论在任何页面均会收到弹窗提示；支持“今日不再提醒”，但若该主体有新增提醒，则连带历史未处理项一并再次唤醒；支持直达待办标签页链接；
+  - 本轮先期系统性排查两大前提：1. 一条议案被提请，系统是否能判断其涉及的前序主体有谁？2. 系统当前是否具备弹窗提示条件？
+- **代码与机制深入排查结论**：
+  1. **问题1（前序主体研判能力）结论：完全具备且已实现**：
+     - 后端 [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py) 基于订单当前流转状态（`pending_arrival`/`pending_receive`/`pending_warehouse`）动态编排 3 大触发场景，精准锁定前序责任主体（`supplier` 厂家、`site_manager` 现场主管，待库管确认时精准排除施工方）；
+     - 结合 `auth_manager.list_user_identities()` 与 `_check_user_can_vote_entity()`，已实现将抽象主体精准映射至物理人员账号，并自动写入 `logs.system_messages`；
+  2. **问题2（弹窗提示条件）结论：核心具备（85%），存在 2 处逻辑升级点**：
+     - **后端接口就绪**：已具备轻量轮询接口 `GET /projects/insulation_pipe_supply_2026/joint-reviews/notifications`，毫秒级返回待办笔数及订单、提请人、事由等摘要；
+     - **前端组件原型就绪**：已具备 [`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)，支持待办列表与直达链接；
+     - **需完善升级点**：
+       - ① **真正“全页面覆盖”**：目前组件挂在 `AppHeader.vue`，需提升至应用最外层根组件 [`App.vue`](file:///D:/编程项目/phoenix/frontend/src/App.vue) 并加入 30~60s 定时轮询；
+       - ② **“今日不再提醒但有新单重新唤醒”判定**：现有实现仅记录日期，需升级为记录 `knownReviewIds` 快照；检测到新议案 ID 时立即突破静音、新老一并弹出。
+
+## 2026-10-09 [天地龙10月6日与10月9日管件发货单核查与型号差异比对剖析]
+- **排查背景与核查诉求**：
+  - 用户反馈系统中供应商“tiandilong”（天地龙）在 10月6日 与 10月9日 分别发货了 3 单管件，数量均分别为 130、140、172 件；
+  - 供应商表示“操作错了”，要求定位这 6 车发货单，并对型号规格进行深度对比，查清根本区别与供应商误操作原因；
+- **发货单精准定位与状态诊断**：
+  1. **140 件车次**：
+     - 10-06 车次 `FSSG-261006-001`（车牌 辽BYM139，四标段 low_lot_4，明泽站 62个 + 北斗 78个，共 8 项），已于 10-08 施工接收，状态 `pending_warehouse`（待入库）；
+     - 10-09 车次 `FSSG-261009-001`（车牌 辽BYM139，四标段 low_lot_4，明泽 62个 + 北斗 78个，共 8 项），状态 `pending_arrival`（在途/待到货）；
+  2. **130 件车次**：
+     - 10-06 车次 `FSSG-261006-002`（车牌 辽BYM139，五标段 low_lot_5，芙蓉人家 130个，共 5 项），已于 10-08 施工接收，状态 `pending_warehouse`（待入库）；
+     - 10-09 车次 `FSSG-261009-002`（车牌 辽BYM39，五标段 low_lot_5，芙蓉人家 130个，共 5 项），状态 `pending_receive`（标段人员魏昊南已于 10-09 16:41 确认到货）；
+  3. **172 件车次**：
+     - 10-06 车次 `FSSG-261006-003`（车牌 辽BN4714，六标段 low_lot_6，府佳名都 172个，共 4 项），已于 10-08 施工接收，状态 `pending_warehouse`（待入库）；
+     - 10-09 车次 `FSSG-261009-003`（车牌 辽BN4714，六标段 low_lot_6，府佳名都 172个，共 4 项），状态 `pending_arrival`（在途/待到货）；
+- **型号规格差异与根因剖析**：
+  - **核心本质**：实物与数量完全一致（100% 对应），区别在于**物料命名的标准化格式与字段切分方式**；
+  - **10-06 填报数据（线下口语化习惯）**：管件类型写入了弯头角度（如 `90°预制保温弯头`），规格仅为 `DN50`；三通写为带“式”字的 `预制保温跨越式三通`；缺少“塑套钢”材质前缀；当时作为非标录入，不扣减厂区库存；
+  - **10-09 填报数据（系统标准物料库规范）**：管件类型标准化为 `塑套钢预制保温弯头`、`塑套钢预制保温跨越三通`，角度移入规格字段（如 `90° DN50`），完全吻合中标价格库 `tube.tube_material_price`；
+  - **误操作场景还原**：天地龙业务员在系统升级物料标准化校验功能后，误以为 10-06 的非标单据失效或未成功扣库，于是在 10-09 上午 11:42~11:49 照着 10-06 的明细以标准格式**重新二次提交发货，导致同一批货物在系统内重复发货（Double-Billing）**；此外 130 件单车牌误漏录一位（`辽BYM39`）。
+- **风险提示与处置方案**：
+  - 10-09 的 001、003 车次仍在途，供应商可直接在工作台执行撤销发货；
+  - 10-09 的 002 车次已被五标段误确认到货，无法单方撤销，需由现场标段退回或发起联合会审终止作废，避免下游标段重复入库造成账实不符。
+
+## 2026-10-09 [发货标准化核验与全生命周期联合会审业务操作指南编撰]
+- **需求与编制背景**：
+  - 用户需要一份面向业务人员、施工标段、保供厂家和管理层的通俗易懂的系统性说明，系统阐明“管件发货标准化核验”与“流转端联合会审”两大核心机制“究竟在干什么”、“为什么这样设置”以及“一线人员具体如何操作”；
+- **业务机制提炼与文档沉淀 ([`2026-10-09_管件发货标准化与全生命周期联合会审业务操作指南.md`](file:///D:/编程项目/phoenix/configs/2026-10-09_管件发货标准化与全生命周期联合会审业务操作指南.md))**：
+  1. **管件发货标准化核验**：
+     - 究竟在干什么：发货录入/粘贴时基于中标物料价格库，通过物理 DNA 语义引擎自动将自由文本对齐为标准物料；
+     - 为什么这样设置：解决非标口径混淆问题，打通发货出厂对厂区成品盘点库存的联动扣减（采纳标准扣减库存，保留原样不扣减）；
+     - 如何操作：提供发货助手（一键点选）与自由填报核验弹窗（单选/批量采纳）双轨通道；
+  2. **全生命周期联合会审机制**：
+     - 究竟在干什么：在待到货、待接收、待入库阶段出现数据错误时，通过在线圆桌会议由各方协同修正；
+     - 为什么这样设置：杜绝单方私下改库风险；发起即刻“在审冻结”订单避免下游并发接收冲突；全票同意后系统秒级自动生效并解冻恢复；全程留痕共识免责；
+     - 如何操作：规范了提请人（发起申请+填事由）、表决人（会审大厅+红绿对照+同意/反对）、流转生效（全票通过/任一否决/撤回/仲裁）的全闭环路径；
+- **同步与交付**：
+  - 完整白皮书已沉淀至 `configs/` 目录，并同步输出清晰通俗的业务解读给用户。
+
 ## 2026-10-09 [管件标准化型号匹配根因分析与算法修复]
 - **问题现象与排查定位**：
   - 用户反馈在管件发货填报时，以“鑫瑞得”为例，当管件类型录入“90°预制保温弯头”、规格填“DN50”时，点击提交发货单弹窗中建议的标准型号有两个，且首选为“45°预制保温弯头 · DN50”，次选才是“90°预制保温弯头 · DN50”；

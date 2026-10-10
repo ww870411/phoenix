@@ -9,7 +9,7 @@
       <header class="topbar premium-topbar">
         <div class="topbar-title-block">
           <div class="title-with-badge">
-            <span class="title-icon">⚖️</span>
+            <ScaleBalanceIcon :size="26" class="title-header-icon" />
             <h2>多方联合会审大厅 (Joint Review Hall)</h2>
             <span class="live-status-pill">共识会签机制</span>
           </div>
@@ -840,6 +840,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
+import ScaleBalanceIcon from '../components/ScaleBalanceIcon.vue'
 import {
   adminArbitrateJointReview,
   cancelJointReview,
@@ -856,7 +857,7 @@ const auth = useAuthStore()
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
   { label: '2026年度保温管、管件物流链管理系统', to: '/projects/insulation_pipe_supply_2026/pages' },
-  { label: '⚖️ 联合会审大厅', to: null },
+  { label: '联合会审大厅', to: null },
 ])
 
 const currentTab = ref('pending_my_vote')
@@ -1570,8 +1571,11 @@ function goProjectPages() {
   flex-wrap: wrap;
 }
 
-.title-icon {
-  font-size: 28px;
+.title-header-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  filter: drop-shadow(0 1px 2px rgba(217, 119, 6, 0.18));
 }
 
 .topbar-title-block h2 {
