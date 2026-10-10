@@ -878,26 +878,25 @@
                 <h2>到货与施工接收记录</h2>
                 <span class="panel-hint">确认运输车次的安全到站，并录入施工单位的真实物理接收量。计量单位：米。</span>
               </div>
-              <div class="toolbar-actions" style="display: flex; gap: 8px;">
+              <div class="toolbar-actions logistics-toolbar-actions">
                 <button 
                   type="button" 
-                  class="btn ghost" 
-                  style="color: #ea580c; border-color: #fdba74; font-weight: 600;" 
+                  class="btn btn-summary-portal" 
                   @click="openPendingSummaryModal"
                   title="查看管辖的所有标段中待到货与待接收的发货单汇总"
                 >
                   🚚 全标段在途汇总 ({{ pendingSummaryTotalCount }})
                 </button>
-                <button type="button" class="btn ghost" :disabled="pendingLoading" @click="resetPendingFilters">重置筛选</button>
-                <button type="button" class="primary-button" :disabled="pendingLoading || !selectedSection1Id" @click="applyPendingFilters">
+                <button type="button" class="btn btn-reset-filter" :disabled="pendingLoading" @click="resetPendingFilters">重置筛选</button>
+                <button type="button" class="btn btn-apply-filter" :disabled="pendingLoading || !selectedSection1Id" @click="applyPendingFilters">
                   {{ pendingLoading ? '查询中...' : '筛选记录' }}
                 </button>
-                <button v-if="canExtractXlsx && pendingRows.length > 0" type="button" class="btn primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" @click="showExportModal = true">📥 导出 Excel</button>
+                <button v-if="canExtractXlsx && pendingRows.length > 0" type="button" class="btn btn-export-filter" @click="showExportModal = true">📥 导出 Excel</button>
               </div>
             </div>
 
             <!-- 筛选排版 -->
-            <div class="filter-grid compact-filter-grid">
+            <div class="filter-grid compact-filter-grid logistics-filter-grid">
               <label class="field field-compact">
                 <span>订单号</span>
                 <input v-model.trim="pendingFilters.orderNo" type="text" placeholder="输入订单号" />
@@ -1162,68 +1161,65 @@
                 <h2>🔧 管件发货记录</h2>
                 <span class="panel-hint">本标段（需求主体）收到的全量管件（弯头、三通、大小头等）发货明细台账。由供给侧调度发货自动联动上报，需求方无需进行任何手工填报。</span>
               </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <div class="fitting-toolbar-actions">
                 <button 
                   type="button" 
-                  class="btn ghost" 
-                  style="height: 34px; padding: 0 12px; font-size: 12.5px; display: flex; align-items: center; gap: 4px; border-color: #fdba74; color: #ea580c; background: #fff; font-weight: 600; cursor: pointer;" 
+                  class="btn ghost btn-fitting-pending-summary" 
                   @click="openPendingSummaryModal"
                   title="查看管辖的所有标段中待到货与待接收的发货单汇总"
                 >
                   🚚 全标段在途汇总 ({{ pendingSummaryTotalCount }})
                 </button>
-                <button
-                  type="button"
-                  class="btn ghost"
-                  style="height: 34px; padding: 0 12px; font-size: 12.5px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
-                  @click="toggleAllDemandFittingGroups(true)"
-                >
-                  📖 展开全车次
-                </button>
-                <button
-                  type="button"
-                  class="btn ghost"
-                  style="height: 34px; padding: 0 12px; font-size: 12.5px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
-                  @click="toggleAllDemandFittingGroups(false)"
-                >
-                  📕 折叠全车次
-                </button>
-                <button
-                  type="button"
-                  class="btn ghost"
-                  style="height: 34px; padding: 0 14px; font-size: 13px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
-                  @click="handleFittingQuery"
-                >
-                  🔄 刷新
-                </button>
-                <button
-                  v-if="canExtractXlsx"
-                  type="button"
-                  class="btn ghost"
-                  :disabled="fittingExportLoading || !fittingRows.length"
-                  style="height: 34px; padding: 0 14px; font-size: 13px; display: flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff; cursor: pointer;"
-                  @click="handleDemandFittingExport"
-                >
-                  📥 导出本标段台账 (.xlsx)
-                </button>
+                <div class="fitting-toolbar-subgroup">
+                  <button
+                    type="button"
+                    class="btn ghost btn-fitting-tool"
+                    @click="toggleAllDemandFittingGroups(true)"
+                  >
+                    📖 展开全车次
+                  </button>
+                  <button
+                    type="button"
+                    class="btn ghost btn-fitting-tool"
+                    @click="toggleAllDemandFittingGroups(false)"
+                  >
+                    📕 折叠全车次
+                  </button>
+                  <button
+                    type="button"
+                    class="btn ghost btn-fitting-tool"
+                    @click="handleFittingQuery"
+                  >
+                    🔄 刷新
+                  </button>
+                  <button
+                    v-if="canExtractXlsx"
+                    type="button"
+                    class="btn ghost btn-fitting-tool"
+                    :disabled="fittingExportLoading || !fittingRows.length"
+                    @click="handleDemandFittingExport"
+                  >
+                    📥 导出台账
+                  </button>
+                </div>
               </div>
             </div>
 
             <!-- 快捷搜索过滤条 -->
-            <div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 8px; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 500; flex-shrink: 0;">发货日期：</span>
-                <input v-model="fittingFilter.startDate" type="date" class="input" style="height: 32px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
-                <span style="color: #94a3b8;">至</span>
-                <input v-model="fittingFilter.endDate" type="date" class="input" style="height: 32px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; font-size: 13px;" />
+            <div class="fitting-search-card">
+              <div class="fitting-search-dates">
+                <span class="search-lbl">发货日期：</span>
+                <input v-model="fittingFilter.startDate" type="date" class="input filter-date-input" />
+                <span class="date-sep">至</span>
+                <input v-model="fittingFilter.endDate" type="date" class="input filter-date-input" />
               </div>
 
-              <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 180px;">
-                <span style="font-size: 12px; color: #64748b; font-weight: 500; flex-shrink: 0;">关键字：</span>
-                <input v-model="fittingFilter.searchKeyword" type="text" placeholder="搜索车牌号/单号/类型/型号/备注..." class="input" style="height: 32px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 10px; font-size: 13px; width: 100%;" @keyup.enter="handleFittingQuery" />
+              <div class="fitting-search-keyword">
+                <span class="search-lbl">关键字：</span>
+                <input v-model="fittingFilter.searchKeyword" type="text" placeholder="搜索车牌号/单号/类型/型号/备注..." class="input filter-keyword-input" @keyup.enter="handleFittingQuery" />
               </div>
 
-              <button type="button" class="btn primary" style="height: 32px; padding: 0 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer; flex-shrink: 0;" @click="handleFittingQuery">
+              <button type="button" class="btn primary btn-fitting-search" @click="handleFittingQuery">
                 🔍 检索
               </button>
             </div>
@@ -1231,60 +1227,66 @@
             <!-- 数据展示 (按车次卡片折叠) -->
             <div v-if="fittingLoading" class="loading-text">正在读取本标段管件到货记录...</div>
             <div v-else-if="!groupedDemandFittingRows.length" class="empty-box">本标段暂无管件发货历史记录。</div>
-            <div v-else style="display: flex; flex-direction: column; gap: 12px;">
+            <div v-else class="demand-fitting-groups-container">
               <div 
                 v-for="group in groupedDemandFittingRows" 
                 :key="group.groupKey"
-                style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.03); transition: all 0.2s ease;"
+                class="demand-fitting-group-card"
               >
-                <!-- 车次汇总卡片表头 (超紧凑清爽流式，0滚动条) -->
+                <!-- 车次汇总卡片表头 (桌面端超紧凑流式 / 移动端两级看板卡片) -->
                 <div 
                   class="fitting-card-header"
                   @click="toggleDemandFittingGroup(group.groupKey)"
                 >
-                  <!-- 左侧：箭头 + 车次 + 车牌 + 供给主体 + 发货时间 -->
+                  <!-- 左侧信息簇：展开箭头 + 车次 + 车牌 + 供给主体 + 发货时间 -->
                   <div class="card-left-stream">
-                    <span 
-                      class="expand-caret-icon" 
-                      :style="{ transform: isDemandFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }"
-                    >▶</span>
-                    <span class="shipment-code-badge">{{ group.shipmentNo }}</span>
-                    <span class="plate-badge">{{ group.vehiclePlateNo }}</span>
-                    <span class="entity-pill-badge" :title="`供给主体: ${group.supplyEntityName}`">
-                      <span style="opacity: 0.8; font-size: 11px;">🏭</span>
-                      <span class="entity-name-text">{{ group.supplyEntityName }}</span>
-                    </span>
-                    <span class="shipped-time-text">{{ formatShortDateTime(group.shippedAt) }}</span>
+                    <div class="header-primary-meta">
+                      <span 
+                        class="expand-caret-icon" 
+                        :style="{ transform: isDemandFittingGroupExpanded(group.groupKey) ? 'rotate(90deg)' : 'rotate(0deg)' }"
+                      >▶</span>
+                      <span class="plate-badge" v-if="group.vehiclePlateNo">{{ group.vehiclePlateNo }}</span>
+                      <span class="shipment-code-badge">{{ group.shipmentNo }}</span>
+                    </div>
+                    <div class="header-secondary-meta">
+                      <span class="entity-pill-badge" :title="`供给主体: ${group.supplyEntityName}`">
+                        <span style="opacity: 0.8; font-size: 11px;">🏭</span>
+                        <span class="entity-name-text">{{ group.supplyEntityName }}</span>
+                      </span>
+                      <span class="shipped-time-text">{{ formatShortDateTime(group.shippedAt) }}</span>
+                    </div>
                   </div>
 
-                  <!-- 右侧：发到数量微芯片 + 状态 Badge + 操作按钮组 -->
+                  <!-- 右侧信息簇：发到数量微芯片 + 状态 Badge + 操作按钮组 -->
                   <div class="card-right-stream">
-                    <!-- 发到数量微芯片 -->
-                    <div class="qty-summary-chip">
-                      <span class="qty-types-lbl">{{ group.items.length }} 种</span>
-                      <span class="qty-divider">·</span>
-                      <span class="qty-stat-item text-blue">发 <strong>{{ group.totalShippedQty }}</strong></span>
-                      <span class="qty-divider">/</span>
-                      <span class="qty-stat-item text-emerald">到 <strong>{{ group.totalArrivedQty }}</strong></span>
-                      <span class="qty-unit-lbl">{{ getGroupUnitLabel(group) }}</span>
-                    </div>
+                    <div class="header-stats-row">
+                      <!-- 发到数量微芯片 -->
+                      <div class="qty-summary-chip">
+                        <span class="qty-types-lbl">{{ group.items.length }} 种</span>
+                        <span class="qty-divider">·</span>
+                        <span class="qty-stat-item text-blue">发 <strong>{{ group.totalShippedQty }}</strong></span>
+                        <span class="qty-divider">/</span>
+                        <span class="qty-stat-item text-emerald">到 <strong>{{ group.totalArrivedQty }}</strong></span>
+                        <span class="qty-unit-lbl">{{ getGroupUnitLabel(group) }}</span>
+                      </div>
 
-                    <!-- 履约状态 Badge -->
-                    <div class="status-badge-container">
-                      <span v-if="group.status === 'under_review'" class="tag-badge warning" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px; padding: 1px 6px; white-space: nowrap;">⚖️ 联合会审中</span>
-                      <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🚚 待到货确认</span>
-                      <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">✅ 待施工接收</span>
-                      <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">👷 待库管确认</span>
-                      <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🏢 库管已确认</span>
-                      <span v-else-if="group.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px; white-space: nowrap;">❌ 已撤销</span>
-                      <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 10.5px; padding: 1px 5px; margin-left: 2px; white-space: nowrap;">⚠️ 撤销</span>
+                      <!-- 履约状态 Badge -->
+                      <div class="status-badge-container">
+                        <span v-if="group.status === 'under_review'" class="tag-badge warning status-pill-badge" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; font-size: 11px; padding: 1px 6px; white-space: nowrap;">⚖️ 联合会审中</span>
+                        <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="tag-badge primary status-pill-badge" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🚚 待到货确认</span>
+                        <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="tag-badge success status-pill-badge" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">✅ 待施工接收</span>
+                        <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="tag-badge warning status-pill-badge" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">👷 待库管确认</span>
+                        <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="tag-badge success status-pill-badge" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">🏢 库管已确认</span>
+                        <span v-else-if="group.status === 'cancelled'" class="tag-badge status-pill-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px; white-space: nowrap;">❌ 已撤销</span>
+                        <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="tag-badge status-pill-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 10.5px; padding: 1px 5px; margin-left: 2px; white-space: nowrap;">⚠️ 撤销</span>
+                      </div>
                     </div>
 
                     <!-- 操作按钮组 -->
                     <div class="action-btn-container" @click.stop>
                       <span 
                         v-if="group.status === 'under_review'"
-                        class="tag-badge warning"
+                        class="tag-badge warning review-locked-tag"
                         style="height: 26px; padding: 0 8px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; border-radius: 5px; display: inline-flex; align-items: center;"
                         title="该单据已进入多方联合会审流程，常规确认已被物理锁定"
                       >
@@ -1294,7 +1296,7 @@
                       <button 
                         v-else-if="(group.status === 'shipped' || group.status === 'pending_arrival' || !group.status || group.items.some(i => i.status === 'shipped' || i.status === 'pending_arrival' || !i.status)) && canConfirmArrival"
                         type="button" 
-                        class="btn primary btn-sm" 
+                        class="btn primary btn-sm btn-fitting-action" 
                         style="height: 26px; padding: 0 8px; font-size: 11.5px; background: #059669; border-color: #059669; color: #fff; cursor: pointer; font-weight: 600; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
                         @click.stop="openFittingArrivalModal(group)"
                       >
@@ -1304,7 +1306,7 @@
                       <button 
                         v-else-if="(group.status === 'arrived' || group.status === 'pending_receive' || group.items.some(i => i.status === 'arrived' || i.status === 'pending_receive')) && canConfirmReceipt"
                         type="button" 
-                        class="btn primary btn-sm" 
+                        class="btn primary btn-sm btn-fitting-action" 
                         style="height: 26px; padding: 0 8px; font-size: 11.5px; background: #7c3aed; border-color: #7c3aed; color: #fff; cursor: pointer; font-weight: 600; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
                         @click.stop="openFittingConstructionModal(group)"
                       >
@@ -1314,7 +1316,7 @@
                       <button 
                         v-if="group.status !== 'under_review' && (canConfirmArrival || canConfirmReceipt)"
                         type="button" 
-                        class="btn ghost btn-sm" 
+                        class="btn ghost btn-sm btn-fitting-action" 
                         style="height: 26px; padding: 0 7px; font-size: 11px; color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
                         title="发现规格、型号或数量有误时提请联合会审"
                         @click.stop="openJointReviewModal(group, 'fitting')"
@@ -1324,7 +1326,7 @@
 
                       <button 
                         type="button" 
-                        class="btn ghost btn-sm" 
+                        class="btn ghost btn-sm btn-fitting-action" 
                         style="height: 26px; padding: 0 9px; font-size: 11.5px; color: #4f46e5; border: 1px solid #c7d2fe; background: #eef2ff; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 3px;"
                         @click.stop="showDeliveryDetail(group)"
                       >
@@ -1335,13 +1337,14 @@
                 </div>
 
                 <!-- 明细展开区 (纯净货物清单展示，100% 自适应，无滚动条) -->
-                <div v-show="isDemandFittingGroupExpanded(group.groupKey)" style="padding: 10px 14px 14px 14px; background: #ffffff;">
-                  <div v-if="group.shipRemark" style="font-size: 11.5px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                    <span style="font-weight: 600;">📝 发货备注：</span>
-                    <span style="color: #1e293b;">{{ group.shipRemark }}</span>
+                <div v-show="isDemandFittingGroupExpanded(group.groupKey)" class="fitting-detail-expand-pane">
+                  <div v-if="group.shipRemark" class="fitting-ship-remark-box">
+                    <span class="remark-lbl">📝 发货备注：</span>
+                    <span class="remark-val">{{ group.shipRemark }}</span>
                   </div>
 
-                  <div style="border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                  <!-- 1. 桌面端明细表格 (>=721px) -->
+                  <div class="desktop-fitting-detail-table-wrap">
                     <table class="data-table demand-fitting-table" style="margin: 0; width: 100%; font-size: 12px; border-collapse: collapse;">
                       <thead>
                         <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
@@ -1393,31 +1396,82 @@
                       </tbody>
                     </table>
                   </div>
+
+                  <!-- 2. 移动端货品微条目卡片流 (<=720px，拒绝死硬挤扁的表格) -->
+                  <div class="mobile-demand-fitting-items">
+                    <div 
+                      v-for="(item, idx) in group.items" 
+                      :key="item.id" 
+                      class="mobile-fitting-item-card"
+                    >
+                      <!-- 头部：序号 + 类型Badge + 规格大标题 + 状态Badge -->
+                      <div class="item-card-header-row">
+                        <div class="item-title-cluster">
+                          <span class="item-seq-badge">{{ idx + 1 }}.</span>
+                          <span class="fitting-type-badge">{{ item.fitting_type }}</span>
+                          <strong class="item-model-spec-text">{{ item.model_spec }}</strong>
+                        </div>
+                        <div class="item-status-pill-wrap">
+                          <span v-if="item.status === 'under_review'" class="tag-badge warning item-status-badge">⚖️ 会审中</span>
+                          <span v-else-if="item.status === 'shipped' || item.status === 'pending_arrival' || !item.status" class="tag-badge primary item-status-badge">🚚 待到货</span>
+                          <span v-else-if="item.status === 'arrived' || item.status === 'pending_receive'" class="tag-badge success item-status-badge">✅ 待接收</span>
+                          <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning item-status-badge">👷 待库管</span>
+                          <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success item-status-badge">🏢 已确认</span>
+                          <span v-else-if="item.status === 'cancelled'" class="tag-badge item-status-badge is-cancelled">❌ 已撤销</span>
+                        </div>
+                      </div>
+
+                      <!-- 底栏：单号 + 发到数量微胶囊 -->
+                      <div class="item-card-bottom-row">
+                        <div class="item-order-cell">
+                          <span class="order-lbl">单号:</span>
+                          <span class="order-val font-mono">{{ item.order_no || '—' }}</span>
+                        </div>
+
+                        <div class="item-qty-chips-cluster">
+                          <div class="mini-qty-pill pill-shipped">
+                            <span class="pill-lbl">发货:</span>
+                            <strong class="pill-val font-mono" :class="{ 'is-del': item.status === 'cancelled' }">{{ item.shipped_qty }}</strong>
+                            <span class="pill-unit">{{ item.unit || '件' }}</span>
+                          </div>
+                          <div class="mini-qty-pill pill-arrived">
+                            <span class="pill-lbl">实到:</span>
+                            <strong class="pill-val font-mono">
+                              <span v-if="isItemArrived(item)">{{ getItemArrivedQty(item) }}</span>
+                              <span v-else-if="item.status === 'cancelled'">-</span>
+                              <span v-else>0</span>
+                            </strong>
+                            <span class="pill-unit">{{ item.unit || '件' }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
             <!-- 管件情况决策透视卡片 -->
-            <div v-if="fittingRows.length > 0" style="margin-top: 15px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 18px; border-radius: 8px; font-size: 13px; color: #334155; line-height: 1.8;">
-              <div style="font-weight: 700; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <div v-if="fittingRows.length > 0" class="fitting-metrics-overview-card">
+              <div class="metrics-overview-header">
                 <span>💡 本标段管件物资统计：</span>
               </div>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 14px;">
-                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
-                  <span>🚚 累计发货车次</span>
-                  <strong style="color: #0f172a;">{{ demandFittingBatches }} 车/批</strong>
+              <div class="metrics-overview-grid">
+                <div class="metric-overview-item">
+                  <span class="metric-lbl">🚚 累计发货车次</span>
+                  <strong class="metric-val">{{ demandFittingBatches }} 车/批</strong>
                 </div>
-                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
-                  <span>📦 收到管件总量</span>
-                  <strong style="color: #2563eb;">{{ demandFittingTotalQty }} 件</strong>
+                <div class="metric-overview-item">
+                  <span class="metric-lbl">📦 收到管件总量</span>
+                  <strong class="metric-val text-blue">{{ demandFittingTotalQty }} 件</strong>
                 </div>
-                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
-                  <span>🟢 常用标准管件</span>
-                  <strong style="color: #16a34a;">{{ demandFittingStandardQty }} 件</strong>
+                <div class="metric-overview-item">
+                  <span class="metric-lbl">🟢 常用标准管件</span>
+                  <strong class="metric-val text-emerald">{{ demandFittingStandardQty }} 件</strong>
                 </div>
-                <div style="background: #fff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
-                  <span>🟧 非常用/异形管件</span>
-                  <strong style="color: #ea580c;">{{ demandFittingNonStandardQty }} 件</strong>
+                <div class="metric-overview-item">
+                  <span class="metric-lbl">🟧 非常用/异形管件</span>
+                  <strong class="metric-val text-amber">{{ demandFittingNonStandardQty }} 件</strong>
                 </div>
               </div>
             </div>
@@ -8695,6 +8749,82 @@ function jumpToUsageTab() {
   align-items: end;
 }
 
+.logistics-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.logistics-toolbar-actions .btn {
+  height: 34px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  padding: 0 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  white-space: nowrap !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1 !important;
+}
+
+.logistics-toolbar-actions .btn-summary-portal {
+  color: #ea580c !important;
+  border: 1px solid #fdba74 !important;
+  background: #fff7ed !important;
+}
+
+.logistics-toolbar-actions .btn-summary-portal:hover {
+  background: #ffedd5 !important;
+  border-color: #fb923c !important;
+}
+
+.logistics-toolbar-actions .btn-reset-filter {
+  color: #475569 !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+}
+
+.logistics-toolbar-actions .btn-reset-filter:hover:not(:disabled) {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+.logistics-toolbar-actions .btn-apply-filter {
+  background: #2563eb !important;
+  border: 1px solid #2563eb !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
+}
+
+.logistics-toolbar-actions .btn-apply-filter:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+}
+
+.logistics-toolbar-actions .btn-export-filter {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border: 1px solid #059669 !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.15);
+}
+
+.logistics-toolbar-actions .btn-export-filter:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.25);
+}
+
+.logistics-toolbar-actions .btn:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
 .field-compact span {
   font-size: 12px;
   color: #64748b;
@@ -9343,148 +9473,457 @@ function jumpToUsageTab() {
   .panel-title-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px !important;
-  }
-
-  .panel-title-row .toolbar-actions {
-    flex-wrap: wrap !important;
-    width: 100% !important;
-  }
-
-  .panel-title-row .toolbar-actions .btn,
-  .panel-title-row .toolbar-actions .primary-button {
-    flex: 1 1 auto !important;
-    justify-content: center !important;
-    font-size: 12px !important;
-    padding: 6px 10px !important;
-  }
-
-  .compact-filter-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px !important;
   }
 
+  /* 🏷️ 工作台全局筛选卡片 (需求主体全宽舒展，杜绝窄屏下长名称被挤压截断) */
+  .filter-card .compact-filter-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .filter-card .compact-filter-grid .field {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .filter-card .compact-filter-grid .field select,
+  .filter-card .compact-filter-grid .field input {
+    height: 36px !important;
+    font-size: 13px !important;
+    padding: 6px 10px !important;
+    border-radius: 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 磨砂玻璃态微数据看板 (Quick Dashboard) 手机端双列规整排列 */
+  .meta-dashboard {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-top: 10px !important;
+  }
+
+  .meta-card {
+    padding: 10px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .meta-card .meta-label {
+    font-size: 11px !important;
+  }
+
+  .meta-card .meta-value {
+    font-size: 16px !important;
+  }
+
+  /* 🚚 物流 Tab 标题与副说明紧凑化 */
+  .tab-card .panel-title-row h2 {
+    font-size: 16px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .tab-card .panel-title-row .panel-hint {
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    line-height: 1.35 !important;
+    display: block !important;
+  }
+
+  /* 🚚 物流工具栏：全标段在途通栏横幅 + 底部操作按钮行 */
+  .logistics-toolbar-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    width: 100% !important;
+    margin-top: 4px !important;
+  }
+
+  /* 顶置的全标段在途通报条：通栏整洁居中展示 */
+  .logistics-toolbar-actions .btn-summary-portal {
+    width: 100% !important;
+    height: 32px !important;
+    justify-content: center !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    padding: 0 10px !important;
+    box-sizing: border-box !important;
+    flex: 1 0 100% !important;
+  }
+
+  /* 下方操作按钮（重置筛选、筛选记录、导出 Excel）：尺寸、字号、高度完全 1:1:1 均等对称一致 */
+  .logistics-toolbar-actions .btn-reset-filter,
+  .logistics-toolbar-actions .btn-apply-filter,
+  .logistics-toolbar-actions .btn-export-filter {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 34px !important;
+    padding: 0 4px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    justify-content: center !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 📦 物流筛选面板：独立浅灰微卡片，2+1+2 黄金比例，彻底消灭落单与长名称截断 */
+  .logistics-filter-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px 10px !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    padding: 10px 10px !important;
+    margin: 8px 0 12px 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  /* 第 1 行：单号与车次（左 50% / 右 50%） */
+  .logistics-filter-grid label:nth-child(1) {
+    grid-column: 1 / 2 !important;
+  }
+  .logistics-filter-grid label:nth-child(2) {
+    grid-column: 2 / 3 !important;
+  }
+
+  /* 第 2 行：过滤型号（全宽 100%，跨 2 列完整展现长名称，充当平衡枢纽） */
+  .logistics-filter-grid label:nth-child(3) {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* 第 3 行：发货日期与确认到货日期（左 50% / 右 50% 完美对称） */
+  .logistics-filter-grid label:nth-child(4) {
+    grid-column: 1 / 2 !important;
+  }
+  .logistics-filter-grid label:nth-child(5) {
+    grid-column: 2 / 3 !important;
+  }
+
+  .logistics-filter-grid .field-compact {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .logistics-filter-grid .field-compact span {
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    color: #64748b !important;
+    white-space: nowrap !important;
+    line-height: 1.2 !important;
+  }
+
+  .logistics-filter-grid .field-compact input,
+  .logistics-filter-grid .field-compact select {
+    height: 32px !important;
+    padding: 4px 8px !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* ==========================================================================
+     🔧 移动端 (<=720px) 管件发货到货记录两级渐进式卡片流专属响应式
+     ========================================================================== */
+  .fitting-toolbar-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 8px !important;
+    margin-top: 8px !important;
+  }
+
+  .btn-fitting-pending-summary {
+    width: 100% !important;
+    height: 34px !important;
+    justify-content: center !important;
+    font-size: 12.5px !important;
+  }
+
+  .fitting-toolbar-subgroup {
+    display: flex !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+
+  .fitting-toolbar-subgroup .btn-fitting-tool {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    font-size: 11.5px !important;
+    padding: 0 2px !important;
+    justify-content: center !important;
+    border-radius: 6px !important;
+    text-align: center !important;
+  }
+
+  /* 快捷检索卡片微缩紧凑化 */
+  .fitting-search-card {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+    border-radius: 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .fitting-search-dates {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    width: 100% !important;
+  }
+
+  .fitting-search-dates .filter-date-input {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    font-size: 12px !important;
+    padding: 0 4px !important;
+  }
+
+  .fitting-search-keyword {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    width: 100% !important;
+  }
+
+  .fitting-search-keyword .filter-keyword-input {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    font-size: 12px !important;
+    padding: 0 8px !important;
+  }
+
+  .btn-fitting-search {
+    width: 100% !important;
+    height: 34px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+  }
+
+  /* 外层车次汇总卡片立体化与自适应排版 */
+  .demand-fitting-group-card {
+    border-radius: 12px !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.05) !important;
+  }
+
   .fitting-card-header {
+    display: flex !important;
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 10px !important;
-    padding: 10px 12px !important;
+    gap: 8px !important;
+    padding: 12px 14px !important;
+    background: #ffffff !important;
   }
 
-  .fitting-card-header .header-left-meta {
+  .card-left-stream {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    width: 100% !important;
+    white-space: normal !important;
+  }
+
+  .header-primary-meta {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
     width: 100% !important;
   }
 
-  .fitting-card-header .header-right-meta {
-    width: 100% !important;
+  .header-secondary-meta {
+    display: flex !important;
+    align-items: center !important;
     justify-content: space-between !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .card-right-stream {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
     border-top: 1px dashed #e2e8f0 !important;
     padding-top: 8px !important;
   }
 
-  .block-modal-metrics {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-  }
-
-  .table-responsive-wrapper {
-    margin-left: -4px;
-    margin-right: -4px;
-    overflow-x: visible !important;
-  }
-
-  /* 移动端 (<=720px) 明细表格自适应卡片化重构，彻底解决死硬表格列被严重挤压、文字叠字、高度拉高的问题 */
-  .demand-fitting-table {
-    min-width: 0 !important;
-    border: none !important;
-    table-layout: auto !important;
-    background: transparent !important;
-  }
-
-  .demand-fitting-table thead {
-    display: none !important;
-  }
-
-  .demand-fitting-table tbody {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 8px !important;
-  }
-
-  .demand-fitting-table tbody tr {
-    display: flex !important;
-    flex-direction: column !important;
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 8px !important;
-    padding: 10px 12px !important;
-    gap: 6px !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
-  }
-
-  .demand-fitting-table tbody td {
-    border: none !important;
-    padding: 0 !important;
-    text-align: left !important;
-    width: 100% !important;
-  }
-
-  /* 隐去无意义纯数字序号列 */
-  .demand-fitting-table tbody td.col-index {
-    display: none !important;
-  }
-
-  /* 卡片第 1 区域：类型 Badge 与型号规格吸纳整行全宽，绝不折叠压缩 */
-  .demand-fitting-table tbody td.col-type {
-    display: inline-block !important;
-    margin-bottom: 2px !important;
-  }
-
-  .demand-fitting-table tbody td.col-model {
-    width: 100% !important;
-  }
-
-  .demand-fitting-table tbody td.col-model strong {
-    font-size: 13.5px !important;
-    color: #0f172a !important;
-    word-break: break-word !important;
-  }
-
-  /* 卡片第 2 区域：发货件数与到货确认数 (浅色包围流式 Grid 双栏) */
-  .demand-fitting-table tbody td.col-shipped,
-  .demand-fitting-table tbody td.col-arrived {
+  .header-stats-row {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
+    width: 100% !important;
+  }
+
+  .action-btn-container {
+    display: flex !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+
+  .action-btn-container .btn-fitting-action {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    font-size: 11.5px !important;
+    padding: 0 4px !important;
+    justify-content: center !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+  }
+
+  /* 内层管件明细：隐藏死硬表格，舒展呈现移动端微卡片条目流 */
+  .desktop-fitting-detail-table-wrap {
+    display: none !important;
+  }
+
+  .mobile-demand-fitting-items {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .mobile-fitting-item-card {
     background: #f8fafc !important;
     border: 1px solid #e2e8f0 !important;
-    border-radius: 6px !important;
-    padding: 6px 10px !important;
-    font-size: 12px !important;
+    border-radius: 8px !important;
+    padding: 8px 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
     box-sizing: border-box !important;
   }
 
-  .demand-fitting-table tbody td.col-shipped .mobile-lbl,
-  .demand-fitting-table tbody td.col-arrived .mobile-lbl {
-    display: inline-block !important;
-    color: #64748b !important;
-    font-weight: 500 !important;
-  }
-
-  /* 卡片第 3 区域：状态 Badge 与单项确认操作按钮 (底部并排布局) */
-  .demand-fitting-table tbody td.col-status {
+  .item-card-header-row {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    margin-top: 4px !important;
-    padding-top: 6px !important;
-    border-top: 1px dashed #e2e8f0 !important;
+    gap: 6px !important;
+    width: 100% !important;
   }
 
-  .demand-fitting-table tbody td.col-action {
+  .item-title-cluster {
     display: flex !important;
     align-items: center !important;
-    justify-content: flex-end !important;
+    gap: 5px !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .item-seq-badge {
+    font-size: 11px !important;
+    color: #94a3b8 !important;
+    font-weight: 600 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .item-model-spec-text {
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .item-status-pill-wrap {
+    flex-shrink: 0 !important;
+  }
+
+  .item-status-badge {
+    font-size: 10.5px !important;
+    padding: 1px 6px !important;
+    white-space: nowrap !important;
+  }
+
+  .item-card-bottom-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    width: 100% !important;
+    border-top: 1px dashed #e2e8f0 !important;
+    padding-top: 6px !important;
+  }
+
+  .item-order-cell {
+    font-size: 11px !important;
+    color: #64748b !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .item-qty-chips-cluster {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mini-qty-pill {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    font-size: 11.5px !important;
+  }
+
+  .pill-shipped {
+    background: #eff6ff !important;
+    border: 1px solid #bfdbfe !important;
+    color: #1d4ed8 !important;
+  }
+
+  .pill-arrived {
+    background: #ecfdf5 !important;
+    border: 1px solid #a7f3d0 !important;
+    color: #047857 !important;
+  }
+
+  .mini-qty-pill .is-del {
+    text-decoration: line-through !important;
+    color: #94a3b8 !important;
+  }
+
+  /* 底部管件物资决策透视卡片 */
+  .metrics-overview-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
   }
 
   /* 移动端 (<=720px) 到货与施工接收记录表格 (logistics-table) 响应式卡片化精细重构 */
@@ -11161,6 +11600,132 @@ function jumpToUsageTab() {
   border-bottom: 1px solid #f1f5f9;
 }
 
+/* 🔧 管件发货记录工具栏与搜索卡片 */
+.fitting-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-fitting-pending-summary {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-color: #fdba74;
+  color: #ea580c;
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fitting-toolbar-subgroup {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-fitting-tool {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-color: #cbd5e1;
+  background: #fff;
+  cursor: pointer;
+}
+
+.fitting-search-card {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.fitting-search-dates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.fitting-search-dates .search-lbl,
+.fitting-search-keyword .search-lbl {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.filter-date-input {
+  height: 32px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.date-sep {
+  color: #94a3b8;
+}
+
+.fitting-search-keyword {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.filter-keyword-input {
+  height: 32px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  width: 100%;
+}
+
+.btn-fitting-search {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.demand-fitting-groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.demand-fitting-group-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+}
+
 /* 🔧 管件发货记录卡片与表头超紧凑清爽流式排版（0滚动条，自适应） */
 .fitting-card-header {
   display: flex !important;
@@ -11184,10 +11749,25 @@ function jumpToUsageTab() {
 .card-left-stream {
   display: flex !important;
   align-items: center !important;
-  gap: 6px !important;
+  gap: 8px !important;
   flex: 1 !important;
   min-width: 0 !important;
   white-space: nowrap !important;
+}
+
+.header-primary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.header-secondary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 1;
+  overflow: hidden;
 }
 
 .expand-caret-icon {
@@ -11257,6 +11837,12 @@ function jumpToUsageTab() {
   white-space: nowrap !important;
 }
 
+.header-stats-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .qty-summary-chip {
   display: inline-flex;
   align-items: center;
@@ -11301,6 +11887,72 @@ function jumpToUsageTab() {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 明细展开区与货品清单 */
+.fitting-detail-expand-pane {
+  padding: 10px 14px 14px 14px;
+  background: #ffffff;
+}
+
+.fitting-ship-remark-box {
+  font-size: 11.5px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desktop-fitting-detail-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mobile-demand-fitting-items {
+  display: none;
+}
+
+/* 底部管件物资决策透视卡片 */
+.fitting-metrics-overview-card {
+  margin-top: 15px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 14px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.8;
+}
+
+.metrics-overview-header {
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metrics-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 14px;
+}
+
+.metric-overview-item {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 /* ==========================================================================

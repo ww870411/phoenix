@@ -1382,4 +1382,268 @@ async function handleSubmit() {
   cursor: not-allowed;
   transform: none;
 }
+
+/* ==========================================================================
+   📱 移动端 (<=720px) 提请会审弹窗响应式卡片化重构
+   ========================================================================== */
+@media (max-width: 720px) {
+  .review-modal-backdrop {
+    padding: 8px !important;
+    align-items: flex-end !important;
+  }
+
+  .review-modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92vh !important;
+    border-radius: 14px 14px 10px 10px !important;
+  }
+
+  .modal-header {
+    padding: 10px 14px !important;
+  }
+
+  .modal-title-group {
+    gap: 8px !important;
+  }
+
+  .modal-icon-badge {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .modal-title-group h3 {
+    font-size: 15px !important;
+  }
+
+  .modal-subtitle {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+  }
+
+  .btn-close {
+    padding: 4px 8px !important;
+    font-size: 16px !important;
+  }
+
+  .modal-body {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+
+  /* 1. 单据与会签概览卡片 (Dossier Card) */
+  .dossier-card {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .dossier-main-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px 10px !important;
+  }
+
+  .dossier-cell-order {
+    grid-column: 1 / -1 !important;
+    border-bottom: 1px dashed #e2e8f0 !important;
+    padding-bottom: 6px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .dossier-cell-order .dossier-val {
+    font-size: 13.5px !important;
+  }
+
+  .dossier-signoff-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    padding-top: 6px !important;
+  }
+
+  .signoff-actors {
+    flex-wrap: wrap !important;
+    font-size: 11px !important;
+  }
+
+  .signoff-rule-hint {
+    font-size: 10.5px !important;
+    color: #64748b !important;
+  }
+
+  /* 2. 拟修正表单区 (Patch Section) */
+  .patch-section-card {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .section-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+  }
+
+  .section-title {
+    font-size: 12.5px !important;
+  }
+
+  .section-hint {
+    font-size: 11px !important;
+  }
+
+  /* 直管表单：单列自适应，避免原值标签与输入框挤压变形 */
+  .form-grid-compact {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .field-header {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  .orig-tag {
+    font-size: 11px !important;
+    padding: 1px 6px !important;
+  }
+
+  .orig-tag-long {
+    white-space: normal !important;
+    line-height: 1.3 !important;
+    word-break: break-all !important;
+  }
+
+  /* 管件表单：每项明细卡片在手机端黄金排布 (品类+数量同行，规格描述独占整行) */
+  .fitting-items-list {
+    max-height: 300px !important;
+    gap: 8px !important;
+  }
+
+  .fitting-item-row-card {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+    border-radius: 8px !important;
+  }
+
+  .fitting-item-card-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+  }
+
+  .item-meta-group {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .item-orig-text {
+    max-width: 100% !important;
+    white-space: normal !important;
+    line-height: 1.3 !important;
+    font-size: 10.5px !important;
+  }
+
+  .fitting-item-card-inputs {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .sub-input-col.col-type {
+    grid-column: 1 / 2 !important;
+  }
+
+  .sub-input-col.col-qty {
+    grid-column: 2 / 3 !important;
+  }
+
+  .sub-input-col.col-spec {
+    grid-column: 1 / -1 !important;
+  }
+
+  .sub-input {
+    height: 32px !important;
+    font-size: 12px !important;
+  }
+
+  /* 3. 事由说明区 */
+  .reason-section-card {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .quick-reasons-bar {
+    gap: 4px !important;
+  }
+
+  .quick-reason-chip {
+    padding: 3px 7px !important;
+    font-size: 10.5px !important;
+  }
+
+  .attachment-bar-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .btn-upload-compact {
+    height: 30px !important;
+    font-size: 11.5px !important;
+  }
+
+  .att-hint-text {
+    width: 100% !important;
+    font-size: 10.5px !important;
+  }
+
+  /* 4. 底栏 (Sticky Footer) 纵向分层与 1:2 弹性按钮 */
+  .modal-footer {
+    padding: 10px 14px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .footer-status-guide {
+    width: 100% !important;
+    line-height: 1.3 !important;
+  }
+
+  .guide-text {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    font-size: 11px !important;
+  }
+
+  .footer-action-buttons {
+    display: flex !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+
+  .btn-cancel {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    height: 34px !important;
+    font-size: 12.5px !important;
+    justify-content: center !important;
+    text-align: center !important;
+    border-radius: 6px !important;
+  }
+
+  .btn-submit {
+    flex: 2 1 0 !important;
+    width: 0 !important;
+    height: 34px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    justify-content: center !important;
+    text-align: center !important;
+    border-radius: 6px !important;
+  }
+}
 </style>

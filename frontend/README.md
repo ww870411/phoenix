@@ -1,3 +1,211 @@
+## 2026-10-10 库管工作台移动端保温管发货微卡片彻底重构：原生语义卡片、三大框体绝对等大锁定与车牌物料排版重塑 (Warehouse Management Mobile Pipe Card Complete Semantic Redesign)
+
+- **涉及页面与组件**：
+  - 核心页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库管员管理入口 · 保温管台账 `tab=pipe` 扁平明细与车次合并展开明细）。
+- **优化背景与痛点溯源**：
+  - 用户反馈发货记录卡片“还是不行，很不美观”，核心要求三大数量框体绝对等大，规格型号与车牌号大小位置重新设计，对标需求侧（`DemandManagementView.vue`）；
+  - 根本成因：此前在移动端试图用 CSS Grid 强扭原生 HTML `<tr>` 表格行，缺乏独立容器导致列宽互相挤压形变，伪元素文字拼接导致单位折断换行，车牌号居于角落局促不显。
+- **高精细度前端重构落地**：
+  1. **彻底打破表格强扭限制，重塑专有语义化移动端卡片架构 (`.pipe-mobile-only-cards`)**：
+     - 桌面端（`> 720px`）锁定展示原有高密度表格（`.pipe-desktop-only-table`）；移动端（`<= 720px`）隐藏大表，激活对标需求侧流转督办的专属高保真发货微卡片（`.pipe-mobile-ticket-card`）；
+     - 支持扁平明细与车次展开明细，点击卡片瞬时联动底部证据链时光轴；
+  2. **“工厂发货”“现场到货”“施工接收”三大框体像素级绝对等大锁定**：
+     - 独立专属网格容器 `.pm-quantity-grid`（`grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important;`）；
+     - 几何尺寸绝对一致：锁定高 `58px`，圆角 `8px`，数值与“米”同行基线对齐（`.pm-qty-value-wrap`），彻底杜绝单位折行；
+     - 浅蓝（工厂发货）、浅绿（现场到货）、浅紫（施工接收）专属业务微质感底色；
+  3. **车牌号与规格型号黄金业务关联排布**：
+     - 一级大标题规格型号（14.5px，700 字重，深墨色，行高 1.4，自然折行）；
+     - 专业货运车牌徽章（`🚚 辽A·88888`，11.5px monospace 加粗，浅蓝底深蓝字加细边）搭配车次微徽章，物料-车辆-车次一目了然；
+  4. **供需流向与元信息优雅两端对称**：
+     - 极简供需流向卡（`.pm-route-box`）供给 ➔ 需求；底部单号与发货时间两端对齐；
+  5. **顶栏与操作底栏触控优化**：
+     - 顶栏状态胶囊、在途时长微胶囊与右上角大触控区 18px 勾选框；
+     - 底栏【📜 凭证】与【⚖️ 提请会审】/【⚖️ 查看会审】均分 50% 宽度，高 32px，圆角 6px。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，17.79s，0 错误，退出码 0）。
+
+## 2026-10-10 库管工作台移动端保温管卡片“三量等大框体”与物料/车牌排版高精细重塑 (Warehouse Management Mobile Pipe Card Strict Equal Grid Polish)
+
+- **涉及页面与组件**：
+  - 核心页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库管员管理入口 · 保温管台账 `tab=pipe` 扁平明细与车次合并展开明细）。
+- **优化背景与视觉缺陷定位**：
+  - 用户反馈“工厂发货”“现场到货”“施工接收”大小不一致，且规格型号与车牌号大小位置欠佳；
+  - 根因定位：父级 Grid 误设为 `1fr auto auto` 导致列宽分配严重失衡；车牌号黑底生硬、规格型号字号过大且缺乏包裹。
+- **高精细度前端重构落地**：
+  1. **父容器彻底重塑为对称的 3 列等宽网格 (`repeat(3, minmax(0, 1fr))`)**：
+     - 在 `.pipe-flat-row` 与 `.pipe-detail-row` 中严格平分 3 列；
+  2. **“工厂发货”“现场到货”“施工接收”三个框体像素级绝对等大等高（56px）**：
+     - 宽度均严格锁定为 1/3，统一 `height: 56px !important;`，居中对称；
+     - 浅蓝、浅绿、浅紫三色微卡片秩序井然，上标 10.5px，数值 13.5px 加米；
+  3. **车牌号高质感现代深蓝胶囊居中优雅对齐**：
+     - 升级为专业交通蓝（`#1d4ed8`，白字 11px 加粗，Mono 字体）；
+  4. **规格型号精美物料条目卡片化**：
+     - 字号定为黄金适中 13px，深墨粗体，浅灰底色带蓝色左装饰条，稳重自然。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，18.50s，0 错误，退出码 0）。
+
+## 2026-10-10 生产日报利润展示来源核对
+
+- `daily_report_25_26` 全口径展示和看板“2.边际利润”读取 `sum_basic_data`（单位）与 `groups`（主城区/集团），基础公式在数据库视图计算，前端按配置展示。
+- 参数与公式说明：`../configs/2026-10-10_daily_report_25_26_边际利润公式与参数核对.md`。主城区热电厂子口径是北海+香海，不能混同三家抵销后的主城区利润。
+- 本轮未改前端行为；浏览器连接受限，页面可见状态未核验。
+
+## 2026-10-10 库管工作台移动端保温管卡片对标需求侧 3 列 Grid 高保真重构 (Warehouse Management Mobile Pipe Card Demand-Side Aesthetic)
+
+- **涉及页面与组件**：
+  - 核心页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库管员管理入口 · 保温管台账 `tab=pipe` 扁平明细与车次合并卡片）。
+- **优化背景与视觉缺陷定位**：
+  - 用户反馈保温管发货记录卡片视觉体验粗糙，要求模仿需求侧成熟的高保真卡片进行美化；
+  - 缺陷定位：此前简单将各单元格转为纵向单列堆叠，数量核验采用 3 条笨重长横幅，单据信息与供需流向缺乏严谨对齐，缺少现代工业级卡片的秩序美感。
+- **高精细度前端重构落地**：
+  1. **全链路移植需求侧 3 列 CSS Grid 卡片排版架构**：
+     - `.pipe-flat-row` 与 `.pipe-detail-row` 统一采用 `grid-template-columns: 1fr auto auto !important;`；
+     - 白底立体圆角微阴影（圆角 12px，边框 `#cbd5e1`，内边距 `12px 14px`），添加触控反馈 `:active { background: #f8fafc; }`；
+  2. **高保真分区层级设计**：
+     - **第 1 行**：左侧流转状态胶囊药丸（999px 圆角，带异常标记） + 中右侧深蓝车牌胶囊（Mono 加粗黑底白字） + 最右侧勾选/会审锁定图标；
+     - **第 2 行**：规格型号主标题全宽展示，大号深黑粗体（14.5px，#0f172a，700 字重），自然断词折行；
+     - **第 3 行**：供需主体两端对齐（左侧 `🏭 供给: [厂商]`，右侧 `📍 需求: [标段]`）；
+     - **第 4 行**：单号与车次号左右呼应，浅灰 monospace 代码微徽章；
+  3. **数量核验三栏对称浅色微卡片（告别长条横幅）**：
+     - 在第 5 行以 1:1:1 绝对平分三栏微卡片：浅蓝工厂发货（`#eff6ff`）、浅绿现场到货（`#ecfdf5`）、浅紫施工接收（`#f5f3ff`），各带小标题标签与 14px 粗体数字+米，数据对比一目了然；
+  4. **时间在途与操作底栏**：
+     - **第 6 行**：`🕒 发货: [时间]` 与 `⏱️ 在途: [时长]`；
+     - **第 7 行**：虚线分隔操作栏，【📜 凭证】与【⚖️ 提请会审】/【⚖️ 查看会审】等高 32px 弹性平铺；
+  5. **车次合并主卡片（`.pipe-shipment-card`）同步美化**：
+     - 供需流向升级为双栏微卡片，数量看板重构为 3 列微徽章网格。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，14.66s，0 错误，退出码 0）。
+
+## 2026-10-10 库管工作台移动端管件按钮等大化、保温管卡片防溢出与紧凑微筛选重构 (Warehouse Management Mobile Fitting Buttons & Pipe Card Optimization)
+
+- **涉及页面与组件**：
+  - 核心页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库管员管理入口 · 保温管台账 `tab=pipe` 与特种管件台账 `tab=fitting`）。
+- **优化背景与业务痛点**：
+  - 用户反馈在手机模式下：
+    1. 管件标签页中，“提请会审”按钮与旁边的“整车确认”、“流转凭证”按钮大小不一致；
+    2. 保温管标签页中，每条记录的卡片水平长度严重溢出视口（“突破天际”）；
+    3. 上方的筛选版块占用了很大的纵向空间，影响浏览效率。
+- **高精细度前端重构落地**：
+  1. **管件车次操作按钮规格统一与等大化 (`.fitting-action-btn`)**：
+     - 清除【⚖️ 提请会审】与【⚖️ 查看会审】标签上硬编码的行内 `style`，统一定义 `.fitting-action-btn`；
+     - 桌面端配置规范：统一 `height: 28px !important; line-height: 26px !important; padding: 0 10px !important; font-size: 12px !important;`；
+     - 移动端媒体查询（`@media (max-width: 720px)`）设定 `.fitting-action-btn` 为 `flex: 1 1 0 !important; width: 0 !important; min-width: 0 !important; height: 32px !important; line-height: 30px !important;`，实现【🏢 整车确认】、【⚖️ 提请会审】（或【查看会审】）、【📜 流转凭证】三枚按钮 1:1:1 绝对等宽平分与等高，视觉规整；
+  2. **保温管发货记录横向尺寸彻底约束（杜绝“突破天际”）**：
+     - 根因定位：桌面端在 `.table` 声明了 `min-width: 1400px;`，在 `.pipe-detail-table` 声明了 `min-width: 960px;`，移动端媒体查询未覆写导致浏览器强制撑大到该宽度；
+     - 解决落地：在移动端媒体查询中对 `.card`、`.table-wrap`、`.pipe-detail-table-wrap`、`.pipe-shipment-group-list`、`.pipe-shipment-card`、`.table`、`.pipe-detail-table`、`.pipe-flat-row`、`.pipe-detail-row` 及全部 `td` 统一锁死 `min-width: 0 !important; max-width: 100% !important; width: 100% !important; box-sizing: border-box !important; overflow-x: hidden !important;`；
+     - 型号规格与供需主体启用 `word-break: break-all; white-space: normal !important;` 智能断行，两端对齐数量微胶囊，整卡自适应贴合视口；
+  3. **保温管筛选版块高度轻量化紧凑重构 (`.pipe-filter-card` + `.pipe-filter-grid`)**：
+     - 移动端由原来的单列 7 行长列表重构为 2 列紧凑网格（`repeat(2, minmax(0, 1fr))`，`gap: 6px 8px`）；
+     - 需求主体跨 2 列通栏置顶，供给主体/型号、状态/车牌、车次/单号两两并列；
+     - 输入框与下拉选择框高度由 41px 压缩至 32px，内边距 `4px 8px`，字体 12px，label 11px；
+     - 行动按钮【查询】、【重置】、【导出 Excel】底栏 32px 弹性平铺；
+     - 统计卡片与四节点指标重构为 2x2 紧凑微看板，视口挤占减少 70% 以上。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，17.01s，0 错误，退出码 0）。
+
+## 2026-10-10 库管工作台移动端保温管卡片化、凭证端库管确认与管件会审升级 (Warehouse Management Mobile Pipe Cardification & Proof Confirm)
+
+- **涉及页面与组件**：
+  - 核心页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（库管员管理入口 · 保温管台账 `tab=pipe` 与管件台账 `tab=fitting`）；
+  - 关联组件：[`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)（多方联合会审发起弹窗）。
+- **优化背景与业务痛点**：
+  - 用户反馈库管管理页面（`tab=pipe`）在手机端需要改成卡片形式，取消底部的“库管操作与全生命周期证据链”两栏重型面板，在订单卡片上点击可查看流转凭证（同需求侧设置），并在凭证上支持点击“库管确认”按钮；同时补齐管件发货记录（`tab=fitting`）中的提请会审入口，并优化移动端排版。
+- **高精细度前端重构落地**：
+  1. **取消移动端底部重型面板 (`.warehouse-bottom-panel`)**：
+     - 在 `@media (max-width: 720px)` 下对底部“库管操作与全生命周期证据链”声明 `display: none !important;`，窄屏下彻底移出视口，页面垂直高度极大收紧；
+  2. **保温管发货记录移动端立体卡片化重构**：
+     - **车次合并明细表 (`.pipe-detail-table`) 与扁平明细表 (`.table`)**：
+       - `thead` 隐藏，解除横向固定尺寸限制，每一行转为自适应独立立体卡片（圆角 12px，白底微阴影）；
+       - 整卡绑定 `handleRowClick(row)`，在 `<= 720px` 手机屏幕上点击卡片任意非按钮区域，直接弹出全生命周期流转凭证抽屉；
+       - 订单号（Mono 加粗）、规格全称（大号粗体不截断）、数量三段式微胶囊（发货蓝底、到货绿底、接收紫底）、在途时长徽章纵向层次展开；
+       - 卡片底栏操作按钮组（【📜 凭证】、【⚖️ 提请会审】/【查看会审】）等高 32px 弹性平铺；
+  3. **流转凭证弹窗底栏增加【🏢 库管确认入库】交互闭环 (`.delivery-modal-action-bar`)**：
+     - 构建双按钮底栏：【已阅并关闭】+【🏢 库管确认入库】（高亮翡翠绿）；
+     - 新增计算属性 `canConfirmWarehouseInModal`，根据直管（`pending_warehouse`）或管件（`construction_confirmed`/`pending_warehouse`/`received`）精准展示；
+     - 新增 `handleWarehouseConfirmFromModal`，支持整车管件批量确认与直管单据入库确认，确认后自动关闭弹窗并刷新台账；
+  4. **管件发货台账（`tab=fitting`）提请会审全方位补齐**：
+     - 车次汇总行放宽提请会审显示条件（非 `under_review` 均展示【⚖️ 提请会审】，`under_review` 展示【⚖️ 查看会审】）；
+     - 明细表格新增【操作】列，支持针对车载具体单项管件发起【⚖️ 会审】；
+     - 移动端车次操作栏按钮组等高 32px 弹性平铺，触控顺畅。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，14.26s，0 错误，退出码 0）。
+
+## 2026-10-10 保温管与管件现场发货“提请会审”弹窗移动端排版卡片化优化 (Initiate Joint Review Modal Mobile Responsive View)
+
+- **涉及页面与组件**：
+  - 核心弹窗组件：[`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)（被需求侧工作台 [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue) 及库管工作台广泛复用）。
+- **优化背景与手机端排版痛点**：
+  - 用户反馈在手机模式下对保温管与管件发货记录提请会审时，弹窗排版存在横向挤压与阅读不便；
+  - 根因：原单据概览卡片采用硬编码 5 列 Grid，手机窄屏下单列仅 60px 导致文本截断严重；管件车载明细 3 列输入框在手机端挤扁叠字；底栏状态指引与操作按钮在同一行互相抢占空间。
+- **高精细度前端重构落地**：
+  1. **弹窗外框与单据概览卡片自适应 (`.dossier-card`)**：
+     - 单号独占整行通栏带下划线，大号 Mono 粗体清晰呈现；品类、规格、标段与厂家重构为 2 列对称层次，彻底消除文本截断；
+     - 会签主体与规则提示纵向分层显示，排版清爽。
+  2. **直管与管件拟更正表单卡片化 (`.patch-section-card`)**：
+     - 直管表单自适应单列整行，原值标签与修正差值胶囊完整舒展；
+     - 管件车载明细卡片采用“第 1 行品类+数量，第 2 行规格描述全宽”的 2 行网格，输入框高度提升至 32px 方便触控。
+  3. **底栏操作区纵向分层 (`.modal-footer`)**：
+     - 顶部展示完整的更正状态指引，底部由【取消】（flex: 1）与【确认发起联合会审】（flex: 2）按钮 1:2 弹性平铺，大拇指极易点击。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，17.58s，0 错误，退出码 0）。
+
+## 2026-10-10 管件发货记录移动端两级渐进式卡片流架构重构 (Fitting Delivery Mobile Progressive Dual-Layer Card View)
+
+- **涉及页面与组件**：
+  - 需求侧工作台：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（Tab 5 管件业务 · 🚚 到货确认与明细记录，`.fitting-toolbar-actions`、`.fitting-search-card`、`.demand-fitting-group-card`、`.fitting-card-header`、`.mobile-demand-fitting-items`、`.desktop-fitting-detail-table-wrap`）。
+- **业务背景与排版特性差异**：
+  - 用户咨询管件发货记录是否适合改造为保温管同款手机排版，并指出管件更复杂；
+  - 架构分析：保温管为“一车一单一规格”扁平单据，单卡片平铺适配良好；管件为“一车多品类（主从层级）”，一辆车装载多种规格管件，且流转确认以整车批次为单位触发弹窗核验。若强行照搬单卡片会造成车牌/厂家冗余刷屏且破坏整车操作。
+- **高精细度前端两级卡片化落地**：
+  1. **第一级：外层【车次汇总主看板卡片】**：
+     - 保留折叠能力，升级为白底圆角立体卡片（圆角 12px）；
+     - 第 1 行：车牌深蓝胶囊 + 车次单号居左，折叠旋转指示箭头居右；
+     - 第 2 行：供货厂家 + 发货时间；
+     - 第 3 行：蓝绿物资统计微芯片（`X 种管件 · 发 Y 件 / 到 Z 件`）与状态药丸左右对称分布；
+     - 第 4 行：整车操作按钮组（【到货确认】/【施工接收】/【提请会审】/【流转凭证】）等高 32px 弹性平铺；
+  2. **第二级：内层【货品微条目列表】**：
+     - 彻底干掉手机端被死硬挤压的原生 7 列表格，改为移动端自适应微型条目卡片流：
+       - 头部行：序号 + 管件类型药丸（`[弯头/三通]`） + 粗体规格全称（不截断） + 单项状态微徽章；
+       - 底栏行：订单编号居左，发货件数（蓝底浅胶囊）对比实到件数（绿底浅胶囊）居右；
+     - 桌面端（>=721px）继续保持规整紧凑的 7 列数据表格；
+  3. **顶栏工具与检索栏移动端紧凑化**：
+     - 在途汇总通栏置顶，展开/折叠/刷新/导出四按钮下一行 1:1:1:1 均分等宽；
+     - 检索栏重构为紧凑卡片，日期对称、关键字与检索按钮自适应排列；
+  4. **底部物资透视看板响应式**：
+     - 自动转为 2x2 规整微网格。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，18.86s，0 错误，退出码 0）。
+
+## 2026-10-10 物流到货“筛选记录”与“导出Excel”按钮跨端尺寸与排版等大对齐重构 (Logistics Filter Actions Cross-Device Equal Size & Alignment)
+
+- **涉及页面与组件**：
+  - 需求侧工作台：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（Tab 4 物流到货工具条 `.logistics-toolbar-actions`，【重置筛选】`.btn-reset-filter`、【筛选记录】`.btn-apply-filter`、【导出 Excel】`.btn-export-filter`）。
+- **优化背景与跨端尺寸不一根因**：
+  - 用户反馈页面上的“筛选记录”和“导出Excel”按钮在电脑端和手机端均存在大小不一致的问题；
+  - 电脑端：【筛选记录】曾绑定了全局样式类 `.primary-button`（内含大内边距，实际渲染高度达 40px+），而【导出 Excel】为常规 `.btn`（高度 34px），导致桌面端【筛选记录】偏高 6~8px；
+  - 手机端：媒体查询中此前为了突出查询，为 `.btn-apply-filter` 分配了 `flex: 2 1 45%` 及 `12.5px` 字号，而为 `.btn-export-filter` 分配了 `flex: 1 1 25%` 及 `11.5px` 字号，导致移动端按钮宽度一宽一窄（宽度相差近一倍）、字号一大一小。
+- **高精细度前端重构落地**：
+  1. **类名解耦与语义归一**：
+     - 将【筛选记录】由 `.primary-button` 统一收敛为 `.btn.btn-apply-filter`，彻底摆脱全局大尺寸按钮样式干扰；
+     - 移除【导出 Excel】行内内联 `style`，统一定义为 `.btn.btn-export-filter`；
+  2. **桌面端强几何尺寸锁定**：
+     - 在 `.logistics-toolbar-actions .btn` 上统一强制锁定 `height: 34px !important; font-size: 13px !important; font-weight: 600 !important; border-radius: 8px !important; padding: 0 14px !important;`，桌面端三按钮完全等高、等字号、等圆角；
+  3. **手机端 1:1:1 黄金对称等大平分**：
+     - 移动端媒体查询（`@media (max-width: 720px)`）统一声明 `flex: 1 1 0 !important; width: 0 !important; min-width: 0 !important; height: 34px !important; font-size: 12px !important; border-radius: 6px !important; padding: 0 4px !important;`，实现三枚按钮 1:1:1 绝对等宽平分与等高。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，17.10s，0 错误，退出码 0）。
+
+## 2026-10-10 需求侧保温管发货记录上方筛选格式突兀感消除与 2+1+2 紧凑微卡片重构 (Logistics Filter Section Mobile Responsive Polish)
+
+- **涉及页面与组件**：
+  - 需求侧工作台：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（Tab 4 物流到货筛选表单 `.logistics-filter-grid`、操作按钮条 `.logistics-toolbar-actions`、全局主体下拉选择 `.filter-card .compact-filter-grid`）。
+- **优化背景与窄屏体验缺陷**：
+  - 用户反馈在手机窄屏模式下，发货记录下方显示正常，但上方的筛选区域排版显得比较突兀、臃肿生硬；
+  - 根因：5 项筛选字段被强制平分两列，造成第 5 项落单偏向一侧；过滤型号长全称在半格内被严重截断；按钮长短不一换行错乱，且整体输入框高度过大导致筛选区占满大半屏。
+- **高精细度前端重构落地**：
+  1. **2 + 1 + 2 黄金比例网格卡片**：
+     - 单号与车次并排（各 50%）+ 过滤型号独占整行（100% 全宽，长名称完整展现，充当平衡枢纽）+ 发货日期与到货日期对称并排（各 50%）；
+     - 外层包装为独立浅灰立体微卡片（`#f8fafc` 底色，圆角 10px，浅边框），消除突兀感；
+  2. **垂直空间极致收紧**：
+     - 表单控件高度统一设为 32px，内边距 `4px 8px`，字号 12px，label 间距收至 3px；筛选区整体高度由 400px+ 骤降至 160px（压缩率超 60%）；
+  3. **分层工具栏操作条**：
+     - 全标段在途汇总按钮置顶通栏；查询、重置与导出三按钮在同一水平线 32px 等高平铺，再无换行错位；
+  4. **全局需求主体下拉框全宽舒展**：
+     - 需求主体下拉框由两列挤压改为纵向 100% 全宽展开，微数据看板以 2 列紧凑网格展示。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，16.59s，0 错误，退出码 0）。
+
 ## 2026-10-10 需求侧保温管发货记录移动端排版卡片化重构与高度塌陷修复 (Demand Logistics Mobile Responsive Card View)
 
 - **涉及页面与组件**：

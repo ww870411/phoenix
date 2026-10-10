@@ -1,3 +1,91 @@
+## 2026-10-10 库管工作台移动端保温管发货微卡片彻底重构前后端契约保持 (Warehouse Mobile Semantic Card Redesign Contract Sync)
+
+- **涉及服务与接口**：
+  - 库管直管确认服务：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - API 路由：[`delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/delivery.py)。
+- **契约与架构对齐说明**：
+  - 本轮改动为前端库管工作台页面（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）在手机移动端（`<= 720px`）对标需求侧（`DemandManagementView.vue`）彻底重构保温管单据微卡片（原生专有卡片 DOM、三大框体绝对等大锁定、车牌物料黄金业务排布）；
+  - 保温管台账查询接口、流转凭证详情拉取及确认入库接口契约 100% 保持稳定，后端无需任何变动。
+
+## 2026-10-10 库管工作台移动端保温管卡片布局重塑前后端契约保持 (Warehouse Mobile Equal Grid Contract Sync)
+
+- **涉及服务与接口**：
+  - 库管直管确认服务：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - API 路由：[`delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/delivery.py)。
+- **契约与架构对齐说明**：
+  - 本轮改动为前端库管工作台页面（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）在手机模式下保温管发货记录的 3 等分对称网格重塑、数量三框体像素级等大锁定及车牌号/规格型号排版优化；
+  - 数据传输字段、流转凭证获取及入库确认逻辑 100% 保持稳定，后端无需任何调整。
+
+## 2026-10-10 生产日报边际利润公式与两期参数核对
+
+- 对实际 `sum_basic_data`、`groups`、公司/集团单日与区间分析、北海分口径共8份视图执行只读核对，常量来源为 `constant_data`，原始量为 `daily_basic_data`。
+- `calc_marginal_profit` 取直接收入减非煤成本与实际标煤成本；`calc_comparable_marginal_profit` 仅替换为可比标煤价。汇总层加回内购热成本、扣除内售热收入。
+- 25-26/24-25完整参数、NULL/缺失处理及固定156天分摊说明见 `../configs/2026-10-10_daily_report_25_26_边际利润公式与参数核对.md`，同目录留存实际定义和40项独立复算证据。
+- 本轮不修改数据库数据、视图或后端代码。外购电常量单位误标为元/吨、庄河同期外购热价为NULL等现状已在核对文档显式标注。
+
+## 2026-10-10 库管工作台移动端保温管卡片对标需求侧美化前后端契约保持 (Warehouse Pipe Card Demand-Side Aesthetic Contract Sync)
+
+- **涉及服务与接口**：
+  - 库管直管确认服务：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - API 路由：[`delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/delivery.py)。
+- **契约与架构对齐说明**：
+  - 本轮改动纯粹属于前端库管工作台页面（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）保温管发货记录在手机端的 3 列 CSS Grid 卡片化视觉美化与排版对齐；
+  - 库管直管台账查询接口、流转凭证详情拉取及确认入库接口契约 100% 保持稳定，后端无需任何变动。
+
+## 2026-10-10 库管工作台移动端管件按钮与保温管卡片布局重构前后端契约保持 (Warehouse Mobile Layout Optimization Contract Sync)
+
+- **涉及服务与接口**：
+  - 库管直管确认服务：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - 管件批量库管确认服务：[`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)；
+  - 联合会审服务：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)。
+- **契约与架构对齐说明**：
+  - 本轮改动为前端库管工作台页面（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）在手机模式下的管件操作按钮等大化、保温管卡片防溢出限制与顶部筛选版块紧凑微网格化重构；
+  - 直管与管件的筛选查询接口、流转凭证获取及入库确认协议 100% 保持稳定，后端服务无任何变更。
+
+## 2026-10-10 库管工作台移动端保温管卡片化、凭证确认与管件会审前后端契约保持 (Warehouse Management Mobile Cardification Contract Sync)
+
+- **涉及服务与接口**：
+  - 库管直管确认服务：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)（`POST /projects/insulation_pipe_supply_2026/delivery/{id}/confirm-warehouse`）；
+  - 管件批量库管确认服务：[`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)（`POST /projects/insulation_pipe_supply_2026/fitting-deliveries/confirm-warehouse`）；
+  - 联合会审提请服务：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)（`POST /projects/insulation_pipe_supply_2026/joint-reviews/`）。
+- **契约与架构对齐说明**：
+  - 本轮改动为前端库管工作台页面（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）在手机模式下的立体卡片化重构、流转凭证弹窗底栏【库管确认】按钮新增以及管件会审触发完善；
+  - 直管与管件的库管确认接口入参（`ids`/`remark`）、联合会审创建协议 100% 保持稳定，后端无需变更。
+
+## 2026-10-10 保温管与管件现场发货“提请会审”弹窗优化前后端契约保持 (Initiate Joint Review Modal Contract Sync)
+
+- **涉及服务与接口**：
+  - 联合会审服务：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - API 路由：[`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)（`POST /projects/insulation_pipe_supply_2026/joint-reviews/` 提请创建接口）。
+- **契约与架构对齐说明**：
+  - 本次调整属于前端提请联合会审弹窗组件 [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue) 的移动端视觉卡片化与响应式排版重构；
+  - 提请会审向后端提交的荷载结构（`order_id`、`order_category`、`review_reason`、`proposed_patch`、`attachments`）保持 100% 稳定，前后端数据协议无任何变更。
+
+## 2026-10-10 管件发货记录移动端两级卡片化重构前后端契约保持 (Fitting Delivery Mobile View Contract Sync)
+
+- **涉及服务与接口**：
+  - 管件发货台账服务：[`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)；
+  - API 路由：[`fitting_delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/fitting_delivery.py)（`GET /projects/insulation_pipe_supply_2026/fitting-deliveries`、`POST /projects/insulation_pipe_supply_2026/fitting-deliveries/confirm-arrival` 等）。
+- **契约与架构对齐说明**：
+  - 本轮改动为前端 Tab 5 管件到货确认与明细记录页面的手机端“两级渐进式卡片流（Master-Detail）”响应式重构；
+  - 后端返回的车次分组数据结构、明细列表字段（`fitting_type`、`model_spec`、`order_no`、`shipped_qty`、`arrived_qty`、`status` 等）以及整车弹窗确认入参保持 100% 稳定，前后端数据契约无任何变动。
+
+## 2026-10-10 物流到货“筛选记录”与“导出Excel”按钮跨端等大对齐前后端契约保持 (Logistics Filter Actions Cross-Device Alignment Contract Sync)
+
+- **涉及服务与接口**：
+  - 物流筛选与导出服务：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - API 路由：[`delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/delivery.py)（`GET /projects/insulation_pipe_supply_2026/delivery/pending` 筛选查询及前端 Excel 导出链路）。
+- **契约与架构对齐说明**：
+  - 本次调整属于前端操作栏按钮的视觉与响应式尺寸对齐重构，接口调用参数、数据传输及导出处理逻辑 100% 保持稳定，前后端数据契约无任何变动。
+
+## 2026-10-10 需求侧保温管发货记录上方筛选格式重构前后端契约保持 (Logistics Filter Section Polish Contract Sync)
+
+- **涉及服务与接口**：
+  - 物流记录筛选查询接口：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - API 路由：[`delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/delivery.py)（`GET /projects/insulation_pipe_supply_2026/delivery/pending` 携带 `order_no`、`shipment_no`、`pipe_model_id`、`shipped_date`、`arrived_date` 等查询参数）。
+- **契约与架构对齐说明**：
+  - 本次改动纯粹为前端页面响应式视觉与卡片排版优化，各筛选参数命名（`order_no`、`shipment_no`、`pipe_model_id`、`shipped_date`、`arrived_date`）与服务端接口规范完全对齐无任何破坏性变动。
+
 ## 2026-10-10 需求侧保温管发货记录移动端卡片化重构前后端契约保持 (Demand Logistics Mobile Card View Contract Sync)
 
 - **涉及服务与接口**：

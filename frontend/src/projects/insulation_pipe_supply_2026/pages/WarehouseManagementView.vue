@@ -68,12 +68,12 @@
 
       <!-- Tab 1: 保温管发货记录 -->
       <div v-if="activeTab === 'pipe'">
-        <section class="card elevated">
+        <section class="card elevated pipe-filter-card">
           <div class="card-header">
             <span>库管台账筛选</span>
             <span class="muted">展示日期：{{ options?.show_date || options?.biz_date || '--' }}</span>
           </div>
-          <div class="filter-grid">
+          <div class="filter-grid pipe-filter-grid">
             <div class="field custom-multi-select-container" ref="section1DropdownRef">
               <span>需求主体</span>
               <div class="custom-multi-select">
@@ -445,7 +445,7 @@
 
             <!-- 展开后的明细表格（独立于外层大表，防右侧截断且支持平滑自适应） -->
             <div v-show="isPipeShipmentExpanded(group.groupKey)" class="pipe-detail-table-wrap custom-scroll-list">
-              <table class="pipe-detail-table">
+              <table class="pipe-detail-table pipe-desktop-only-table">
                 <colgroup>
                   <col style="width: 44px;" />
                   <col style="width: 140px;" />
@@ -475,11 +475,12 @@
                     v-for="row in group.items"
                     :key="row.id"
                     :class="{ checked: isDeliverySelected(row.id), active: String(row.id) === selectedDeliveryId }"
+                    class="pipe-detail-row"
                     style="cursor: pointer;"
-                    title="点击在下方查看流转轨迹"
-                    @click="toggleDeliverySelection(row)"
+                    title="点击查看流转凭证"
+                    @click="handleRowClick(row)"
                   >
-                    <td style="text-align: center;" @click.stop>
+                    <td class="col-pipe-check" style="text-align: center;" @click.stop>
                       <span v-if="row.status === 'under_review'" style="font-size: 13px; cursor: help;" title="单据处于多方联合会审中，入库操作已挂起锁定">⚖️</span>
                       <input
                         v-else-if="row.status === 'pending_warehouse'"
@@ -489,16 +490,16 @@
                         @change="toggleDeliverySelection(row)"
                       />
                     </td>
-                    <td>
+                    <td class="col-pipe-order">
                       <span class="cell-code">{{ row.order_no || row.delivery_code || row.id }}</span>
                     </td>
-                    <td :title="row.pipe_model_name" style="font-weight: 500; color: #1e293b; font-family: monospace;">
+                    <td class="col-pipe-model" :title="row.pipe_model_name" style="font-weight: 500; color: #1e293b; font-family: monospace;">
                       {{ row.pipe_model_name }}
                     </td>
-                    <td class="cell-number" style="font-weight: 600; color: #0f172a;">{{ formatAmount(row.shipped_qty) }}</td>
-                    <td class="cell-number" style="color: #059669;">{{ formatOptionalAmount(row.arrived_qty) }}</td>
-                    <td class="cell-number" style="color: #7c3aed;">{{ formatOptionalAmount(row.received_qty) }}</td>
-                    <td>
+                    <td class="col-pipe-shipped cell-number" style="font-weight: 600; color: #0f172a;">{{ formatAmount(row.shipped_qty) }}</td>
+                    <td class="col-pipe-arrived cell-number" style="color: #059669;">{{ formatOptionalAmount(row.arrived_qty) }}</td>
+                    <td class="col-pipe-received cell-number" style="color: #7c3aed;">{{ formatOptionalAmount(row.received_qty) }}</td>
+                    <td class="col-pipe-status">
                       <div class="status-pill-group">
                         <span class="status-pill" :class="statusClass(row.status)" style="font-size: 11px; padding: 1px 6px; white-space: nowrap;">
                           {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
@@ -508,12 +509,12 @@
                         </span>
                       </div>
                     </td>
-                    <td class="cell-elapsed" style="font-size: 11px; white-space: nowrap;">{{ formatDeliveryElapsedDisplay(row) }}</td>
-                    <td style="text-align: center;">
-                      <div style="display: inline-flex; align-items: center; gap: 4px;">
+                    <td class="col-pipe-elapsed cell-elapsed" style="font-size: 11px; white-space: nowrap;">{{ formatDeliveryElapsedDisplay(row) }}</td>
+                    <td class="col-pipe-action" style="text-align: center;">
+                      <div class="pipe-actions-group" style="display: inline-flex; align-items: center; gap: 4px;">
                         <button
                           type="button"
-                          class="btn ghost btn-sm"
+                          class="btn ghost btn-sm btn-action-proof"
                           style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;"
                           title="查看单据流转凭证"
                           @click.stop="openDeliveryDetailModal(row)"
@@ -523,7 +524,7 @@
                         <button
                           v-if="row.status === 'under_review'"
                           type="button"
-                          class="btn ghost btn-sm"
+                          class="btn ghost btn-sm btn-action-review"
                           style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; font-weight: 600;"
                           title="查看此单据的多方联合会审表决详情"
                           @click.stop="goToJointReview(row)"
@@ -533,7 +534,7 @@
                         <button
                           v-else-if="row.status === 'pending_warehouse'"
                           type="button"
-                          class="btn ghost btn-sm"
+                          class="btn ghost btn-sm btn-action-review"
                           style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
                           title="发现型号规格或数量有误时提请联合会审"
                           @click.stop="openJointReviewModal(row, 'pipe')"
@@ -545,13 +546,125 @@
                   </tr>
                 </tbody>
               </table>
+
+              <!-- 手机移动端专属：车次内明细高保真卡片列表 (对标需求侧流转督办设计) -->
+              <div class="pipe-mobile-only-cards">
+                <div
+                  v-for="row in group.items"
+                  :key="`m_pipe_detail_${row.id}`"
+                  class="pipe-mobile-ticket-card"
+                  :class="{
+                    'is-checked': isDeliverySelected(row.id),
+                    'is-active': String(row.id) === selectedDeliveryId,
+                    'has-abnormal': row.abnormal_flag
+                  }"
+                  @click="handleRowClick(row)"
+                >
+                  <!-- 1. 顶栏 Meta Header -->
+                  <div class="pm-card-header">
+                    <div class="pm-header-left">
+                      <span class="status-pill" :class="statusClass(row.status)">
+                        {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
+                      </span>
+                      <span v-if="row.abnormal_flag" class="status-pill status-abnormal">
+                        {{ getAbnormalLabel(row) }}
+                      </span>
+                      <span v-if="formatDeliveryElapsedDisplay(row) !== '—'" class="pm-elapsed-pill">
+                        ⏱️ {{ formatDeliveryElapsedDisplay(row) }}
+                      </span>
+                    </div>
+
+                    <div class="pm-header-right" @click.stop>
+                      <span v-if="row.status === 'under_review'" class="pm-review-lock" title="会审中锁定">⚖️</span>
+                      <label v-else-if="row.status === 'pending_warehouse'" class="pm-checkbox-label">
+                        <input
+                          type="checkbox"
+                          class="pm-checkbox"
+                          :checked="isDeliverySelected(row.id)"
+                          @change="toggleDeliverySelection(row)"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- 2. 规格型号主标题 -->
+                  <div class="pm-identity-row">
+                    <div class="pm-model-title" :title="row.pipe_model_name">
+                      {{ row.pipe_model_name }}
+                    </div>
+                  </div>
+
+                  <!-- 3. 核心数量核验区：三个严格等大、等高、等宽专属数量微卡片 -->
+                  <div class="pm-quantity-grid">
+                    <div class="pm-qty-card card-shipped">
+                      <span class="pm-qty-label">工厂发货</span>
+                      <div class="pm-qty-value-wrap">
+                        <strong class="pm-qty-num">{{ formatAmount(row.shipped_qty) }}</strong>
+                        <span class="pm-qty-unit">米</span>
+                      </div>
+                    </div>
+                    <div class="pm-qty-card card-arrived">
+                      <span class="pm-qty-label">现场到货</span>
+                      <div class="pm-qty-value-wrap">
+                        <strong class="pm-qty-num">{{ formatOptionalAmount(row.arrived_qty) }}</strong>
+                        <span v-if="row.arrived_qty != null && row.arrived_qty !== ''" class="pm-qty-unit">米</span>
+                      </div>
+                    </div>
+                    <div class="pm-qty-card card-received">
+                      <span class="pm-qty-label">施工接收</span>
+                      <div class="pm-qty-value-wrap">
+                        <strong class="pm-qty-num">{{ formatOptionalAmount(row.received_qty) }}</strong>
+                        <span v-if="row.received_qty != null && row.received_qty !== ''" class="pm-qty-unit">米</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 4. 辅助元信息：单号 -->
+                  <div class="pm-meta-footer">
+                    <div class="pm-meta-item">
+                      <span class="pm-meta-label">订单号:</span>
+                      <span class="pm-meta-code">{{ row.order_no || row.delivery_code || row.id }}</span>
+                    </div>
+                  </div>
+
+                  <!-- 5. 协同流转操作底栏 -->
+                  <div class="pm-action-row" @click.stop>
+                    <button
+                      type="button"
+                      class="btn ghost btn-sm pm-action-btn btn-proof"
+                      title="查看单据流转凭证"
+                      @click="openDeliveryDetailModal(row)"
+                    >
+                      📜 凭证
+                    </button>
+                    <button
+                      v-if="row.status === 'under_review'"
+                      type="button"
+                      class="btn ghost btn-sm pm-action-btn btn-review"
+                      title="查看此单据的多方联合会审表决详情"
+                      @click="goToJointReview(row)"
+                    >
+                      ⚖️ 查看会审
+                    </button>
+                    <button
+                      v-else-if="row.status === 'pending_warehouse'"
+                      type="button"
+                      class="btn ghost btn-sm pm-action-btn btn-review"
+                      title="发现型号规格或数量有误时提请联合会审"
+                      @click="openJointReviewModal(row, 'pipe')"
+                    >
+                      ⚖️ 提请会审
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- 模式 2：扁平明细表格（原有表格） -->
         <div v-else class="table-wrap custom-scroll-list">
-          <table class="table">
+          <table class="table pipe-desktop-only-table">
             <colgroup>
               <col class="col-checkbox" />
               <col class="col-order" />
@@ -598,9 +711,10 @@
                 v-for="row in deliveries"
                 :key="row.id"
                 :class="{ checked: isDeliverySelected(row.id), active: String(row.id) === selectedDeliveryId }"
+                class="pipe-flat-row"
                 style="cursor: pointer;"
-                title="点击在下方查看流转轨迹"
-                @click="toggleDeliverySelection(row)"
+                title="点击查看流转凭证"
+                @click="handleRowClick(row)"
               >
                 <td class="cell-checkbox" @click.stop>
                   <span v-if="row.status === 'under_review'" style="font-size: 13px; cursor: help;" title="单据处于多方联合会审中，入库操作已挂起锁定">⚖️</span>
@@ -639,11 +753,11 @@
                 </td>
                 <td class="cell-datetime">{{ formatDateTime(row.shipped_at) }}</td>
                 <td class="cell-elapsed">{{ formatDeliveryElapsedDisplay(row) }}</td>
-                <td style="text-align: center;">
+                <td class="cell-actions" style="text-align: center;">
                   <div style="display: inline-flex; align-items: center; gap: 4px;">
                     <button
                       type="button"
-                      class="btn ghost btn-sm"
+                      class="btn ghost btn-sm btn-action-proof"
                       style="height: 24px; padding: 0 6px; font-size: 11px; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;"
                       title="查看单据流转凭证"
                       @click.stop="openDeliveryDetailModal(row)"
@@ -653,7 +767,7 @@
                     <button
                       v-if="row.status === 'under_review'"
                       type="button"
-                      class="btn ghost btn-sm"
+                      class="btn ghost btn-sm btn-action-review"
                       style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; font-weight: 600;"
                       title="查看此单据的多方联合会审表决详情"
                       @click.stop="goToJointReview(row)"
@@ -663,7 +777,7 @@
                     <button
                       v-else-if="row.status === 'pending_warehouse'"
                       type="button"
-                      class="btn ghost btn-sm"
+                      class="btn ghost btn-sm btn-action-review"
                       style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
                       title="发现型号规格或数量有误时提请联合会审"
                       @click.stop="openJointReviewModal(row, 'pipe')"
@@ -675,10 +789,150 @@
               </tr>
             </tbody>
           </table>
+
+          <!-- 手机移动端专属：对标需求侧流转督办的高保真发货微卡片列表 -->
+          <div class="pipe-mobile-only-cards">
+            <div
+              v-for="row in deliveries"
+              :key="`m_pipe_${row.id}`"
+              class="pipe-mobile-ticket-card"
+              :class="{
+                'is-checked': isDeliverySelected(row.id),
+                'is-active': String(row.id) === selectedDeliveryId,
+                'has-abnormal': row.abnormal_flag
+              }"
+              @click="handleRowClick(row)"
+            >
+              <!-- 1. 顶栏 Meta Header -->
+              <div class="pm-card-header">
+                <div class="pm-header-left">
+                  <span class="status-pill" :class="statusClass(row.status)">
+                    {{ deliveryStatusLabelMap[row.status] || row.status || '--' }}
+                  </span>
+                  <span v-if="row.abnormal_flag" class="status-pill status-abnormal">
+                    {{ getAbnormalLabel(row) }}
+                  </span>
+                  <span v-if="formatDeliveryElapsedDisplay(row) !== '—'" class="pm-elapsed-pill">
+                    ⏱️ {{ formatDeliveryElapsedDisplay(row) }}
+                  </span>
+                </div>
+
+                <div class="pm-header-right" @click.stop>
+                  <span v-if="row.status === 'under_review'" class="pm-review-lock" title="会审中锁定">⚖️</span>
+                  <label v-else-if="row.status === 'pending_warehouse'" class="pm-checkbox-label">
+                    <input
+                      type="checkbox"
+                      class="pm-checkbox"
+                      :checked="isDeliverySelected(row.id)"
+                      @change="toggleDeliverySelection(row)"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <!-- 2. 规格型号主标题与车辆车次徽章 -->
+              <div class="pm-identity-row">
+                <div class="pm-model-title" :title="row.pipe_model_name">
+                  {{ row.pipe_model_name }}
+                </div>
+                <div class="pm-vehicle-badges">
+                  <span v-if="row.vehicle_plate_no" class="pm-plate-badge">
+                    🚚 {{ row.vehicle_plate_no }}
+                  </span>
+                  <span v-if="row.shipment_no" class="pm-shipment-badge">
+                    车次: {{ row.shipment_no }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 3. 供需主体流向 (对标需求侧极简高辨识卡片) -->
+              <div class="pm-route-box">
+                <div class="pm-route-node">
+                  <span class="pm-route-role">供给:</span>
+                  <span class="pm-route-name" :title="row.supply_entity_name">{{ row.supply_entity_name }}</span>
+                </div>
+                <span class="pm-route-arrow">➔</span>
+                <div class="pm-route-node">
+                  <span class="pm-route-role">需求:</span>
+                  <span class="pm-route-name demand" :title="row.section_1_name">{{ row.section_1_name }}</span>
+                </div>
+              </div>
+
+              <!-- 4. 核心数量核验区：三个严格等大、等高、等宽专属数量微卡片 -->
+              <div class="pm-quantity-grid">
+                <!-- 工厂发货 -->
+                <div class="pm-qty-card card-shipped">
+                  <span class="pm-qty-label">工厂发货</span>
+                  <div class="pm-qty-value-wrap">
+                    <strong class="pm-qty-num">{{ formatAmount(row.shipped_qty) }}</strong>
+                    <span class="pm-qty-unit">米</span>
+                  </div>
+                </div>
+                <!-- 现场到货 -->
+                <div class="pm-qty-card card-arrived">
+                  <span class="pm-qty-label">现场到货</span>
+                  <div class="pm-qty-value-wrap">
+                    <strong class="pm-qty-num">{{ formatOptionalAmount(row.arrived_qty) }}</strong>
+                    <span v-if="row.arrived_qty != null && row.arrived_qty !== ''" class="pm-qty-unit">米</span>
+                  </div>
+                </div>
+                <!-- 施工接收 -->
+                <div class="pm-qty-card card-received">
+                  <span class="pm-qty-label">施工接收</span>
+                  <div class="pm-qty-value-wrap">
+                    <strong class="pm-qty-num">{{ formatOptionalAmount(row.received_qty) }}</strong>
+                    <span v-if="row.received_qty != null && row.received_qty !== ''" class="pm-qty-unit">米</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. 辅助元信息：单号与发货时间 -->
+              <div class="pm-meta-footer">
+                <div class="pm-meta-item">
+                  <span class="pm-meta-label">订单号:</span>
+                  <span class="pm-meta-code">{{ row.order_no || row.delivery_code || row.id }}</span>
+                </div>
+                <div v-if="row.shipped_at" class="pm-meta-item">
+                  <span class="pm-meta-label">发货:</span>
+                  <span class="pm-meta-time">{{ formatDateTime(row.shipped_at) }}</span>
+                </div>
+              </div>
+
+              <!-- 6. 协同流转操作底栏 -->
+              <div class="pm-action-row" @click.stop>
+                <button
+                  type="button"
+                  class="btn ghost btn-sm pm-action-btn btn-proof"
+                  title="查看单据流转凭证"
+                  @click="openDeliveryDetailModal(row)"
+                >
+                  📜 凭证
+                </button>
+                <button
+                  v-if="row.status === 'under_review'"
+                  type="button"
+                  class="btn ghost btn-sm pm-action-btn btn-review"
+                  title="查看此单据的多方联合会审表决详情"
+                  @click="goToJointReview(row)"
+                >
+                  ⚖️ 查看会审
+                </button>
+                <button
+                  v-else-if="row.status === 'pending_warehouse'"
+                  type="button"
+                  class="btn ghost btn-sm pm-action-btn btn-review"
+                  title="发现型号规格或数量有误时提请联合会审"
+                  @click="openJointReviewModal(row, 'pipe')"
+                >
+                  ⚖️ 提请会审
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="card elevated" style="padding: 24px;">
+      <section class="card elevated warehouse-bottom-panel" style="padding: 24px;">
         <div class="card-header" style="border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 20px;">
           <span style="font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 6px;">
             💼 库管操作与全生命周期证据链
@@ -1102,18 +1356,18 @@
                     <button 
                       v-if="group.status !== 'under_review' && (group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received' || group.items.some(i => i.status === 'construction_confirmed' || i.status === 'pending_warehouse' || i.status === 'received'))"
                       type="button" 
-                      class="btn primary btn-sm fitting-archive-button"
+                      class="btn primary btn-sm fitting-action-btn fitting-archive-button"
                       :disabled="fittingActionLoading"
+                      title="对该车次全部待确认管件执行入库确认"
                       @click.stop="handleConfirmFittingWarehouse(group.items)"
                     >
-                      🏢 整车批量确认
+                      🏢 整车确认
                     </button>
 
                     <button 
-                      v-if="group.status !== 'under_review' && (group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received')"
+                      v-if="group.status !== 'under_review' && !group.items.some(i => i.status === 'under_review')"
                       type="button" 
-                      class="btn ghost btn-sm"
-                      style="height: 26px; padding: 0 7px; font-size: 11px; color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
+                      class="btn ghost btn-sm fitting-action-btn fitting-review-trigger-btn"
                       title="发现管件规格或数量有误时提请联合会审"
                       @click.stop="openJointReviewModal(group, 'fitting')"
                     >
@@ -1123,8 +1377,7 @@
                     <button 
                       v-if="group.status === 'under_review' || group.items.some(i => i.status === 'under_review')"
                       type="button" 
-                      class="btn ghost btn-sm"
-                      style="height: 26px; padding: 0 7px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; font-weight: 600;"
+                      class="btn ghost btn-sm fitting-action-btn fitting-review-view-btn"
                       title="查看此车次的多方联合会审表决详情"
                       @click.stop="goToJointReview(group)"
                     >
@@ -1133,7 +1386,8 @@
 
                     <button 
                       type="button" 
-                      class="btn ghost btn-sm fitting-proof-button"
+                      class="btn ghost btn-sm fitting-action-btn fitting-proof-button"
+                      title="查看该车次全生命周期流转凭证"
                       @click.stop="showDeliveryDetail(group)"
                     >
                       📜 流转凭证
@@ -1157,6 +1411,7 @@
                         <col class="fitting-col-qty">
                         <col class="fitting-col-qty">
                         <col class="fitting-col-status">
+                        <col class="fitting-col-action" style="width: 75px;">
                       </colgroup>
                       <thead>
                         <tr>
@@ -1166,6 +1421,7 @@
                           <th class="fitting-col-qty">发货件数</th>
                           <th class="fitting-col-qty">实到件数</th>
                           <th class="fitting-col-status">履约状态</th>
+                          <th class="fitting-col-action" style="text-align: center;">操作</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1195,6 +1451,32 @@
                           <span v-else-if="item.status === 'construction_confirmed' || item.status === 'pending_warehouse' || item.status === 'received'" class="tag-badge warning" style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px; padding: 1px 6px;">👷 待库管确认</span>
                           <span v-else-if="item.status === 'warehouse_confirmed' || item.status === 'completed'" class="tag-badge success" style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; padding: 1px 6px;">🏢 库管已确认</span>
                           <span v-else-if="item.status === 'cancelled'" class="tag-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 11px; padding: 1px 6px;">❌ 已撤销</span>
+                        </td>
+
+                        <!-- 操作列 -->
+                        <td class="fitting-col-action" style="text-align: center;">
+                          <div style="display: inline-flex; align-items: center; justify-content: center; gap: 3px;">
+                            <button
+                              v-if="item.status === 'under_review'"
+                              type="button"
+                              class="btn ghost btn-xs"
+                              style="height: 22px; padding: 0 5px; font-size: 10.5px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; border-radius: 4px; white-space: nowrap;"
+                              title="查看多方联合会审表决详情"
+                              @click.stop="goToJointReview(item)"
+                            >
+                              ⚖️ 查看
+                            </button>
+                            <button
+                              v-else
+                              type="button"
+                              class="btn ghost btn-xs"
+                              style="height: 22px; padding: 0 5px; font-size: 10.5px; color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; border-radius: 4px; white-space: nowrap;"
+                              title="发现此规格或数量有误时提请联合会审"
+                              @click.stop="openJointReviewModal(item, 'fitting')"
+                            >
+                              ⚖️ 会审
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       </tbody>
@@ -1383,14 +1665,27 @@
             </div>
           </div>
 
-          <button
-            type="button"
-            class="btn primary"
-            style="width: 100%; margin-top: 15px; background: #4f46e5 !important; color: #fff !important; font-weight: 600;"
-            @click="deliveryDetailModalVisible = false"
-          >
-            已阅并关闭流转凭证
-          </button>
+          <div class="delivery-modal-action-bar" style="margin-top: 16px; display: flex; gap: 10px; align-items: center;">
+            <button
+              type="button"
+              class="btn ghost"
+              style="flex: 1; height: 38px; border-radius: 8px; font-weight: 600; color: #64748b; border: 1px solid #cbd5e1; white-space: nowrap; background: #fff;"
+              @click="deliveryDetailModalVisible = false"
+            >
+              已阅并关闭
+            </button>
+            <button
+              v-if="canConfirmWarehouseInModal"
+              type="button"
+              class="btn primary"
+              :disabled="modalConfirmLoading"
+              style="flex: 1.5; height: 38px; background: linear-gradient(135deg, #0f766e 0%, #047857 100%) !important; border: none !important; color: #fff !important; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 8px rgba(15,118,110,0.3); white-space: nowrap;"
+              @click="handleWarehouseConfirmFromModal"
+            >
+              <span v-if="modalConfirmLoading">正在入库确认...</span>
+              <span v-else>🏢 库管确认入库</span>
+            </button>
+          </div>
         </div>
       </div>
     </Transition>
@@ -1714,6 +2009,101 @@ function showDeliveryDetail(input) {
 
 function openDeliveryDetailModal(row) {
   showDeliveryDetail(row)
+}
+
+const modalConfirmLoading = ref(false)
+
+const canConfirmWarehouseInModal = computed(() => {
+  if (!deliveryDetailModalData.value) return false
+  const data = deliveryDetailModalData.value
+  if (data.status === 'under_review') return false
+
+  if (isFittingDeliveryModal.value) {
+    if (['construction_confirmed', 'pending_warehouse', 'received'].includes(data.status)) return true
+    if (data.itemsList && data.itemsList.some(it => 
+      it.status !== 'under_review' && 
+      ['construction_confirmed', 'pending_warehouse', 'received'].includes(it.status)
+    )) {
+      return true
+    }
+    return false
+  }
+
+  // 直管（保温管）
+  if (data.status === 'pending_warehouse') return true
+  if (data.itemsList && data.itemsList.some(it => it.status === 'pending_warehouse')) return true
+  return false
+})
+
+async function handleWarehouseConfirmFromModal() {
+  if (!deliveryDetailModalData.value) return
+  modalConfirmLoading.value = true
+  pageError.value = ''
+  try {
+    const modalData = deliveryDetailModalData.value
+    if (isFittingDeliveryModal.value) {
+      // 管件库管确认
+      const itemsToConfirm = (modalData.itemsList || [modalData]).filter(it => 
+        it.status !== 'under_review' && 
+        ['construction_confirmed', 'pending_warehouse', 'received'].includes(it.status)
+      )
+      const ids = itemsToConfirm.map(it => it.id).filter(Boolean)
+      if (!ids.length) {
+        alert('当前没有待库管确认的管件项目')
+        return
+      }
+      const res = await confirmFittingDeliveryWarehouse(projectKey, {
+        ids,
+        remark: '库管凭证端单据核对入库确认',
+      })
+      if (res && res.ok) {
+        fittingActionMsg.value = { type: 'success', text: `🎉 成功完成库管确认 ${res.updated_count || ids.length} 项管件！` }
+        deliveryDetailModalVisible.value = false
+        await loadWarehouseFittingDeliveries()
+      }
+    } else {
+      // 保温管直管库管确认
+      const itemsToConfirm = (modalData.itemsList || [modalData]).filter(it => it.status === 'pending_warehouse')
+      const targets = itemsToConfirm.length ? itemsToConfirm : (modalData.status === 'pending_warehouse' ? [modalData] : [])
+      if (!targets.length) {
+        alert('当前没有待库管确认的保温管记录')
+        return
+      }
+      const promises = targets.map(item => 
+        confirmTubeWarehouseDeliveryWarehouse(projectKey, item.id || item.deliveryId, {
+          remark: '库管凭证端单据核对入库确认',
+        })
+      )
+      const results = await Promise.allSettled(promises)
+      const fulfilled = results.filter(r => r.status === 'fulfilled')
+      const rejected = results.filter(r => r.status === 'rejected')
+      if (rejected.length === 0) {
+        pageMessage.value = `🎉 库管确认入库成功！已完成 ${fulfilled.length} 条保温管记录入库。`
+        deliveryDetailModalVisible.value = false
+        await loadDeliveries()
+      } else {
+        const errorMsg = rejected.map(r => r.reason?.message || '网络或权限异常').join('; ')
+        pageError.value = `部分确认成功：成功 ${fulfilled.length} 项，失败 ${rejected.length} 项。错误: ${errorMsg}`
+        deliveryDetailModalVisible.value = false
+        await loadDeliveries()
+      }
+    }
+  } catch (err) {
+    console.error('凭证端库管确认执行失败:', err)
+    alert(`库管确认执行失败: ${err.message || '网络或服务异常'}`)
+  } finally {
+    modalConfirmLoading.value = false
+  }
+}
+
+function handleRowClick(row) {
+  if (!row) return
+  // 在移动端窄屏 (<= 720px) 下，直接呼出全生命周期流转凭证弹窗（对齐需求侧交互规范）
+  if (typeof window !== 'undefined' && window.innerWidth <= 720) {
+    openDeliveryDetailModal(row)
+  } else {
+    toggleDeliverySelection(row)
+  }
 }
 
 function handleGoToUserDirectory(target) {
@@ -4021,6 +4411,14 @@ th.cell-number {
   background: #f0fdf4 !important;
 }
 
+.pipe-mobile-only-cards {
+  display: none;
+}
+
+.pipe-desktop-only-table {
+  display: table;
+}
+
 /* 保温管按车次合并视图：专属卡片与流转看板样式 */
 .pipe-shipment-group-list {
   display: flex;
@@ -4291,17 +4689,809 @@ th.cell-number {
   }
 }
 
+/* 管件车次操作按钮通用基础样式（桌面端等大对齐） */
+.fitting-action-btn {
+  height: 28px !important;
+  line-height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+
 @media (max-width: 720px) {
-  .pipe-shipment-toggle {
-    grid-template-columns: 16px 20px minmax(0, 1fr);
-    gap: 8px;
-    padding: 10px 12px;
+  /* 1. 取消手机端页面底部的“库管操作与全生命周期证据链”大面板 */
+  .warehouse-bottom-panel {
+    display: none !important;
   }
+
+  /* 2. 彻底根除“卡片水平长度突破天际”：所有卡片与表格容器强约束 min-width: 0 与 max-width: 100% */
+  .card,
+  .pipe-filter-card,
+  .stats-card,
+  .table-wrap,
+  .pipe-detail-table-wrap,
+  .pipe-shipment-group-list,
+  .pipe-shipment-card,
+  .table,
+  .pipe-detail-table {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .table-wrap,
+  .pipe-detail-table-wrap,
+  .pipe-shipment-group-list {
+    overflow-x: hidden !important;
+    padding: 0 !important;
+  }
+
+  /* 3. 保温管上方筛选版块紧凑化重构 (从500px+压缩至约150px) */
+  .pipe-filter-card {
+    padding: 10px 12px 12px !important;
+    margin-bottom: 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .pipe-filter-card .card-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding-bottom: 6px !important;
+    margin-bottom: 8px !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+  }
+
+  .pipe-filter-card .card-header span:first-child {
+    font-size: 13.5px !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+  }
+
+  .pipe-filter-card .card-header .muted {
+    font-size: 11px !important;
+  }
+
+  .pipe-filter-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px 8px !important;
+    margin-bottom: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 需求主体跨 2 列通栏展示 */
+  .pipe-filter-grid .field:first-child {
+    grid-column: span 2 !important;
+  }
+
+  .pipe-filter-grid .field {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pipe-filter-grid .field > span {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    line-height: 1.2 !important;
+  }
+
+  /* 输入框与下拉框高度由 41px 收敛至 32px */
+  .pipe-filter-grid .input,
+  .pipe-filter-grid .select-trigger {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 4px 8px !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .pipe-filter-grid .custom-multi-select {
+    height: 32px !important;
+    width: 100% !important;
+  }
+
+  .pipe-filter-grid .trigger-text {
+    font-size: 12px !important;
+    line-height: 22px !important;
+  }
+
+  /* 筛选按钮栏等高 32px 等宽平铺 */
+  .pipe-filter-card .filter-actions {
+    display: flex !important;
+    gap: 6px !important;
+    width: 100% !important;
+    margin-top: 4px !important;
+  }
+
+  .pipe-filter-card .filter-actions .btn {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    line-height: 30px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    padding: 0 4px !important;
+    border-radius: 6px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+  }
+
+  /* 4. 统计卡片紧凑微看板化 */
+  .stats-card {
+    margin-bottom: 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .stats-card > div:first-child {
+    padding: 8px 12px !important;
+  }
+
+  .stats-card > div:first-child > div > div:first-child {
+    font-size: 13px !important;
+  }
+
+  .stats-card > div:first-child > div > div:last-child {
+    font-size: 11px !important;
+    margin-top: 2px !important;
+  }
+
+  .stats-card .fitting-summary-grid {
+    padding: 6px 10px 8px !important;
+    gap: 6px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .stats-card .fitting-summary-item {
+    padding: 6px 8px !important;
+    border-radius: 6px !important;
+  }
+
+  .stats-card .fitting-summary-item span {
+    font-size: 11px !important;
+  }
+
+  .stats-card .fitting-summary-item strong {
+    font-size: 13px !important;
+  }
+
+  /* 5. 视图切换开关 (扁平/合并) 移动端紧凑化 */
+  .view-mode-segmented-control {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+  }
+
+  .view-mode-segmented-control button {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    padding: 6px 4px !important;
+    font-size: 12px !important;
+  }
+
+  /* 6. 保温管车次合并模式卡片头部紧凑微卡片化 */
+  .pipe-shipment-card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+    background: #ffffff !important;
+    overflow: hidden !important;
+    margin-bottom: 12px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .pipe-shipment-header {
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pipe-shipment-toggle {
+    display: grid !important;
+    grid-template-columns: 16px minmax(0, 1fr) !important;
+    gap: 8px 10px !important;
+    padding: 12px 14px !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pipe-shipment-checkbox-wrap {
+    display: none !important;
+  }
+
+  .pipe-shipment-main {
+    grid-column: 2 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .pipe-shipment-main-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    align-items: center !important;
+  }
+
+  .pipe-shipment-label {
+    font-size: 11px !important;
+    color: #64748b !important;
+  }
+
+  .pipe-shipment-no {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    font-family: monospace !important;
+  }
+
+  /* 车牌号：淡雅清爽蓝徽章（彻底告别死黑/浓重色块） */
+  .pipe-shipment-main .plate-badge {
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    padding: 2px 7px !important;
+    border-radius: 4px !important;
+    font-family: monospace !important;
+    border: 1px solid #bfdbfe !important;
+    white-space: nowrap !important;
+  }
+
+  .pipe-shipment-time {
+    font-size: 11px !important;
+    color: #64748b !important;
+  }
+
   .pipe-shipment-route {
-    grid-column: 3;
-    width: 100%;
-    box-sizing: border-box;
-    margin-top: 4px;
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-top: 6px !important;
+    padding: 7px 10px !important;
+    background: #f8fafc !important;
+    border: 1px solid #f1f5f9 !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .pipe-route-party small {
+    font-size: 10px !important;
+    color: #94a3b8 !important;
+    display: block !important;
+    margin-bottom: 1px !important;
+  }
+
+  .pipe-route-party strong {
+    font-size: 11.5px !important;
+    color: #334155 !important;
+    font-weight: 600 !important;
+  }
+
+  .pipe-shipment-side {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 10px 14px 12px !important;
+    border-top: 1px dashed #f1f5f9 !important;
+    border-left: none !important;
+    background: #fafbfc !important;
+    border-radius: 0 0 10px 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pipe-shipment-quantity {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+  }
+
+  .pipe-specs-count {
+    font-size: 11px !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+  }
+
+  .pipe-qty-badges {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pipe-qty-badge {
+    text-align: center !important;
+    font-size: 10.5px !important;
+    padding: 6px 2px !important;
+    border-radius: 6px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 1px !important;
+    box-sizing: border-box !important;
+    height: 48px !important;
+  }
+
+  .pipe-qty-badge strong {
+    font-size: 13px !important;
+    font-family: monospace !important;
+  }
+
+  .pipe-status-group {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .pipe-proof-button {
+    width: 100% !important;
+    height: 32px !important;
+    justify-content: center !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+  }
+
+  /* 7. 手机移动端保温管专属卡片化：隐藏原生大表，展示高清对标需求侧微卡片 */
+  .pipe-desktop-only-table {
+    display: none !important;
+  }
+
+  .pipe-mobile-only-cards {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 2px 0 !important;
+  }
+
+  .pipe-detail-table-wrap {
+    max-height: none !important;
+    padding: 10px 8px !important;
+    background: #f8fafc !important;
+    border-top: 1px solid #e2e8f0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  .table-wrap {
+    max-height: none !important;
+    overflow-x: hidden !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* 8. 移动端专属高保真发货卡片 (对标需求侧流转督办设计) */
+  .pipe-mobile-ticket-card {
+    background: #ffffff !important;
+    border-radius: 12px !important;
+    border: 1px solid #e2e8f0 !important;
+    padding: 12px 14px !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 9px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    position: relative !important;
+    transition: all 0.15s ease-in-out !important;
+    cursor: pointer !important;
+  }
+
+  .pipe-mobile-ticket-card:active {
+    background: #f8fafc !important;
+  }
+
+  .pipe-mobile-ticket-card.is-checked {
+    border-color: #3b82f6 !important;
+    background: #eff6ff !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
+  }
+
+  .pipe-mobile-ticket-card.has-abnormal {
+    border-left: 3.5px solid #ef4444 !important;
+  }
+
+  /* 顶栏 Meta Header */
+  .pm-card-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .pm-header-left {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .pm-header-left .status-pill {
+    font-size: 11px !important;
+    padding: 2.5px 8px !important;
+    border-radius: 999px !important;
+    white-space: nowrap !important;
+    font-weight: 600 !important;
+  }
+
+  .pm-header-left .status-abnormal {
+    font-size: 10px !important;
+    padding: 2px 5px !important;
+    border-radius: 999px !important;
+  }
+
+  .pm-elapsed-pill {
+    font-size: 11px !important;
+    color: #475569 !important;
+    background: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    padding: 1.5px 6px !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+  }
+
+  .pm-header-right {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+  }
+
+  .pm-review-lock {
+    font-size: 14px !important;
+  }
+
+  .pm-checkbox-label {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 3px !important;
+    cursor: pointer !important;
+  }
+
+  .pm-checkbox {
+    width: 18px !important;
+    height: 18px !important;
+    cursor: pointer !important;
+    accent-color: #3b82f6 !important;
+    margin: 0 !important;
+  }
+
+  /* 规格型号与车辆车次徽章 */
+  .pm-identity-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    width: 100% !important;
+  }
+
+  .pm-model-title {
+    font-size: 14.5px !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    line-height: 1.4 !important;
+    word-break: break-all !important;
+  }
+
+  .pm-vehicle-badges {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .pm-plate-badge {
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+    font-family: monospace !important;
+    padding: 2.5px 8px !important;
+    border-radius: 4px !important;
+    border: 1px solid #bfdbfe !important;
+    letter-spacing: 0.3px !important;
+    white-space: nowrap !important;
+  }
+
+  .pm-shipment-badge {
+    background: #f8fafc !important;
+    color: #475569 !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    font-family: monospace !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    border: 1px solid #e2e8f0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* 供需主体流向 */
+  .pm-route-box {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: #f8fafc !important;
+    border: 1px solid #f1f5f9 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    gap: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pm-route-node {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .pm-route-role {
+    font-size: 10px !important;
+    color: #94a3b8 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .pm-route-name {
+    font-size: 11.5px !important;
+    color: #334155 !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .pm-route-name.demand {
+    color: #1d4ed8 !important;
+    font-weight: 600 !important;
+  }
+
+  .pm-route-arrow {
+    color: #94a3b8 !important;
+    font-size: 12px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* 核心数量核验区：三个严格等大、等高、等宽专属数量微卡片 (各占严格 1/3) */
+  .pm-quantity-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 2px 0 !important;
+  }
+
+  .pm-qty-card {
+    height: 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+    box-sizing: border-box !important;
+    border-radius: 8px !important;
+    padding: 6px 3px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    gap: 3px !important;
+    overflow: hidden !important;
+    width: 100% !important;
+  }
+
+  .pm-qty-card.card-shipped {
+    background: #f0f7ff !important;
+    border: 1px solid #dbeafe !important;
+  }
+  .pm-qty-card.card-shipped .pm-qty-label {
+    color: #2563eb !important;
+  }
+  .pm-qty-card.card-shipped .pm-qty-num {
+    color: #1d4ed8 !important;
+  }
+
+  .pm-qty-card.card-arrived {
+    background: #f0fdf4 !important;
+    border: 1px solid #dcfce7 !important;
+  }
+  .pm-qty-card.card-arrived .pm-qty-label {
+    color: #16a34a !important;
+  }
+  .pm-qty-card.card-arrived .pm-qty-num {
+    color: #15803d !important;
+  }
+
+  .pm-qty-card.card-received {
+    background: #faf5ff !important;
+    border: 1px solid #f3e8ff !important;
+  }
+  .pm-qty-card.card-received .pm-qty-label {
+    color: #9333ea !important;
+  }
+  .pm-qty-card.card-received .pm-qty-num {
+    color: #7e22ce !important;
+  }
+
+  .pm-qty-label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    display: block !important;
+  }
+
+  .pm-qty-value-wrap {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    line-height: 1.1 !important;
+  }
+
+  .pm-qty-num {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    font-family: monospace !important;
+  }
+
+  .pm-qty-unit {
+    font-size: 10.5px !important;
+    color: #64748b !important;
+    font-weight: normal !important;
+  }
+
+  /* 辅助元信息 */
+  .pm-meta-footer {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    font-size: 11px !important;
+    color: #64748b !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .pm-meta-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+  }
+
+  .pm-meta-label {
+    color: #94a3b8 !important;
+    font-size: 10.5px !important;
+  }
+
+  .pm-meta-code {
+    font-family: monospace !important;
+    font-weight: 600 !important;
+    color: #334155 !important;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    padding: 1px 5px !important;
+    border-radius: 4px !important;
+    font-size: 11px !important;
+  }
+
+  .pm-meta-time {
+    color: #475569 !important;
+    font-size: 11px !important;
+  }
+
+  /* 协同流转操作底栏 */
+  .pm-action-row {
+    display: flex !important;
+    gap: 8px !important;
+    width: 100% !important;
+    margin-top: 2px !important;
+    padding-top: 8px !important;
+    border-top: 1px dashed #f1f5f9 !important;
+    box-sizing: border-box !important;
+  }
+
+  .pm-action-btn {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+
+  .pm-action-btn.btn-proof {
+    color: #4f46e5 !important;
+    border: 1px solid #c7d2fe !important;
+    background: #eef2ff !important;
+  }
+
+  .pm-action-btn.btn-review {
+    color: #ea580c !important;
+    border: 1px solid #fed7aa !important;
+    background: #fff7ed !important;
+  }
+
+  /* 9. 管件发货卡片操作按钮组 1:1:1 绝对等大均分对齐 */
+  .fitting-shipment-side {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .fitting-action-btn {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    line-height: 30px !important;
+    padding: 0 4px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 10. 流转凭证弹窗底栏移动端自适应 */
+  .delivery-modal-action-bar {
+    display: flex !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .delivery-modal-action-bar .btn {
+    height: 40px !important;
+    font-size: 13px !important;
   }
 }
 </style>

@@ -1,0 +1,4395 @@
+{
+  "核对日期": "2026-10-10",
+  "抽样日期": [
+    "2026-03-01",
+    "2025-03-01"
+  ],
+  "结果数": 40,
+  "最大绝对差": 5.684341886080802e-14,
+  "原始日报量": [
+    {
+      "company": "BeiFang",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "BeiFang",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 2
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 5
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 5
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 12
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 5881.36
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 6779.04
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 87
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 100
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 30.41
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 29.71
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 21.5028
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 18.8496
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 8
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 6
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": -2
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": -1
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "BeiFang",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 2.1
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 10.395
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1.742
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 490.89
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 395.21
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_limestone",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 23.78
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_limestone",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 14.98
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 7.56
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 3.78
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1246
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 629
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1.823
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 24
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 142.8
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 3.1522
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 3.2752
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 3.1522
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 3.2752
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 349.31
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 280.59
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1270
+    },
+    {
+      "company": "BeiFang",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 771.8
+    },
+    {
+      "company": "BeiFang",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "BeiFang",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "BeiFang",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 5
+    },
+    {
+      "company": "BeiFang",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiFang",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 179
+    },
+    {
+      "company": "BeiFang",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 69
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.13
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.41
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 377
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 395
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 2933
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 4677
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.13
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.41
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 55
+    },
+    {
+      "company": "BeiGang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 51
+    },
+    {
+      "company": "BeiHai",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "BeiHai",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 3
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_boiler_water_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_boiler_water_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 34924.37
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 36943.92
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 171.36
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 115.056
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 119.3544
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 69.3
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_steam_supply",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 601
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_steam_supply",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 809
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 2
+    },
+    {
+      "company": "BeiHai",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 13.51
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 11.45
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 2243
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 2279
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 51.04
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 43
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 4489
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 2326
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1579.43
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1571.48
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 4489
+    },
+    {
+      "company": "BeiHai",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 2326
+    },
+    {
+      "company": "BeiHai",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "BeiHai",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 2
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 6
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.54
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.31
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 245
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 247
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 3908
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 3514
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.54
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.31
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 58
+    },
+    {
+      "company": "ChunHai_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 48
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.37
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 1.91
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 478
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 327
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 3874
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 3958
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.37
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 1.91
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 40
+    },
+    {
+      "company": "DaFang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 12
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 2
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 3.05
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.93
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 116
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 88
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 4619
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 4668
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 3.05
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.93
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 116
+    },
+    {
+      "company": "DongGang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 35
+    },
+    {
+      "company": "GongRe",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "GongRe",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 12
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 17
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 7761
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 7841
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_network_interface_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 50475
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_network_interface_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 55057
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_steam_sales",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1173
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_steam_sales",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1192
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 8
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 6
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_network_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 3245
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_network_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 2794
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 21.2709
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 20
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 3292
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 3055
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 33287
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 36278
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 21.2709
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 20
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 6537
+    },
+    {
+      "company": "GongRe",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 5849
+    },
+    {
+      "company": "GongRe",
+      "item": "eco_hot_water_supply_income",
+      "unit": "万元",
+      "date": "2025-03-01",
+      "value": 66
+    },
+    {
+      "company": "GongRe",
+      "item": "eco_hot_water_supply_income",
+      "unit": "万元",
+      "date": "2026-03-01",
+      "value": 67
+    },
+    {
+      "company": "GongRe",
+      "item": "eco_steam_supply_income",
+      "unit": "万元",
+      "date": "2025-03-01",
+      "value": 35
+    },
+    {
+      "company": "GongRe",
+      "item": "eco_steam_supply_income",
+      "unit": "万元",
+      "date": "2026-03-01",
+      "value": 36
+    },
+    {
+      "company": "GongRe",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GongRe",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 553
+    },
+    {
+      "company": "GongRe",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 315
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 2658
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 2079
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 23
+    },
+    {
+      "company": "GuanWang_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 9
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.28
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.2
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 346
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 354
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 3184
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 3263
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.28
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.2
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 64
+    },
+    {
+      "company": "HuaLe_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 22
+    },
+    {
+      "company": "JinPu",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "JinPu",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_boiler_room_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 11
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_boiler_room_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 11
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 3
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 3
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 3
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 3053.79
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 2502.55
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 130
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 100
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 8
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 4
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": -1
+    },
+    {
+      "company": "JinPu",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 245
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 216
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_denitration_agent",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0.5
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_denitration_agent",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0.625
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_magnesium_oxide",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1.2
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_magnesium_oxide",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0.725
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 682.5
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 694
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_purchased_power",
+      "unit": "���kWh",
+      "date": "2025-03-01",
+      "value": 4.86
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 4.4532
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 4.86
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 4.4532
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 143.81
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 121.98
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 682.5
+    },
+    {
+      "company": "JinPu",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 694
+    },
+    {
+      "company": "JinPu",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "JinPu",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "JinPu",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinPu",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 3
+    },
+    {
+      "company": "JinPu",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinPu",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 68
+    },
+    {
+      "company": "JinZhou",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "JinZhou",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 3
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 3
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_boiler_water_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_boiler_water_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 11582
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 11481
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 248
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_hot_water_sales",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 190
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 59.4
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 46.2
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 40.4
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 29.5
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 4
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 5
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 3
+    },
+    {
+      "company": "JinZhou",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 9.4
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 8.3
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 866
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 769
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 15
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 20
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 2111
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1122
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 2709
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1291
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 5.89
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 6
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 5.89
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 6
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 584
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 570
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 4820
+    },
+    {
+      "company": "JinZhou",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 2413
+    },
+    {
+      "company": "JinZhou",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "JinZhou",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "JinZhou",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "JinZhou",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 527
+    },
+    {
+      "company": "JinZhou",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 160
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.07
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 1.96
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 671
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 681
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 3457
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 3743
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.07
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 1.96
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 35
+    },
+    {
+      "company": "ShuangXing_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 17
+    },
+    {
+      "company": "XiangHai",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "XiangHai",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 2
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_boiler_steam_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 15550.49
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 18113.12
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 115.44
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_power_generation",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 113.57
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 85.06
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_power_sales",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 81.58
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_steam_supply",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1501
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_steam_supply",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1695
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 2
+    },
+    {
+      "company": "XiangHai",
+      "item": "amount_turbine_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_acid",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1.3
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_alkali",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_ammonia_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 4
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1162
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1216
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 20
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_limestone_powder",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 20
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_oil",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_plant_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 3952
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_plant_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 4004
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 789.79
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 818.19
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 3952
+    },
+    {
+      "company": "XiangHai",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 4004
+    },
+    {
+      "company": "XiangHai",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "XiangHai",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.05
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.02
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 685
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 786
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 4254
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 4393
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.05
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.02
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 35
+    },
+    {
+      "company": "XiangLuJiao_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 45
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 5
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 2
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.32
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.34
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 463
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 469
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 3866
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 4296
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.32
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.34
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 45
+    },
+    {
+      "company": "XingGong_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 28
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_electric_boiler_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 4
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_electric_boiler_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 4
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_heat_pump_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 17
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_heat_pump_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 17
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 186.03
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 232.15
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 7
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 5
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": -1
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 34.5
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 15.7
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 3.8676
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 5.1504
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 3.8676
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 5.1504
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 34.5
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 15.7
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "YanJiuYuan",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 3
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.47
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.24
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 498
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_station_fill_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 423
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 3192
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_station_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 3449
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 2.47
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 2.24
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 82
+    },
+    {
+      "company": "ZhongShan_Center",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 48
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "additional_information",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_boiler_room_running",
+      "unit": "台",
+      "date": "2025-03-01",
+      "value": 11
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_boiler_room_running",
+      "unit": "台",
+      "date": "2026-03-01",
+      "value": 1
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_city_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_provincial_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 2
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_daily_service_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 5710.91
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_heat_supply",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 4458.31
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 6
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_temp_highest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": 6
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "amount_temp_lowest",
+      "unit": "℃",
+      "date": "2026-03-01",
+      "value": -1
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 341
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_amount_raw_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 13
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_amount_raw_coal_zhangtun",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 11.5
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_amount_raw_coal_zhangtun",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 13
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_denitration_agent",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 1.78
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_denitration_agent",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0.08
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_magnesium_oxide",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 4.7
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_magnesium_oxide",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 0.2
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 2442
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_network_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1573
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_outer_purchased_heat",
+      "unit": "GJ",
+      "date": "2025-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_outer_purchased_heat",
+      "unit": "GJ",
+      "date": "2026-03-01",
+      "value": 4306
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 8.16
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 3.57
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2025-03-01",
+      "value": 8.16
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_station_purchased_power",
+      "unit": "万kWh",
+      "date": "2026-03-01",
+      "value": 3.57
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 243.95
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_std_coal",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 8.66
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_std_coal_zhangtun",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 6.99
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_std_coal_zhangtun",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 8.66
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2025-03-01",
+      "value": 2442
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "consumption_water",
+      "unit": "吨",
+      "date": "2026-03-01",
+      "value": 1573
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2025-03-01",
+      "value": null
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "equipment_on_off_status",
+      "unit": "-",
+      "date": "2026-03-01",
+      "value": null
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 1
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "sum_month_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 0
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2025-03-01",
+      "value": 534
+    },
+    {
+      "company": "ZhuangHe",
+      "item": "sum_season_total_net_complaints",
+      "unit": "件",
+      "date": "2026-03-01",
+      "value": 138
+    }
+  ],
+  "分析视图结果": [
+    {
+      "company": "BeiHai",
+      "company_cn": "北海热电厂",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 79.128666,
+      "value_peer_date": 53.217285
+    },
+    {
+      "company": "JinPu",
+      "company_cn": "金普热电",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 13.379665782051282,
+      "value_peer_date": 10.213198910256411
+    },
+    {
+      "company": "JinZhou",
+      "company_cn": "金州热电",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 60.78767246153846,
+      "value_peer_date": 52.151664205128206
+    },
+    {
+      "company": "BeiFang",
+      "company_cn": "北方热电",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 26.61798468,
+      "value_peer_date": 10.814018305128204
+    },
+    {
+      "company": "XiangHai",
+      "company_cn": "香海热电厂",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 50.0277399434,
+      "value_peer_date": 23.5191731865
+    },
+    {
+      "company": "ZhuangHe",
+      "company_cn": "庄河环海",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 11.137078282051283,
+      "value_peer_date": 2.629898153846154
+    },
+    {
+      "company": "YanJiuYuan",
+      "company_cn": "研究院",
+      "item": "eco_marginal_profit",
+      "value_biz_date": -0.5073445384615385,
+      "value_peer_date": 0.0464690769230769
+    },
+    {
+      "company": "GongRe",
+      "company_cn": "供热公司",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 176.11427346153846,
+      "value_peer_date": 183.16144282051283
+    },
+    {
+      "company": "BeiHai",
+      "company_cn": "北海热电厂",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 52.88495,
+      "value_peer_date": 60.482663
+    },
+    {
+      "company": "JinPu",
+      "company_cn": "金普热电",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 11.976895782051281,
+      "value_peer_date": 10.213198910256411
+    },
+    {
+      "company": "JinZhou",
+      "company_cn": "金州热电",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 50.83832246153846,
+      "value_peer_date": 57.115664205128205
+    },
+    {
+      "company": "BeiFang",
+      "company_cn": "北方热电",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 23.2419258,
+      "value_peer_date": 14.411911305128205
+    },
+    {
+      "company": "XiangHai",
+      "company_cn": "香海热电厂",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 38.76056,
+      "value_peer_date": 30.27634
+    },
+    {
+      "company": "ZhuangHe",
+      "company_cn": "庄河环海",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 11.078190282051283,
+      "value_peer_date": 3.947228153846154
+    },
+    {
+      "company": "YanJiuYuan",
+      "company_cn": "研究院",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": -0.5073445384615385,
+      "value_peer_date": 0.0464690769230769
+    },
+    {
+      "company": "GongRe",
+      "company_cn": "供热公司",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 176.11427346153846,
+      "value_peer_date": 183.16144282051283
+    },
+    {
+      "company": "ZhuChengQu",
+      "company_cn": "主城区",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 305.27047940493844,
+      "value_peer_date": 259.8986010070128
+    },
+    {
+      "company": "ZhuChengQu",
+      "company_cn": "主城区",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 267.75958346153845,
+      "value_peer_date": 273.92114582051283
+    },
+    {
+      "company": "Group",
+      "company_cn": "集团全口径",
+      "item": "eco_marginal_profit",
+      "value_biz_date": 416.68553607211794,
+      "value_peer_date": 335.7538496582949
+    },
+    {
+      "company": "Group",
+      "company_cn": "集团全口径",
+      "item": "eco_comparable_marginal_profit",
+      "value_biz_date": 364.38757324871796,
+      "value_peer_date": 359.65561747179487
+    }
+  ],
+  "独立复算对照": [
+    {
+      "company": "BeiHai",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 79.12866600000001,
+      "database": 79.128666,
+      "difference": 1.4210854715202004e-14
+    },
+    {
+      "company": "BeiHai",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 52.88495000000003,
+      "database": 52.88495,
+      "difference": 2.842170943040401e-14
+    },
+    {
+      "company": "XiangHai",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 50.02773994340002,
+      "database": 50.0277399434,
+      "difference": 2.1316282072803006e-14
+    },
+    {
+      "company": "XiangHai",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 38.76056000000001,
+      "database": 38.76056,
+      "difference": 1.4210854715202004e-14
+    },
+    {
+      "company": "GongRe",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 176.1142734615384,
+      "database": 176.11427346153846,
+      "difference": -5.684341886080802e-14
+    },
+    {
+      "company": "GongRe",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 176.1142734615384,
+      "database": 176.11427346153846,
+      "difference": -5.684341886080802e-14
+    },
+    {
+      "company": "JinZhou",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 60.78767246153847,
+      "database": 60.78767246153846,
+      "difference": 7.105427357601002e-15
+    },
+    {
+      "company": "JinZhou",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 50.83832246153847,
+      "database": 50.83832246153846,
+      "difference": 7.105427357601002e-15
+    },
+    {
+      "company": "BeiFang",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 26.617984679999996,
+      "database": 26.61798468,
+      "difference": -3.552713678800501e-15
+    },
+    {
+      "company": "BeiFang",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 23.241925799999994,
+      "database": 23.2419258,
+      "difference": -7.105427357601002e-15
+    },
+    {
+      "company": "JinPu",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 13.379665782051283,
+      "database": 13.379665782051282,
+      "difference": 1.7763568394002505e-15
+    },
+    {
+      "company": "JinPu",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 11.976895782051283,
+      "database": 11.976895782051281,
+      "difference": 1.7763568394002505e-15
+    },
+    {
+      "company": "ZhuangHe",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 11.13707828205128,
+      "database": 11.137078282051283,
+      "difference": -1.7763568394002505e-15
+    },
+    {
+      "company": "ZhuangHe",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 11.078190282051281,
+      "database": 11.078190282051283,
+      "difference": -1.7763568394002505e-15
+    },
+    {
+      "company": "YanJiuYuan",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": -0.5073445384615389,
+      "database": -0.5073445384615385,
+      "difference": -4.440892098500626e-16
+    },
+    {
+      "company": "YanJiuYuan",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": -0.5073445384615389,
+      "database": -0.5073445384615385,
+      "difference": -4.440892098500626e-16
+    },
+    {
+      "company": "ZhuChengQu",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 305.27047940493844,
+      "database": 305.27047940493844,
+      "difference": 0
+    },
+    {
+      "company": "ZhuChengQu",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 267.75958346153845,
+      "database": 267.75958346153845,
+      "difference": 0
+    },
+    {
+      "company": "Group",
+      "period": "25-26",
+      "item": "eco_marginal_profit",
+      "recomputed": 416.68553607211794,
+      "database": 416.68553607211794,
+      "difference": 0
+    },
+    {
+      "company": "Group",
+      "period": "25-26",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 364.3875732487179,
+      "database": 364.38757324871796,
+      "difference": -5.684341886080802e-14
+    },
+    {
+      "company": "BeiHai",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 53.217285000000004,
+      "database": 53.217285,
+      "difference": 7.105427357601002e-15
+    },
+    {
+      "company": "BeiHai",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 60.482663,
+      "database": 60.482663,
+      "difference": 0
+    },
+    {
+      "company": "XiangHai",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 23.519173186499998,
+      "database": 23.5191731865,
+      "difference": -3.552713678800501e-15
+    },
+    {
+      "company": "XiangHai",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 30.27633999999999,
+      "database": 30.27634,
+      "difference": -1.0658141036401503e-14
+    },
+    {
+      "company": "GongRe",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 183.16144282051283,
+      "database": 183.16144282051283,
+      "difference": 0
+    },
+    {
+      "company": "GongRe",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 183.16144282051283,
+      "database": 183.16144282051283,
+      "difference": 0
+    },
+    {
+      "company": "JinZhou",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 52.151664205128206,
+      "database": 52.151664205128206,
+      "difference": 0
+    },
+    {
+      "company": "JinZhou",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 57.115664205128205,
+      "database": 57.115664205128205,
+      "difference": 0
+    },
+    {
+      "company": "BeiFang",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 10.8140183051282,
+      "database": 10.814018305128204,
+      "difference": -3.552713678800501e-15
+    },
+    {
+      "company": "BeiFang",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 14.4119113051282,
+      "database": 14.411911305128205,
+      "difference": -5.329070518200751e-15
+    },
+    {
+      "company": "JinPu",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 10.213198910256406,
+      "database": 10.213198910256411,
+      "difference": -5.329070518200751e-15
+    },
+    {
+      "company": "JinPu",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 10.213198910256406,
+      "database": 10.213198910256411,
+      "difference": -5.329070518200751e-15
+    },
+    {
+      "company": "ZhuangHe",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 2.6298981538461526,
+      "database": 2.629898153846154,
+      "difference": -1.3322676295501878e-15
+    },
+    {
+      "company": "ZhuangHe",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 3.947228153846151,
+      "database": 3.947228153846154,
+      "difference": -3.1086244689504383e-15
+    },
+    {
+      "company": "YanJiuYuan",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 0.04646907692307667,
+      "database": 0.0464690769230769,
+      "difference": -2.2898349882893854e-16
+    },
+    {
+      "company": "YanJiuYuan",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 0.04646907692307667,
+      "database": 0.0464690769230769,
+      "difference": -2.2898349882893854e-16
+    },
+    {
+      "company": "ZhuChengQu",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 259.8986010070128,
+      "database": 259.8986010070128,
+      "difference": 0
+    },
+    {
+      "company": "ZhuChengQu",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 273.92114582051283,
+      "database": 273.92114582051283,
+      "difference": 0
+    },
+    {
+      "company": "Group",
+      "period": "24-25",
+      "item": "eco_marginal_profit",
+      "recomputed": 335.7538496582948,
+      "database": 335.7538496582949,
+      "difference": -5.684341886080802e-14
+    },
+    {
+      "company": "Group",
+      "period": "24-25",
+      "item": "eco_comparable_marginal_profit",
+      "recomputed": 359.6556174717948,
+      "database": 359.65561747179487,
+      "difference": -5.684341886080802e-14
+    }
+  ]
+}
