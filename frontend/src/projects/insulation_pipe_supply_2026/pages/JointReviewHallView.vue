@@ -3135,4 +3135,593 @@ function goProjectPages() {
   font-size: 13px;
   font-weight: 600;
 }
+
+/* ==========================================================================
+   📱 联合会审大厅手机移动端专属响应式重塑 (Joint Review Hall Mobile Optimization)
+   对标工业级高保真协同工单设计，确保各尺寸移动端页面美观、整齐、紧凑、触控友好
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 1. 页面主容器与内边距紧凑化 */
+  .tube-page-main.container {
+    padding: 10px 8px !important;
+  }
+
+  /* 2. 页面顶栏优化 */
+  .topbar.premium-topbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .title-with-badge {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .title-with-badge h2 {
+    font-size: 15.5px !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+    color: #0f172a !important;
+  }
+
+  .live-status-pill {
+    font-size: 10px !important;
+    padding: 1.5px 6px !important;
+    border-radius: 999px !important;
+  }
+
+  .topbar-desc {
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    line-height: 1.45 !important;
+    margin: 4px 0 0 !important;
+  }
+
+  .topbar-actions {
+    width: 100% !important;
+  }
+
+  .btn-initiate-guide {
+    width: 100% !important;
+    height: 36px !important;
+    justify-content: center !important;
+    font-size: 12.5px !important;
+    border-radius: 6px !important;
+  }
+
+  /* 3. 核心统计大盘 KPI 2×2 黄金网格重构 (告别 4 列挤爆) */
+  .kpi-banner-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .kpi-card {
+    padding: 10px 12px !important;
+    gap: 3px !important;
+    border-radius: 8px !important;
+    min-height: 64px !important;
+    box-sizing: border-box !important;
+  }
+
+  .kpi-label {
+    font-size: 11px !important;
+    color: #64748b !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .kpi-val {
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    line-height: 1.1 !important;
+    display: flex !important;
+    align-items: baseline !important;
+    gap: 3px !important;
+  }
+
+  .kpi-val small {
+    font-size: 11px !important;
+  }
+
+  .kpi-alert-pulse {
+    font-size: 9.5px !important;
+    padding: 1px 4px !important;
+    margin-left: 4px !important;
+  }
+
+  /* 4. 分类 Tab 栏平滑横向滑动优化 */
+  .hall-tabs-bar {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 12px !important;
+    border-bottom: 1.5px solid #e2e8f0 !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .hall-tabs-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .hall-tab-btn {
+    padding: 8px 12px !important;
+    font-size: 12.5px !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    border-radius: 6px !important;
+    gap: 4px !important;
+  }
+
+  .tab-badge-pill {
+    font-size: 10px !important;
+    padding: 1px 5px !important;
+  }
+
+  /* 5. 搜索与筛选工具栏紧凑规整网格化 (告别 320px 宽度写死与错乱折行) */
+  .filter-card {
+    padding: 12px 14px !important;
+    margin-bottom: 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .filter-controls-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+    align-items: stretch !important;
+  }
+
+  .filter-field {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    width: 100% !important;
+    font-size: 11px !important;
+    color: #64748b !important;
+  }
+
+  .filter-field span {
+    font-weight: 600 !important;
+  }
+
+  .filter-field select {
+    width: 100% !important;
+    height: 36px !important;
+    border-radius: 6px !important;
+    font-size: 12.5px !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  .filter-field.search-field {
+    grid-column: 1 / -1 !important;
+  }
+
+  .search-field input {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 36px !important;
+    border-radius: 6px !important;
+    font-size: 12.5px !important;
+    padding: 0 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  .filter-controls-row .btn-query,
+  .filter-controls-row .btn-reset {
+    height: 36px !important;
+    width: 100% !important;
+    justify-content: center !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    padding: 0 !important;
+  }
+
+  /* 6. 列表折叠与批量控制栏 */
+  .list-control-bar {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 7px 10px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    margin-bottom: -2px !important;
+  }
+
+  .fold-hint-text {
+    display: none !important;
+  }
+
+  .control-right {
+    gap: 6px !important;
+  }
+
+  .btn-ctrl-fold {
+    padding: 2.5px 8px !important;
+    font-size: 11px !important;
+  }
+
+  /* 7. 会审单据流卡片容器 */
+  .review-cards-list {
+    gap: 12px !important;
+  }
+
+  .review-item-card {
+    padding: 12px 14px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+  }
+
+  .review-item-card.is-card-collapsed {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+
+  /* 8. 卡片顶栏移动端分层排版 (告别拥挤冲撞) */
+  .card-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    padding-bottom: 9px !important;
+  }
+
+  .header-left {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+
+  .header-right {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+
+  .review-no {
+    font-size: 13.5px !important;
+    font-weight: 800 !important;
+  }
+
+  .order-ref {
+    font-size: 11.5px !important;
+    padding: 1.5px 5px !important;
+  }
+
+  .status-badge {
+    font-size: 11px !important;
+    padding: 2px 8px !important;
+  }
+
+  .needs-vote-badge {
+    font-size: 10.5px !important;
+    padding: 1.5px 6px !important;
+  }
+
+  .btn-fold-toggle {
+    font-size: 10.5px !important;
+    padding: 2px 6px !important;
+  }
+
+  /* 9. 折叠态摘要条紧凑微块化 */
+  .folded-summary-strip {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+  }
+
+  .summary-left {
+    gap: 6px !important;
+    font-size: 11.5px !important;
+  }
+
+  .sum-tag {
+    font-size: 11px !important;
+  }
+
+  .sum-patch-preview {
+    font-size: 11.5px !important;
+    padding: 2px 6px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    word-break: break-all !important;
+  }
+
+  .summary-right {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  .sum-reason-text {
+    max-width: 100% !important;
+    font-size: 11px !important;
+    white-space: normal !important;
+    line-height: 1.35 !important;
+  }
+
+  /* 10. 展开态详情区全方位优化 */
+  .expanded-details-body {
+    gap: 10px !important;
+  }
+
+  /* 主体与元数据条 2 列网格 */
+  .meta-strip {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px 10px !important;
+    padding: 8px 10px !important;
+    font-size: 11.5px !important;
+    border-radius: 6px !important;
+  }
+
+  .meta-strip .time {
+    grid-column: 1 / -1 !important;
+    margin-left: 0 !important;
+    font-size: 11px !important;
+  }
+
+  /* 提请事由框 */
+  .reason-quote-box {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+    border-radius: 0 6px 6px 0 !important;
+  }
+
+  .quote-title {
+    font-size: 11.5px !important;
+  }
+
+  .quote-content {
+    font-size: 12px !important;
+  }
+
+  /* 拟更正内容对比面板 */
+  .diff-block {
+    padding: 10px !important;
+    border-radius: 8px !important;
+  }
+
+  .diff-title {
+    font-size: 11.5px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .diff-items-grid {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+
+  .diff-grid-row {
+    font-size: 12px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .diff-items-mini-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .diff-items-mini-table {
+    min-width: 480px !important;
+  }
+
+  .diff-items-mini-table th,
+  .diff-items-mini-table td {
+    padding: 4px 6px !important;
+    font-size: 11px !important;
+  }
+
+  /* 现场照片凭据 */
+  .attachments-strip {
+    padding: 8px 10px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .att-img {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  /* 多方会签流转矩阵 */
+  .pipeline-section {
+    padding: 10px 12px !important;
+    border-radius: 8px !important;
+    gap: 8px !important;
+  }
+
+  .pipeline-title {
+    font-size: 12px !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+  }
+
+  .entities-vote-list {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .entity-vote-card {
+    padding: 10px 12px !important;
+    border-radius: 8px !important;
+    gap: 6px !important;
+  }
+
+  .card-ent-top {
+    align-items: flex-start !important;
+  }
+
+  .ent-name {
+    font-size: 12.5px !important;
+  }
+
+  .vote-tag {
+    font-size: 11px !important;
+    padding: 1.5px 6px !important;
+    white-space: nowrap !important;
+  }
+
+  .audit-row {
+    font-size: 11px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+  }
+
+  .audit-opinion {
+    font-size: 11.5px !important;
+    padding: 4px 6px !important;
+  }
+
+  /* 最终决议记录 */
+  .resolution-summary-box {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* 操作工具栏重塑 (大按钮，触控极佳) */
+  .card-actions-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding-top: 10px !important;
+  }
+
+  .my-vote-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .admin-sign-badge {
+    grid-column: 1 / -1 !important;
+    justify-content: center !important;
+    font-size: 11px !important;
+  }
+
+  .btn-approve,
+  .btn-reject {
+    height: 38px !important;
+    width: 100% !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    border-radius: 6px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+
+  .actions-right {
+    margin-left: 0 !important;
+    width: 100% !important;
+    display: flex !important;
+    gap: 8px !important;
+  }
+
+  .btn-cancel-rev,
+  .btn-arbitrate {
+    flex: 1 1 0 !important;
+    height: 34px !important;
+    font-size: 12px !important;
+    justify-content: center !important;
+  }
+
+  .btn-collapse-bottom {
+    height: 34px !important;
+    font-size: 11.5px !important;
+    padding: 0 10px !important;
+    white-space: nowrap !important;
+  }
+
+  /* 11. 分页栏 */
+  .pagination-bar {
+    margin-top: 14px !important;
+    gap: 10px !important;
+  }
+
+  .pagination-bar .btn {
+    height: 34px !important;
+    font-size: 12px !important;
+    padding: 0 12px !important;
+  }
+
+  .page-info {
+    font-size: 12px !important;
+  }
+
+  /* 12. 弹窗群手机端自适应 */
+  .modal-dialog {
+    max-width: 94vw !important;
+    border-radius: 12px !important;
+    max-height: 88vh !important;
+  }
+
+  .modal-head {
+    padding: 12px 16px !important;
+  }
+
+  .modal-head h4 {
+    font-size: 15px !important;
+  }
+
+  .modal-content {
+    padding: 14px 16px !important;
+    gap: 10px !important;
+    max-height: calc(88vh - 110px) !important;
+    overflow-y: auto !important;
+  }
+
+  .modal-foot {
+    padding: 10px 16px !important;
+  }
+
+  .modal-foot .btn {
+    height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  /* 13. 指南说明弹窗流程步骤优化 */
+  .guide-dialog {
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+
+  .guide-content {
+    padding: 14px 16px !important;
+  }
+
+  .workflow-steps {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .wf-arrow {
+    transform: rotate(90deg) !important;
+    align-self: center !important;
+  }
+}
 </style>

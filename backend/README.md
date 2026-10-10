@@ -1,3 +1,12 @@
+## 2026-10-10 多方联合会审大厅手机移动端响应式重构前后端契约保持 (Joint Review Hall Mobile Responsive Contract Sync)
+
+- **涉及服务与接口**：
+  - 联合会审核心服务：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - API 路由：[`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)。
+- **契约与架构对齐说明**：
+  - 本轮改动纯粹属于前端多方联合会审大厅页面（[`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)）在手机移动端（`<= 768px`）的全套工业级高保真响应式布局重塑（KPI 2×2 网格、筛选栏双列网格化、会审卡片顶栏分层、多方会签矩阵与操作大按钮）；
+  - 会审列表查询、提案发起、表决核准、异议挂起、终局裁决及撤销接口数据契约 100% 保持稳定，后端无需任何变动。
+
 ## 2026-10-10 库管工作台移动端保温管发货微卡片彻底重构前后端契约保持 (Warehouse Mobile Semantic Card Redesign Contract Sync)
 
 - **涉及服务与接口**：
