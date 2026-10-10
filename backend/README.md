@@ -1,3 +1,14 @@
+## 2026-10-10 库管工作台管件发货记录手机移动端深度优化前后端契约保持 (Warehouse Mobile Fitting Ledger Optimization Contract Sync)
+
+- **涉及服务与接口**：
+  - 库管管件确认服务：[`delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/delivery_service.py)；
+  - 管件流转 API 路由：[`delivery.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/delivery.py)。
+- **契约与架构对齐说明**：
+  - 本轮改动纯粹属于前端库管工作台页面（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）在管件发货记录（`tab=fitting`）手机移动端（`<= 720px`）的高精细高保真体验重构：
+    1. 外层视口内边距收敛扩容、Tab 导航满宽平铺、台账列表解除 520px 定高与内边距紧缩，彻底消除窄屏手机卡片被压窄问题；
+    2. 车次发货卡片底部解耦为【数据与状态行】与【独立操作底栏】，按钮 1:1:1 绝对等高均分排布，彻底消除混排错位变形；
+  - 管件台账查询接口、整车入库批量确认、提请会审及流转凭证详情拉取等全量数据接口契约 100% 保持稳定，后端无需任何变动。
+
 ## 2026-10-10 多方联合会审大厅手机移动端响应式重构前后端契约保持 (Joint Review Hall Mobile Responsive Contract Sync)
 
 - **涉及服务与接口**：

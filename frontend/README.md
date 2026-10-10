@@ -1,3 +1,28 @@
+## 2026-10-10 库管工作台管件发货记录手机移动端深度优化：外层视口扩容、发货卡片解耦与操作按钮栏均分 (Warehouse Management Mobile Fitting Ledger Responsive Optimization)
+
+- **涉及页面与组件**：
+  - 核心页面：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)（管件发货记录台账 · `warehouse_management?tab=fitting` 路由与车次分组视图）。
+- **优化背景与痛点溯源**：
+  - 用户反馈在窄屏手机上访问管件发货记录页面时，“管件的发货单卡片被紧紧压窄，按钮错位”；
+  - 深度排查发现两大致命缺陷：
+    1. **多重嵌套死规与边距挤压**：主容器 `.tube-page-main` 保持桌面端 24px 大内边距，内层 `.fitting-ledger-body` 被死锁在 `max-height: 520px` 且带 16px 内边距，极窄手机可用宽度被压缩至不足 280px；
+    2. **数据徽章与操作按钮混排混搭**：规格数量、状态 Badge 与 3 个操作按钮杂乱堆叠在一个 flex-wrap 容器中，且带有 `margin-left: auto` 与 `flex: 1 1 0`，导致按钮在第一行和第二行之间随机断裂变形、高低错位。
+- **高精细度前端重构落地**：
+  1. **视口与外层布局解绑扩容**：
+     - 主容器在移动端收紧至 `padding: 10px 8px 16px !important;`，立即释放 32px 宝贵宽度；
+     - 顶部 Segmented Control Tabs 增加自适应类（`.warehouse-tab-nav`），在移动端 100% 满宽等分排布；
+     - 移除台账列表 520px 死高限制（`max-height: none !important; overflow-y: visible !important;`），内边距收敛至 `10px 6px 14px`，使卡片恢复充足呼吸感；
+     - 指标概览 `.fitting-summary-grid` 精致化为紧凑 2×2 网格微看板，排版端庄不换行。
+  2. **发货单卡片分层解耦**：
+     - 彻底解耦 `.fitting-shipment-side`，分为【信息摘要层 (`.fitting-shipment-meta-row`)】与【专属操作底栏 (`.fitting-shipment-actions`)】；
+     - 上层左侧为规格种类与总个数（`2 种规格 · 16 个`），右侧为精致状态胶囊徽章（`待库管确认`等），两端对称呼应；
+  3. **操作按钮栏等高均分与业务微质感**：
+     - 彻底清除 `margin-left: auto`，操作按钮全组锁定等高 34px，`flex: 1 1 0` 严格均分横排；
+     - 【🏢 整车确认】（渐变翠绿）、【⚖️ 提请会审/查看会审】（暖橙微描边）、【📜 流转凭证】（浅蓝紫）色彩鲜明、触控舒适、永不错位；
+  4. **车次头部与明细区排版优化**：
+     - 车次号与清爽蓝车牌徽章支持弹性换行，供需流向收敛为微型图；展开明细表格与备注紧凑微卡片化。
+- **构建结果**：执行 `npm run build` 全量打包编译成功（747 modules transformed，17.58s，0 错误，退出码 0）。
+
 ## 2026-10-10 多方联合会审大厅手机移动端全量高保真响应式重构 (Joint Review Hall Mobile Complete Responsive Redesign)
 
 - **涉及页面与组件**：

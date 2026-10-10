@@ -19,10 +19,11 @@
       <p v-if="pageMessage" class="page-success">{{ pageMessage }}</p>
 
       <!-- Segmented Control Tabs 导航 (位于“库管台账筛选”卡片正上方) -->
-      <div style="margin-top: 16px; margin-bottom: 16px; display: flex; align-items: center;">
-        <div style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; padding: 4px; display: inline-flex; gap: 4px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);">
+      <div class="warehouse-tab-nav" style="margin-top: 16px; margin-bottom: 16px; display: flex; align-items: center;">
+        <div class="warehouse-tab-nav-inner" style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; padding: 4px; display: inline-flex; gap: 4px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);">
           <button 
             type="button" 
+            class="warehouse-tab-nav-btn"
             :style="activeTab === 'pipe' ? {
               background: '#ffffff',
               color: '#4f46e5',
@@ -44,6 +45,7 @@
           </button>
           <button 
             type="button" 
+            class="warehouse-tab-nav-btn"
             :style="activeTab === 'fitting' ? {
               background: '#ffffff',
               color: '#2563eb',
@@ -1339,59 +1341,66 @@
                   </button>
 
                   <div class="fitting-shipment-side">
-                    <div class="fitting-shipment-quantity">
-                      <span>{{ group.items.length }} 种规格</span>
-                      <strong>{{ group.totalQty }} 个</strong>
+                    <!-- 规格数量与状态徽章区 -->
+                    <div class="fitting-shipment-meta-row">
+                      <div class="fitting-shipment-quantity">
+                        <span>{{ group.items.length }} 种规格</span>
+                        <strong>{{ group.totalQty }} 个</strong>
+                      </div>
+                      <div class="fitting-shipment-status-wrap">
+                        <span v-if="group.status === 'under_review'" class="fitting-status-badge is-under-review" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa;">⚖️ 联合会审中</span>
+                        <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="fitting-status-badge is-shipped">🚚 待到货确认</span>
+                        <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="fitting-status-badge is-arrived">✅ 待施工接收</span>
+                        <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="fitting-status-badge is-pending-warehouse">👷 待库管确认</span>
+                        <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="fitting-status-badge is-warehouse-confirmed">🏢 库管已确认</span>
+                        <span v-else-if="group.status === 'cancelled'" class="fitting-status-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">❌ 已撤销</span>
+                        <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="fitting-status-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;">⚠️ 含已撤销明细</span>
+                      </div>
                     </div>
-                    <!-- 状态 Badge -->
-                    <span v-if="group.status === 'under_review'" class="fitting-status-badge is-under-review" style="background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa;">⚖️ 联合会审中</span>
-                    <span v-else-if="group.status === 'shipped' || group.status === 'pending_arrival' || !group.status" class="fitting-status-badge is-shipped">🚚 待到货确认</span>
-                    <span v-else-if="group.status === 'arrived' || group.status === 'pending_receive'" class="fitting-status-badge is-arrived">✅ 待施工接收</span>
-                    <span v-else-if="group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received'" class="fitting-status-badge is-pending-warehouse">👷 待库管确认</span>
-                    <span v-else-if="group.status === 'warehouse_confirmed' || group.status === 'completed'" class="fitting-status-badge is-warehouse-confirmed">🏢 库管已确认</span>
-                    <span v-else-if="group.status === 'cancelled'" class="fitting-status-badge" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;">❌ 已撤销</span>
-                    <span v-if="group.hasCancelled && group.status !== 'cancelled'" class="fitting-status-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;">⚠️ 含已撤销明细</span>
 
-                    <!-- 包含待确认项时显示“整车批量确认”按钮 -->
-                    <button 
-                      v-if="group.status !== 'under_review' && (group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received' || group.items.some(i => i.status === 'construction_confirmed' || i.status === 'pending_warehouse' || i.status === 'received'))"
-                      type="button" 
-                      class="btn primary btn-sm fitting-action-btn fitting-archive-button"
-                      :disabled="fittingActionLoading"
-                      title="对该车次全部待确认管件执行入库确认"
-                      @click.stop="handleConfirmFittingWarehouse(group.items)"
-                    >
-                      🏢 整车确认
-                    </button>
+                    <!-- 操作按钮组 (解耦独立容器，避免混排挤压与错位) -->
+                    <div class="fitting-shipment-actions">
+                      <!-- 包含待确认项时显示“整车批量确认”按钮 -->
+                      <button 
+                        v-if="group.status !== 'under_review' && (group.status === 'construction_confirmed' || group.status === 'pending_warehouse' || group.status === 'received' || group.items.some(i => i.status === 'construction_confirmed' || i.status === 'pending_warehouse' || i.status === 'received'))"
+                        type="button" 
+                        class="btn primary btn-sm fitting-action-btn fitting-archive-button"
+                        :disabled="fittingActionLoading"
+                        title="对该车次全部待确认管件执行入库确认"
+                        @click.stop="handleConfirmFittingWarehouse(group.items)"
+                      >
+                        🏢 整车确认
+                      </button>
 
-                    <button 
-                      v-if="group.status !== 'under_review' && !group.items.some(i => i.status === 'under_review')"
-                      type="button" 
-                      class="btn ghost btn-sm fitting-action-btn fitting-review-trigger-btn"
-                      title="发现管件规格或数量有误时提请联合会审"
-                      @click.stop="openJointReviewModal(group, 'fitting')"
-                    >
-                      ⚖️ 提请会审
-                    </button>
+                      <button 
+                        v-if="group.status !== 'under_review' && !group.items.some(i => i.status === 'under_review')"
+                        type="button" 
+                        class="btn ghost btn-sm fitting-action-btn fitting-review-trigger-btn"
+                        title="发现管件规格或数量有误时提请联合会审"
+                        @click.stop="openJointReviewModal(group, 'fitting')"
+                      >
+                        ⚖️ 提请会审
+                      </button>
 
-                    <button 
-                      v-if="group.status === 'under_review' || group.items.some(i => i.status === 'under_review')"
-                      type="button" 
-                      class="btn ghost btn-sm fitting-action-btn fitting-review-view-btn"
-                      title="查看此车次的多方联合会审表决详情"
-                      @click.stop="goToJointReview(group)"
-                    >
-                      ⚖️ 查看会审
-                    </button>
+                      <button 
+                        v-if="group.status === 'under_review' || group.items.some(i => i.status === 'under_review')"
+                        type="button" 
+                        class="btn ghost btn-sm fitting-action-btn fitting-review-view-btn"
+                        title="查看此车次的多方联合会审表决详情"
+                        @click.stop="goToJointReview(group)"
+                      >
+                        ⚖️ 查看会审
+                      </button>
 
-                    <button 
-                      type="button" 
-                      class="btn ghost btn-sm fitting-action-btn fitting-proof-button"
-                      title="查看该车次全生命周期流转凭证"
-                      @click.stop="showDeliveryDetail(group)"
-                    >
-                      📜 流转凭证
-                    </button>
+                      <button 
+                        type="button" 
+                        class="btn ghost btn-sm fitting-action-btn fitting-proof-button"
+                        title="查看该车次全生命周期流转凭证"
+                        @click.stop="showDeliveryDetail(group)"
+                      >
+                        📜 流转凭证
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -3886,9 +3895,27 @@ th.cell-number {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
   padding: 10px 14px;
   border-left: 1px solid #e2e8f0;
+}
+
+.fitting-shipment-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fitting-shipment-status-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fitting-shipment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .fitting-shipment-quantity {
@@ -4145,17 +4172,29 @@ th.cell-number {
   .topbar { flex-direction: column; }
   .topbar-actions, .filter-actions, .form-actions { width: 100%; justify-content: stretch; }
   .topbar-actions .btn, .filter-actions .btn, .form-actions .btn { width: 100%; }
-  .fitting-ledger-header { flex-direction: column; padding: 16px; }
-  .fitting-ledger-actions { width: 100%; max-width: none; justify-content: flex-start; }
-  .fitting-ledger-actions .btn { flex: 1 1 calc(50% - 8px); }
-  .fitting-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 16px; }
-  .fitting-ledger-body { padding: 14px 16px 16px; }
-  .fitting-shipment-toggle { grid-template-columns: 16px minmax(0, 1fr); gap: 10px; padding: 12px; }
-  .fitting-route { grid-column: 2; width: 100%; box-sizing: border-box; }
-  .fitting-shipment-side { padding: 9px 12px; flex-wrap: wrap !important; gap: 8px !important; }
-  .fitting-shipment-quantity { align-items: flex-start; margin-right: auto; }
-  .fitting-proof-button { margin-left: auto; }
-  .fitting-shipment-remark { grid-template-columns: 1fr; gap: 4px; }
+  .fitting-ledger-header { flex-direction: column; padding: 12px 14px; gap: 10px; }
+  .fitting-ledger-heading h2 { font-size: 15px; }
+  .fitting-ledger-heading p { font-size: 11.5px; }
+  .fitting-ledger-actions { width: 100%; max-width: none; justify-content: flex-start; gap: 6px; }
+  .fitting-ledger-actions .btn { flex: 1 1 calc(50% - 6px); min-height: 32px; padding: 0 6px; font-size: 11.5px; }
+  .fitting-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px 10px; gap: 6px; }
+  .fitting-summary-item { padding: 8px 10px 8px 12px; gap: 6px; border-radius: 8px; }
+  .fitting-summary-item span { font-size: 11.5px; }
+  .fitting-summary-item strong { font-size: 14px; }
+  .fitting-ledger-body { max-height: none !important; overflow-y: visible !important; padding: 10px 6px 14px !important; }
+  .fitting-shipment-card { border-radius: 12px !important; border: 1px solid #e2e8f0 !important; margin-bottom: 10px !important; }
+  .fitting-shipment-header { display: flex !important; flex-direction: column !important; width: 100% !important; box-sizing: border-box !important; }
+  .fitting-shipment-toggle { grid-template-columns: 14px minmax(0, 1fr); gap: 8px 10px; padding: 12px 12px 10px; width: 100%; box-sizing: border-box; }
+  .fitting-shipment-main-row { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; align-items: center !important; }
+  .fitting-shipment-main-row strong { font-size: 13.5px !important; }
+  .fitting-shipment-main .plate-badge { background: #eff6ff !important; color: #1d4ed8 !important; border: 1px solid #bfdbfe !important; font-size: 11px !important; font-weight: 700 !important; padding: 2px 6px !important; border-radius: 4px !important; }
+  .fitting-shipment-time { font-size: 11px !important; color: #64748b !important; margin-top: 2px !important; }
+  .fitting-route { grid-column: 2; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 6px 8px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .fitting-route-party { min-width: 0 !important; overflow: hidden !important; }
+  .fitting-route-party small { font-size: 10px !important; color: #94a3b8 !important; display: block !important; margin-bottom: 1px !important; }
+  .fitting-route-party strong { font-size: 11.5px !important; color: #334155 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; display: block !important; }
+  .fitting-route-arrow { font-size: 13px !important; color: #94a3b8 !important; flex-shrink: 0 !important; }
+  .fitting-shipment-remark { grid-template-columns: 1fr; gap: 4px; padding: 6px 8px !important; font-size: 11.5px !important; border-radius: 6px !important; }
   .fitting-detail-table tbody tr {
     grid-template-columns: 36px minmax(0, 1fr);
     grid-template-areas:
@@ -4705,6 +4744,37 @@ th.cell-number {
 }
 
 @media (max-width: 720px) {
+  /* 0. 页面主体容器移动端收紧内边距，释放横向宽度空间，彻底避免卡片被压窄 */
+  .tube-page-main {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    padding-top: 10px !important;
+    padding-bottom: 20px !important;
+    gap: 10px !important;
+  }
+
+  /* 0.1 顶部 Segmented Control 导航移动端自适应平铺 */
+  .warehouse-tab-nav {
+    width: 100% !important;
+    margin-top: 8px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .warehouse-tab-nav-inner {
+    width: 100% !important;
+    display: flex !important;
+    box-sizing: border-box !important;
+  }
+
+  .warehouse-tab-nav-btn {
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    justify-content: center !important;
+    padding: 9px 8px !important;
+    font-size: 13.5px !important;
+    white-space: nowrap !important;
+  }
+
   /* 1. 取消手机端页面底部的“库管操作与全生命周期证据链”大面板 */
   .warehouse-bottom-panel {
     display: none !important;
@@ -5455,31 +5525,116 @@ th.cell-number {
     background: #fff7ed !important;
   }
 
-  /* 9. 管件发货卡片操作按钮组 1:1:1 绝对等大均分对齐 */
+  /* 9. 管件发货卡片底部信息与操作栏移动端全新重构 (信息与按钮分层，彻底杜绝错位挤压) */
   .fitting-shipment-side {
     display: flex !important;
-    flex-wrap: wrap !important;
+    flex-direction: column !important;
+    gap: 9px !important;
+    padding: 10px 12px 12px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+    border-left: none !important;
+    background: #fafbfc !important;
+    border-radius: 0 0 12px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .fitting-shipment-meta-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  .fitting-shipment-quantity {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: baseline !important;
+    gap: 5px !important;
+    min-width: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .fitting-shipment-quantity span {
+    font-size: 11.5px !important;
+    color: #64748b !important;
+    white-space: nowrap !important;
+  }
+
+  .fitting-shipment-quantity strong {
+    font-size: 14.5px !important;
+    color: #2563eb !important;
+    font-weight: 700 !important;
+    font-family: monospace !important;
+    white-space: nowrap !important;
+  }
+
+  .fitting-shipment-status-wrap {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .fitting-status-badge {
+    min-height: 22px !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    border-radius: 999px !important;
+    white-space: nowrap !important;
+  }
+
+  .fitting-shipment-actions {
+    display: flex !important;
+    align-items: center !important;
     gap: 8px !important;
     width: 100% !important;
     box-sizing: border-box !important;
   }
 
-  .fitting-action-btn {
+  .fitting-shipment-actions .fitting-action-btn {
     flex: 1 1 0 !important;
     width: 0 !important;
     min-width: 0 !important;
-    height: 32px !important;
-    line-height: 30px !important;
+    height: 34px !important;
+    line-height: 32px !important;
     padding: 0 4px !important;
     font-size: 12px !important;
     font-weight: 600 !important;
-    border-radius: 6px !important;
+    border-radius: 7px !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
     text-align: center !important;
     white-space: nowrap !important;
     box-sizing: border-box !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .fitting-shipment-actions .fitting-archive-button {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25) !important;
+  }
+
+  .fitting-shipment-actions .fitting-review-trigger-btn,
+  .fitting-shipment-actions .fitting-review-view-btn {
+    background: #fff7ed !important;
+    color: #ea580c !important;
+    border: 1px solid #fed7aa !important;
+  }
+
+  .fitting-shipment-actions .fitting-proof-button {
+    background: #eef2ff !important;
+    color: #4f46e5 !important;
+    border: 1px solid #c7d2fe !important;
+    margin-left: 0 !important;
   }
 
   /* 10. 流转凭证弹窗底栏移动端自适应 */

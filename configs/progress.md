@@ -1,3 +1,36 @@
+## 2026-10-10 [库管工作台管件发货记录手机移动端深度优化：外层视口扩容、车次发货单卡片呼吸感重构与操作按钮栏解耦均分]
+- **需求定位与痛点根因归纳**：
+  - 用户反馈：“帮我处理一下页面/projects/insulation_pipe_supply_2026/pages/warehouse_management?tab=fitting，当屏幕很窄的手机访问该页面时，管件的发货单卡片被紧紧压窄，按钮错位……请站在功能和美观的角度，优化一下”；
+  - **核心痛点排查与根因深度剖析**：
+    1. **多重内外边距叠加与死高限制导致“卡片被紧紧压窄”**：
+       - 主体容器 `.tube-page-main` 仅有桌面端 `padding: 24px`，窄屏手机未覆盖，白白损耗 48px 屏幕宽度；
+       - 台账卡片内层列表容器 `.fitting-ledger-body` 在 PC 端设置了 `max-height: 520px; overflow-y: auto;` 且 `padding: 16px`，在移动端不仅产生双滚动条，还进一步将卡片挤缩到 280px 以内；
+       - 顶部 Segmented Control Tabs 导航行内 padding（`10px 24px`）未自适应，极窄屏幕下容易撑顶或溢出。
+    2. **数据信息与操作按钮混排导致“按钮错位变形”**：
+       - 原模板将规格数量（`.fitting-shipment-quantity`）、状态徽章（`.fitting-status-badge`）以及多个操作按钮（整车确认、提请会审/查看会审、流转凭证）全部散装放置在同一个 `.fitting-shipment-side` 弹性容器中；
+       - CSS 中直接给予按钮 `flex: 1 1 0 !important; width: 0 !important;`，同时又存在 `.fitting-proof-button { margin-left: auto; }`；
+       - 当屏幕窄时，由于状态徽章字数长短不一，按钮在第一行和第二行之间随机折行，导致某些按钮被挤成一条细缝、某些按钮被推至行末拉伸、整体高低错位、严重变形。
+- **高精细度前端重构落地 ([`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue))**：
+  1. **视口与外层容器重塑（彻底释放横向可用空间）**：
+     - 主容器 `.tube-page-main` 在移动端收敛至 `padding: 10px 8px 16px !important; gap: 10px !important;`，直接在窄屏手机上释放出 32px 宝贵宽度；
+     - 顶部 Segmented Control Tabs 增加响应式支持（`.warehouse-tab-nav`、`.warehouse-tab-nav-inner`、`.warehouse-tab-nav-btn`），移动端 100% 满宽等分平铺（`flex: 1 1 0`，`9px 8px` 内边距），触控舒适自然；
+     - 解除 `.fitting-ledger-body` 的 520px 死高限制，改为自然页面滚动（`max-height: none !important; overflow-y: visible !important;`），内边距收紧至 `10px 6px 14px !important;`，让发货单卡片彻底拥有舒展的横向宽度；
+     - 4 项流转指标概览 `.fitting-summary-grid` 精致化为紧凑 2×2 微看板，数字与文字间距适宜，杜绝换行重叠。
+  2. **卡片结构解耦：数据信息层与独立操作底栏彻底分层**：
+     - 将原 `.fitting-shipment-side` 拆解为两个职责明确的子容器：
+       1. **信息摘要层 (`.fitting-shipment-meta-row`)**：左侧展示规格种类与总管件数（如 `2 种规格 · 16 个`），右侧整洁展示履约胶囊徽章（如 `待库管确认`、`联合会审中`），两端对齐，层次清晰；
+       2. **操作底栏 (`.fitting-shipment-actions`)**：将【🏢 整车确认】、【⚖️ 提请会审/查看会审】、【📜 流转凭证】独立聚合在专属操作栏中。
+  3. **按钮组 1:1:1 绝对等高均分与业务色彩规范**：
+     - 彻底清除 `margin-left: auto` 干扰，所有 `.fitting-action-btn` 在移动端均锁定 `flex: 1 1 0 !important; width: 0 !important; height: 34px !important; line-height: 32px !important; border-radius: 7px !important;`；
+     - 无论当前车次包含 1 个、2 个还是 3 个操作按钮，均在底栏整整齐齐等高排布，高度统一 34px，间距 8px，完全均分对齐，彻底根除挤压错位；
+     - 视觉微质感提升：整车确认采用渐变翠绿高亮、会审采用温润橙调微描边、流转凭证采用清爽淡紫蓝微描边，功能识别度极佳；
+  4. **卡片上半部分与明细区移动端排版优化**：
+     - 车次与车牌支持优雅折行（`flex-wrap: wrap`），车牌号配清爽蓝徽章（`#eff6ff`、`#1d4ed8`），发货时间小号 monospace 清晰呈现；
+     - 供需流向 `.fitting-route` 改造为紧凑微型流向图，主体超长平滑截断，居中箭头对齐；
+     - 明细展开区内边距收紧至 `10px 8px 12px`，发货备注微卡片化，明细数据与会审操作交互顺畅。
+- **验证与构建**：
+  - 前端执行 `npm run build` 全量生产打包编译通过（耗时 17.58s，747 个模块转换完成，零语法/样式错误，退出码 0）。
+
 ## 2026-10-10 [多方联合会审大厅手机移动端全量高保真响应式重塑：KPI 2×2 网格、筛选栏紧凑化、卡片分层与流转表决矩阵优化]
 - **需求定位与痛点根因归纳**：
   - 用户反馈：“联合会审大厅的手机版页面很糟糕，帮我优化一下，站在用户的角度，美观整齐”；
