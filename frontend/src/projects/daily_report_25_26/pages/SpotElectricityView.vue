@@ -158,7 +158,7 @@
             <button
               class="btn primary export-btn"
               type="button"
-              :disabled="loading || (viewMode === 'range' && rangeSubMode === 'period' ? !periodTrends.length : viewMode === 'range' && rangeSubMode === 'monthly' ? !monthlyTrends.length : !points.length)"
+              :disabled="loading || (viewMode === 'range' && rangeSubMode === 'period' ? !periodTrends.length : viewMode === 'range' && rangeSubMode === 'monthly' ? !monthlyTrends.length : viewMode === 'range' && rangeSubMode === 'daily' && dailyTableSubMode === 'dailySummary' ? !dailyTrends.length : !points.length)"
               @click="exportCurrentData"
             >
               📥 导出数据 (Excel/CSV)
@@ -496,9 +496,31 @@
                   ? `共 ${displayedPeriodTrends.length} 个时段聚合记录 (00:15 ~ 24:00)`
                   : viewMode === 'range' && rangeSubMode === 'monthly'
                     ? `共 ${displayedMonthlyTrends.length} 个月份聚合记录`
-                    : `共 ${displayedPoints.length} 条 15 分钟时序记录`
+                    : viewMode === 'range' && rangeSubMode === 'daily' && dailyTableSubMode === 'dailySummary'
+                      ? `共 ${displayedDailyTrends.length} 天日均聚合记录`
+                      : `共 ${displayedPoints.length} 条 15 分钟时序记录 (第 ${currentPage}/${totalPages} 页)`
               }}
             </span>
+          </div>
+
+          <!-- 区间日度走势下的表格子视图切换 (按日均价汇总 vs 15分钟分时明细) -->
+          <div v-if="viewMode === 'range' && rangeSubMode === 'daily'" class="table-submode-switch">
+            <button
+              :class="['table-toggle-btn', { active: dailyTableSubMode === 'dailySummary' }]"
+              type="button"
+              title="按天查看每一天的日前/实时均价及售电汇总"
+              @click="dailyTableSubMode = 'dailySummary'"
+            >
+              📅 每日均价汇总
+            </button>
+            <button
+              :class="['table-toggle-btn', { active: dailyTableSubMode === 'pointsDetail' }]"
+              type="button"
+              title="穿透查看区间内所有 15 分钟交易时序点位明细 (带分页)"
+              @click="dailyTableSubMode = 'pointsDetail'"
+            >
+              ⏱️ 15分钟分时明细
+            </button>
           </div>
 
           <!-- 手机端专属切换：卡片流 vs 大表格 -->
@@ -628,13 +650,63 @@
             </div>
           </template>
 
-          <!-- 3. 单日分时或日度时序微卡片 -->
-          <template v-else>
-            <div v-if="!displayedPoints.length" class="empty-cards">
-              未查询到符合条件的电力现货数据
+          <!-- 3. 区间按日均价汇总微卡片 -->
+          <template v-else-if="viewMode === 'range' && rangeSubMode === 'daily' && dailyTableSubMode === 'dailySummary'">
+            <div v-if="!displayedDailyTrends.length" class="empty-cards">
+              未查询到符合条件的日度均价汇总记录
             </div>
             <div
-              v-for="item in displayedPoints"
+              v-for="(item, idx) in displayedDailyTrends"
+              v-else
+              :key="`daily_card_${item.trade_date}`"
+              :class="['spot-mobile-card', { 'is-negative': (item.negative_count || 0) > 0 }]"
+            >
+              <div class="card-top-row">
+                <div class="time-block">
+                  <span class="point-badge">#{{ idx + 1 }}</span>
+                  <span class="time-text font-bold">{{ item.trade_date }}</span>
+                </div>
+                <div class="status-wrap">
+                  <span v-if="(item.negative_count || 0) > 0" class="badge-neg">❄️ 负电价 ({{ item.negative_count }}点)</span>
+                </div>
+              </div>
+
+              <div class="card-price-grid">
+                <div class="price-cell">
+                  <span class="cell-label">日前日均价</span>
+                  <span :class="['cell-val text-blue', { 'val-neg': item.avg_day_ahead_price < 0 }]">
+                    {{ formatNum(item.avg_day_ahead_price) }}
+                  </span>
+                </div>
+                <div class="price-cell">
+                  <span class="cell-label">实时日均价</span>
+                  <span :class="['cell-val text-orange', { 'val-neg': item.avg_real_time_price < 0 }]">
+                    {{ formatNum(item.avg_real_time_price) }}
+                  </span>
+                </div>
+                <div class="price-cell">
+                  <span class="cell-label">日均价差</span>
+                  <span :class="['cell-val', getSpreadColorClass(item.avg_price_spread)]">
+                    {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="card-bottom-info">
+                <span>北海售电: {{ item.beihai_sales != null ? `${formatNum(item.beihai_sales)} MWh` : '—' }}</span>
+                <span>香海售电: {{ item.xianghai_sales != null ? `${formatNum(item.xianghai_sales)} MWh` : '—' }}</span>
+                <span>全省售电: {{ item.province_sales != null ? `${formatNum(item.province_sales)} MWh` : '—' }}</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- 4. 单日分时或穿透 15 分钟分时微卡片 (轻量分页切片) -->
+          <template v-else>
+            <div v-if="!paginatedPoints.length" class="empty-cards">
+              未查询到符合条件的电力现货时序数据
+            </div>
+            <div
+              v-for="item in paginatedPoints"
               v-else
               :key="item.id || `${item.trade_date}_${item.point_index}`"
               :class="['spot-mobile-card', { 'is-negative': isPointNegative(item) }]"
@@ -809,7 +881,73 @@
             </tbody>
           </table>
 
-          <!-- 2. 单日分时或日度时序点位大表 -->
+          <!-- 3. 区间按日均价汇总大表 (每日一条汇总记录，毫秒级极速渲染) -->
+          <table v-else-if="viewMode === 'range' && rangeSubMode === 'daily' && dailyTableSubMode === 'dailySummary'" class="spot-table">
+            <thead>
+              <tr>
+                <th class="col-center">序号</th>
+                <th>交易日期</th>
+                <th class="col-right">日前日均价 (元/MWh)</th>
+                <th class="col-right">实时日均价 (元/MWh)</th>
+                <th class="col-right">日均价差 (元/MWh)</th>
+                <th class="col-right">负电价时点数</th>
+                <th class="col-right">北海总售电 (MWh)</th>
+                <th class="col-right">香海总售电 (MWh)</th>
+                <th class="col-right">全省总售电 (MWh)</th>
+                <th class="col-right">两厂总售电 (MWh)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="loading">
+                <td colspan="10" class="empty-cell">
+                  <div class="table-loading-wrap">
+                    <div class="spinner"></div>
+                    <span>数据正在加载中…</span>
+                  </div>
+                </td>
+              </tr>
+              <tr v-else-if="!displayedDailyTrends.length">
+                <td colspan="10" class="empty-cell">未查询到符合条件的日度均价汇总记录</td>
+              </tr>
+              <tr
+                v-for="(item, idx) in displayedDailyTrends"
+                :key="`daily_row_${item.trade_date}`"
+                :class="{ 'row-negative': (item.negative_count || 0) > 0 }"
+              >
+                <td class="col-center text-muted">{{ idx + 1 }}</td>
+                <td class="mono font-bold">{{ item.trade_date }}</td>
+                <td class="col-right mono font-bold text-blue">
+                  <span v-if="item.avg_day_ahead_price < 0" class="badge-neg-inline">❄️ {{ formatNum(item.avg_day_ahead_price) }}</span>
+                  <span v-else>{{ formatNum(item.avg_day_ahead_price) }}</span>
+                </td>
+                <td class="col-right mono font-bold text-orange">
+                  <span v-if="item.avg_real_time_price < 0" class="badge-neg-inline">❄️ {{ formatNum(item.avg_real_time_price) }}</span>
+                  <span v-else>{{ formatNum(item.avg_real_time_price) }}</span>
+                </td>
+                <td :class="['col-right mono font-bold', getSpreadColorClass(item.avg_price_spread)]">
+                  {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
+                </td>
+                <td class="col-right mono font-bold text-danger">
+                  <span v-if="item.negative_count > 0" class="badge-neg-inline">❄️ {{ item.negative_count }} 点</span>
+                  <span v-else class="text-muted">0</span>
+                </td>
+                <td class="col-right mono text-muted">
+                  {{ item.beihai_sales != null ? formatNum(item.beihai_sales) : '—' }}
+                </td>
+                <td class="col-right mono text-muted">
+                  {{ item.xianghai_sales != null ? formatNum(item.xianghai_sales) : '—' }}
+                </td>
+                <td class="col-right mono text-muted">
+                  {{ item.province_sales != null ? formatNum(item.province_sales) : '—' }}
+                </td>
+                <td class="col-right mono text-muted">
+                  {{ item.total_sales != null ? formatNum(item.total_sales) : '—' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 4. 单日分时或穿透 15 分钟时序点位大表 (轻量分页渲染，单页最多 96 条，杜绝 DOM 爆炸) -->
           <table v-else class="spot-table">
             <thead>
               <tr>
@@ -834,11 +972,11 @@
                   </div>
                 </td>
               </tr>
-              <tr v-else-if="!displayedPoints.length">
+              <tr v-else-if="!paginatedPoints.length">
                 <td colspan="10" class="empty-cell">未查询到符合条件的电力现货时序记录</td>
               </tr>
               <tr
-                v-for="item in displayedPoints"
+                v-for="item in paginatedPoints"
                 :key="item.id || `${item.trade_date}_${item.point_index}`"
                 :class="{ 'row-negative': isPointNegative(item) }"
               >
@@ -869,6 +1007,85 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- 轻量分页控制器：仅在单日分时或穿透 15 分钟分时明细视图下展示 -->
+        <div
+          v-if="(viewMode === 'single' || dailyTableSubMode === 'pointsDetail') && displayedPoints.length > 0"
+          class="pagination-bar"
+        >
+          <div class="pagination-info">
+            <span>共 <strong>{{ totalPointsCount.toLocaleString() }}</strong> 条时序记录</span>
+            <span class="pagination-sep">|</span>
+            <span>第 <strong>{{ currentPage }}</strong> / <strong>{{ totalPages }}</strong> 页</span>
+          </div>
+
+          <div class="pagination-controls">
+            <button
+              class="btn-page"
+              type="button"
+              :disabled="currentPage <= 1"
+              title="跳转到第 1 页"
+              @click="goToPage(1)"
+            >
+              « 首页
+            </button>
+            <button
+              class="btn-page"
+              type="button"
+              :disabled="currentPage <= 1"
+              title="前一页"
+              @click="goToPage(currentPage - 1)"
+            >
+              ‹ 上一页
+            </button>
+
+            <!-- 紧凑页码输入跳转 -->
+            <div class="page-num-indicator">
+              <span class="page-label">页码</span>
+              <input
+                type="number"
+                class="page-jump-input"
+                :value="currentPage"
+                min="1"
+                :max="totalPages"
+                @change="goToPage($event.target.value)"
+              />
+              <span class="page-total-label">/ {{ totalPages }}</span>
+            </div>
+
+            <button
+              class="btn-page"
+              type="button"
+              :disabled="currentPage >= totalPages"
+              title="后一页"
+              @click="goToPage(currentPage + 1)"
+            >
+              下一页 ›
+            </button>
+            <button
+              class="btn-page"
+              type="button"
+              :disabled="currentPage >= totalPages"
+              title="跳转到最后一页"
+              @click="goToPage(totalPages)"
+            >
+              末页 »
+            </button>
+
+            <div class="page-size-selector">
+              <span class="page-label">每页</span>
+              <select
+                :value="pageSize"
+                class="page-select"
+                @change="changePageSize($event.target.value)"
+              >
+                <option v-for="opt in pageSizeOptions" :key="opt" :value="opt">
+                  {{ opt }} 条{{ opt === 96 ? ' (1天)' : '' }}
+                </option>
+              </select>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1075,7 +1292,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
@@ -1118,7 +1335,8 @@ const breadcrumbItems = computed(() => [
 const loading = ref(false)
 const loadError = ref('')
 const viewMode = ref('single') // 'single' | 'range'
-const rangeSubMode = ref('daily') // 'daily' | 'period' (区间下：按每日平均值 vs 按时段平均值)
+const rangeSubMode = ref('daily') // 'daily' | 'monthly' | 'period' (区间下：按每日平均值 vs 按每月平均值 vs 按时段平均值)
+const dailyTableSubMode = ref('dailySummary') // 区间日度走势下表格展示：'dailySummary' (按日均价汇总，默认) | 'pointsDetail' (15分钟分时明细，分页)
 const mobileLayout = ref('card') // 'card' | 'table'
 const isMobileScreen = ref(false)
 
@@ -1143,10 +1361,11 @@ const meta = ref({
 })
 
 const summary = ref(null)
-const points = ref([])
-const dailyTrends = ref([])
-const periodTrends = ref([])
-const monthlyTrends = ref([])
+// 纯展示批量时序数据使用 shallowRef，避免 Vue 深度递归对 10,000+ 个对象进行 Proxy 包装，大幅节省内存与消除 GC 卡顿
+const points = shallowRef([])
+const dailyTrends = shallowRef([])
+const periodTrends = shallowRef([])
+const monthlyTrends = shallowRef([])
 
 const totalQueryPoints = computed(() => {
   return summary.value?.point_count || points.value?.length || 0
@@ -1403,12 +1622,51 @@ function isMonthlyItemNegativeBySelection(item) {
   return isMonthlyNegative(item)
 }
 
+// 日度聚合模式展示列表：勾选“仅负电价时段”时按出现负电价的天数过滤
+const displayedDailyTrends = computed(() => {
+  if (!onlyNegative.value) {
+    return dailyTrends.value
+  }
+  return dailyTrends.value.filter(d => (d.negative_count || 0) > 0)
+})
+
 // 表格与卡片展示的数据列表：勾选“仅负电价时段”时根据勾选指标动态过滤
 const displayedPoints = computed(() => {
   if (!onlyNegative.value) {
     return points.value
   }
   return points.value.filter(p => isItemNegativeBySelection(p))
+})
+
+// -----------------------------------------------------------------------------
+// 前端轻量分页切片（核心性能优化：无论总数据有几万条，DOM仅渲染当前页，彻底消除死机卡顿）
+// -----------------------------------------------------------------------------
+const currentPage = ref(1)
+const pageSize = ref(96) // 默认 96 条（刚好 1 天 96 点位，贴合电力现货业务语义）
+const pageSizeOptions = [50, 96, 200]
+
+const totalPointsCount = computed(() => displayedPoints.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalPointsCount.value / pageSize.value)))
+
+// 截取当前页展示的时序记录（DOM 节点从 100,000 锐减至 960）
+const paginatedPoints = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return displayedPoints.value.slice(start, start + pageSize.value)
+})
+
+function goToPage(page) {
+  const target = Math.max(1, Math.min(Number(page) || 1, totalPages.value))
+  currentPage.value = target
+}
+
+function changePageSize(size) {
+  pageSize.value = Number(size) || 96
+  currentPage.value = 1
+}
+
+// 切换查询日期、模式或过滤条件时自动重置为第 1 页
+watch([selectedDate, rangeStartDate, rangeEndDate, viewMode, rangeSubMode, dailyTableSubMode, onlyNegative], () => {
+  currentPage.value = 1
 })
 
 // 时段聚合模式表格与卡片展示列表
@@ -2273,6 +2531,32 @@ function exportCurrentData() {
     XLSX.utils.book_append_sheet(workbook, worksheet, '时段均价走势')
 
     const fileName = `辽宁电力现货时段均价走势_${rangeStartDate.value}_至_${rangeEndDate.value}.xlsx`
+    XLSX.writeFile(workbook, fileName)
+    return
+  }
+
+  if (viewMode.value === 'range' && rangeSubMode.value === 'daily' && dailyTableSubMode.value === 'dailySummary') {
+    const target = displayedDailyTrends.value.length ? displayedDailyTrends.value : dailyTrends.value
+    if (!target.length) return
+
+    const exportRows = target.map((p, idx) => ({
+      '序号': idx + 1,
+      '交易日期': p.trade_date,
+      '日前日均电价（元/兆瓦时）': p.avg_day_ahead_price,
+      '实时日均电价（元/兆瓦时）': p.avg_real_time_price,
+      '日均价差（元/兆瓦时）': p.avg_price_spread,
+      '负电价时点数（次）': p.negative_count,
+      '北海日总售电量(MWh)': p.beihai_sales,
+      '香海日总售电量(MWh)': p.xianghai_sales,
+      '全省日总售电量(MWh)': p.province_sales,
+      '两厂日总售电量(MWh)': p.total_sales,
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, '日度均价走势')
+
+    const fileName = `辽宁电力现货日均电价走势_${rangeStartDate.value}_至_${rangeEndDate.value}.xlsx`
     XLSX.writeFile(workbook, fileName)
     return
   }
@@ -3319,6 +3603,156 @@ onBeforeUnmount(() => {
 }
 .badge-status.raw { background: #f1f5f9; color: #475569; }
 .badge-status.submitted { background: #dcfce7; color: #15803d; }
+
+.table-submode-switch {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.table-toggle-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.table-toggle-btn:hover {
+  color: #0f172a;
+}
+
+.table-toggle-btn.active {
+  background: #ffffff;
+  color: #2563eb;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* 轻量级现代分页控制条 */
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-sep {
+  color: #cbd5e1;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-page {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-page:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.btn-page:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #f8fafc;
+}
+
+.page-num-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px;
+}
+
+.page-jump-input {
+  width: 52px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+}
+
+.page-jump-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.page-total-label {
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.page-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.page-select {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: #334155;
+  background: #ffffff;
+  outline: none;
+  cursor: pointer;
+}
+
+.page-select:focus {
+  border-color: #3b82f6;
+}
 
 /* 手机端微卡片容器 (默认桌面端隐藏) */
 .mobile-cards-wrap {

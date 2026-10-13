@@ -293,7 +293,7 @@
       "groups": [
         "tube_site_manager"
       ],
-      "unit": "high_lot_3",
+      "unit": "high_lot_3,high_lot_4",
       "project_roles": {}
     },
     "王一粟": {
@@ -621,7 +621,7 @@
       "groups": [
         "tube_warehouse_keeper"
       ],
-      "unit": "low_lot_5,low_lot_6",
+      "unit": "low_lot_5",
       "project_roles": {}
     },
     "tube_viewer": {

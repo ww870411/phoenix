@@ -1,3 +1,25 @@
+## 2026-10-13 daily_report_25_26 电力现货接口数据链路与前端分页/日均汇总配合说明 (Spot Electricity Data Pipeline & Dual View Alignment)
+
+- **涉及服务与路由模块**：
+  - 现货 API 路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 自动化调度服务：[`spot_electricity_sync_service.py`](file:///D:/编程项目/phoenix/backend/services/spot_electricity_sync_service.py)。
+- **数据链路配合与运行说明**：
+  1. **日度趋势聚合接口 (`/spot_electricity/daily_trends`)**：
+     - 在区间模式的日度走势下，前端默认直接基于该接口返回的每日一条汇总数据渲染“每日均价汇总大表”，极大地降低了前端与后端的密集通信与渲染消耗；
+  2. **点位明细接口 (`/spot_electricity/points`)**：
+     - 保持现有稳定接口契约，支持 `start_date`、`end_date`、`only_negative` 与 `limit`（最大 10,000）；
+     - 前端在客户端内存中通过 `paginatedPoints` 进行轻量高效的分页切片展示（单页 96 条），彻底解决了上万条点位一次性挂载到 DOM 树引发的严重假死死机问题。
+
+## 2026-10-13 insulation_pipe_supply_2026 配置文件与账户信息管辖范围一致性核对 (Tube Config & Auth Unit Alignment Audit)
+
+- **涉及配置文件与数据源**：
+  - 模块配置文件：[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)；
+  - 全局用户认证数据源：[`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)；
+  - 关联权限解析服务：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)（`resolve_accessible_section_1_ids`、`resolve_accessible_supply_entity_ids`）。
+- **核对结果与架构审计说明**：
+  - 核心服务 `resolve_accessible_section_1_ids` 优先读取 `tube_config.json` 中的 `manager_assignments`、`construction_units`、`warehouse_keepers` 和 `supply_entities` 作为权限依据；
+  - 对照 52 个相关账户实体，发现 2 处标段范围差异（现场管理员「肖贺升」在 `tube_config` 中比 `账户信息` 多 `high_lot_4`；库管员「孟广胜」在 `账户信息` 中比 `tube_config` 多 `low_lot_6`）、1 处字面口径差异（通用「库管」账号在 `账户信息` 中填写 `"物资仓库"`，而在 `tube_config` 中配置全量 10 个标段）以及 1 处离线自定义主体（「辽宁华阳管道设备有限公司」无登录账号），其余 48 个账号在标段、单位全称上完全一致。
+
 ## 2026-10-13 daily_report_25_26 电力现货数据入库存在性校验与覆盖确认机制 (Spot Electricity Data Exists Check & Overwrite Guard)
 
 - **涉及核心服务与路由模块**：

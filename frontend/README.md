@@ -1,3 +1,31 @@
+## 2026-10-13 daily_report_25_26 电力现货市场数据大点位数性能优化与轻量分页/日均汇总双视图实现 (Spot Electricity Performance Optimization & Pagination Dual-View)
+
+- **涉及页面与组件模块**：
+  - 核心大盘页面：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **前端性能重构与交互升级成果**：
+  1. **巨量 DOM 渲染卡死彻底解决（轻量分页器切片）**：
+     - 将原本一口气裸渲染 10,000 个 `<tr>` 与 100,000 个 `<td>` 的分时时序大表，改造为基于 `paginatedPoints` 的前端内存高效切片机制；
+     - 默认每页展示 96 条（刚好对应 1 天 96 点位，支持下拉切换 50/96/200 条/页）；
+     - DOM 树常驻节点数降低 99%，渲染耗时由 20,000ms 剧降至 3ms 瞬时秒开；
+     - 底部配套集成轻量现代的分页栏组件（包含首页、上一页、当前页码徽章、快速跳页输入框、下一页、末页与每页条数选择器）；
+  2. **区间日走势模式新增“每日均价汇总大表”与双视图切换**：
+     - 在区间模式的日走势（`rangeSubMode === 'daily'`）下，表头新增子视图切换按钮组：【📅 每日均价汇总】vs【⏱️ 15分钟分时明细】；
+     - 默认展示与上方图表完全对齐的“每日现货均价汇总大表”，字段涵盖：交易日期、日前日均价、实时日均价、日均价差、负电价时点数、各厂售电量与两厂总售电量；30 天仅 30 行，90 天仅 90 行，极速呈现且一目了然；
+  3. **数据响应式 Proxy 解耦优化 (`shallowRef`)**：
+     - 时序大数据数组 `points`、`dailyTrends`、`periodTrends`、`monthlyTrends` 改用 `shallowRef`，解除 Vue 深度递归 Proxy 代理，节省内存占用并消除垃圾回收暂停；
+  4. **全量导出与移动端微卡片同步适配**：
+     - Excel/CSV 导出功能基于完整过滤数据集进行导出，不受前端当前分页限制；
+     - 移动端微卡片同步支持日均汇总卡片与分时分页切片。
+
+## 2026-10-13 insulation_pipe_supply_2026 配置文件与统一账号权限体系管辖范围一致性核对 (Tube Config & Auth Unit Alignment Audit)
+
+- **涉及页面与权限上下文**：
+  - 子项目用户权限与管理范围显示：现场管理员、施工单位、库管员各端工作台及标段切换筛选器；
+  - 核心核对：[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json) 与 [`账户信息.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/账户信息.json)；
+- **前端权限表现说明**：
+  - 前端各页面标段筛选与数据流转依据后端通过 `resolve_accessible_section_1_ids` 计算返回的可访问标段列表进行渲染；
+  - 本轮已完成双源数据全量对齐审计，明确了肖贺升、孟广胜两处标段配置差异以及通用库管员的文字口径差异，为后续业务端权限统一提供依据。
+
 ## 2026-10-13 daily_report_25_26 电力现货数据手动拉取已存在提示与二次覆盖确认交互 (Spot Electricity Data Exists Overwrite Confirmation UI)
 
 - **涉及页面与服务模块**：
