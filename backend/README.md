@@ -1,3 +1,157 @@
+## 2026-10-13 daily_report_25_26 前端负电价时点占比升级与后端数据源契约保持 (Spot Electricity Negative Ratio & Data Stability)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)（`/spot_electricity/summary` 接口）；
+  - 关联前端组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **数据源与架构契约说明**：
+  - 前端利用既有 `/spot_electricity/summary` 接口返回的 `negative_price_points`（负电价时点数）与 `point_count`（总查询点位数）字段，由前端响应式计算得出负电价时点占比；
+  - 后端接口入参出参及数据库表结构无需变更，数据契约 100% 保持稳定。
+
+## 2026-10-13 daily_report_25_26 前端现货价差指标改名与后端 API 契约稳定保持 (Spot Electricity Metric Rename & API Stability)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 关联前端组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **契约与架构对齐说明**：
+  - 前端将单日分时图表、指标按钮、Tooltip 与表格表头中的“现货价差”统一规范更名为“**价差（实时-日前）**”；
+  - 后端数据库表字段 `price_spread` 以及 API 端点返回的 JSON 键名保持 100% 兼容稳定，无破坏性变更。
+
+## 2026-10-13 daily_report_25_26 共享项目拓扑页面描述精准化同步 (Spot Electricity Description Update)
+
+- **涉及服务与配置文件**：
+  - 单一真相源配置：[`项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)；
+  - 关联 API 模块：[`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)（`/projects/{project_id}/pages` 接口动态读取该配置）。
+- **元数据配置说明**：
+  - 在 `backend_data/shared/项目列表.json` 中，将 `spot_electricity` 页面描述同步更新为：“**15分钟日前/实时电价、实时与日前价差走势**”；
+  - 后端全部 API 端点契约保持 100% 稳定运行。
+
+## 2026-10-13 daily_report_25_26 共享项目拓扑页面元数据改名与现货数据服务定位统一 (Spot Electricity Metadata Page Rename & Service Stability)
+
+- **涉及服务与配置文件**：
+  - 单一真相源配置：[`项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)；
+  - 关联 API 模块：[`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)（`/projects/{project_id}/pages` 接口动态读取该配置）；
+  - 关联数据表：`public.spot_electricity_15min_data`。
+- **元数据配置与架构说明**：
+  1. **页面拓扑统一更名**：
+     - 在 `backend_data/shared/项目列表.json` 中，将 `daily_report_25_26` 项目下的 `spot_electricity` 页面名称由 `"电力市场数据"` 更新为规范名称 **`"电力现货市场数据"`**；
+     - 页面描述字段同步精炼更新为 `"15分钟日前/实时电价走势、现货峰谷价差分析"`；
+  2. **后端 API 与数据契约保持**：
+     - 后端全部现货业务接口（`meta`、`summary`、`points`、`daily_trends`、`period_trends`、`monthly_trends`）入参和出参契约 100% 保持稳定，页面拓扑名称调整对业务数据流无破坏性影响。
+
+## 2026-10-13 daily_report_25_26 前端电力市场顶部看板白底质感重塑与后端契约保持 (Spot Electricity Banner Theme Redesign & API Stability)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 关联前端组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **契约与架构对齐说明**：
+  - 前端将“辽宁电力市场数据板块”顶部看板（`.banner-card`）由暗黑深色渐变全面改造为与整站一致的纯白质感卡片风格；
+  - 该项改进纯属前端视图层 CSS 样式调整，不涉及任何接口调用变动，后端全部 API 端点（`points`, `summary`, `daily_trends`, `period_trends`, `monthly_trends`）契约保持 100% 稳定运行。
+
+## 2026-10-13 daily_report_25_26 前端图表极值标签胶囊重构与后端契约保持 (Spot Electricity MarkPoint Pill Badge & API Stability)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 关联前端组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **契约与架构对齐说明**：
+  - 前端各口径图表极值标签从水滴大头针重构为自适应宽度圆角胶囊标签，修复数字溢出并提升美观度；该项改进完全由前端图表层自适应完成；
+  - 后端全部 API 端点与数据契约保持 100% 稳定，无需调整任何后端服务。
+
+## 2026-10-13 daily_report_25_26 前端图表全口径极值数据标签上线与后端接口契约保持 (Spot Electricity Chart MarkPoint Labels & API Stability)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 关联前端组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **契约与架构对齐说明**：
+  - 前端各口径图表新增 ECharts `markPoint` 极值气泡标签展示，该项改进完全由前端图表渲染层驱动，直接使用既有接口（`daily_trends`, `monthly_trends`, `period_trends`, `points`）所返回的数值集合；
+  - 后端全部 API 端点与数据契约保持 100% 稳定，无需新增或修改任何后端接口。
+
+## 2026-10-13 daily_report_25_26 前端控制工具栏两行布局固化与后端契约保持 (Spot Electricity Two-Row Toolbar & API Stability)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 关联前端组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **契约与架构对齐说明**：
+  - 前端将控制筛选工具栏（`.control-toolbar`）在单日分时精细与区间走势分析两大模式下统一固化为双行独立架构（第一行承载模式切换与日期范围选择，第二行承载子模式切换、负电价过滤与数据导出）；
+  - 后端全部 API 端点（`points`, `summary`, `daily_trends`, `period_trends`, `monthly_trends`）入参契约与出参契约保持 100% 稳定，前端布局调整不改变任何网络请求与交互逻辑。
+
+## 2026-10-13 daily_report_25_26 电力现货按月聚合平均走势 API 落地 (Spot Electricity Monthly Trends Aggregation API)
+
+- **涉及服务与路由**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 路由挂载：`public_router`（支持 `get_current_session_optional`，与既有端点同源挂载）。
+- **新增对外暴露端点**：
+  - `GET /api/v1/projects/daily_report_25_26/spot_electricity/monthly_trends`：
+    - 查询参数：`start_date: str`（起始日期），`end_date: str`（截止日期）；
+    - 聚合原理：基于 PostgreSQL 原生 SQL 对数据表 `public.spot_electricity_15min_data` 按 `TO_CHAR(trade_date, 'YYYY-MM')` 执行 `GROUP BY` 与 `ORDER BY month_label ASC`；
+    - 统计指标：
+      1. 日前月均价（`avg_da = AVG(day_ahead_price)`）；
+      2. 实时月均价（`avg_rt = AVG(real_time_price)`）；
+      3. 月均价差（`avg_spread = AVG(price_spread)`）；
+      4. 负电价时点数统计（`COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0)`）；
+      5. 包含天数与总点位数（`COUNT(DISTINCT trade_date) as day_count`, `COUNT(*) as point_count`）；
+      6. 北海热电厂、香海热电厂、全省售电量与两厂合计售电量的月度总计（`SUM(beihai_total_sales)`, `SUM(xianghai_total_sales)`, `SUM(province_total_sales)`, `SUM(total_power_sales)`）；
+    - 输出性能：固定输出 1~12 条月度聚合记录，毫秒级响应，为前端区间走势的月度均价分析提供高效支持。
+
+## 2026-10-13 daily_report_25_26 电力现货按15分钟时段聚合平均趋势 API 落地 (Spot Electricity Period Trends Aggregation API)
+
+- **涉及服务与路由**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 路由挂载：`public_router`（支持 `get_current_session_optional`，与既有端点同源挂载）。
+- **新增对外暴露端点**：
+  - `GET /api/v1/projects/daily_report_25_26/spot_electricity/period_trends`：
+    - 查询参数：`start_date: str`（起始日期），`end_date: str`（截止日期）；
+    - 聚合原理：基于 PostgreSQL 原生 SQL 对数据表 `public.spot_electricity_15min_data` 按 `point_index, time_label, period_start_time, period_end_time` 执行 `GROUP BY` 与 `ORDER BY point_index ASC`；
+    - 统计指标：
+      1. 日前时段均价、最高价、最低价（`avg_da`, `max_da`, `min_da`）；
+      2. 实时时段均价、最高价、最低价（`avg_rt`, `max_rt`, `min_rt`）；
+      3. 时段平均现货价差（`avg_spread`）；
+      4. 时段负电价发生天数统计（`COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0)`）；
+      5. 北海热电厂、香海热电厂、全省售电量与两厂合计售电量的时段平均值（`avg_beihai_sales`, `avg_xianghai_sales`, `avg_province_sales`, `avg_total_sales`）；
+    - 输出性能：固定输出 96 条高精聚合记录，毫秒级响应，为前端区间走势的 00:15~24:00 典型分时曲线提供高效支持。
+
+## 2026-10-13 daily_report_25_26 电力市场分时精细模式与负电价区间前后端契约对齐保持 (Spot Electricity Mode & Data Contract Alignment)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 核心接口端点：
+    - `GET /api/v1/projects/daily_report_25_26/spot_electricity/points`
+    - `GET /api/v1/projects/daily_report_25_26/spot_electricity/summary`
+    - `GET /api/v1/projects/daily_report_25_26/spot_electricity/daily_trends`
+- **契约与架构对齐说明**：
+  - 前端将“单日96点精细”更名为“单日分时精细”，并将负电价过滤策略升级为“前端全量拉取 96 点、横轴刻度固化、根据勾选指标动态判定负电价区间并呈现连续曲线”；
+  - 移除了表格中冗余的“状态”字段；
+  - 后端点位查询接口 `points` 及相关统计接口数据契约完全保持稳定兼容，单日模式下由前端显式传入 `only_negative=false`，充分复用既有的 15 分钟高精时序接口能力。
+
+## 2026-10-13 daily_report_25_26 电力市场数据板块后端 API 路由落地与全省售电量统计对齐 (Spot Electricity Market APIs & Province Sales Contract Sync)
+
+- **涉及接口与路由**：
+  - API 实现文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)（改挂载在 `public_router` 并支持 `get_current_session_optional`，消除强制 Bearer 鉴权锁死的 401 报错；接口聚合输出 `sum_beihai_sales`、`sum_xianghai_sales` 及 `sum_province_sales` 全省时段售电量指标）；
+  - 路由挂载文件：[`router.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/router.py)；
+  - 页面项目注册：[`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)（在 `daily_report_25_26` 下挂载 `spot_electricity` 页面）；
+  - 全局权限放行：[`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)（将 `daily_report_25_26` 纳入 `public_router` 挂载清单，并在 `list_project_pages` 中为具备本生产日报项目权限的所有用户统一放行电力市场数据页面）。
+- **对外暴露端点**：
+  1. `GET /api/v1/projects/daily_report_25_26/spot_electricity/meta`：返回有效时间范围与数据点总量；
+  2. `GET /api/v1/projects/daily_report_25_26/spot_electricity/summary`：返回指定日期或区间的均价、极值、价差及负电价汇总统计，以及北海、香海与全省售电量汇总；
+  3. `GET /api/v1/projects/daily_report_25_26/spot_electricity/points`：返回 15 分钟高精度时序明细点位，支持负电价条件过滤；
+  4. `GET /api/v1/projects/daily_report_25_26/spot_electricity/daily_trends`：按日聚合统计均价与极端时点分布。
+
+## 2026-10-13 辽宁电力现货15分钟电价与电厂机组售电量数据表架构落地 (Spot Electricity 15-Minute Data & Generator Unit Sales Schema)
+
+- **涉及模型、脚本与 DDL**：
+  - DDL 脚本：[`create_spot_electricity_15min_data.sql`](file:///D:/编程项目/phoenix/backend/sql/create_spot_electricity_15min_data.sql)；
+  - ORM 数据模型：[`models_spot_electricity.py`](file:///D:/编程项目/phoenix/backend/db/models_spot_electricity.py)（类名 `SpotElectricity15MinData`，统一由 [`backend/db/__init__.py`](file:///D:/编程项目/phoenix/backend/db/__init__.py) 导出）；
+  - 数据导入工具：[`import_spot_electricity_data.py`](file:///D:/编程项目/phoenix/backend/scripts/import_spot_electricity_data.py)。
+- **数据表结构说明 (`public.spot_electricity_15min_data`)**：
+  1. **主键与时序**：`id` (BIGSERIAL), `trade_date` (DATE), `point_index` (INT 1-96), `time_label` (VARCHAR(10)), `period_start_time` (VARCHAR(8)), `period_end_time` (VARCHAR(8))；
+  2. **现货电价**：`day_ahead_price` (NUMERIC(10,4)), `real_time_price` (NUMERIC(10,4)), `price_spread` (NUMERIC(10,4), 实时-日前)；
+  3. **北海热电厂机组售电量**：`beihai_unit1_sales`, `beihai_unit2_sales`, `beihai_unit3_sales`, `beihai_total_sales` (NUMERIC(12,4))；
+  4. **香海热电厂机组售电量**：`xianghai_unit1_sales`, `xianghai_unit2_sales`, `xianghai_unit3_sales`, `xianghai_unit4_sales`, `xianghai_total_sales` (NUMERIC(12,4))；
+  5. **全省与汇总收益**：`province_total_sales` (NUMERIC(14,4), 全省该时段售电量 MWh), `total_power_sales` (NUMERIC(12,4), 两厂合计), `estimated_revenue` (NUMERIC(14,4))；
+  6. **状态管理**：`status` ('raw'/'draft'/'submitted'/'locked'), `remarks`, `created_at`, `updated_at`；
+  7. **约束与索引**：唯一键 `(trade_date, point_index)`，高效支持基于日期的时序查询与幂等 Upsert。
+- **数据导入实绩**：
+  - 成功导入自 2026-01-01 至 2026-10-12 共 285 天、27,360 条 15 分钟现货电价历史数据，日前与实时电价、价差、时段起止均已校验落库。
+
 ## 2026-10-10 库管工作台管件发货记录手机移动端深度优化前后端契约保持 (Warehouse Mobile Fitting Ledger Optimization Contract Sync)
 
 - **涉及服务与接口**：

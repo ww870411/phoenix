@@ -1,3 +1,213 @@
+## 2026-10-13 daily_report_25_26 电力现货负电价指标升级：重塑为总查询时段占比透明呈现 (Spot Electricity Negative Point Ratio Redesign)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面数据展示与分析深度升级成果**：
+  1. **定性标签升级为定量占比指标**：
+     - 将原先静态定性说明“⚠️ 新能源大发/极端低谷”升级为精准实时的总查询时段占比（`negativePointRatioText`）；
+     - 占比指标以 `(负电价时点数 / 总查询时段数) * 100`% 动态计算，并附带 `(分子/分母)` 具体点位数对照；
+  2. **状态卡片层级规范展示**：
+     - `.kpi-sub` 左侧固定展示 `占总查询时段:`，右侧根据是否存在负电价自动切换预警色调胶囊（`badge-alert`）或标准中性文本，信息直观完整。
+
+## 2026-10-13 daily_report_25_26 电力现货图表指标改名：现货价差更名为价差（实时-日前） (Spot Electricity Spread Metric Rename)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面指标展示与交互统一成果**：
+  1. **单日图表指标切换按钮规范化**：
+     - 指标控制胶囊 (`.indicator-chip`) 文案与 hover 提示由“现货价差”更新为：“**价差（实时-日前）**”；
+  2. **ECharts 柱状图系列与浮窗提示同步**：
+     - series 声明 `name: '价差（实时-日前）'`，悬停 Tooltip 浮窗同步输出 `● 价差（实时-日前）: 数值 元/MWh`；
+  3. **数据明细表格与微卡片表头统一**：
+     - 表格列头正式命名为 `价差（实时-日前） (元/MWh)`，微卡片单元格标签同步设为 `价差（实时-日前）`；
+  4. **Excel 导出表头同步**：
+     - 单日分时导出文件列名自动匹配为 `'价差（实时-日前）（元/兆瓦时）'`。
+
+## 2026-10-13 daily_report_25_26 电力现货看板副标题文案精炼与实时价差定位升级 (Spot Electricity Subtitle Update: Realtime & Day-Ahead Spread)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 页面导航选择大厅：[`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)。
+- **页面文案与业务属性精炼成果**：
+  1. **看板副标题精准定位**：
+     - `.banner-subtitle` 文案由“15分钟日前/实时电价走势、现货峰谷价差分析”更新为：“**15分钟日前/实时电价、实时与日前价差走势**”；
+     - 准确点明当前系统核心图表聚焦于日前与实时电价对比以及实时对日前的套利价差波动；
+  2. **选择大厅兜底说明同步**：
+     - `PageSelectView.vue` 中 `PAGE_DESCRIPTION_MAP.spot_electricity` 兜底说明同步更新为 `'15分钟日前/实时电价、实时与日前价差走势'`。
+
+## 2026-10-13 daily_report_25_26 电力现货市场数据板块全链路规范化改名与看板文案升级 (Spot Electricity Rename & Subtitle Refinement)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 页面导航选择大厅：[`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)。
+- **页面规范化与文案精炼成果**：
+  1. **全链路规范化页面名称统一为“电力现货市场数据”**：
+     - 在系统页面选择大厅中，页面名称与点击跳转 query 参数从原先的 `pageName=电力市场数据` 全面升级为 `pageName=电力现货市场数据`；
+     - `PageSelectView.vue` 中兜底映射同步更新为 `'15分钟日前/实时电价走势、现货峰谷价差分析'`；
+  2. **现货板块顶栏主标题全面升级**：
+     - `.banner-title` 主标题文案由原先“辽宁电力市场数据板块”正式更名为高阶定位：“**辽宁省电力现货市场数据查询服务**”；
+  3. **现货板块副标题去冗余精炼**：
+     - `.banner-subtitle` 副标题由“15分钟日前/实时电价走势、现货峰谷价差分析与电厂机组售电量填报大盘”精炼收敛为：“**15分钟日前/实时电价走势、现货峰谷价差分析**”，消除陈旧冗余描述；
+  4. **面包屑导航动态关联与标准 Fallback**：
+     - 面包屑第三级标签采用计算属性响应式绑定 `route.query.pageName`，未指定时默认展示 `'电力现货市场数据'`，确保所有路由场景下层级显示一致。
+
+## 2026-10-13 daily_report_25_26 电力市场顶部看板视觉风格重构与整站白底卡片质感统一 (Spot Electricity Banner Card Light Theme Redesign)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面视觉与风格统一成果**：
+  1. **暗黑背景框体全面转型为现代纯白质感卡片 (`.banner-card`)**：
+     - 去除原先偏暗、沉重的深色蓝灰渐变底色（`#1e293b`~`#0f172a`），重构为整站统一的纯白卡片背景（`#ffffff`）；
+     - 边框采用浅灰低饱和线条（`border: 1px solid #e2e8f0`），搭配柔和轻微阴影（`box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05)`），与下方的控制工具栏、KPI 胶囊卡及 ECharts 图表卡片浑然一体；
+  2. **板块图标容器与文本层次优化**：
+     - 图标容器 (`.banner-icon`)：重构为浅蓝渐变柔和微卡片（`linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)`），搭配蓝色电力符号（`#2563eb`）与浅蓝边框（`border: 1px solid #bfdbfe`）；
+     - 主标题 (`.banner-title`)：字色切换为高对比度深深灰（`#0f172a`，字号 19px，字重 700）；
+     - 副标题 (`.banner-subtitle`)：字色切换为优雅次级灰（`#64748b`，字号 13px）；
+  3. **数据状态标签组升级 (`.meta-tag`)**：
+     - 数据状态标签（数据覆盖天数、总点位数）由深色半透明胶囊升级为浅灰蓝现代胶囊（`background: #f8fafc; border: 1px solid #e2e8f0; color: #475569;`）；
+     - 强调数值文本使用加粗深色字（`#0f172a`）；
+     - 在线状态绿点（`.dot.live`）升级为翡翠绿微光晕（`box-shadow: 0 0 6px rgba(16, 185, 129, 0.5)`）；
+  4. **全端视觉一致性与响应式保真**：
+     - 桌面端与移动端窄屏下均表现出极佳的一致性与清爽感，彻底消除了深浅色块突兀割裂的视觉体验。
+
+## 2026-10-13 daily_report_25_26 电力市场图表极值标签视觉重构与数字溢出消除 (Spot Electricity MarkPoint Pill Badge Redesign & Overflow Fix)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面数据可视化升级成果**：
+  1. **彻底根除数字溢出缺陷**：
+     - 摒弃内部可用视口局促的传统水滴大头针（`pin`），升级为现代自适应宽度圆角胶囊药丸标签（Pill Badge）；
+     - 定位点采用 5px 靶心微圆点（序列色填充 + 白色边框），高低点分别位于数据点上下方（`distance: 6px`）；
+     - 标签容器宽度由数值文本自动弹性扩展（Auto-width），无论长浮点数还是负电价数值均完整被圆角背景包裹，绝不溢出；
+  2. **序列专属主题色彩融合**：
+     - 各指标极值胶囊分别精准对齐序列主题色彩（日前宝蓝、实时暖橙、价差深绿、负电价预警红）；
+     - 附带向上/向下直观导向箭头（`▲ 最高 数值` / `▼ 最低 数值`）；
+  3. **图表顶部呼吸空间优化**：
+     - 各口径图表 `grid.top` 微调至 `48px`，波峰处数据标签展示从容舒展。
+
+## 2026-10-13 daily_report_25_26 电力市场图表全口径最大/最小值数据标签上线 (Spot Electricity Charts Max/Min MarkPoint Labels)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面数据可视化升级成果**：
+  1. **全统计口径极值标注覆盖**：
+     - **区间走势 · 按每日平均值**：日前日均价、实时日均价与负电价时点数均配置 `markPoint` 极值气泡指针；
+     - **区间走势 · 按每月平均值**：日前月均价、实时月均价、月均价差与负电价时点数均标注 Max/Min 标签；
+     - **区间走势 · 按时段平均值 (0:15~24:00)**：96 时段日前均价、实时均价、时段价差及负电价发生天数均配置极值标签；
+     - **单日分时精细模式**：96 点日前电价、实时电价与现货价差同步装备最大/最小值标签；
+  2. **智能格式化与负电价过滤联动**：
+     - 电价与价差自动保留 2 位小数，天数与频次自动格式化为整数；
+     - 当开启“仅负电价时段”过滤时，极值自动在有效负电价数据集中实时重算并动态定位。
+
+## 2026-10-13 daily_report_25_26 电力市场控制工具栏双行架构固化与交互体验统一 (Spot Electricity Toolbar Two-Row Layout Standardization)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面交互与布局升级**：
+  1. **控制工具栏解耦为物理固定双行布局**：
+     - 第一行 (`.toolbar-row.toolbar-row-top`)：统一安放【模式切换按钮】（单日分时精细 vs 区间走势分析）以及对应的时间选择控件（单日模式的日期切页、区间模式的起止日期与快捷胶囊）；
+     - 第二行 (`.toolbar-row.toolbar-row-bottom`)：左侧承载分析视角（区间模式下的三大子模式切换按钮，单日模式下的 15 分钟粒度说明徽章），右侧恒定吸附【❄️ 仅负电价时段】复选框与【📥 导出数据 (Excel/CSV)】按钮；
+  2. **消除单日模式挤占与切换抖动**：
+     - 彻底改变以往单日模式下导出与过滤按钮被拉至第一行右侧、区间模式下又被挤落至第二行的排版不一致现象；
+     - 全模式下统一保持双行高度，中间辅以 `1px dashed` 虚线分割，整体视觉专业典雅且切换高度恒定无抖动。
+
+## 2026-10-13 daily_report_25_26 电力市场区间走势三大聚合模态落地：日度、月度与时段均价走势秒级联动 (Spot Electricity Triple Range Trends: Daily, Monthly & Period Average)
+
+- **涉及页面与服务组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - API 请求封装：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（新增 `getSpotElectricityMonthlyTrends` 封装方法）。
+- **页面功能与架构扩展成果**：
+  1. **区间走势二级聚合模式控制器扩充 (`.range-submode-tabs`)**：
+     - 在“📈 区间走势分析”工具栏中并列提供三大子模式：【📅 按每日平均值】、【🗓️ 按每月平均值】与【⏰ 按时段平均值 (0:15~24:00)】；
+     - 各子模式切换采用零延迟本地秒切策略，数据在进入区间模式时通过 `Promise.all` 预拉取完毕；
+  2. **按月平均走势图表与指标动态选择器**：
+     - X 轴展示所选时间跨度内的月份序列（如 `2026-01` 至 `2026-10`）；
+     - 支持日前月均价（宝蓝平滑折线与渐变区域）、实时月均价（暖橙平滑折线与渐变区域）、月均价差（绿/紫柱状图）与负电价时点数（红柱状图）的动态开关；
+     - Tooltip 提示浮窗详尽展示月份、统计天数、点位数、各项均价指标与电厂月度总售电量；
+  3. **月度明细大表格与微卡片渲染**：
+     - 数据详细列表呈现月度统计表格：序号、月份、统计天数/点位数、日前月均价、实时月均价、月均价差、负电价时点数、北海总售电、香海总售电、全省总售电；
+     - 手机端同步自适应为月度信息微卡片；
+  4. **月度均价专属 Excel 导出**：
+     - 在“按每月平均值”模式下点击导出按钮，自动生成标准月度均价与售电量分析工作簿。
+
+## 2026-10-13 daily_report_25_26 电力市场区间走势双模式扩展：每日平均走势与0:15~24:00时段聚合平均曲线 (Spot Electricity Dual Range Trends: Daily Average & Period Average)
+
+- **涉及页面与服务组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - API 请求封装：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（新增 `getSpotElectricityPeriodTrends` 封装端点）。
+- **页面功能与架构扩展成果**：
+  1. **区间走势二级聚合模式控制器 (`.range-submode-tabs`)**：
+     - 在“📈 区间走势分析”工具栏中加入二级聚合切换：【📅 按每日平均值】与【⏰ 按时段平均值 (0:15~24:00)】；
+     - 手机端自适应等分排布，触控切换顺畅；
+  2. **时段聚合平均曲线 (00:15 至 24:00，96 点位)**：
+     - 针对用户选定时间跨度（近7天、近30天或自定义任意时间段），统计并绘制 96 个 15 分钟时段的日前时段均价（宝蓝平滑曲线与渐变区域）与实时时段均价（暖橙平滑曲线与渐变区域）；
+     - 图表主标题与 Badge 智能跟随展示（`各时段平均电价走势 (00:15 ~ 24:00)` 与 `时段聚合平均 (96 点位)`）；
+     - Tooltip 提示框丰富呈现：同时展示时段序号、起止时刻、日前均价与极值区间 [MIN~MAX]、实时均价与极值区间、平均价差、负电价发生天数及电厂售电量均值；
+  3. **指标显隐开关与负电价区间图表联动**：
+     - 时段平均模式专属指标切换器：【日前均价】、【实时均价】、【平均价差】（柱状图）、【负电价天数】（柱状图）；
+     - 勾选“仅负电价时段”时，横轴 96 点位绝对固化不变，仅在所选电价均值为负的时段区间绘制连续曲线并点亮高亮标记点；
+  4. **全链路列表明细与 Excel 导出完整对称**：
+     - 切换至按时段平均值模式后，下方的大表格及移动端微卡片即刻呈现 96 个时段的明细数据；
+     - 导出按钮智能切为时段聚合均价导出方案，输出包含时段序号、时段起止、日前/实时平均与极值电价、价差、负电价天数及平均售电量的专项报表。
+
+## 2026-10-13 daily_report_25_26 电力市场分时精细重命名、表格状态字段移除与负电价区间曲线横轴固化 (Spot Electricity Time-Division Mode & Negative Price Range Series)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)
+- **页面交互与数据可视化重构成果**：
+  1. **模式文案优化与标题精细化**：
+     - 切换按钮由“📅 单日96点精细”更名为“📅 单日分时精细”；
+     - 图表主标题升级为“分时现货日前/实时曲线对比”，更符合电力现货分时交易语境；
+  2. **表格与卡片“状态”字段彻底移除**：
+     - 大表格表头与数据行彻底移除“状态”列，空数据占位跨列 `colspan` 对应调整为 10；
+     - 移动端微卡片中彻底剔除状态标签微徽章；
+     - 数据导出 Excel 逻辑同步剔除 `'状态'` 列映射，使数据结构更紧凑纯粹；
+  3. **负电价区间图表与横轴时间固化（重点）**：
+     - 单日模式下彻底解除后端过滤对点位完整性的破坏，前端请求全天 96 点数据，使横轴时间刻度绝对固化在 `00:15`~`24:00`（保持全天 96 点完整跨度，绝不变形塌陷）；
+     - 负电价判定规则动态协同：根据当前激活显示的指标（日前电价、实时电价），只要已选指标中至少有一个 `< 0`，即认定该时段为负电价时段；
+     - 在 ECharts 中将非负电价点位设为 `null`，使折线仅在负电价区间平滑连接绘制，并点亮实心数据圆点（`showSymbol: true`），形成鲜明的负电价区间走势；
+     - 价差柱状图同样在负电价区间精准呈现，其余时段保持留白；
+  4. **明细列表计算属性 `displayedPoints` 双向联动**：
+     - 数据详细列表及移动端卡片根据动态指标判定规则同步过滤，精准呈现负电价时段明细条目与统计数。
+
+## 2026-10-13 daily_report_25_26 电力市场数据板块落地、图表自适应、动态指标切换与大表直出 (Spot Electricity Market Dashboard & Responsive Table View)
+
+- **涉及页面与路由**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 核心服务方法：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（新增 `getSpotElectricityMeta`、`getSpotElectricitySummary`、`getSpotElectricityPoints`、`getSpotElectricityDailyTrends` 四大封装函数，自动附带 `attachAuthHeaders` 与异常捕获）；
+  - 路由配置：[`router/index.js`](file:///D:/编程项目/phoenix/frontend/src/router/index.js)（注册 `/projects/:projectKey/pages/spot_electricity`，配置项目权限守卫直接放行）；
+  - 权限控制：[`auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js)（`hasPageAccess` 中对 `spot_electricity` 开放给所有具备项目权限的用户）；
+  - 导航入口：[`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)（增加板块卡片与跳转分发）。
+- **页面功能、图表自适应与数据列表双模渲染**：
+  1. **数据详细列表桌面端直出大表与视口感知修复**：
+     - 彻底修复由于 `mobileLayout='card'` 且桌面端 CSS 隐藏卡片导致的明细区域空白缺陷；
+     - 注入 `isMobileScreen` 响应式视口检测，在 PC 桌面端无条件直接渲染 96 点完整数据表格；
+     - 在手机窄屏（`<= 768px`）设备上默认展示紧凑微卡片，并可通过顶部切换按钮在【微卡片】与【紧凑大表】间平滑切换；
+  2. **动态指标开关选择器（默认显示日前与实时电价，价差可选）**：
+     - 单日模式支持自由勾选【日前电价】（折线）、【实时电价】（折线）、【现货价差】（柱状图）；默认勾选日前与实时电价，价差默认不显示；
+     - 区间模式支持自由勾选【日前日均价】、【实时日均价】、【负电价时点数】；
+     - 双 Y 轴智能联动：未勾选“价差”时，右侧 Y 轴自动隐藏（`yAxis[1].show = false`），折线图享有全幅视野；勾选后右轴平滑浮现；
+     - Tooltip 智能跟随：提示弹窗仅针对勾选生效的指标呈现数值，未激活指标自动滤除；
+  3. **图表全宽撑满与容器尺寸竞态彻底修复**：
+     - 彻底解耦 `loading` 与图表 DOM，移除 `v-show="!loading"`，使 `.main-chart` 始终保持 `width: 100% !important; min-width: 100% !important;`；
+     - 采用 `.chart-loading-overlay` 绝对定位半透明磨砂遮罩覆盖层，数据加载不影响底层容器排版宽度；
+     - 在 `renderChart()` 中加入零宽度拦截与 `requestAnimationFrame` 延迟重试，并在渲染完成后显式触发 `chartInstance.resize()`；
+     - 注入原生 `ResizeObserver` 动态监听容器形变，确保无论是浏览器窗口缩放、侧边栏收折还是移动端横竖屏切换，图表均 100% 满宽平铺、毫无缩瘪；
+  4. **双层 KPI 业务大盘与售电量补齐**：
+     - 价格指标层（4列）：日前均价、实时均价、现货平均价差、负电价时点数；
+     - 机组发售电量大盘层（3列）：北海热电厂售电量（1-3号机组）、香海热电厂售电量（1-4号机组）、辽宁全省该时段售电量；
+     - 移动端窄屏（`<= 768px`）自适应为精致 2 列网格；
+  5. **多层级时间选择与数据导出支持**：
+     - 支持单日 96 点高精时序（支持快捷切换前一天/后一天/最新一天）与多日区间走势（近7天、近30天、全部数据）；
+     - 基于 `xlsx` 支持一键将当前筛选时段的全部 15 分钟时点、电价、机组售电量及全省售电量数据导出为 Excel 文件。
+
+## 2026-10-13 辽宁电力现货15分钟电价与电厂机组售电量数据基座建设 (Spot Electricity 15-Minute Data Foundation)
+
+- **涉及业务模块与数据准备**：
+  - 后端已在 PostgreSQL `public` schema 建立辽宁电力现货 15 分钟电价与机组售电量数据表 `public.spot_electricity_15min_data`，并完成自 2026-01-01 至 2026-10-12 全量 27,360 条 15 分钟现货历史数据入库；
+  - 表结构中已对齐全省该时段售电量（`province_total_sales`）、北海热电厂（1#~3#机组及合计）与香海热电厂（1#~4#机组及合计）的 15 分钟时段售电量填报字段，以及日前/实时电价、价差、预估收益等核心指标；
+  - 为后续前端开发“电力现货 15 分钟机组与全省售电量在线填报表格”与“现货电价及售电收益走势图表/看板”提供了完整的数据底座支持。
+
 ## 2026-10-10 库管工作台管件发货记录手机移动端深度优化：外层视口扩容、发货卡片解耦与操作按钮栏均分 (Warehouse Management Mobile Fitting Ledger Responsive Optimization)
 
 - **涉及页面与组件**：

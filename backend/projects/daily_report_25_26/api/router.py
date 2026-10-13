@@ -15,12 +15,17 @@ from .legacy_full import router as legacy_router
 from .dashboard import public_router as dashboard_public_router
 from .dashboard import router as dashboard_router
 
+from .spot_electricity import public_router as spot_electricity_public_router
+from .spot_electricity import router as spot_electricity_router
+
 router = APIRouter()
 router.include_router(legacy_router)
 router.include_router(dashboard_router)
+router.include_router(spot_electricity_router)
 
 public_router = APIRouter()
 public_router.include_router(legacy_public_router)
 public_router.include_router(dashboard_public_router)
+public_router.include_router(spot_electricity_public_router)
 
 __all__ = ["router", "public_router"]

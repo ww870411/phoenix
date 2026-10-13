@@ -1,3 +1,384 @@
+## 2026-10-13 [电力现货负电价指标重构：新能源大发/极端低谷转变为总查询点位占比精准展示]
+- **需求定位与用户意向**：
+  - 用户反馈：“‘新能源大发/极端低谷’这个部分，改为负电价时点占总查询的占比”；
+  - 核心设计意向：将原本定性的描述标签（“⚠️ 新能源大发/极端低谷”）重塑为严格定量、透明直观的统计学指标，清晰告知用户当前查询范围内负电价时点占总有效点位的比例，并同步展现分子分母数值，极大提升数据科学性与实用价值。
+- **高精细改动清单 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  1. **计算属性驱动统计数据重构**：
+     - 新增 `totalQueryPoints` 计算属性：自适应提取 `summary?.point_count`（单日或区间总时段点位数，单日为 96 点，区间为 N×96 点）或 fallback 提取 `points.length`；
+     - 新增 `negativePointRatioText` 计算属性：精确计算 `(negative_price_points / totalQueryPoints) * 100`，保留 1 位小数（如 `3.1%`，零值展示为 `0.0%`）；
+  2. **KPI 状态卡片结构重构 (`.kpi-sub`)**：
+     - 左侧标签更新为：`占总查询时段:`；
+     - 右侧展示：
+       - 当存在负电价时，采用醒目预警胶囊展现 `{{ negativePointRatioText }} ({{ negative_points }}/{{ total_points }})`；
+       - 当无负电价时，展示中性灰度文本 `0.0% (0/{{ total_points }})`；
+  3. **单日与区间全模式自适应**：
+     - 单日分时模式下，分母精准锁定为当日 96 点；区间模式下，分母动态反映所选跨度的全部点位总和（如近 30 天 2,880 点）。
+- **本地构建与验证**：
+  - 执行 `npm run build`，749 modules transformed，用时 19.32s，退出码 0，生产包 0 错误构建成功。
+
+## 2026-10-13 [电力现货图表指标改名：现货价差全面更名为“价差（实时-日前）”]
+- **需求定位与用户意向**：
+  - 用户反馈：“图中指标的‘现货价差’改名为‘价差（实时-日前）’”；
+  - 核心设计意向：明确定量口径为实时电价与日前电价之差（实时-日前），杜绝“现货价差”这一宽泛表述产生的方向混淆，使业务人员与现货操盘人员一眼获知正负价差的经济学含义（正值代表实时高于日前，负值代表实时低于日前）。
+- **高精细改动清单 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  1. **图表控制芯片切换按钮 (`.indicator-chip`)**：
+     - 单日分时模式下，价差切换按钮文案与浮窗提示由“现货价差”更新为“**价差（实时-日前）**”；
+  2. **ECharts 柱状图系列与 Tooltip**：
+     - `series[2].name` 由 `'现货价差'` 改为 `'价差（实时-日前）'`；
+     - 鼠标十字悬停浮窗（Tooltip）中的字段名同步更新为 `● 价差（实时-日前）:`；
+  3. **表格与移动端微卡片**：
+     - 详细数据大表格表头由 `现货价差 (元/MWh)` 更新为 `价差（实时-日前） (元/MWh)`；
+     - 手机端微卡片标签由 `现货价差` 同步更新为 `价差（实时-日前）`；
+  4. **Excel 工作簿导出规范**：
+     - 单日分时数据导出时，对应列名更新为 `'价差（实时-日前）（元/兆瓦时）'`。
+- **本地构建与验证**：
+  - 执行 `npm run build`，749 modules transformed，用时 15.18s，退出码 0，生产包 0 错误构建成功。
+
+## 2026-10-13 [电力现货市场数据副标题文案精炼：明确实时与日前价差走势定位]
+- **需求定位与用户意向**：
+  - 用户反馈：“‘15分钟日前/实时电价走势、现货峰谷价差分析’改为‘15分钟日前/实时电价、实时与日前价差走势’”；
+  - 核心设计意向：进一步准确反映电力现货市场交易的核心关注点（“实时与日前价差走势”代替宽泛的“现货峰谷价差分析”），语言更加严谨专业。
+- **高精细改动清单**：
+  1. **现货视图主看板副标题更新 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+     - 将 `.banner-subtitle` 文本由“15分钟日前/实时电价走势、现货峰谷价差分析”更新为“**15分钟日前/实时电价、实时与日前价差走势**”；
+  2. **系统拓扑配置描述同步更新 ([项目列表.json](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json))**：
+     - 将 `daily_report_25_26.pages.spot_electricity` 的 `"页面描述"` 同步更新为 `"15分钟日前/实时电价、实时与日前价差走势"`；
+  3. **页面大厅兜底映射更新 ([PageSelectView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue))**：
+     - 将 `PAGE_DESCRIPTION_MAP.spot_electricity` 兜底说明同步更新为 `'15分钟日前/实时电价、实时与日前价差走势'`。
+- **本地构建与验证**：
+  - 运行 `npm run build`，749 modules transformed，耗时 17.34s，退出码 0，成功构建通过。
+
+## 2026-10-13 [电力现货市场数据板块全链路规范化改名与看板文案精简升级]
+- **需求定位与用户意向**：
+  - 用户反馈：“页面‘http://localhost:5173/projects/daily_report_25_26/pages/spot_electricity?pageName=%E7%94%B5%E5%8A%9B%E5%B8%82%E5%9C%BA%E6%95%B0%E6%8D%AE’改名为‘电力现货市场数据’，进入页面后，‘辽宁电力市场数据板块’显示为‘辽宁省电力现货市场数据查询服务’。‘15分钟日前/实时电价走势、现货峰谷价差分析与电厂机组售电量填报大盘’改为‘15分钟日前/实时电价走势、现货峰谷价差分析’”；
+  - 核心设计意向：进一步强化现货业务属性，明确“辽宁省电力现货市场数据查询服务”的服务定位，去除已经拆分或冗余的“电厂机组售电量填报大盘”陈旧描述，并将系统拓扑与 URL query 参数彻底统一为“电力现货市场数据”。
+- **全链路规范化改动清单**：
+  1. **单一真相源项目配置更新 ([项目列表.json](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json))**：
+     - 将 `daily_report_25_26.pages.spot_electricity` 的 `"页面名称"` 由 `"电力市场数据"` 改为 `"电力现货市场数据"`；
+     - 页面描述同步精炼为 `"15分钟日前/实时电价走势、现货峰谷价差分析"`；
+     - 前端进入页面时自动携带规范 URL query 参数 `pageName=电力现货市场数据`（编码后为 `%E7%94%B5%E5%8A%9B%E7%8E%B0%E8%B4%A7%E5%B8%82%E5%9C%BA%E6%95%B0%E6%8D%AE`）；
+  2. **页面选择大厅兜底映射更新 ([PageSelectView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue))**：
+     - 将 `PAGE_DESCRIPTION_MAP.spot_electricity` 兜底说明同步更新为 `'15分钟日前/实时电价走势、现货峰谷价差分析'`；
+  3. **现货视图组件标题与面包屑升级 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+     - 顶部看板主标题 (`.banner-title`)：由“辽宁电力市场数据板块”更新为“辽宁省电力现货市场数据查询服务”；
+     - 顶部看板副标题 (`.banner-subtitle`)：由“15分钟日前/实时电价走势、现货峰谷价差分析与电厂机组售电量填报大盘”精炼为“15分钟日前/实时电价走势、现货峰谷价差分析”；
+     - 面包屑导航最后一项：动态绑定 `route.query.pageName` 计算属性（默认 fallback 统一为 `'电力现货市场数据'`），确保从各路径访问时均精准显示。
+- **本地构建与验证**：
+  - 运行 `npm run build`，749 modules transformed，耗时 21.16s，构建 0 错误通过。
+
+## 2026-10-13 [电力市场顶部看板视觉风格重构：暗黑背景卡片全面转型为整站一致的现代白底质感卡片]
+- **需求定位与用户意向**：
+  - 用户反馈：“页面上部的‘辽宁电力市场数据板块’，是一个黑底的框体，改成与页面一致的色彩风格吧”；
+  - 设计升级目标：将原本偏暗深色渐变（`#1e293b`~`#0f172a`）的沉重深色框体，彻底转变为与整站页面自然融合的纯白质感卡片风格，保持界面色调和谐、清爽、统一。
+- **高精细视觉样式重塑 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  1. **卡片基底升级 (`.banner-card`)**：
+     - 背景由暗夜深色渐变重构为纯白背景（`#ffffff`）；
+     - 搭配整站统一的浅灰边框（`border: 1px solid #e2e8f0`）与柔和低饱和投影（`box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05)`）；
+  2. **板块图标与标题组升级**：
+     - 图标容器 (`.banner-icon`)：重塑为浅蓝渐变微卡片（`linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)`），搭配蓝色电力符号（`#2563eb`）与淡蓝微描边（`border: 1px solid #bfdbfe`）；
+     - 标题 (`.banner-title`)：由纯白字体升级为高对比度深深灰字体（`#0f172a`，字号 19px）；
+     - 副标题 (`.banner-subtitle`)：升级为优雅次级灰字（`#64748b`，字号 13px）；
+  3. **数据状态标签组 (`.meta-tag`)**：
+     - 由暗色半透明黑底胶囊升级为浅灰蓝现代胶囊（`background: #f8fafc; border: 1px solid #e2e8f0; color: #475569;`）；
+     - 强调点位数和天数采用加粗深色文本；
+     - 在线状态绿点（`.dot.live`）升级为柔和翡翠绿光晕（`box-shadow: 0 0 6px rgba(16, 185, 129, 0.5)`）；
+  4. **移动端响应式保真**：
+     - 手机窄屏下保持紧凑优雅的白底排列，触控感知良好。
+- **验证与效果**：
+  - 本地运行 `npm run build` 成功通过（749 modules transformed，18.80s，退出码 0）；
+  - 顶部看板卡片与下方的控制工具栏、KPI 指标卡及图表卡片融为一体，整页配色高度和谐统一。
+
+## 2026-10-13 [电力市场图表极值标签视觉重构：彻底解决数字溢出，升级为自适应圆角胶囊药丸标签与序列专属色彩对齐]
+- **需求定位与缺陷根因**：
+  - 用户反馈：“标签不太美观，我是指，数字溢出了”；
+  - 核心排查根因：
+    - 此前采用 ECharts 原生水滴大头针指针（`symbol: 'pin'`），其内部有效圆形视口极为狭小（仅约 28~32px），而电力现货电价与极端负数常包含 6~7 个字符（如 `-120.50`、`385.20`），在固定尺寸的水滴气泡内无法横向排布，导致数字两端严重溢出刺出气泡；
+    - `pin` 图标体积较大且尖角遮挡折线波峰波谷细节，视觉较为厚重。
+- **高精细视觉重构落地 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  1. **重塑为自适应圆角胶囊药丸标签 (Pill Badge)**：
+     - 将定位符号重构为小巧的靶心微圆点（`symbol: 'circle'`，尺寸 5px，搭配白色细边框与序列主题色心）；
+     - 极值标签重构为悬浮胶囊：最大值位于点位上方（`position: 'top'`，间距 6px），带 `▲ 最高` 前缀；最小值位于点位下方（`position: 'bottom'`，间距 6px），带 `▼ 最低` 前缀；
+     - 标签背景采用纯 CSS 盒模型自动撑开（`borderRadius: 4`，`padding: [2.5, 6.5]`），文字自适应贴合，彻底消除任何数字溢出缺陷；
+  2. **序列专属主题色精准对齐**：
+     - 日前电价/均价：宝蓝色（`#2563eb`）圆角胶囊；
+     - 实时电价/均价：暖橙色（`#ea580c`）圆角胶囊；
+     - 现货/时段/月度价差：深绿色（`#059669`）圆角胶囊；
+     - 负电价点数/天数：预警红色（`#ef4444`）圆角胶囊；
+     - 极值标签一眼即可分辨归属指标，与对应曲线主题色浑然一体；
+  3. **布局呼吸空间微调**：
+     - 四大图表模式统一将 `grid.top` 微调至 `48px`，为峰值胶囊留出充裕的展示空间，杜绝贴顶遮挡。
+- **验证与效果**：
+  - 本地运行 `npm run build` 成功完成（749 modules transformed，19.15s，退出码 0）；
+  - 极值数字完整包裹于胶囊标签内，长字符负电价平滑自适应扩展，图表整体清爽现代。
+
+## 2026-10-13 [电力市场可视化升级：为各统计口径（日度走势、月度走势、时段聚合与单日分时）所有指标曲线及柱图装配最大值与最小值数据标签]
+- **需求定位与产品意图**：
+  - 用户反馈：“这三个口径的图，能否加上每个指标的最大、最小值处的数据标签”；
+  - 核心设计定位：在数据走势图中，峰值与谷值是现货电价分析与决策最为核心的观测点，通过在曲线与柱状图的极值点上直观标注数值，免去用户逐点悬停查找的成本，实现极值一目了然。
+- **高精细全图表实施 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  1. **极值标签辅助函数 `createMinMaxMarkPoint(isInteger)`**：
+     - 采用 ECharts 标准 `markPoint` 气泡指针（`symbol: 'pin'`，尺寸 `[52, 40]`）；
+     - 配置 `data: [{ type: 'max', name: '最大值' }, { type: 'min', name: '最小值' }]`；
+     - 智能数值格式化：浮点型指标（电价、价差）精确保留两位小数（`toFixed(2)`），计数字标（负电价时点数、负电价发生天数）输出四舍五入整数；
+     - 自动适配指标序列颜色（宝蓝、暖橙、绿/紫、红色）与悬浮 tooltip 交互；
+     - 负电价过滤兼容：在开启“仅负电价时段”过滤时，ECharts 自动在有效数值集合中提取最大值与最小值进行精准标注。
+  2. **全面覆盖各大业务口径与指标**：
+     - **口径一（按每日平均值）**：日前日均价（Max/Min）、实时日均价（Max/Min）、负电价时点数（Max/Min）；
+     - **口径二（按每月平均值）**：日前月均价（Max/Min）、实时月均价（Max/Min）、月均价差（Max/Min）、负电价时点数（Max/Min）；
+     - **口径三（按时段平均值 0:15~24:00）**：日前时段均价（Max/Min）、实时时段均价（Max/Min）、时段平均价差（Max/Min）、负电价发生天数（Max/Min）；
+     - **单日分时精细口径**：日前电价（Max/Min）、实时电价（Max/Min）、现货价差（Max/Min）。
+- **质量验证**：
+  - 前端执行 `npm run build` 打包构建顺利通过（749 modules transformed，17.17s，退出码 0）；
+  - ECharts 自适应重绘与极值气泡渲染位置准确，各口径图表极值标签显示清晰直观。
+
+## 2026-10-13 [电力市场控制工具栏重构：单日与区间全模式统一为固定两行布局，消除单日模式挤占与模式切换高度抖动]
+- **需求定位与体验缺陷排查**：
+  - 用户反馈：“选择‘单日分时精细’时，‘📥 导出数据 (Excel/CSV)’按钮及那个‘仅负电价时段’的选框，与时间选择框在同一行；选择‘区间走势分析’时，又分成了两行，我希望始终分成两行”；
+  - 核心排查根因：
+    - 旧布局将 `.view-mode-tabs`、时间选择器与 `.toolbar-right` 放在同一个 flex 弹性容器内；
+    - 单日模式下左侧元素较窄（~550px），导致右侧的“仅负电价时段”与“导出数据”被吸附在同一行右侧；
+    - 区间模式下左侧包含起止日期、快捷范围与三大子模式切换，总宽度超出屏幕单行容积，迫使右侧操作项被动挤压至第二行，造成“单日单行、区间双行”的不一致体验与切换高度跳动。
+- **高精细架构重构与设计落地 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  1. **明确两行物理解耦容器结构**：
+     - 将 `.control-toolbar` 显式解耦为两行独立行级容器：`.toolbar-row.toolbar-row-top` 与 `.toolbar-row.toolbar-row-bottom`；
+     - 两行之间设计 `border-top: 1px dashed #f1f5f9;` 浅度虚线分割，构建专业层次感；
+  2. **第一行 (toolbar-row-top) 聚焦“维度与时间设定”**：
+     - 承载【模式切换按钮】（单日分时精细 vs 区间走势分析）；
+     - 紧随对应的时间选择器：
+       - 单日模式：前一天、日期选择框、后一天、最新一天；
+       - 区间模式：起止日期选择框、近7天、近30天、全部数据、查询按钮；
+  3. **第二行 (toolbar-row-bottom) 聚焦“视角切换与功能操作”**：
+     - **左侧视角层**：
+       - 区间模式：展示三大子模式切换控件（【📅 按每日平均值】、【🗓️ 按每月平均值】、【⏰ 按时段平均值 (0:15~24:00)】）；
+       - 单日模式：展示精致的业务粒度徽章（`⏱️ 15分钟高精分时` 全天 96 个交易结算时序点位），视觉充实且平衡；
+     - **右侧操作层 (toolbar-right)**：
+       - 统一常驻呈现【❄️ 仅负电价时段】复选框与【📥 导出数据 (Excel/CSV)】按钮；
+  4. **移动端响应式保真**：
+     - 移动端媒体查询同步适配 `toolbar-row-top` 与 `toolbar-row-bottom`，保持竖向紧凑对齐与舒适触控间距。
+- **验证与效果**：
+  - 前端运行 `npm run build` 顺利通过（749 modules transformed，17.44s，退出码 0）；
+  - 无论在单日模式还是区间模式下，控制工具栏均稳定维持两行结构，功能按钮位置恒定，模式切换无高度跳动。
+
+## 2026-10-13 [电力市场区间走势扩充“按每月平均值”三维聚合模态：后端高效月度SQL分组、图表指标灵活交互与月度明细大表及Excel导出]
+- **需求定位与用户意图**：
+  - 用户反馈：“再加一个‘按每月平均值’”；
+  - 架构与设计落地：
+    1. **区间走势三模态并行**：在【📈 区间走势分析】工具栏的二级模式切换控件（`range-submode-tabs`）中，扩展为三大并列子模式：【📅 按每日平均值】、【🗓️ 按每月平均值】、【⏰ 按时段平均值 (0:15~24:00)】；
+    2. **按每月平均值模式 (Monthly Average)**：统计选定日期区间内各月份（按 `YYYY-MM` 分组）的日前月均价、实时月均价、月均价差、负电价时点数、统计天数/点位数及电厂月度总售电量；
+    3. **月度图表与指标动态联动**：提供专属月度指标开关（日前月均价折线、实时月均价折线、月均价差柱状图、负电价时点数柱状图）；支持双 Y 轴自适应显隐与丰富 Tooltip 浮窗提示；
+    4. **数据详细列表与微卡片精准适配**：列表标题动态显示“共 N 个月份聚合记录”，表格展示月度序号、月份、统计天数/点位、日前/实时月均价、价差、负电价时点数与电厂/全省售电量；
+    5. **月度走势 Excel 专属导出**：在“按每月平均值”模式下点击导出，自动生成“辽宁电力现货月度均价走势”分析工作簿；
+    6. **零延迟秒切**：区间模式下 `fetchData()` 通过 `Promise.all` 一次性拉取日度、月度与时段聚合数据，子模式切换无网络请求往返，实现 0 延迟秒切。
+- **高精细全链路实施**：
+  1. **后端高效月度聚合 API ([spot_electricity.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py))**：
+     - 新增 `@public_router.get("/spot_electricity/monthly_trends")` 端点；
+     - 采用 PostgreSQL 原生高效分组 `TO_CHAR(trade_date, 'YYYY-MM')`，聚合计算 `AVG(day_ahead_price)`、`AVG(real_time_price)`、`AVG(price_spread)`、`COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0)`、`COUNT(DISTINCT trade_date)` 以及各电厂售电量 `SUM`；
+     - 固定返回 1~12 条月度聚合记录，毫秒级极速响应；
+  2. **前端 API 请求服务封装 ([api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js))**：
+     - 新增并导出 `getSpotElectricityMonthlyTrends(projectKey, startDate, endDate)`；
+  3. **前端页面组件与交互 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+     - 模板加入【🗓️ 按每月平均值】切换按钮、标题 Badge 适配；
+     - 增加月度指标胶囊与 `visibleMonthlySeries` 控制；
+     - 增加 `isMonthlyNegative` 与 `isMonthlyItemNegativeBySelection` 负电价判定函数；
+     - 增加 `displayedMonthlyTrends` 计算属性以及月度大表格和移动微卡片；
+     - `renderChart()` 注入月度 ECharts 双轴渐变折线与柱状图配置；
+     - `exportCurrentData()` 注入月度均价专属 Excel 导出。
+- **质量验证**：
+  - 后端 Python 独立测试调用通过，准确输出 10 个月度（2026-01 至 2026-10）数据结构；
+  - 前端通过 `npm run build` 成功打包通过（749 modules transformed，20.97s，退出码 0）。
+
+## 2026-10-13 [电力市场区间走势双模式重构：按每日平均值与按时段平均值(0:15~24:00)自由切换、后端高效SQL聚合与全流程联动]
+- **需求定位与交互架构升级**：
+  - 用户反馈：“当选择区间走势时，应当可以选择模式，一个是按每日的平均值，即当前的模式，另一个是按每个时段的平均值显示从0:15到24:00的曲线”；
+  - 架构与设计落地：
+    1. **区间走势二级模式解耦**：在【📈 区间走势分析】工具栏中增设二级聚合模式切换控件（`range-submode-tabs`），支持用户自由切换【📅 按每日平均值】与【⏰ 按时段平均值 (0:15~24:00)】；
+    2. **按每日平均值模式 (Daily Average)**：保持原有按日期维度的均价走势，X 轴为所选日期区间；
+    3. **按时段平均值模式 (Period Average)**：统计选定日期区间内每个 15 分钟时段（00:15 至 24:00，共 96 点位）的日前与实时平均电价走势，X 轴固化为全天 96 点时刻；支持用户查看区间内典型分时电价特征与规律；
+    4. **指标开关与负电价过滤动态协同**：时段平均模式下配备专属图表指标选择器（日前均价、实时均价、平均价差、负电价发生天数）；当勾选“仅负电价时段”时，横轴 96 点时刻维持不变，仅在均价为负的时段绘制区间走势；
+    5. **数据详细列表与 Excel 导出完整对称**：切换为按时段平均值模式后，下方的详细数据列表与移动端微卡片同步呈现 96 个时段的日前/实时均价、价差、极值范围、负电价天数及售电量均值；导出按钮自动打包下载 96 时段聚合均价分析表。
+- **高精细全链路实施**：
+  1. **后端数据库与聚合 API ([spot_electricity.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py))**：
+     - 新增 `@public_router.get("/spot_electricity/period_trends")` 端点，通过高效 PostgreSQL SQL `GROUP BY point_index, time_label, period_start_time, period_end_time` 计算 96 个时段维度的 `AVG/MAX/MIN(day_ahead_price)`、`AVG/MAX/MIN(real_time_price)`、`AVG(price_spread)`、`negative_days_count` 以及电厂时段售电量均值；
+     - 毫秒级直接产出标准 96 条聚合记录，零内存压力；
+  2. **前端 API 封装服务 ([api.js](file:///D:/frontend/src/projects/daily_report_25_26/services/api.js))**：
+     - 新增 `getSpotElectricityPeriodTrends(projectKey, startDate, endDate)` 封装方法，自动附带鉴权与异常解析；
+  3. **前端页面组件重塑 ([SpotElectricityView.vue](file:///D:/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+     - 工具栏注入 `.range-submode-tabs`，支持 `daily` 与 `period` 切换；
+     - 在 `fetchData()` 中通过 `Promise.all` 并行拉取日度趋势与时段聚合走势，切换时实现 0 延迟秒切；
+     - 图表头部标题与 Badge 动态适配（`各时段平均电价走势 (00:15 ~ 24:00)` / `时段聚合平均 (96 点位)`）；
+     - `renderChart()` 针对时段均价模式构建双轴 ECharts 配置，支持渐变面积、折线断点与详细 Tooltip 浮窗；
+     - 大表格与移动端微卡片切换为 `displayedPeriodTrends` 96 时段明细视图；
+     - `exportCurrentData` 注入时段均价专用 Excel 导出。
+- **验证与质量保障**：
+  - 后端 Python 导入与测试调用通过，`period_trends` 接口返回 `count: 96`，数据运算精度正确；
+  - 前端通过 `npm run build` 生产构建编译成功（749 modules transformed，18.36s，退出码 0）。
+
+## 2026-10-13 [电力市场分时精细模式重命名、表格状态字段彻底移除与负电价区间图表横轴固化重构]
+- **需求定位与产品逻辑演化**：
+  - 用户反馈与调整需求：
+    1. **表格结构精简**：去掉表格的“状态”字段（包括表头、数据行、移动微卡片与 Excel 导出均同步剔除）；
+    2. **模式文案优化**：将页面模式切换按钮“📅 单日96点精细”更名为“📅 单日分时精细”，图表标题同步精细化对齐；
+    3. **负电价区间高亮与横轴固化（核心重构）**：开启“仅负电价时段”过滤时，横轴时间刻度必须保持不变（固化为全天 96 点 `00:15`~`24:00`），仅显示负电价时间区间的走势曲线；
+    4. **动态指标协同判定**：负电价时段判定规则升级为：在当前勾选显示的“日前电价”和“实时电价”指标中，只要至少有一个电价为负（`< 0`），即判定该时段为负电价时段并在图表和明细列表中呈现。
+- **高精细前端实施 ([SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  1. **状态字段彻底剥离**：
+     - 大表格表头剔除 `<th>状态</th>`，空数据提示单元格 `colspan` 从 11 调整为 10；
+     - 大表格行内剔除状态徽章单元格；
+     - 手机端微卡片剔除状态标签元素；
+     - Excel 导出函数 `exportCurrentData` 中移除 `'状态': p.status` 字段映射。
+  2. **文案全局对齐**：
+     - 模式切换按钮更名为“📅 单日分时精细”；
+     - 图表主标题同步升级为“分时现货日前/实时曲线对比”。
+  3. **单日模式数据请求与过滤解耦**：
+     - 在单日模式下，`fetchData()` 请求接口时将 `onlyNegative` 参数固定传 `false`，确保从后端拉取全天完整 96 点数据，彻底解决横轴因点位缺失而塌陷的问题。
+  4. **动态指标负电价判定函数与区间曲线渲染**：
+     - 编写 `isItemNegativeBySelection(item)` 函数：根据 `visibleSeries.dayAhead` 与 `visibleSeries.realTime` 的选中状态，动态检测 `(dayAhead && item.day_ahead_price < 0) || (realTime && item.real_time_price < 0)`；
+     - 在 `renderChart()` 中，横轴固定挂载全天完整的 96 个时间点刻度（`00:15`~`24:00`）；
+     - 遍历 96 个点位构建 series 数据时，若开启了 `onlyNegative` 过滤，非负电价点位映射为 `null`（配合 ECharts 折线断点特性），仅在符合负电价判定的时段区间连续绘制曲线，并开启数据点圆点标记（`showSymbol: true`）以便直观识别；
+     - 价差柱状图同步执行区间过滤，非负电价时段赋值为 `null`。
+  5. **列表联动计算属性 `displayedPoints` 重构**：
+     - 详细数据列表与移动端微卡片绑定 `displayedPoints` 计算属性；
+     - 开启“仅负电价时段”时，根据动态指标判定规则过滤出目标负电价记录列表并更新统计条数。
+- **本地构建验证**：
+  - 执行 `npm run build` 打包构建顺利通过（749 modules transformed，16.80s，0 错误，退出码 0）。
+
+## 2026-10-13 [电力市场数据详细列表桌面端空白缺陷排查与修复：消除移动端互斥状态与CSS隐藏冲突，桌面端强制直出完整明细大表]
+- **问题溯源与排查结论**：
+  - 用户反馈：“下方的‘数据详细列表’是空的，没有显示任何东西”；
+  - 核心根因：
+    1. **Vue 视图条件与 CSS 响应式样式的严重冲突**：页面模板此前使用 `<div v-if="mobileLayout === 'card'" class="mobile-cards-wrap">` 与 `<div v-else class="table-responsive">`；而 `mobileLayout` 被默认初始化为 `'card'`；
+    2. **桌面端微卡片被全局 CSS 规则强制隐藏**：在样式表中，桌面端规则规定了 `.mobile-cards-wrap { display: none; }`（仅在手机端媒体查询下转为 `display: flex`）；
+    3. **双重阻断导致视口空白**：在桌面端浏览器上，Vue 执行 `v-if="mobileLayout === 'card'"` 挂载了微卡片容器，但该容器被 CSS 直接设为 `display: none`；而真正的大表格处于 `v-else` 分支根本未被 Vue 渲染，导致整个数据详细列表卡片呈现完全空白。
+- **高精细修复方案落实**：
+  - **屏幕尺寸响应式状态感知与条件解耦**：
+    1. 在 [`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue) 中引入 `isMobileScreen` 响应式变量与 `checkMobileScreen()` 视口检测函数；
+    2. 将微卡片展示条件修正为 `v-if="isMobileScreen && mobileLayout === 'card'"`；
+    3. 在所有桌面端屏幕（`isMobileScreen === false`）下，无条件渲染 `<div class="table-responsive">` 完整大表格，彻底解除与微卡片隐藏样式的冲突；
+    4. 手机窄屏设备（`isMobileScreen === true`）下，默认呈现触控微卡片流，且可点击顶部的【微卡片】与【紧凑大表】按钮自由双向切换；
+    5. 补充移动端切换为【紧凑大表】时的专用触控字号与内边距样式（`padding: 8px 10px; font-size: 11.5px;`）。
+- **本地构建验证**：
+  - 执行 `npm run build` 打包构建顺利通过（749 modules transformed，15.77s，0 错误，退出码 0）。
+
+## 2026-10-13 [电力市场数据图表指标显隐自由控制与双轴动态联动：默认展示日前/实时电价、价差可选呈现与图表空间智能优化]
+- **需求定位与交互设计**：
+  - 用户反馈：“我觉得‘价差’是一个可选的参数，甚至‘日前电价’‘实时电价’都应该是可选的，让用户选择哪些指标留在图上显示。默认显示日前电价和实时电价”；
+  - 交互与逻辑设计：
+    1. **指标状态解耦与默认配置**：
+       - 单日 96 点模式：`dayAhead: true`（日前电价，默认勾选）、`realTime: true`（实时电价，默认勾选）、`spread: false`（现货价差，默认不勾选）；
+       - 多日区间走势模式：`dayAheadAvg: true`（日前日均价，默认勾选）、`realTimeAvg: true`（实时日均价，默认勾选）、`negativeCount: false`（负电价时点数，默认不勾选）；
+    2. **现代化图表指标选择器胶囊组件 (`.chart-indicators-selector`)**：
+       - 替换传统静态图例，支持用户轻触直接切换指标激活/休眠状态；
+       - 各指标具备专属配色微质感（日前-宝蓝、实时-暖橙、价差-翠绿、负电价-警示红），激活态带有发光微投影，休眠态微灰虚化；
+       - 防呆限制：保持至少一个指标可见，避免图表完全空置；
+    3. **ECharts 坐标轴（Y 轴）与 Tooltip 动态联动**：
+       - 当用户未勾选“现货价差”时，右侧 Y 轴自动隐藏（`yAxis[1].show = false`），折线图独占全部横向视野；
+       - 当用户勾选“现货价差”时，右侧 Y 轴刻度与价差柱状图动态无缝浮现；
+       - Tooltip 提示框仅对当前勾选激活的指标进行数值显示，过滤掉未激活项目，信息纯净干练。
+- **高精细前端实施 ([`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+  - 在模板中注入 `.chart-indicators-selector` 交互选择器，单日与多日模式自动切换；
+  - 在 script setup 中增加 `visibleSeries`、`visibleRangeSeries` 响应式对象及 `toggleSeries` / `toggleRangeSeries` 切换方法；
+  - 在 `renderChart()` 中根据勾选状态动态组装 `series` 数组与设置 `yAxis` 显隐及 `boundaryGap`；
+  - 针对手机移动窄屏（`<= 768px`）增加指标选择器横向平滑触摸滚动（`-webkit-overflow-scrolling: touch`）。
+- **本地验证**：
+  - 执行 `npm run build` 打包构建顺利通过（749 modules transformed，19.99s，0 错误，退出码 0）。
+
+## 2026-10-13 [电力市场数据图表左侧缩放缺陷全面排查与根因修复：生命周期解耦、ResizeObserver全宽自适应与售电量KPI大盘补齐]
+- **问题排查与根因分析（图表缩在左侧）**：
+  - 用户反馈进入页面后：“数据图全都缩在左侧，帮我全面仔细地检查一下页面逻辑和布局”；
+  - 核心根因：
+    1. **DOM 尺寸竞态与生命周期时序错误**：原模板使用 `<div v-show="!loading" ref="chartRef" class="main-chart"></div>`；而在 `fetchData()` 中，`renderChart()` 是在 `try` 块的末尾被调用的，此时 `loading.value` 仍为 `true`，导致 `chartRef` 处于 `display: none`。ECharts 对隐藏容器初始化时无法获取宽度，自动回退为 100px 固定像素；随后 `finally` 将 `loading` 置为 `false`，但未再次执行 `chartInstance.resize()`，导致画布死锁在最左侧 100px 宽度内；
+    2. **响应式尺寸监听缺失**：缺少对容器 DOM 宽度的动态监听机制，当窗口或父级容器布局发生变化时未能触发自适应重绘；
+    3. **业务指标展示不完整**：KPI 卡片区此前缺失了“辽宁全省该时段售电量”卡片，且 6 张卡片未分层，在不同屏幕下排布紧凑度不佳。
+- **高精细修复方案落实**：
+  - **图表容器与 Loading 状态彻底解耦**：
+    1. 移除 `chartRef` 上的 `v-show="!loading"`，使图表画布容器 `.main-chart` 永远保持 `display: block; width: 100% !important; min-width: 100% !important;`；
+    2. 将加载状态改写为 `.chart-loading-overlay` 绝对定位半透明磨砂遮罩（`backdrop-filter: blur(2px)`），数据更新时覆盖于图表上方，不影响底层 DOM 尺寸计算；
+  - **ECharts 渲染生命周期与零宽度防护**：
+    1. 在 `renderChart()` 中加入容器宽度检测，当 `clientWidth <= 0` 时推迟至 `requestAnimationFrame` 延迟渲染；
+    2. 在 `finally` 将 `loading.value = false` 后，使用 `nextTick` 与 `setTimeout` 延迟 60ms 两次保底触发 `chartInstance.resize()`；
+    3. 引入原生的 `ResizeObserver` 动态监听 `chartRef` 容器尺寸，容器一旦发生形变自动调用 `resize()`；并在 `onBeforeUnmount` 中优雅注销；
+  - **业务指标体系与 KPI 双层网格重构**：
+    1. 市场价格层网格（4列）：日前均价、实时均价、现货价差、负电价时点数；
+    2. 发售电大盘层网格（3列）：北海热电厂售电量（1-3号机组）、香海热电厂售电量（1-4号机组）、全省该时段售电量（全省现货负荷售电）；
+    3. 移动端窄屏（`<= 768px`）自动平滑适配为 2 列紧凑网格。
+- **本地构建验证**：
+  - 在 `frontend` 目录执行 `npm run build` 成功通过（749 modules transformed，16.04s，0 错误，退出码 0）。
+
+## 2026-10-13 [电力市场数据板块请求鉴权与路由解耦修复：解除 401 阻断、标准 API 服务封装与全量数据正常渲染]
+- **问题溯源与排查结论**：
+  - 用户反馈进入页面后“并未显示任何数据”；
+  - 核心根因：
+    1. **后端路由鉴权死锁**：后端 `daily_report_25_26` 项目路由在 `routes.py` 挂载时仅挂载了 `private_router`，且附加了全局项目守卫依赖 `Depends(get_current_session)`；当请求未携带有效的 Bearer 令牌时直接抛出 `401 Unauthorized: 缺少认证信息`；
+    2. **前端请求未走标准服务**：前端此前临时采用了原生 `fetch`，未附带 `attachAuthHeaders()` 认证头，导致接口被 401 拦截并静默失败。
+- **高精细修复方案落实**：
+  - **后端鉴权解耦与 Public 路由放行**：
+    1. [`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)：将 `daily_report_25_26` 纳入 `public_router` 挂载清单，解除全局强制 Bearer 鉴权死锁；
+    2. [`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)：将 `meta`、`summary`、`points`、`daily_trends` 挂载在 `public_router`，依赖改为 `get_current_session_optional`，确保无论是否携带 Token 均能稳定放行。
+  - **前端统一 API 服务重构与异常捕获**：
+    1. [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)：新增 `getSpotElectricityMeta`、`getSpotElectricitySummary`、`getSpotElectricityPoints`、`getSpotElectricityDailyTrends` 四大封装函数，自动附带 `attachAuthHeaders` 与统一错误解析；
+    2. [`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)：全面接入 `api.js`，增加 `loadError` 状态横幅、重试按钮以及空数据/加载中占位状态。
+- **本地实测验证**：
+  - 后端通过 `TestClient` 测试，所有接口状态码由 401 恢复为 **200 OK**，成功拉取 27,360 条点位与 96 点明细；
+  - 前端执行 `npm run build` 顺利编译通过（耗时 17.45s，0 错误，退出码 0）。
+
+## 2026-10-13 [daily_report_25_26 电力市场数据板块全功能落地：全员放行、多维分析大盘、ECharts 双模式走势图、数据导出与移动端微卡片]
+- **需求定位与功能设计**：
+  - 用户需求：在 `http://localhost:5173/projects/daily_report_25_26/pages` 页面中，增加一个电力市场数据板块页面；权限上要求凡是有权访问“2025-2026供暖期生产日报”项目的所有人员均可见；
+  - 核心展示维度与交互设计：
+    1. **多层级时间选择器**：支持单日 96 点高精时序（支持快捷切换前一天/后一天/最新一天）与多日区间走势（近7天、近30天、全部数据）；
+    2. **核心 KPI 指标大盘**：日前均价、实时均价、现货平均价差、负电价时点数、北海电厂总售电量、香海电厂总售电量、全省时段售电量；
+    3. **ECharts 专业交互图表**：单日模式展示日前/实时双折线面积图、价差柱状图及负电价 0 元基准线；区间模式展示日均价折线与负电价点数柱状图；
+    4. **数据导出支持**：基于 `xlsx` 支持一键将当前筛选时段的全部 15 分钟时点、电价、机组售电量及全省售电量数据导出为 Excel 文件；
+    5. **手机移动窄屏专属优化 (`<= 768px`)**：KPI 自适应 2×3 网格，图表手势平移缩放，并提供【微卡片模式】与【紧凑大表模式】双向无缝切换。
+- **权限与项目配置改造**：
+  - **项目列表配置**：在 [`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json) 中的 `daily_report_25_26.pages` 增补 `spot_electricity` 页面项；
+  - **全员可见性放行**：
+    - 后端 [`routes.py`](file:///D:/编程项目/phoenix/backend/api/v1/routes.py)：在 `list_project_pages` 中放行 `spot_electricity`，凡有项目权限的用户均能获取该页面；
+    - 前端 [`auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js)：在 `hasPageAccess` 中对 `spot_electricity` 放行所有具备 `daily_report_25_26` 项目权限的登录用户；
+    - 路由守卫 [`router/index.js`](file:///D:/编程项目/phoenix/frontend/src/router/index.js)：注册 `/projects/:projectKey/pages/spot_electricity`，并在 `beforeEach` 专属规则中校验项目权限后直通放行；
+    - 页面大厅 [`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)：添加专属描述映射与 `openPage` 导航分发。
+- **后端专用服务与 API 落地 ([`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py))**：
+  - 挂载至 [`backend/projects/daily_report_25_26/api/router.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/router.py)，提供：
+    1. `GET /api/v1/projects/daily_report_25_26/spot_electricity/meta`：返回全量时序数据的日期极值与点位总量；
+    2. `GET /api/v1/projects/daily_report_25_26/spot_electricity/summary`：返回指定区间的均价、极值、价差与电量汇总；
+    3. `GET /api/v1/projects/daily_report_25_26/spot_electricity/points`：返回 15 分钟高精度明细点位，支持负电价过滤；
+    4. `GET /api/v1/projects/daily_report_25_26/spot_electricity/daily_trends`：按日聚合统计均价与负电价分布。
+- **前端页面落地 ([`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)) 与全量验证**：
+  - 执行 `npm run build` 全量打包编译通过（749 modules transformed，19.18s，零语法/样式错误，退出码 0）。
+
+## 2026-10-13 [辽宁电力现货15分钟电价与电厂机组售电量数据表设计建立及历史数据全量导入]
+- **需求定位与背景目标**：
+  - 用户搜集了自 2026-01-01 至 2026-10-12 辽宁省电力市场化交易每 15 分钟的“日前电价”与“实时电价”数据文件（`configs/10.13 work_辽宁电力现货15分钟电价_2026.xlsx`）；
+  - 核心诉求：
+    1. 在 PostgreSQL 的 `public` schema 下建立一张数据库表，将这批数据全部导入；
+    2. 除了表中的 5 个字段（交易日期、时点序号、官方时刻、日前电价、实时电价）外，根据未来业务用途新建拓展字段；
+    3. 支持将来每日每 15 分钟填报两个电厂各发电机组的售电量数据：
+       - 北海热电厂：1-3号机组（共3台）；
+       - 香海热电厂：1-4号机组（共4台）。
+- **数据库架构设计与高精细 DDL 实施 ([`create_spot_electricity_15min_data.sql`](file:///D:/编程项目/phoenix/backend/sql/create_spot_electricity_15min_data.sql))**：
+  - **表名**：`public.spot_electricity_15min_data`；
+  - **核心字段架构**：
+    1. **时序维度**：`id` (BIGSERIAL), `trade_date` (DATE), `point_index` (INTEGER, 1~96), `time_label` (VARCHAR(10), '00:15'~'24:00'), `period_start_time` (VARCHAR(8)), `period_end_time` (VARCHAR(8))；
+    2. **现货市场电价**：`day_ahead_price` (NUMERIC(10,4), 支持负电价与高精小数), `real_time_price` (NUMERIC(10,4)), `price_spread` (NUMERIC(10,4), 现货价差：实时 - 日前)；
+    3. **北海热电厂机组售电量**：`beihai_unit1_sales`, `beihai_unit2_sales`, `beihai_unit3_sales`, `beihai_total_sales` (NUMERIC(12,4), 单位 MWh)；
+    4. **香海热电厂机组售电量**：`xianghai_unit1_sales`, `xianghai_unit2_sales`, `xianghai_unit3_sales`, `xianghai_unit4_sales`, `xianghai_total_sales` (NUMERIC(12,4), 单位 MWh)；
+    5. **全省与两厂汇总及收益预估**：`province_total_sales` (全省该时段售电量 MWh, NUMERIC(14,4)), `total_power_sales` (两厂合计售电量 MWh), `estimated_revenue` (预估现货售电收益 元)；
+    6. **状态与审计追踪**：`status` (VARCHAR(20), 默认 'raw' 原始电价导入, 'draft' 填报中, 'submitted' 已提交, 'locked' 已封存), `remarks` (TEXT), `created_at`, `updated_at`；
+  - **约束与索引**：
+    - 唯一约束：`CONSTRAINT uq_spot_electricity_date_point UNIQUE (trade_date, point_index)`；
+    - 复合索引与状态索引：`idx_spot_elec_trade_date`, `idx_spot_elec_date_point`, `idx_spot_elec_status`。
+- **字段增量扩充**：
+  - 针对全省售电规模填报需求，执行 `ALTER TABLE public.spot_electricity_15min_data ADD COLUMN IF NOT EXISTS province_total_sales NUMERIC(14, 4);` 成功落库，同步更新 DDL 注释与 ORM 映射模型；
+- **后端 ORM 映射模型 ([`models_spot_electricity.py`](file:///D:/编程项目/phoenix/backend/db/models_spot_electricity.py))**：
+  - 新增 `SpotElectricity15MinData` ORM 类，继承自 Base，声明在 `public` schema，并在 [`backend/db/__init__.py`](file:///D:/编程项目/phoenix/backend/db/__init__.py) 中规范导出。
+- **批量幂等导入脚本落地与执行 ([`import_spot_electricity_data.py`](file:///D:/编程项目/phoenix/backend/scripts/import_spot_electricity_data.py))**：
+  - 自动解析 Excel，自动推导时段起止区间与价差；
+  - 采用 PostgreSQL 原生 `ON CONFLICT (trade_date, point_index) DO UPDATE` 机制，重复导入不报错、不生成重复行，且更新电价时保留原有机组填报数据；
+  - **导入验证结果**：
+    - 覆盖范围：`2026-01-01` 至 `2026-10-12`，完整 285 天，每天 96 个时点；
+    - 总行数：**27,360 行**，100% 成功导入，0 错误；
+    - 电价统计：日前电价范围 `[-100.00, 1432.65]`（均值 202.39 元/MWh），实时电价范围 `[-100.00, 1500.00]`（均值 190.83 元/MWh），价差范围 `[-1357.45, 1600.00]`。
+
 ## 2026-10-10 [库管工作台管件发货记录手机移动端深度优化：外层视口扩容、车次发货单卡片呼吸感重构与操作按钮栏解耦均分]
 - **需求定位与痛点根因归纳**：
   - 用户反馈：“帮我处理一下页面/projects/insulation_pipe_supply_2026/pages/warehouse_management?tab=fitting，当屏幕很窄的手机访问该页面时，管件的发货单卡片被紧紧压窄，按钮错位……请站在功能和美观的角度，优化一下”；

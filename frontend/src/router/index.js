@@ -67,6 +67,10 @@ const routes = [
     component: () => import('../projects/daily_report_25_26/pages/DataAnalysisView.vue'),
   },
   {
+    path: '/projects/:projectKey/pages/spot_electricity',
+    component: () => import('../projects/daily_report_25_26/pages/SpotElectricityView.vue'),
+  },
+  {
     path: '/admin-console',
     component: () => import('../projects/daily_report_25_26/pages/AdminConsoleView.vue'),
   },
@@ -178,6 +182,15 @@ router.beforeEach(async (to) => {
     const pageKey = String(to.params.pageKey || '').trim()
     if (!auth.hasPageAccess('insulation_pipe_supply_2026', pageKey)) {
       return makeForbiddenRedirect(to, 'insulation_pipe_supply_2026', pageKey)
+    }
+    return true
+  }
+
+  // 5.1 电力市场数据板块专属路由校验：凡是有权访问该项目的用户均可直接进入
+  if (to.path.endsWith('/pages/spot_electricity')) {
+    const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
+    if (!auth.hasProjectAccess(pKey)) {
+      return makeForbiddenRedirect(to, pKey, 'spot_electricity')
     }
     return true
   }

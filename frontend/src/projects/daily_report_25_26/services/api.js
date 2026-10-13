@@ -3112,6 +3112,82 @@ export async function saveOcrToolConfig(projectKey = 'insulation_pipe_supply_202
   return response.json()
 }
 
+export async function getSpotElectricityMeta(projectKey = 'daily_report_25_26') {
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/meta`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取电力现货元信息失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getSpotElectricitySummary(projectKey = 'daily_report_25_26', startDate = '', endDate = '') {
+  const params = new URLSearchParams()
+  if (startDate) params.set('start_date', startDate)
+  if (endDate) params.set('end_date', endDate)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/summary${qs}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取电力现货汇总数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getSpotElectricityPoints(projectKey = 'daily_report_25_26', { date = '', startDate = '', endDate = '', onlyNegative = false, limit = 10000 } = {}) {
+  const params = new URLSearchParams()
+  if (date) params.set('date', date)
+  if (startDate) params.set('start_date', startDate)
+  if (endDate) params.set('end_date', endDate)
+  if (onlyNegative) params.set('only_negative', 'true')
+  if (limit) params.set('limit', String(limit))
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/points${qs}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取电力现货明细点位失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getSpotElectricityDailyTrends(projectKey = 'daily_report_25_26', startDate = '', endDate = '') {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/daily_trends?${params.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取电力现货日度走势失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getSpotElectricityPeriodTrends(projectKey = 'daily_report_25_26', startDate = '', endDate = '') {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/period_trends?${params.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取电力现货时段聚合平均走势失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getSpotElectricityMonthlyTrends(projectKey = 'daily_report_25_26', startDate = '', endDate = '') {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/monthly_trends?${params.toString()}`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取电力现货月度走势失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+
+
 
 
 

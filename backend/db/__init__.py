@@ -1,1 +1,5 @@
-"""Database helpers for daily_report_25_26."""
+"""Database helpers and models."""
+
+from backend.db.models_spot_electricity import SpotElectricity15MinData
+
+__all__ = ["SpotElectricity15MinData"]

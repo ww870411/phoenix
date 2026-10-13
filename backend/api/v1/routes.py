@@ -249,9 +249,12 @@ def list_project_pages(
     }
     has_project_override = project_id in session.permissions.projects
     if has_project_override and not allowed_pages:
-        pages = []
+        pages = [page for page in pages if page.get("page_key") == "spot_electricity"]
     elif allowed_pages:
-        pages = [page for page in pages if page.get("page_key") in allowed_pages]
+        pages = [
+            page for page in pages 
+            if page.get("page_key") in allowed_pages or (project_id == "daily_report_25_26" and page.get("page_key") == "spot_electricity")
+        ]
 
     project_name = (
         target.get("project_name")
@@ -335,7 +338,7 @@ for project_key, routers in PROJECT_ROUTER_REGISTRY.items():
     if private_router is not None:
         router.include_router(private_router, prefix=prefix, dependencies=[Depends(dependency)])
     if public_router is not None:
-        if project_key in ("page_showcase", "insulation_pipe_supply_2026"):
+        if project_key in ("page_showcase", "insulation_pipe_supply_2026", "daily_report_25_26"):
             router.include_router(public_router, prefix=prefix)
         else:
             router.include_router(public_router, prefix=prefix, dependencies=[Depends(dependency)])

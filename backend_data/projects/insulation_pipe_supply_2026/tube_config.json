@@ -767,7 +767,6 @@
       "keeper_name": "辛宇满",
       "contact_phone": "18842818979",
       "section_1_ids": [
-        "low_lot_3",
         "low_lot_4"
       ]
     },
@@ -785,8 +784,7 @@
       "keeper_name": "孟广胜",
       "contact_phone": "13214288219",
       "section_1_ids": [
-        "low_lot_5",
-        "low_lot_6"
+        "low_lot_5"
       ]
     }
   ],
