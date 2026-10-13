@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "cron_time": "07:40",
+  "retry_interval_minutes": 20,
+  "max_retries_per_day": 30,
+  "target_date_rule": "yesterday",
+  "last_sync_date": null,
+  "last_run_time": null,
+  "last_run_status": "IDLE",
+  "last_run_message": "系统初次就绪，等待执行",
+  "next_run_time": null
+}

@@ -111,6 +111,7 @@ def get_spot_electricity_summary(
                 MAX(price_spread) as max_spread,
                 MIN(price_spread) as min_spread,
                 COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_price_points,
+                COUNT(DISTINCT trade_date) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_price_days,
                 SUM(beihai_total_sales) as sum_beihai_sales,
                 SUM(xianghai_total_sales) as sum_xianghai_sales,
                 SUM(province_total_sales) as sum_province_sales,
@@ -141,6 +142,7 @@ def get_spot_electricity_summary(
                 "max_price_spread": _to_float(row.max_spread),
                 "min_price_spread": _to_float(row.min_spread),
                 "negative_price_points": int(row.negative_price_points or 0),
+                "negative_price_days": int(row.negative_price_days or 0),
                 "sum_beihai_sales": _to_float(row.sum_beihai_sales),
                 "sum_xianghai_sales": _to_float(row.sum_xianghai_sales),
                 "sum_province_sales": _to_float(row.sum_province_sales),
@@ -427,5 +429,89 @@ def get_spot_electricity_monthly_trends(
             "count": len(months),
             "months": months,
         }
+
+
+# ==============================================================================
+# 电力现货自动化同步与系统控制接口 (仅 Global_admin 授权访问)
+# ==============================================================================
+
+from backend.services.spot_electricity_sync_service import spot_sync_service
+from pydantic import BaseModel, Field
+
+# 启动后台守护调度引擎
+spot_sync_service.start_scheduler()
+
+
+def _ensure_global_admin(session: Optional[AuthSession] = None) -> None:
+    """验证用户是否具备 Global_admin 权限或后台管理控制台权限。"""
+    if session is None:
+        raise HTTPException(status_code=401, detail="未授权，请先登录")
+    is_admin = (
+        getattr(session, "is_global_admin", False)
+        or session.group == "Global_admin"
+        or getattr(session.permissions.actions, "can_access_admin_console", False)
+    )
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="仅 Global_admin 拥有现货系统控制选项权限")
+
+
+class SyncConfigUpdatePayload(BaseModel):
+    enabled: Optional[bool] = Field(None, description="是否开启每日自动拉取")
+    cron_time: Optional[str] = Field(None, description="每日初次尝试拉取时间 (HH:MM，默认 07:40)")
+    retry_interval_minutes: Optional[int] = Field(None, description="未更新时的重试间隔 (分钟，默认 20)")
+    max_retries_per_day: Optional[int] = Field(None, description="每日最大重试次数")
+    target_date_rule: Optional[str] = Field(None, description="拉取规则 (yesterday / today)")
+
+
+class ManualSyncPayload(BaseModel):
+    date: Optional[str] = Field(None, description="指定拉取的日期 (YYYY-MM-DD)，若为空则默认拉取发改委最新昨日电价")
+    overwrite: bool = Field(False, description="若数据库已存在某日数据，是否确认覆盖现有数据")
+
+
+@public_router.get("/spot_electricity/sync/check_exists", summary="检查数据库中指定日期是否已存在现货数据 (仅限 Global_admin)")
+def check_spot_electricity_exists(
+    date: str = Query(..., description="目标日期 (YYYY-MM-DD)"),
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+) -> Dict[str, Any]:
+    _ensure_global_admin(session)
+    result = spot_sync_service.check_date_exists(date.strip())
+    return {"ok": True, "target_date": date.strip(), **result}
+
+
+@public_router.get("/spot_electricity/sync/config", summary="获取电力现货自动同步配置与调度状态 (仅限 Global_admin)")
+def get_spot_electricity_sync_config(
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+) -> Dict[str, Any]:
+    _ensure_global_admin(session)
+    config = spot_sync_service.get_config()
+    return {"ok": True, "data": config}
+
+
+@public_router.post("/spot_electricity/sync/config", summary="保存电力现货自动同步配置 (仅限 Global_admin)")
+def save_spot_electricity_sync_config(
+    payload: SyncConfigUpdatePayload,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+) -> Dict[str, Any]:
+    _ensure_global_admin(session)
+    updates = {k: v for k, v in payload.dict().items() if v is not None}
+    updated_config = spot_sync_service.update_config(updates)
+    return {"ok": True, "message": "自动拉取配置已成功更新并即时生效", "data": updated_config}
+
+
+@public_router.post("/spot_electricity/sync/manual", summary="手动实时拉取现货数据入库 (仅限 Global_admin)")
+def manual_sync_spot_electricity(
+    payload: ManualSyncPayload,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+) -> Dict[str, Any]:
+    _ensure_global_admin(session)
+    target_date = payload.date.strip() if payload.date and payload.date.strip() else None
+    result = spot_sync_service.sync_data(
+        target_date=target_date,
+        is_manual=True,
+        overwrite=payload.overwrite,
+    )
+    return result
+
+
 
 

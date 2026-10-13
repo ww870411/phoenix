@@ -186,7 +186,7 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // 5.1 电力市场数据板块专属路由校验：凡是有权访问该项目的用户均可直接进入
+  // 5.1 电力现货市场数据板块专属路由校验：凡是有权访问该项目的用户均可直接进入
   if (to.path.endsWith('/pages/spot_electricity')) {
     const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
     if (!auth.hasProjectAccess(pKey)) {

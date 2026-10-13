@@ -143,6 +143,17 @@
               <span class="checkbox-label">❄️ 仅负电价时段</span>
             </label>
 
+            <!-- Global_admin 系统控制选项按钮 (仅 Global_admin 可见) -->
+            <button
+              v-if="isGlobalAdmin"
+              class="btn admin-control-btn"
+              type="button"
+              title="设置现货数据每日自动拉取开关、时间、间隔或手动实时拉取 (仅 Global_admin 可操作)"
+              @click="openAdminControlModal"
+            >
+              ⚙️ 系统控制选项
+            </button>
+
             <!-- 导出按钮 -->
             <button
               class="btn primary export-btn"
@@ -193,12 +204,16 @@
               <span>平均价差 (实时-日前)</span>
               <span class="kpi-unit">元/MWh</span>
             </div>
-            <div :class="['kpi-value', (summary?.avg_price_spread ?? 0) >= 0 ? 'text-green' : 'text-purple']">
+            <div :class="['kpi-value', getSpreadColorClass(summary?.avg_price_spread)]">
               {{ (summary?.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(summary?.avg_price_spread) }}
             </div>
             <div class="kpi-sub">
-              <span>最大溢价: {{ formatNum(summary?.max_price_spread) }}</span>
-              <span>最大贴水: {{ formatNum(summary?.min_price_spread) }}</span>
+              <span :title="`选定区间内实时电价高于日前电价的最大差值：${(summary?.max_price_spread ?? 0) > 0 ? '+' : ''}${formatNum(summary?.max_price_spread)} 元/MWh`">
+                最大正价差: {{ (summary?.max_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(summary?.max_price_spread) }}
+              </span>
+              <span :title="`选定区间内实时电价低于日前电价的最大差值：${formatNum(summary?.min_price_spread)} 元/MWh`">
+                最大负价差: {{ formatNum(summary?.min_price_spread) }}
+              </span>
             </div>
           </div>
 
@@ -207,16 +222,37 @@
               <span>负电价时点数</span>
               <span class="kpi-unit">个时段 (15min)</span>
             </div>
-            <div :class="['kpi-value', (summary?.negative_price_points ?? 0) > 0 ? 'text-danger' : 'text-gray']">
+            <div class="kpi-value text-blue">
               {{ summary?.negative_price_points ?? 0 }}
             </div>
-            <div class="kpi-sub">
-              <span>占总查询时段:</span>
-              <span v-if="(summary?.negative_price_points ?? 0) > 0" class="badge-alert">
+            <!-- 单日模式：展示时段占比与分子分母 -->
+            <div v-if="viewMode === 'single'" class="kpi-sub">
+              <span>占全天时段:</span>
+              <span v-if="(summary?.negative_price_points ?? 0) > 0" class="badge-blue">
                 {{ negativePointRatioText }} ({{ summary?.negative_price_points ?? 0 }}/{{ totalQueryPoints.toLocaleString() }})
               </span>
               <span v-else class="text-muted">
                 0.0% (0/{{ totalQueryPoints.toLocaleString() }})
+              </span>
+            </div>
+
+            <!-- 区间走势分析：单行双指标（左侧时段占比，右侧天数及占比），高度与前序卡片严丝合缝对齐 -->
+            <div
+              v-else
+              class="kpi-sub kpi-sub-dual"
+            >
+              <span
+                class="sub-item"
+                :title="`选定区间负电价时点数：${summary?.negative_price_points ?? 0}点，占总查询时段(${totalQueryPoints.toLocaleString()}点)的 ${negativePointRatioText}`"
+              >
+                时段占比: <strong class="text-blue">{{ negativePointRatioText }}</strong>
+              </span>
+              <span
+                class="sub-item"
+                :title="`选定区间出现负电价的天数：${negativeDaysCount}天，占总查询天数(${totalQueryDays}天)的 ${negativeDaysRatioText}`"
+              >
+                天数: <span v-if="negativeDaysCount > 0" class="badge-blue">{{ negativeDaysCount }}天 (占比{{ negativeDaysRatioText }})</span>
+                <span v-else class="text-muted">0天 (占比0.0%)</span>
               </span>
             </div>
           </div>
@@ -527,7 +563,7 @@
                 </div>
                 <div class="price-cell">
                   <span class="cell-label">平均价差</span>
-                  <span :class="['cell-val', (item.avg_price_spread ?? 0) >= 0 ? 'text-green' : 'text-purple']">
+                  <span :class="['cell-val', getSpreadColorClass(item.avg_price_spread)]">
                     {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
                   </span>
                 </div>
@@ -578,7 +614,7 @@
                 </div>
                 <div class="price-cell">
                   <span class="cell-label">月均价差</span>
-                  <span :class="['cell-val', (item.avg_price_spread ?? 0) >= 0 ? 'text-green' : 'text-purple']">
+                  <span :class="['cell-val', getSpreadColorClass(item.avg_price_spread)]">
                     {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
                   </span>
                 </div>
@@ -629,7 +665,7 @@
                 </div>
                 <div class="price-cell">
                   <span class="cell-label">价差（实时-日前）</span>
-                  <span :class="['cell-val', (item.price_spread ?? 0) >= 0 ? 'text-green' : 'text-purple']">
+                  <span :class="['cell-val', getSpreadColorClass(item.price_spread)]">
                     {{ (item.price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.price_spread) }}
                   </span>
                 </div>
@@ -691,7 +727,7 @@
                   <span v-if="item.avg_real_time_price < 0" class="badge-neg-inline">❄️ {{ formatNum(item.avg_real_time_price) }}</span>
                   <span v-else>{{ formatNum(item.avg_real_time_price) }}</span>
                 </td>
-                <td :class="['col-right mono font-bold', (item.avg_price_spread ?? 0) >= 0 ? 'text-green' : 'text-purple']">
+                <td :class="['col-right mono font-bold', getSpreadColorClass(item.avg_price_spread)]">
                   {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
                 </td>
                 <td class="col-right mono font-bold text-danger">
@@ -754,7 +790,7 @@
                   <span v-if="item.avg_real_time_price < 0" class="badge-neg-inline">❄️ {{ formatNum(item.avg_real_time_price) }}</span>
                   <span v-else>{{ formatNum(item.avg_real_time_price) }}</span>
                 </td>
-                <td :class="['col-right mono font-bold', (item.avg_price_spread ?? 0) >= 0 ? 'text-green' : 'text-purple']">
+                <td :class="['col-right mono font-bold', getSpreadColorClass(item.avg_price_spread)]">
                   {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
                 </td>
                 <td class="col-right mono font-bold text-danger">
@@ -818,7 +854,7 @@
                   <span v-if="item.real_time_price < 0" class="badge-neg-inline">❄️ {{ formatNum(item.real_time_price) }}</span>
                   <span v-else>{{ formatNum(item.real_time_price) }}</span>
                 </td>
-                <td :class="['col-right mono font-bold', (item.price_spread ?? 0) >= 0 ? 'text-green' : 'text-purple']">
+                <td :class="['col-right mono font-bold', getSpreadColorClass(item.price_spread)]">
                   {{ (item.price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.price_spread) }}
                 </td>
                 <td class="col-right mono text-muted">
@@ -835,18 +871,218 @@
           </table>
         </div>
       </section>
+
+      <!-- Global_admin 系统控制选项弹窗 (自动同步与手动拉取设置) -->
+      <div v-if="showAdminControlModal" class="admin-modal-backdrop" @click="showAdminControlModal = false">
+        <div class="admin-modal-card" @click.stop>
+          <div class="admin-modal-header">
+            <div class="modal-title-group">
+              <span class="modal-badge-admin">🔒 仅 Global_admin 可见</span>
+              <h3>⚙️ 电力现货数据自动获取与系统控制</h3>
+            </div>
+            <button class="modal-close-btn" type="button" @click="showAdminControlModal = false">✕</button>
+          </div>
+
+          <div class="admin-modal-body">
+            <!-- 当前运行状态面板 -->
+            <div class="status-summary-card">
+              <div class="status-indicator-row">
+                <div class="indicator-left">
+                  <span
+                    class="pulse-status-dot"
+                    :class="syncConfig.enabled ? (syncConfig.last_run_status === 'RETRYING' ? 'dot-retrying' : 'dot-online') : 'dot-paused'"
+                  ></span>
+                  <span class="status-title">调度运行状态：</span>
+                  <strong
+                    class="status-name"
+                    :class="syncConfig.enabled ? (syncConfig.last_run_status === 'RETRYING' ? 'text-orange' : 'text-green') : 'text-muted'"
+                  >
+                    {{ !syncConfig.enabled ? '已暂停自动拉取' : syncConfig.last_run_status === 'RETRYING' ? '重试探测中' : '正常守候中' }}
+                  </strong>
+                </div>
+                <div class="indicator-right">
+                  <button class="btn-refresh-status" type="button" :disabled="syncConfigLoading" @click="fetchSyncConfig">
+                    {{ syncConfigLoading ? '刷新中...' : '🔄 刷新状态' }}
+                  </button>
+                </div>
+              </div>
+              <div class="status-meta-grid">
+                <div class="meta-item">
+                  <span class="meta-label">下次计划探测</span>
+                  <span class="meta-val highlight">{{ syncConfig.next_run_time || '等待计算' }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">最近入库日期</span>
+                  <span class="meta-val">{{ syncConfig.last_sync_date || '暂无记录' }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">最近探测时间</span>
+                  <span class="meta-val">{{ syncConfig.last_run_time || '尚未触发' }}</span>
+                </div>
+              </div>
+              <div v-if="syncConfig.last_run_message" class="status-msg-banner">
+                <span>📢 状态信息：{{ syncConfig.last_run_message }}</span>
+              </div>
+            </div>
+
+            <!-- 配置表单区块 1：自动化调度参数 -->
+            <div class="control-section">
+              <div class="section-title-row">
+                <h4>⏰ 每日自动拉取规则设置</h4>
+                <span class="section-desc">发改委每日约 08:00 发布前一日现货电价，可设置提早探测与轮询策略</span>
+              </div>
+
+              <div class="control-form-grid">
+                <div class="form-row">
+                  <div class="form-label">
+                    <span class="label-txt">自动拉取开关</span>
+                    <small>开启后后台守护程序将每日定时抓取</small>
+                  </div>
+                  <div class="form-field">
+                    <label class="toggle-switch">
+                      <input type="checkbox" v-model="syncConfig.enabled" />
+                      <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-text">{{ syncConfig.enabled ? '已开启' : '已关闭' }}</span>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-label">
+                    <span class="label-txt">每日初次尝试时间</span>
+                    <small>建议设为 07:40，提前守候发改委发布</small>
+                  </div>
+                  <div class="form-field">
+                    <input type="time" class="input-time" v-model="syncConfig.cron_time" />
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-label">
+                    <span class="label-txt">未更新时重试间隔</span>
+                    <small>若初次探测未发布，每隔多少分钟重试一次直至完成</small>
+                  </div>
+                  <div class="form-field">
+                    <div class="input-unit-wrap">
+                      <input
+                        type="number"
+                        class="input-number"
+                        v-model.number="syncConfig.retry_interval_minutes"
+                        min="1"
+                        max="120"
+                      />
+                      <span class="input-unit">分钟</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="section-action-row">
+                <button
+                  class="btn primary save-config-btn"
+                  type="button"
+                  :disabled="savingSyncConfig"
+                  @click="handleSaveSyncConfig"
+                >
+                  {{ savingSyncConfig ? '正在保存...' : '💾 保存自动拉取设置' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 配置表单区块 2：手动实时拉取与历史补录 -->
+            <div class="control-section">
+              <div class="section-title-row">
+                <h4>🚀 手动实时拉取 / 历史补录</h4>
+                <span class="section-desc">无需等待定时任务，直接向发改委接口请求数据并原子幂等入库</span>
+              </div>
+
+              <div class="manual-sync-box">
+                <div class="sync-mode-radios">
+                  <label class="radio-label">
+                    <input type="radio" value="yesterday" v-model="manualSyncMode" />
+                    <span>拉取最新数据（昨日现货电价）</span>
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" value="specific" v-model="manualSyncMode" />
+                    <span>指定某日补录</span>
+                  </label>
+                </div>
+
+                <div v-if="manualSyncMode === 'specific'" class="specific-date-picker-row">
+                  <span class="picker-label">请选择目标补录日期：</span>
+                  <input type="date" class="input-date" v-model="manualSyncSpecificDate" />
+                </div>
+
+                <!-- 存在性覆盖确认警告区 -->
+                <div v-if="showOverwriteConfirm" class="overwrite-confirm-box">
+                  <div class="confirm-alert-header">
+                    <span class="confirm-icon">⚠️</span>
+                    <strong class="confirm-title">数据已存在，是否覆盖？</strong>
+                  </div>
+                  <div class="confirm-desc">
+                    {{ overwriteConfirmMessage }}
+                  </div>
+                  <div class="confirm-actions">
+                    <button
+                      class="btn danger btn-confirm-overwrite"
+                      type="button"
+                      :disabled="manualSyncLoading"
+                      @click="handleConfirmOverwrite"
+                    >
+                      <span v-if="manualSyncLoading" class="btn-spinner"></span>
+                      <span>{{ manualSyncLoading ? '正在覆盖入库中...' : '⚠️ 确认覆盖现有数据' }}</span>
+                    </button>
+                    <button
+                      class="btn default btn-cancel-overwrite"
+                      type="button"
+                      :disabled="manualSyncLoading"
+                      @click="handleCancelOverwrite"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+
+                <div v-else class="manual-btn-row">
+                  <button
+                    class="btn manual-trigger-btn"
+                    type="button"
+                    :disabled="manualSyncLoading"
+                    @click="() => handleManualSync(false)"
+                  >
+                    <span v-if="manualSyncLoading" class="btn-spinner"></span>
+                    <span>{{ manualSyncLoading ? '正在向发改委请求并入库中...' : '⚡ 立即执行拉取入库' }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 结果反馈横幅 -->
+            <div v-if="syncFeedbackMsg" :class="['feedback-alert', `alert-${syncFeedbackType}`]">
+              <span class="alert-icon">{{ syncFeedbackType === 'success' ? '✅' : syncFeedbackType === 'warning' ? '⚠️' : '❌' }}</span>
+              <span class="alert-text">{{ syncFeedbackMsg }}</span>
+            </div>
+          </div>
+
+          <div class="admin-modal-footer">
+            <span class="footer-tip">💡 提示：写入数据采用 ON CONFLICT (trade_date, point_index) 幂等更新，不会影响已有电厂售电量数据。</span>
+            <button class="btn default" type="button" @click="showAdminControlModal = false">关闭</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
+import { useAuthStore } from '../store/auth'
 import {
   getSpotElectricityMeta,
   getSpotElectricitySummary,
@@ -854,15 +1090,19 @@ import {
   getSpotElectricityDailyTrends,
   getSpotElectricityPeriodTrends,
   getSpotElectricityMonthlyTrends,
+  getSpotElectricitySyncConfig,
+  saveSpotElectricitySyncConfig,
+  manualSyncSpotElectricity,
 } from '../services/api'
 
 const route = useRoute()
+const router = useRouter()
 const projectKey = String(route.params.projectKey || 'daily_report_25_26')
 const projectName = computed(() => getProjectNameById(projectKey) || '2025-2026供暖期生产日报')
 
 const pageDisplayName = computed(() => {
   const raw = route.query.pageName
-  if (typeof raw === 'string' && raw.trim()) {
+  if (typeof raw === 'string' && raw.trim() && raw.trim() !== '电力市场数据') {
     return raw.trim()
   }
   return '电力现货市场数据'
@@ -917,6 +1157,37 @@ const negativePointRatioText = computed(() => {
   const total = totalQueryPoints.value
   if (!total || total <= 0) return '0.0%'
   const pct = (neg / total) * 100
+  return `${pct.toFixed(1)}%`
+})
+
+// 区间走势分析：总查询天数
+const totalQueryDays = computed(() => {
+  if (summary.value?.day_count) {
+    return Number(summary.value.day_count)
+  }
+  if (dailyTrends.value?.length) {
+    return dailyTrends.value.length
+  }
+  return 0
+})
+
+// 区间走势分析：负电价天数（优先后端权威统计，兜底由前端日走势聚合）
+const negativeDaysCount = computed(() => {
+  if (summary.value?.negative_price_days != null) {
+    return Number(summary.value.negative_price_days)
+  }
+  if (Array.isArray(dailyTrends.value) && dailyTrends.value.length > 0) {
+    return dailyTrends.value.filter((d) => (d.negative_count || 0) > 0).length
+  }
+  return 0
+})
+
+// 区间走势分析：负电价天数占比文本
+const negativeDaysRatioText = computed(() => {
+  const days = totalQueryDays.value
+  if (!days || days <= 0) return '0.0%'
+  const negDays = negativeDaysCount.value
+  const pct = (negDays / days) * 100
   return `${pct.toFixed(1)}%`
 })
 
@@ -1011,6 +1282,15 @@ const metaRangeText = computed(() => {
 function formatNum(val) {
   if (val === null || val === undefined || isNaN(val)) return '—'
   return Number(val).toFixed(2)
+}
+
+// 价差文本色彩辅助函数（国内统一红涨绿跌规范：正数显红，负数显绿，零为中性灰）
+function getSpreadColorClass(val) {
+  if (val === null || val === undefined || isNaN(val)) return 'text-gray'
+  const num = Number(val)
+  if (num > 0) return 'text-danger' // 正数为红
+  if (num < 0) return 'text-green'  // 负数为绿
+  return 'text-gray'
 }
 
 // 极值数据标签生成函数（自适应圆角胶囊标签，支持色彩定制，彻底消除数字溢出）
@@ -1386,7 +1666,7 @@ function renderChart() {
         markPoint: createMinMaxMarkPoint('#059669', false),
         itemStyle: {
           color: (params) => {
-            return params.value >= 0 ? '#10b981' : '#a855f7'
+            return params.value >= 0 ? '#ef4444' : '#10b981'
           },
         },
       })
@@ -1412,7 +1692,7 @@ function renderChart() {
             tip += `<div style="color: #ea580c;">● 实时电价: <strong>${formatNum(item.real_time_price)}</strong> 元/MWh</div>`
           }
           if (visibleSeries.value.spread) {
-            tip += `<div style="color: ${(item.price_spread ?? 0) >= 0 ? '#10b981' : '#9333ea'};">● 价差（实时-日前）: <strong>${(item.price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.price_spread)}</strong> 元/MWh</div>`
+            tip += `<div style="color: ${(item.price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 价差（实时-日前）: <strong>${(item.price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.price_spread)}</strong> 元/MWh</div>`
           }
           if (item.beihai_total_sales != null) {
             tip += `<div style="color: #64748b;">● 北海售电: ${formatNum(item.beihai_total_sales)} MWh</div>`
@@ -1649,7 +1929,7 @@ function renderChart() {
         markPoint: createMinMaxMarkPoint('#059669', false),
         itemStyle: {
           color: (params) => {
-            return params.value >= 0 ? '#10b981' : '#a855f7'
+            return params.value >= 0 ? '#ef4444' : '#10b981'
           },
         },
       })
@@ -1688,7 +1968,7 @@ function renderChart() {
             tip += `<div style="color: #ea580c;">● 实时月均价: <strong>${formatNum(item.avg_real_time_price)}</strong> 元/MWh</div>`
           }
           if (visibleMonthlySeries.value.spread) {
-            tip += `<div style="color: ${(item.avg_price_spread ?? 0) >= 0 ? '#10b981' : '#9333ea'};">● 月均价差: <strong>${(item.avg_price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.avg_price_spread)}</strong> 元/MWh</div>`
+            tip += `<div style="color: ${(item.avg_price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 月均价差: <strong>${(item.avg_price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.avg_price_spread)}</strong> 元/MWh</div>`
           }
           if (visibleMonthlySeries.value.negativeCount) {
             tip += `<div style="color: #ef4444;">● 负电价时点数: <strong>${item.negative_count}</strong> 次</div>`
@@ -1830,7 +2110,7 @@ function renderChart() {
         markPoint: createMinMaxMarkPoint('#059669', false),
         itemStyle: {
           color: (params) => {
-            return params.value >= 0 ? '#10b981' : '#a855f7'
+            return params.value >= 0 ? '#ef4444' : '#10b981'
           },
         },
       })
@@ -1870,7 +2150,7 @@ function renderChart() {
             tip += `<div style="color: #ea580c;">● 实时均价: <strong>${formatNum(item.avg_real_time_price)}</strong> 元/MWh <span style="color:#94a3b8;font-size:11px;">[${formatNum(item.min_real_time_price)}~${formatNum(item.max_real_time_price)}]</span></div>`
           }
           if (visiblePeriodSeries.value.spread) {
-            tip += `<div style="color: ${(item.avg_price_spread ?? 0) >= 0 ? '#10b981' : '#9333ea'};">● 平均价差: <strong>${(item.avg_price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.avg_price_spread)}</strong> 元/MWh</div>`
+            tip += `<div style="color: ${(item.avg_price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 平均价差: <strong>${(item.avg_price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.avg_price_spread)}</strong> 元/MWh</div>`
           }
           if (visiblePeriodSeries.value.negativeDays) {
             tip += `<div style="color: #ef4444;">● 负电价天数: <strong>${item.negative_days_count}</strong> 天</div>`
@@ -2054,7 +2334,158 @@ function initResizeObserver() {
   resizeObserver.observe(chartRef.value)
 }
 
+// ==============================================================================
+// Global_admin 现货数据自动获取与系统控制管理
+// ==============================================================================
+const auth = useAuthStore()
+const isGlobalAdmin = computed(() => {
+  return auth.user?.group === 'Global_admin' || Boolean(auth.canAccessAdminConsole)
+})
+
+const showAdminControlModal = ref(false)
+const syncConfigLoading = ref(false)
+const savingSyncConfig = ref(false)
+const manualSyncLoading = ref(false)
+const manualSyncMode = ref('yesterday') // 'yesterday' | 'specific'
+const manualSyncSpecificDate = ref(selectedDate.value || '2026-10-12')
+const syncFeedbackMsg = ref('')
+const syncFeedbackType = ref('success') // 'success' | 'warning' | 'error'
+
+// 某日数据已存在时的覆盖确认状态
+const showOverwriteConfirm = ref(false)
+const overwriteTargetDate = ref('')
+const overwriteConfirmMessage = ref('')
+const overwritePendingPoints = ref(0)
+const overwritePendingPricePoints = ref(0)
+
+watch([manualSyncMode, manualSyncSpecificDate], () => {
+  // 切换拉取模式或日期时重置覆盖确认框
+  showOverwriteConfirm.value = false
+})
+
+const syncConfig = ref({
+  enabled: true,
+  cron_time: '07:40',
+  retry_interval_minutes: 20,
+  max_retries_per_day: 30,
+  last_sync_date: '',
+  last_run_time: '',
+  last_run_status: 'IDLE',
+  last_run_message: '',
+  next_run_time: '',
+  retry_count_today: 0,
+})
+
+async function openAdminControlModal() {
+  showAdminControlModal.value = true
+  syncFeedbackMsg.value = ''
+  showOverwriteConfirm.value = false
+  await fetchSyncConfig()
+}
+
+async function fetchSyncConfig() {
+  if (!isGlobalAdmin.value) return
+  syncConfigLoading.value = true
+  try {
+    const res = await getSpotElectricitySyncConfig(projectKey)
+    if (res && res.data) {
+      syncConfig.value = { ...syncConfig.value, ...res.data }
+    }
+  } catch (err) {
+    console.error('获取现货同步配置失败:', err)
+  } finally {
+    syncConfigLoading.value = false
+  }
+}
+
+async function handleSaveSyncConfig() {
+  savingSyncConfig.value = true
+  syncFeedbackMsg.value = ''
+  try {
+    const res = await saveSpotElectricitySyncConfig(projectKey, {
+      enabled: Boolean(syncConfig.value.enabled),
+      cron_time: String(syncConfig.value.cron_time || '07:40').trim(),
+      retry_interval_minutes: Number(syncConfig.value.retry_interval_minutes) || 20,
+    })
+    if (res && res.data) {
+      syncConfig.value = { ...syncConfig.value, ...res.data }
+      syncFeedbackMsg.value = res.message || '自动同步配置保存成功并已即时生效！'
+      syncFeedbackType.value = 'success'
+    }
+  } catch (err) {
+    syncFeedbackMsg.value = err.message || '保存配置失败'
+    syncFeedbackType.value = 'error'
+  } finally {
+    savingSyncConfig.value = false
+  }
+}
+
+async function handleManualSync(forceOverwrite = false) {
+  manualSyncLoading.value = true
+  syncFeedbackMsg.value = ''
+  try {
+    const targetDate = manualSyncMode.value === 'specific' ? String(manualSyncSpecificDate.value || '').trim() : ''
+    const res = await manualSyncSpotElectricity(projectKey, {
+      date: targetDate,
+      overwrite: Boolean(forceOverwrite),
+    })
+
+    // 若数据库中已存在某日数据且未确认覆盖，提示用户并呼出确认选项
+    if (res && res.status === 'ALREADY_EXISTS') {
+      overwriteTargetDate.value = res.target_date || targetDate
+      overwriteConfirmMessage.value = res.message || `数据库中已存在【${res.target_date || targetDate}】的数据，是否确认覆盖？`
+      overwritePendingPoints.value = res.points_count || 96
+      overwritePendingPricePoints.value = res.price_points || 0
+      showOverwriteConfirm.value = true
+      return
+    }
+
+    if (res && res.ok) {
+      showOverwriteConfirm.value = false
+      syncFeedbackMsg.value = res.message || '手动拉取入库成功！'
+      syncFeedbackType.value = 'success'
+      // 成功后动态重载看板数据与大盘指标
+      await fetchMeta()
+      await fetchData()
+      await fetchSyncConfig()
+    } else {
+      showOverwriteConfirm.value = false
+      syncFeedbackMsg.value = res?.message || '发改委数据尚未发布或接口未返回有效数据'
+      syncFeedbackType.value = 'warning'
+    }
+  } catch (err) {
+    showOverwriteConfirm.value = false
+    syncFeedbackMsg.value = err.message || '手动拉取请求失败，请稍后重试'
+    syncFeedbackType.value = 'error'
+  } finally {
+    manualSyncLoading.value = false
+  }
+}
+
+// 用户确认覆盖
+async function handleConfirmOverwrite() {
+  await handleManualSync(true)
+}
+
+// 用户取消覆盖
+function handleCancelOverwrite() {
+  showOverwriteConfirm.value = false
+  syncFeedbackMsg.value = `已取消对【${overwriteTargetDate.value}】数据的覆盖操作。`
+  syncFeedbackType.value = 'warning'
+}
+
 onMounted(async () => {
+  if (route.query.pageName === '电力市场数据') {
+    router.replace({
+      query: {
+        ...route.query,
+        pageName: '电力现货市场数据',
+      },
+    })
+  }
+  if (typeof document !== 'undefined') {
+    document.title = `${pageDisplayName.value} - 凤凰计划`
+  }
   checkMobileScreen()
   window.addEventListener('resize', handleResize)
   initResizeObserver()
@@ -2141,14 +2572,14 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
-/* 顶部 Banner：改用与整站页面一致的浅色质感卡片风格 */
+/* 顶部 Banner：天蓝色过渡效果质感卡片 */
 .banner-card {
-  background: #ffffff;
-  color: #1e293b;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 35%, #bae6fd 70%, #7dd3fc 100%);
+  color: #0369a1;
   padding: 18px 22px;
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid #bae6fd;
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.12);
 }
 
 .banner-content {
@@ -2169,26 +2600,28 @@ onBeforeUnmount(() => {
   font-size: 26px;
   width: 48px;
   height: 48px;
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-  color: #2563eb;
+  background: #ffffff;
+  color: #0284c7;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #bfdbfe;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.15);
 }
 
 .banner-title {
   margin: 0;
   font-size: 19px;
   font-weight: 700;
-  color: #0f172a;
+  color: #0369a1;
 }
 
 .banner-subtitle {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #64748b;
+  color: #0284c7;
+  opacity: 0.95;
 }
 
 .banner-meta {
@@ -2198,19 +2631,21 @@ onBeforeUnmount(() => {
 }
 
 .meta-tag {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(186, 230, 253, 0.85);
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 12.5px;
-  color: #475569;
+  color: #0369a1;
   display: flex;
   align-items: center;
   gap: 6px;
+  box-shadow: 0 1px 3px rgba(14, 165, 233, 0.08);
 }
 
 .meta-tag strong {
-  color: #0f172a;
+  color: #0c4a6e;
 }
 
 .dot.live {
@@ -2528,6 +2963,39 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
+.kpi-sub + .kpi-sub {
+  margin-top: 5px;
+}
+
+.kpi-sub-dual {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.kpi-sub-dual .sub-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.kpi-sub-dual .badge-alert,
+.kpi-sub-dual .badge-blue {
+  padding: 1px 5px;
+  font-size: 10.5px;
+}
+
+.sub-dim {
+  color: #94a3b8;
+  font-size: 10.5px;
+  font-weight: normal;
+}
+
 .sub-status {
   background: #f1f5f9;
   padding: 2px 6px;
@@ -2547,6 +3015,15 @@ onBeforeUnmount(() => {
   color: #dc2626;
   font-weight: 600;
   background: #fef2f2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.badge-blue {
+  color: #2563eb;
+  font-weight: 600;
+  background: #eff6ff;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;
@@ -2853,25 +3330,53 @@ onBeforeUnmount(() => {
    ========================================================================== */
 @media (max-width: 768px) {
   .spot-elec-main {
-    padding: 12px 10px 30px;
-    gap: 12px;
+    padding: 10px 10px 30px;
+    gap: 10px;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
 
+  /* 1. 顶部天蓝看板卡片移动端优化 */
   .banner-card {
     padding: 14px 14px;
   }
+  .banner-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .banner-title-row {
+    align-items: flex-start;
+    gap: 12px;
+  }
   .banner-icon {
-    font-size: 24px;
-    width: 40px;
-    height: 40px;
+    font-size: 22px;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
   }
   .banner-title {
-    font-size: 17px;
+    font-size: 16px;
+    line-height: 1.35;
   }
   .banner-subtitle {
-    font-size: 12px;
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+  .banner-meta {
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+  .meta-tag {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 11.5px;
+    padding: 5px 10px;
   }
 
+  /* 2. 筛选控制工具栏移动端排版优化 */
   .control-toolbar {
     padding: 12px;
     gap: 10px;
@@ -2894,108 +3399,253 @@ onBeforeUnmount(() => {
 
   .view-mode-tabs {
     width: 100%;
+    display: flex;
   }
   .mode-tab-btn {
     flex: 1;
     text-align: center;
     padding: 7px 4px;
+    font-size: 12px;
   }
 
-  .date-picker-group,
+  /* 单日日期选择组 */
+  .date-picker-group {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .date-picker-group .btn.icon-btn {
+    padding: 6px 10px;
+    flex-shrink: 0;
+  }
+  .date-picker-group .form-input.date-input {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    font-size: 13px;
+    padding: 6px 4px;
+  }
+  .date-picker-group .btn.quick-btn {
+    padding: 6px 10px;
+    font-size: 11.5px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* 区间模式控制组 */
   .range-picker-group {
     width: 100%;
-    justify-content: space-between;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
-  .form-input.date-input {
+  .range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+  }
+  .range-inputs .form-input.date-input {
     flex: 1;
-    min-width: 110px;
+    min-width: 0;
+    text-align: center;
+    font-size: 12.5px;
+    padding: 6px 4px;
+  }
+  .range-sep {
+    font-size: 12px;
+    color: #64748b;
+    flex-shrink: 0;
   }
   .quick-range-chips {
     width: 100%;
-    justify-content: space-between;
-    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
+  .quick-range-chips .chip-btn {
+    flex: 1;
+    text-align: center;
+    padding: 5px 2px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .quick-range-chips .query-btn {
+    padding: 5px 12px;
+    font-size: 11.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* 区间聚合维度 tabs */
   .range-submode-tabs {
     width: 100%;
-    margin-top: 4px;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
   }
   .submode-btn {
     flex: 1;
     justify-content: center;
-    padding: 6px 4px;
-    font-size: 11.5px;
+    padding: 6px 2px;
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+  .single-mode-hint {
+    font-size: 11px;
+    gap: 6px;
+  }
+  .hint-text {
+    font-size: 11px;
   }
 
+  /* 底部操作区：负电价勾选与导出按钮 */
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 10px;
+  }
+  .checkbox-filter {
+    font-size: 12px;
+    white-space: nowrap;
+  }
   .btn.primary.export-btn {
-    flex: 1;
-    text-align: center;
-    padding: 8px 12px;
+    flex: initial;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    white-space: nowrap;
   }
 
-  /* KPI 网格：手机端转为 2 列自适应网格 */
+  /* 3. KPI 核心指标卡片：2 列自适应网格与长文本优化 */
   .kpi-section {
+    gap: 10px;
+  }
+  .kpi-grid-prices {
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
   }
-  .kpi-grid-prices,
   .kpi-grid-sales {
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
   }
-  .kpi-card {
-    padding: 10px 12px;
+  /* 让售电量的大盘指标横跨两列居底，布局整齐平衡 */
+  .kpi-grid-sales .kpi-card:nth-child(3) {
+    grid-column: span 2;
   }
-  .kpi-value {
-    font-size: 18px;
+  .kpi-card {
+    padding: 10px 10px;
   }
   .kpi-title {
-    font-size: 11.5px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .kpi-value {
+    font-size: 17px;
+    margin: 4px 0;
   }
   .kpi-sub {
-    font-size: 10.5px;
+    font-size: 10px;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
+  }
+  .kpi-sub-dual {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  .badge-alert,
+  .badge-blue {
+    padding: 2px 5px;
+    font-size: 9.5px;
+    line-height: 1.2;
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  /* 图表区 */
+  /* 4. 图表区移动端上下分层与横滑优化 */
   .chart-container-card {
     padding: 12px;
   }
-  .chart-wrapper {
-    min-height: 280px;
+  .chart-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
   }
-  .main-chart {
-    height: 280px;
-    width: 100% !important;
+  .chart-title-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
   .chart-title {
-    font-size: 13.5px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .chart-badge {
+    align-self: flex-start;
+    font-size: 10.5px;
   }
   .chart-indicators-selector {
     width: 100%;
     justify-content: flex-start;
     overflow-x: auto;
-    padding: 3px 6px;
+    padding: 4px 2px;
     gap: 6px;
     -webkit-overflow-scrolling: touch;
   }
   .indicator-chip {
-    padding: 3px 8px;
+    padding: 4px 8px;
     font-size: 11px;
     white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .chart-wrapper {
+    min-height: 300px;
+  }
+  .main-chart {
+    height: 300px;
+    width: 100% !important;
   }
 
-  /* 表格区：激活手机端布局切换按钮 */
+  /* 5. 表格区移动端切换与微卡片排版重构 */
+  .table-card-header {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .table-title-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .table-title-group h3 {
+    font-size: 14.5px;
+  }
+  .table-count {
+    font-size: 11px;
+  }
   .mobile-layout-switch {
     display: flex;
+    width: 100%;
     background: #f1f5f9;
-    padding: 2px;
+    padding: 3px;
     border-radius: 6px;
   }
   .switch-btn {
+    flex: 1;
+    text-align: center;
     border: none;
     background: transparent;
-    font-size: 11.5px;
-    padding: 3px 8px;
+    font-size: 12px;
+    padding: 5px 8px;
     border-radius: 4px;
     color: #64748b;
     cursor: pointer;
@@ -3006,13 +3656,12 @@ onBeforeUnmount(() => {
     font-weight: 600;
   }
 
-  /* 显示微卡片 */
+  /* 微卡片流排版 */
   .mobile-cards-wrap {
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
-
   .spot-mobile-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -3037,6 +3686,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-wrap: wrap;
   }
   .point-badge {
     background: #e2e8f0;
@@ -3053,7 +3703,7 @@ onBeforeUnmount(() => {
     color: #0f172a;
   }
   .period-text {
-    font-size: 11px;
+    font-size: 10.5px;
     color: #64748b;
   }
   .badge-neg {
@@ -3065,28 +3715,35 @@ onBeforeUnmount(() => {
     font-weight: 600;
   }
 
+  /* 核心价格网格：第 3 列 1.35fr 空间自适应容纳“价差（实时-日前）” */
   .card-price-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr 1fr 1.35fr;
     background: #f8fafc;
     border-radius: 6px;
     padding: 6px 8px;
     gap: 4px;
+    align-items: center;
   }
   .price-cell {
     display: flex;
     flex-direction: column;
     gap: 2px;
     text-align: center;
+    overflow: hidden;
   }
   .cell-label {
-    font-size: 10.5px;
+    font-size: 10px;
     color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .cell-val {
     font-size: 13.5px;
     font-weight: 700;
     font-family: ui-monospace, monospace;
+    white-space: nowrap;
   }
   .cell-val.val-neg {
     color: #2563eb !important;
@@ -3094,8 +3751,9 @@ onBeforeUnmount(() => {
 
   .card-bottom-info {
     display: flex;
-    justify-content: space-between;
-    font-size: 11px;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 10.5px;
     color: #64748b;
     border-top: 1px dashed #f1f5f9;
     padding-top: 6px;
@@ -3103,11 +3761,555 @@ onBeforeUnmount(() => {
 
   .table-responsive {
     max-height: 480px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .spot-table th,
   .spot-table td {
-    padding: 8px 10px;
-    font-size: 11.5px;
+    padding: 8px 8px;
+    font-size: 11px;
+    white-space: nowrap;
   }
 }
+
+/* ==========================================================
+   Global_admin 系统控制选项与定时调度弹窗样式
+   ========================================================== */
+.admin-control-btn {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #f8fafc;
+  border: 1px solid #475569;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+}
+.admin-control-btn:hover {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #38bdf8;
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.admin-modal-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.admin-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.admin-modal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-badge-admin {
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid #fecaca;
+}
+
+.admin-modal-title-wrap h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+.modal-close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.admin-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 状态概览卡片 */
+.status-summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status-indicator-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.indicator-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.pulse-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-online {
+  background-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+.dot-retrying {
+  background-color: #f97316;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+  animation: pulseDot 1.5s infinite;
+}
+.dot-paused {
+  background-color: #94a3b8;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.btn-refresh-status {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: #334155;
+  transition: all 0.15s;
+}
+.btn-refresh-status:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+}
+
+.status-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  background: #ffffff;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #edf2f7;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.meta-label {
+  font-size: 11px;
+  color: #64748b;
+}
+.meta-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  font-family: ui-monospace, monospace;
+}
+.meta-val.highlight {
+  color: #0284c7;
+}
+
+.status-msg-banner {
+  font-size: 12px;
+  color: #475569;
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+/* 控制区块 */
+.control-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.section-title-row {
+  margin-bottom: 14px;
+}
+.section-title-row h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.section-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.control-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px dashed #f1f5f9;
+}
+.form-row:last-child {
+  border-bottom: none;
+}
+
+.form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.form-label .label-txt {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.form-label small {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.form-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 开关组件 */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1;
+  transition: .3s;
+  border-radius: 24px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+input:checked + .slider {
+  background-color: #0284c7;
+}
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+.toggle-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.input-time,
+.input-number,
+.input-date {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.input-time:focus,
+.input-number:focus,
+.input-date:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+.input-unit-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.input-number {
+  width: 80px;
+}
+.input-unit {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.section-action-row {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+.save-config-btn {
+  font-size: 13px;
+  padding: 7px 16px;
+}
+
+/* 手动拉取区块 */
+.manual-sync-box {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sync-mode-radios {
+  display: flex;
+  gap: 18px;
+}
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.specific-date-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+.picker-label {
+  font-size: 12px;
+  color: #475569;
+}
+
+.manual-btn-row {
+  display: flex;
+  justify-content: flex-start;
+}
+.manual-trigger-btn {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  border: none;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.manual-trigger-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  transform: translateY(-1px);
+}
+.manual-trigger-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+/* 覆盖确认警示框 */
+.overwrite-confirm-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: modalFadeIn 0.2s ease-out;
+}
+.confirm-alert-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.confirm-icon {
+  font-size: 16px;
+}
+.confirm-title {
+  font-size: 14px;
+  color: #92400e;
+  font-weight: 700;
+}
+.confirm-desc {
+  font-size: 13px;
+  color: #78350f;
+  line-height: 1.5;
+}
+.confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.btn-confirm-overwrite {
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-confirm-overwrite:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.btn-cancel-overwrite {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-cancel-overwrite:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+/* 反馈横幅 */
+.feedback-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  animation: modalFadeIn 0.2s ease-out;
+}
+.alert-success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.alert-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.alert-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.admin-modal-footer {
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.footer-tip {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
 </style>
+

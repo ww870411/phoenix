@@ -402,9 +402,10 @@ function openPage(page) {
   }
   const isSpotElectricity = normalizedKey === 'spot_electricity'
   if (isSpotElectricity) {
+    const targetName = page?.page_name && page.page_name !== '电力市场数据' ? page.page_name : '电力现货市场数据'
     router.push({
       path: `${base}`,
-      query: { pageName: page.page_name },
+      query: { pageName: targetName },
     })
     return
   }

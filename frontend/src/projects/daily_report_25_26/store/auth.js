@@ -279,7 +279,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     const slugKey = rawKey.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase()
     if (pageSet.has(slugKey)) return true
 
-    // 针对“电力市场数据”板块：凡是有权访问 daily_report_25_26 项目的所有人员均直接放行
+    // 针对“电力现货市场数据”板块：凡是有权访问 daily_report_25_26 项目的所有人员均直接放行
     if (slugKey === 'spot_electricity' && hasProjectAccess(projectKey)) {
       return true
     }

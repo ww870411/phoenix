@@ -3186,6 +3186,58 @@ export async function getSpotElectricityMonthlyTrends(projectKey = 'daily_report
   return response.json()
 }
 
+export async function getSpotElectricitySyncConfig(projectKey = 'daily_report_25_26') {
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/sync/config`)
+  const response = await authAwareFetch(url, { headers: attachAuthHeaders() })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取现货电价自动同步配置失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function saveSpotElectricitySyncConfig(projectKey = 'daily_report_25_26', payload = {}) {
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/sync/config`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '保存现货电价自动同步配置失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function manualSyncSpotElectricity(projectKey = 'daily_report_25_26', payload = {}) {
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/sync/manual`)
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '手动拉取电力现货数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function checkSpotElectricityExists(projectKey = 'daily_report_25_26', date) {
+  const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/sync/check_exists?date=${encodeURIComponent(date)}`)
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '检查现货数据存在性失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+
 
 
 

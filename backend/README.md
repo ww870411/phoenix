@@ -1,3 +1,141 @@
+## 2026-10-13 daily_report_25_26 电力现货数据入库存在性校验与覆盖确认机制 (Spot Electricity Data Exists Check & Overwrite Guard)
+
+- **涉及核心服务与路由模块**：
+  - 核心自动化调度服务：[`spot_electricity_sync_service.py`](file:///D:/编程项目/phoenix/backend/services/spot_electricity_sync_service.py)；
+  - 现货 API 路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **后端架构与安全控制落地成果**：
+  1. **数据存在性检查 (`check_date_exists`)**：
+     - 查询 `public.spot_electricity_15min_data` 表，统计指定 `trade_date` 的已有点位数、已录入电价点位数与售电量点位数；
+     - 挂载路由 `GET /spot_electricity/sync/check_exists`，供前端或管理任务预检数据存在状态；
+  2. **覆盖控制拦截 (`sync_data` & `manual_sync_spot_electricity`)**：
+     - `ManualSyncPayload` 模型增加 `overwrite: bool = False` 字段；
+     - 手动模式下若目标日期数据已存在且 `overwrite == False`，后端安全阻断并返回 `status: ALREADY_EXISTS` 及明确的提示信息；
+     - 当且仅当客户端传入 `overwrite == True` 时才执行真实覆盖写入，有效杜绝误操作破坏已有电价数据。
+
+## 2026-10-13 daily_report_25_26 电力现货自动化调度服务与 Global_admin 系统控制 API 实现 (Spot Electricity Sync Service & Admin API)
+
+- **涉及核心服务与路由模块**：
+  - 核心自动化调度服务：[`spot_electricity_sync_service.py`](file:///D:/编程项目/phoenix/backend/services/spot_electricity_sync_service.py)；
+  - 现货 API 路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 数据库操作与模型：[`models_spot_electricity.py`](file:///D:/编程项目/phoenix/backend/db/models_spot_electricity.py)。
+- **后端架构与功能落地成果**：
+  1. **自动化轮询调度服务 (`SpotElectricitySyncService`)**：
+     - **配置文件持久化**：存储于 `backend_data/projects/daily_report_25_26/config/spot_electricity_sync_config.json`，初始配置默认为：
+       - `enabled: true`
+       - `cron_time: "07:40"`
+       - `retry_interval_minutes: 20`
+     - **阶梯退避探测与自愈轮询**：
+       - 后台守护线程（`threading.Thread(daemon=True)`）在设定初次时间（默认 07:40）启动对目标日期的探测；
+       - 若发改委当日数据尚未发布（接口返回空或数据缺失），将调度状态置为 `RETRYING`，并在 20 分钟后唤醒重试；
+       - 一旦成功获取 96 点位数据并入库，将状态重置为 `SUCCESS`，并将下次运行时间规划至次日的 07:40；
+     - **高安全性原子幂等入库**：
+       - 利用 PostgreSQL `INSERT ... ON CONFLICT (trade_date, point_index) DO UPDATE`；
+       - 仅更新官方发布的 `day_ahead_price`、`real_time_price`、`price_spread` 及相关时段文本；
+       - 绝对不覆盖或重置各热电厂用户手工填报的售电量指标（`beihai_total_sales`、`xianghai_total_sales` 等）；
+  2. **权限隔离与管理 API 路由**：
+     - 在接口层面通过 `_ensure_global_admin` 严格校验登录会话角色，非 `Global_admin` 或管理员直接阻断返回 HTTP 403 Forbidden；
+     - `GET /api/v1/projects/daily_report_25_26/spot_electricity/sync/config`：获取当前自动调度参数与实时运行日志；
+     - `POST /api/v1/projects/daily_report_25_26/spot_electricity/sync/config`：热更新调度配置并立即唤醒调度器生效；
+     - `POST /api/v1/projects/daily_report_25_26/spot_electricity/sync/manual`：手动触发拉取入库，支持 `mode="yesterday"` 或 `mode="specific" + target_date="YYYY-MM-DD"`。
+
+## 2026-10-13 daily_report_25_26 辽宁发改委现货电价数据自动化采集入库流程架构设计 (Spot Electricity Automated Ingestion Architecture)
+
+- **涉及服务与模块**：
+  - 数据模型层：[`models_spot_electricity.py`](file:///D:/编程项目/phoenix/backend/db/models_spot_electricity.py)；
+  - 现货 API 路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+  - 采集服务与脚本：[`liaoning_spot_price_fetcher.py`](file:///D:/编程项目/phoenix/backend/services/liaoning_spot_price_fetcher.py)、[`import_spot_electricity_data.py`](file:///D:/编程项目/phoenix/backend/scripts/import_spot_electricity_data.py)。
+- **外部数据源逆向与流程设计**：
+  1. **数据源穿透**：已定位并实测发改委系统底层 REST 接口 `POST https://fgw.ln.gov.cn/indexview/api/getLine`，单次请求毫秒级返回全天 96 点位（日前/实时/时刻），完全规避 HTML 页面解析与反爬风险；
+  2. **自动化架构规划**：
+     - **调度引擎**：早晨 08:00 开始阶梯探测重试（08:00、08:15、08:30... 直至成功或 09:30 超时）；
+     - **清洗计算**：自动生成 15min 规范区间与价差（`real_time - day_ahead`）；
+     - **幂等写入**：基于 `(trade_date, point_index)` 进行原子 Upsert，保护机组售电量业务数据；
+     - **手动补录**：预设 `POST /spot_electricity/sync` 接口，支持指定日期补录与前端一键同步。
+
+## 2026-10-13 daily_report_25_26 前端负电价卡片升级为蓝色主题与后端服务契约保持 (Spot Electricity Negative Card Blue Theme & API Stability)
+
+- **涉及服务与接口**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 本次调整属于前端现货数据大盘“负电价时点数”KPI 卡片视觉优化（主数值与占比徽标全部统一切换为与第一张日前均价卡片一致的蓝色主题，弱化强烈告警红）；
+  - 后端汇总 API（`/spot_electricity/summary`）输出的负电价相关统计字段、底层查询与数据契约保持 100% 稳定运行。
+
+## 2026-10-13 daily_report_25_26 前端现货价差色彩规范重构与后端服务契约保持 (Spot Electricity Spread Colors & API Stability)
+
+- **涉及服务与接口**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 本次调整属于前端全场景展示层关于现货价差正负数的色彩映射重构（全面改为国内通用的“正数红、负数绿”）；
+  - 后端 API 数据输出、数据库表结构保持 100% 稳定运行。
+
+## 2026-10-13 daily_report_25_26 前端价差极值表述升级为“最大正/负价差”与后端契约保持 (Spot Electricity Extreme Spread UI & API Stability)
+
+- **涉及服务与接口**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 前端将原本的“最大溢价/最大贴水”更名为通俗易懂的“最大正价差/最大负价差”；
+  - 后端 API 端点返回的 `max_price_spread` 和 `min_price_spread` 字段键名及数据类型保持 100% 稳定兼容。
+
+## 2026-10-13 daily_report_25_26 前端负电价指标文案精简与后端数据契约保持 (Spot Electricity KPI Text Refinement & API Stability)
+
+- **涉及服务与接口**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 本次调整属于前端现货看板 KPI 卡片展示文案与防折行样式的精细化微调（时段占比与天数占比文案精简）；
+  - 后端 API 接口与数据库数据契约 100% 保持稳定。
+
+## 2026-10-13 daily_report_25_26 前端负电价卡片单行双指标排版重构与后端服务契约保持 (Spot Electricity Negative KPI UI Overhaul & API Stability)
+
+- **涉及服务与接口**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 本次改动纯属前端展示层的排版与视觉节奏优化（将区间模式下突兀堆叠的双行文本改造成单行两端对齐的对称双指标布局）；
+  - 后端汇总接口 `/spot_electricity/summary` 输出的 `negative_price_days` 与其他全部字段、数据库模型与路由契约保持 100% 稳定运行。
+
+## 2026-10-13 daily_report_25_26 电力现货后端汇总接口负电价天数统计扩展 (Spot Electricity Summary Negative Days Support)
+
+- **涉及服务与接口**：
+  - API 路由文件：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)（`/spot_electricity/summary` 接口）；
+  - 关联前端组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **接口增强与数据架构说明**：
+  - 在 `/spot_electricity/summary` 接口的 SQL 查询中扩展了原生聚合统计：
+    `COUNT(DISTINCT trade_date) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_price_days`；
+  - 响应 payload 中新增 `negative_price_days` 字段，直接返回选定日期区间内出现负电价的总天数；
+  - 接口保持 100% 向后兼容，零破坏性变更。
+
+## 2026-10-13 daily_report_25_26 前端电力现货页面名称全链路归一化与后端服务契约保持 (Spot Electricity Page Name Normalization & API Stability)
+
+- **涉及服务与组件**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 页面选择大厅：[`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 本次改动消除了页面展示层与路由传参中旧名称“电力市场数据”的残留，全链路统一为“**电力现货市场数据**”；
+  - 后端全部 API 端点与数据库表结构保持 100% 稳定运行。
+
+## 2026-10-13 daily_report_25_26 前端电力现货手机端排版重构与后端服务契约保持 (Spot Electricity Mobile UI & API Stability)
+
+- **涉及服务与组件**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 本次改动聚焦于移动端响应式布局优化（CSS 媒体查询 `@media (max-width: 768px)` 重构），不变更任何数据模型与接口契约；
+  - 后端全部 API 端点与数据库表结构保持 100% 稳定运行。
+
+## 2026-10-13 daily_report_25_26 前端电力现货顶部看板视觉升级与后端服务契约保持 (Spot Electricity Sky Blue Banner & API Stability)
+
+- **涉及服务与组件**：
+  - 前端页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 后端接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **架构契约与状态说明**：
+  - 本次调整属于前端现货数据查询看板的视觉样式优化（顶部卡片升级为天蓝色过渡渐变效果），不涉及后端接口、时序查询与数据逻辑变更；
+  - 后端全部 API 端点与数据库表结构保持 100% 稳定运行。
+
 ## 2026-10-13 daily_report_25_26 前端负电价时点占比升级与后端数据源契约保持 (Spot Electricity Negative Ratio & Data Stability)
 
 - **涉及服务与接口**：

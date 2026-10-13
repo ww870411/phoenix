@@ -1,3 +1,180 @@
+## 2026-10-13 daily_report_25_26 电力现货数据手动拉取已存在提示与二次覆盖确认交互 (Spot Electricity Data Exists Overwrite Confirmation UI)
+
+- **涉及页面与服务模块**：
+  - 核心页面：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - API 服务层：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)。
+- **前端交互与安全机制实现成果**：
+  1. **数据已存在风险拦截与内嵌警示卡片**：
+     - 当 Global_admin 在系统控制面板执行手动拉取（最新数据或某日补录）时，后端若返回 `ALREADY_EXISTS`，前端操作按钮区立即平滑转换为醒目的黄色警示卡片（`.overwrite-confirm-box`）；
+     - 卡片清晰提示目标日期已存在的数据条数、已含电价点位数，并明确告知覆盖的影响范围；
+  2. **双向分支操作**：
+     - 提供【⚠️ 确认覆盖现有数据】按钮，点击后带 `overwrite=true` 发起覆盖请求，成功后重载大盘与图表；
+     - 提供【取消】按钮，点击后恢复普通按钮状态并提示“已取消覆盖操作”，保障原有数据绝对安全；
+     - 切换拉取模式或修改日期时自动重置覆盖状态，防止状态错位。
+
+## 2026-10-13 daily_report_25_26 电力现货数据自动获取与 Global_admin 系统控制选项交互实现 (Spot Electricity Admin Sync Control UI)
+
+- **涉及页面与服务模块**：
+  - 核心页面：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - API 服务层：[`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)；
+  - 认证与权限状态机：[`auth.js`](file:///D:/编程项目/phoenix/frontend/src/stores/auth.js)。
+- **前端交互与管理功能实现成果**：
+  1. **基于角色的强权限隔离与入口渲染**：
+     - 利用 `useAuthStore` 严格判定用户身份（`auth.user?.group === 'Global_admin' || auth.canAccessAdminConsole`）；
+     - 仅当当前登录账户具备 `Global_admin` 权限时，现货数据大盘操作栏才会渲染“⚙️ 系统控制选项”专属管理按钮；普通用户不可见亦无法打开弹窗；
+  2. **系统控制选项模态面板**：
+     - **调度运行状态看板**：动态心跳灯指示器（正常守候-绿/重试探测中-橙/已暂停-灰），展示当前调度状态、下次计划探测时间、最近成功入库日期及探测日志；
+     - **每日自动拉取规则表单**：
+       - 开关自动拉取（iOS 风格 Toggle Switch）；
+       - 每日初次尝试时间选择器（支持设置 07:40 等精确时间）；
+       - 未更新重试间隔步进框（默认 20 分钟）；
+       - 一键保存配置并同步后端调度线程；
+     - **手动实时拉取与历史补录面板**：
+       - 支持“拉取最新数据（前一日现货电价）”或“指定某日补录”模式切换；
+       - 指定日期选择器；
+       - 带有加载防重复点击状态（Loading Spinner）的手动拉取执行按钮；
+     - **反馈通知与提示**：
+       - 采用即时 Banner 提醒（成功、警告、错误）；
+       - 提示幂等写入安全保障机制（`ON CONFLICT (trade_date, point_index)` 不影响机组售电量数据）。
+  3. **生产构建验证**：
+     - 经 `npm run build` 验证，749 modules 顺利打包完成，0 语法警告与错误。
+
+## 2026-10-13 daily_report_25_26 电力现货公开数据源底层 API 逆向与自动化流程设计 (Spot Electricity External Ingestion & UI Sync Planning)
+
+- **涉及页面与组件**：
+  - 现货数据大盘页面：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **外部数据源探查与前端规划成果**：
+  1. **数据源通信协议穿透**：
+     - 已成功逆向辽宁省发改委公开电价页面的底层数据源接口，确认其为免认证的标准 JSON 接口（`/getLine`，单次返回 96 点位）；
+  2. **前端交互与主动同步功能规划**：
+     - 在自动化定时任务基础上，拟在看板操作栏预设“🔄 同步最新数据”功能，支持用户随时主动触发发改委最新日度电价拉取与看板数据重载，免去人工录入与等待。
+
+## 2026-10-13 daily_report_25_26 负电价时点数卡片数据色彩升级为与日前均价一致的蓝色 (Spot Electricity Negative Card Blue Theme)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面视觉与卡片色彩统一成果**：
+  1. **负电价时点数卡片全面接入蓝色主题**：
+     - 主数值统一设为 `text-blue`（`#2563eb`），与第一张“日前均价”卡片完全一致；
+     - 单日模式时段占比、区间模式时段占比以及天数占比，全部更替为优雅清爽的蓝色徽标（`.badge-blue`）或蓝色文字（`.text-blue`）；
+  2. **视觉冲击弱化与看板格调平衡**：
+     - 彻底消除此前强烈的红色突兀告警感，使 4 张 KPI 卡片（日前均价-蓝、实时均价-橙、平均价差-正红负绿、负电价时点数-蓝）呈现和谐沉稳的工业看板视觉。
+
+## 2026-10-13 daily_report_25_26 电力现货价差全链路色彩规范升级：“正数显红、负数显绿、零为中性” (Spot Electricity Spread Red-Up Green-Down Colors)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面视觉与业务习惯对齐成果**：
+  1. **全面对接国内“红涨绿跌”交易与管理认知习惯**：
+     - 正价差（实时高于日前，溢价偏高）由原本的绿色重构为**醒目红色**（`.text-danger` / `#ef4444`）；
+     - 负价差（实时低于日前，贴水偏低）由原本的紫色重构为**清爽绿色**（`.text-green` / `#10b981`）；
+     - 零值保持中性灰阶（`.text-gray`）；
+  2. **端到端全链路视觉口径严格统一**：
+     - 大盘核心 KPI 卡片“平均价差 (实时-日前)”；
+     - 移动端 3 类微卡片（日度趋势、月度聚合、分时点位）；
+     - PC 端 3 大明细表格（日度趋势表、月度聚合表、分时点位表）；
+     - ECharts 3 类图表（单日分时、月度聚合、时段均值）的价差柱形与 Tooltip 浮层文字色彩全部协同一致。
+
+## 2026-10-13 daily_report_25_26 电力现货平均价差卡片极值文案升级为“最大正价差/最大负价差” (Spot Electricity Spread Extreme Metric Redesign)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面视觉与指标文本通俗化成果**：
+  1. **淘汰生僻金融术语**：
+     - 彻底摒弃“最大溢价”与“最大贴水”这种易引发歧义的金融衍生品表述；
+     - 升级为方案 B：`最大正价差: +XX.XX` 与 `最大负价差: -YY.YY`；
+  2. **正号补齐与业务释义悬浮提示**：
+     - 正数显式补齐加号 `+`，负数保留减号 `-`；
+     - 鼠标悬浮提供通俗准确的释义：“选定区间内实时电价高于/低于日前电价的最大差值”，极大提升易用性。
+
+## 2026-10-13 daily_report_25_26 电力现货负电价 KPI 卡片文案精炼与防折行强化 (Spot Electricity Negative KPI Refinement & Layout Hardening)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面视觉与指标文本精炼成果**：
+  1. **指标名称与结构规范化**：
+     - 左侧时段维度更名为 `时段占比: 52.7%`，移除括号内冗长的点数信息 `(xxx点)`，大幅节约水平横向空间；
+     - 右侧天数维度升级为 `天数: 29天 (占比96.7%)`，显式标注“占比”释义，使数据语义一目了然；
+  2. **样式强化与防折行加固 (`.kpi-sub-dual`)**：
+     - 为 `.kpi-sub-dual` 和 `.sub-item` 配置 `white-space: nowrap;`、`flex-shrink: 0;` 与微缩字号，彻底根除因空间挤压引起的拆词换行；
+     - 鼠标 hover 依然完整保留分子分母与总天数的完整业务释义提示。
+
+## 2026-10-13 daily_report_25_26 电力现货负电价 KPI 卡片底部单行双指标对称排版重构 (Spot Electricity Negative KPI Dual-Metric Single-Row Layout)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面视觉与卡片排版重构成果**：
+  1. **彻底消除双行堆叠的突兀下坠感**：
+     - 将此前在区间走势分析模式下纵向堆叠的两行文字（`占总查询时段` 与 `负电价天数`）重构为单行互斥条件渲染；
+     - 与前三张价格 KPI 卡片（日前均价、实时均价、平均价差）底部的单行两端对齐格式（`最高 / 最低`、`最大溢价 / 最大贴水`）保持严丝合缝的高度与视觉节奏统一；
+  2. **单行双维度指标精细化呈现 (`.kpi-sub-dual`)**：
+     - **左侧（时段维度）**：紧凑呈现 `时段: 44.7% (515点)`，存在负电价时标红加粗；
+     - **右侧（天数维度）**：自适应呈现 `天数: 11天 (91.7%)`，存在负电价时保留醒目预警小胶囊；
+     - 鼠标悬停在两项指标上分别提示各自完整的时序点位总量与区间总天数释义；
+  3. **移动端自适应平滑分流**：
+     - 移动端媒体查询 `@media (max-width: 768px)` 中针对 `.kpi-sub-dual` 增加弹性分流布局，确保在极窄手机屏幕下文字不遮挡、不换行破损。
+
+## 2026-10-13 daily_report_25_26 电力现货负电价指标升级：区间模式动态展现负电价天数及其占比 (Spot Electricity Negative Days Metric)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面数据展示与分析深度升级成果**：
+  1. **区间模式专属新增“负电价天数”指标行**：
+     - 在“负电价时点数”KPI 卡片中，当用户切换至“区间走势分析”（`viewMode === 'range'`）时，卡片内动态追加第二行指标项；
+     - 左侧标签明确标识为 `负电价天数:`；
+     - 右侧自适应展示负电价发生天数及在区间总天数中的百分比（如 `10天 (33.3%)`），存在负电价时以预警高亮胶囊凸显；
+     - 鼠标悬浮提供完整业务释义提示：包含具体分子天数、总天数与百分比；
+  2. **双行排版与高度自然对齐**：
+     - 单日模式维持单行“占总查询时段”，区间模式展现“占总查询时段”与“负电价天数”双行，与前三张价格卡片（最高/最低均价、溢价/贴水）高度视觉平衡对齐。
+
+## 2026-10-13 daily_report_25_26 电力现货页面名称全链路归一化 (Spot Electricity Page Name Normalization)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - 页面选择大厅：[`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)。
+- **页面标题与 URL 归一化成果**：
+  1. **主页面面包屑与标题强归一化**：
+     - `pageDisplayName` 增加强校验逻辑，彻底拦截旧名称 `'电力市场数据'`，统一计算并返回 `'电力现货市场数据'`；
+     - 确保页面顶部面包屑导航无论何时均规范显示为：`项目选择 / 2025-2026供暖期生产日报 / 电力现货市场数据`；
+  2. **URL Query 与浏览器标题自动静默修正**：
+     - 在 `onMounted` 阶段检测若带有旧 query `pageName=电力市场数据`，通过 `router.replace` 自动纠正为 `pageName=电力现货市场数据`，并同步更新 `document.title`；
+  3. **选择大厅跳转传参对齐**：
+     - `PageSelectView.vue` 跳转至现货页面时，严格锁定目标参数 `pageName: '电力现货市场数据'`。
+
+## 2026-10-13 daily_report_25_26 电力现货手机移动端响应式排版全面重构 (Spot Electricity Mobile Layout Overhaul)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **移动端页面排版重构成果**：
+  1. **全屏防晃与顶部看板垂直层级化**：
+     - 主容器增加 `overflow-x: hidden; max-width: 100%`，根除横向轻微溢出；
+     - 顶部天蓝看板在小屏下转为纵向自适应分层，标题与两个数据状态标签整齐铺满；
+  2. **工具栏全场景触控布局优化**：
+     - 单日模式日期输入框与翻页箭头弹性拉伸并居中对齐；
+     - 区间模式起止日期与快捷查询胶囊自适应分层均分宽度，聚合子维度 Tab 全宽均匀分布；
+  3. **KPI 核心指标与售电量卡片对称平衡**：
+     - 价格网格卡片内边距调优，药丸标签防撑破；
+     - 售电量卡片通过 `grid-column: span 2` 使全省指标横跨两列居底居中，布局对称大气；
+  4. **图表区上下分层与横滑优化**：
+     - 图表头部从横排改为上下分层，彻底杜绝标题挤折；
+     - 指标切换 Chips 支持单行平滑横滑触控，图表高度优化至 300px；
+  5. **明细微卡片价格网格抗折行优化**：
+     - 微卡片价格网格升级为 `1fr 1fr 1.35fr` 差异化列宽，赋予“价差（实时-日前）”充裕空间，彻底消除文字怪异折断。
+
+## 2026-10-13 daily_report_25_26 电力现货顶部看板视觉升级：天蓝色过渡效果质感卡片 (Spot Electricity Banner Sky Blue Gradient Redesign)
+
+- **涉及页面与组件**：
+  - 核心页面组件：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)。
+- **页面视觉与色彩层次升级成果**：
+  1. **顶部看板升级为天蓝色过渡渐变卡片 (`.banner-card`)**：
+     - 背景升级为多阶晴空天蓝平滑渐变：`linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 35%, #bae6fd 70%, #7dd3fc 100%)`；
+     - 搭配天青微描边 `1px solid #bae6fd` 与天蓝色柔和环境投影 `0 4px 16px rgba(14, 165, 233, 0.12)`；
+  2. **文字与微卡片元素色彩精细重绘**：
+     - 主标题 (`.banner-title`) 采用高辨识度深海湛蓝 `#0369a1`；
+     - 副标题 (`.banner-subtitle`) 采用清秀晴空深蓝 `#0284c7`；
+     - 图标微卡片 (`.banner-icon`) 升级为纯白微浮雕卡片（`#ffffff`），搭配天蓝闪电符号；
+     - 状态胶囊标签 (`.meta-tag`) 升级为霜白玻璃态磨砂胶囊（`rgba(255, 255, 255, 0.85)` + `backdrop-filter: blur(4px)`），视觉通透且数据清晰。
+
 ## 2026-10-13 daily_report_25_26 电力现货负电价指标升级：重塑为总查询时段占比透明呈现 (Spot Electricity Negative Point Ratio Redesign)
 
 - **涉及页面与组件**：
