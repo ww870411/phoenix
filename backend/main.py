@@ -72,6 +72,25 @@ def create_app() -> FastAPI:
     else:
         logging.warning("v1 router not mounted (import failed). Endpoints under /api/v1 are unavailable.")
 
+    # 注册应用生命周期事件：启动与关闭电力现货定时调度引擎
+    @app.on_event("startup")
+    def on_startup():
+        try:
+            from backend.services.spot_electricity_sync_service import spot_sync_service
+            spot_sync_service.start_scheduler()
+            logging.info("SpotElectricitySyncService scheduler initialized on app startup.")
+        except Exception as e:
+            logging.error("Failed to start SpotElectricitySyncService scheduler on app startup: %s", e)
+
+    @app.on_event("shutdown")
+    def on_shutdown():
+        try:
+            from backend.services.spot_electricity_sync_service import spot_sync_service
+            spot_sync_service.stop_scheduler()
+            logging.info("SpotElectricitySyncService scheduler stopped gracefully on app shutdown.")
+        except Exception as e:
+            logging.error("Failed to stop SpotElectricitySyncService scheduler on app shutdown: %s", e)
+
     return app
 
 

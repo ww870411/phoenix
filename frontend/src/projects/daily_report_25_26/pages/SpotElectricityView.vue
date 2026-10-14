@@ -64,7 +64,7 @@
               type="date"
               class="form-input date-input"
               :min="meta.min_date || '2026-01-01'"
-              :max="meta.max_date || '2026-10-12'"
+              :max="meta.max_date || undefined"
               @change="fetchData"
             />
             <button class="btn icon-btn" type="button" title="后一天" @click="shiftDay(1)">▶</button>
@@ -79,7 +79,7 @@
                 type="date"
                 class="form-input date-input"
                 :min="meta.min_date || '2026-01-01'"
-                :max="meta.max_date || '2026-10-12'"
+                :max="meta.max_date || undefined"
               />
               <span class="range-sep">至</span>
               <input
@@ -87,7 +87,7 @@
                 type="date"
                 class="form-input date-input"
                 :min="meta.min_date || '2026-01-01'"
-                :max="meta.max_date || '2026-10-12'"
+                :max="meta.max_date || undefined"
               />
             </div>
             <div class="quick-range-chips">
@@ -1217,7 +1217,7 @@
                 <div class="sync-mode-radios">
                   <label class="radio-label">
                     <input type="radio" value="yesterday" v-model="manualSyncMode" />
-                    <span>拉取最新数据（昨日现货电价）</span>
+                    <span>拉取最新数据（昨日现货电价：<strong>{{ yesterdayDateStr }}</strong>）</span>
                   </label>
                   <label class="radio-label">
                     <input type="radio" value="specific" v-model="manualSyncMode" />
@@ -1247,7 +1247,7 @@
                       @click="handleConfirmOverwrite"
                     >
                       <span v-if="manualSyncLoading" class="btn-spinner"></span>
-                      <span>{{ manualSyncLoading ? '正在覆盖入库中...' : '⚠️ 确认覆盖现有数据' }}</span>
+                      <span>{{ manualSyncLoading ? '正在覆盖入库中...' : `⚠️ 确认覆盖【${overwriteTargetDate}】数据` }}</span>
                     </button>
                     <button
                       class="btn default btn-cancel-overwrite"
@@ -1268,7 +1268,7 @@
                     @click="() => handleManualSync(false)"
                   >
                     <span v-if="manualSyncLoading" class="btn-spinner"></span>
-                    <span>{{ manualSyncLoading ? '正在向发改委请求并入库中...' : '⚡ 立即执行拉取入库' }}</span>
+                    <span>{{ manualSyncLoading ? '正在向发改委请求并入库中...' : (manualSyncMode === 'yesterday' ? `⚡ 立即拉取昨日【${yesterdayDateStr}】入库` : `⚡ 立即拉取【${manualSyncSpecificDate || '未选择日期'}】入库`) }}</span>
                   </button>
                 </div>
               </div>
@@ -1348,14 +1348,27 @@ function checkMobileScreen() {
 
 const onlyNegative = ref(false)
 
-const selectedDate = ref('2026-10-12')
-const rangeStartDate = ref('2026-10-01')
-const rangeEndDate = ref('2026-10-12')
+// 动态计算默认初始日期（默认前一日，贴合辽宁现货电价发布周期），避免写死过往历史日期导致初次渲染闪烁跳动
+function getInitialDateStr(offsetDays = 1) {
+  const d = new Date()
+  d.setDate(d.getDate() - offsetDays)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const defaultLatestDate = getInitialDateStr(1)
+const defaultStartDate = getInitialDateStr(12)
+
+const selectedDate = ref(defaultLatestDate)
+const rangeStartDate = ref(defaultStartDate)
+const rangeEndDate = ref(defaultLatestDate)
 
 const meta = ref({
   has_data: false,
   min_date: '2026-01-01',
-  max_date: '2026-10-12',
+  max_date: defaultLatestDate,
   total_days: 0,
   total_points: 0,
 })
@@ -1727,8 +1740,8 @@ function setLatestDay() {
 }
 
 function setQuickRange(days) {
-  const maxD = meta.value.max_date ? new Date(meta.value.max_date) : new Date('2026-10-12')
-  rangeEndDate.value = meta.value.max_date || '2026-10-12'
+  const maxD = meta.value.max_date ? new Date(meta.value.max_date) : new Date(defaultLatestDate)
+  rangeEndDate.value = meta.value.max_date || defaultLatestDate
 
   if (days === 'all') {
     rangeStartDate.value = meta.value.min_date || '2026-01-01'
@@ -2631,7 +2644,18 @@ const syncConfigLoading = ref(false)
 const savingSyncConfig = ref(false)
 const manualSyncLoading = ref(false)
 const manualSyncMode = ref('yesterday') // 'yesterday' | 'specific'
-const manualSyncSpecificDate = ref(selectedDate.value || '2026-10-12')
+
+// 动态计算昨日日期（本地/北京时间），用于默认补录日期和单选框提示
+const yesterdayDateStr = computed(() => {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+})
+
+const manualSyncSpecificDate = ref(yesterdayDateStr.value)
 const syncFeedbackMsg = ref('')
 const syncFeedbackType = ref('success') // 'success' | 'warning' | 'error'
 
@@ -2664,6 +2688,10 @@ async function openAdminControlModal() {
   showAdminControlModal.value = true
   syncFeedbackMsg.value = ''
   showOverwriteConfirm.value = false
+  // 打开控制台时，若尚未指定日期，默认填入昨日
+  if (!manualSyncSpecificDate.value) {
+    manualSyncSpecificDate.value = yesterdayDateStr.value
+  }
   await fetchSyncConfig()
 }
 
@@ -2708,7 +2736,16 @@ async function handleManualSync(forceOverwrite = false) {
   manualSyncLoading.value = true
   syncFeedbackMsg.value = ''
   try {
-    const targetDate = manualSyncMode.value === 'specific' ? String(manualSyncSpecificDate.value || '').trim() : ''
+    // 若用户点击的是确认覆盖，严格锁定待覆盖的目标日期
+    let targetDate = ''
+    if (forceOverwrite && overwriteTargetDate.value) {
+      targetDate = overwriteTargetDate.value
+    } else if (manualSyncMode.value === 'specific') {
+      targetDate = String(manualSyncSpecificDate.value || yesterdayDateStr.value).trim()
+    } else {
+      targetDate = yesterdayDateStr.value
+    }
+
     const res = await manualSyncSpotElectricity(projectKey, {
       date: targetDate,
       overwrite: Boolean(forceOverwrite),
@@ -2716,11 +2753,14 @@ async function handleManualSync(forceOverwrite = false) {
 
     // 若数据库中已存在某日数据且未确认覆盖，提示用户并呼出确认选项
     if (res && res.status === 'ALREADY_EXISTS') {
-      overwriteTargetDate.value = res.target_date || targetDate
-      overwriteConfirmMessage.value = res.message || `数据库中已存在【${res.target_date || targetDate}】的数据，是否确认覆盖？`
+      const existDate = res.target_date || targetDate || yesterdayDateStr.value
+      overwriteTargetDate.value = existDate
+      overwriteConfirmMessage.value = res.message || `数据库中已存在【${existDate}】的数据，是否确认覆盖？`
       overwritePendingPoints.value = res.points_count || 96
       overwritePendingPricePoints.value = res.price_points || 0
       showOverwriteConfirm.value = true
+      syncFeedbackMsg.value = `⚠️ 检测到【${existDate}】已存在 ${overwritePendingPricePoints.value} 个电价点位，请在上方确认是否覆盖。`
+      syncFeedbackType.value = 'warning'
       return
     }
 
@@ -2728,7 +2768,10 @@ async function handleManualSync(forceOverwrite = false) {
       showOverwriteConfirm.value = false
       syncFeedbackMsg.value = res.message || '手动拉取入库成功！'
       syncFeedbackType.value = 'success'
-      // 成功后动态重载看板数据与大盘指标
+      // 成功后若有目标日期，自动将主看板日期定位至新入库的数据
+      if (res.target_date) {
+        selectedDate.value = res.target_date
+      }
       await fetchMeta()
       await fetchData()
       await fetchSyncConfig()

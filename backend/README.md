@@ -1,3 +1,22 @@
+## 2026-10-14 daily_report_25_26 电力现货调度引擎时区校准、RLock 死锁消除与配置持久化整改 (Spot Electricity Sync Scheduler Timezone & Lock Alignment)
+
+- **涉及核心服务与模块**：
+  - 核心自动化调度服务：[`spot_electricity_sync_service.py`](file:///D:/编程项目/phoenix/backend/services/spot_electricity_sync_service.py)；
+  - 应用入口生命周期管理：[`main.py`](file:///D:/编程项目/phoenix/backend/main.py)；
+  - 现货 API 路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)。
+- **核心修复与架构升级说明**：
+  1. **全链路北京时间（UTC+8）强制校准**：
+     - 解决 Docker 容器在 UTC 时区下 naive `datetime.now()` 慢 8 小时导致的早间调度瘫痪（原 07:40 判定在容器内需等待至北京时间 15:40）；
+     - 引入 `get_beijing_now()` 与 `BEIJING_TZ`，统一将调度触发、昨日判定、冷却期计算与日志时间戳锚定至北京时间；
+  2. **消除锁重入死锁 (`threading.RLock`)**：
+     - 原 `_run_scheduler_step` 持有 `_config_lock` 时调用 `_persist_config()`，因使用普通 `Lock()` 产生自死锁；
+     - 全面升级为 `threading.RLock()` 可重入锁，确保多方法嵌套调用时线程绝对安全；
+  3. **标准 `DATA_DIRECTORY` 配置持久化**：
+     - 将原私有硬编码路径改为统一全局常量 `DATA_DIRECTORY / "projects" / "daily_report_25_26" / "config"`，确保容器内读写与宿主机 `./backend_data` 挂载目录实时互通；
+  4. **数据存在性细化检查与日志输出**：
+     - `check_date_exists()` 仅在 `price_points > 0`（已有非空电价）时提示覆盖阻断，若仅含电厂售电量则安全直接写入；
+     - 配置标准控制台 `StreamHandler`，容器日志实时输出结构化中文字符调度日志。
+
 ## 2026-10-13 daily_report_25_26 电力现货接口数据链路与前端分页/日均汇总配合说明 (Spot Electricity Data Pipeline & Dual View Alignment)
 
 - **涉及服务与路由模块**：

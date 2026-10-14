@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -26,16 +27,32 @@ from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import engine
 
+# 北京时区定义（固定 UTC+8）
+BEIJING_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
+
+
+def get_beijing_now() -> datetime:
+    """获取当前北京时间（无时区 naive datetime，已校准至 UTC+8）。"""
+    return datetime.now(BEIJING_TZ).replace(tzinfo=None)
+
+
 logger = logging.getLogger("spot_electricity_sync")
+if not logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] [spot_sync] %(message)s"))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = True
 
 # 发改委现货电价底层 API
 GET_LINE_API_URL = "https://fgw.ln.gov.cn/indexview/api/getLine"
 DEFAULT_TIMEOUT = 20.0
 
-# 配置文件存储路径
+from backend.config import DATA_DIRECTORY
+
+# 配置文件存储路径（统一挂载持久化）
 _CONFIG_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "backend_data"
+    DATA_DIRECTORY
     / "projects"
     / "daily_report_25_26"
     / "config"
@@ -123,7 +140,7 @@ class SpotElectricitySyncService:
     """电力现货数据自动化同步与调度服务单例。"""
 
     _instance: Optional[SpotElectricitySyncService] = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __new__(cls) -> SpotElectricitySyncService:
         with cls._lock:
@@ -136,12 +153,13 @@ class SpotElectricitySyncService:
         if getattr(self, "_initialized", False):
             return
         self._initialized = True
-        self._config_lock = threading.Lock()
-        self._running_lock = threading.Lock()
+        self._config_lock = threading.RLock()
+        self._running_lock = threading.RLock()
         self._stop_event = threading.Event()
         self._wake_event = threading.Event()
         self._retry_count_today = 0
         self._current_tracking_date: Optional[str] = None
+        self._last_tracking_day: Optional[str] = None
         self._config = self._load_config()
         self._bg_thread: Optional[threading.Thread] = None
 
@@ -231,7 +249,7 @@ class SpotElectricitySyncService:
         raise RuntimeError(f"发改委接口请求失败: {last_error}")
 
     def check_date_exists(self, target_date: str) -> Dict[str, Any]:
-        """检查数据库中指定交易日期是否已存在电力现货数据。"""
+        """检查数据库中指定交易日期是否已存在电力现货电价数据。"""
         check_sql = text("""
             SELECT 
                 COUNT(*) as total_points,
@@ -244,16 +262,19 @@ class SpotElectricitySyncService:
             with engine.connect() as conn:
                 row = conn.execute(check_sql, {"trade_date": target_date}).fetchone()
                 if row and row.total_points > 0:
+                    price_pts = int(row.price_points or 0)
                     return {
-                        "exists": True,
+                        "exists": price_pts > 0,  # 仅当已存在非空电价数据时才触发覆盖警告
+                        "has_records": True,
                         "total_points": int(row.total_points),
-                        "price_points": int(row.price_points or 0),
+                        "price_points": price_pts,
                         "sales_points": int(row.sales_points or 0),
                     }
         except Exception as e:
             logger.warning("[现货同步] 检查数据库存在性失败: %s", e)
         return {
             "exists": False,
+            "has_records": False,
             "total_points": 0,
             "price_points": 0,
             "sales_points": 0,
@@ -277,12 +298,12 @@ class SpotElectricitySyncService:
             "message": str
         }
         """
-        now = datetime.now()
+        now = get_beijing_now()
         now_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
-        # 确定目标日期：若未指定，默认为昨日（发改委发布前一日真实电价）
+        # 确定目标日期：若未指定，默认为北京时间的昨日（发改委发布前一日真实电价）
         if not target_date:
-            target_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+            target_date = (now.date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
         # 若是手动拉取且未显式指定覆盖，检查数据库中是否已存在该日期数据
         if is_manual and not overwrite:
@@ -447,6 +468,7 @@ class SpotElectricitySyncService:
             self._config["last_run_status"] = "SUCCESS"
             self._config["last_run_message"] = success_msg
             self._persist_config()
+        self._wake_event.set()
 
         return {
             "ok": True,
@@ -494,48 +516,74 @@ class SpotElectricitySyncService:
             self._wake_event.clear()
 
     def _run_scheduler_step(self) -> None:
-        """执行单次调度状态评估与触发检测。"""
+        """执行单次调度状态评估与触发检测（基于北京时间）。"""
         cfg = self.get_config()
         if not cfg.get("enabled", True):
             # 若自动拉取开关被关闭
             with self._config_lock:
-                self._config["next_run_time"] = "已暂停自动拉取"
+                if self._config.get("next_run_time") != "已暂停自动拉取":
+                    self._config["next_run_time"] = "已暂停自动拉取"
+                    self._persist_config()
             return
 
-        now = datetime.now()
+        now = get_beijing_now()
+        today_str = now.strftime("%Y-%m-%d")
+
+        # 跨自然日重置当日重试计数器
+        if self._last_tracking_day != today_str:
+            self._retry_count_today = 0
+            self._last_tracking_day = today_str
+
         cron_time_str = str(cfg.get("cron_time") or "07:40")
         target_h, target_m = _parse_time_str(cron_time_str)
         interval_mins = max(1, int(cfg.get("retry_interval_minutes") or 20))
         max_retries = int(cfg.get("max_retries_per_day") or 30)
 
-        # 每日目标数据对应昨日
+        # 每日目标数据对应北京时间的昨日
         yesterday_date = (now.date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-        # 检查昨日数据是否已经在数据库中
+        # 检查昨日数据是否已经在数据库中完整存储
         if self._is_date_already_synced(yesterday_date):
-            # 今日任务已圆满完成，计算明天的 07:40
+            # 今日任务已圆满完成，计算明天的北京时间 07:40
             tomorrow = now.date() + timedelta(days=1)
             next_run_dt = datetime(tomorrow.year, tomorrow.month, tomorrow.day, target_h, target_m, 0)
+            next_str = next_run_dt.strftime("%Y-%m-%d %H:%M:%S")
             with self._config_lock:
-                self._config["next_run_time"] = next_run_dt.strftime("%Y-%m-%d %H:%M:%S")
+                changed = False
+                if self._config.get("next_run_time") != next_str:
+                    self._config["next_run_time"] = next_str
+                    changed = True
                 if self._config.get("last_run_status") != "SUCCESS":
                     self._config["last_run_status"] = "SUCCESS"
-                    self._config["last_run_message"] = f"{yesterday_date} 数据已在库中完整存储"
+                    self._config["last_run_message"] = f"【{yesterday_date}】现货电价数据已在库中完整存储，等待明日自动拉取"
+                    changed = True
+                if self._config.get("last_sync_date") != yesterday_date:
+                    self._config["last_sync_date"] = yesterday_date
+                    changed = True
+                if changed:
+                    self._persist_config()
                 self._retry_count_today = 0
                 self._current_tracking_date = None
             return
 
         # 尚未完成昨日数据入库
-        # 计算今天设定的初次尝试时间
+        # 计算今天设定的初次尝试时间（北京时间）
         today_trigger_dt = datetime(now.year, now.month, now.day, target_h, target_m, 0)
 
         if now < today_trigger_dt:
-            # 尚未到达初次尝试时间 (如 07:40 之前)
+            # 尚未到达初次尝试时间 (如北京时间 07:40 之前)
+            trigger_str = today_trigger_dt.strftime("%Y-%m-%d %H:%M:%S")
             with self._config_lock:
-                self._config["next_run_time"] = today_trigger_dt.strftime("%Y-%m-%d %H:%M:%S")
+                changed = False
+                if self._config.get("next_run_time") != trigger_str:
+                    self._config["next_run_time"] = trigger_str
+                    changed = True
                 if self._config.get("last_run_status") not in ("SUCCESS", "RETRYING"):
                     self._config["last_run_status"] = "WAITING"
-                    self._config["last_run_message"] = f"等待今日 {cron_time_str} 发起首次抓取"
+                    self._config["last_run_message"] = f"等待今日 {cron_time_str} 发起首次抓取探测"
+                    changed = True
+                if changed:
+                    self._persist_config()
             return
 
         # 已到达或超过设定时间 (>= 07:40)
@@ -548,10 +596,13 @@ class SpotElectricitySyncService:
                 cooling_seconds = interval_mins * 60
 
                 if elapsed_seconds < cooling_seconds:
-                    # 仍在 20 分钟等待间隔内
+                    # 仍在等待间隔冷却期内
                     next_attempt_dt = last_run_dt + timedelta(minutes=interval_mins)
+                    next_str = next_attempt_dt.strftime("%Y-%m-%d %H:%M:%S")
                     with self._config_lock:
-                        self._config["next_run_time"] = next_attempt_dt.strftime("%Y-%m-%d %H:%M:%S")
+                        if self._config.get("next_run_time") != next_str:
+                            self._config["next_run_time"] = next_str
+                            self._persist_config()
                     return
             except Exception:
                 pass
@@ -563,6 +614,7 @@ class SpotElectricitySyncService:
                 self._config["next_run_time"] = "已达今日最大重试次数"
                 self._config["last_run_status"] = "FAILED"
                 self._config["last_run_message"] = f"今日已重试 {max_retries} 次仍未检测到发改委发布最新数据，等待人工核实"
+                self._persist_config()
             return
 
         # 触发执行抓取尝试！
@@ -572,7 +624,7 @@ class SpotElectricitySyncService:
         if res.get("ok"):
             self._retry_count_today = 0
             self._current_tracking_date = None
-            # 计算明日执行时间
+            # 计算明日执行时间（北京时间）
             tomorrow = now.date() + timedelta(days=1)
             next_run_dt = datetime(tomorrow.year, tomorrow.month, tomorrow.day, target_h, target_m, 0)
             with self._config_lock:
@@ -588,11 +640,16 @@ class SpotElectricitySyncService:
                 self._persist_config()
 
     def _is_date_already_synced(self, check_date: str) -> bool:
-        """检查指定日期是否已经在数据库中拥有完整的 96 个点位。"""
+        """检查指定日期是否已经在数据库中拥有完整的 96 个现货电价点位。"""
         try:
             with engine.connect() as conn:
                 res = conn.execute(
-                    text("SELECT COUNT(*) FROM public.spot_electricity_15min_data WHERE trade_date = :d;"),
+                    text("""
+                        SELECT COUNT(*) 
+                        FROM public.spot_electricity_15min_data 
+                        WHERE trade_date = :d
+                          AND (day_ahead_price IS NOT NULL OR real_time_price IS NOT NULL);
+                    """),
                     {"d": check_date},
                 ).scalar()
                 return int(res or 0) >= 96
