@@ -46,6 +46,12 @@
         "数据源":"public.spot_electricity_15min_data",
         "页面描述":"15分钟日前/实时电价、实时与日前价差走势"
       },
+      "global_management":
+      {
+        "页面名称":"全局管理中心",
+        "数据源":"backend/services/heating_metrics",
+        "页面描述":"生产指标与算法体系字典、实时验算沙盒与核心运行参数"
+      },
       "/debug/runtime-eval":
       {
         "页面名称":"运行时表达式求值（调试）",

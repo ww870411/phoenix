@@ -5633,7 +5633,13 @@ def debug_cache(company: str):
     """
     session = SessionLocal()
     try:
-        m_rows = session.execute(text("""
+        try:
+            from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+            engine = DailyDashboardEngine(session)
+            all_records = engine.compute_all_metrics(None)
+            m_rows = [r for r in all_records if r.get("company") == company]
+        except Exception:
+            m_rows = session.execute(text("""
             SELECT item, item_cn, value_biz_date, value_peer_date,
                    sum_month_biz, sum_month_peer, sum_ytd_biz, sum_ytd_peer
             FROM sum_basic_data WHERE company = :company

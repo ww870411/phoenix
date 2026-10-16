@@ -1,3 +1,89 @@
+## 2026-10-16 daily_report_25_26 电力现货图表标题全维度统一规范为“辽宁省统一结算点电价数据” (Spot Electricity Chart Titles Unification)
+
+- **涉及页面与改动说明**：
+  - 核心页面：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)；
+  - **标题全维度规范化**：将单日模式与区间模式的主可视化图表标题统一以“辽宁省统一结算点电价数据”统领，并结合查询口径进行格式化输出：
+    1. 单日精细模式：`【${selectedDate}】辽宁省统一结算点电价数据`；
+    2. 区间日均模式：`【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（日均走势）`；
+    3. 区间月均模式：`【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（月均走势）`；
+    4. 区间时段模式：`【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（时段均值 00:15 ~ 24:00）`；
+  - 保持 96 点位 ECharts 曲线渲染、指标多选开关、负电价时段过滤与各维度数据导出不受影响。
+
+## 2026-10-16 daily_report_25_26 专属全局管控中心 (Global Management View) 与 69 项指标算法字典及实时验算沙盒上线
+
+- **前端架构演进与用户需求落地**：
+  - **专属控制台独立挂载**：对齐保温管系统架构，在生产日报子项目中构建专有独立的全局管控中心页面 [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue)，路由为 `/projects/:projectKey/pages/global_management`；
+  - **核心功能一：指标与算法全景字典**：
+    - 支持 7 大业务大类胶囊标签切换（能源产销、能耗原材料、综合单耗、经济效益、服务质量、气象煤炭、冲销机制）；
+    - 支持拼音、中英文 Key、公式与描述的多维实时模糊检索；
+    - 具备“卡片透视（Cards）”与“紧凑表格（Table）”双向自由切换视图，支持一键复制英文 Key；
+  - **核心功能二：交互式在线演算沙盒 (Interactive Derivation Sandbox)**：
+    - 用户可灵活选取任意历史/当日业务日期、任意供热单位（电厂/分公司/主城区/全集团）与目标指标；
+    - 点击卡片上的“🧪 载入沙盒实时验算”可自动滚动并填充参数触发演算；
+    - 实时呈现 8 窗口矩阵卡片（当日/同期日/同比、7天/同期/同比、月累计/同期/同比、全供暖期累计/同期/同比），以及详尽的参数来源、算式推导与同比对账明细；
+  - **路由与权限无缝集成**：
+    - 在 `router/index.js` 中配置路径并在 `router.beforeEach` 中接入严格的角色与页面权限校验；
+    - 在 `PageSelectView.vue` 项目页面大厅中注册专属卡片并支持一键直达。
+
+## 2026-10-16 daily_report_25_26 后端计算机制全面切换至 Python 计算引擎：生产大盘冷启动由 33 秒压缩至 1 秒 (Full Engine Migration & Production Dashboard Acceleration)
+
+- **前端交互体验质的飞跃**：
+  - **大盘冷启动秒开**：过去未命中缓存时，用户访问或切换生产大盘日期需要等待 30~40 秒甚至遭遇接口超时；后端全面迁移至 `heating_metrics` 计算引擎后，大盘冷启动实时全量计算直接压缩至 **1.1 秒**，带缓存时仅需 **160 毫秒**；
+  - **数据展示单表 200ms 渲染**：填报与数据展示页面的单表求值耗时由 15 秒降至 **204 毫秒**，多表切换与日期联动毫无卡顿；
+  - **接口协议零变化无感兼容**：前端页面（[`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)、[`DataAnalysisView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue) 等）无需任何代码改动，返回字段、数据单位与结构与原视图完全一致；
+  - **平滑支持 26-27 新供暖季**：底层引擎已内置跨采暖季自适应识别与闰年历史同期日自动对齐，前端后续切入 26-27 供暖季时无需对历史比对字段做任何特殊补丁。
+
+## 2026-10-16 daily_report_25_26 生产日报后端计算引擎提速（200+倍）对前端展示与多采暖期切换的支撑说明 (Heating Metrics Engine Acceleration & Frontend Readiness)
+
+- **前端影响与协议兼容**：
+  - 后端已完成供热生产指标统一高性能计算引擎（`heating_metrics`）的开发与全量影子对账，已完整覆盖生产大盘四大视图（公司级 664 项、集团级 129 项、煤炭库存 26 项、逐日气温 151 天）；
+  - 该引擎主指标单次计算耗时从 33+ 秒大幅压缩至 0.18 秒（提速 180+ 倍），未来接入后将直接为前端生产大盘 [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue) 提供毫秒级秒开体验；
+  - **接口契约完全透明**：计算引擎产出的字段集合、中文描述与 8 窗口（当日/同期/7日/月累计/年累计）数据结构与原 PostgreSQL 视图 100% 保持一致，后续前端无需改动任何表格字段或数据转换逻辑；
+  - **采暖期自适应能力**：引擎已内置动态采暖季推导与闰年历史同期日无损对齐能力，为前端后续平滑支持 26-27 及后续任意供暖季提供了稳健底层保障。
+
+## 2026-10-16 daily_report_25_26 面向 26-27 新供暖期前端业务架构梳理与技术储备 (Daily Report 26-27 Season Readiness & Frontend Overview)
+
+- **业务背景**：
+  - 2026-2027 供暖期即将开始，生产日报系统（`daily_report_25_26`）作为生产运行的核心监控工具，将进入新一轮密集使用与关注周期。
+- **前端核心页面与能力就绪清单**：
+  1. **生产运行综合大盘**：[`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)
+     - 包含标煤耗量、平均气温、单耗对比（热/电/水）、投诉量、供暖热化率、累计摘要卡片、后台缓存发布与定时刷新机制；
+     - 面向 26-27 供暖季时需关注：同期数据（映射至 25-26 供暖期历史数据）的对齐与展示窗口；
+  2. **在线数据填报与协同审批**：[`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)、[`ApprovalView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/ApprovalView.vue)
+     - 基于 RevoGrid 的电子底表录入与公式自动计算（各热电厂、供暖分公司表单）；
+     - 支持填报校验、临时保存、提交送审及退回重填流转；
+  3. **多维统计分析与 AI 洞察报告**：[`DataAnalysisView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue)
+     - 支持单位选择、日模式/累计模式、同比/环比分析、气温关联分析，内置 AI 深度分析报告生成及 Excel 全量导出；
+  4. **电力现货 15 分钟交易数据看板**：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)
+     - 日前/实时 96 点位时序图、日前日均价/实时日均价日度汇总大表、大点位轻量分页切片（3ms 瞬开）、系统控制台自动调度与手动补录；
+  5. **管理后台与系统配置**：[`AdminConsoleView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)
+     - 用户权限管理、表单模板设计、指标公式配置与数据备份。
+
+## 2026-10-16 insulation_pipe_supply_2026 保温管供货与施工协同系统前端整体架构与模块结构同步 (Insulation Pipe Supply Frontend Architecture Overview)
+
+- **子项目定位**：
+  - 核心子项目 `insulation_pipe_supply_2026`（保温暖管/直埋保温管供货与施工协同系统），聚焦供暖管网工程各标段的需求申报、供货管理、仓库出入库、现场联合会审、GIS地图标注到数字指挥大屏全链路业务。
+- **核心模块与页面清单**：
+  1. **路由与权限分发**：[`TubeProjectPageRouterView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue)（基于 `permissions/insulation_pipe_supply_2026.json` 强校验角色页面权限并动态加载分发）；
+  2. **数据大屏与全局看板**：
+     - 数字指挥大屏：[`BigScreenDashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/BigScreenDashboardView.vue)；
+     - 全局数据看板：[`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)；
+  3. **业务管理工作台**：
+     - 需求侧管理：[`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)；
+     - 供给侧管理：[`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)；
+     - 库管员管理：[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)；
+     - 全局管理入口：[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GlobalManagementView.vue)；
+  4. **会审协同与智能工具**：
+     - 联合会审大厅：[`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+     - 发起会审/通知弹窗：[`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)、[`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)；
+     - 送货单 OCR 智能识别工具：[`DeliveryBillOcrTool.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DeliveryBillOcrTool.vue)；
+  5. **空间地理与综合查询**：
+     - GIS 地图标注看板：[`GisMapView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/GisMapView.vue)；
+     - 综合数据查询中心：[`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)；
+  6. **消息与通知服务**：
+     - 顶部收件箱与铃铛：[`TopInboxDropdown.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/TopInboxDropdown.vue)、[`TopNotificationBell.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/TopNotificationBell.vue)；
+     - 会审与系统消息 API：[`jointReviewApi.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/services/jointReviewApi.js)、[`systemMessageApi.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/services/systemMessageApi.js)。
+
 ## 2026-10-14 daily_report_25_26 电力现货手动拉取/补录交互优化与日期选框 0 闪烁重构 (Spot Electricity Manual Sync UI & Zero-Flicker Date Initialization)
 
 - **涉及页面与组件模块**：

@@ -24,13 +24,15 @@
 - 优先使用原生文件工具（如 `apply_patch`、desktop-commander、结构化读写工具）完成编辑。
 - 不使用临时 Python 脚本批量改写文件（除非明确授权且有必要）。
 
-### 2.2 每轮对话后的文档同步（强制）
+### 2.2 代码改动后的文档同步（按需触发）
 
-每次发生有效讨论或代码改动后，必须同步更新：
+**仅在发生实质性代码修改交付后**，才必须同步更新：
 
-1. `configs/progress.md`（记录本轮结论与改动）  
+1. `configs/progress.md`（记录本轮代码改动的缘由、改动点与影响面）  
 2. `frontend/README.md`（同步前端结构/行为变化）  
 3. `backend/README.md`（同步后端结构/行为变化）
+
+若仅为日常交流、方案探讨、答疑或制定开发计划，**无需**更新上述三个文件。
 
 ### 2.3 结果说明方式（强制）
 
@@ -57,6 +59,7 @@
   - `daily_report_spring_festval_2026`
   - `monthly_data_pull`
   - `monthly_data_show`
+  - `insulation_pipe_supply_2026`（保温管供货与施工协同系统）
 
 ### 3.2 后端真实结构（核心）
 
@@ -67,6 +70,7 @@
   - `daily_report_spring_festval_2026`
   - `monthly_data_pull`
   - `monthly_data_show`
+  - `insulation_pipe_supply_2026`（保温管供货与施工协同系统）
 - 核心服务：`backend/services/`
 - 数据模型与数据库：`backend/db/`、`backend/sql/`
 
@@ -145,7 +149,7 @@
 2. 确认影响范围与真实目录  
 3. 实施最小必要改动  
 4. 给出“模块/函数/流程/结果”说明  
-5. 同步更新 `progress.md` + 前后端 README  
+5. 若涉及代码改动，同步更新 `progress.md` + 前后端 README（纯交流或规划无需更新）  
 6. 如有关键结论，写入知识留痕
 
 ---

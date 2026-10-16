@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
@@ -49,6 +50,11 @@ def _shift_year_safe(target: date, years: int) -> date:
 def _query_temperature_daily_avg_map(db_session, start_date: date, end_date: date) -> Dict[str, Optional[float]]:
     if start_date > end_date:
         return {}
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        return DailyDashboardEngine(db_session).get_temperature_daily_avg_map(start_date, end_date)
+    except Exception:
+        pass
     stmt = text(
         """
         SELECT date, aver_temp
@@ -351,3 +357,39 @@ def refresh_dashboard_cache(
         "cache_disabled": status.get("disabled", False),
         "cache_updated_at": status.get("updated_at"),
     }
+
+
+class SandboxRequest(BaseModel):
+    biz_date: str = Field(default="", description="业务日期 YYYY-MM-DD")
+    company: str = Field(default="JinZhou", description="单位代码")
+    item: str = Field(default="rate_std_coal_per_heat", description="指标标识")
+
+
+@public_router.get(
+    "/metrics/catalog",
+    summary="获取生产指标与算法规范元数据字典",
+    tags=["daily_report_25_26"],
+)
+def get_metrics_catalog():
+    from backend.services.heating_metrics.catalog_data import get_catalog_categories, get_full_catalog
+    return {
+        "ok": True,
+        "categories": get_catalog_categories(),
+        "catalog": get_full_catalog(),
+    }
+
+
+@public_router.post(
+    "/metrics/sandbox",
+    summary="在线拆解验算指标计算逻辑与过程",
+    tags=["daily_report_25_26"],
+)
+def run_metric_sandbox(payload: SandboxRequest):
+    from backend.services.heating_metrics.sandbox_service import explain_metric_calculation
+    with SessionLocal() as session:
+        return explain_metric_calculation(
+            session=session,
+            biz_date_str=payload.biz_date,
+            company=payload.company,
+            item=payload.item,
+        )

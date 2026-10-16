@@ -217,6 +217,21 @@ def _fetch_daily_temperature_stats_map(
     """从 calc_temperature_data 视图按日读取最高/最低/平均气温。"""
     if start_date > end_date:
         return {}
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        engine = DailyDashboardEngine(session)
+        recs = engine.compute_temperature_data(start_date, end_date)
+        return {
+            r["date"]: {
+                "max": _to_float_or_none(r.get("max_temp")),
+                "min": _to_float_or_none(r.get("min_temp")),
+                "avg": _to_float_or_none(r.get("aver_temp")),
+            }
+            for r in recs if r.get("date")
+        }
+    except Exception:
+        pass
+
 
     stmt = text(
         """
@@ -870,6 +885,18 @@ def _fetch_daily_average_temperature_map(
     """按日从 calc_temperature_data 视图聚合平均气温，缺失日期以 None 填充。"""
     if start_date > end_date:
         return {}
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        raw_map = DailyDashboardEngine(session).get_temperature_daily_avg_map(start_date, end_date)
+        ordered_engine: Dict[date, Optional[float]] = {}
+        total_days = (end_date - start_date).days + 1
+        for idx in range(total_days):
+            current = start_date + timedelta(days=idx)
+            ordered_engine[current] = raw_map.get(current.isoformat())
+        return ordered_engine
+    except Exception:
+        pass
+
 
     stmt = text(
         """
@@ -1249,6 +1276,15 @@ def _fetch_average_temperature_between(
     """直接从 calc_temperature_data 视图求指定日期区间的平均气温。"""
     if start_date > end_date:
         return None
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        avg_map = DailyDashboardEngine(session).get_temperature_daily_avg_map(start_date, end_date)
+        valid_vals = [v for v in avg_map.values() if v is not None]
+        if valid_vals:
+            return sum(valid_vals) / len(valid_vals)
+    except Exception:
+        pass
+
 
     stmt = text(
         """
@@ -1273,6 +1309,14 @@ def _fetch_temperature_value_from_view(session, target_date: Optional[date]) -> 
     """读取 calc_temperature_data 中指定日期的平均气温。"""
     if target_date is None:
         return None
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        avg_map = DailyDashboardEngine(session).get_temperature_daily_avg_map(target_date, target_date)
+        if target_date.isoformat() in avg_map:
+            return avg_map[target_date.isoformat()]
+    except Exception:
+        pass
+
     stmt = text(
         """
         SELECT aver_temp

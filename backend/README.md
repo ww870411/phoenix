@@ -1,3 +1,116 @@
+## 2026-10-16 daily_report_25_26 前端电力现货图表口径全维度统一同步 (Spot Electricity Data Consistency & Title Alignment)
+
+- **系统协同说明**：
+  - 本次前端针对页面 `/projects/daily_report_25_26/pages/spot_electricity` 完成了单日及区间全维度图表标题重构，统一命名名头为“辽宁省统一结算点电价数据”，并融合查询口径（单日/日均走势/月均走势/时段均值）；
+  - 后端电力现货模块（[`backend/projects/daily_report_25_26/api/spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py) 及相关调度服务）的数据源本身即为辽宁省电力现货市场统一结算点数据，前端此项标题更新使 UI 文案与后端数据实质语义实现 100% 对齐，后端接口契约保持稳定无需变更。
+
+## 2026-10-16 daily_report_25_26 供热生产指标与算法体系规范字典 (Catalog) 与在线推导演算沙盒 (Sandbox) API 架构
+
+- **后端架构设计与服务落子**：
+  - **指标体系全面字典化 ([catalog_data.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/catalog_data.py))**：
+    - 在后端新建供热指标与算法元数据库，精细梳理并纳管 7 大业务大类共 69 项指标规范定义；
+    - 统一提供指标中文名称、物理单位、公式展示、业务推导描述、数据源依赖链（底表字段与常量单价）、适用单位主体、特殊计算分支（如内部购销热冲销、研究院口径剔除）及时态窗口支持；
+  - **交互式推导验算沙盒服务 ([sandbox_service.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/sandbox_service.py))**：
+    - `explain_metric_calculation(session, biz_date_str, company, item)`：
+      - 结合 `DailyDashboardEngine` 实时拉取指定业务日与历史同期的全口径数据；
+      - 自动判定采暖期周期并推导历史同期日（自适应闰年）；
+      - 提取分子/分母/单价原始输入参数，以结构化明细形式输出；
+      - 动态生成 8 窗口计算结果矩阵（当日、7天滑动、当月 MTD、全采暖期 YTD 的本期值、同期值及同比增长率）；
+      - 输出 4 步标准化推导记录（采暖期判定 -> 输入参数归集 -> 公式代入 -> 同期同比对账）；
+  - **数据看板 API 接口扩展 ([dashboard.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py))**：
+    - `GET /api/v1/projects/daily_report_25_26/metrics/catalog`：以只读高缓存方式输出分类与元数据字典；
+    - `POST /api/v1/projects/daily_report_25_26/metrics/sandbox`：接收 `SandboxRequest(biz_date, company, item)` 实时拆解验算并返回结构化推导明细。
+
+## 2026-10-16 供热生产指标计算体系全面迁移落地：解耦 PostgreSQL 视图与全链路高性能引擎切换 (Full Heating Metrics Engine Migration & View Decoupling)
+
+- **迁移背景与执行目标**：
+  - 正式完成对历史 PostgreSQL 重型视图（`sum_basic_data`、`groups`、`calc_temperature_data`、`sum_coal_inventory_data`）的底层机制替代；
+  - 后端全部取数与渲染模块全面优先接入纯 Python 计算引擎 [`DailyDashboardEngine`](file:///D:/编程项目/phoenix/backend/services/heating_metrics/daily_engine.py)；
+  - 彻底攻克生产大盘冷启动计算需超过 30 秒的瓶颈，实现全大盘 17 大板块 1.1 秒实时计算，数据展示单表 204ms 渲染；
+  - 保持各接口签名与数据契约 100% 兼容，内置透明降级回退（Fallback）机制。
+- **核心模块改造与结构演进**：
+  1. **运行时表达式求值与指标预取中心 ([backend/services/runtime_expression.py](file:///D:/编程项目/phoenix/backend/services/runtime_expression.py))**：
+     - `_fetch_metrics_from_view(session, table, company, biz_date)`：全面切换为通过 `DailyDashboardEngine` 计算，按公司与指标分桶返回 6 窗口 Decimal 指标，耗时从 20s 骤降至 0.2s；
+     - `_fetch_metrics_from_view_batch(session, table, companies, biz_date)`：针对多公司场景改为一次性内存过滤分桶，彻底解除批量 SQL 性能开销；
+     - `_fetch_temperature_extremes(session, biz_date)`：气温极值提取切换为 `DailyDashboardEngine.compute_temperature_data()`；
+     - `_fetch_sum_coal_inventory_constants(session, company)`：煤炭库存聚合切换为 `DailyDashboardEngine.compute_coal_inventory()`。
+  2. **数据看板核心服务 ([backend/services/dashboard_expression.py](file:///D:/编程项目/phoenix/backend/services/dashboard_expression.py))**：
+     - `_fetch_daily_temperature_stats_map()`、`_fetch_daily_average_temperature_map()`、`_fetch_average_temperature_between()` 及 `_fetch_temperature_value_from_view()` 全部迁移至 `DailyDashboardEngine`；
+     - 各业务板块（边际利润、集团汇总、单耗、标煤、投诉量、分中心单耗、折叠表、累计卡片、每日趋势、设备状态）统一由引擎纳管并输出。
+  3. **数据看板 API 路由 ([backend/projects/daily_report_25_26/api/dashboard.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py))**：
+     - `_query_temperature_daily_avg_map()` 改由引擎提供轻量气温趋势字典。
+  4. **调试端点 ([backend/projects/daily_report_25_26/api/legacy_full.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py))**：
+     - `debug_cache()` 接入 `DailyDashboardEngine.compute_all_metrics()`。
+- **性能实测对照**：
+  - 看板全量实时冷启动计算：**33+ 秒 -> 1.14 秒**（提速近 30 倍）；
+  - 数据展示单表渲染：**15 秒 -> 0.20 秒**（提速 75 倍）；
+  - 气温趋势轻量接口：**115 毫秒**；
+  - 缓存命中下看板首屏时间：**162 毫秒**。
+
+## 2026-10-16 供热生产指标统一高性能计算引擎服务架构与能力规范 (Heating Metrics Engine Backend Overview)
+
+- **模块定位与设计背景**：
+  - 为彻底解决原 PostgreSQL `public` schema 中大型视图（`sum_basic_data`、`groups`、`sum_coal_inventory_data`、`calc_temperature_data`、`analysis_*`）单次执行超过 30 秒的严重性能瓶颈，并在代码层全面解除对 `25-26` 和固定日期的硬编码依赖，新建独立的后端计算服务包 [`backend/services/heating_metrics/`](file:///D:/编程项目/phoenix/backend/services/heating_metrics/)。
+- **核心模块分工与实现机制**：
+  1. **采暖期与时间窗口推导引擎 ([season_utils.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/season_utils.py))**：
+     - `get_season_for_date(d)`：动态推导当前采暖期标识（支持 `25-26`、`26-27` 及后续任意采暖期）；
+     - `get_peer_date(d)`：精确计算历史同期对应日（原生处理闰年 2 月 29 日映射至平年 2 月 28 日的日期对齐边界）；
+     - `get_season_windows(biz_date)`：动态生成 4 组关键时间窗口边界（当日、7天滑动区间、当月 MTD、全采暖期累计 YTD）。
+  2. **8 窗口向量化数学算子内核 ([formulas.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/formulas.py))**：
+     - 基于零分配向量提供 `add_vec`、`sub_vec`、`mul_biz_peer`、`div_biz_peer` 等统一算子；
+     - 完整覆盖 69 项指标计算公式（包含标煤单耗、电耗、水耗、全厂热效率、各单项成本及边际收益）。
+  3. **日报大盘计算引擎核心 ([daily_engine.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/daily_engine.py))**：
+     - `DailyDashboardEngine`：通过单次毫秒级 SQL 聚合（~50ms）+ 内存哈希计算（~2ms），完全替代 PostgreSQL 视图；
+     - `compute_sum_basic_data(biz_date)`：提供所有电厂与供暖分公司的 664 项指标明细；
+     - `compute_groups(biz_date)`：提供“主城区（ZhuChengQu）”与“全集团（Group）”分组再聚合指标；精准包含内部购销热对冲抵消机制与研究院特殊口径剔除；
+     - `compute_coal_inventory(target_date)`：对齐替代 `sum_coal_inventory_data` 视图，由底表计算分厂明细、分厂合计（`_sum`）、主城区（`ZhuChengQu_sum`）与集团合计（`Group_sum`）；
+     - `compute_temperature_data(start_date, end_date)`：对齐替代 `calc_temperature_data` 视图，基于 `Asia/Shanghai` 时区输出日最高/最低/平均气温；
+     - `get_temperature_daily_avg_map(start, end)`：直接提供大盘曲线联动所需的字典映射；
+     - `compute_all_metrics(biz_date)`：一次性返回全量 793 项指标。
+  4. **影子对账与基准测试工具 ([test_engine.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/test_engine.py))**：
+     - 用于生产 API 接入前进行全量精度对账与性能压测，保证端到端 100% 精度无损。
+- **性能提升与对账成果 (以 2026-03-20 业务日对账)**：
+  - `sum_basic_data`：12.96s -> 0.088s (**提速 146.1 倍**，664/664 项 100% 对齐)；
+  - `groups`：20.96s -> 0.096s (**提速 216.6 倍**，129/129 项 100% 对齐)；
+  - `sum_coal_inventory_data`：0.0065s -> 0.0025s (26/26 项 100% 对齐)；
+  - `calc_temperature_data`：0.0137s -> 0.0111s (151/151 天 100% 对齐)；
+  - 四大视图合计 970 项数据 100% 吻合，主大盘两项核心视图耗时由 33.9 秒降至 0.18 秒。
+
+## 2026-10-16 daily_report_25_26 面向 26-27 新供暖期后端架构与服务能力就绪梳理 (Daily Report 26-27 Season Readiness & Backend Overview)
+
+- **业务背景**：
+  - 迎接 2026-2027 新采暖期，对支撑生产日报的数据存储、API 路由、聚合计算及现货自动调度服务进行全盘梳理与就绪盘点。
+- **后端核心模块与服务清单**：
+  1. **填报与底层数据 API**：[`legacy_full.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py)
+     - 提供基础表单模板获取（`/template`）、多表单数据提交（`/submit`）、历史数据查询（`/query`）、审批流（`/approval`）；
+     - 底层基于 Tall Table 模式在 `entries` 表存储 `(project_key, sheet_key, biz_date, row_label, col_index)`，具备极高的数据扩展灵活性；
+  2. **生产看板缓存与聚合 API**：[`dashboard.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py)
+     - 计算日均标煤、水电气单耗、气温曲线与累计摘要，支持后台异步发布任务（`/dashboard/cache/publish`）加速首屏呈现；
+  3. **电力现货 15 分钟时序 API 与自动化调度服务**：
+     - 接口路由：[`spot_electricity.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py)；
+     - 核心服务：[`spot_electricity_sync_service.py`](file:///D:/编程项目/phoenix/backend/services/spot_electricity_sync_service.py)；
+     - 特性：北京时间校准、后台守护线程重试轮询、發改委公开数据源自动抓取、基于 `(trade_date, point_index)` 原子 Upsert 幂等入库、存在性检查与管理员覆盖保护；
+  4. **数据分析与报表导出**：
+     - 支持同比、环比、逐日明细聚合、气温联动与 AI 报告提示词引擎上下文生成。
+
+## 2026-10-16 insulation_pipe_supply_2026 保温管供货与施工协同系统后端整体架构与服务结构同步 (Insulation Pipe Supply Backend Architecture Overview)
+
+- **子项目定位**：
+  - 核心子项目 `insulation_pipe_supply_2026`（保温暖管/直埋保温管供货与施工协同系统），承载供暖管网工程各标段的需求管理、供货履约、库管出入库、多方联合会审、OCR智能单据解析等全量业务逻辑。
+- **核心路由与服务架构清单**：
+  1. **API 路由层 ([backend/projects/insulation_pipe_supply_2026/api](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api))**：
+     - 子项目主路由聚合：[`router.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/router.py)；
+     - 工作台综合业务接口：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（涵盖需求申报、供货单据、库管验收领料、全局大屏看板接口）；
+     - 联合会审业务接口：[`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)；
+     - 站内消息与提醒接口：[`system_messages.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/system_messages.py)。
+  2. **业务核心服务层 ([backend/projects/insulation_pipe_supply_2026/services](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services))**：
+     - 权限与标段配置：[`config_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/config_service.py)；
+     - 联合会审流转引擎：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+     - 需求与供给履约服务：[`demand_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/demand_management_service.py)、[`supply_management_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supply_management_service.py)；
+     - 库存与管件管理：[`supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/supplier_inventory_service.py)、[`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)、[`fitting_supplier_inventory_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_supplier_inventory_service.py)、[`fitting_usage_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_usage_service.py)；
+     - 单价与基准核算：[`price_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/price_service.py)、[`baseline_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/baseline_service.py)；
+     - 辅助与增强服务：[`ocr_tool_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ocr_tool_service.py)（单据识别）、[`presence_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/presence_service.py)（在线心跳）、[`system_message_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/system_message_service.py)、[`comprehensive_history_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/comprehensive_history_service.py)、[`weather_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/weather_service.py)、[`ip_location_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/ip_location_service.py)、[`audit_log_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/audit_log_service.py)。
+
 ## 2026-10-14 daily_report_25_26 电力现货调度引擎时区校准、RLock 死锁消除与配置持久化整改 (Spot Electricity Sync Scheduler Timezone & Lock Alignment)
 
 - **涉及核心服务与模块**：

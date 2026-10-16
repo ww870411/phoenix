@@ -71,6 +71,10 @@ const routes = [
     component: () => import('../projects/daily_report_25_26/pages/SpotElectricityView.vue'),
   },
   {
+    path: '/projects/:projectKey/pages/global_management',
+    component: () => import('../projects/daily_report_25_26/pages/GlobalManagementView.vue'),
+  },
+  {
     path: '/admin-console',
     component: () => import('../projects/daily_report_25_26/pages/AdminConsoleView.vue'),
   },
@@ -191,6 +195,18 @@ router.beforeEach(async (to) => {
     const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
     if (!auth.hasProjectAccess(pKey)) {
       return makeForbiddenRedirect(to, pKey, 'spot_electricity')
+    }
+    return true
+  }
+
+  // 5.2 生产日报全局管控中心专属路由校验
+  if (to.path.endsWith('/pages/global_management')) {
+    const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
+    if (!auth.hasProjectAccess(pKey)) {
+      return makeForbiddenRedirect(to, pKey, 'global_management')
+    }
+    if (!auth.hasPageAccess(pKey, 'global_management')) {
+      return makeForbiddenRedirect(to, pKey, 'global_management')
     }
     return true
   }

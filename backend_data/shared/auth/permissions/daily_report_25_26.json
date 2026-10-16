@@ -9,6 +9,7 @@
         "data_entry",
         "constant_data",
         "data_analysis",
+        "global_management",
         "placeholder"
       ],
       "sheet_rules": {
@@ -50,6 +51,7 @@
         "data_entry",
         "constant_data",
         "data_analysis",
+        "global_management",
         "placeholder"
       ],
       "sheet_rules": {
@@ -228,6 +230,7 @@
       "page_access": [
         "dashboard",
         "data_show",
+        "global_management",
         "placeholder"
       ],
       "sheet_rules": {

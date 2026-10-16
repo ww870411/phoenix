@@ -114,6 +114,34 @@ def _fetch_metrics_from_view(session: Session, table: str, company: str, biz_dat
     """
     table_whitelist = {"sum_basic_data", "groups"}
     target = table if table in table_whitelist else "sum_basic_data"
+
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        engine = DailyDashboardEngine(session)
+        records = engine.compute_groups(biz_date) if target == "groups" else engine.compute_sum_basic_data(biz_date)
+        out: Dict[str, Dict[str, Decimal]] = {}
+        for r in records:
+            if r.get("company") != company:
+                continue
+            item = r["item"]
+            bucket = {
+                "value_biz_date": _to_decimal(r.get("value_biz_date")),
+                "value_peer_date": _to_decimal(r.get("value_peer_date")),
+                "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
+                "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
+                "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
+                "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
+            }
+            out[item] = bucket
+            if r.get("item_cn"):
+                cn_key = str(r.get("item_cn")).strip()
+                if cn_key and cn_key not in out:
+                    out[cn_key] = bucket
+        if out:
+            return out
+    except Exception:
+        pass
+
     if biz_date and biz_date.lower() != "regular":
         session.execute(text("SET LOCAL phoenix.biz_date = :biz_date"), {"biz_date": biz_date})
     else:
@@ -193,6 +221,33 @@ def _fetch_temperature_extremes(session: Session, biz_date: Optional[str]) -> Di
 
     peer = _compute_peer_date(anchor)
 
+    def _metric(biz_val: Optional[Any], peer_val: Optional[Any]) -> Dict[str, Decimal]:
+        biz_decimal = _to_decimal(biz_val)
+        peer_decimal = _to_decimal(peer_val)
+        return {
+            "value_biz_date": biz_decimal,
+            "sum_month_biz": biz_decimal,
+            "sum_ytd_biz": biz_decimal,
+            "value_peer_date": peer_decimal,
+            "sum_month_peer": peer_decimal,
+            "sum_ytd_peer": peer_decimal,
+        }
+
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        engine = DailyDashboardEngine(session)
+        anchor_rows = engine.compute_temperature_data(anchor, anchor)
+        peer_rows = engine.compute_temperature_data(peer, peer)
+        anchor_row = anchor_rows[0] if anchor_rows else None
+        peer_row = peer_rows[0] if peer_rows else None
+        if anchor_row:
+            return {
+                "amount_temp_highest": _metric(anchor_row.get("max_temp"), peer_row.get("max_temp") if peer_row else None),
+                "amount_temp_lowest": _metric(anchor_row.get("min_temp"), peer_row.get("min_temp") if peer_row else None),
+            }
+    except Exception:
+        pass
+
     def _get_row(target_date: _date) -> Optional[Dict[str, Any]]:
         sql = text(
             """
@@ -241,6 +296,45 @@ def _fetch_sum_coal_inventory_constants(session: Session, company: str) -> Dict[
         WHERE company = :company
         """
     )
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        engine = DailyDashboardEngine(session)
+        coal_records = engine.compute_coal_inventory(None)
+        cand_set = set()
+        if company:
+            cand_set.add(company)
+            if not company.endswith("_sum"):
+                cand_set.add(f"{company}_sum")
+            else:
+                base = company[:-4]
+                if base:
+                    cand_set.add(base)
+        engine_rows = [r for r in coal_records if r.get("company") in cand_set]
+        if engine_rows:
+            out_engine: Dict[str, Dict[str, Decimal]] = {}
+            for r in engine_rows:
+                comp_raw = str(r.get("company") or "").strip()
+                storage_type = str(r.get("storage_type") or "").strip()
+                val = _to_decimal(r.get("value"))
+                if not comp_raw:
+                    continue
+                if storage_type == "all_sites":
+                    if comp_raw.endswith("_sum"):
+                        key = comp_raw
+                    else:
+                        key = f"{comp_raw}_sum"
+                elif storage_type:
+                    key = f"{comp_raw}_{storage_type}"
+                else:
+                    key = comp_raw
+                out_engine[key] = {
+                    FRAME_TO_PERIOD["biz_date"]: val,
+                    FRAME_TO_PERIOD["peer_date"]: val,
+                }
+            return out_engine
+    except Exception:
+        pass
+
     candidates: List[str] = []
     if company:
         candidates.append(company)
@@ -1566,6 +1660,35 @@ def _fetch_metrics_from_view_batch(
 
     table_whitelist = {"sum_basic_data", "groups"}
     target = table if table in table_whitelist else "sum_basic_data"
+
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        engine = DailyDashboardEngine(session)
+        records = engine.compute_groups(biz_date) if target == "groups" else engine.compute_sum_basic_data(biz_date)
+        comp_set = set(normalized_companies)
+        out_engine: Dict[str, Dict[str, Dict[str, Decimal]]] = {company: {} for company in normalized_companies}
+        for r in records:
+            comp = str(r.get("company") or "").strip()
+            if comp not in comp_set:
+                continue
+            company_bucket = out_engine.setdefault(comp, {})
+            item = r["item"]
+            bucket = {
+                "value_biz_date": _to_decimal(r.get("value_biz_date")),
+                "value_peer_date": _to_decimal(r.get("value_peer_date")),
+                "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
+                "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
+                "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
+                "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
+            }
+            company_bucket[item] = bucket
+            if r.get("item_cn"):
+                cn_key = str(r.get("item_cn")).strip()
+                if cn_key and cn_key not in company_bucket:
+                    company_bucket[cn_key] = bucket
+        return out_engine
+    except Exception:
+        pass
     if biz_date and biz_date.lower() != "regular":
         session.execute(text("SET LOCAL phoenix.biz_date = :biz_date"), {"biz_date": biz_date})
     else:

@@ -2,7 +2,7 @@
   "project_key": "daily_report_25_26",
   "layout_version": 2,
   "disabled": false,
-  "updated_at": "2026-10-10T11:19:08.127688+08:00",
+  "updated_at": "2026-10-16T18:59:05.233778+08:00",
   "entries": {
     "2026-03-20": {
       "dir_name": "2026-03-20",
@@ -33,6 +33,42 @@
       "generated_at": "2026-10-10T11:19:08.033887+08:00",
       "show_date": "2026-04-28",
       "push_date": "2026-04-28",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-01-15": {
+      "dir_name": "2026-01-15",
+      "generated_at": "2026-10-16T15:16:02.183854+08:00",
+      "show_date": "2026-01-15",
+      "push_date": "2026-01-15",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-03-10": {
+      "dir_name": "2026-03-10",
+      "generated_at": "2026-10-16T18:59:01.469810+08:00",
+      "show_date": "2026-03-10",
+      "push_date": "2026-03-10",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-03-01": {
+      "dir_name": "2026-03-01",
+      "generated_at": "2026-10-16T18:59:05.063985+08:00",
+      "show_date": "2026-03-01",
+      "push_date": "2026-03-01",
       "parts": [
         "meta.json",
         "summary.json",

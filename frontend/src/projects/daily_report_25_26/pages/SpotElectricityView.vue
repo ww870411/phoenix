@@ -311,12 +311,12 @@
             <h3 class="chart-title">
               {{
                 viewMode === 'single'
-                  ? `【${selectedDate}】分时现货日前/实时曲线对比`
+                  ? `【${selectedDate}】辽宁省统一结算点电价数据`
                   : rangeSubMode === 'daily'
-                    ? `【${rangeStartDate} 至 ${rangeEndDate}】日均现货电价走势`
+                    ? `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（日均走势）`
                     : rangeSubMode === 'monthly'
-                      ? `【${rangeStartDate} 至 ${rangeEndDate}】月均现货电价走势`
-                      : `【${rangeStartDate} 至 ${rangeEndDate}】各时段平均电价走势 (00:15 ~ 24:00)`
+                      ? `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（月均走势）`
+                      : `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（时段均值 00:15 ~ 24:00）`
               }}
             </h3>
             <span class="chart-badge">

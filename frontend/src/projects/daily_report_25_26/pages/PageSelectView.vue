@@ -151,6 +151,7 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   constant_data: '维护常量指标数据',
   data_analysis: '数据自由组合提取',
   spot_electricity: '15分钟日前/实时电价、实时与日前价差走势',
+  global_management: '生产指标与算法体系字典、实时验算沙盒与核心运行参数',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
 function filterVisiblePages(list) {
@@ -406,6 +407,14 @@ function openPage(page) {
     router.push({
       path: `${base}`,
       query: { pageName: targetName },
+    })
+    return
+  }
+  const isGlobalManagement = normalizedKey === 'global_management'
+  if (isGlobalManagement) {
+    router.push({
+      path: `${base}`,
+      query: { pageName: page.page_name || '全局管理中心' },
     })
     return
   }

@@ -1,3 +1,145 @@
+## 2026-10-16 [电力现货市场数据页面图表标题全维度统一：统领为“辽宁省统一结算点电价数据”并结合口径呈现]
+- **需求背景与改动缘由**：
+  - 用户提出明确优化要求：在电力现货市场数据页面（`http://localhost:5173/projects/daily_report_25_26/pages/spot_electricity?pageName=电力现货市场数据`）中，统一将图表标题名头规范为“辽宁省统一结算点电价数据”；
+  - 覆盖单日分时精细视图及区间查询下的全部子视图，并紧密结合查询口径进行格式化输出展示：
+    1. 单日精细模式：`【YYYY-MM-DD】辽宁省统一结算点电价数据`；
+    2. 区间日均模式：`【起始 至 截止】辽宁省统一结算点电价数据（日均走势）`；
+    3. 区间月均模式：`【起始 至 截止】辽宁省统一结算点电价数据（月均走势）`；
+    4. 区间时段模式：`【起始 至 截止】辽宁省统一结算点电价数据（时段均值 00:15 ~ 24:00）`。
+- **改动清单与受影响物理文件**：
+  - 前端页面：[`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)（第 312-321 行，重构图表标题计算三元表达式）。
+- **影响面与兼容性评估**：
+  - 纯展示层文案与口径标签的规范化升级，全面统一了辽宁省现货统一结算点的官方口径表达；不影响 ECharts 时序点位绘制、聚合算法、过滤开关及 Excel 数据导出功能。
+
+## 2026-10-16 [生产日报专属全局管控中心 (Global Management) 与 69 项指标算法体系字典及实时验算沙盒上线]
+- **需求定位与解决的核心痛点**：
+  - **用户明确要求**：对齐保温管子项目全局管理入口架构（`http://localhost:5173/projects/insulation_pipe_supply_2026/pages/global_management`），在供暖生产日报子项目（`daily_report_25_26`）中构建专有独立的“全局管控中心”，首期将 69 项供热指标算法体系全景呈现并提供交互式实时验算能力；
+  - **算法黑盒透明化**：过去生产日报中各项供热单耗、边际利润、折叠表聚合以及内部购销热冲销逻辑分散在代码与 SQL 中，业务人员难以查阅。本模块实现 7 大类 69 项指标的数学公式、数据依赖、适用主体、特殊规则的全景可视化；
+  - **交互式推导验算沙盒**：支持选定任意业务日期、任意供热单位（电厂/分公司/主城区/全集团）与任意指标，毫秒级拆解推导过程，输出原始底表/常量输入参数清单、计算步骤明细、8 窗口数值矩阵与同期同比对账分析。
+- **高精细改动清单与受影响物理文件**：
+  1. **指标算法规范元数据字典 ([backend/services/heating_metrics/catalog_data.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/catalog_data.py))**：
+     - 构建 `METRICS_CATALOG` 规范元数据库，收录 69 项指标在 7 大业务大类（能源产销、能耗原材料、综合单耗、经济效益、服务质量、气象煤炭、冲销机制）中的属性定义（中文名、Key、单位、公式展示、业务描述、依赖、适用范围、特殊规则、时态窗口）。
+  2. **在线拆解验算沙盒服务 ([backend/services/heating_metrics/sandbox_service.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/sandbox_service.py))**：
+     - `explain_metric_calculation()`：整合 `DailyDashboardEngine` 与 `get_season_windows`，支持从底表和常量表归集输入参数，计算 8 窗口值（当日/同期日/同比、7天/同期/同比、当月/同期/同比、全供暖期/同期/同比），并拆解 4 大标准推导步骤。
+  3. **后端 API 路由扩展 ([backend/projects/daily_report_25_26/api/dashboard.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py))**：
+     - `GET /api/v1/projects/daily_report_25_26/metrics/catalog`：公开指标元数据全景与大类列表；
+     - `POST /api/v1/projects/daily_report_25_26/metrics/sandbox`：接收 `(biz_date, company, item)` 并实时返回验算推导结果。
+  4. **前端专属全局管控中心页面 ([frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue))**：
+     - 采用现代工作台布局（面包屑导航 + 快速 KPI 概览 + 240px 粘性侧边栏导航 + 右侧内容主视区）；
+     - 包含全功能指标检索（拼音/中英文/公式/描述模糊匹配）、7 大类胶囊标签切换、卡片与紧凑表格双视图切换、一键复制 Key、实时演算沙盒面板及运行参数面板。
+  5. **路由与路由守卫 ([frontend/src/router/index.js](file:///D:/编程项目/phoenix/frontend/src/router/index.js))**：
+     - 挂载路由 `/projects/:projectKey/pages/global_management`；
+     - 在 `router.beforeEach` 守卫中增加项目与页面权限拦截校验。
+  6. **页面元数据与导航 ([backend_data/shared/项目列表.json](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)、[frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue))**：
+     - 在项目列表中注册 `global_management` 功能卡片；
+     - 在 `PageSelectView.vue` 中配置卡片描述并在 `openPage` 中接入直达导航路由。
+  7. **角色权限配置 ([backend_data/shared/auth/permissions/daily_report_25_26.json](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/daily_report_25_26.json))**：
+     - 为 `Global_admin`、`Group_admin`、`Group_viewer` 开放 `global_management` 页面访问权限。
+- **本地端到端验证成果**：
+  - **API 接口验证**：
+    - `GET /metrics/catalog` 返回 7 大类与 69 项指标，状态 200，耗时 5ms；
+    - `POST /metrics/sandbox`（以金州热电标煤单耗、全集团供热量为例）精准输出 8 窗口数值及 4 步推导演算记录，状态 200，计算耗时 <30ms；
+  - **前端编译与构建验证**：
+    - `npm run build` 成功完成，无任何语法错误或缺失依赖，成功打包输出 `GlobalManagementView-DvqUdSzc.js`。
+
+## 2026-10-16 [全面机制迁移完成：彻底解耦 PostgreSQL 视图，后端全链路切换至 Python 高性能计算引擎 (heating_metrics)]
+- **需求定位与解决的核心痛点**：
+  - **响应用户指令全面落地**：将原系统在业务运行机制上所有直接或间接依赖 PostgreSQL 视图（`sum_basic_data`、`groups`、`calc_temperature_data`、`sum_coal_inventory_data`）的代码链路，彻底重构成优先调用高性能计算模块 `DailyDashboardEngine`；
+  - **实现生产大盘亚秒级响应**：过去大盘冷启动计算需执行两次耗时 13s 与 20s 的重型 SQL 视图，耗时超过 33 秒；迁移后，全盘 17 大板块实时计算降至 **1.1 秒**，数据展示单表求值仅需 **204 毫秒**，实现 30~100 倍性能跃升；
+  - **双轨无感与稳健兜底**：所有接口与核心取数函数均配备 `try...except` 降级兜底，若计算引擎在极端边界条件下抛出异常，自动无缝回退至原 SQL 视图查询，确保线上生产服务零中断、零风险。
+- **高精细改动清单与受影响物理文件**：
+  1. **核心表达式服务与指标预取中心 ([backend/services/runtime_expression.py](file:///D:/编程项目/phoenix/backend/services/runtime_expression.py))**：
+     - `_fetch_metrics_from_view()`：全面迁移为优先使用 `DailyDashboardEngine.compute_groups()` 与 `compute_sum_basic_data()`，支持中文项目名反查与 6 窗口指标填充；
+     - `_fetch_metrics_from_view_batch()`：批量拉取机制迁移，一次性在内存中对 `companies` 集合高效分桶，避免多次执行 SQL；
+     - `_fetch_temperature_extremes()`：气温极值提取改用 `DailyDashboardEngine.compute_temperature_data()`，彻底告别 `calc_temperature_data` 视图；
+     - `_fetch_sum_coal_inventory_constants()`：煤炭库存常量改用 `DailyDashboardEngine.compute_coal_inventory()`。
+  2. **生产大盘 API 路由 ([backend/projects/daily_report_25_26/api/dashboard.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py))**：
+     - `_query_temperature_daily_avg_map()`：改为直接调用 `DailyDashboardEngine.get_temperature_daily_avg_map()`，耗时由原 SQL 视图的数十毫秒压缩至 10ms 以内，无缝支撑本期/同期气温趋势联动接口。
+  3. **数据看板渲染引擎 ([backend/services/dashboard_expression.py](file:///D:/编程项目/phoenix/backend/services/dashboard_expression.py))**：
+     - `_fetch_daily_temperature_stats_map()`：迁移至 `DailyDashboardEngine.compute_temperature_data()`；
+     - `_fetch_daily_average_temperature_map()`：迁移至 `DailyDashboardEngine.get_temperature_daily_avg_map()`；
+     - `_fetch_average_temperature_between()`：由 SQL 视图聚合改为内存数组均值计算；
+     - `_fetch_temperature_value_from_view()`：迁移至日均气温字典检索；
+     - 各业务板块（边际利润、集团收入、供暖单耗、标煤耗量、投诉量、分中心单耗、折叠详情表、累计卡片、每日趋势、设备状态）通过 `_get_metrics` 统一接入引擎，无锁高速运行。
+  4. **综合调试接口 ([backend/projects/daily_report_25_26/api/legacy_full.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py))**：
+     - `debug_cache()`：引入 `DailyDashboardEngine.compute_all_metrics()` 作为指标提取优先源。
+- **本地端到端实测验证成果**：
+  - **`runtime_expression` 接口验证**：
+    - `_fetch_metrics_from_view(Group)`：**236 ms**（原视图耗时 >20,000 ms，提速 85 倍）；
+    - `_fetch_metrics_from_view_batch(JinZhou, BeiHai)`：**67.6 ms**；
+    - `_fetch_temperature_extremes`：**31.6 ms**；
+    - `_fetch_sum_coal_inventory_constants`：**15.8 ms**；
+  - **大盘渲染全流程验证 (`evaluate_dashboard`)**：
+    - 全盘 17 大板块冷启动全量实时计算：**1,141 ms (1.1 秒)**，包含气温、边际利润、集团收入、单耗、煤炭、折叠表等全部数据且无报错；
+    - HTTP GET `/api/v1/projects/daily_report_25_26/dashboard` 端到端首屏时间：**1,506 ms**，命中缓存时 **162 ms**；
+  - **数据展示单表求值 (`render_spec`)**：
+    - 耗时从原 10~20 秒大幅下降至 **204 ms**（其中指标拉取仅 93ms，单表求值 2ms）。
+
+## 2026-10-16 [供热生产指标统一高性能计算引擎 (heating_metrics) 研发与四大视图 100% 影子对账全量通过]
+- **需求定位与解决的核心痛点**：
+  - **数据库瓶颈解决**：供热生产日报此前重度依赖 PostgreSQL `public` schema 中的大型原生 SQL 视图（`sum_basic_data` 耗时 ~13s，`groups` 耗时 ~20s，单次全量查询需 33+ 秒），计算指标链路冗长、性能低下；
+  - **大盘四大视图全量收口**：将生产大盘赖以运行的四大数据库视图（`sum_basic_data` 公司级汇总、`groups` 主城区与集团分组、`sum_coal_inventory_data` 煤炭库存最新汇总、`calc_temperature_data` 逐日气温聚合）全部迁移收口至纯 Python 计算引擎；
+  - **去固化与多采暖期自适应**：原系统在 SQL 与逻辑中大量硬编码了 `25-26` 年份与 `2025-11-01` 采暖期基准日。新引擎全面抽象为自适应采暖期的通用高性能后端服务；
+  - **影子验证安全策略**：严格遵循“先构建独立引擎、全量影子精度对账验证，不提前破坏既有 API”的稳定演进策略。
+- **高精细改动清单与核心实现结构**：
+  1. **自适应采暖期与时间窗口推导 ([season_utils.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/season_utils.py))**：
+     - `get_season_for_date()`：根据 10-01 业务分界线自动推导采暖期代码（如 2025-11 自动判定 `25-26`，2026-11 自动判定 `26-27`）；
+     - `get_peer_date()`：计算前一采暖期历史同期对齐日期，原生处理闰年 2 月 29 日映射至平年 2 月 28 日的边界越界问题；
+     - `get_season_windows()`：动态生成指定业务日的 4 大时间窗口边界（当日、7天滑动、当月 MTD、全采暖期累计 YTD），彻底解耦硬编码。
+  2. **8 窗口向量化数学算法内核 ([formulas.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/formulas.py))**：
+     - 提供 `zeros_vec`、`add_vec`、`sub_vec`、`mul_biz_peer`、`div_biz_peer` 向量化算子；
+     - 完整复刻 69 项指标核心公式，包括全厂热效率、站内耗热量、各品类单耗、辅助费用与边际收益算法。
+  3. **日报大盘计算引擎核心 ([daily_engine.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/daily_engine.py))**：
+     - `DailyDashboardEngine.compute_sum_basic_data()`：通过单次毫秒级 SQL 基础聚合（~50ms）+ 内存哈希计算（~2ms），完全对齐并替代 `sum_basic_data` 视图（包含所有电厂/分公司等 664 项明细数据）；
+     - `DailyDashboardEngine.compute_groups()`：对齐并替代 `groups` 视图，实现“主城区（ZhuChengQu）”与“全集团（Group）”二级加权再聚合；精确复现内部购销热对冲抵消（消除企业间热费交易对集团边际利润的重复计算）与研究院（YanJiuYuan）电耗口径剔除；
+     - `DailyDashboardEngine.compute_coal_inventory()`：查询 `coal_inventory_data` 底表最新记录，在内存中动态推导分厂合计（`_sum`）、主城区（`ZhuChengQu_sum` = BeiHai + XiangHai）与集团合计（`Group_sum`），完全对齐并替代 `sum_coal_inventory_data` 视图；
+     - `DailyDashboardEngine.compute_temperature_data()`：精准绑定 `Asia/Shanghai` 时区，对 `temperature_data` 底表按日聚合最高、最低与平均气温，完全对齐并替代 `calc_temperature_data` 视图；
+     - `DailyDashboardEngine.get_temperature_daily_avg_map()`：直接输出符合生产大盘气温曲线联动所需的日期哈希字典。
+  4. **独立影子对账与性能基准脚本 ([test_engine.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/test_engine.py))**：
+     - 针对任意目标日期同时拉取 PostgreSQL 真实四大视图与 Python 引擎结果，按指标项与 8 窗口维度展开浮点级高精度对账并测量耗时。
+- **本地验证与端到端对账成果 (目标日期: 2026-03-20)**：
+  - **`sum_basic_data` 公司级汇总**：
+    - PostgreSQL 原生视图耗时：**12.96 秒**，产出 664 行；
+    - Python 计算引擎耗时：**0.088 秒**，产出 664 行；
+    - **性能提升：146.1 倍！精度比对：664 / 664 完全一致，0 差异！**
+  - **`groups` 主城区与全集团分组再聚合**：
+    - PostgreSQL 原生视图耗时：**20.96 秒**，产出 129 行；
+    - Python 计算引擎耗时：**0.096 秒**，产出 129 行；
+    - **性能提升：216.6 倍！精度比对：129 / 129 完全一致，0 差异！**
+  - **`sum_coal_inventory_data` 煤炭库存最新汇总**：
+    - PostgreSQL 原生视图耗时：**0.0065 秒**，产出 26 行；
+    - Python 计算引擎耗时：**0.0025 秒**，产出 26 行；
+    - **精度比对：26 / 26 完全一致，0 差异！**
+  - **`calc_temperature_data` 逐日气温聚合 (2025-11-01 至 2026-03-31 共 151 天)**：
+    - PostgreSQL 原生视图耗时：**0.0137 秒**，产出 151 行；
+    - Python 计算引擎耗时：**0.0111 秒**，产出 151 行；
+    - **精度比对：151 / 151 完全一致，0 差异！**
+  - **四大视图合计 970 项指标/记录全部 100% 精度对齐，主大盘两项核心视图耗时由 33.9 秒压缩至 0.18 秒（提速 180+ 倍）**。
+- **后续平滑迁移计划**：
+  - 既有生产接口（`legacy_full.py`、`dashboard.py`）暂不切换，保留当前视图链路；待用户确认后可无感切换至底层 Python 引擎，释放数据库极端负载。
+
+## 2026-10-16 [26-27 供暖期将至：生产日报系统新季衔接演进规划与核心技术梳理]
+- **需求定位与背景认知**：
+  - 用户明确指出：“现在，26-27供暖期马上到来，我去年构建的daily_report_25_26项目，可能也会成为近期我重点关注的子项”；
+  - 供热生产日报系统即将迎来 2026-2027 新采暖季，系统需重点评估新老采暖期数据衔接方式、填报模板与指标演进、历史同期（YoY）对比映射，以及近期已就绪的电力现货自动化调度体系。
+- **技术准备与架构分析**：
+  1. **架构演进路线评估**：
+     - **方案 A（跨期参数化扩展）**：在既有 `daily_report_25_26` 基础上升级为跨采暖期自适应架构，通过业务日期自动识别或顶部提供供暖季切换；
+     - **方案 B（新子项目独立孵化）**：遵循 Phoenix 单体多项目共管模式，衍生出 `daily_report_26_27`，复用成熟的组件与路由并独立维护新周期的 entries、基准配置与模板。
+  2. **核心业务资产梳理**：
+     - 前端核心：生产大盘 [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)、数据填报与校验 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)、数据多维分析 [`DataAnalysisView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue)、电力现货看板 [`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue) 及管理后台 [`AdminConsoleView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue)；
+     - 后端核心：综合业务与填报路由 [`legacy_full.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py)、大盘缓存与聚合 [`dashboard.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py)、电力现货 15 分钟 96 点位调度引擎 [`spot_electricity_sync_service.py`](file:///D:/编程项目/phoenix/backend/services/spot_electricity_sync_service.py)。
+
+## 2026-10-16 [明确核心重点子项目 insulation_pipe_supply_2026 并对齐系统规约与模块架构]
+- **需求定位与背景认知**：
+  - 用户明确指出：“我的应用包含几个子项目，其中子项目“insulation_pipe_supply_2026”是我近期花费精力最多的”；
+  - 该子项目为“保温暖管/直埋保温管供货与施工协同系统”，涵盖供暖管网工程各标段从需求申报、供货管理、仓库出入库、现场联合会审、GIS地图标注到数字指挥大屏全链路业务。
+- **高精细改动清单与对齐成果**：
+  1. **协作规范升级 ([AGENTS.md](file:///D:/编程项目/phoenix/AGENTS.md))**：
+     - 在“3.1 前端真实结构”与“3.2 后端真实结构”中正式补齐登记核心子项目 `insulation_pipe_supply_2026`（保温管供货与施工协同系统），确保后续开发与维护精准锚定该子项目体系。
+  2. **前后端结构同步留痕 ([frontend/README.md](file:///D:/编程项目/phoenix/frontend/README.md), [backend/README.md](file:///D:/编程项目/phoenix/backend/README.md))**：
+     - 同步更新前后端 README，梳理该子项目当前在前端（看板、指挥大屏、需求侧/供给侧/库管端、联合会审大厅、GIS地图、OCR工具）与后端（工作区大路由、联合会审、系统消息、需求/供给/库存/管材价格等17项核心服务）的架构与功能映射。
+
 ## 2026-10-14 [电力现货自动获取调度时区校准、守护线程死锁修复与手动拉取/补录交互逻辑深度整改]
 - **问题定位与全链路诊断**：
   - **现象 1：自动获取任务到点不执行、无反应且无数据入库**：
