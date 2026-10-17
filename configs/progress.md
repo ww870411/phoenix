@@ -1,3 +1,26 @@
+## 2026-10-17 [修复电力现货市场数据页面在区间走势分析下导出 15 分钟分时明细日期不全缺陷]
+- **需求背景与缺陷成因分析**：
+  - **缺陷现象**：用户在页面 `/projects/daily_report_25_26/pages/spot_electricity?pageName=电力现货市场数据` 中，选择“区间走势分析” -> “按每日平均值”并在下方表格选择“每日15分钟明细”后，点击导出 Excel 表格时发现导出的表格日期严重不全（如选择全部数据 289 天，导出的 Excel 到了 4 月中旬就戛然而止，后半年数据完全缺失）；
+  - **核心致病诱因 1（条数硬截断）**：
+    - 后端接口 `GET /spot_electricity/points` 原默认限制 `limit: int = Query(5000)`，且在 SQL 内部强行拼接 `LIMIT :limit`；前端 `getSpotElectricityPoints` 请求层与 `SpotElectricityView.vue` 中固定写死传入 `limit: 10000`；
+    - 辽宁电力现货全天为 96 个 15 分钟点位，`10,000 / 96 ≈ 104.16 天`；当前数据库已有 2026-01-01 至 2026-10-16 共 289 天时序（27,744 点位）；
+    - 用户只要查询跨度超过 104 天（或未传 limit 时的 52 天），后端返回点位在第 10,000 条处（2026-04-15 04:00）被直接物理截断，后续 185 天的数据完全丢失，导致表格分页到 105 页即止，导出的 Excel 同样只有前 104 天；
+  - **次要诱因 2（日期范围输入框未绑定 change 事件）**：
+    - 区间模式工具栏上的起止日期输入框未绑定 `@change="fetchData"`，用户手动调整日期若未点击右侧“查询”按钮，前端点位依然为原时间区间，但导出文件名却带有新日期，造成“日期不全且对不上”的直观错位。
+- **改动清单与受影响物理文件**：
+  1. **后端 API 路由 ([backend/projects/daily_report_25_26/api/spot_electricity.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py))**：
+     - 重构 `get_spot_electricity_points` 接口的 `limit` 参数为 `Optional[int] = Query(None, description="最大返回条数，若传 None 或 <=0 则不限制条数")`；
+     - 仅在 `limit is not None and limit > 0` 时动态追加 `LIMIT :limit`，传 `None` 或 `<=0` 时全量返回指定起止日期区间内的所有时序点位。
+  2. **前端 API 请求层 ([frontend/src/projects/daily_report_25_26/services/api.js](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js))**：
+     - `getSpotElectricityPoints` 函数默认 `limit = null`，仅在指定大于 0 时才拼接 `limit` 查询参数，默认按选定起止日期全量拉取。
+  3. **前端电力现货页面 ([frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue))**：
+     - 工具栏：为 `rangeStartDate` 与 `rangeEndDate` 输入框添加 `@change="fetchData"`，支持日历修改即刻联动拉取；
+     - `fetchData()`：增加起止日期前后颠倒纠偏保护，调用 `getSpotElectricityPoints` 时传入 `limit: null`，完整加载区间内全部 15 分钟时序点位；
+     - `exportCurrentData()`：优化分时明细导出，将工作表命名为“15分钟分时明细”（单日为“单日15分钟明细”），文件名自动带上时间跨度及负电价过滤状态后缀。
+- **验证成果**：
+  - 后端直接针对全库 2026-01-01 至 2026-10-16 检验：成功获取全部 289 天、27,744 条点位数据，无任何数据截断，耗时仅 0.3 秒；
+  - 前端执行 `npm run build` 成功完成，打包无报错。
+
 ## 2026-10-16 [电力现货市场数据页面图表标题全维度统一：统领为“辽宁省统一结算点电价数据”并结合口径呈现]
 - **需求背景与改动缘由**：
   - 用户提出明确优化要求：在电力现货市场数据页面（`http://localhost:5173/projects/daily_report_25_26/pages/spot_electricity?pageName=电力现货市场数据`）中，统一将图表标题名头规范为“辽宁省统一结算点电价数据”；

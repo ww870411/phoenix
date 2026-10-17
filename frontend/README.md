@@ -1,3 +1,16 @@
+## 2026-10-17 daily_report_25_26 电力现货区间走势 15 分钟分时明细全量拉取、日期联动与 Excel 导出完整性修复 (Spot Electricity Full Range Points Export Fix)
+
+- **涉及页面与结构演进说明**：
+  - **核心页面**：[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue) 及 API 请求封装 [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)；
+  - **全量点位拉取与性能保障**：
+    - 前端在 `fetchData` 中移除固定 `limit: 10000` 截断，改为向后端传入 `limit: null`，实现所选日期区间（如全部 289 天、27,744 条点位）无损拉取；
+    - 页面采用 `shallowRef` 存储点位大数组并在 DOM 层使用 `paginatedPoints` 前端轻量分页（默认 96 条/页），无论总记录数达到几万条，页面操作与图表切换依然毫秒级瞬开，内存与 GC 零卡顿；
+  - **输入框交互联动增强**：
+    - 区间模式工具栏的 `rangeStartDate` 与 `rangeEndDate` 绑定 `@change="fetchData"`，日期选择即时刷新；同时增加起止日期前后颠倒自动纠偏保护；
+  - **Excel 导出完整性与规范化**：
+    - 当用户选择“区间走势分析” -> “按每日平均值”并在下方表格选择“⏱️ 15分钟分时明细”时，导出的 Excel 包含所选区间的全部时序行（整年导出包含完整的 27,744 行）；
+    - 工作表 Sheet 规范命名为“15分钟分时明细”（单日为“单日15分钟明细”），文件名命名为 `辽宁电力现货15分钟分时明细_${rangeStartDate}_至_${rangeEndDate}.xlsx`，开启负电价过滤时自动追加 `_仅负电价时段` 标识。
+
 ## 2026-10-16 daily_report_25_26 电力现货图表标题全维度统一规范为“辽宁省统一结算点电价数据” (Spot Electricity Chart Titles Unification)
 
 - **涉及页面与改动说明**：

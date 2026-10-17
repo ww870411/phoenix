@@ -3136,13 +3136,13 @@ export async function getSpotElectricitySummary(projectKey = 'daily_report_25_26
   return response.json()
 }
 
-export async function getSpotElectricityPoints(projectKey = 'daily_report_25_26', { date = '', startDate = '', endDate = '', onlyNegative = false, limit = 10000 } = {}) {
+export async function getSpotElectricityPoints(projectKey = 'daily_report_25_26', { date = '', startDate = '', endDate = '', onlyNegative = false, limit = null } = {}) {
   const params = new URLSearchParams()
   if (date) params.set('date', date)
   if (startDate) params.set('start_date', startDate)
   if (endDate) params.set('end_date', endDate)
   if (onlyNegative) params.set('only_negative', 'true')
-  if (limit) params.set('limit', String(limit))
+  if (limit != null && Number(limit) > 0) params.set('limit', String(limit))
   const qs = params.toString() ? `?${params.toString()}` : ''
   const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/points${qs}`)
   const response = await authAwareFetch(url, { headers: attachAuthHeaders() })

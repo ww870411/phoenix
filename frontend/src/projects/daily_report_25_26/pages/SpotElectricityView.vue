@@ -80,6 +80,7 @@
                 class="form-input date-input"
                 :min="meta.min_date || '2026-01-01'"
                 :max="meta.max_date || undefined"
+                @change="fetchData"
               />
               <span class="range-sep">至</span>
               <input
@@ -88,6 +89,7 @@
                 class="form-input date-input"
                 :min="meta.min_date || '2026-01-01'"
                 :max="meta.max_date || undefined"
+                @change="fetchData"
               />
             </div>
             <div class="quick-range-chips">
@@ -1788,6 +1790,11 @@ async function fetchData() {
     let eDate = selectedDate.value
 
     if (viewMode.value === 'range') {
+      if (rangeStartDate.value && rangeEndDate.value && rangeStartDate.value > rangeEndDate.value) {
+        const tmp = rangeStartDate.value
+        rangeStartDate.value = rangeEndDate.value
+        rangeEndDate.value = tmp
+      }
       sDate = rangeStartDate.value
       eDate = rangeEndDate.value
     }
@@ -1798,12 +1805,12 @@ async function fetchData() {
       summary.value = sumData.data
     }
 
-    // 2. 获取点位 Points（单日分时模式始终获取全量点位以维持横轴完整；区间模式按需后端过滤）
+    // 2. 获取点位 Points（单日分时模式始终获取全量点位以维持横轴完整；区间模式按需后端过滤，不加条数截断以保证日期完整）
     const pData = await getSpotElectricityPoints(projectKey, {
       startDate: sDate,
       endDate: eDate,
       onlyNegative: viewMode.value === 'range' ? onlyNegative.value : false,
-      limit: 10000,
+      limit: null,
     })
     if (pData && pData.ok) {
       points.value = pData.items || []
@@ -2603,11 +2610,13 @@ function exportCurrentData() {
 
   const worksheet = XLSX.utils.json_to_sheet(exportRows)
   const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, '现货数据导出')
+  const sheetName = viewMode.value === 'single' ? '单日15分钟明细' : '15分钟分时明细'
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
 
+  const negSuffix = onlyNegative.value ? '_仅负电价时段' : ''
   const fileName = viewMode.value === 'single'
-    ? `辽宁电力现货15分钟数据_${selectedDate.value}.xlsx`
-    : `辽宁电力现货数据_${rangeStartDate.value}_至_${rangeEndDate.value}.xlsx`
+    ? `辽宁电力现货15分钟数据_${selectedDate.value}${negSuffix}.xlsx`
+    : `辽宁电力现货15分钟分时明细_${rangeStartDate.value}_至_${rangeEndDate.value}${negSuffix}.xlsx`
 
   XLSX.writeFile(workbook, fileName)
 }

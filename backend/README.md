@@ -1,3 +1,12 @@
+## 2026-10-17 daily_report_25_26 电力现货 15 分钟明细点位接口条数截断解除与全区间查询支持 (Spot Electricity Points Limit Decoupling)
+
+- **服务改造与接口演化说明**：
+  - **问题根因解决**：过去接口 `GET /api/v1/projects/daily_report_25_26/spot_electricity/points` 固定带有 `limit: int = 5000` 并在 SQL 结尾强制拼接 `LIMIT :limit`。在全天 96 点位业务场景下，当用户在前端查询跨度超过 52 天或 104 天（前端曾传 10,000）的大时间区间（如当前库内已有 289 天、27,744 条点位）时，数据在第 10,000 条处被强行截断，导致 4 月中旬以后的时序完全丢失；
+  - **接口弹性重构 ([backend/projects/daily_report_25_26/api/spot_electricity.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/spot_electricity.py))**：
+    - `get_spot_electricity_points` 接口将 `limit` 形参调整为 `Optional[int] = Query(None, description="最大返回条数，若传 None 或 <=0 则不限制条数")`；
+    - SQL 生成机制重构：仅当客户端显式传递且 `limit > 0` 时才追加 `LIMIT :limit` 子句；当不传递或传 `None`/`0` 时，全量返回所选 `trade_date BETWEEN :start_date AND :end_date` 区间内的所有点位；
+    - 实测全库 289 天 27,744 行点位单次检索耗时仅 309 毫秒，单接口直接支撑整年/全量 15 分钟高精点位的大数据量导出与穿透分页。
+
 ## 2026-10-16 daily_report_25_26 前端电力现货图表口径全维度统一同步 (Spot Electricity Data Consistency & Title Alignment)
 
 - **系统协同说明**：

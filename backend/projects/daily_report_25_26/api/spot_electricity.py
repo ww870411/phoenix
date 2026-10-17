@@ -158,7 +158,7 @@ def get_spot_electricity_points(
     start_date: Optional[str] = Query(None, description="起始日期 (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="截止日期 (YYYY-MM-DD)"),
     only_negative: bool = Query(False, description="仅返回负电价时点"),
-    limit: int = Query(5000, description="最大返回条数"),
+    limit: Optional[int] = Query(None, description="最大返回条数，若传 None 或 <=0 则不限制条数"),
     session: Optional[AuthSession] = Depends(get_current_session_optional),
 ) -> Dict[str, Any]:
     _ensure_access(session)
@@ -178,6 +178,16 @@ def get_spot_electricity_points(
         where_clauses = ["trade_date BETWEEN :start_date AND :end_date"]
         if only_negative:
             where_clauses.append("(day_ahead_price < 0 OR real_time_price < 0)")
+
+        query_params: Dict[str, Any] = {
+            "start_date": s_date,
+            "end_date": e_date,
+        }
+
+        limit_clause = ""
+        if limit is not None and limit > 0:
+            limit_clause = "LIMIT :limit"
+            query_params["limit"] = limit
 
         sql_text = f"""
             SELECT 
@@ -207,14 +217,10 @@ def get_spot_electricity_points(
             FROM public.spot_electricity_15min_data
             WHERE {' AND '.join(where_clauses)}
             ORDER BY trade_date ASC, point_index ASC
-            LIMIT :limit;
+            {limit_clause};
         """
 
-        rows = db.execute(text(sql_text), {
-            "start_date": s_date,
-            "end_date": e_date,
-            "limit": limit,
-        }).fetchall()
+        rows = db.execute(text(sql_text), query_params).fetchall()
 
         items = []
         for r in rows:
