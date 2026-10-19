@@ -566,12 +566,17 @@ def list_admin_projects(session: AuthSession = Depends(get_current_session)):
     entries = _load_project_entries()
     projects: List[Dict[str, str]] = []
     for project_key, cfg in entries.items():
-        project_name = (
+        raw_name = (
             cfg.get("project_name")
             or cfg.get("项目名称")
             or cfg.get("名称")
             or project_key
         )
+        try:
+            from backend.services.heating_season_service import format_project_display_name
+            project_name = format_project_display_name(project_key, str(raw_name))
+        except Exception:
+            project_name = str(raw_name)
         projects.append(
             {
                 "project_key": project_key,

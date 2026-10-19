@@ -1487,14 +1487,19 @@ function onSheetAiToggle(event) {
 async function setupStandardGrid(tpl) {
   const readonlyLimit = resolveReadonlyLimit(tpl.columns);
   readOnlyThreshold.value = readonlyLimit;
-  gridColumns.value = tpl.columns.map((colName, index) => ({
-    prop: `c${index}`,
-    name: String(colName ?? ''),
-    autoSize: true,
-    minSize: index === 0 ? 160 : 120,
-    __locked: index <= readonlyLimit,
-    readonly: index <= readonlyLimit || isReadOnlyForDate.value,
-  }));
+  const isConstant = templateType.value === 'constant';
+  gridColumns.value = tpl.columns.map((colName, index) => {
+    const isConstantPeerColumn = isConstant && (index === tpl.columns.length - 1) && (index > readonlyLimit);
+    const locked = index <= readonlyLimit || isConstantPeerColumn;
+    return {
+      prop: `c${index}`,
+      name: String(colName ?? ''),
+      autoSize: true,
+      minSize: index === 0 ? 160 : 120,
+      __locked: locked,
+      readonly: locked || isReadOnlyForDate.value,
+    };
+  });
   applyReadonlyToColumns();
 
   const src = tpl.rows.map(row => {
@@ -1935,13 +1940,18 @@ async function applyStandardQueryResult(payload) {
   if (Array.isArray(q.columns)) {
     if (!isDailyPage.value) {
       columns.value = q.columns;
-      const colDefs = q.columns.map((name, index) => ({
-        name: String(name ?? ''),
-        prop: `c${index}`,
-        size: index === 0 ? 220 : 120,
-        __locked: index <= readOnlyThreshold.value,
-        readonly: index <= readOnlyThreshold.value || isReadOnlyForDate.value,
-      }));
+      const isConstant = templateType.value === 'constant';
+      const colDefs = q.columns.map((name, index) => {
+        const isConstantPeerColumn = isConstant && (index === q.columns.length - 1) && (index > readOnlyThreshold.value);
+        const locked = index <= readOnlyThreshold.value || isConstantPeerColumn;
+        return {
+          name: String(name ?? ''),
+          prop: `c${index}`,
+          size: index === 0 ? 220 : 120,
+          __locked: locked,
+          readonly: locked || isReadOnlyForDate.value,
+        };
+      });
       gridColumns.value = colDefs;
       applyReadonlyToColumns();
     }

@@ -2,7 +2,7 @@
   "project_key": "daily_report_25_26",
   "layout_version": 2,
   "disabled": false,
-  "updated_at": "2026-10-16T18:59:05.233778+08:00",
+  "updated_at": "2026-10-19T16:31:25.484916+08:00",
   "entries": {
     "2026-03-20": {
       "dir_name": "2026-03-20",
@@ -69,6 +69,66 @@
       "generated_at": "2026-10-16T18:59:05.063985+08:00",
       "show_date": "2026-03-01",
       "push_date": "2026-03-01",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-03-29": {
+      "dir_name": "2026-03-29",
+      "generated_at": "2026-10-19T14:55:21.253490+08:00",
+      "show_date": "2026-03-29",
+      "push_date": "2026-03-29",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-03-03": {
+      "dir_name": "2026-03-03",
+      "generated_at": "2026-10-19T14:55:24.825471+08:00",
+      "show_date": "2026-03-03",
+      "push_date": "2026-03-03",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-06-03": {
+      "dir_name": "2026-06-03",
+      "generated_at": "2026-10-19T14:55:32.595511+08:00",
+      "show_date": "2026-06-03",
+      "push_date": "2026-06-03",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-07-03": {
+      "dir_name": "2026-07-03",
+      "generated_at": "2026-10-19T14:55:35.494635+08:00",
+      "show_date": "2026-07-03",
+      "push_date": "2026-07-03",
+      "parts": [
+        "meta.json",
+        "summary.json",
+        "detail.json",
+        "trend.json"
+      ]
+    },
+    "2026-04-05": {
+      "dir_name": "2026-04-05",
+      "generated_at": "2026-10-19T16:31:25.321102+08:00",
+      "show_date": "2026-04-05",
+      "push_date": "2026-04-05",
       "parts": [
         "meta.json",
         "summary.json",

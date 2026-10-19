@@ -1294,6 +1294,20 @@ def _is_constant_sheet(name: Optional[str]) -> bool:
     return name.strip().lower().endswith("_constant_sheet")
 
 
+def _get_season_aliases() -> Dict[str, str]:
+    """动态获取当前项目的供暖期别名映射（联动 season_config.json）。"""
+    try:
+        from backend.services import heating_season_service
+        return heating_season_service.get_season_aliases(PROJECT_KEY)
+    except Exception:
+        return {
+            "本供暖期": "25-26",
+            "同供暖期": "24-25",
+            "25-26": "25-26",
+            "24-25": "24-25",
+        }
+
+
 HEATING_SEASON_ALIASES = {
     "本供暖期": "25-26",
     "同供暖期": "24-25",
@@ -1314,10 +1328,10 @@ def _normalize_constant_period_key(label: str) -> str:
         return ""
     simplified = _strip_period_wrappers(raw)
     if simplified:
-        simplified_key = HEATING_SEASON_ALIASES.get(simplified, simplified)
+        simplified_key = _get_season_aliases().get(simplified, simplified)
     else:
         simplified_key = ""
-    return HEATING_SEASON_ALIASES.get(raw, simplified_key or raw)
+    return _get_season_aliases().get(raw, simplified_key or raw)
 
 
 def _display_constant_period_label(label: str) -> str:
@@ -1412,6 +1426,13 @@ def _parse_constant_records(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
             period_key = _normalize_constant_period_key(period)
             if not period_key:
                 continue
+            try:
+                from backend.services import heating_season_service
+                _act_p = heating_season_service.get_season_config(PROJECT_KEY).get("active_period")
+                if _act_p and period_key != _act_p and value is None:
+                    continue
+            except Exception:
+                pass
 
             rec = {
                 "company": company_id,
@@ -2550,6 +2571,16 @@ def get_sheet_template(
         response_content["columns"] = list(columns_raw) if isinstance(columns_raw, list) else list(columns_raw)
     elif _is_constant_sheet(sheet_key):
         response_content["template_type"] = "constant"
+        has_center = isinstance(dict_bundle.get("center_dict"), dict) and len(dict_bundle.get("center_dict")) > 0
+        start_idx = 3 if has_center else 2
+        periods = [str(c).strip() if c is not None else "" for c in columns_raw[start_idx:]]
+        period_display = [_display_constant_period_label(label) for label in periods]
+        cols_dyn = list(columns_standard)
+        for idx, label in enumerate(period_display):
+            target_index = start_idx + idx
+            if target_index < len(cols_dyn):
+                cols_dyn[target_index] = label
+        response_content["columns"] = cols_dyn
     else:
         response_content["template_type"] = "standard"
 

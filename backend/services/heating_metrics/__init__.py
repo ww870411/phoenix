@@ -12,10 +12,12 @@ from .season_utils import (
     get_season_windows,
 )
 from .daily_engine import DailyDashboardEngine
+from .analysis_engine import HeatingAnalysisEngine
 
 __all__ = [
     "get_season_period",
     "get_peer_date",
     "get_season_windows",
     "DailyDashboardEngine",
+    "HeatingAnalysisEngine",
 ]

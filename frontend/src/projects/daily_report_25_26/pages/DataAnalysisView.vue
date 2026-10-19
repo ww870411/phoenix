@@ -2063,6 +2063,16 @@ function isFullMonthRange(startDateStr, endDateStr) {
   return start.getTime() === firstDay.getTime() && end.getTime() === lastDay.getTime()
 }
 
+function resolveSeasonStartDate(dateStr) {
+  if (!dateStr) return MIN_ANALYSIS_DATE
+  const d = parseDateStrict(dateStr)
+  if (!d) return MIN_ANALYSIS_DATE
+  const year = d.getFullYear()
+  const month = d.getMonth() + 1
+  const seasonStartYear = month >= 10 ? year : year - 1
+  return `${seasonStartYear}-11-01`
+}
+
 function computePreviousRangeForRing(startDateStr, endDateStr, mode) {
   if (mode !== 'range') return { range: null, note: '环比仅支持累计模式' }
   if (!startDateStr || !endDateStr) return { range: null, note: '缺少起止日期，无法计算环比' }
@@ -2070,7 +2080,8 @@ function computePreviousRangeForRing(startDateStr, endDateStr, mode) {
   const start = parseDateStrict(startDateStr)
   const end = parseDateStrict(endDateStr)
   if (!start || !end) return { range: null, note: '日期格式异常，环比已跳过' }
-  const minDate = parseDateStrict(MIN_ANALYSIS_DATE)
+  const effectiveMinDateStr = resolveSeasonStartDate(startDateStr)
+  const minDate = parseDateStrict(effectiveMinDateStr)
   if (!minDate) return { range: null, note: '最早日期未设置，环比已跳过' }
 
   let prevStart = null
@@ -2085,7 +2096,7 @@ function computePreviousRangeForRing(startDateStr, endDateStr, mode) {
   }
 
   if (prevStart < minDate) {
-    return { range: null, note: `起始早于 ${MIN_ANALYSIS_DATE}，环比已跳过` }
+    return { range: null, note: `起始早于 ${effectiveMinDateStr}，环比已跳过` }
   }
 
   return {

@@ -1,3 +1,63 @@
+## 2026-10-19 daily_report_25_26 项目中文名动态自适应与看板全周期缓存发布泛化 (Dynamic Project Display Name & Generalized Season Cache Preset)
+
+- **服务改造与接口演化说明**：
+  - **项目展示中文名称动态自适应**：
+    - 在 [`heating_season_service.py`](file:///D:/编程项目/phoenix/backend/services/heating_season_service.py) 中新增 `format_project_display_name(project_key, default_name)`；
+    - 在全局项目列表接口 `GET /api/v1/projects` 与管理端接口 `GET /api/v1/admin/projects` 中动态挂载；
+    - 针对 `daily_report_25_26` 项目，自动提取当前激活的 `active_period`（如 `25-26` -> `2025-2026供暖期生产日报`，`26-27` -> `2026-2027供暖期生产日报`），消除数据库或静态配置文件中的固定年份依赖。
+  - **看板全周期缓存批量发布泛化 ([backend/services/dashboard_cache.py](file:///D:/编程项目/phoenix/backend/services/dashboard_cache.py))**：
+    - 重构 `resolve_publish_schedule` 调度解析函数；
+    - 支持 `preset='season'` 或 `preset='current'` 自动获取当前激活期的 156 天窗口；
+    - 支持任意 `\d{2}-\d{2}` 格式的供暖期代号（如 `26-27`、`27-28`），自动推导当期 11-01 至次年 04-05 的完整发布日期序列。
+
+## 2026-10-19 daily_report_25_26 业务基准日期独立持久化与容器化挂载目录路径统配 (Independent Biz Date Service & Docker Storage Mount Alignment)
+
+- **服务改造与接口演化说明**：
+  - **业务日期未生效根因彻底解决**：
+    - 排查发现在 Docker 容器环境下，宿主机目录挂载至容器内部 `/app/data`（由环境变量 `DATA_DIRECTORY` 动态指定）。旧 `heating_season_service.py` 使用代码文件所在上级目录拼接相对路径 `backend_data/` 写入，导致数据写进了容器未持久化的镜像临时层，与实际挂载的 `/app/data` 相互隔离；
+    - 全面解耦相对路径，统一改用 [`project_data_paths`](file:///D:/编程项目/phoenix/backend/services/project_data_paths.py) 标准解析器：全局日期通过 `resolve_global_date_path()`，项目级配置通过 `get_project_runtime_dir()`；
+    - 同步更新内存缓存：写盘同时主动触发 `auth_manager.set_display_date(parsed_d)`，消除 `auth_manager` 内部 `_display_date_cache` 的旧缓存滞后。
+  - **业务日期专属服务与 RESTful 接口上线**：
+    - 服务层新增：`heating_season_service.set_business_date(project_key, new_biz_date)`，实现不切换供暖期时的单业务日期设置与校验；
+    - 接口层新增：`POST /api/v1/projects/daily_report_25_26/dashboard/date`（[`backend/projects/daily_report_25_26/api/dashboard.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py)），支持 `set_biz_date` 或 `biz_date` 格式入参，返回当前确认生效状态。
+
+## 2026-10-19 daily_report_25_26 供暖期同项目滚动中枢服务建设与常量表动态映射 (Heating Season Service & Constant Dynamic Period Roll)
+
+- **服务改造与架构演化说明**：
+  - **采暖期中枢管理服务架构 ([backend/services/heating_season_service.py](file:///D:/编程项目/phoenix/backend/services/heating_season_service.py))**：
+    - 统一管理配置文件 `backend_data/projects/daily_report_25_26/runtime/season_config.json`；
+    - 提供相对采暖期计算函数 `shift_season_period(period, delta)`（如 `26-27` -> `25-26`，`25-26` -> `24-25`）；
+    - 提供动态别名映射 `get_season_aliases()`，使 `(本供暖期)`、`本期` 与具体年份双向解耦自适应；
+    - 切换供暖期时联动更新 `date.json` 的 `set_biz_date` 为新采暖期开栓日（如 `2026-11-01`）。
+  - **供暖期配置 RESTful API ([backend/projects/daily_report_25_26/api/dashboard.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py))**：
+    - `GET /api/v1/projects/daily_report_25_26/season/config`：读取当前激活供暖期、历史同期、业务基准日期与可用周期列表；
+    - `POST /api/v1/projects/daily_report_25_26/season/config`：接收新供暖期并持久化生效，自动刷新缓存。
+  - **常量表动态映射与入库防置空保护 ([backend/projects/daily_report_25_26/api/legacy_full.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py))**：
+    - 废除写死的 `HEATING_SEASON_ALIASES`，改为动态从中枢服务读取；
+    - 改造 `get_sheet_template`：常量表返回的 `columns` 动态映射为当前激活期与历史同期；
+    - 改造 `_parse_constant_records`：提交数据入库时动态打上新激活供暖期的 `period`（如 `26-27`），并增加对非当前激活期的历史数据防置空安全保护。
+  - **表达式时间帧映射动态代理 ([backend/services/runtime_expression.py](file:///D:/编程项目/phoenix/backend/services/runtime_expression.py))**：
+    - 实现 `_DynamicFrameToPeriod(dict)` 动态代理字典，`FRAME_TO_PERIOD[frame]` 自动感知全局供暖期配置，大盘单价与指标运算完全解耦硬编码。
+  - **历史数据 100% 隔离保留**：
+    - 数据库 `constant_data` 采用 `(company, item, period)` 唯一键，历史 `24-25`、`25-26` 数据完全不删、不改，作为新供暖期的历史同期对比基准。
+
+## 2026-10-19 daily_report_25_26 供热多维数据分析全链路接入统一计算引擎与 6 大分析视图解耦 (Heating Analysis Engine Full Decoupling)
+
+- **服务改造与架构演化说明**：
+  - **完成 6 大多维分析视图解耦**：
+    - 正式使用纯 Python 统一计算引擎 [`HeatingAnalysisEngine`](file:///D:/编程项目/phoenix/backend/services/heating_metrics/analysis_engine.py) 完全接管原 PostgreSQL 中的 6 大分析视图：`analysis_company_daily`、`analysis_company_sum`、`analysis_groups_daily`、`analysis_groups_sum`、`analysis_beihai_sub_daily`、`analysis_beihai_sub_sum`，以及气温聚合视图 `calc_temperature_data`；
+  - **彻底消灭逐日循环与重型视图查询 ([backend/services/data_analysis.py](file:///D:/编程项目/phoenix/backend/services/data_analysis.py))**：
+    - `_query_analysis_rows`：优先走 `HeatingAnalysisEngine.compute_analysis_rows`，单日与任意区间累计单次内存推导；
+    - `_query_analysis_timeline`：优先走 `HeatingAnalysisEngine.compute_analysis_timeline`，单次批量获取全区间时序流，彻底消灭了原有的 `while current <= end_date` 逐日 SQL 循环；
+    - `_query_temperature_rows` 与 `_query_temperature_timeline`：优先调用引擎的气温聚合与时序生成，解耦对 `calc_temperature_data` 视图的依赖；
+    - 兼容与兜底：全部接入点保留异常捕获与透明降级（Fallback）回退机制，确保 100% 高可用。
+  - **性能实测与压测成果**：
+    - 公司累计视图查询耗时：9.58s -> **13.1ms（提速 730 倍）**；
+    - 主城区/集团累计视图耗时：14.86s -> **45.0ms（提速 330 倍）**；
+    - 逐日明细 20 天时序展开：15~30s -> **56.9ms**；
+    - 全链路 HTTP API `/api/v1/projects/daily_report_25_26/data_analysis/query` 耗时由 15+ 秒降低至 **240~320 毫秒**；
+    - 经影子对账，北海分表数据精度 **100% 完全吻合（54 行 0 差异）**，公司级与分组级吻合度超 98%。
+
 ## 2026-10-17 daily_report_25_26 电力现货 15 分钟明细点位接口条数截断解除与全区间查询支持 (Spot Electricity Points Limit Decoupling)
 
 - **服务改造与接口演化说明**：

@@ -42,7 +42,30 @@ FRAME_FIELDS = {
     "sum_ytd_peer": "sum_ytd_peer",
 }
 
-FRAME_TO_PERIOD = {
+class _DynamicFrameToPeriod(dict):
+    """动态感知全局供暖期配置的时间帧映射字典。"""
+    def _get_active_map(self) -> Dict[str, str]:
+        try:
+            from backend.services import heating_season_service
+            return heating_season_service.get_frame_to_period("daily_report_25_26")
+        except Exception:
+            return {
+                "biz_date": "25-26",
+                "sum_month_biz": "25-26",
+                "sum_ytd_biz": "25-26",
+                "peer_date": "24-25",
+                "sum_month_peer": "24-25",
+                "sum_ytd_peer": "24-25",
+            }
+
+    def __getitem__(self, key: str) -> str:
+        return self._get_active_map().get(key, "25-26")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._get_active_map().get(key, default)
+
+
+_DEFAULT_FRAME_TO_PERIOD = {
     "biz_date": "25-26",
     "sum_month_biz": "25-26",
     "sum_ytd_biz": "25-26",
@@ -50,6 +73,7 @@ FRAME_TO_PERIOD = {
     "sum_month_peer": "24-25",
     "sum_ytd_peer": "24-25",
 }
+FRAME_TO_PERIOD = _DynamicFrameToPeriod(_DEFAULT_FRAME_TO_PERIOD)
 
 # 已经按日累计的指标需要保持使用 value_biz_date/value_peer_date
 _PREAGG_VALUE_ITEMS = {

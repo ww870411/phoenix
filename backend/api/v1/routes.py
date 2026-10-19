@@ -199,12 +199,17 @@ def list_projects(session: AuthSession = Depends(get_current_session)):
         if not _is_project_enabled_for_group(cfg, session.group):
             continue
         # 允许多种命名回落
-        project_name = (
+        raw_name = (
             cfg.get("project_name")
             or cfg.get("项目名称")
             or cfg.get("名称")
             or project_id
         )
+        try:
+            from backend.services.heating_season_service import format_project_display_name
+            project_name = format_project_display_name(project_id, str(raw_name))
+        except Exception:
+            project_name = raw_name
         if session.has_project_access(project_id):
             projects.append({"project_id": project_id, "project_name": project_name})
 

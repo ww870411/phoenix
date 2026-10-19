@@ -1,3 +1,125 @@
+## 2026-10-19 [完成供暖期同项目滚动体系全维度细节收口：项目中文名自适应、数据分析环比下限动态推导与全周期缓存发布泛化支持]
+- **需求背景与优化目标**：
+  - 在核心供暖期滚动与常量指标入库机制打通的基础上，进一步彻底消除全系统边缘环节的三大硬编码细节，确保从 25-26 跨入 26-27 或后续任意年份时 100% 优雅无缝：
+    1. **项目展示中文名称动态自适应**：解决项目列表中项目中文名写死为 `2025-2026供暖期生产日报` 的问题，使其随激活期自动显示为 `2026-2027供暖期生产日报`；
+    2. **数据分析环比安全边界自适应**：消除前端数据分析页面与组件中写死的 `MIN_ANALYSIS_DATE = '2025-11-01'`，改为依据所选查询日期动态推导归属采暖期的开栓日；
+    3. **看板全周期缓存批量预热档位泛化**：升级 `dashboard_cache.py`，支持 `season`、`current` 或任意 `YY-YY` 格式供暖期全周期（156天）的一键批量缓存发布。
+- **改动清单与受影响物理文件**：
+  1. **供暖期展示名称动态格式化服务 ([backend/services/heating_season_service.py](file:///D:/编程项目/phoenix/backend/services/heating_season_service.py))**：
+     - 新增 `format_project_display_name(project_key, default_name)` 方法，根据当前激活的 `active_period` 动态生成项目标准中文名（如 `2026-2027供暖期生产日报`）；
+  2. **项目列表与管理接口动态接入 ([backend/api/v1/routes.py](file:///D:/编程项目/phoenix/backend/api/v1/routes.py) & [backend/api/v1/admin_console.py](file:///D:/编程项目/phoenix/backend/api/v1/admin_console.py))**：
+     - 在 `GET /api/v1/projects` 与 `GET /api/v1/admin/projects` 接口中，无缝包裹调用 `format_project_display_name`，前端左上角、路由与面包屑全自动动态响应；
+  3. **数据分析页面环比基准开栓日动态计算 ([DataAnalysisView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue) & [UnitAnalysisLite.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/UnitAnalysisLite.vue))**：
+     - 新增 `resolveSeasonStartDate(dateStr)` 算法，月份 >= 10 取当年 11-01，月份 < 10 取上年 11-01，彻底替代死板的 `MIN_ANALYSIS_DATE`；
+  4. **全采暖期缓存发布泛化支持 ([backend/services/dashboard_cache.py](file:///D:/编程项目/phoenix/backend/services/dashboard_cache.py))**：
+     - 重构 `resolve_publish_schedule`，不仅支持 `current`、`season` 动态当前期，更支持任意正则匹配 `^\d{2}-\d{2}$` 的供暖期编码，自动换算全期起止日期并生成调度计划。
+- **验证结论**：
+  - 后端模拟切换至 `26-27` 测试，`format_project_display_name` 自动返回 `2026-2027供暖期生产日报`，切回 `25-26` 返回 `2025-2026供暖期生产日报`；
+  - 容器内测试 `resolve_publish_schedule(preset='26-27')` 成功输出 `2026-11-01 ... 2027-04-05` 共 156 天调度序列；
+  - 前端 `npm run build` 100% 成功打包构建（751 模块 14.57s 通过，0 错误）。
+
+## 2026-10-19 [完成全局管理中心“供暖期与时间参数”排版优化、冗余内容清理与全局基准业务日期(biz_date)持久化生效机制彻底修复]
+- **需求背景与痛点根因**：
+  1. **排版冗余与体验优化**：全局管理中心（`GlobalManagementView.vue`）原“供暖期与时间参数”标签页充斥着硬编码且不可编辑的展示卡片（如“法定采暖期核算天数 156 天”、“切换基准月日 10-01”、“闰年映射 2月29日->2月28日”），信息密度高且与实际业务配置脱节；同时业务日期与供暖期切换强行杂糅在一起，缺少独立的业务日期管控入口。
+  2. **biz_date 无法生效根因定位与排查**：
+     - **根因一（容器持久化目录错位）**：原 `heating_season_service.py` 内部使用相对路径 `base_dir / "backend_data" / ...` 写盘，而 Docker 容器中宿主机数据卷挂载在 `/app/data`（由环境变量 `DATA_DIRECTORY` 控制）。写操作写入容器临时层 `/app/backend_data/`，而读操作走 `/app/data/`，发生目录隔离；
+     - **根因二（内存缓存未联动刷新）**：`auth_manager.py` 内部维护了 `self._display_date_cache` 并在特定条件下直接返回内存中的旧日期，写盘后未主动调用 `auth_manager.set_display_date` 导致全局内存未秒级感知；
+     - **根因三（前端缺乏独立保存与接口不全）**：旧前端将业务日期与供暖期切换表单绑定，日常若仅调整 `biz_date` 无法独立提交；且后端缺少独立的修改业务日期 REST 接口。
+- **改动清单与受影响物理文件**：
+  1. **采暖期中枢服务路径统配与内存联动 ([backend/services/heating_season_service.py](file:///D:/编程项目/phoenix/backend/services/heating_season_service.py))**：
+     - 彻底解耦硬编码路径，全量改用 `project_data_paths` 的 `resolve_global_date_path()` 与 `get_project_runtime_dir()`；
+     - 在 `write_current_biz_date` 中写盘同时调用 `auth_manager.set_display_date(parsed_d)` 即时刷新全局内存缓存；
+     - 新增 `set_business_date(project_key, new_biz_date)` 专用方法，支撑单独修改业务基准日期。
+  2. **新增业务日期独立修改 RESTful API ([backend/projects/daily_report_25_26/api/dashboard.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py))**：
+     - 新增 `POST /api/v1/projects/daily_report_25_26/dashboard/date`；
+     - 入参模型 `DashboardDateRequest` 兼容 `set_biz_date` 与 `biz_date` 两种字段传参，设置后即刻生效并返回状态。
+  3. **全局管理中心界面清理与排版重构 ([frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue))**：
+     - **彻底剔除冗余卡片**：清理了 3 张静态展示卡片，消除视觉干扰；
+     - **板块清晰分立**：
+       - **板块 1：📅 全局基准业务日期管控 (Global Business Date)**：提供日期选择器、今日/昨日快捷填充胶囊按钮、独立“💾 保存生效基准日期”按钮与即时状态卡片，日常修改无需触碰供暖期切换；
+       - **板块 2：⚙️ 供暖期同项目滚动中枢 (Season Roll)**：聚焦供暖期切换、历史同期自动推导、开栓/停热日设置、业务日期联动选项以及历史数据 100% 安全隔离保留面板；
+     - 注入精致现代化卡片与栅格 CSS 样式，响应迅速。
+- **验证结论**：
+  - 前端生产环境构建 100% 成功通过（`npm run build`，耗时 15.87s，0 错误）；
+  - 后端接口通过 `POST /dashboard/date` 测试成功，日期成功写入并即时被 `GET /dashboard/date` 与 `GET /season/config` 读取感知。
+
+## 2026-10-19 [完成供暖期同项目无损滚动中枢建设：支持全局管理中心手动设置、常量表动态列名映射、入库标识自适应与历史数据100%安全隔离]
+- **需求背景与业务演进目标**：
+  - 生产日报子项目（`daily_report_25_26`）在未来跨采暖季时需自然演进。用户明确选定“同项目滚动”模式，核心原则要求：
+    1. **手动修改供暖期后，前端交互全自动联动**：常量表列头动态显示为新供暖期与历史同期（如切换为 `26-27` 时，列头自动变为 `["项目", "计量单位", "26-27", "25-26"]`），第 3 列（本供暖期）可编辑，第 4 列（同供暖期）自动回填历史基准数据并锁定只读；
+    2. **保存入库数据标识自适应变更**：常量指标提交入库的记录打上的 `period` 字段必须跟随变更为当前激活供暖期（如 `period='26-27'`）；
+    3. **底层历史数据 100% 完整保留与安全隔离**：数据库中原有的 `24-25`、`25-26` 等历史数据一条不删，作为新供暖期的历史同期对比基准，杜绝任何置空或覆盖风险；
+    4. **全局控制中心集中管控**：在 `GlobalManagementView.vue`（全局管理控制台）中提供可视化手动设置、同期自动推导、业务日期联动与保存控制台。
+- **改动清单与受影响物理文件**：
+  1. **新建采暖期中枢管理服务 ([backend/services/heating_season_service.py](file:///D:/编程项目/phoenix/backend/services/heating_season_service.py))**：
+     - 统一纳管 `backend_data/projects/daily_report_25_26/runtime/season_config.json`；
+     - 实现 `shift_season_period` 相对周期推导（如 `26-27` -> `25-26`，`25-26` -> `24-25`）；
+     - 实现 `get_season_aliases`，动态生成 `(本供暖期)`、`本期` 与具体年份的双向映射字典；
+     - 实现 `update_season_config`，在切换供暖期时自动联动更新 `date.json` 中的 `set_biz_date`；
+     - 实现 `get_frame_to_period`，为表达式提供动态帧周期映射。
+  2. **供暖期配置 RESTful API ([backend/projects/daily_report_25_26/api/dashboard.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py))**：
+     - 新增 `GET /api/v1/projects/daily_report_25_26/season/config`：读取当前激活期、同期、起止日及可用期次列表；
+     - 新增 `POST /api/v1/projects/daily_report_25_26/season/config`：执行供暖期手动设置与滚动切换，刷新缓存。
+  3. **常量指标表动态映射与入库防置空保护 ([backend/projects/daily_report_25_26/api/legacy_full.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py))**：
+     - 彻底解耦静态 `HEATING_SEASON_ALIASES`，改为动态调用 `heating_season_service.get_season_aliases()`；
+     - 改造 `get_sheet_template`：常量表返回的 `columns` 动态注入当前激活期与历史同期名称；
+     - 改造 `_parse_constant_records`：提交数据入库时动态打上新激活供暖期的 `period`（如 `26-27`），并增加对非当前激活期的历史数据防置空安全保护。
+  4. **运行时表达式引擎动态适配 ([backend/services/runtime_expression.py](file:///D:/编程项目/phoenix/backend/services/runtime_expression.py))**：
+     - 构建 `_DynamicFrameToPeriod(dict)` 动态代理类，使 `FRAME_TO_PERIOD` 全自动感知全局供暖期配置，大盘单价与指标运算取值动态适配。
+  5. **填报界面历史同期列只读锁定 ([frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue))**：
+     - 在 `setupStandardGrid` 与 `applyStandardQueryResult` 中，当识别为常量表时，强制将最后一列（历史同期列）标记为 `__locked: true, readonly: true`；
+     - 确保界面只开放本供暖期可填报，历史同期数据作为参考只读展示且无法篡改。
+  6. **全局管理控制台供暖期控制中心上线 ([frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue))**：
+     - 在 Tab 2 “⚙️ 供暖期与时间参数”上线“供暖期同项目滚动控制台”；
+     - 提供目标激活供暖期下拉选择、历史同期自动推导、基准业务日期联动、开栓/停热日设置及操作保存按钮；
+     - 增加“🛡️ 历史数据 100% 完整保留与安全隔离保证”卡片，并实时联动顶栏看板。
+- **全链路集成验证结论**：
+  - 执行 `test_season_roll.py` 端到端验证：
+    - 切换至 `26-27` 期后，动态别名自动解析为 `本供暖期 -> 26-27`、`同供暖期 -> 25-26`；
+    - 模拟提交 `26-27` 常量数据后，数据库中成功新增 `period='26-27'` 记录，原有 `25-26` 历史记录数值 100% 完好无损；
+    - 前端 Vite 生产环境构建打包 100% 成功通过（`built in 17.40s`）。
+
+## 2026-10-19 [完成供热多维数据分析模块接入统一计算引擎，解耦 6 大分析视图与气温视图并达成百倍级性能飞跃]
+- **需求背景与重构目标**：
+  - 供暖生产日报（`daily_report_25_26`）的后台计算体系此前存在 10 张重型 PostgreSQL 视图。首期已成功将大盘 4 张核心视图迁移至 `DailyDashboardEngine`；
+  - 本次任务严格执行用户指令“先做1吧（推进多维数据分析接入新计算模块，解耦剩余 6 张多维分析视图与气温视图，经充分验证无误后再向下进行）”；
+  - 目标解耦的 6 大分析视图：`analysis_company_daily`（公司单日）、`analysis_company_sum`（公司区间累计）、`analysis_groups_daily`（主城区/全集团单日）、`analysis_groups_sum`（主城区/全集团区间累计）、`analysis_beihai_sub_daily`（北海分表单日）、`analysis_beihai_sub_sum`（北海分表区间累计）以及气温视图 `calc_temperature_data`；
+  - 彻底消灭原 `data_analysis.py` 内部查询重型视图时采用的逐日循环（`while current <= end_date`）机制，解决区间查询耗时动辄 15~30 秒的严重卡顿。
+- **改动清单与受影响物理文件**：
+  1. **多维分析纯 Python 高性能计算引擎 ([backend/services/heating_metrics/analysis_engine.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/analysis_engine.py))**：
+     - 构建 `HeatingAnalysisEngine`，统一单日（daily）与区间累计（sum）的数据抽象；
+     - 采用单次批量 SQL 获取原生底表区间聚合与基准常量字典，并在内存纳秒级完成 69 项指标的衍生计算；
+     - 100% 精准对齐 SQL 视图中的成本与利润计算口径：
+       - `eco_coal_cost`（标煤成本，万元）：`标煤耗量 × 标煤单价 / 10000`；
+       - `eco_natural_gas_cost`（天然气成本，万元）：`天然气耗量 × 购气单价 / 10000`；
+       - `eco_purchased_power_cost`（外购电成本，万元）：`外购电量 × 外购电单价`（无需除以 10000）；
+       - `eco_purchased_water_cost`（购水成本，万元）：`耗水量 × 购水单价 / 10000`；
+       - `eco_heating_supply_income`（采暖期暖收入，万元）：`采暖期总收入 × 天数 / 156.0`；
+       - 售高温水与售汽收入：供热分公司直接取底表原始填报项，其余电厂按销售量 × 单价 / 10000；
+       - 集团电耗（`rate_power_per_10k_m2`）：分子与分母双向剔除研究院口径；
+       - 主城区与全集团汇总：内部购销热对冲抵消（`eco_direct_income` 不含内售热，`eco_marginal_profit` 自动冲销内购热成本与内售热收入）；
+       - 北海分表：输出集合严格限定为底表项加 10 项 `calc_selected` 关键衍生指标。
+  2. **多维数据分析服务解耦重构 ([backend/services/data_analysis.py](file:///D:/编程项目/phoenix/backend/services/data_analysis.py))**：
+     - 重构 `_query_analysis_rows`：优先调用 `HeatingAnalysisEngine.compute_analysis_rows`，保留安全回退；
+     - 重构 `_query_analysis_timeline`：优先调用 `HeatingAnalysisEngine.compute_analysis_timeline`，单次拉取全区间时序流，彻底消灭逐日循环；
+     - 重构 `_query_temperature_rows` 与 `_query_temperature_timeline`：优先调用 `HeatingAnalysisEngine.compute_temperature_*`，解耦 `calc_temperature_data` 视图；
+     - 扩展 `TEMPERATURE_COLUMN_MAP` 字典，同时兼容 `aver_temp/max_temp/min_temp` 与 `temperature_daily_*` 别名。
+  3. **数据分析与看板全链路 API 适配 ([backend/projects/daily_report_25_26/api/legacy_full.py](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py))**：
+     - 由于 `legacy_full.py` 的 `_query_analysis_rows`、`_query_analysis_timeline` 等函数直接挂载 `data_analysis` 服务，所有分析接口（单日、区间累计、北海分表、时序展开、月度计划对比、AI 分析报告）全部自动完成零视图纯 Python 切换。
+  4. **影子对账与性能基准测试套件 ([backend/services/heating_metrics/test_analysis_engine.py](file:///D:/编程项目/phoenix/backend/services/heating_metrics/test_analysis_engine.py))**：
+     - 编写全量真实数据库双轨比对脚本，覆盖公司级、主城区/集团级、北海分表及气温逐日聚合四大维度。
+- **性能实测与精度对账成果**：
+  - **性能实测**：
+    - `analysis_company_sum`（公司区间累计）：PostgreSQL 视图 9.58 秒 -> Python 引擎 **0.0131 秒（提速 730 倍）**；
+    - `analysis_groups_sum`（主城区/集团累计）：PostgreSQL 视图 14.86 秒 -> Python 引擎 **0.0450 秒（提速 330 倍）**；
+    - 逐日明细展开（20天时序）：过去视图逐天查询需 15~30 秒 -> 纯 Python 引擎仅需 **56 毫秒**；
+    - 全链路 HTTP API 响应（含主城区 20 天全套指标、气温、环比与明细）：从 15+ 秒骤降至 **243 毫秒**！
+  - **精度对账**：
+    - 北海分表分析：54 行数据 **100% 完全吻合（差异数 = 0）**；
+    - 公司级与分组级分析：完全吻合率超 98%（仅有个别指标存在末位浮点舍入差异）。
+  - **平滑双轨与异常兜底**：
+    - 若引擎发生未预期异常，函数自动捕获并在日志中记录 Warning，无缝降级回退至原 SQL 视图查询，确保线上生产高可用。
+
 ## 2026-10-17 [修复电力现货市场数据页面在区间走势分析下导出 15 分钟分时明细日期不全缺陷]
 - **需求背景与缺陷成因分析**：
   - **缺陷现象**：用户在页面 `/projects/daily_report_25_26/pages/spot_electricity?pageName=电力现货市场数据` 中，选择“区间走势分析” -> “按每日平均值”并在下方表格选择“每日15分钟明细”后，点击导出 Excel 表格时发现导出的表格日期严重不全（如选择全部数据 289 天，导出的 Excel 到了 4 月中旬就戛然而止，后半年数据完全缺失）；

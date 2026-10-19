@@ -502,20 +502,46 @@ def resolve_publish_schedule(
     """
     解析缓存发布档位。
     - 默认按最近 N 天发布
-    - `25-26` 表示 2025-11-01 至 2026-04-05 的完整供暖期
+    - 支持指定供暖期全周期发布（如 '25-26'、'26-27'、'season' 或 'current'）
     """
+    import re
+    from backend.services import heating_season_service
+
     normalized_preset = str(preset or "").strip()
-    if normalized_preset == "25-26":
-        start_date = date(2025, 11, 1)
-        end_date = date(2026, 4, 5)
-        total_days = (end_date - start_date).days + 1
-        schedule = [
-            (start_date + timedelta(days=offset)).isoformat()
-            for offset in range(total_days)
-        ]
-        return schedule, "25-26"
     if normalized_preset:
+        season_cfg = heating_season_service.get_season_config(project_key)
+        active_period = season_cfg.get("active_period", "25-26")
+
+        target_period: Optional[str] = None
+        start_date: Optional[date] = None
+        end_date: Optional[date] = None
+
+        if normalized_preset.lower() in {"season", "current", "active"}:
+            target_period = active_period
+            start_date = date.fromisoformat(season_cfg.get("start_date", "2025-11-01"))
+            end_date = date.fromisoformat(season_cfg.get("end_date", "2026-04-05"))
+        elif re.match(r"^\d{2}-\d{2}$", normalized_preset):
+            target_period = normalized_preset
+            if target_period == active_period:
+                start_date = date.fromisoformat(season_cfg.get("start_date", "2025-11-01"))
+                end_date = date.fromisoformat(season_cfg.get("end_date", "2026-04-05"))
+            else:
+                parts = target_period.split("-")
+                y1 = int(parts[0])
+                y2 = int(parts[1])
+                start_date = date(2000 + y1, 11, 1)
+                end_date = date(2000 + y2, 4, 5)
+
+        if start_date and end_date and target_period:
+            total_days = (end_date - start_date).days + 1
+            schedule = [
+                (start_date + timedelta(days=offset)).isoformat()
+                for offset in range(total_days)
+            ]
+            return schedule, target_period
+
         raise ValueError(f"不支持的缓存发布档位：{normalized_preset}")
+
     return default_publish_dates(window=window, project_key=project_key), f"{window}天"
 
 

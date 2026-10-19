@@ -450,7 +450,140 @@
           <!-- Tab 2: ⚙️ 供暖期与时间参数 (预留扩展模块)  -->
           <!-- ========================================== -->
           <div v-if="activeTab === 'season_params'" class="pane-content-wrapper">
-            <section class="card elevated section-card">
+            <!-- 供暖期滚动与控制中枢卡片 -->
+            <!-- ============================================== -->
+            <!-- 板块 1：📅 系统基准业务日期管控 (Base Business Date) -->
+            <!-- ============================================== -->
+            <section class="card elevated section-card biz-date-controller-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">📅 全局基准业务日期管控 (Global Business Date)</div>
+                  <p class="sub block-sub">
+                    设定系统默认的业务基准日期（<code>set_biz_date</code>）。此日期决定生产大盘首屏、日报填报默认日历及各模块的锚点基准。
+                  </p>
+                </div>
+                <div class="section-actions">
+                  <button
+                    class="btn primary shadow-accent execute-sandbox-btn"
+                    type="button"
+                    :disabled="savingBizDate"
+                    @click="saveBizDate"
+                  >
+                    {{ savingBizDate ? '💾 正在保存…' : '💾 保存业务日期生效' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 业务日期反馈提示 -->
+              <div v-if="bizDateTip" :class="['season-tip-banner', bizDateTip.type]">
+                {{ bizDateTip.text }}
+              </div>
+
+              <div class="biz-date-form-row">
+                <label class="field date-picker-field">
+                  <span class="field-title">📌 选择目标基准业务日期</span>
+                  <div class="date-picker-wrap">
+                    <input v-model="standaloneBizDate" type="date" class="input highlight-date-input" />
+                    <button class="btn ghost compact-btn" type="button" @click="setBizDateQuick('today')">今日</button>
+                    <button class="btn ghost compact-btn" type="button" @click="setBizDateQuick('yesterday')">昨日</button>
+                  </div>
+                  <small class="field-help">修改保存后，大盘、填报与分析页面将立即对齐该日期（当前库内最新数据日通常为昨日）。</small>
+                </label>
+
+                <div class="date-status-card">
+                  <span class="status-label">当前生效日期</span>
+                  <strong class="status-val">{{ currentBizDate || '未设置' }}</strong>
+                  <span class="status-sub">文件：backend_data/.../date.json</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- 板块 2：⚙️ 供暖期同项目无损滚动中枢 (Season Roll) -->
+            <!-- ============================================== -->
+            <section class="card elevated section-card season-controller-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">⚙️ 供暖期同项目滚动控制台</div>
+                  <p class="sub block-sub">
+                    手动设置或滚动当前供暖期。系统将自动联动：常量表动态列头、历史同期只读参考、入库 period 编码及基准业务日期。
+                  </p>
+                </div>
+                <div class="section-actions">
+                  <button
+                    class="btn primary shadow-accent execute-sandbox-btn"
+                    type="button"
+                    :disabled="savingSeason"
+                    @click="saveSeasonConfig"
+                  >
+                    {{ savingSeason ? '💾 正在保存生效…' : '💾 保存并切换供暖期' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 切换反馈提示 -->
+              <div v-if="seasonTip" :class="['season-tip-banner', seasonTip.type]">
+                {{ seasonTip.text }}
+              </div>
+
+              <!-- 控制表单栅格 -->
+              <div class="season-control-form-grid">
+                <label class="field">
+                  <span class="field-title">🎯 目标激活供暖期 (active_period)</span>
+                  <select v-model="selectedPeriod" class="input season-select" @change="onPeriodSelectChange">
+                    <option v-for="s in seasonConfig.available_seasons || ['24-25', '25-26', '26-27', '27-28', '28-29']" :key="s" :value="s">
+                      {{ s }} 供暖期 {{ s === currentSeasonCode ? '（当前运行）' : '' }}
+                    </option>
+                  </select>
+                  <small class="field-help">选择新供暖期后，系统将自动推导历史同期并调整各页面列名与入库标签。</small>
+                </label>
+
+                <label class="field">
+                  <span class="field-title">🔄 自动推导历史同期 (peer_period)</span>
+                  <input type="text" class="input readonly-input" :value="seasonConfig.peer_period || '24-25'" disabled />
+                  <small class="field-help">由中枢引擎自动向前推算一年，作为新供暖期的历史同期对比基准。</small>
+                </label>
+
+                <label class="field">
+                  <span class="field-title">📅 业务日期自适应联动</span>
+                  <div class="checkbox-align-box">
+                    <input v-model="autoAlignBizDate" type="checkbox" id="auto-align-date-check" class="align-checkbox" />
+                    <label for="auto-align-date-check" class="align-checkbox-label">自动将基准业务日期对齐至新开栓首日 ({{ formStartDate }})</label>
+                  </div>
+                  <small class="field-help">开启后，切换供暖期将全自动将全局业务基准日期设为上方开栓日。</small>
+                </label>
+
+                <label class="field">
+                  <span class="field-title">❄️ 供暖期开栓起始日 (start_date)</span>
+                  <input v-model="formStartDate" type="date" class="input" />
+                  <small class="field-help">供暖季开栓第一天，标准期至今(YTD)累计从此日开始计算。</small>
+                </label>
+
+                <label class="field">
+                  <span class="field-title">🌸 供暖期停热结束日 (end_date)</span>
+                  <input v-model="formEndDate" type="date" class="input" />
+                  <small class="field-help">供暖季停热法定结束日。</small>
+                </label>
+
+                <label class="field full-width">
+                  <span class="field-title">📝 供暖期切换说明 / 备注</span>
+                  <input v-model="formDescription" type="text" class="input" placeholder="输入切换原因或备忘说明…" />
+                </label>
+              </div>
+
+              <!-- 历史数据安全保障说明看板 -->
+              <div class="season-safety-notice">
+                <div class="safety-title">🛡️ 历史数据 100% 完整保留与安全隔离保证</div>
+                <ul class="safety-list">
+                  <li><strong>历史记录不删除：</strong> 数据库中已有的 <code>24-25</code>、<code>25-26</code> 等所有历史周期的常量指标和日报数据一条不删，全量保留。</li>
+                  <li><strong>动态列头自动对齐：</strong> 打开常量指标页面时，列头自动变为 <code>[{{ selectedPeriod }}, {{ seasonConfig.peer_period }}]</code>，同期列自动只读作为基准参考。</li>
+                  <li><strong>新录入标识跟随变更：</strong> 保存常量或填报数据时，数据库记录中的 <code>period</code> 字段将自动打上最新的 <code>{{ selectedPeriod }}</code> 标识，完美隔离。</li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- 规则说明卡片 -->
+            <div v-if="false">
               <div class="card-header-row">
                 <div>
                   <div class="card-header">⚙️ 供暖期与时间窗口参数管理</div>
@@ -479,7 +612,7 @@
                   <small class="field-help">针对闰年 2 月 29 日无损向平年对齐，杜绝日期越界异常。</small>
                 </label>
               </div>
-            </section>
+            </div>
           </div>
 
           <!-- ========================================== -->
@@ -582,6 +715,26 @@ const errorMessage = ref('')
 const globalTip = ref(null)
 const currentBizDate = ref('')
 const currentSeasonCode = ref('25-26')
+const seasonConfig = ref({
+  active_period: '25-26',
+  peer_period: '24-25',
+  start_date: '2025-11-01',
+  end_date: '2026-04-05',
+  stat_days: 156,
+  switch_date_rule: '10-01',
+  available_seasons: ['24-25', '25-26', '26-27', '27-28', '28-29'],
+})
+const selectedPeriod = ref('25-26')
+const formBizDate = ref('')
+const formStartDate = ref('')
+const formEndDate = ref('')
+const formDescription = ref('')
+const savingSeason = ref(false)
+const seasonTip = ref(null)
+const standaloneBizDate = ref('')
+const savingBizDate = ref(false)
+const bizDateTip = ref(null)
+const autoAlignBizDate = ref(true)
 
 // 算法元数据
 const categories = ref([])
@@ -614,12 +767,85 @@ const unitList = [
 ]
 
 onMounted(async () => {
+  await loadSeasonConfig()
   await loadBizDate()
   await loadCatalog()
 })
 
 function goProjectPages() {
   router.push(`/projects/${projectKey}/pages`)
+}
+
+async function loadSeasonConfig() {
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/season/config`)
+    if (res.ok) {
+      const data = await res.json()
+      if (data.ok) {
+        seasonConfig.value = data
+        currentSeasonCode.value = data.active_period || '25-26'
+        selectedPeriod.value = data.active_period || '25-26'
+        formBizDate.value = data.current_biz_date || currentBizDate.value || ''
+        formStartDate.value = data.start_date || '2025-11-01'
+        formEndDate.value = data.end_date || '2026-04-05'
+      }
+    }
+  } catch (err) {
+    console.error('加载供暖期配置失败', err)
+  }
+}
+
+function onPeriodSelectChange() {
+  const p = selectedPeriod.value
+  const parts = p.split('-')
+  if (parts.length === 2) {
+    const y1 = parseInt(parts[0], 10)
+    const y2 = parseInt(parts[1], 10)
+    if (!isNaN(y1) && !isNaN(y2)) {
+      const py1 = (y1 - 1 + 100) % 100
+      const py2 = (y2 - 1 + 100) % 100
+      seasonConfig.value.peer_period = `${String(py1).padStart(2, '0')}-${String(py2).padStart(2, '0')}`
+      formStartDate.value = `20${String(y1).padStart(2, '0')}-11-01`
+      formEndDate.value = `20${String(y2).padStart(2, '0')}-04-05`
+      formBizDate.value = formStartDate.value
+    }
+  }
+}
+
+async function saveSeasonConfig() {
+  savingSeason.value = true
+  seasonTip.value = null
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/season/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        active_period: selectedPeriod.value,
+        biz_date: autoAlignBizDate.value ? formStartDate.value : (standaloneBizDate.value || currentBizDate.value),
+        start_date: formStartDate.value,
+        end_date: formEndDate.value,
+        description: formDescription.value || `切换供暖期至 ${selectedPeriod.value}`,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+    seasonTip.value = {
+      type: 'success',
+      text: `✅ 供暖期已成功滚动切换至【${selectedPeriod.value}】（同期自动对齐为【${data.peer_period}】）！基准业务日期已对齐至 ${data.current_biz_date}。系统内各填报表、常量指标表与多维分析已全自动联动！`,
+    }
+    currentSeasonCode.value = data.active_period
+    currentBizDate.value = data.current_biz_date
+    sandboxDate.value = data.current_biz_date
+    standaloneBizDate.value = data.current_biz_date
+    await loadSeasonConfig()
+  } catch (err) {
+    seasonTip.value = {
+      type: 'error',
+      text: `❌ 保存供暖期配置失败: ${err.message}`,
+    }
+  } finally {
+    savingSeason.value = false
+  }
 }
 
 async function loadBizDate() {
@@ -630,10 +856,58 @@ async function loadBizDate() {
       if (data.set_biz_date) {
         currentBizDate.value = data.set_biz_date
         sandboxDate.value = data.set_biz_date
+        standaloneBizDate.value = data.set_biz_date
       }
     }
   } catch (err) {
     console.error('加载基准日期失败', err)
+  }
+}
+
+function setBizDateQuick(type) {
+  const d = new Date()
+  if (type === 'today') {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    standaloneBizDate.value = `${y}-${m}-${day}`
+  } else if (type === 'yesterday') {
+    d.setDate(d.getDate() - 1)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    standaloneBizDate.value = `${y}-${m}-${day}`
+  }
+}
+
+async function saveBizDate() {
+  if (!standaloneBizDate.value) {
+    bizDateTip.value = { type: 'error', text: '请先选择有效的业务日期' }
+    return
+  }
+  savingBizDate.value = true
+  bizDateTip.value = null
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/dashboard/date`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ set_biz_date: standaloneBizDate.value }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+    currentBizDate.value = data.set_biz_date
+    sandboxDate.value = data.set_biz_date
+    bizDateTip.value = {
+      type: 'success',
+      text: `✅ 基准业务日期已成功设置为【${data.set_biz_date}】并即时生效！生产大盘、数据填报日历与分析模块已完成同步对齐！`,
+    }
+  } catch (err) {
+    bizDateTip.value = {
+      type: 'error',
+      text: `❌ 保存业务日期失败: ${err.message}`,
+    }
+  } finally {
+    savingBizDate.value = false
   }
 }
 
@@ -656,6 +930,7 @@ async function loadCatalog() {
 }
 
 async function refreshAll() {
+  await loadSeasonConfig()
   await loadBizDate()
   await loadCatalog()
   if (sandboxResult.value) {
@@ -1571,5 +1846,170 @@ async function executeSandbox() {
   border-radius: 8px;
   max-height: 480px;
   overflow: auto;
+}
+
+/* 基准业务日期控制卡片专属样式 */
+.biz-date-controller-card {
+  border-left: 4px solid #10b981;
+  margin-bottom: 20px;
+}
+
+.biz-date-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.date-picker-field {
+  flex: 1 1 360px;
+}
+
+.date-picker-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.highlight-date-input {
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f766e;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.date-status-card {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+}
+
+.status-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.status-val {
+  font-size: 18px;
+  color: #047857;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.status-sub {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.checkbox-align-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 2px;
+}
+
+.align-checkbox {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.align-checkbox-label {
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  margin: 0;
+  user-select: none;
+}
+
+/* 供暖期控制台专属样式 */
+.season-controller-card {
+  border-left: 4px solid #3b82f6;
+}
+
+.season-tip-banner {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+.season-tip-banner.success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.season-tip-banner.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.season-control-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.season-control-form-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.field-title {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 13px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.season-select {
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #f8fafc;
+}
+
+.readonly-input {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.season-safety-notice {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+.safety-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #166534;
+  margin-bottom: 8px;
+}
+.safety-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: #15803d;
+  line-height: 1.7;
+}
+.safety-list code {
+  background: #dcfce7;
+  color: #14532d;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 </style>

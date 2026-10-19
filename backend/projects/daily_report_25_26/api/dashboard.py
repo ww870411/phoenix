@@ -149,6 +149,33 @@ def get_dashboard_date():
     }
 
 
+class DashboardDateRequest(BaseModel):
+    set_biz_date: Optional[str] = Field(default=None, description="业务基准日期，格式 YYYY-MM-DD")
+    biz_date: Optional[str] = Field(default=None, description="业务基准日期别名，格式 YYYY-MM-DD")
+
+    def get_target_date(self) -> str:
+        target = self.set_biz_date or self.biz_date
+        if not target:
+            raise ValueError("必须提供 set_biz_date 或 biz_date")
+        return target
+
+
+@public_router.post(
+    "/dashboard/date",
+    summary="设置当前全局基准业务日期 set_biz_date",
+    tags=["daily_report_25_26"],
+)
+def update_dashboard_date(payload: DashboardDateRequest):
+    from backend.services import heating_season_service
+    try:
+        target_date = payload.get_target_date()
+        return heating_season_service.set_business_date(PROJECT_KEY, target_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"保存业务日期失败: {exc}") from exc
+
+
 @public_router.get(
     "/dashboard/temperature/trend",
     summary="获取轻量气温趋势数据（本期/同期）",
@@ -393,3 +420,50 @@ def run_metric_sandbox(payload: SandboxRequest):
             company=payload.company,
             item=payload.item,
         )
+
+
+class SeasonConfigRequest(BaseModel):
+    active_period: str = Field(..., description="激活供暖期编码，如 25-26、26-27")
+    biz_date: Optional[str] = Field(default=None, description="联动设置的业务基准日期 YYYY-MM-DD")
+    start_date: Optional[str] = Field(default=None, description="供暖季开栓起始日")
+    end_date: Optional[str] = Field(default=None, description="供暖季停热结束日")
+    description: Optional[str] = Field(default=None, description="调整说明")
+
+
+@public_router.get(
+    "/season/config",
+    summary="获取当前供暖期全局运行配置",
+    tags=["daily_report_25_26"],
+)
+def get_season_configuration():
+    from backend.services import heating_season_service
+    cfg = heating_season_service.get_season_config(PROJECT_KEY)
+    return {"ok": True, **cfg}
+
+
+@public_router.post(
+    "/season/config",
+    summary="手动修改或滚动切换供暖期",
+    tags=["daily_report_25_26"],
+)
+def update_season_configuration(payload: SeasonConfigRequest):
+    from backend.services import heating_season_service
+    try:
+        updated = heating_season_service.update_season_config(
+            project_key=PROJECT_KEY,
+            active_period=payload.active_period,
+            biz_date=payload.biz_date,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            description=payload.description,
+        )
+        return {
+            "ok": True,
+            "message": f"供暖期已成功切换为 {payload.active_period}（同期自动对齐为 {updated.get('peer_period')}）",
+            **updated,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"保存供暖期配置失败: {exc}") from exc
+

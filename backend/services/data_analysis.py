@@ -21,6 +21,9 @@ TEMPERATURE_COLUMN_MAP = {
     "aver_temp": "aver_temp",
     "max_temp": "max_temp",
     "min_temp": "min_temp",
+    "temperature_daily_average": "aver_temp",
+    "temperature_daily_highest": "max_temp",
+    "temperature_daily_lowest": "min_temp",
 }
 TEMPERATURE_UNIT = "℃"
 BEIHAI_SUB_SCOPES = {"BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet"}
@@ -945,6 +948,23 @@ def _query_analysis_rows(
 ) -> Dict[str, Dict[str, Any]]:
     if not metric_keys:
         return {}
+    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，解耦数据库重型视图
+    try:
+        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
+        with SessionLocal() as session:
+            engine = HeatingAnalysisEngine(session)
+            engine_res = engine.compute_analysis_rows(
+                unit_key=unit_key,
+                metric_keys=metric_keys,
+                start_date=start_date,
+                end_date=end_date,
+                sheet_name=sheet_name,
+            )
+            if engine_res is not None:
+                return engine_res
+    except Exception as exc:
+        logger.warning("HeatingAnalysisEngine.compute_analysis_rows 计算失败，安全回退视图: %s", exc)
+
     sanitized = _sanitize_identifier(view_name)
     if sanitized is None:
         raise ValueError(f"非法视图名称: {view_name}")
@@ -1037,6 +1057,23 @@ def _query_analysis_timeline(
         return {}
     if start_date > end_date:
         return {}
+    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，单次拉取全区间时序流，彻底消灭逐日 SQL 循环
+    try:
+        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
+        with SessionLocal() as session:
+            engine = HeatingAnalysisEngine(session)
+            timeline_res = engine.compute_analysis_timeline(
+                unit_key=unit_key,
+                metric_keys=metric_keys,
+                start_date=start_date,
+                end_date=end_date,
+                sheet_name=sheet_name,
+            )
+            if timeline_res:
+                return timeline_res
+    except Exception as exc:
+        logger.warning("HeatingAnalysisEngine.compute_analysis_timeline 计算失败，安全回退视图: %s", exc)
+
     sanitized = _sanitize_identifier(view_name)
     if sanitized is None:
         raise ValueError(f"非法视图名称: {view_name}")
@@ -1429,6 +1466,24 @@ def _query_temperature_rows(
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
     if not metric_keys:
         return {}, {}
+    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，解耦 calc_temperature_data 视图
+    try:
+        column_lookup = column_lookup or _build_temperature_column_lookup(metric_keys)
+        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
+        with SessionLocal() as session:
+            engine = HeatingAnalysisEngine(session)
+            temp_res, lookup = engine.compute_temperature_rows(
+                metric_keys=metric_keys,
+                start_date=start_date,
+                end_date=end_date,
+                analysis_mode=analysis_mode,
+                column_lookup=column_lookup,
+            )
+            if temp_res:
+                return temp_res, lookup
+    except Exception as exc:
+        logger.warning("HeatingAnalysisEngine.compute_temperature_rows 计算失败，安全回退视图: %s", exc)
+
     sanitized = _sanitize_identifier(view_name)
     if sanitized is None:
         raise ValueError(f"非法气温视图: {view_name}")
@@ -1519,6 +1574,21 @@ def _query_temperature_timeline(
 ) -> Dict[str, List[Dict[str, Any]]]:
     if start_date > end_date or not column_lookup:
         return {}
+    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，解耦 calc_temperature_data 视图
+    try:
+        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
+        with SessionLocal() as session:
+            engine = HeatingAnalysisEngine(session)
+            temp_tl = engine.compute_temperature_timeline(
+                column_lookup=column_lookup,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            if temp_tl:
+                return temp_tl
+    except Exception as exc:
+        logger.warning("HeatingAnalysisEngine.compute_temperature_timeline 计算失败，安全回退视图: %s", exc)
+
     sanitized = _sanitize_identifier(view_name)
     if sanitized is None:
         raise ValueError(f"非法气温视图: {view_name}")
