@@ -52,11 +52,28 @@ export async function listJointReviews(params = {}) {
   if (params.section_1_id) query.set('section_1_id', params.section_1_id)
   if (params.supply_entity_id) query.set('supply_entity_id', params.supply_entity_id)
   if (params.review_status) query.set('review_status', params.review_status)
+  if (params.review_type) query.set('review_type', params.review_type)
   if (params.search) query.set('search', params.search)
   if (params.page) query.set('page', String(params.page))
   if (params.limit) query.set('limit', String(params.limit))
 
   const url = `${API_BASE}/projects/insulation_pipe_supply_2026/joint-reviews/list?${query.toString()}`
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders(),
+  })
+  return handleResponse(res)
+}
+
+/**
+ * 获取订单流转链路各节点合法候选人清单（用于小组会议定向邀请）
+ */
+export async function getOrderMeetingCandidates(params = {}) {
+  const query = new URLSearchParams()
+  if (params.order_category) query.set('order_category', params.order_category)
+  if (params.delivery_id) query.set('delivery_id', String(params.delivery_id))
+
+  const url = `${API_BASE}/projects/insulation_pipe_supply_2026/joint-reviews/order-candidates?${query.toString()}`
   const res = await fetch(url, {
     method: 'GET',
     headers: getHeaders(),

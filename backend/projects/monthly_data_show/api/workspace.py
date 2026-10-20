@@ -168,6 +168,7 @@ class QueryRequest(BaseModel):
     aggregate_companies: bool = False
     aggregate_months: bool = False
     use_april_5_for_current: bool = False
+    penetrate_history: bool = False
     exclude_zero_values: bool = False
     exclude_zero_mode: str = "row"
     limit: int = 200
@@ -1022,24 +1023,34 @@ def _merge_and_sort_rows(
     order_fields: List[str],
     aggregate_months: bool,
     rank_maps: Optional[Dict[str, Dict[str, int]]] = None,
+    penetrate_history: bool = False,
 ) -> List[dict]:
     rank_maps = rank_maps or {}
 
-    def _date_desc_key(v: Optional[str]):
+    def _parse_sort_date(v: Optional[str]) -> Optional[date]:
         if not v:
-            return (1, 0)
+            return None
+        text_v = str(v).strip()
+        if "~" in text_v:
+            text_v = text_v.split("~")[0].strip()
+        if len(text_v) == 7 and text_v.count("-") == 1:
+            text_v = f"{text_v}-01"
         try:
-            return (0, -date.fromisoformat(v).toordinal())
+            return date.fromisoformat(text_v[:10])
         except Exception:
-            return (0, 0)
+            return None
+
+    def _date_desc_key(v: Optional[str]):
+        d = _parse_sort_date(v)
+        if d is None:
+            return (1, 0)
+        return (0, -d.toordinal())
 
     def _date_asc_key(v: Optional[str]):
-        if not v:
+        d = _parse_sort_date(v)
+        if d is None:
             return (1, 0)
-        try:
-            return (0, date.fromisoformat(v).toordinal())
-        except Exception:
-            return (0, 0)
+        return (0, d.toordinal())
 
     def _time_key(row: dict):
         # 查询工具默认按业务月份(date)理解时间，只有缺失时才回退到来源月份(report_month)。
@@ -1059,15 +1070,15 @@ def _merge_and_sort_rows(
         key_parts.append(is_avg_temp)
         for field in order_fields:
             if field == "time":
-                if aggregate_months:
-                    # 月份已聚合时，时间维度无实际排序意义，放固定占位保持稳定排序。
+                if aggregate_months and not penetrate_history:
+                    # 仅在非穿透且纯月份聚合时，时间维度无实际排序意义，放固定占位保持稳定排序。
                     key_parts.append((1, 0))
                 else:
                     key_parts.append(_time_key(row))
                 continue
             key_parts.append(_rank_key(field, row.get(field)))
-        # 若用户未显式选择 time，则保持历史行为：时间降序优先（最新月份在前）。
-        if (not aggregate_months) and ("time" not in order_fields):
+        # 若用户未显式选择 time，则保持历史行为：时间降序优先（最新月份/周期在前）。
+        if (not aggregate_months or penetrate_history) and ("time" not in order_fields):
             key_parts.append(_date_desc_key(row.get("date")))
             key_parts.append(_date_desc_key(row.get("report_month")))
         key_parts.append(_safe_str(row.get("unit")))
@@ -2506,37 +2517,70 @@ def get_monthly_data_show_query_options():
     )
 
 
-@router.post("/monthly-data-show/query", response_model=QueryResponse, summary="月报数据查询")
-def query_month_data_show(request: QueryRequest):
-    _refresh_indicator_runtime()
-    limit = max(1, min(1000, int(request.limit or 200)))
-    offset = max(0, int(request.offset or 0))
-    companies_selected = _normalize_text_list(request.companies)
-    items_selected = _normalize_text_list(request.items)
-    periods_selected = _normalize_text_list(request.periods)
-    types_selected = _normalize_text_list(request.types)
-    if not companies_selected or not items_selected or not periods_selected or not types_selected:
-        return QueryResponse(
-            ok=True,
-            project_key=PROJECT_KEY,
-            total=0,
-            limit=limit,
-            offset=offset,
-            rows=[],
-            summary=QuerySummary(
-                total_rows=0,
-                value_non_null_rows=0,
-                value_null_rows=0,
-                value_sum=0.0,
-            ),
-        )
-    include_average_temperature = AVERAGE_TEMPERATURE_ITEM in items_selected
-    aggregate_companies = bool(request.aggregate_companies)
-    aggregate_months = bool(request.aggregate_months)
-    selected_calc_items = [x for x in items_selected if x in CALCULATED_ITEM_SET]
-    selected_base_items = [x for x in items_selected if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
-    required_base_items = _collect_required_base_items(selected_calc_items)
-    query_base_items = sorted(set(selected_base_items + required_base_items))
+def _resolve_penetration_cycles(
+    session,
+    start_date: date,
+    end_date: date,
+) -> List[Tuple[date, date, str]]:
+    stmt = text(
+        """
+        SELECT DISTINCT
+            EXTRACT(YEAR FROM date)::int AS y,
+            EXTRACT(MONTH FROM date)::int AS m
+        FROM monthly_data_show
+        WHERE period = 'month' AND type = 'real' AND date IS NOT NULL
+        """
+    )
+    rows = session.execute(stmt).fetchall()
+    available_year_months = {(r[0], r[1]) for r in rows}
+
+    is_single_month = (start_date.year == end_date.year and start_date.month == end_date.month)
+    month_count = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+    if month_count <= 0:
+        return []
+
+    valid_cycles: List[Tuple[date, date, str]] = []
+    MAX_LOOKBACK_YEARS = 30
+
+    for k in range(MAX_LOOKBACK_YEARS):
+        cycle_months: List[Tuple[int, int]] = []
+        for i in range(month_count):
+            y = start_date.year + (start_date.month - 1 + i) // 12 - k
+            m = (start_date.month - 1 + i) % 12 + 1
+            cycle_months.append((y, m))
+
+        if all(cm in available_year_months for cm in cycle_months):
+            first_y, first_m = cycle_months[0]
+            last_y, last_m = cycle_months[-1]
+            c_start = date(first_y, first_m, 1)
+            c_end_day = calendar.monthrange(last_y, last_m)[1]
+            c_end = date(last_y, last_m, c_end_day)
+
+            if is_single_month:
+                label = f"{first_y}-{str(first_m).zfill(2)}-01"
+            else:
+                label = f"{first_y}-{str(first_m).zfill(2)} ~ {last_y}-{str(last_m).zfill(2)}"
+
+            valid_cycles.append((c_start, c_end, label))
+        else:
+            break
+
+    return valid_cycles
+
+
+def _fetch_cycle_query_rows(
+    session,
+    request: QueryRequest,
+    cycle_label: Optional[str],
+    aggregate_months: bool,
+    aggregate_companies: bool,
+    companies_selected: List[str],
+    items_selected: List[str],
+    selected_calc_items: List[str],
+    selected_base_items: List[str],
+    query_base_items: List[str],
+    include_average_temperature: bool,
+) -> List[dict]:
     run_base_query = bool(query_base_items)
     if run_base_query:
         base_request = request.model_copy(update={"items": query_base_items})
@@ -2545,11 +2589,6 @@ def query_month_data_show(request: QueryRequest):
     else:
         where_clause, params, bind_params = "", {}, []
         where_sql = ""
-    order_mode = str(request.order_mode or "company_first").strip().lower()
-    if order_mode not in {"company_first", "item_first"}:
-        raise HTTPException(status_code=422, detail="order_mode 仅支持 company_first 或 item_first")
-    zero_filter_mode = _resolve_zero_filter_mode(request)
-    resolved_order_fields = _resolve_order_fields(order_mode, request.order_fields, aggregate_companies)
 
     if run_base_query and (aggregate_companies or aggregate_months):
         value_agg_sql = _build_value_aggregate_sql(apply_latest_for_state_items=aggregate_months)
@@ -2588,22 +2627,18 @@ def query_month_data_show(request: QueryRequest):
     if run_base_query and bind_params:
         list_sql = list_sql.bindparams(*bind_params)
 
-    try:
-        with SessionLocal() as session:
-            row_mappings = session.execute(list_sql, params).mappings().all() if run_base_query else []
-            temp_rows = (
-                _build_average_temperature_rows(
-                    session=session,
-                    request=request,
-                    companies_selected=companies_selected,
-                    aggregate_companies=aggregate_companies,
-                    aggregate_months=aggregate_months,
-                )
-                if include_average_temperature
-                else []
-            )
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"查询月报数据失败：{exc}") from exc
+    row_mappings = session.execute(list_sql, params).mappings().all() if run_base_query else []
+    temp_rows = (
+        _build_average_temperature_rows(
+            session=session,
+            request=request,
+            companies_selected=companies_selected,
+            aggregate_companies=aggregate_companies,
+            aggregate_months=aggregate_months,
+        )
+        if include_average_temperature
+        else []
+    )
 
     base_rows_all: List[dict] = []
     if run_base_query and aggregate_companies:
@@ -2615,7 +2650,7 @@ def query_month_data_show(request: QueryRequest):
                 row.get("date"),
                 row.get("period"),
                 row.get("type"),
-                row.get("report_month")
+                row.get("report_month"),
             )
             val_raw = row.get("value")
             val = _to_float(val_raw) if val_raw is not None else None
@@ -2637,7 +2672,9 @@ def query_month_data_show(request: QueryRequest):
                     curr_val = aggregated_mappings[key]["value"]
                     aggregated_mappings[key]["value"] = _to_float(curr_val) + val
                     if row.get("operation_time") and aggregated_mappings[key]["operation_time"]:
-                        aggregated_mappings[key]["operation_time"] = max(aggregated_mappings[key]["operation_time"], row.get("operation_time"))
+                        aggregated_mappings[key]["operation_time"] = max(
+                            aggregated_mappings[key]["operation_time"], row.get("operation_time")
+                        )
 
         for row in aggregated_mappings.values():
             base_rows_all.append(
@@ -2678,18 +2715,124 @@ def query_month_data_show(request: QueryRequest):
     )
     selected_base_set = set(selected_base_items)
     output_base_rows = [row for row in base_rows_all if _safe_str(row.get("item")) in selected_base_set]
+
+    if cycle_label:
+        for r in output_base_rows:
+            r["date"] = cycle_label
+        for r in calculated_rows:
+            r["date"] = cycle_label
+        for r in temp_rows:
+            r["date"] = cycle_label
+
+    cycle_all: List[dict] = []
+    cycle_all.extend(output_base_rows)
+    cycle_all.extend(calculated_rows)
+    cycle_all.extend(temp_rows)
+    return cycle_all
+
+
+@router.post("/monthly-data-show/query", response_model=QueryResponse, summary="月报数据查询")
+def query_month_data_show(request: QueryRequest):
+    _refresh_indicator_runtime()
+    limit = max(1, min(1000, int(request.limit or 200)))
+    offset = max(0, int(request.offset or 0))
+    companies_selected = _normalize_text_list(request.companies)
+    items_selected = _normalize_text_list(request.items)
+    periods_selected = _normalize_text_list(request.periods)
+    types_selected = _normalize_text_list(request.types)
+    if not companies_selected or not items_selected or not periods_selected or not types_selected:
+        return QueryResponse(
+            ok=True,
+            project_key=PROJECT_KEY,
+            total=0,
+            limit=limit,
+            offset=offset,
+            rows=[],
+            summary=QuerySummary(
+                total_rows=0,
+                value_non_null_rows=0,
+                value_null_rows=0,
+                value_sum=0.0,
+            ),
+        )
+    include_average_temperature = AVERAGE_TEMPERATURE_ITEM in items_selected
+    aggregate_companies = bool(request.aggregate_companies)
+    aggregate_months = bool(request.aggregate_months)
+    selected_calc_items = [x for x in items_selected if x in CALCULATED_ITEM_SET]
+    selected_base_items = [x for x in items_selected if x not in CALCULATED_ITEM_SET and x != AVERAGE_TEMPERATURE_ITEM]
+    required_base_items = _collect_required_base_items(selected_calc_items)
+    query_base_items = sorted(set(selected_base_items + required_base_items))
+    order_mode = str(request.order_mode or "company_first").strip().lower()
+    if order_mode not in {"company_first", "item_first"}:
+        raise HTTPException(status_code=422, detail="order_mode 仅支持 company_first 或 item_first")
+    zero_filter_mode = _resolve_zero_filter_mode(request)
+    resolved_order_fields = _resolve_order_fields(order_mode, request.order_fields, aggregate_companies)
+
+    try:
+        with SessionLocal() as session:
+            if request.penetrate_history:
+                start_dt, end_dt = _pick_temperature_date_range(request)
+                if start_dt is None or end_dt is None:
+                    valid_cycles = []
+                else:
+                    valid_cycles = _resolve_penetration_cycles(session, start_dt, end_dt)
+
+                all_rows = []
+                for c_start, c_end, c_label in valid_cycles:
+                    is_sm = (c_start.year == c_end.year and c_start.month == c_end.month)
+                    c_agg_months = not is_sm
+                    c_request = request.model_copy(
+                        update={
+                            "date_from": c_start.isoformat(),
+                            "date_to": c_end.isoformat(),
+                            "aggregate_months": c_agg_months,
+                        }
+                    )
+                    c_rows = _fetch_cycle_query_rows(
+                        session=session,
+                        request=c_request,
+                        cycle_label=c_label,
+                        aggregate_months=c_agg_months,
+                        aggregate_companies=aggregate_companies,
+                        companies_selected=companies_selected,
+                        items_selected=items_selected,
+                        selected_calc_items=selected_calc_items,
+                        selected_base_items=selected_base_items,
+                        query_base_items=query_base_items,
+                        include_average_temperature=include_average_temperature,
+                    )
+                    all_rows.extend(c_rows)
+            else:
+                all_rows = _fetch_cycle_query_rows(
+                    session=session,
+                    request=request,
+                    cycle_label=None,
+                    aggregate_months=aggregate_months,
+                    aggregate_companies=aggregate_companies,
+                    companies_selected=companies_selected,
+                    items_selected=items_selected,
+                    selected_calc_items=selected_calc_items,
+                    selected_base_items=selected_base_items,
+                    query_base_items=query_base_items,
+                    include_average_temperature=include_average_temperature,
+                )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"查询月报数据失败：{exc}") from exc
+
     rank_maps = {
         "company": _build_rank_map(companies_selected),
         "item": _build_rank_map(items_selected),
         "period": _build_rank_map(periods_selected),
         "type": _build_rank_map(types_selected),
     }
-    all_rows: List[dict] = []
-    all_rows.extend(output_base_rows)
-    all_rows.extend(calculated_rows)
-    all_rows.extend(temp_rows)
     all_rows = _filter_rows_by_zero_mode(all_rows, zero_filter_mode)
-    all_rows = _merge_and_sort_rows(all_rows, resolved_order_fields, aggregate_months, rank_maps=rank_maps)
+    all_rows = _merge_and_sort_rows(
+        all_rows,
+        resolved_order_fields,
+        aggregate_months,
+        rank_maps=rank_maps,
+        penetrate_history=request.penetrate_history,
+    )
     total_count = len(all_rows)
     page_rows = all_rows[offset : offset + limit]
     value_non_null_rows = sum(1 for row in all_rows if row.get("value") is not None)

@@ -1,21 +1,67 @@
 <template>
-  <div v-if="visible" class="review-modal-backdrop" @click.self="handleClose">
+  <div v-if="visible" class="review-modal-backdrop">
     <div class="review-modal-card">
       <!-- 弹窗顶栏 -->
       <div class="modal-header">
         <div class="modal-title-group">
-          <div class="modal-icon-badge">
-            <ScaleBalanceIcon :size="20" color="#4f46e5" />
+          <div class="modal-icon-badge" :class="{ 'is-meeting': selectedMode === 'group_meeting' }">
+            <span v-if="selectedMode === 'group_meeting'" class="icon-emoji">🤝</span>
+            <ScaleBalanceIcon v-else :size="20" color="#4f46e5" />
           </div>
           <div>
-            <h3>提请多方联合会审</h3>
-            <p class="modal-subtitle">发起订单协同校核 · 前序关键责任主体全票会签更正</p>
+            <h3>{{ selectedMode === 'group_meeting' ? '召开小组会议' : '提请多方联合会审' }}</h3>
+            <p class="modal-subtitle">
+              {{ selectedMode === 'group_meeting' ? '自主邀请关联节点责任人 · 闭环协商一致更正 · 留痕留证' : '发起订单协同校核 · 前序关键责任主体全票会签更正' }}
+            </p>
           </div>
         </div>
         <button type="button" class="btn-close" @click="handleClose" title="关闭">✕</button>
       </div>
 
       <div class="modal-body" v-if="order">
+        <!-- 0. 协同模式选择器 (Mode Switcher) -->
+        <div class="meeting-mode-selector-card">
+          <div class="mode-cards-row">
+            <div
+              class="mode-card"
+              :class="{ 'is-active': selectedMode === 'group_meeting' }"
+              @click="selectMode('group_meeting')"
+            >
+              <div class="mode-radio-circle">
+                <span v-if="selectedMode === 'group_meeting'" class="dot"></span>
+              </div>
+              <div class="mode-card-info">
+                <div class="mode-title-line">
+                  <span class="mode-name">🤝 小组会议</span>
+                  <span class="mode-badge-rec">推荐</span>
+                </div>
+                <p class="mode-desc">
+                  发现错漏后定向邀请链条相关责任人核对，小组成员一致核准即刻更正生效，支持全流程任意状态单据。
+                </p>
+              </div>
+            </div>
+
+            <div
+              class="mode-card"
+              :class="{ 'is-active': selectedMode === 'joint_review', 'is-disabled': !isJointReviewAllowed }"
+              @click="selectMode('joint_review')"
+            >
+              <div class="mode-radio-circle">
+                <span v-if="selectedMode === 'joint_review'" class="dot"></span>
+              </div>
+              <div class="mode-card-info">
+                <div class="mode-title-line">
+                  <span class="mode-name">⚖️ 多方联合会审</span>
+                  <span v-if="!isJointReviewAllowed" class="mode-badge-formal" style="background: #f1f5f9; color: #64748b; border-color: #cbd5e1;">仅流转中可用</span>
+                </div>
+                <p class="mode-desc">
+                  {{ isJointReviewAllowed ? '按流转节点强制列席所有法定前序责任主体，支持特许裁决员终局仲裁。' : '当前单据状态已归档完成，联合会审不可用，请使用左侧【小组会议】模式。' }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 1. 一体化单据与会签概览卡片 (Dossier Brief) -->
         <div class="dossier-card">
           <div class="dossier-main-row">
@@ -49,10 +95,158 @@
           </div>
           <div class="dossier-signoff-bar">
             <div class="signoff-actors">
-              <span class="signoff-prefix">会签主体：</span>
-              <span class="signoff-actor-chip">{{ sceneActorsText }}</span>
+              <span class="signoff-prefix">{{ selectedMode === 'group_meeting' ? '协同形式：' : '会签主体：' }}</span>
+              <span class="signoff-actor-chip">
+                {{ selectedMode === 'group_meeting' ? `🤝 小组会议 (已邀 ${selectedInvitedCount} 位相关责任人 + 发起人)` : sceneActorsText }}
+              </span>
             </div>
-            <span class="signoff-rule-hint">💡 全票同意更正生效 · 一票异议公开挂起</span>
+            <span class="signoff-rule-hint">
+              {{ selectedMode === 'group_meeting' ? '💡 小组成员全票同意更正生效 · 闭环全程留痕' : '💡 全票同意更正生效 · 一票异议公开挂起' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- 1.5 小组会议受邀人员选择器 (当 selectedMode === 'group_meeting') -->
+        <div v-if="selectedMode === 'group_meeting'" class="group-invite-section-card">
+          <div class="invite-header-row">
+            <div class="invite-title-wrap">
+              <span class="invite-title">👥 邀请参会协同人员 *</span>
+              <span class="invite-count-chip" :class="{ 'has-selected': selectedInvitedCount > 0 }">
+                {{ selectedInvitedCount > 0 ? `已选 ${selectedInvitedCount} 人` : '未选择人员' }}
+              </span>
+            </div>
+            <div class="invite-actions-quick" v-if="selectedCandidateKeys.length > 0">
+              <button type="button" class="btn-quick-select ghost" @click="clearSelectedCandidates">
+                清空已选
+              </button>
+            </div>
+          </div>
+
+          <p class="invite-sub-hint">
+            请从下方点选受邀参会人员（仅限供给方人员、Global_admin和仲裁人员，小组成员一致同意后数据生效）：
+          </p>
+
+          <!-- 加载状态 -->
+          <div v-if="loadingCandidates" class="candidates-loading-box">
+            <span class="spinner-icon">⌛</span>
+            <span>正在检索供给方、超管及仲裁人员...</span>
+          </div>
+
+          <!-- 错误状态 -->
+          <div v-else-if="candidateFetchError" class="candidates-error-box">
+            <span>⚠️ {{ candidateFetchError }}</span>
+            <button type="button" class="btn-retry" @click="fetchCandidates">重试</button>
+          </div>
+
+          <!-- 下拉菜单点选组件 (Dropdown Selector) -->
+          <div v-else class="candidate-dropdown-wrapper">
+            <!-- 触发条 (Trigger Bar) -->
+            <div
+              class="candidate-dropdown-trigger"
+              :class="{ 'is-open': isCandidateDropdownOpen, 'has-selected': selectedCandidateObjects.length > 0 }"
+              @click="toggleCandidateDropdown"
+            >
+              <div class="trigger-left-content">
+                <span v-if="selectedCandidateObjects.length === 0" class="trigger-placeholder">
+                  📋 点击展开下拉菜单点选参会人员...
+                </span>
+                <div v-else class="trigger-chips-flow">
+                  <span
+                    v-for="cand in selectedCandidateObjects"
+                    :key="cand.key"
+                    class="cand-chip"
+                    @click.stop
+                  >
+                    <span class="cand-chip-text">{{ cand.display_name }} ({{ cand.role_desc }})</span>
+                    <span class="cand-chip-remove" title="取消选择" @click.stop="toggleCandidate(cand)">✕</span>
+                  </span>
+                </div>
+              </div>
+              <div class="trigger-right-arrow">
+                <span class="arrow-icon" :class="{ 'is-open': isCandidateDropdownOpen }">▾</span>
+              </div>
+            </div>
+
+            <!-- 下拉浮层面板 (Dropdown Menu) -->
+            <div v-if="isCandidateDropdownOpen" class="candidate-dropdown-menu">
+              <div class="menu-header-bar">
+                <span class="menu-hint-text">点击人员进行勾选/取消：</span>
+                <div class="menu-header-actions">
+                  <button
+                    v-if="selectedCandidateKeys.length > 0"
+                    type="button"
+                    class="btn-menu-action"
+                    @click.stop="clearSelectedCandidates"
+                  >
+                    清空
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-menu-action primary"
+                    @click.stop="closeCandidateDropdown"
+                  >
+                    完成 ✕
+                  </button>
+                </div>
+              </div>
+
+              <div class="menu-groups-container">
+                <div
+                  v-for="grp in groupedCandidates"
+                  :key="grp.node_title"
+                  class="dropdown-node-group"
+                >
+                  <div class="node-group-title">
+                    <span class="grp-icon">{{ getNodeIcon(grp.node_key) }}</span>
+                    <span>{{ grp.node_title }}</span>
+                  </div>
+
+                  <div class="node-group-options">
+                    <div
+                      v-for="cand in grp.items"
+                      :key="cand.key"
+                      class="dropdown-option-item"
+                      :class="{
+                        'is-checked': isCandidateSelected(cand),
+                        'is-self': cand.is_current_user
+                      }"
+                      @click="toggleCandidate(cand)"
+                    >
+                      <div class="opt-checkbox-wrap">
+                        <input
+                          type="checkbox"
+                          :checked="isCandidateSelected(cand)"
+                          :disabled="cand.is_current_user"
+                          @click.stop
+                          @change="toggleCandidate(cand)"
+                        />
+                      </div>
+                      <div class="opt-info-wrap">
+                        <div class="opt-name-row">
+                          <strong class="opt-display-name">{{ cand.display_name }}</strong>
+                          <span v-if="cand.is_current_user" class="opt-self-badge">(您 · 发起人免选)</span>
+                        </div>
+                        <div class="opt-role-row">
+                          <span class="opt-role-desc">{{ cand.role_desc }}</span>
+                          <span v-if="cand.phone" class="opt-phone-text">📞 {{ cand.phone }}</span>
+                        </div>
+                      </div>
+                      <div v-if="isCandidateSelected(cand) && !cand.is_current_user" class="opt-checked-icon">
+                        ✓
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 下拉底栏 -->
+              <div class="menu-footer-bar">
+                <span class="footer-count">已选择 <strong>{{ selectedInvitedCount }}</strong> 位协同人员</span>
+                <button type="button" class="btn-menu-done" @click.stop="closeCandidateDropdown">
+                  ✓ 确定并收起
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -316,8 +510,8 @@
         <div class="footer-action-buttons">
           <button type="button" class="btn-cancel" @click="handleClose" :disabled="submitting">取消</button>
           <button type="button" class="btn-submit" @click="handleSubmit" :disabled="submitting">
-            <span v-if="submitting">提请提交中...</span>
-            <span v-else>确认发起联合会审 ➔</span>
+            <span v-if="submitting">提交中...</span>
+            <span v-else>{{ selectedMode === 'group_meeting' ? '确认召开协同小组会 ➔' : '确认发起联合会审 ➔' }}</span>
           </button>
         </div>
       </div>
@@ -327,7 +521,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { createJointReview } from '../services/jointReviewApi'
+import { createJointReview, getOrderMeetingCandidates } from '../services/jointReviewApi'
 import ScaleBalanceIcon from './ScaleBalanceIcon.vue'
 
 const props = defineProps({
@@ -337,6 +531,114 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'success'])
+
+// 协同模式选择：'group_meeting' (敏捷现场小组会) | 'joint_review' (法定联合会审)
+const selectedMode = ref('group_meeting')
+const loadingCandidates = ref(false)
+const candidates = ref([])
+const selectedCandidateKeys = ref([])
+const candidateFetchError = ref('')
+const isCandidateDropdownOpen = ref(false)
+
+const selectedCandidateObjects = computed(() => {
+  return candidates.value.filter(c => selectedCandidateKeys.value.includes(c.key))
+})
+
+function toggleCandidateDropdown() {
+  isCandidateDropdownOpen.value = !isCandidateDropdownOpen.value
+}
+
+function closeCandidateDropdown() {
+  isCandidateDropdownOpen.value = false
+}
+
+const isJointReviewAllowed = computed(() => {
+  const st = order.value?.status || ''
+  return ['pending_arrival', 'pending_receive', 'pending_diff_approve', 'pending_warehouse'].includes(st)
+})
+
+function selectMode(mode) {
+  if (mode === 'joint_review' && !isJointReviewAllowed.value) {
+    submitError.value = `当前单据状态 [${order.value?.status || '已归档'}] 仅支持召开【小组会议】，无法发起多方联合会审。`
+    return
+  }
+  selectedMode.value = mode
+  submitError.value = ''
+}
+
+async function fetchCandidates() {
+  if (!order.value) return
+  const deliveryId = order.value.id || order.value.delivery_id || order.value.order_id || order.value.deliveryId
+  if (!deliveryId) return
+  const cat = order.value.order_category || order.value.category || (isPipe.value ? 'pipe' : 'fitting')
+
+  loadingCandidates.value = true
+  candidateFetchError.value = ''
+  try {
+    const res = await getOrderMeetingCandidates({ order_category: cat, delivery_id: Number(deliveryId) })
+    candidates.value = res.candidates || []
+
+    // 默认不推荐、不选中任何参会人员，由发起人在下拉菜单中主动点选
+    selectedCandidateKeys.value = []
+    isCandidateDropdownOpen.value = false
+  } catch (err) {
+    candidateFetchError.value = err.message || '加载链条节点责任人列表失败'
+  } finally {
+    loadingCandidates.value = false
+  }
+}
+
+const groupedCandidates = computed(() => {
+  const map = {}
+  candidates.value
+    .filter(c => c.node_key !== 'construction' && c.entity_type !== 'construction_unit')
+    .forEach(c => {
+      const key = c.node_title || '其他相关节点'
+      if (!map[key]) {
+        map[key] = {
+          node_title: key,
+          node_key: c.node_key,
+          items: [],
+        }
+      }
+      map[key].items.push(c)
+    })
+  return Object.values(map)
+})
+
+function getNodeIcon(key) {
+  if (key === 'supply') return '🏭'
+  if (key === 'global_admin') return '🛡️'
+  if (key === 'arbitrator') return '⚖️'
+  return '👥'
+}
+
+function isCandidateSelected(cand) {
+  if (cand.is_current_user) return true
+  return selectedCandidateKeys.value.includes(cand.key)
+}
+
+function toggleCandidate(cand) {
+  if (cand.is_current_user) return
+  const idx = selectedCandidateKeys.value.indexOf(cand.key)
+  if (idx >= 0) {
+    selectedCandidateKeys.value.splice(idx, 1)
+  } else {
+    selectedCandidateKeys.value.push(cand.key)
+  }
+}
+
+function selectAllCandidates() {
+  selectedCandidateKeys.value = candidates.value.filter(c => !c.is_current_user).map(c => c.key)
+}
+
+function clearSelectedCandidates() {
+  selectedCandidateKeys.value = []
+}
+
+const selectedInvitedCount = computed(() => {
+  return selectedCandidateKeys.value.length
+})
 
 const quickReasons = [
   { label: '实收短缺', text: '经现场实物吊装核验并清点，实到数量存在短缺，特提请供方核对随车出厂清单并协同更正。' },
@@ -453,8 +755,21 @@ watch(
     } else {
       fittingItemsForm.value = []
     }
+    if (!isJointReviewAllowed.value) {
+      selectedMode.value = 'group_meeting'
+    }
+    fetchCandidates()
   },
   { immediate: true }
+)
+
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (newVal) {
+      fetchCandidates()
+    }
+  }
 )
 
 const sceneActorsText = computed(() => {
@@ -649,8 +964,36 @@ async function handleSubmit() {
     submitError.value = '发货数量必须为有限正数，最多2位小数'
     return
   }
-  const deliveryId = currentOrder.id || currentOrder.delivery_id || currentOrder.order_id
+  if (selectedMode.value === 'joint_review' && !isJointReviewAllowed.value) {
+    submitError.value = `当前单据状态 [${currentOrder.status || '已归档'}] 仅支持召开【小组会议】，无法发起多方联合会审。`
+    return
+  }
+  const deliveryId = currentOrder.id || currentOrder.delivery_id || currentOrder.order_id || currentOrder.deliveryId
   const orderCategory = currentOrder.order_category || currentOrder.category || (isPipe.value ? 'pipe' : 'fitting')
+
+  if (selectedMode.value === 'group_meeting') {
+    if (selectedCandidateKeys.value.length === 0) {
+      submitError.value = '召开小组会议必须至少勾选邀请 1 位相关责任人'
+      return
+    }
+  }
+
+  const invitedList = candidates.value
+    .filter(c => selectedCandidateKeys.value.includes(c.key) && !c.is_current_user)
+    .map(c => ({
+      entity_type: c.entity_type,
+      entity_id: c.entity_id,
+      entity_name: c.entity_name,
+      display_name: c.display_name,
+      role_desc: c.role_desc,
+      username: c.username,
+      phone: c.phone || '',
+    }))
+
+  if (selectedMode.value === 'group_meeting' && invitedList.length === 0) {
+    submitError.value = '小组会议不能仅包含发起人自己，请至少勾选邀请 1 位协同责任人'
+    return
+  }
 
   submitting.value = true
   try {
@@ -660,11 +1003,13 @@ async function handleSubmit() {
       proposed_patch: patch,
       review_reason: reasonText,
       attachments: attachments.value,
+      review_type: selectedMode.value,
+      invited_users: invitedList,
     })
     emit('success', res)
     emit('close')
   } catch (err) {
-    submitError.value = err.message || '提请联合会审失败'
+    submitError.value = err.message || (selectedMode.value === 'group_meeting' ? '召开小组会议失败' : '提请多方联合会审失败')
   } finally {
     submitting.value = false
   }
@@ -765,6 +1110,589 @@ async function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* ==========================================================================
+   🤝 协同模式选择卡片 (Mode Switcher)
+   ========================================================================== */
+.meeting-mode-selector-card {
+  margin-bottom: 2px;
+}
+
+.mode-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mode-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.mode-card:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.mode-card.is-active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.15);
+}
+
+.mode-radio-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.mode-card.is-active .mode-radio-circle {
+  border-color: #3b82f6;
+}
+
+.mode-radio-circle .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+
+.mode-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mode-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mode-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.mode-card.is-active .mode-name {
+  color: #1d4ed8;
+}
+
+.mode-badge-rec {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.mode-badge-formal {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.mode-desc {
+  margin: 0;
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   👥 小组会议受邀人员选择器 (Group Invite Section)
+   ========================================================================== */
+.group-invite-section-card {
+  background: #ffffff;
+  border: 1.5px solid #dbeafe;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 8px -2px rgba(59, 130, 246, 0.08);
+}
+
+.invite-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.invite-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.invite-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.invite-count-chip {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.invite-count-chip.has-selected {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.invite-actions-quick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-quick-select {
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-quick-select:hover {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.invite-sub-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.candidates-loading-box,
+.candidates-error-box {
+  padding: 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 下拉菜单点选组件样式 (Candidate Dropdown Component) */
+.candidate-dropdown-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.candidate-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.candidate-dropdown-trigger:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.candidate-dropdown-trigger.is-open {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.candidate-dropdown-trigger.has-selected {
+  border-color: #93c5fd;
+  background: #f8faff;
+}
+
+.trigger-left-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.trigger-placeholder {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+.trigger-chips-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cand-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  transition: all 0.15s ease;
+}
+
+.cand-chip:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.cand-chip-text {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cand-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: bold;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cand-chip-remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.trigger-right-arrow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+}
+
+.arrow-icon {
+  font-size: 14px;
+  color: #64748b;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+}
+
+.arrow-icon.is-open {
+  transform: rotate(180deg);
+  color: #2563eb;
+}
+
+/* 下拉浮层面板 (Dropdown Menu) */
+.candidate-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.15), 0 4px 6px -2px rgba(15, 23, 42, 0.05);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  max-height: 330px;
+  overflow: hidden;
+  animation: dropdownFadeIn 0.18s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menu-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+
+.menu-hint-text {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.menu-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-menu-action {
+  padding: 3px 8px;
+  font-size: 11.5px;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-menu-action:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.btn-menu-action.primary {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+.btn-menu-action.primary:hover {
+  background: #1d4ed8;
+}
+
+.menu-groups-container {
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.dropdown-node-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.node-group-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  padding: 4px 6px 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.node-group-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdown-option-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.dropdown-option-item:hover {
+  background: #f1f5f9;
+}
+
+.dropdown-option-item.is-checked {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.dropdown-option-item.is-self {
+  background: #f8fafc;
+  cursor: default;
+  opacity: 0.75;
+}
+
+.opt-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.opt-checkbox-wrap input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+.opt-info-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+}
+
+.opt-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.opt-display-name {
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.opt-self-badge {
+  font-size: 10.5px;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.opt-role-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.opt-role-desc {
+  font-weight: 500;
+}
+
+.opt-phone-text {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: #475569;
+}
+
+.opt-checked-icon {
+  color: #2563eb;
+  font-weight: bold;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.menu-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+
+.footer-count {
+  color: #475569;
+  font-size: 12px;
+}
+
+.footer-count strong {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.btn-menu-done {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-menu-done:hover {
+  background: #1d4ed8;
+}
+
+.modal-icon-badge.is-meeting {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.1);
+}
+
+.modal-icon-badge .icon-emoji {
+  font-size: 20px;
 }
 
 /* 1. 一体化单据与会签概览卡片 */
@@ -1431,6 +2359,42 @@ async function handleSubmit() {
   .modal-body {
     padding: 12px 14px !important;
     gap: 10px !important;
+  }
+
+  /* 0. 协同模式选择器与受邀人网格移动端适配 */
+  .mode-cards-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .mode-card {
+    padding: 10px 12px !important;
+  }
+
+  .candidate-dropdown-trigger {
+    padding: 6px 10px !important;
+    min-height: 40px !important;
+  }
+
+  .cand-chip {
+    font-size: 11px !important;
+    padding: 2px 6px !important;
+  }
+
+  .cand-chip-text {
+    max-width: 140px !important;
+  }
+
+  .candidate-dropdown-menu {
+    max-height: 260px !important;
+  }
+
+  .dropdown-option-item {
+    padding: 8px 6px !important;
+  }
+
+  .opt-display-name {
+    font-size: 12px !important;
   }
 
   /* 1. 单据与会签概览卡片 (Dossier Card) */

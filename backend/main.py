@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
     else:
         logging.warning("v1 router not mounted (import failed). Endpoints under /api/v1 are unavailable.")
 
-    # 注册应用生命周期事件：启动与关闭电力现货定时调度引擎
+    # 注册应用生命周期事件：启动与关闭电力现货定时调度引擎及检查业务核心表
     @app.on_event("startup")
     def on_startup():
         try:
@@ -81,6 +81,13 @@ def create_app() -> FastAPI:
             logging.info("SpotElectricitySyncService scheduler initialized on app startup.")
         except Exception as e:
             logging.error("Failed to start SpotElectricitySyncService scheduler on app startup: %s", e)
+
+        try:
+            from backend.projects.insulation_pipe_supply_2026.services.joint_review_service import ensure_joint_review_tables
+            ensure_joint_review_tables(force=True)
+            logging.info("Insulation pipe joint review tables verified on app startup.")
+        except Exception as e:
+            logging.error("Failed to verify joint review tables on app startup: %s", e)
 
     @app.on_event("shutdown")
     def on_shutdown():

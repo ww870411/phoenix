@@ -1,3 +1,312 @@
+## 2026-10-20 insulation_pipe_supply_2026 会审大厅提请指引弹窗双标签重构 (Dual-Tab Review & Discussion Guide Dialog)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+  - **交互体验完善与双轨指引重塑**：
+    1. **顶栏指引入口更名**：
+       - 大厅右上角操作按钮由原“提请会审流程说明”正式升级更名为“**提请小组讨论/联合会审说明**”；
+    2. **指引弹窗双标签页架构 (`guide-tabs-bar`)**：
+       - 采用选项卡架构，第一标签页为“**🤝 小组讨论**”（默认激活），第二标签页为“**⚖️ 联合会审**”，顶部大图标与副标题随标签自适应切换；
+    3. **仿照联合会审结构定制“小组讨论”专属指南**：
+       - **设立宗旨**：明确小组讨论（小组会议）以小范围、面对面协商形式快速纠正偶发错漏，免除全流程大范围法定会签成本；
+       - **三大业务场景**：
+         - 场景 1（适用节点与提请原位）：需求侧现场主管或责任库管员在到货、接收或入库流转环节发起，提供直达台账快捷跳转按钮；
+         - 场景 2（定向受邀与一人一票协商机制）：明确参会人员仅限定向勾选供给方厂家、Global_admin 与集团特许仲裁人员，强调协商一致原则与仲裁人员普通表决权；
+         - 场景 3（隐私脱敏与即时原单恢复）：明确异议时立即判定“协商失败”并直接恢复提请前原单流转状态（不挂起冻结），以及非当事人的私密遮罩防护；
+       - **四步闭环操作条与操作提示卡片**：完整梳理定位订单、选择小组会议模式、勾选受邀人、核验生效的操作全流程。
+
+## 2026-10-20 insulation_pipe_supply_2026 仲裁人员权能精准分流与大厅操作自适应 (Arbitrator Authority Split & Review Hall Adaptive Action Display)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+  - **交互体验完善与权能自适应联动**：
+    1. **小组会议操作按钮自适应呈现**：
+       - 当特许仲裁人员（如王玮、李绍、张亮）查看**小组会议**时，因后端接口将 `can_arbitrate` 强制置为 `False`，会审大厅卡片与展开抽屉自动隐藏“⚖️ 终局裁决”按钮；
+       - 若仲裁员作为受邀协同核验成员，卡片准确展示普通表决操作栏（“✓ 同意更正”与“✕ 提出异议”），行使平等的协商表决权；
+    2. **多方联合会审裁决权保留无缝承接**：
+       - 当特许仲裁人员查看**多方联合会审**时，维持原有的权威裁决通道，正常展示“⚖️ 终局裁决”按钮，可针对争议挂起事项实施终局核准或驳回。
+
+## 2026-10-20 insulation_pipe_supply_2026 小组会议受邀人员界面下拉范围收敛 (Group Meeting Candidate Selection Scope Refinement)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+  - **交互体验完善举措**：
+    1. **候选人员范围收敛**：小组会议受邀人员下拉菜单精准展示为三组人选：
+       - `1. 供给方人员`（🏭 供货厂家业务账号）；
+       - `2. Global_admin (系统超级管理员)`（🛡️ `ww870411`）；
+       - `3. 集团仲裁人员`（⚖️ `王玮`、`李绍`、`张亮` 等特许仲裁员）；
+       彻底剥离并隐藏现场主管、责任库管员与施工单位，避免多重现场角色交叉误选；
+    2. **提示与状态文案同步**：弹窗副说明明确标注“仅限供给方人员、Global_admin和仲裁人员”，检索状态文案精准同步。
+
+## 2026-10-20 insulation_pipe_supply_2026 协同模式名称规范化与副标签精简 (Review Mode Terminology Normalization & Badge Clean-Up)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件与页面**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+    - [`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)；
+  - **术语规范化与视觉降噪**：
+    1. **模式名称规范化**：全站将“现场协同小组会”统一更名为“**小组会议**”，将“全员联合会审”统一更名为“**多方联合会审**”；
+    2. **副标签与宣传用语精简**：模式卡片彻底去除“重大争议”徽章以及“敏捷高效……”字样，仅保留整洁的“推荐”与状态约束“仅流转中可用”；描述文案精简为沉稳务实的业务解释；
+    3. **通知与大厅协同**：会审大厅类型筛选下拉列表、记录卡片顶部徽章、折叠摘要条以及每日待办弹窗上的类型标签全量同步更新为“🤝 小组会议”与“⚖️ 多方联合会审”。
+
+## 2026-10-20 insulation_pipe_supply_2026 经办签署人友好展示与卡片排版防溢出加固 (Voter Display Formatting & Card Overflow Protection)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+  - **交互体验完善与排版加固**：
+    1. **经办签署人清洗与友好展示 (`formatVoterName`)**：新增 `formatVoterName(vote)` 助手函数，签署人展示时自动过滤任何存量或异常的标段代码（如包含逗号或 `lot_`），优先回显纯净的用户真实账号姓名（如 `王玮`），彻底根除标段代码长串占位；
+    2. **CSS 文本换行与边框防溢出防护**：
+       - 对 `.entity-vote-card` 设置 `min-width: 0; overflow: hidden;`，杜绝子元素撑破外层网格卡片；
+       - 对 `.card-vote-audit` 与 `.audit-row` 赋予 `min-width: 0; max-width: 100%; flex-wrap: wrap;`；
+       - 对 `.audit-signer` 及其内部 `strong`、`.audit-opinion` 全面实装 `word-break: break-all; overflow-wrap: anywhere;`，保证任意长度英文字符串在到达边界时均能在任意字符处安全折行，绝不突破或溢出卡片边框。
+
+## 2026-10-20 insulation_pipe_supply_2026 私密小组会表面极简不可展开与提请人格式规范 (Masked Review Minimal Display & Initiator Format)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+  - **交互体验完善举措**：
+    1. **私密记录表面极简化**：非当事人查看私密小组会时，隐藏多余的标段、厂家、拟更正比对预览、事由及折叠摘要条，表面仅整洁呈现小组会标记（`🤝 现场小组会`）、物料类别、订单号（`订单号: rev.order_no`）、提请人及状态徽章与 `🔒 仅参会人员可见` 标签；
+    2. **彻底禁止展开**：卡片应用 `is-private-masked-card` 样式（默认鼠标指针、移除 hover 浮起），移除折叠箭头与展开/收起按钮，点击顶栏或空白处直接拦截；`expandAll` 自动忽略私密记录，详情区严格不渲染；
+    3. **提请人格式规范化 (`formatInitiator`)**：全页面提请人统一回显为 **`用户名 (角色)`**（如 `李春 (责任库管员)`、`ww870411 (集团超级管理员)`），彻底替代此前错误出现的标段名称。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会非当事人私密保护与脱敏展示 (Group Meeting Privacy Protection UI)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+  - **交互体验完善举措**：
+    1. **折叠条摘要保护**：当该记录被隐私保护（`rev.is_private_masked`）时，拟更正项显示 `📝 拟更正：🔒 仅参会人员可见`，事由标题脱敏；
+    2. **私密横幅与内容遮罩**：展开卡片后，在顶部呈现灰蓝渐变 `private-meeting-banner` 隐私横幅；拟更正对比面板显示 `diff-masked-notice` 隐私遮罩，附件与发言记录自动隐蔽；
+    3. **移动端窄屏适配**：针对手机端优化横幅间距、图标与字体大小，保障移动端窄屏下的专业美观。
+
+## 2026-10-20 insulation_pipe_supply_2026 会审大厅现场小组会协商失败状态展示与文案规范化 (Group Meeting Failed Negotiation Status Display)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+  - **交互体验完善举措**：
+    1. **状态标识与文案规范化 (`formatReviewStatus`)**：当小组会议（`review_type === 'group_meeting'`）中有成员投反对票导致未通过时，列表徽章明确呈现为 `🔴 协商失败`（原有法定联合会审仍保留 `🔴 终局裁决驳回`）；
+    2. **折叠栏标签与时间线反馈**：卡片顶栏折叠条标签展示为 `❌ 协商失败: {{ finalized_at }}`，时间线状态卡片显示为 `🔴 协商失败·维持原单`；
+    3. **状态筛选与履约信息优化**：顶栏状态下拉列表调整为 `🔴 终局驳回 / 协商失败`；办结环节指示器显示为 `小组成员异议·协商失败`，办结人标注为 `👤 异议成员: {{ finalized_by }}`。
+
+## 2026-10-20 insulation_pipe_supply_2026 库管员工作台管件发货记录多维筛选功能补齐与导出增强 (Warehouse Fitting Deliveries Multi-Dimension Filter)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)；
+  - **交互体验完善举措**：
+    1. **管件发货记录筛选面板补齐**：在管件台账卡片上方完整建立与保温管一致的响应式筛选卡片，支持“需求主体”、“供给主体”、“管件类别”、“状态”多选下拉筛选，以及“运输车次号”、“单号”、“车牌号”、“综合搜索”精准与模糊检索；
+    2. **响应式状态隔离与双重过滤**：引入独立的 `fittingFilters` 状态，与保温管筛选逻辑解耦；重构 `filteredFittingRows`，不仅在接口请求时向后端传参，同时在前端支持全字段即时响应式多维过滤并与四节点流转卡片状态叠加；
+    3. **台账统计与导出协同**：台账明细项统计及总管件数量随筛选条件动态响应；导出管件 Excel 时优先基于筛选后的结果导出，并补充了清晰的中文流转状态标签与需求主体全称。
+
+## 2026-10-20 insulation_pipe_supply_2026 全局待办通知弹窗账号切换即时感知与抑制逻辑纠偏 (Notice Modal Account Watch & Suppression Fix)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)；
+  - **交互体验完善举措**：
+    1. **账号切换即时感知**：增加对 `auth.user?.username` 的侦听，当在页面内登入或切换不同账号时，300ms 内立即调用待办接口执行刷新，无需死等 45 秒定时心跳；
+    2. **纠正过度抑制缺陷**：用户处于会审大厅内部时仅静默当前弹窗，不再提前将单据写入本地存储 `suppressedReviewIds`，仅当用户主动点击“今日不再提醒”时才持久化静默，确保用户在其他业务页面依然能正常唤醒待办弹窗。
+
+## 2026-10-20 insulation_pipe_supply_2026 协同小组会受邀候选人呈现基于系统账号规范化 (Account-Based Candidate Selection & Display)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+  - **交互体验完善举措**：
+    1. **候选人呈现按系统账号精准映射**：协同小组会下拉菜单中的候选人选项全面与后端系统用户账号（Username）对齐。供货厂家直接展示登录账号及单位（例如 `kaiyuan (大连开元热力管道股份有限公司)`），不再展示无系统账号的纸质单据或名册联系人（如薛向新、宋波），确保勾选邀请与账号登录、待办推送、大厅表决链路 100% 严密闭环。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会候选人列表纳入 ww870411 集团超管人选 (Include ww870411 in Group Review Candidates)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+  - **交互体验完善举措**：
+    1. **候选人下拉菜单置顶展示 ww870411**：在“4. 监督裁决 (可选)”分组中，显式将 `ww870411 (集团超管/仲裁)` 置于首位，方便现场主管或供货方在遇到重大争议时主动勾选邀请集团超级管理员列席协同；若当前登录人正是 `ww870411`，系统自动标注 `(您 · 发起人免选)`，其他用户发起时可正常勾选邀请。
+
+## 2026-10-20 insulation_pipe_supply_2026 提请小组会选单剔除施工单位与业务链路收敛 (Exclude Construction Units from Group Candidates)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+  - **交互体验完善举措**：
+    1. **下拉选单剔除施工单位**：在人员分组计算属性 `groupedCandidates` 中增加显式白名单过滤，彻底排除施工单位节点，确保下拉选单仅呈现“供货发货环节”、“到货核验环节”、“库管入库环节”及“监督裁决环节”，完全符合施工方不介入内部数据修正的业务规范。
+
+## 2026-10-20 insulation_pipe_supply_2026 提请会审弹窗误触遮罩关闭防护与会审大厅防打扰通知治理 (Modal Backdrop Guard & Review Hall Notification Suppression)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+    - [`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)；
+  - **交互体验完善举措**：
+    1. **遮罩点击误触防护**：移除会审提请弹窗背景遮罩的 `@click.self="handleClose"` 绑定，杜绝用户在编辑表单或点选人员时不慎点击卡片边缘空白处导致弹窗意外关闭的问题，必须显式点击右上角关闭按钮或取消按钮方可退出；
+    2. **会审大厅全场景防打扰通知机制**：
+       - 在全局待办通知弹窗中增加 `isAtReviewHall()` 页面感知判断，无论定时心跳（45s）、窗口焦点切换（focus）还是路由跳转，一旦检测到用户正处于会审大厅页面（`joint_review_hall`），即刻自动关闭并阻断新弹窗唤醒；
+       - 当用户点击“前往联合会审大厅”或在会审大厅中停留时，自动调用 `recordSuppressedIds` 将所有已知待办 ID 标记为已感知；即使用户离开大厅跳转到需求端或仓储端台账，也不会再被旧有待办弹窗二次打扰，仅在检测到全新提请单据时才恢复提醒。
+
+## 2026-10-20 insulation_pipe_supply_2026 协同小组会受邀人员下拉菜单点选组件上线与排版精简 (Group Meeting Candidate Dropdown Selector)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+  - **交互与排版重构举措**：
+    1. **零预设与无默认推荐**：打开小组会议时不默认勾选任何人，取消历史推荐高亮与自动勾选行为，完全由发起人主动勾选，避免非必要人员误入表决链路；
+    2. **折叠式下拉点选菜单组件 (Candidate Dropdown Component)**：
+       - 替代原先占用较大面积的卡片平铺网格，采用类似现代 Tag Input 的紧凑触发条；
+       - 未选择时展示引导占位符，点选后以交互式胶囊标签（Chips）回显人员与角色，支持在触发条内点击 `✕` 快速移除某人员；
+       - 展开下拉浮层后，人员按五大业务节点（供货单位、现场接货、施工单位、仓库保管、仲裁统筹）分类展示，提供清晰的复选框、姓名、角色、电话及当前发起人免选标识；
+       - 面板内置“清空已选”与“完成并收起”操作按钮，极大改善交互流转；
+    3. **移动端窄屏自适应**：
+       - `@media (max-width: 720px)` 下优化胶囊最大宽度、弹层最大高度（260px）及触控项间距，确保手机竖屏单手点选顺畅不挡屏。
+
+## 2026-10-20 insulation_pipe_supply_2026 全状态发货单提请会审/协同小组会支持与多视图入口贯通 (Universal Order Review Trigger & Multi-View Integration)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与组件**：
+    - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)；
+    - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)；
+    - [`SupplyManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)；
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+  - **交互增强举措**：
+    1. **提请入口对全状态开放**：在需求端、库管端及供给端发货台账中，无论是已归档（`completed`）、待到货、待接收还是待入库单据，只要未处于会审锁定中（`under_review`），均全量开放“⚖️ 提请会审”按钮；
+    2. **供给端发货台账集成提请与查看能力**：在供货商界面的直管物流记录及管件发货卡片中新增“提请会审/查看会审”操作按钮，并挂载发起模态框，供货方可直接就错漏单据发起现场小组协同讨论；
+    3. **发起弹窗智能模式约束与保护**：针对已归档完成单据，弹窗自动将模式锁定为“🤝 现场协同小组会”，若用户尝试切换法定联合会审则明确提示“仅支持流转中单据”，保障法定联合会审严肃性的同时极大扩展小组会协商范围。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会议与全流程节点提请功能上线及移动端窄屏适配 (Group Meeting Collaboration & Mobile Responsive Overhaul)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心组件**：
+    - [`InitiateJointReviewModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)；
+    - [`JointReviewHallView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)；
+    - [`DailyReviewNoticeModal.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)；
+    - [`jointReviewApi.js`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/services/jointReviewApi.js)；
+  - **界面与交互重构举措**：
+    1. **双模式卡片式无缝切换**：
+       - 在发起弹窗顶部提供“🤝 现场协同小组会 (轻量快速)”与“⚖️ 全员联合会审 (正式仲裁)”双模式切换；
+       - 默认为“现场协同小组会”，引导用户以更小的人际心理阻力发起微型协商；
+    2. **全流程节点人选精细选择器与智能推荐**：
+       - 根据后端接口 `GET /api/v1/projects/insulation_pipe_supply_2026/joint-reviews/order-candidates` 动态拉取当前单据涉及的供货单位、现场片区负责人、施工单位、库管员以及仲裁人员；
+       - 智能分组呈现，提供“智能推荐（供货代表+片区负责人）”、“一键全选”、“清空”快速操作，发起人名片自动置灰并标注“发起人（免选）”；
+    3. **移动端窄屏自适应深度优化（Mobile First）**：
+       - `@media (max-width: 720px)` 下模式切换自动转为单列全宽；
+       - 候选人人选网格自适应单列，触控高度扩展至 44px 以上，点击即选；
+       - 强制输入控件字号达到 16px，杜绝 iOS Safari 触摸聚焦时的页面异常放大；
+       - 底部提交与取消按钮自动纵向流式排列，单手单指操作无障碍；
+    4. **大厅列表与全局提醒联动展示**：
+       - 会审大厅顶部支持按协同类型（小组会 / 全员会审）进行独立过滤；
+       - 卡片顶部与折叠条显著展示绿色 `🤝 小组会` 徽标，进度条阶段标注为“会商中”，全员通过后标识为“🟢 小组成员核准生效”；
+       - 待办弹窗自动识别 `review_type === 'group_meeting'` 并精准呈现“现场小组会”通知。
+
+## 2026-10-19 monthly_data_show 月报数据查询工具“向前穿透”趋势图均值标签物理隔离与自主控制优化 (MarkLine Label Physical Isolation & Toggle Control)
+
+- **涉及页面与界面交互演化说明**：
+  - **核心页面**：[`MonthlyDataShowQueryToolView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue)；
+  - **避让防遮挡与用户自主控制举措**：
+    1. **均值标签移至右侧外部安全区 (`position: 'end'`)**：
+       - 将均值标签彻底移出绘图区域内部，定位在均值线最右侧端点外侧（`position: 'end'`，水平偏移 8px），与所有周期的折线点/柱子在 X 轴横向物理隔离，彻底根除了由于指标数值接近均值而导致的数据标签被遮挡难题；
+    2. **去除实心底色，轻量微标化**：
+       - 移除大面积厚重背景框，采用纯文本琥珀色微标（`均值 xx.xx`），视觉通透无遮盖感；
+    3. **自适应右侧边界扩展 (`grid.right: 76`)**：
+       - 当显示均值标注时自适应预留 76px 独立右侧缓冲区，均值文字完全收纳在图表视口内，不溢出、不裁切；
+    4. **控制栏新增“均值标注”交互复选框 (`penetrationShowAvgLabel`)**：
+       - 用户可自由勾选是否在均值线上展示标注文字（默认勾选），即便取消勾选，均值基准虚线、主副标题均值及顶部概览卡片依然完整保留；
+    5. **Tooltip 增强均值基准行**：
+       - 单口径模式下在鼠标悬浮浮层底部增加一条虚线隔开的均值参考，查看单期细节时可随手比对。
+
+## 2026-10-19 monthly_data_show 月报数据查询工具“向前穿透”趋势图均值标签避让优化 (Relocate MarkLine Label To Avoid Data Label Collision)
+
+- **涉及页面与界面交互演化说明**：
+  - **核心页面**：[`MonthlyDataShowQueryToolView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue)；
+  - **避让防遮挡举措**：
+    1. **均值标签移至左侧起点上方 (`insideStartTop`)**：
+       - 将均值胶囊标签的位置由右端迁移至最左侧起点内侧上方，彻底避开最右侧最新周期的数据点与顶部数值标签密集区域，彻底消除了相互重叠遮挡；
+    2. **左上角副标题同步固化均值显示**：
+       - 单口径模式下自动在副标题中追加展示 `历史均值: xx.xx [单位]`，使用户在图表上方即可清晰获知基准线数值，无论图表数据如何变动均 100% 安全可靠。
+
+## 2026-10-19 monthly_data_show 月报数据查询工具“向前穿透”趋势图动态刻度缩放与均值线内嵌防溢出优化 (Dynamic Y-Axis Scale & Inset MarkLine Label)
+
+- **涉及页面与界面交互演化说明**：
+  - **核心页面**：[`MonthlyDataShowQueryToolView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue)；
+  - **体验痛点深度解决**：
+    1. **脱离 0 值强行对齐，自适应真实值域 (`scale: true` + 动态 min/max)**：
+       - 彻底解决各周期数值差异不大时曲线被压平成一条直线的问题；
+       - 通过回调函数根据当前数据极差自动上下预留 15%~18% 缓冲区间，使折线起伏与柱状对比显著放大，微小变动一目了然；
+    2. **历史均值线内嵌终点下方 (`insideEndTop`) 与消除向外发射**：
+       - 去除向外发射箭头符号（`symbol: ['none', 'none']`）；
+       - 均值标签位置由外侧改置为 `insideEndTop`（终点内侧上方），并赋予淡琥珀色胶囊底色标签，彻底杜绝文字移出右边界被裁切的问题；
+       - 坐标系右侧内边距增至 `grid.right: 36`，提供充裕安全空间。
+
+## 2026-10-19 monthly_data_show 月报数据查询工具“向前穿透”趋势图视觉精简：去除最高/最低标点标签 (Remove MarkPoints From Penetration Chart)
+
+- **涉及页面与界面交互演化说明**：
+  - **核心页面**：[`MonthlyDataShowQueryToolView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue)；
+  - **图表精简举措**：
+    - 彻底移除了折线图与柱状图上的 `markPoint` 气泡标点（“最高”、“最低”），避免图表上出现多余的大气泡遮挡曲线走向或与数据标签相互交叠；
+    - 保持平滑曲线微渐变面积阴影以及历史均值参考虚线（`markLine`），画面更轻盈纯粹；
+    - 历史极值（最高/最低周期及数值）继续完整呈现在图表上方的 4 维指标快览卡片与 Tooltip 中，满足深度审计需求的同时保障图表视觉干净。
+
+## 2026-10-19 monthly_data_show 月报数据查询工具“向前穿透”趋势图全维度防重叠深度优化 (Monthly Data Show Penetration Chart Label Anti-Overlap Optimization)
+
+- **涉及页面与界面交互演化说明**：
+  - **核心页面**：[`MonthlyDataShowQueryToolView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue)；
+  - **标签防重叠优化举措**：
+    1. **X 轴双行紧凑格式化 (`formatCycleXAxisLabel`)**：
+       - 针对区间型历史周期（如 `2022-10 ~ 2023-04`），创新性拆解为两行排版：第一行显示供暖期（如 `2022-2023供暖期`），第二行显示月份跨度（如 `2022.10 ~ 2023.04`）；
+       - 标签宽度降低 50% 以上，并配合 `lineHeight: 16` 与 `hideOverlap: true`，彻底根除多周期并列时的横向挤压与文字粘连；
+    2. **ECharts 原生防重叠引擎介入 (`labelLayout`)**：
+       - 折线与柱状图 series 接入 `labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' }`；
+       - 多口径并列时，若不同公司在同一周期的数值非常相近，系统自动进行垂直微位移错开或避让，杜绝数据标签堆叠成黑团；
+    3. **单口径极值标记 (`markPoint`) 精细化重构**：
+       - 极值气泡采用独立 Pin 样式并内嵌格式化数值与名称（最高/最低）；
+       - 与 series 的防重叠引擎联动，气泡出现位置自动避开普通数据标签，告别气泡盖字；
+    4. **图例与标题独立排布**：
+       - 图例增加 `maxWidth: '52%'` 与滚动翻页保护，并与左上角标题垂直空间错落，互不挤占；
+       - 单口径聚焦时自动隐藏无用图例，视口更加整洁通透；
+    5. **布局间距与容器高度优化**：
+       - 图表下边距拓展至 `bottom: 48`，容器高度提升至 `400px`，卡片极值文字增加防溢出省略截断。
+
+## 2026-10-19 monthly_data_show 月报数据查询工具新增“向前穿透”历史演变趋势图表与指标可视化分析能力 (Monthly Data Show Historical Penetration Charts & Metric Insights)
+
+- **涉及页面与界面交互演化说明**：
+  - **核心页面**：[`MonthlyDataShowQueryToolView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue)；
+  - **可视化趋势分析模块架构**：
+    - **穿透专属控制工具栏**：
+      - 提供“分析指标”下拉选择器（支持用户在已查询指标集合中随时切换）；
+      - 提供“分析口径”切换（支持全部已选口径对比或聚焦单一口径，如“全口径”）；
+      - 提供“图表类型”切换（支持折线趋势与柱状对比两种形态）；
+      - 提供“显示数值标签”复选开关；
+    - **4 维核心指标洞察卡片**：
+      - 最新周期值（数值 + 计量单位 + 口径）；
+      - 基准起始值（回溯最远完整周期值）；
+      - 全周期总变动（差值与幅变率，自动高亮正负变动颜色）；
+      - 历史极值周期（历史最高值周期与最低值周期快览）；
+    - **ECharts 响应式图表引擎集成**：
+      - X 轴基于周期起始时间正序严谨排列；
+      - Y 轴自适应指标计量单位（万GJ、万kWh、kg/㎡、℃、% 等）；
+      - 折线图支持平滑曲线、单口径微渐变面积阴影、最高/最低极值标点（MarkPoint）以及历史均值参考线（MarkLine）；
+      - 智能 Tooltip：悬浮即时显示完整周期名称、指标口径、当前值，并自动换算出较上一周期的环比变动差值与增减百分比；
+    - **周期横向明细对比小表**：在图表下方以矩阵表格横向展开各历史周期的具体数值，并自动计算末期近一期环比变动与全期总变化率；
+    - **查询条数上限自适应提升**：在 `buildPayload()` 中将穿透模式的查询 `limit` 自动升至 1000（常规仍为 200），保障多口径多指标查询时所有历史周期数据完整呈现在图表中；
+    - **生命周期保护**：在 `onMounted` 绑定窗口 resize 自适应监听，在 `onBeforeUnmount` 及时解绑并调用 `dispose()` 防范内存泄漏。
+
+## 2026-10-19 monthly_data_show 月报数据查询工具新增“向前穿透”历史周期回溯功能 (Monthly Data Show Query Tool Historical Penetration)
+
+- **涉及页面与界面交互演化说明**：
+  - **核心页面**：[`MonthlyDataShowQueryToolView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue)；
+  - **筛选区控件演变**：
+    - 在筛选网格首行紧随“4月口径（改用4月5日）”之后，同排新增“历史回溯”卡片与“向前穿透”复选框（默认不勾选）；
+    - 适配单月或跨月时间段查询：勾选后前端将 `penetrate_history: true` 随同 `buildPayload()` 传递至后端，由后端自动逐年向前探测并返回所有完整历史周期的聚合行；
+  - **表格展示与聚合开关自适应**：
+    - 升级 `formatResultMonth`，对后端返回的周期跨度时间标识（如 `2025-10 ~ 2026-04`）自动解析并格式化为 `2025年10月 ~ 2026年4月` 友好文本展示；
+    - 聚合开关中的“月份聚合”在开启“向前穿透”时自适应提示为“已自动按周期聚合”（多月）或“单月历史穿透”（单月），并进行只读锁定保护；
+    - 导出 XLSX 自动附加 `_向前穿透` 标签，完整包含跨越多个历史采暖期的连续聚合值。
+
 ## 2026-10-19 daily_report_25_26 数据分析环比区间动态开栓日推导与项目名称随期自适应 (Data Analysis Ring Season Adaptation & Dynamic Project Name)
 
 - **涉及页面与界面交互演化说明**：

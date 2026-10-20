@@ -26,11 +26,27 @@ from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.projects.insulation_pipe_supply_2026.services.audit_log_service import save_operation_log
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
+    _extract_normalized_ids,
     get_config_list,
     load_tube_config,
     resolve_accessible_section_1_ids,
     resolve_accessible_supply_entity_ids,
 )
+
+def _normalize_ids(raw_value: Any) -> Set[str]:
+    """安全归一化标段/主体 ID 集合。"""
+    try:
+        return _extract_normalized_ids(raw_value)
+    except Exception:
+        if not raw_value:
+            return set()
+        if isinstance(raw_value, str):
+            parts = raw_value.split(",")
+        elif isinstance(raw_value, (list, tuple, set)):
+            parts = [str(x) for x in raw_value]
+        else:
+            parts = [str(raw_value)]
+        return {str(p).strip() for p in parts if str(p).strip()}
 
 def _json_serialize_default(obj: Any) -> Any:
     """处理 json.dumps 无法直接序列化的 Decimal、datetime、date 等对象。"""
@@ -50,7 +66,7 @@ PROJECT_KEY = "insulation_pipe_supply_2026"
 logger = logging.getLogger(__name__)
 
 # 终局裁决/仲裁权默认白名单（首批特许裁决人员）
-DEFAULT_ARBITRATOR_ACCOUNTS: Set[str] = {"王玮", "李绍", "张亮"}
+DEFAULT_ARBITRATOR_ACCOUNTS: Set[str] = {"ww870411", "王玮", "李绍", "张亮"}
 
 
 def get_arbitrator_accounts() -> Set[str]:
@@ -110,10 +126,10 @@ FROZEN_FIELDS = {"order_no", "shipment_no", "supply_entity_id", "section_1_id"}
 _tables_initialized = False
 
 
-def ensure_joint_review_tables() -> None:
+def ensure_joint_review_tables(force: bool = False) -> None:
     """初始化检查并确保联合会审相关数据表与索引存在。"""
     global _tables_initialized
-    if _tables_initialized:
+    if _tables_initialized and not force:
         return
 
     ddl_statements = [
@@ -178,6 +194,15 @@ def ensure_joint_review_tables() -> None:
         """,
         """
         ALTER TABLE tube.tube_fitting_delivery ADD COLUMN IF NOT EXISTS pre_review_status VARCHAR(32);
+        """,
+        """
+        ALTER TABLE tube.tube_order_reviews ADD COLUMN IF NOT EXISTS review_type VARCHAR(32) NOT NULL DEFAULT 'joint_review';
+        """,
+        """
+        ALTER TABLE tube.tube_order_reviews ADD COLUMN IF NOT EXISTS invited_users JSONB DEFAULT '[]'::jsonb;
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_tube_order_reviews_type ON tube.tube_order_reviews(review_type);
         """,
     ]
 
@@ -458,6 +483,159 @@ def _restore_rows(db_session, review: Dict[str, Any], rows: List[Dict[str, Any]]
                            {**values, "row_id": row["id"]})
 
 
+def get_order_meeting_candidates(
+    order_category: str,
+    delivery_id: int,
+    session_username: str,
+    session_name: str,
+    session_group: str,
+) -> Dict[str, Any]:
+    """
+    获取指定发货单在业务全流转链条上的所有合法责任主体/人员候选清单（用于小组会议定向邀请）。
+    包含发货出厂节点、到货核验节点、施工接收节点、库管归档节点及特许裁决员。
+    """
+    ensure_joint_review_tables()
+    order_category = order_category.strip().lower()
+    if order_category not in ("pipe", "fitting"):
+        raise HTTPException(status_code=400, detail="物料类别必须为 pipe (直管) 或 fitting (管件)")
+
+    db_session = SessionLocal()
+    try:
+        delivery = _get_delivery_info(db_session, order_category, delivery_id)
+        if not delivery:
+            raise HTTPException(status_code=404, detail="关联的发货单据不存在")
+
+        section_1_id = str(delivery.get("section_1_id") or "").strip()
+        supply_entity_id = str(delivery.get("supply_entity_id") or "").strip()
+        current_status = str(delivery.get("status") or "")
+
+        cfg = load_tube_config() or {}
+
+        # 检查当前登录用户是否具备提请召开小组会议的资格：
+        # 规则：属于该订单流程链条上的任意节点权限人（发货方、到货现场主管、施工单位、库管员）或 Global_admin
+        is_admin = session_group in ("Global_admin", "dev_admin")
+        can_initiate = False
+        initiator_node_role = "协同经办人"
+
+        if is_admin:
+            can_initiate = True
+            initiator_node_role = "集团超级管理员"
+        else:
+            acc_suppliers = resolve_accessible_supply_entity_ids(cfg, session_username, session_group)
+            if supply_entity_id.lower() in {s.lower() for s in acc_suppliers}:
+                can_initiate = True
+                initiator_node_role = "供货厂家经办人"
+
+            acc_sections = resolve_accessible_section_1_ids(cfg, session_username, session_group)
+            if section_1_id.lower() in {s.lower() for s in acc_sections}:
+                if session_group == "tube_site_manager":
+                    can_initiate = True
+                    initiator_node_role = "标段现场主管"
+                elif session_group in ("tube_warehouse_keeper", "tube_warehouse_admin"):
+                    can_initiate = True
+                    initiator_node_role = "责任库管员"
+                else:
+                    can_initiate = True
+                    initiator_node_role = "标段协同经办人"
+
+        candidates: List[Dict[str, Any]] = []
+        seen_keys: Set[str] = set()
+
+        def add_cand(c: Dict[str, Any]) -> None:
+            k = c["key"]
+            if k not in seen_keys:
+                seen_keys.add(k)
+                cand_u = str(c.get("username") or "").strip().lower()
+                cand_eid = str(c.get("entity_id") or "").strip().lower()
+                cur_u = str(session_username or "").strip().lower()
+                cur_n = str(session_name or "").strip().lower()
+                is_curr = False
+                if cand_u and (cur_u == cand_u or cur_n == cand_u):
+                    is_curr = True
+                elif cand_eid and (cur_u == cand_eid or cur_n == cand_eid):
+                    is_curr = True
+                c["is_current_user"] = is_curr
+                candidates.append(c)
+
+        # 1. 供货厂家节点（发货出厂）- 严格基于系统用户账号（Username）实施邀请
+        supply_entities = get_config_list(cfg, "supply_entities")
+        matched_sup = None
+        for sup in supply_entities:
+            if str(sup.get("entity_id") or "").strip().lower() == supply_entity_id.lower():
+                matched_sup = sup
+                break
+
+        if matched_sup:
+            s_id = matched_sup.get("entity_id")
+            s_name = matched_sup.get("entity_name") or s_id
+            sup_uname = matched_sup.get("username") or s_id
+            sup_phone = matched_sup.get("contact_phone") or ""
+            # 候选人 key/username 均直接绑定厂家的系统账号（如 kaiyuan），显示名称展示：账号 (厂家单位全称)
+            add_cand({
+                "key": f"supplier_{sup_uname}",
+                "node_key": "supply",
+                "node_title": "1. 供给方人员",
+                "role_desc": "供货厂家业务账号",
+                "entity_type": "supplier",
+                "entity_id": s_id,
+                "entity_name": s_name,
+                "display_name": f"{sup_uname} ({s_name})",
+                "username": sup_uname,
+                "phone": sup_phone,
+                "recommended": False,
+            })
+
+        # 2. Global_admin (集团超级管理员)
+        add_cand({
+            "key": "global_admin_ww870411",
+            "node_key": "global_admin",
+            "node_title": "2. Global_admin (系统超级管理员)",
+            "role_desc": "集团超级管理员",
+            "entity_type": "global_admin",
+            "entity_id": "ww870411",
+            "entity_name": "ww870411 (集团超级管理员)",
+            "display_name": "ww870411 (集团超管)",
+            "username": "ww870411",
+            "phone": "",
+            "recommended": False,
+        })
+
+        # 3. 仲裁人员 (特许仲裁员)
+        arbitrators = get_arbitrator_accounts()
+        arb_list = sorted([a for a in arbitrators if a != "ww870411"])
+        for arb in arb_list:
+            add_cand({
+                "key": f"arbitrator_{arb}",
+                "node_key": "arbitrator",
+                "node_title": "3. 集团仲裁人员",
+                "role_desc": "特许仲裁员",
+                "entity_type": "arbitrator",
+                "entity_id": arb,
+                "entity_name": f"{arb} (特许裁决员)",
+                "display_name": f"{arb} (特许仲裁)",
+                "username": arb,
+                "phone": "",
+                "recommended": False,
+            })
+
+        return {
+            "ok": True,
+            "order_no": delivery["order_no"],
+            "delivery_id": delivery_id,
+            "order_category": order_category,
+            "section_1_id": section_1_id,
+            "section_1_name": _resolve_section_name(cfg, section_1_id),
+            "supply_entity_id": supply_entity_id,
+            "supply_entity_name": _resolve_supplier_name(cfg, supply_entity_id),
+            "current_status": current_status,
+            "can_initiate": can_initiate,
+            "initiator_node_role": initiator_node_role,
+            "candidates": candidates,
+        }
+    finally:
+        db_session.close()
+
+
 def create_joint_review(
     order_category: str,
     delivery_id: int,
@@ -468,24 +646,32 @@ def create_joint_review(
     operator_name: str,
     operator_group: str,
     client_ip: str = "",
+    review_type: Optional[str] = None,
+    invited_users: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
-    发起联合会审核心逻辑：
+    发起联合会审 / 现场协同小组会核心逻辑：
     1. 校验订单存在性与当前状态互斥锁；
-    2. 校验发起人角色与场景权责匹配；
+    2. 校验发起人角色与场景权责匹配（小组会议允许链条上任意节点权限人及管理员发起）；
     3. 校验 proposed_patch 白名单与合法性；
-    4. 编排必审主体清单（场景 3 精准排除施工方）；
-    5. 原单挂起状态置为 'under_review'，创建会审记录。
+    4. 编排必审主体清单（小组会议支持发起人自主勾选受邀协同人）；
+    5. 原单挂起状态置为 'under_review'，创建会审/小组会记录。
     """
     ensure_joint_review_tables()
     order_category = order_category.strip().lower()
-    # 通知署名与主单署名统一，避免通知阶段引用未定义变量。
-    initiator_name = operator_name or operator_username
+    if not review_type:
+        review_type = "group_meeting" if invited_users else "joint_review"
+    else:
+        review_type = review_type.strip().lower()
+        if review_type not in ("group_meeting", "joint_review"):
+            review_type = "group_meeting" if invited_users else "joint_review"
+
+    initiator_name = operator_username or operator_name
     if order_category not in ("pipe", "fitting"):
         raise HTTPException(status_code=400, detail="物料类别必须为 pipe (直管) 或 fitting (管件)")
 
     if not review_reason or len(review_reason.strip()) < 4:
-        raise HTTPException(status_code=422, detail="提请联合会审必须填写充分的事由说明（不少于4个字符）")
+        raise HTTPException(status_code=422, detail="提请事由说明必须填写充分（不少于4个字符）")
 
     db_session = SessionLocal()
     try:
@@ -502,31 +688,35 @@ def create_joint_review(
             raise HTTPException(status_code=404, detail="关联单据不存在")
         current_status = delivery.get("status") or ""
         if current_status == "under_review":
-            raise HTTPException(status_code=409, detail="该单据已处于联合会审中，请勿重复提请")
-        if current_status == "completed":
-            raise HTTPException(status_code=422, detail="该单据已完成库管最终归档，全生命周期已闭环，无需发起会审")
-        if current_status == "cancelled":
-            raise HTTPException(status_code=422, detail="已撤销作废的单据无法发起会审")
-        if current_status not in ("pending_arrival", "pending_receive", "pending_diff_approve", "pending_warehouse"):
-            raise HTTPException(status_code=422, detail=f"当前单据状态 [{current_status}] 不支持发起会审")
+            raise HTTPException(status_code=409, detail="该单据已处于会审或协同会商中，请勿重复提请")
 
-        # 检查是否已有未办结的会审
+        # 模式校验规则：
+        # 对于多方联合会审模式 (joint_review)，条件与原来保持不变（必须为流转中的待到货/待接收/待入库状态）；
+        # 对于小组会议模式 (group_meeting)，支持任意状态（包括已完成归档、待到货、待接收、待入库等）发起协商。
+        is_group_meeting = (review_type == "group_meeting")
+        if not is_group_meeting:
+            if current_status == "completed":
+                raise HTTPException(status_code=422, detail="该单据已完成库管最终归档，全生命周期已闭环，多方联合会审仅支持流转中单据发起（如需协商更正请使用【小组会议】模式）")
+            if current_status == "cancelled":
+                raise HTTPException(status_code=422, detail="已撤销作废的单据无法发起多方联合会审")
+            if current_status not in ("pending_arrival", "pending_receive", "pending_diff_approve", "pending_warehouse"):
+                raise HTTPException(status_code=422, detail=f"当前单据状态 [{current_status}] 不支持发起多方联合会审更正（请切换为【小组会议】模式）")
+
+        # 检查是否已有未办结的会审或小组会议
         active_review_sql = text("""
-            SELECT id, review_no FROM tube.tube_order_reviews
+            SELECT id, review_no, review_type FROM tube.tube_order_reviews
             WHERE order_category = :cat AND delivery_id = :did AND review_status = 'voting'
             LIMIT 1
         """)
         active_rev = db_session.execute(active_review_sql, {"cat": order_category, "did": delivery_id}).mappings().first()
         if active_rev:
-            raise HTTPException(status_code=409, detail=f"已存在正在进行的联合会审 [{active_rev['review_no']}]，不能重复发起")
+            t_label = "小组会议" if active_rev.get("review_type") == "group_meeting" else "多方联合会审"
+            raise HTTPException(status_code=409, detail=f"已存在正在进行的{t_label} [{active_rev['review_no']}]，不能重复发起")
 
         # 场景界定与发起人资格校验
         is_global_admin = operator_group in ("Global_admin", "dev_admin")
         cfg = load_tube_config() or {}
-        if not is_global_admin:
-            allowed_sections = resolve_accessible_section_1_ids(cfg, operator_username, operator_group)
-            if str(delivery["section_1_id"]).lower() not in {str(key).lower() for key in allowed_sections}:
-                raise HTTPException(status_code=403, detail="您没有该订单所属标段的会审发起权限")
+
         frozen_rows = [delivery]
         if order_category == "fitting" and delivery.get("shipment_no"):
             shipment_rows = [dict(row) for row in db_session.execute(text("""
@@ -534,7 +724,7 @@ def create_joint_review(
                 ORDER BY id FOR UPDATE
             """), {"shipment": delivery["shipment_no"]}).mappings().all()]
             if any(row["status"] == "under_review" for row in shipment_rows):
-                raise HTTPException(status_code=409, detail="同车次已有明细处于会审中，请勿重复提请")
+                raise HTTPException(status_code=409, detail="同车次已有明细处于会审/小组会中，请勿重复提请")
             frozen_rows = [row for row in shipment_rows if row["status"] == current_status
                            and row["section_1_id"] == delivery["section_1_id"]
                            and row["supply_entity_id"] == delivery["supply_entity_id"]]
@@ -542,65 +732,171 @@ def create_joint_review(
         sup_name = _resolve_supplier_name(cfg, delivery["supply_entity_id"])
         sec_name = _resolve_section_name(cfg, delivery["section_1_id"])
 
-        if current_status == "pending_arrival":
-            # 场景 1：待确认到货 -> 现场负责人发起
-            if not is_global_admin and operator_group != "tube_site_manager":
-                raise HTTPException(status_code=403, detail="待到货阶段仅限现场负责人（Site Manager）发起联合会审")
-            trigger_scene = "scene_1_arrival"
-            initiator_role = "现场负责人"
-            # 必需主体：仅供货厂家
-            required_entities = [
-                {
-                    "entity_type": "supplier",
-                    "entity_id": delivery["supply_entity_id"],
-                    "entity_name": sup_name,
-                    "role_desc": "供货厂家",
-                }
-            ]
-        elif current_status in ("pending_receive", "pending_diff_approve"):
-            # 场景 2：待施工接收 -> 施工单位发起
-            if not is_global_admin and operator_group not in ("tube_construction_unit", "tube_site_manager"):
-                raise HTTPException(status_code=403, detail="待施工接收阶段仅限施工单位或现场主管发起联合会审")
-            trigger_scene = "scene_2_receive"
-            initiator_role = "施工单位"
-            # 必需主体：供货厂家 + 现场负责人
-            required_entities = [
-                {
-                    "entity_type": "supplier",
-                    "entity_id": delivery["supply_entity_id"],
-                    "entity_name": sup_name,
-                    "role_desc": "供货厂家",
-                },
-                {
-                    "entity_type": "site_manager",
-                    "entity_id": "site_manager",
-                    "entity_name": "标段现场主管",
-                    "role_desc": "现场负责人",
-                },
-            ]
-        elif current_status == "pending_warehouse":
-            # 场景 3：待库管确认 -> 库管员发起
-            if not is_global_admin and operator_group not in ("tube_warehouse_keeper", "tube_warehouse_admin"):
-                raise HTTPException(status_code=403, detail="待库管确认阶段仅限库管员发起联合会审")
-            trigger_scene = "scene_3_warehouse"
-            initiator_role = "责任库管员"
-            # 必需主体：供货厂家 + 现场负责人（精准排除施工方！）
-            required_entities = [
-                {
-                    "entity_type": "supplier",
-                    "entity_id": delivery["supply_entity_id"],
-                    "entity_name": sup_name,
-                    "role_desc": "供货厂家",
-                },
-                {
-                    "entity_type": "site_manager",
-                    "entity_id": "site_manager",
-                    "entity_name": "标段现场主管",
-                    "role_desc": "现场负责人",
-                },
-            ]
+        is_group_meeting = (review_type == "group_meeting")
+        if is_group_meeting:
+            # 🤝 小组会议规则：可以提请召开小组会议的人，应当是该流程上的任意节点权限人或 Global_admin
+            can_initiate_meeting = False
+            initiator_role = "协同经办人"
+            if is_global_admin:
+                can_initiate_meeting = True
+                initiator_role = "集团超级管理员"
+            else:
+                acc_suppliers = resolve_accessible_supply_entity_ids(cfg, operator_username, operator_group)
+                if str(delivery["supply_entity_id"]).lower() in {s.lower() for s in acc_suppliers}:
+                    can_initiate_meeting = True
+                    initiator_role = "供货厂家经办人"
+
+                acc_sections = resolve_accessible_section_1_ids(cfg, operator_username, operator_group)
+                if str(delivery["section_1_id"]).lower() in {s.lower() for s in acc_sections}:
+                    if operator_group == "tube_site_manager":
+                        can_initiate_meeting = True
+                        initiator_role = "标段现场主管"
+                    elif operator_group in ("tube_warehouse_keeper", "tube_warehouse_admin"):
+                        can_initiate_meeting = True
+                        initiator_role = "责任库管员"
+                    else:
+                        can_initiate_meeting = True
+                        initiator_role = "标段协同经办人"
+
+            if not can_initiate_meeting:
+                raise HTTPException(status_code=403, detail="您不属于该订单业务链条上的任何责任节点，无权提请召开小组会议")
+
+            if not invited_users or not isinstance(invited_users, list):
+                raise HTTPException(status_code=422, detail="提请召开小组会议必须至少邀请 1 位相关责任人参与讨论核验")
+
+            # 规范化 invited_users：支持 dict 或纯 username 字符串
+            normalized_invited = []
+            for item in invited_users:
+                if isinstance(item, str):
+                    uname = item.strip()
+                    normalized_invited.append({
+                        "username": uname,
+                        "entity_id": uname,
+                        "display_name": uname,
+                        "entity_name": uname,
+                        "role_desc": "受邀协同成员",
+                        "entity_type": "user",
+                    })
+                elif isinstance(item, dict):
+                    normalized_invited.append(item)
+
+            # 过滤掉发起人自身（发起人作为主持人已在会中，默认投赞成票）
+            filtered_invited = []
+            for u in normalized_invited:
+                u_uname = str(u.get("username") or "").strip().lower()
+                u_eid = str(u.get("entity_id") or "").strip().lower()
+                op_u = operator_username.strip().lower()
+                op_n = (operator_name or "").strip().lower()
+                if u_uname and u_uname == op_u:
+                    continue
+                if u_eid and u_eid == op_u:
+                    continue
+                if op_n and (u_uname == op_n or u_eid == op_n):
+                    continue
+                filtered_invited.append(u)
+
+            if not filtered_invited:
+                raise HTTPException(status_code=422, detail="召开小组会议不能仅包含发起人自己，请至少勾选邀请 1 位协同责任人")
+
+            # 严格核验受邀人员身份范围：仅允许供给方人员、Global_admin和仲裁人员
+            allowed_arbitrators = {a.strip().lower() for a in get_arbitrator_accounts()}
+            allowed_global_admins = {"ww870411"}
+            allowed_suppliers = {str(delivery["supply_entity_id"]).strip().lower()}
+            for sup in get_config_list(cfg, "supply_entities"):
+                if str(sup.get("entity_id") or "").strip().lower() in allowed_suppliers:
+                    if sup.get("username"):
+                        allowed_suppliers.add(str(sup.get("username")).strip().lower())
+                    allowed_suppliers.add(str(sup.get("entity_id")).strip().lower())
+
+            for u in filtered_invited:
+                u_uname = str(u.get("username") or "").strip().lower()
+                u_eid = str(u.get("entity_id") or "").strip().lower()
+                u_type = str(u.get("entity_type") or "").strip().lower()
+                is_sup = (u_uname in allowed_suppliers or u_eid in allowed_suppliers or u_type == "supplier")
+                is_admin = (u_uname in allowed_global_admins or u_eid in allowed_global_admins or u_type in ("global_admin", "dev_admin"))
+                is_arb = (u_uname in allowed_arbitrators or u_eid in allowed_arbitrators or u_type == "arbitrator")
+                if not (is_sup or is_admin or is_arb):
+                    cand_name = u.get("display_name") or u.get("entity_name") or u_uname
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"受邀成员 [{cand_name}] 不符合受邀资质：小组会议仅允许邀请供给方人员、Global_admin和仲裁人员"
+                    )
+
+            trigger_scene = "group_meeting"
+            required_entities = []
+            for u in filtered_invited:
+                required_entities.append({
+                    "entity_type": u.get("entity_type", "user"),
+                    "entity_id": str(u.get("entity_id") or u.get("username")),
+                    "entity_name": u.get("entity_name") or u.get("display_name") or str(u.get("username") or u.get("entity_id") or "受邀成员"),
+                    "role_desc": u.get("role_desc", "受邀协同成员"),
+                    "username": u.get("username") or str(u.get("entity_id") or ""),
+                    "display_name": u.get("display_name") or u.get("entity_name") or str(u.get("username") or u.get("entity_id") or "受邀成员"),
+                    "phone": u.get("phone", ""),
+                })
         else:
-            raise HTTPException(status_code=400, detail="不支持的触发节点")
+            # ⚖️ 多方联合会审：保留原先严格的按当前状态场景划分的发起角色与必审主体
+            if not is_global_admin:
+                allowed_sections = resolve_accessible_section_1_ids(cfg, operator_username, operator_group)
+                if str(delivery["section_1_id"]).lower() not in {str(key).lower() for key in allowed_sections}:
+                    raise HTTPException(status_code=403, detail="您没有该订单所属标段的会审发起权限")
+
+            if current_status == "pending_arrival":
+                # 场景 1：待确认到货 -> 现场负责人发起
+                if not is_global_admin and operator_group != "tube_site_manager":
+                    raise HTTPException(status_code=403, detail="待到货阶段仅限现场负责人（Site Manager）发起联合会审")
+                trigger_scene = "scene_1_arrival"
+                initiator_role = "现场负责人"
+                required_entities = [
+                    {
+                        "entity_type": "supplier",
+                        "entity_id": delivery["supply_entity_id"],
+                        "entity_name": sup_name,
+                        "role_desc": "供货厂家",
+                    }
+                ]
+            elif current_status in ("pending_receive", "pending_diff_approve"):
+                # 场景 2：待施工接收 -> 施工单位发起
+                if not is_global_admin and operator_group not in ("tube_construction_unit", "tube_site_manager"):
+                    raise HTTPException(status_code=403, detail="待施工接收阶段仅限施工单位或现场主管发起联合会审")
+                trigger_scene = "scene_2_receive"
+                initiator_role = "施工单位"
+                required_entities = [
+                    {
+                        "entity_type": "supplier",
+                        "entity_id": delivery["supply_entity_id"],
+                        "entity_name": sup_name,
+                        "role_desc": "供货厂家",
+                    },
+                    {
+                        "entity_type": "site_manager",
+                        "entity_id": "site_manager",
+                        "entity_name": "标段现场主管",
+                        "role_desc": "现场负责人",
+                    },
+                ]
+            elif current_status == "pending_warehouse":
+                # 场景 3：待库管确认 -> 库管员发起
+                if not is_global_admin and operator_group not in ("tube_warehouse_keeper", "tube_warehouse_admin"):
+                    raise HTTPException(status_code=403, detail="待库管确认阶段仅限库管员发起联合会审")
+                trigger_scene = "scene_3_warehouse"
+                initiator_role = "责任库管员"
+                required_entities = [
+                    {
+                        "entity_type": "supplier",
+                        "entity_id": delivery["supply_entity_id"],
+                        "entity_name": sup_name,
+                        "role_desc": "供货厂家",
+                    },
+                    {
+                        "entity_type": "site_manager",
+                        "entity_id": "site_manager",
+                        "entity_name": "标段现场主管",
+                        "role_desc": "现场负责人",
+                    },
+                ]
+            else:
+                raise HTTPException(status_code=400, detail="不支持的触发节点")
 
         review_no = _generate_review_no()
         pre_status = current_status
@@ -619,20 +915,22 @@ def create_joint_review(
         original_snapshot["_review_rows"] = frozen_rows
         original_snapshot["items"] = frozen_rows
 
-        # 1. 插入会审主单
+        # 1. 插入会审/小组会主单
         insert_review_sql = text("""
             INSERT INTO tube.tube_order_reviews (
                 review_no, project_key, order_category, delivery_id, order_no,
                 section_1_id, supply_entity_id, trigger_scene, pre_status, review_status,
                 initiator_role, initiator_name, initiator_username, review_reason,
                 attachments, original_snapshot, proposed_patch, required_entities,
-                approved_entities, rejected_entities, created_at, updated_at
+                approved_entities, rejected_entities, review_type, invited_users,
+                created_at, updated_at
             ) VALUES (
                 :review_no, :project_key, :order_category, :delivery_id, :order_no,
                 :section_1_id, :supply_entity_id, :trigger_scene, :pre_status, 'voting',
                 :initiator_role, :initiator_name, :initiator_username, :review_reason,
                 :attachments, :original_snapshot, :proposed_patch, :required_entities,
-                '[]'::jsonb, '[]'::jsonb, NOW(), NOW()
+                '[]'::jsonb, '[]'::jsonb, :review_type, :invited_users,
+                NOW(), NOW()
             ) RETURNING id;
         """)
 
@@ -654,6 +952,8 @@ def create_joint_review(
             "original_snapshot": _dumps_json(original_snapshot),
             "proposed_patch": _dumps_json(proposed_patch),
             "required_entities": _dumps_json(required_entities),
+            "review_type": review_type,
+            "invited_users": _dumps_json(invited_users or []),
         })
         review_id = res.scalar()
 
@@ -668,42 +968,63 @@ def create_joint_review(
         db_session.commit()
 
         # 审计日志
+        action_label = "提请小组会议" if is_group_meeting else "提请多方联合会审"
         save_operation_log(
             operator=operator_username,
             operator_group=operator_group,
-            action_type="INITIATE_JOINT_REVIEW",
-            action_desc=f"提请多方联合会审 [{review_no}]: 单号 {delivery['order_no']} (标段: {sec_name}, 厂家: {sup_name})，事由: {review_reason.strip()}",
+            action_type="INITIATE_GROUP_MEETING" if is_group_meeting else "INITIATE_JOINT_REVIEW",
+            action_desc=f"{action_label} [{review_no}]: 单号 {delivery['order_no']} (标段: {sec_name}, 厂家: {sup_name})，事由: {review_reason.strip()}",
             resource_id=str(review_id),
             before_value={"delivery_status": pre_status, "snapshot": original_snapshot},
-            after_value={"review_no": review_no, "patch": proposed_patch, "required_entities": required_entities},
+            after_value={"review_no": review_no, "review_type": review_type, "patch": proposed_patch, "required_entities": required_entities},
             client_ip=client_ip,
         )
 
         # 同步写入 logs.system_messages 消息中心收件箱
         try:
             from backend.projects.insulation_pipe_supply_2026.services.system_message_service import create_system_message
-            from backend.services.auth_manager import auth_manager
-            recipients = set()
-            for identity in auth_manager.list_user_identities():
-                if any(_check_user_can_vote_entity(ent, identity["username"], identity["group"], cfg,
-                                                  str(delivery["section_1_id"])) for ent in required_entities):
-                    recipients.add(identity["username"])
-            for recv in sorted(recipients):
-                create_system_message(
-                    receiver_username=recv,
-                    receiver_entity_id=delivery["section_1_id"],
-                    title=f"【联合会审待办】订单 {delivery['order_no']} 提请会签",
-                    content=f"【{initiator_name}】就订单 {delivery['order_no']}（{sec_name}）提请了联合会审。事由：{review_reason.strip()}。请及时在联合会审大厅会签表决。",
-                    msg_type="joint_review",
-                    category="work",
-                    sender_username=operator_username,
-                    sender_name=initiator_name,
-                    sender_role=initiator_role,
-                    action_url=f"/projects/insulation_pipe_supply_2026/pages/joint_review_hall?tab=pending_my_vote&review_id={review_id}",
-                    biz_type="joint_review",
-                    biz_id=str(review_id),
-                    extra_data={"review_no": review_no, "order_no": delivery["order_no"]},
-                )
+            if is_group_meeting:
+                for ent in required_entities:
+                    target_recv = ent.get("username") or ent.get("entity_id")
+                    if target_recv:
+                        create_system_message(
+                            receiver_username=target_recv,
+                            receiver_entity_id=delivery["section_1_id"],
+                            title=f"🤝【小组会议】{initiator_name} 邀请您核验订单 {delivery['order_no']} 修正申请",
+                            content=f"【{initiator_name}】就订单 {delivery['order_no']}（{sec_name}）提请召开小组会议。事由：{review_reason.strip()}。请点击通知直接进入会商表决。",
+                            msg_type="group_meeting",
+                            category="work",
+                            sender_username=operator_username,
+                            sender_name=initiator_name,
+                            sender_role=initiator_role,
+                            action_url=f"/projects/insulation_pipe_supply_2026/pages/joint_review_hall?tab=pending_my_vote&review_id={review_id}",
+                            biz_type="group_meeting",
+                            biz_id=str(review_id),
+                            extra_data={"review_no": review_no, "order_no": delivery["order_no"], "review_type": "group_meeting"},
+                        )
+            else:
+                from backend.services.auth_manager import auth_manager
+                recipients = set()
+                for identity in auth_manager.list_user_identities():
+                    if any(_check_user_can_vote_entity(ent, identity["username"], identity["group"], cfg,
+                                                      str(delivery["section_1_id"])) for ent in required_entities):
+                        recipients.add(identity["username"])
+                for recv in sorted(recipients):
+                    create_system_message(
+                        receiver_username=recv,
+                        receiver_entity_id=delivery["section_1_id"],
+                        title=f"【联合会审待办】订单 {delivery['order_no']} 提请会签",
+                        content=f"【{initiator_name}】就订单 {delivery['order_no']}（{sec_name}）提请了联合会审。事由：{review_reason.strip()}。请及时在联合会审大厅会签表决。",
+                        msg_type="joint_review",
+                        category="work",
+                        sender_username=operator_username,
+                        sender_name=initiator_name,
+                        sender_role=initiator_role,
+                        action_url=f"/projects/insulation_pipe_supply_2026/pages/joint_review_hall?tab=pending_my_vote&review_id={review_id}",
+                        biz_type="joint_review",
+                        biz_id=str(review_id),
+                        extra_data={"review_no": review_no, "order_no": delivery["order_no"], "review_type": "joint_review"},
+                    )
         except Exception as msg_err:
             print(f"[joint_review] 写入系统消息中心异常: {msg_err}")
 
@@ -712,9 +1033,10 @@ def create_joint_review(
             "review_id": review_id,
             "review_no": review_no,
             "order_no": delivery["order_no"],
+            "review_type": review_type,
             "trigger_scene": trigger_scene,
             "required_entities": required_entities,
-            "message": "联合会审提请成功，单据已挂起并向各前序责任主体派发表决任务",
+            "message": "小组会议已发起，单据已挂起并向受邀协同人发送核验提醒" if is_group_meeting else "多方联合会审提请成功，单据已挂起并向各前序责任主体派发表决任务",
         }
     except Exception:
         db_session.rollback()
@@ -723,17 +1045,117 @@ def create_joint_review(
         db_session.close()
 
 
+def _is_user_invited_to_group_meeting(
+    ent: Dict[str, Any],
+    session_username: str,
+    session_name: str = "",
+) -> bool:
+    """
+    小组会议模式：严格根据账号（username）实施核验。
+    仅当当前登录用户的账号（或 entity_id）与受邀账号一致时返回 True。
+    确保未受邀人员（含超管/裁决员）绝不会被误弹窗催办或推送待办。
+    """
+    curr_u = str(session_username or "").strip().lower()
+    if not curr_u:
+        return False
+
+    t_uname = str(ent.get("username") or "").strip().lower()
+    t_eid = str(ent.get("entity_id") or "").strip().lower()
+
+    # 1. 登录账号（用户名）与受邀账号完全一致
+    if t_uname and curr_u == t_uname:
+        return True
+    # 2. 登录账号与受邀 entity_id 完全一致（例如厂家账号直接使用 entity_id 如 kaiyuan）
+    if t_eid and curr_u == t_eid:
+        return True
+    # 3. 辅助兼顾：若 session_name 与受邀账号一致（部分系统用户 name 即 username）
+    curr_n = str(session_name or "").strip().lower()
+    if curr_n and (curr_n == t_uname or curr_n == t_eid):
+        return True
+
+    return False
+
+
+def _is_party_of_group_meeting(
+    review: Dict[str, Any],
+    session_username: str,
+    session_name: str = "",
+) -> bool:
+    """
+    核验当前登录人是否为小组会议的当事人（发起人或受邀参会成员）。
+    """
+    curr_u = str(session_username or "").strip().lower()
+    curr_n = str(session_name or "").strip().lower()
+    if not curr_u and not curr_n:
+        return False
+
+    # 1. 发起人判定（匹配 initiator_username 或 initiator_name）
+    init_u = str(review.get("initiator_username") or "").strip().lower()
+    init_n = str(review.get("initiator_name") or "").strip().lower()
+    if curr_u and (curr_u == init_u or curr_u == init_n):
+        return True
+    if curr_n and (curr_n == init_u or curr_n == init_n):
+        return True
+
+    # 2. 受邀参会成员判定（检查 required_entities 与 invited_users）
+    req_ents = review.get("required_entities") or []
+    if isinstance(req_ents, str):
+        try:
+            req_ents = json.loads(req_ents)
+        except Exception:
+            req_ents = []
+
+    for ent in req_ents:
+        if isinstance(ent, dict) and _is_user_invited_to_group_meeting(ent, session_username, session_name=session_name):
+            return True
+
+    inv_users = review.get("invited_users") or []
+    if isinstance(inv_users, str):
+        try:
+            inv_users = json.loads(inv_users)
+        except Exception:
+            inv_users = []
+
+    for u in inv_users:
+        if isinstance(u, str):
+            u_str = u.strip().lower()
+            if curr_u and curr_u == u_str:
+                return True
+            if curr_n and curr_n == u_str:
+                return True
+        elif isinstance(u, dict) and _is_user_invited_to_group_meeting(u, session_username, session_name=session_name):
+            return True
+
+    return False
+
+
 def _check_user_can_vote_entity(
     required_entity: Dict[str, Any],
     session_username: str,
     session_group: str,
     cfg: Dict[str, Any],
     section_1_id: str = "",
+    session_name: str = "",
 ) -> bool:
-    """核验当前登录人是否代表必审主体表决。"""
-    if session_group in ("Global_admin", "dev_admin"):
+    """核验当前登录人是否代表必审主体表决（常规联合会审场景）。"""
+    # 1. 明确匹配用户名或姓名
+    target_uname = str(required_entity.get("username") or "").strip().lower()
+    target_dname = str(required_entity.get("display_name") or required_entity.get("entity_name") or "").strip().lower()
+    curr_uname = str(session_username or "").strip().lower()
+    curr_name = str(session_name or "").strip().lower()
+
+    if target_uname and curr_uname and curr_uname == target_uname:
+        return True
+    if target_dname:
+        if curr_name and (curr_name == target_dname or target_dname.startswith(curr_name)):
+            return True
+        if curr_uname and (curr_uname == target_dname or target_dname.startswith(curr_uname)):
+            return True
+    target_eid = str(required_entity.get("entity_id") or "").strip().lower()
+    if target_eid and curr_uname and target_eid == curr_uname:
         return True
 
+    # 2. 角色与主体归属权责匹配（常规联合会审）
     ent_type = required_entity.get("entity_type")
     ent_id = str(required_entity.get("entity_id") or "").strip().lower()
 
@@ -754,6 +1176,14 @@ def _check_user_can_vote_entity(
         return session_group in ("tube_construction_unit", "tube_site_manager") and str(section_1_id).lower() in {
             str(key).lower() for key in resolve_accessible_section_1_ids(cfg, session_username, session_group)
         }
+
+    if ent_type == "warehouse_keeper":
+        return session_group in ("tube_warehouse_keeper", "tube_warehouse_admin") and str(section_1_id).lower() in {
+            str(key).lower() for key in resolve_accessible_section_1_ids(cfg, session_username, session_group)
+        }
+
+    if ent_type == "arbitrator":
+        return check_user_can_arbitrate(session_username, session_group)
 
     return False
 
@@ -816,8 +1246,24 @@ def vote_joint_review(
 
         # 查找当前用户能代表的必审主体
         matched_entity = None
-        if is_admin and target_entity_type and target_entity_id:
-            # 管理员显式指定以哪个主体身份签署意见
+        is_grp_meeting = (review.get("review_type") == "group_meeting")
+
+        if is_grp_meeting:
+            # 小组会议：必须是受邀人本人签署（若管理员代签，需显式指定 target_entity_id）
+            if is_admin and target_entity_type and target_entity_id:
+                for ent in required_entities:
+                    if ent.get("entity_type") == target_entity_type and str(ent.get("entity_id") or "").lower() == str(target_entity_id).lower():
+                        matched_entity = ent
+                        break
+            else:
+                for ent in required_entities:
+                    if _is_user_invited_to_group_meeting(ent, session_username, session_name=session_name):
+                        matched_entity = ent
+                        break
+            if not matched_entity:
+                raise HTTPException(status_code=403, detail="您未受邀参加本次小组会议，无表决权限")
+        elif is_admin and target_entity_type and target_entity_id:
+            # 管理员显式指定以哪个主体身份签署意见（常规联合会审）
             for ent in required_entities:
                 if ent.get("entity_type") == target_entity_type and str(ent.get("entity_id") or "").lower() == str(target_entity_id).lower():
                     matched_entity = ent
@@ -836,9 +1282,9 @@ def vote_joint_review(
             if not matched_entity and required_entities:
                 matched_entity = required_entities[0]
         else:
-            # 普通用户按角色与责任归属权责精准匹配
+            # 普通用户按角色与责任归属权责精准匹配（常规联合会审）
             for ent in required_entities:
-                if _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(review["section_1_id"])):
+                if _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(review["section_1_id"]), session_name=session_name):
                     matched_entity = ent
                     break
 
@@ -847,10 +1293,15 @@ def vote_joint_review(
 
         ent_type = matched_entity["entity_type"]
         ent_id = matched_entity["entity_id"]
-        voter_display_name = session_name or session_username
+        # 防御性过滤：经办签署人姓名绝不能为标段代码列表（如包含逗号或包含 lot_ 标段特征字符串）
+        clean_name = str(session_name or "").strip()
+        if not clean_name or "," in clean_name or "lot_" in clean_name.lower():
+            clean_name = str(session_username or "").strip()
+
+        voter_display_name = clean_name or session_username
         if is_admin:
             ent_label = matched_entity.get("entity_name") or matched_entity.get("role_desc") or ent_type
-            voter_display_name = f"{ent_label} (管理员{session_name or session_username}代签)"
+            voter_display_name = f"{ent_label} (管理员{session_username}代签)"
 
         # 检查是否已表决
         existing_vote_sql = text("""
@@ -914,19 +1365,27 @@ def vote_joint_review(
                 if v["vote_decision"] == "approve":
                     approved_list.append(ent)
                 else:
-                    rejected_list.append({**ent, "opinion": v["vote_opinion"], "voter": v["voter_name"]})
+                    voter_show = str(v.get("voter_name") or "")
+                    if not voter_show or "," in voter_show or "lot_" in voter_show.lower():
+                        voter_show = v.get("voter_username") or "责任经办人"
+                    rejected_list.append({**ent, "opinion": v["vote_opinion"], "voter": voter_show})
 
         # 判断是否全票通过
         is_all_approved = len(approved_list) == len(required_entities) and len(rejected_list) == 0
+        is_grp_meeting = (review.get("review_type") == "group_meeting")
+        pre_status = review.get("pre_status") or "pending_arrival"
 
         if is_all_approved:
             # 🚀 全票通过：执行订单自动修正
-            pre_status = review.get("pre_status") or "pending_arrival"
             patch = review["proposed_patch"]
             if isinstance(patch, str):
                 patch = json.loads(patch)
 
             summary_parts = []
+            if "shipped_qty" in patch:
+                summary_parts.append(f"发货数量={patch['shipped_qty']}米")
+            if "pipe_model_id" in patch:
+                summary_parts.append(f"规格型号={patch['pipe_model_id']}")
             if "vehicle_plate_no" in patch:
                 summary_parts.append(f"车牌={patch['vehicle_plate_no']}")
             if "items" in patch and isinstance(patch["items"], list):
@@ -934,17 +1393,29 @@ def vote_joint_review(
                     summary_parts.append(f"单号{it.get('order_no') or it.get('id')}: {it.get('fitting_type','')}{it.get('model_spec','')} {it.get('shipped_qty','')}{it.get('unit','件')}")
             else:
                 for k, v in patch.items():
-                    if k not in ("items", "ship_remark"):
+                    if k not in ("items", "ship_remark", "vehicle_plate_no", "shipped_qty", "pipe_model_id"):
                         summary_parts.append(f"{k}={v}")
 
-            patch_summary_str = "; ".join(summary_parts) if summary_parts else "现场核验更正一致"
-            resolution_text = (
-                f"【联合会审全票通过更正】单号: {review['review_no']} | "
-                f"发起人: {review['initiator_name']}({review['initiator_role']}) | "
-                f"事由: {review['review_reason']} | "
-                f"更正项: [{patch_summary_str}] | "
-                f"会审决议: 全票一致同意通过 (生效时间: {datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')})"
-            )
+            patch_summary_str = "; ".join(summary_parts) if summary_parts else "核对更正一致"
+
+            if is_grp_meeting:
+                conf_names = ", ".join([str(e.get("display_name") or e.get("entity_name") or e.get("username") or "小组成员") for e in approved_list])
+                resolution_text = (
+                    f"【小组会议商一致更正】单号: {review['review_no']} | "
+                    f"发起人: {review['initiator_name']}({review['initiator_role']}) | "
+                    f"受邀协同核准: {conf_names} | "
+                    f"事由: {review['review_reason']} | "
+                    f"更正项: [{patch_summary_str}] | "
+                    f"决议: 小组成员一致同意通过 (生效时间: {datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')})"
+                )
+            else:
+                resolution_text = (
+                    f"【多方联合会审全票通过更正】单号: {review['review_no']} | "
+                    f"发起人: {review['initiator_name']}({review['initiator_role']}) | "
+                    f"事由: {review['review_reason']} | "
+                    f"更正项: [{patch_summary_str}] | "
+                    f"会审决议: 全票一致同意通过 (生效时间: {datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')})"
+                )
 
             # 原子更新业务订单
             _apply_review_patch_to_order(db_session, review, patch, resolution_text)
@@ -972,8 +1443,8 @@ def vote_joint_review(
             save_operation_log(
                 operator=session_username,
                 operator_group=session_group,
-                action_type="JOINT_REVIEW_APPROVED",
-                action_desc=f"联合会审全票通过并自动修正订单: 会审单 [{review['review_no']}] 对应订单 {review['order_no']}，更正为 [{patch_summary_str}]，单据已恢复为待办 [{pre_status}]",
+                action_type="GROUP_MEETING_APPROVED" if is_grp_meeting else "JOINT_REVIEW_APPROVED",
+                action_desc=f"{'小组会议一致同意' if is_grp_meeting else '多方联合会审全票通过'}并自动修正订单: 单据 [{review['review_no']}] 对应订单 {review['order_no']}，更正为 [{patch_summary_str}]，单据已恢复为待办 [{pre_status}]",
                 resource_id=str(review_id),
                 before_value={"patch": patch, "status": "under_review", "previous_vote": dict(exist_vote) if exist_vote else None},
                 after_value={"new_status": pre_status, "resolution": resolution_text, "decision": vote_decision, "opinion": vote_opinion, "entity": matched_entity},
@@ -983,16 +1454,22 @@ def vote_joint_review(
             # 向发起人发送会审全票通过更正通知
             try:
                 from backend.projects.insulation_pipe_supply_2026.services.system_message_service import create_system_message
+                notif_title = f"🎉【小组会议核准通过】订单 {review['order_no']} 修正生效！" if is_grp_meeting else f"🎉【多方联合会审全票通过】订单 {review['order_no']} 修正生效！"
+                notif_content = (
+                    f"您就订单 {review['order_no']} 发起的小组会议已获得全体受邀成员一致核准同意！数据已自动修正，单据已恢复待办状态【{pre_status}】。"
+                    if is_grp_meeting
+                    else f"您就订单 {review['order_no']} 发起的会审已获得所有主体全票同意！数据已自动修正，单据已恢复待办状态【{pre_status}】，请及时办理。"
+                )
                 create_system_message(
                     receiver_username=review["initiator_username"],
-                    title=f"🎉【联合会审全票通过】订单 {review['order_no']} 修正生效！",
-                    content=f"您就订单 {review['order_no']} 发起的会审已获得所有主体全票同意！数据已自动修正，单据已恢复待办状态【{pre_status}】，请及时办理。",
-                    msg_type="joint_review",
+                    title=notif_title,
+                    content=notif_content,
+                    msg_type="group_meeting" if is_grp_meeting else "joint_review",
                     category="work",
                     sender_username="SYSTEM",
-                    sender_name="联合会审大厅",
+                    sender_name="现场协同大厅" if is_grp_meeting else "联合会审大厅",
                     action_url=f"/projects/insulation_pipe_supply_2026/pages/joint_review_hall?tab=history&review_id={review_id}",
-                    biz_type="joint_review",
+                    biz_type="group_meeting" if is_grp_meeting else "joint_review",
                     biz_id=str(review_id),
                 )
             except Exception as notify_err:
@@ -1005,10 +1482,86 @@ def vote_joint_review(
                 "review_status": "approved",
                 "is_finalized": True,
                 "restored_status": pre_status,
-                "message": "恭喜！所有必审主体已全票同意，数据已自动更正生效，单据已恢复为发起前待办状态，可继续常规办理！",
+                "message": "小组成员已一致核准同意，数据已自动更正生效，单据已恢复为发起前待办状态！" if is_grp_meeting else "恭喜！所有必审主体已全票同意，数据已自动更正生效，单据已恢复为发起前待办状态，可继续常规办理！",
+            }
+        elif is_grp_meeting and len(rejected_list) > 0:
+            # 🚀 小组会议闭环：小组成员存在异议，判定【协商失败】
+            # 1. 恢复原业务订单状态（不变成挂起，而是直接恢复成原来的状态）
+            _revert_review_order_status(db_session, review)
+
+            # 2. 会审单直接办结并置为 rejected
+            reasons = [f"{r.get('voter') or r.get('entity_name') or '成员'}: {r.get('opinion') or '不同意'}" for r in rejected_list]
+            reasons_str = "；".join(reasons)
+            resolution_text = f"【小组会议未达成共识·协商失败】异议说明: {reasons_str}。原单已自动恢复为发起前状态【{pre_status}】。"
+
+            update_rev_sql = text("""
+                UPDATE tube.tube_order_reviews
+                SET review_status = 'rejected',
+                    resolution_summary = :res_sum,
+                    approved_entities = :app_list,
+                    rejected_entities = :rej_list,
+                    finalized_at = NOW(),
+                    finalized_by = :fby,
+                    updated_at = NOW()
+                WHERE id = :rid
+            """)
+            db_session.execute(update_rev_sql, {
+                "res_sum": resolution_text,
+                "app_list": _dumps_json(approved_list),
+                "rej_list": _dumps_json(rejected_list),
+                "fby": session_username,
+                "rid": review_id,
+            })
+            db_session.commit()
+
+            # 3. 记录操作审计
+            save_operation_log(
+                operator=session_username,
+                operator_group=session_group,
+                action_type="GROUP_MEETING_REJECTED",
+                action_desc=f"小组会议协商失败: 成员 [{matched_entity.get('entity_name')}] 提出异议 [{vote_opinion or '无'}]，单号 {review['review_no']}，订单 {review['order_no']} 已恢复为 [{pre_status}]",
+                resource_id=str(review_id),
+                before_value={"status": "under_review", "previous_vote": dict(exist_vote) if exist_vote else None},
+                after_value={"decision": vote_decision, "opinion": vote_opinion, "review_status": "rejected", "restored_status": pre_status},
+                client_ip=client_ip,
+            )
+
+            # 4. 向发起人发送协商失败系统通知
+            try:
+                from backend.projects.insulation_pipe_supply_2026.services.system_message_service import create_system_message
+                notif_title = f"❌【小组会议协商失败】订单 {review['order_no']} 修正未通过"
+                notif_content = (
+                    f"您就订单 {review['order_no']} 发起的小组会议因受邀成员提出异议未达成共识（异议说明: {vote_opinion or '未达成共识'}）。"
+                    f"根据小组会议规则，本次会议协商失败并已终止闭环，原单据已自动恢复至发起前流转状态【{pre_status}】。"
+                )
+                create_system_message(
+                    receiver_username=review["initiator_username"],
+                    title=notif_title,
+                    content=notif_content,
+                    msg_type="group_meeting",
+                    category="work",
+                    sender_username="SYSTEM",
+                    sender_name="现场协同大厅",
+                    action_url=f"/projects/insulation_pipe_supply_2026/pages/joint_review_hall?tab=history&review_id={review_id}",
+                    biz_type="group_meeting",
+                    biz_id=str(review_id),
+                )
+            except Exception as notify_err:
+                print(f"[joint_review] 写入协商失败通知失败: {notify_err}")
+
+            return {
+                "ok": True,
+                "review_id": review_id,
+                "review_no": review["review_no"],
+                "review_status": "rejected",
+                "is_finalized": True,
+                "is_suspended": False,
+                "status_display": "协商失败",
+                "restored_status": pre_status,
+                "message": "小组成员存在异议，现场协商失败！原单据已自动恢复至发起前待办状态。",
             }
         else:
-            # 存在异议或尚未全部表决：保持 voting
+            # 存在异议或尚未全部表决：常规联合会审保持 voting，或小组会核准中
             update_rev_sql = text("""
                 UPDATE tube.tube_order_reviews
                 SET approved_entities = :app_list,
@@ -1038,7 +1591,9 @@ def vote_joint_review(
 
             is_suspended = len(rejected_list) > 0
             msg = "表决已登记成功。"
-            if vote_decision == "reject":
+            if is_grp_meeting:
+                msg += f" 当前小组成员已核准 {len(approved_list)}/{len(required_entities)} 人，待其他成员核准。"
+            elif vote_decision == "reject":
                 msg += " 由于提出了异议，该会审状态已变更为【挂起中】，所有参与方均可查阅异议说明以继续协商或由管理员仲裁。"
             else:
                 msg += f" 当前已同意 {len(approved_list)}/{len(required_entities)} 方，待其他主体表决。"
@@ -1049,7 +1604,7 @@ def vote_joint_review(
                 "review_no": review["review_no"],
                 "review_status": "voting",
                 "is_suspended": is_suspended,
-                "status_display": "挂起中" if is_suspended else "会审中",
+                "status_display": "挂起中" if is_suspended else ("讨论中" if is_grp_meeting else "会审中"),
                 "is_finalized": False,
                 "approved_count": len(approved_list),
                 "total_required": len(required_entities),
@@ -1169,6 +1724,11 @@ def admin_arbitrate_joint_review(
         if review["review_status"] != "voting":
             raise HTTPException(status_code=422, detail=f"该会审单已办结，无法裁决（当前状态: {review['review_status']}）")
 
+        is_grp_meeting = (review.get("review_type") == "group_meeting")
+        is_admin = session_group in ("Global_admin", "dev_admin")
+        if is_grp_meeting and not is_admin:
+            raise HTTPException(status_code=403, detail="小组会议不设特许仲裁权，仲裁人员仅享有受邀参会表决权，无权进行终局裁决")
+
         order_cat = review["order_category"]
         deliv_id = review["delivery_id"]
         pre_status = review["pre_status"]
@@ -1180,6 +1740,10 @@ def admin_arbitrate_joint_review(
                 patch = json.loads(patch)
 
             summary_parts = []
+            if "shipped_qty" in patch:
+                summary_parts.append(f"发货数量={patch['shipped_qty']}米")
+            if "pipe_model_id" in patch:
+                summary_parts.append(f"规格型号={patch['pipe_model_id']}")
             if "vehicle_plate_no" in patch:
                 summary_parts.append(f"车牌={patch['vehicle_plate_no']}")
             if "items" in patch and isinstance(patch["items"], list):
@@ -1187,7 +1751,7 @@ def admin_arbitrate_joint_review(
                     summary_parts.append(f"单号{it.get('order_no') or it.get('id')}: {it.get('fitting_type','')}{it.get('model_spec','')} {it.get('shipped_qty','')}{it.get('unit','件')}")
             else:
                 for k, v in patch.items():
-                    if k not in ("items", "ship_remark"):
+                    if k not in ("items", "ship_remark", "vehicle_plate_no", "shipped_qty", "pipe_model_id"):
                         summary_parts.append(f"{k}={v}")
 
             patch_summary_str = "; ".join(summary_parts) if summary_parts else "裁决人员核实更正一致"
@@ -1281,8 +1845,10 @@ def list_joint_reviews(
     session_username: str = "",
     session_group: str = "",
     review_id: Optional[int] = None,
+    session_name: str = "",
+    review_type: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """多维分页查询联合会审列表。"""
+    """多维分页查询多方联合会审/小组会议列表。"""
     ensure_joint_review_tables()
     cfg = load_tube_config() or {}
     db_session = SessionLocal()
@@ -1292,6 +1858,10 @@ def list_joint_reviews(
         if review_id is not None:
             where_clauses.append("r.id = :review_id")
             params["review_id"] = review_id
+
+        if review_type:
+            where_clauses.append("r.review_type = :review_type")
+            params["review_type"] = review_type.strip().lower()
 
         if order_category:
             where_clauses.append("r.order_category = :order_category")
@@ -1369,6 +1939,9 @@ def list_joint_reviews(
                 if rid not in votes_map:
                     votes_map[rid] = []
                 v_dict = dict(v)
+                v_name = str(v_dict.get("voter_name") or "")
+                if "," in v_name or "lot_" in v_name.lower():
+                    v_dict["voter_name"] = v_dict.get("voter_username") or "责任经办人"
                 if v_dict.get("voted_at"):
                     v_dict["voted_at"] = v_dict["voted_at"].astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
                 votes_map[rid].append(v_dict)
@@ -1383,14 +1956,18 @@ def list_joint_reviews(
             r_votes = votes_map.get(rid, [])
 
             # JSON 字段解析
-            for j_key in ("attachments", "original_snapshot", "proposed_patch", "required_entities", "approved_entities", "rejected_entities"):
+            for j_key in ("attachments", "original_snapshot", "proposed_patch", "required_entities", "approved_entities", "rejected_entities", "invited_users"):
                 val = r_dict.get(j_key)
                 if isinstance(val, str):
                     try:
                         r_dict[j_key] = json.loads(val)
                     except Exception:
-                        pass
+                        r_dict[j_key] = [] if j_key in ("attachments", "approved_entities", "rejected_entities", "invited_users") else {}
 
+            r_dict["review_type"] = r_dict.get("review_type") or "joint_review"
+            is_grp_meeting = (r_dict["review_type"] == "group_meeting")
+            r_dict["initiator_name"] = r_dict.get("initiator_username") or r_dict.get("initiator_name")
+            r_dict["invited_users"] = r_dict.get("invited_users") or []
             r_dict["approval_type"] = (
                 "consensus" if r_dict.get("finalized_by") == "SYSTEM_CONSENSUS" else "arbitration"
             ) if r_dict["review_status"] == "approved" else None
@@ -1426,7 +2003,11 @@ def list_joint_reviews(
             if r_dict["review_status"] == "voting":
                 req_ents = r_dict.get("required_entities") or []
                 for ent in req_ents:
-                    if _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(r_dict["section_1_id"])):
+                    if is_grp_meeting:
+                        user_matches = _is_user_invited_to_group_meeting(ent, session_username, session_name=session_name)
+                    else:
+                        user_matches = _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(r_dict["section_1_id"]), session_name=session_name)
+                    if user_matches:
                         can_i_vote = True
                         # 检查该主体是否已投过票
                         voted_for_this = any(v["entity_type"] == ent["entity_type"] and v["entity_id"] == ent["entity_id"] for v in r_votes)
@@ -1452,7 +2033,52 @@ def list_joint_reviews(
                 r_dict["display_status"] = r_dict["review_status"]
 
             r_dict["can_cancel"] = (r_dict["is_mine"] or is_global_admin) and r_dict["review_status"] == "voting"
-            r_dict["can_arbitrate"] = can_arbitrate_user and r_dict["review_status"] == "voting"
+            # 仲裁权隔离：对于多方联合会审，特许仲裁员与超管均可裁决；对于小组会议，仲裁人员仅享有受邀参会表决权，无仲裁权（仅超管保留最高兜底）
+            if is_grp_meeting:
+                r_dict["can_arbitrate"] = is_global_admin and r_dict["review_status"] == "voting"
+            else:
+                r_dict["can_arbitrate"] = can_arbitrate_user and r_dict["review_status"] == "voting"
+
+            # 🔒 隐私保护：小组会议（review_type == 'group_meeting'）
+            # 仅当事人（发起人、受邀人）和 Global_admin/dev_admin 可以查阅具体明细；其他人员脱敏，仅展示基本条目信息。
+            if is_grp_meeting:
+                is_party = _is_party_of_group_meeting(r_dict, session_username, session_name=session_name)
+                can_view_detail = is_global_admin or is_party
+                r_dict["is_private_masked"] = not can_view_detail
+            else:
+                r_dict["is_private_masked"] = False
+
+            if r_dict["is_private_masked"]:
+                # 脱敏具体细节
+                r_dict["review_reason"] = "🔒 [保密事项] 仅限协同小组成员查阅"
+                if r_dict.get("resolution_summary"):
+                    r_dict["resolution_summary"] = "🔒 [保密决议] 仅限协同小组成员查阅"
+                r_dict["proposed_patch"] = {"_masked": True}
+                r_dict["original_snapshot"] = {"_masked": True}
+                r_dict["attachments"] = []
+                # 意见发言脱敏（保留表决决策与主体，隐去具体发言）
+                masked_votes = []
+                for v in r_votes:
+                    mv = dict(v)
+                    mv["vote_opinion"] = "🔒 [保密发言]"
+                    masked_votes.append(mv)
+                r_dict["votes"] = masked_votes
+                # 脱敏联系方式
+                if isinstance(r_dict.get("invited_users"), list):
+                    r_dict["invited_users"] = [
+                        {k: (v if k != "phone" else "") for k, v in u.items()} if isinstance(u, dict) else u
+                        for u in r_dict["invited_users"]
+                    ]
+                if isinstance(r_dict.get("required_entities"), list):
+                    r_dict["required_entities"] = [
+                        {k: (v if k != "phone" else "") for k, v in ent.items()} if isinstance(ent, dict) else ent
+                        for ent in r_dict["required_entities"]
+                    ]
+                # 非当事人禁止操作
+                r_dict["can_i_vote"] = False
+                r_dict["needs_my_vote"] = False
+                r_dict["can_cancel"] = False
+                r_dict["can_arbitrate"] = False
 
             # 客户端过滤 tab == 'pending_my_vote'
             if tab == "pending_my_vote" and not needs_my_vote:
@@ -1475,28 +2101,39 @@ def list_joint_reviews(
         db_session.close()
 
 
-def get_joint_review_detail(review_id: int, session_username: str = "", session_group: str = "") -> Dict[str, Any]:
+def get_joint_review_detail(
+    review_id: int,
+    session_username: str = "",
+    session_group: str = "",
+    session_name: str = "",
+) -> Dict[str, Any]:
     """按ID复用列表资格与表决元数据，通知可直接打开不在首屏的议案。"""
-    result = list_joint_reviews(tab="all", review_id=review_id, limit=1,
-                                session_username=session_username, session_group=session_group)
+    result = list_joint_reviews(
+        tab="all",
+        review_id=review_id,
+        limit=1,
+        session_username=session_username,
+        session_group=session_group,
+        session_name=session_name,
+    )
     if not result["items"]:
         raise HTTPException(status_code=404, detail="会审单不存在")
     return {"ok": True, "data": result["items"][0]}
 
 
-def get_pending_review_notifications(session_username: str, session_group: str) -> Dict[str, Any]:
+def get_pending_review_notifications(session_username: str, session_group: str, session_name: str = "") -> Dict[str, Any]:
     """
-    轻量拉取当前主体待办会审数量与简要列表（驱动顶栏红点与每日弹窗）。
+    轻量拉取当前主体待办会审/小组会议数量与简要列表（驱动顶栏红点与每日弹窗）。
     """
     ensure_joint_review_tables()
     cfg = load_tube_config() or {}
     db_session = SessionLocal()
     try:
-        # 查询所有 voting 中的会审
+        # 查询所有 voting 中的会审与小组会议
         sql = text("""
             SELECT r.id, r.review_no, r.order_category, r.order_no, r.section_1_id,
                    r.supply_entity_id, r.initiator_name, r.initiator_role, r.initiator_username, r.review_reason,
-                   r.required_entities, r.proposed_patch, r.original_snapshot, r.created_at
+                   r.required_entities, r.proposed_patch, r.original_snapshot, r.created_at, r.review_type
             FROM tube.tube_order_reviews r
             WHERE r.review_status = 'voting'
             ORDER BY r.created_at DESC
@@ -1517,6 +2154,7 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
             if r.get("initiator_username") and r.get("initiator_username") == session_username:
                 continue
 
+            is_grp_meeting = (r.get("review_type") == "group_meeting")
             req_ents = r["required_entities"] or []
             if isinstance(req_ents, str):
                 try:
@@ -1525,7 +2163,13 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
                     req_ents = []
 
             for ent in req_ents:
-                if _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(r["section_1_id"])):
+                if is_grp_meeting:
+                    # 小组会严格仅受邀人匹配，未受邀人员（含超管）绝不收到弹窗通知
+                    user_matches = _is_user_invited_to_group_meeting(ent, session_username, session_name=session_name)
+                else:
+                    user_matches = _check_user_can_vote_entity(ent, session_username, session_group, cfg, str(r["section_1_id"]), session_name=session_name)
+
+                if user_matches:
                     key = f"{r['id']}::{ent['entity_type']}::{ent['entity_id']}"
                     if key not in voted_set:
                         sec_name = _resolve_section_name(cfg, r["section_1_id"])
@@ -1587,6 +2231,8 @@ def get_pending_review_notifications(session_username: str, session_group: str) 
                         pending_for_me.append({
                             "review_id": r["id"],
                             "review_no": r["review_no"],
+                            "review_type": r.get("review_type") or "joint_review",
+                            "is_group_meeting": (r.get("review_type") == "group_meeting"),
                             "order_no": r["order_no"],
                             "order_category": r["order_category"],
                             "category_label": cat_label,

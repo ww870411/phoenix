@@ -1,3 +1,532 @@
+
+## 2026-10-20 [会审大厅指引弹窗升级为双标签结构（新增“小组讨论”说明，规范“联合会审”说明）]
+- **需求背景与指引重塑**：
+  - 用户在会审大厅提出需求：“在页面右上方，有一个提请会审流程说明，请将此按钮改为‘提请小组讨论/联合会审说明’，在其中增加标签，当前的联合会审内容作为第二个标签页，第一个标签为‘小组讨论’，仿照‘联合会审’标签页内容，写一个小组讨论的内容说明”；
+  - **业务指引双轨化**：
+    1. **按钮文案更名**：顶栏操作按钮由“提请会审流程说明”更名为“**提请小组讨论/联合会审说明**”；
+    2. **弹窗多标签页架构**：在指引弹窗（`guide-dialog`）中建立优雅的选项卡切换导航栏（`guide-tabs-bar`），包含“🤝 小组讨论”（默认第一标签）与“⚖️ 联合会审”（第二标签），动态响应不同协同模式的图标、标题与副说明；
+    3. **仿照联合会审结构定制“小组讨论”专属指南**：
+       - **设立宗旨**：说明小组讨论（小组会议）立足于小范围、面对面协同核验，快速纠正现场偶发单据错漏与细微偏差，免除全流程大范围法定会签成本；
+       - **三大业务场景**：
+         - **场景 1（适用节点与提请原位）**：需求侧主管与库管员在待确认到货、待接收、待入库等环节在对应工作台操作列点击提请，支持快捷跳转；
+         - **场景 2（定向受邀与一人一票协商机制）**：明确参会范围仅限供货厂家业务账号、Global_admin 与集团特许仲裁人员，强调一人一票协商一致原则及仲裁人员在此仅享普通表决权；
+         - **场景 3（隐私脱敏与即时原单恢复）**：明确若协商失败直接恢复为提请前原单流转状态、绝不挂起停滞，并阐释非当事人私密遮罩保护机制；
+       - **四步闭环可视化**：`定位待办订单 ➔ 选择【小组会议】 ➔ 勾选受邀人与凭证 ➔ 一致同意·秒级修正`；
+       - **操作提示框**：指引一线人员准确切换模式、勾选受邀人并完成提请。
+- **改动清单与受影响物理文件**：
+  1. **页面模板与弹窗组件 ([JointReviewHallView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - 更新顶栏按钮文案为 `提请小组讨论/联合会审说明`；
+     - 在 `<script setup>` 引入响应式标签状态 `guideActiveTab = ref('group_meeting')`；
+     - 弹窗重构为基于 `guideActiveTab` 的双标签页结构，完整编写“小组讨论”四大版块内容，同时无损保留“联合会审”既有指引；
+     - 增加 `.guide-tabs-bar`、`.guide-tab-item`、`.amber-banner` 等样式及移动端自适应规则。
+- **验证结论**：
+  - 前端生产打包构建全量通过（751 个模块正常编译，0 错误）；
+  - 页面各跳转直达按钮、标签页平滑切换及响应式排版验证无误。
+
+- **需求背景与权限边界明确**：
+  - 用户明确规范：“作为仲裁人员，根据我之前的设定，应当可以为会审做出裁决，但是对于小组会，只给他们表决权，而无仲裁权”；
+  - **权能分流定位**：
+    1. **多方联合会审（`joint_review`）**：定位于全链条各前序主体法定列席会签，发生死锁或异议挂起时，特许仲裁人员（王玮、李绍、张亮等）及系统超级管理员享有最高一锤定音裁决权（`can_arbitrate: True`），可做出终局通过或驳回决定；
+    2. **小组会议（`group_meeting`）**：定位于协商一致与错漏核对，规则是一人一票一致核准更正（异议则立即协商失败恢复原单）。仲裁人员作为受邀协同核验成员，**仅享有普通表决权**（`can_i_vote: True`，可投赞成或异议），**严禁行使终局仲裁权**（`can_arbitrate: False`），不得在小组会中直接越过小组成员强裁生效或终止。
+- **改动清单与受影响物理文件**：
+  1. **大厅列表与详情接口权限计算分离 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `list_joint_reviews` 中对 `can_arbitrate` 按会审类型分流：
+       - 若记录为小组会议（`is_grp_meeting`），特许仲裁人员一律标记 `can_arbitrate = False`（仅 Global_admin 拥有最高系统级兜底）；
+       - 若记录为常规多方联合会审（`joint_review`），特许仲裁人员与超管正常赋予 `can_arbitrate = True`；
+     - 驱动前端会审大厅在展示小组会议时，彻底隐藏“⚖️ 终局裁决”按钮，仲裁员仅在受邀时展示“✓ 同意更正”与“✕ 提出异议”表决操作组。
+  2. **后端裁决提交端点强拦截防线 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `admin_arbitrate_joint_review` 核心函数中，针对 `review_type == 'group_meeting'` 单据增加拦截校验；
+     - 非超管特许仲裁员尝试提交强裁时，接口直接拒绝并抛出 403 异常（`小组会议不设特许仲裁权，仲裁人员仅享有受邀参会表决权，无权进行终局裁决`）。
+  3. **表决办结决议文本空值保护修复 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 针对小组会议核准办结生成决议文本（`conf_names`）时，对成员的 `display_name` 与 `entity_name` 增加 `str(...)` 与 `username` 安全回退，彻底解决极端受邀入参下 `sequence item None` 引发 TypeError 的隐患。
+  4. **自动化回归测试集扩充 ([test_joint_review_postgres.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py))**：
+     - 新增 `test_arbitrator_rights_split_between_joint_review_and_group_meeting` 测试用例，全面覆盖：多方联合会审仲裁权生效并成功强裁、小组会议特许仲裁员仅有表决权无仲裁权、尝试强裁被 403 拦截、作为受邀成员正常投票表决通过全流程。
+- **验证结论**：
+  - 后端自动化单元测试：全部 15/15 项独立 PostgreSQL 测试用例全数通过（`Ran 15 tests in 1.894s, OK`）；
+  - 前端生产打包构建：`npm --prefix frontend run build` 100% 编译成功（751 个模块全部转换，耗时 18.96s，0 错误）；
+  - 容器内生产服务与数据库实机验证无误。
+
+## 2026-10-20 [小组会议受邀人员范围收敛（仅限供给方人员、Global_admin和仲裁人员）与资质校验加固]
+- **需求背景与业务规则收敛**：
+  - 用户明确要求：“帮我修改一下范围，能够被邀请加入小组会议的，只有供给方人员、Global_admin和仲裁人员”；
+  - **业务规则收敛**：小组会议定位为针对物资错漏开展的高效协同核验，原先将现场负责人、库管员全部纳入受邀清单容易造成流程交叉干扰。本次调整将受邀人员精准限定在三类关键主体：
+    1. **供给方人员**：订单对应的供货厂家（如 `kaiyuan` 等）；
+    2. **Global_admin**：系统超级管理员（`ww870411`）；
+    3. **仲裁人员**：特许仲裁员（`王玮`、`李绍`、`张亮` 等）。
+    彻底剔除现场主管、责任库管员和施工单位等被邀请人选。
+- **改动清单与受影响物理文件**：
+  1. **候选人提取与分组重构 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 重构 `get_order_meeting_candidates`：移除 `manager_assignments`（现场主管）与 `warehouse_keepers`（库管员）候选人遍历；
+     - 候选人列表严谨收敛并归为三组：
+       - `1. 供给方人员`（`supplier`，供货厂家业务账号）；
+       - `2. Global_admin (系统超级管理员)`（`global_admin`，`ww870411`）；
+       - `3. 集团仲裁人员`（`arbitrator`，特许仲裁员白名单）。
+  2. **后端提请受邀资质双重防御校验 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `create_joint_review` 中加入受邀人员身份严格白名单校验；
+     - 任何非供给方、非 Global_admin、非仲裁员的受邀人员尝试提交时，后端直接返回 422 拒绝（`受邀成员 [xxx] 不符合受邀资质：小组会议仅允许邀请供给方人员、Global_admin和仲裁人员`）。
+  3. **前端下拉点选与图标适配 ([InitiateJointReviewModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue))**：
+     - 更新提示文案为“仅限供给方人员、Global_admin和仲裁人员”；
+     - 完善 `getNodeIcon` 支持 `global_admin` 图标（`🛡️`），保持视觉规范一致。
+  4. **自动化测试加固 ([test_joint_review_postgres.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py))**：
+     - 增加 `test_group_meeting_candidate_range_and_invitation_restriction` 自动化用例，严格断言候选人类型仅含合法三类，并验证非法越界邀请拦截（422）与合法邀请正常提请。
+- **验证结论**：
+  - 后端自动化单元测试：全部 14/14 项独立 PostgreSQL 测试用例全数通过（`Ran 14 tests in 2.068s, OK`）；
+  - 前端生产环境构建：`npm --prefix frontend run build` 100% 编译成功（751 个模块全部转换，耗时 18.71s，0 错误）；
+  - 容器内生产数据库实机验证：`get_order_meeting_candidates` 实机返回仅包含供给方厂家、Global_admin（`ww870411`）及 3 名特许仲裁员，完全剔除现场人员。
+
+## 2026-10-20 [协同模式名称规范化（小组会议 / 多方联合会审）、冗余标签精简与上线前全流程终验]
+- **需求背景与改进目标**：
+  - 用户明确规范：“将‘现场协同小组会’改名为‘小组会议’，‘全员联合会审’改名为‘多方联合会审’。后面的‘敏捷高效……’‘重大争议’字样去掉。然后帮我再最后检查、验证一下该小组会议功能还有没有BUG，是否运行正常，作为上线前的最后核实”；
+  - 规范业务场景中的术语表达：将非正式现场小范围核实统一命名为简洁大方的“小组会议”，将全节点列席会签统一命名为表意精准的“多方联合会审”，去除营销宣传式副标签（“敏捷高效……”、“重大争议”），界面更趋专业、沉稳、合规。
+- **改动清单与受影响物理文件**：
+  1. **提请弹窗界面文案与模式选择器重塑 ([InitiateJointReviewModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue))**：
+     - 弹窗主标题统一为 `召开小组会议` / `提请多方联合会审`；
+     - 模式单选卡片名称更正为 `🤝 小组会议` 与 `⚖️ 多方联合会审`；
+     - 彻底移除 `重大争议` 徽章与 `推荐 · 敏捷高效` 中的“敏捷高效”，仅保留极简的 `推荐` 与不可用时的 `仅流转中可用`；
+     - 会签概览与提示条中更正为 `🤝 小组会议 (已邀 X 位相关责任人 + 发起人)` 与 `💡 小组成员全票同意更正生效 · 闭环全程留痕`；
+     - 状态拦截提示、未勾选成员错误校验与提交报错提示全部统一为“小组会议”与“多方联合会审”。
+  2. **会审大厅与待办通知文案规范化 ([JointReviewHallView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue)、[DailyReviewNoticeModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue))**：
+     - 类型下拉筛选更正为 `🤝 小组会议` 与 `⚖️ 多方联合会审`；
+     - 卡片顶部类型徽章统一为 `🤝 小组会议` 与 `⚖️ 多方联合会审`，悬停 title 提示同步修正；
+     - 待办红点与每日提醒弹窗卡片上的徽章统一为 `🤝 小组会议`。
+  3. **后端接口与协同服务文案规范化 ([joint_review.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)、[joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - FastAPI 接口摘要、报错 HTTPException 详情与返回 message 统一更正为“小组会议”与“多方联合会审”；
+     - 办结决议文本（`resolution_text`）更新为 `【小组会议商一致更正】` 与 `【小组会议未达成共识·协商失败】`；
+     - 审计日志动作名称与系统通知（`create_system_message`）标题内容统一更正为 `🤝【小组会议】`、`🎉【小组会议核准通过】`、`❌【小组会议协商失败】`。
+  4. **上线前全链路综合测试与验证加固 ([test_joint_review_postgres.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py))**：
+     - 扩充真实 PostgreSQL 自动化测试用例 `test_group_meeting_full_consensus_and_voter_clean_name`，覆盖：未受邀者拦截（403）、受邀成员通过、签署人姓名标段长串自动清洗、订单数据原子更正、状态恢复、决议文本规范性以及列表 votes 装配纯净度。
+- **验证结论**：
+  - 后端自动化单元测试：全部 13/13 项独立 PostgreSQL 测试用例 100% 通过（`Ran 13 tests in 1.798s, OK`）；
+  - 前端生产环境构建：`npm --prefix frontend run build` 100% 编译成功（751 个模块全部转换，耗时 18.16s，0 错误）；
+  - 容器内生产服务与数据库实机验证：
+    - `get_order_meeting_candidates` 实机返回 15 名责任节点候选人，账号名称规范严谨；
+    - `list_joint_reviews` 在超管与第三方非当事人视角下权限脱敏与展示全部准确无误；
+    - 系统待办通知统计 `get_pending_review_notifications` 运行正常。
+
+## 2026-10-20 [经办签署人姓名口径纠偏、历史数据清洗与卡片排版防溢出加固]
+- **需求背景与痛点根因**：
+  - 用户反馈：“有一个‘经办签署: high_lot_1,high_lot_2,high_lot_3,high_lot_4,low_lot_1,low_lot_2,low_lot_3,low_lot_4,low_lot_5,low_lot_6’的提示，这行lot的文字都溢出边框了”；
+  - **排查根因 1（经办签署展示为长串标段代码）**：
+    在 `backend/projects/insulation_pipe_supply_2026/api/joint_review.py` 中，`handle_vote_joint_review` 接口取 `display_name = session.unit or session.username`。对于负责管辖多个标段的管理人员（如现场负责人“王玮”），其账号的 `session.unit` 恰好是逗号拼接的全部标段代码串。表决保存时，服务层直接将该长串标段列表存入了 `tube_review_votes` 的 `voter_name` 字段，并在前端呈现为“经办签署: high_lot_1,...”；
+  - **排查根因 2（文字突破卡片容器横向溢出边框）**：
+    前端 `JointReviewHallView.vue` 中，`.entity-vote-card`、`.audit-row`、`.audit-signer` 缺少 `min-width: 0` 和 `word-break: break-all; overflow-wrap: anywhere;`。由于全英文字符串中间只有逗号无空格，浏览器默认英文断词规则将其视作一个超长单字，整行无法换行，直接撑破外层 Flex / Grid 容器溢出边框。
+- **改动清单与受影响物理文件**：
+  1. **后端签署人姓名口径纠偏与入库防伪 ([joint_review.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)、[joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `joint_review.py` 中，表决（`/vote`）、列表查询（`/list`）与待办通知（`/notifications`）统一废弃 `session.unit` 回退，显式使用权威真实账号 `session.username`；
+     - 在 `joint_review_service.py` 的 `vote_joint_review` 中加入防御性过滤：若 `session_name` 中包含逗号 `,` 或 `lot_` 标段标识，强制取纯净的 `session_username`；
+     - 在列表组装 `votes` 时加入运行时数据清洗，若既有数据库存量含有标段代码，自动回退取 `voter_username`。
+  2. **数据库存量脏数据清洗**：
+     - 执行 SQL 更新：`UPDATE tube.tube_review_votes SET voter_name = voter_username WHERE voter_name LIKE '%,%' OR voter_name LIKE '%lot_%';`，将存量 2 笔标段串清洗还原为纯净的真实姓名“王玮”；
+     - 执行 SQL 修复主单 `tube.tube_order_reviews` 中 `rejected_entities` 的 `voter` 字段。
+  3. **前端展示层安全清洗与排版防溢出加固 ([JointReviewHallView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - **安全清洗展示 (`formatVoterName`)**：新增 `formatVoterName(vote)`，若 `voter_name` 包含逗号或 `lot_` 标段代码，优先取用真实用户名（如 `王玮`），彻底防止脏数据露底；
+     - **CSS 防溢出与文本折行**：
+       - `.entity-vote-card`: 设置 `min-width: 0; overflow: hidden;`；
+       - `.card-vote-audit` & `.audit-row`: 设置 `min-width: 0; max-width: 100%; flex-wrap: wrap;`；
+       - `.audit-signer` & `strong`: 设置 `min-width: 0; max-width: 100%; word-break: break-all; overflow-wrap: anywhere;`；
+       - `.audit-opinion`: 设置 `word-break: break-all; overflow-wrap: anywhere; max-width: 100%; box-sizing: border-box;`。
+- **验证结论**：
+  - 后端自动化单元测试：全部 12/12 项独立 PostgreSQL 测试用例全量通过（Ran 12 tests in 1.873s, OK）；
+  - 前端生产环境构建：`npm --prefix frontend run build` 100% 编译成功（751 个模块全部转换，耗时 17.39s，0 错误）；
+  - 数据库存量校验：`SELECT voter_username, voter_name FROM tube.tube_review_votes;` 查验全部恢复为 `王玮`，无任何 lot 代码残留。
+
+## 2026-10-20 [保密小组会表面精简不可展开设计与提请人规范为“用户名+角色”]
+- **需求背景与痛点根因**：
+  - 用户明确规范：“对于你标记为‘保密事项’的记录，表面上展示的信息过多了，只需要显示小组会标记，订单号，提请人等信息就好，另外，也不支持点击展开。对了，我发现提请人写的负责标段，以及括号中的角色，而非用户名+角色，请改一下”；
+  - **排查根因 1（保密记录信息冗余且可展开）**：此前非当事人视角下的私密小组会卡片仍保留了折叠摘要条、事由文本和拟更正比对，且点击卡片仍能展开，造成版面冗长且存在潜在信息泄露风险；
+  - **排查根因 2（提请人显示为负责标段）**：此前在 `api/joint_review.py` 中取 `display_name = session.unit or session.username`，而现场负责人/库管员账号的 `session.unit` 恰好是所属标段（如 `low_lot_2`、`一标段`），导致提请人被错误存为标段名并展示为 `low_lot_2 (责任库管员)`，脱离了真实登录用户名。
+- **改动清单与受影响物理文件**：
+  1. **提请人入参口径纠正与历史数据洗涤 ([joint_review.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)、[joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `handle_create_joint_review` 与 `handle_get_order_candidates` 中彻底废弃 `session.unit` 取值，显式统一为真实登录账号 `session.username`；
+     - 在 `create_joint_review` 与 `list_joint_reviews` 中，提请人字段强制以 `initiator_username` 作为优先权威口径；
+     - 针对运行数据库执行历史修正，将此前误写入标段名称的记录清洗为真实的登录用户名。
+  2. **保密记录表面信息极简呈现与不可展开设计 ([JointReviewHallView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - **表面信息极简**：对于 `rev.is_private_masked` 的私密记录，表面仅展示：
+       - 小组会标记：`🤝 现场小组会`
+       - 物料类型标签：`🔥 保温管` / `🔩 管件阀门`
+       - 订单号：`订单号: rev.order_no`
+       - 提请人：`👤 提请人: 用户名 (角色)`（统一由 `formatInitiator(rev)` 格式化）
+       - 状态徽章：`{{ formatReviewStatus(rev) }}`（如 `🔴 协商失败` / `🟢 已办结` / `🟡 会商中`）
+       - 私密标签：`🔒 仅参会人员可见`
+     - **隐藏冗余信息**：彻底隐藏标段、供货厂家、拟修改条目比对、事由预览及折叠摘要条；
+     - **不可点击展开**：卡片样式赋予 `is-private-masked-card`（`cursor: default`，移除 hover 阴影与浮起）；点击顶栏与卡片空白处直接拦截不触发展开；`expandCard` 与 `expandAll` 加入保密判断；详情区 `v-if="isExpanded(rev.id) && !rev.is_private_masked"` 彻底杜绝展开。
+  3. **提请人格式规范化 (`formatInitiator`)**：
+     - 前端封装 `formatInitiator(rev)`，列表顶栏、折叠摘要条、展开元数据条、流转进度卡片及撤回弹窗中的提请人统一回显为 **`用户名 (角色)`**（如 `ww870411 (集团超级管理员)`、`李春 (责任库管员)`）。
+- **验证结论**：
+  - 后端自动化测试回归：全部 12/12 项独立 PostgreSQL 测试用例全量通过（Ran 12 tests in 1.723s, OK）；
+  - 前端生产环境构建：`npm --prefix frontend run build` 100% 编译成功（751 个模块全部转换，耗时 17.15s，0 错误）；
+  - 历史数据库数据洗涤验证：历史存有 `low_lot_2` 的单据均已准确更新为 `李春`。
+
+## 2026-10-20 [会审列表非 voting 状态单据 is_grp_meeting 变量作用域异常修复]
+- **排查缘由与根因分析**：
+  - 用户调用 `GET /joint-reviews/list?tab=all&limit=1` 时后端报错 500：
+    `UnboundLocalError: cannot access local variable 'is_grp_meeting' where it is not associated with a value`（发生在 `joint_review_service.py` 的 2037 行）；
+  - **根因确认**：`is_grp_meeting` 变量此前仅在 `if r_dict["review_status"] == "voting":` 分支内部进行了初始化赋值。当单据状态为办结状态（`approved` / `rejected` / `cancelled`）时，该分支被直接跳过，导致随后的隐私脱敏判断 `if is_grp_meeting:` 引用了未绑定的局部变量，触发 500 异常。
+- **改动清单与受影响物理文件**：
+  - **[joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)**：
+    - 将 `is_grp_meeting = (r_dict["review_type"] == "group_meeting")` 提升至列表项遍历循环顶部（`r_dict["review_type"]` 归一化之后）；
+    - 确保无论记录处于推进中（`voting`）、已通过（`approved`）、协商失败（`rejected`）还是已撤回（`cancelled`）状态，`is_grp_meeting` 均能被无条件、确定性地关联与引用。
+- **验证结论**：
+  - 容器内服务调用验证：`list_joint_reviews(tab='all', limit=1)` 在各角色会话下全部正常返回 `200 OK`，0 错误；
+  - 后端自动化单元测试回归：12/12 项独立 PostgreSQL 测试用例全量通过（Ran 12 tests in 1.963s, OK）。
+
+## 2026-10-20 [现场协同小组会非当事人隐私隔离与明细数据脱敏保护]
+- **需求背景与痛点根因**：
+  - 用户明确规范：“现在我想做一项隐私处理，即以小组会议形式进行的会审记录，除了当事人和Global_admin之外，都不能看到具体的内容，只能看见条目基本信息”；
+  - 现场协同小组会（`group_meeting`）属于小范围灵活协商场景，可能涉及敏感的内部核算、私密照片或内部争议发言。此前在公共大厅的“历史会审”或“全部会审”列表中，所有登录角色均可查看完整的修改明细（`proposed_patch`）、现场照片附件、事由及表决发言，缺少权限层面的数据脱敏与隐私保护机制。
+- **改动清单与受影响物理文件**：
+  1. **后端隐私判定与字段级脱敏保护 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 新增 `_is_party_of_group_meeting` 当事人判定函数：严密对比当前登录用户名（`session_username`）与显示名（`session_name`）是否属于发起人（`initiator_username` / `initiator_name`）或受邀参会成员（`required_entities` / `invited_users`）；
+     - 在 `list_joint_reviews` 与 `get_joint_review_detail` 中，当且仅当当前用户既不是当事人，也不是 `Global_admin` / `dev_admin` 时，标记 `is_private_masked = True` 并执行数据级脱敏：
+       - 保留基本条目信息：单号（`review_no` / `order_no`）、标段、供货厂家、会审类型（`group_meeting`）、流转状态、提请人、时间；
+       - 脱敏敏感细节：`review_reason` 脱敏为 `🔒 [保密事项] 仅限协同小组成员查阅`；`resolution_summary` 脱敏为 `🔒 [保密决议]`；`proposed_patch` 与 `original_snapshot` 规整为 `{"_masked": True}`；`attachments` 清空；各方表决发言脱敏为 `🔒 [保密发言]`；清除参会成员中的私人联系电话；
+       - 权限封禁：非当事人强制关闭表决（`can_i_vote=False`）、撤销（`can_cancel=False`）与裁决（`can_arbitrate=False`）权限。
+  2. **API 详情路由透传登录姓名 ([joint_review.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py))**：
+     - 在 `handle_get_joint_review_detail` 接口中补齐透传 `session_name`，保证单笔详情在通过 URL 或卡片直达时同样受到一致的隐私鉴权脱敏保护。
+  3. **前端会审大厅隐私标识与专属 UI 渲染 ([JointReviewHallView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - 折叠条摘要：`formatPatchSummary` 适配 `_masked` 标记，拟更正项优雅呈现为 `📝 拟更正：🔒 仅参会人员可见`；
+     - 展开详情区：顶部渲染灰蓝质感 `private-meeting-banner` 隐私保护横幅，明确提示议案受协同管理规范保护；
+     - 拟更正比对区：渲染 `diff-masked-notice` 隐私遮罩占位符；照片区域自动收拢，表决发言自然脱敏；
+     - 窄屏与手机端深度适配：移动端对横幅图标、内边距与字体做专属紧凑优化，保证手机窄屏查看时整齐清爽。
+  4. **自动化单元测试全链路加固 ([test_joint_review_postgres.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py))**：
+     - 新增 `test_group_meeting_privacy_masking_for_third_party` 测试用例，全面验证发起人视角、受邀成员视角、超管视角（均完整可见）与无关第三方视角（严格脱敏、字段遮蔽、基本信息保留）的数据表现。
+- **验证结论**：
+  - 后端自动化测试：全部 12/12 项测试用例全部 **OK** 通过（Ran 12 tests in 1.654s）；
+  - 前端生产环境构建：`npm --prefix frontend run build` 100% 打包成功（751 个模块全部转换，耗时 17.17s，0 错误）。
+
+## 2026-10-20 [会审表新增字段 review_type 生产数据库即时迁移与启动自愈加固]
+- **排查缘由与根因分析**：
+  - 用户反馈报错：`psycopg2.errors.UndefinedColumn: column "review_type" does not exist`，在提请会审/小组会时查询 `SELECT id, review_no, review_type FROM tube.tube_order_reviews WHERE order_category = %(cat)s AND delivery_id = %(did)s AND review_status = 'voting'` 抛出 500 异常；
+  - **根因确认**：此前在 `joint_review_service.py` 的 `ensure_joint_review_tables` 中追加了 `ALTER TABLE tube.tube_order_reviews ADD COLUMN IF NOT EXISTS review_type VARCHAR(32)` 与 `invited_users JSONB`，但由于后端 Uvicorn 常驻容器内存且依赖内存标志 `_tables_initialized = True`，热更新时跳过了 DDL 执行，导致真实运行数据库 `tube.tube_order_reviews` 缺少新字段。
+- **改动清单与受影响物理文件**：
+  1. **生产数据库即时执行 DDL 补齐字段**：
+     - 在数据库真实表 `tube.tube_order_reviews` 中成功补齐 `review_type VARCHAR(32) NOT NULL DEFAULT 'joint_review'` 与 `invited_users JSONB DEFAULT '[]'::jsonb` 字段及索引；
+  2. **服务结构支持强制刷新与启动自愈 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - `ensure_joint_review_tables` 函数增加 `force: bool = False` 参数，允许在服务启动与恢复时无视内存缓存强制核验执行；
+  3. **FastAPI 启动生命周期接入显式核验 ([main.py](file:///D:/编程项目/phoenix/backend/main.py))**：
+     - 在应用 `@app.on_event("startup")` 中追加显式调用 `ensure_joint_review_tables(force=True)`，保证后端服务每次启动、重启时百分之百强制完成数据库增量迁移与约束校对。
+- **验证结论**：
+  - 生产数据库实际查询验证：直接执行 `SELECT id, review_no, review_type, invited_users FROM tube.tube_order_reviews WHERE delivery_id = 463` 成功通过，0 错误；
+  - 接口回归验证：`GET /joint-reviews/notifications` 与创建接口均返回 `200 OK`；
+  - 后端自动化测试回归：全部 11 项测试用例 100% 通过（Ran 11 tests in 1.574s, OK）。
+
+## 2026-10-20 [现场协同小组会异议敏捷闭环：协商失败自动办结并无损恢复原单状态]
+- **需求背景与痛点根因**：
+  - 用户明确规范：“我想这样设计，在小组会议中，如果哦没有通过，那么状态不要变成挂起，而是恢复成原来的状态。在会审大厅中，显示该条记录时，提示为‘协商失败’”。
+  - 此前逻辑中，无论是法定联合会审还是敏捷小组会，只要有人投反对票（reject），单据都统一留在 `voting` 状态并将 `is_suspended` 置为 true（挂起中），业务单据持续锁死在 `under_review` 待审状态，导致小组会失去了快速敏捷闭环的特性，且大厅中无法明确标记“协商失败”。
+- **改动清单与受影响物理文件**：
+  1. **后端小组会表决异议敏捷闭环 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `vote_joint_review` 中增加专门的判定分支：当 `is_grp_meeting and len(rejected_list) > 0` 时；
+     - 立即调用 `_revert_review_order_status(db_session, review)`，将关联的发货单/车载管件明细无损还原为发起前状态（`pre_status`），不再将订单锁死在 `under_review` 挂起态；
+     - 将 `tube.tube_order_reviews` 记录直接更新为 `review_status = 'rejected'`（办结终止），记录决议摘要 `【现场协同小组会未达成共识·协商失败】异议说明: ... 原单已自动恢复为发起前状态【pre_status】`，记录办结人与办结时间；
+     - 向发起人自动推送站内系统通知：`❌【现场小组会协商失败】订单 {order_no} 修正未通过`，告知小组成员提出异议未达成共识，订单已恢复正常流转；
+     - 记录操作审计 `GROUP_MEETING_REJECTED`；
+     - 返回给前端：`review_status = 'rejected'`, `status_display = '协商失败'`, `is_finalized = True`, `restored_status = pre_status`。
+     - 优化 `create_joint_review` 对 `invited_users` 的格式兼容，同时支持 dict 与纯 username 字符串。
+  2. **前端会审大厅展示规范化 ([JointReviewHallView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue))**：
+     - 状态格式化 `formatReviewStatus(rev)`：当 `rev.review_status === 'rejected'` 且为小组会时，状态徽章明确呈现为 `🔴 协商失败`（法定常规会审仍保留 `🔴 终局裁决驳回`）；
+     - 折叠栏顶栏标签：状态显示为 `❌ 协商失败: {{ finalized_at }}`；
+     - 状态筛选下拉框：调整为 `🔴 终局驳回 / 协商失败`，便于同时筛选此类已办结单据；
+     - 流程履约指示器 `getFinalStepBadge` / `getFinalStepOperator`：针对小组会 `rejected` 场景显示为 `小组成员异议·协商失败` 与 `👤 异议成员: {{ finalized_by }}`；
+     - `formatTimelineStatus` 时间线卡片：小组会 `rejected` 时显示为 `🔴 协商失败·维持原单`。
+  3. **自动化测试加固 ([test_joint_review_postgres.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py))**：
+     - 新增 `test_group_meeting_reject_reverts_order_and_fails_negotiation` 真实 PostgreSQL 独立测试用例，全链路覆盖小组会创建 -> 成员投反对票 -> 订单自动恢复 -> 会审状态置为 `rejected` -> 摘要与审计校验。
+- **验证结论**：
+  - 后端自动化测试全量通过：`docker exec phoenix_backend python -m unittest backend.projects.insulation_pipe_supply_2026.tests.test_joint_review_postgres -v` 全部 11/11 项测试用例 100% 通过（Ran 11 tests in 1.671s, OK）；
+  - 前端生产环境打包验证：`npm --prefix frontend run build` 100% 编译成功（751 个模块全部转换，耗时 13.22s，0 错误）。
+
+## 2026-10-20 [库管员工作台需求主体筛选缺陷修复与管件发货记录台账多维筛选补齐]
+- **排查缘由与根因分析**：
+  - 用户反映：“帮我检查一下，有用户反映 http://localhost:5173/projects/insulation_pipe_supply_2026/pages/warehouse_management 页面中的‘需求主体’筛选不起作用，另外，管件标签页没有筛选功能，也请在修复后添加”；
+  - **根因 1（保温管需求主体筛选不起作用）**：
+    - 后端接口 `GET /warehouse-management/deliveries`（[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)）在接收到前端传入的 `section_1_id` 参数后，虽然解析了 `selected_section_1s` 集合，但在随后的 `for row in rows:` 数据过滤遍历中，**漏写了对 `selected_section_1s` 的判定校验**（仅保留了账号分管标段过滤与供给主体/型号/状态过滤），导致无论前端选择哪个需求主体，后端返回的均是全量记录，筛选完全失效；
+  - **根因 2（管件标签页没有筛选功能）**：
+    - 前端库管员工作台（[`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)）仅在保温管发货记录标签页（`activeTab === 'pipe'`）上方配置了筛选卡片，管件发货记录标签页（`activeTab === 'fitting'`）直接渲染了台账卡片，缺少专门的筛选控件；且原管件数据拉取逻辑硬编码复用了部分不存在的筛选字段。
+- **改动清单与受影响物理文件**：
+  1. **后端库管发货记录接口需求主体过滤补齐 ([workspace.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py))**：
+     - 在 `get_warehouse_management_deliveries` 的遍历过滤循环中追加 `if selected_section_1s and sec_id not in selected_section_1s: continue`；
+     - 使得单选或逗号分隔多选的需求主体过滤在后端内存集合中立即精准生效。
+  2. **前端管件标签页多维筛选面板与交互体系完整构建 ([WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue))**：
+     - **模板构建**：在管件台账卡片上方新增独立的管件台账筛选卡片（`fitting-filter-card`），与保温管筛选卡片保持完全统一的响应式网格布局与配色，包含：
+       - “需求主体”多选下拉框（支持全选/清空、状态回显）；
+       - “供给主体”多选下拉框（支持全选/清空、状态回显）；
+       - “管件类别”多选下拉框（动态提取标准类型与实际数据中的弯头、三通、大小头、直缝弯管、补偿器、固定节、球阀等）；
+       - “状态”多选下拉框（支持待现场到货、待施工接收、待库管确认、库管已确认、联合会审中）；
+       - “运输车次号”、“单号”、“车牌号”文本输入框（支持按回车键即刻查询）；
+       - “综合搜索”文本输入框（支持按型号规格、备注等模糊过滤）；
+       - 操作按钮组：“查询”（Primary）、“重置”（Ghost，重置后自动将流转子标签还原为全部）、“导出管件台账”（带渐变绿色高亮）。
+     - **状态解耦与逻辑闭环**：
+       - 定义独立的响应式筛选状态 `fittingFilters`，与保温管筛选状态完全隔离，互不干扰；
+       - 重构 `filteredFittingRows` 计算属性，实现前端内存多维过滤（需求主体、供给主体、管件类别、状态、车次、单号、车牌、综合搜索）并完美叠加顶部“四节点流转卡片”状态；
+       - `loadWarehouseFittingDeliveries` 传参改为读取 `fittingFilters`，向服务端高效传输标段/厂家与关键字参数；
+       - 在 `loadOptions` 中对单标段库管员自动设置 `fittingFilters.section1Ids` 默认值；
+       - 重构 `exportWarehouseFittingExcel`，优先导出经过当前多维筛选后的记录集合，并补齐了需求主体全称与管件流转状态中文标签。
+- **验证结论**：
+  - **后端语法校验**：`python -m py_compile backend/projects/insulation_pipe_supply_2026/api/workspace.py` 0 错误编译通过；
+  - **前端生产构建**：`npm run build --prefix frontend` 100% 打包成功（751 个模块全部编译通过，产物正常生成，耗时 14.00s，0 错误）。
+
+
+## 2026-10-20 [会审待办通知弹窗账号切换即时感知与大厅过载抑制修复]
+- **排查缘由与根因分析**：
+  - 用户反馈：“我尝试邀请‘王玮’进入小组会议，可是王玮并没有收到任何通知，帮我排查逻辑”；
+  - 深度排查结果确认：
+    1. **后端站内消息已正常送达**：`logs.system_messages` 中已于 16:31:35 准确生成发往 `王玮` 的邀请记录；
+    2. **大厅过载静默拦截**：上一轮为了满足“进入会审大厅后不弹窗打扰”的需求，在 `DailyReviewNoticeModal.vue` 中加入了只要身处 `joint_review_hall` 页面即刻静默并调用 `recordSuppressedIds` 将单据直接塞入本地 `localStorage` 今日抑制列表的逻辑；导致王玮在会审大厅页面内时弹窗被显式拦截，离开大厅前往其他页面时又因该单被过早标记为“已抑制”而永远不再弹出；
+    3. **账号切换感知缺失**：弹窗组件此前仅监听路由切换，未监听 `auth.user?.username` 登录账号切换，切账号后需等待长达 45 秒心跳轮询。
+- **改动清单与受影响物理文件**：
+  - **[DailyReviewNoticeModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue)**：
+    1. **纠偏过载抑制逻辑**：在会审大厅内部时仅保持当前页面不弹窗（`visible.value = false; return;`），坚决移除 `recordSuppressedIds` 写入本地存储的行为，严格只在用户主动点击“今日不再提醒”按钮时才持久化抑制；
+    2. **新增账号切换监听**：添加 `watch(() => auth.user?.username)`，一旦检测到登录用户切换（例如从超管切换为王玮），在 300ms 内立即主动拉取待办并唤醒弹窗，彻底杜绝切账号需死等 45 秒轮询的问题；
+    3. **组件初始化加速**：将 `onMounted` 首次检测延迟由 1500ms 缩短至 600ms。
+- **验证结论**：
+  - 前端生产环境打包构建：`npm run build` 100% 成功编译通过（751 个模块全部转换，耗时 15.32s，0 错误）。
+
+## 2026-10-20 [现场协同小组会受邀候选人全面基于系统登录“账号（Username）”实施重构]
+- **需求背景与痛点根因**：
+  - 用户明确规范：“应当是根据‘账号’，也就是用户名来实施邀请”；
+  - 此前供货厂家候选人提取逻辑错误地从纸质单据或名册联系人（如 `薛向新`、`宋波`）中提取人名，导致出现未注册账号的个人姓名，既无法实现账号身份精确登录认证，又会导致开元厂家登录自身账号（`kaiyuan`）时无法准确匹配受邀身份或接收待办通知。
+- **改动清单与受影响物理文件**：
+  1. **供货厂家受邀候选人绑定系统账号 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `get_order_meeting_candidates` 中彻底移除 `supply_entity_contacts` 多联系人名单遍历与主联系人 `contact_name` 取词；
+     - 厂家候选人直接绑定系统登录账号 `matched_sup.get("username") or matched_sup.get("entity_id")`（如大连开元账号 `kaiyuan`），显示为 `kaiyuan (大连开元热力管道股份有限公司)`，角色标注为 `供货厂家业务账号`，候选人 `username` 严格锁定为 `kaiyuan`；
+     - 杜绝非账号联系人（薛向新、宋波等）进入受邀候选列表。
+  2. **受邀人核验机制纯净化与账号直通匹配**：
+     - 在 `_is_user_invited_to_group_meeting` 中强化基于登录账号（`username`）与主体标识（`entity_id`）的 100% 精确对比；
+     - 剥离模糊关联，确保被邀请账号（如 `kaiyuan`、`ww870411`、`王玮`、`李绍` 等）与登录会话账号一对一精确投递与核验，未受邀账号绝不收到催办；
+     - 在系统消息推送 `create_system_message` 中直接使用受邀实体的 `username` 投递至收件箱，杜绝因显示名投递导致消息失联；
+     - 修复 `_check_user_can_vote_entity` 中对空 `curr_name` 执行 `startswith("")` 导致的非受邀人员虚假匹配缺陷。
+- **验证结论**：
+  - 后端自动化测试回归：`docker exec phoenix_backend python -m unittest backend.projects.insulation_pipe_supply_2026.tests.test_joint_review_postgres -v` 全部 10 项测试用例全部 **OK** 通过（100% 通过率）；
+  - 前端生产环境打包：`npm --prefix frontend run build` 100% 编译成功（751 个模块全部转换，0 错误）。
+
+## 2026-10-20 [现场协同小组会受邀候选人名单纳入 ww870411 集团超管账号并置顶支持]
+- **需求背景与业务定位**：
+  - 用户明确要求：“在邀请名单中，要把我，也就是 ww870411 放进去，也就是说，可以邀请我”；
+  - `ww870411` 是系统 `Global_admin` 最高统筹账号，业务流程上具备终局仲裁与特许裁决权，现场发生重大歧义或需集团介入时，发起人可直接在下拉菜单中点选邀请 `ww870411` 列席协同小组会。
+- **改动清单与受影响物理文件**：
+  1. **仲裁特许配置扩充 ([tube_config.json](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json))**：
+     - 在 `arbitration_config.arbitrator_accounts` 配置列表中加入 `"ww870411"`，完成数据层账户白名单登记。
+  2. **后端服务裁决人选置顶与别名映射 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `DEFAULT_ARBITRATOR_ACCOUNTS` 常量中追加 `"ww870411"` 底线兜底；
+     - 在 `get_order_meeting_candidates` 的监督裁决节点中，将 `ww870411` 显式置于裁决列表首位，角色展示为 `ww870411 (集团超管/仲裁)`，身份标注为 `集团超管 · 特许裁决`；
+     - 在 `_is_user_invited_to_group_meeting` 中增加 `ww870411` 与“王玮”别名的双向精准关联，当外部人员选择邀请 `ww870411` 时，`ww870411` 账号登录后可 100% 准确接收待办提醒并参与表决。
+- **验证结论**：
+  - 后端 Python 语法与模块编译：`python -m py_compile` 100% 成功通过；
+  - 前端生产打包构建：`npm run build` 100% 成功编译通过（751 个模块，耗时 13.64s，0 错误）。
+
+## 2026-10-20 [小组会精准定向通知范围收敛（非受邀超管/他方节点彻底禁扰）与剔除施工单位人选优化]
+- **需求背景与业务痛点**：
+  1. 通知范围泛化溢出：现场负责人提请小组会并邀请特定裁决者参会时，作为未被受邀的 `Global_admin` 却收到了弹窗催办通知。用户明确要求：“在小组会情况下，应当是只有被邀请的人员才会收到通知”；
+  2. 人员下拉选单业务纠偏：根据实际业务流程，施工单位不参与现场小组会核验更正过程，需在提请人选列表中彻底去除“施工单位人员”。
+- **改动清单与受影响物理文件**：
+  1. **小组会受邀身份精准鉴权与非受邀全员静默 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - **新增 `_is_user_invited_to_group_meeting`**：严格匹对当前登录人的用户名（`username`）、主体标识（`entity_id`）与姓名（`display_name`），在小组会场景下完全脱钩 `Global_admin` / `dev_admin` 超级角色的泛化通过判定；
+     - **重构 `get_pending_review_notifications`**：拉取待办提醒时，对 `group_meeting` 严格只对受邀人本人生成待办提醒，彻底杜绝未受邀的管理员、其他标段主管或厂家收到弹窗打扰；
+     - **收敛 `list_joint_reviews`**：在会审大厅“待我会签 (`pending_my_vote`)”中，针对小组会议同样严格只对受邀人显示待办，保持超管待办列表清爽；
+     - **加固 `vote_joint_review`**：小组会议仅允许受邀成员本人签署（或超管显式指定 `target_entity_id` 代签），杜绝未受邀者误操作。
+  2. **全面剔除施工单位人选与节点重排**：
+     - **后端候选人接口 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：在 `get_order_meeting_candidates` 中彻底移除施工单位节点扫描（`construction_units`），并将剩余节点重整为：1. 供货发货环节、2. 到货核验环节、3. 库管入库环节、4. 监督裁决 (可选)；
+     - **前端选择器双重过滤 ([InitiateJointReviewModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue))**：在 `groupedCandidates` 计算属性中增加前置过滤，彻底阻断任何施工单位数据进入下拉选单。
+- **验证结论**：
+  - 后端 Python 语法与模块编译：`python -m py_compile` 100% 成功通过；
+  - 前端生产环境打包构建：`npm run build` 100% 成功编译通过（751 个模块全部转换，耗时 13.01s，0 错误）。
+
+## 2026-10-20 [会审弹窗误触关闭防护、大厅防重复弹窗通知优化与小组会核准 NameError 修复]
+- **需求背景与痛点根因**：
+  1. 弹窗防误触：用户在提请会审弹窗中填写表单或点选人员时，若不慎点击弹窗卡片外部遮罩（backdrop），弹窗会意外关闭并丢失已填内容；
+  2. 通知打扰治理：被通知用户点击进入会审大厅后，全局通知弹窗仍继续弹出，造成重复打扰；
+  3. 小组会核准报错：小组成员表决全部同意触发自动更正时，后端日志抛出 `NameError: name 'patch_summary_str' is not defined`，导致表决请求失败。
+- **改动清单与受影响物理文件**：
+  1. **提请会审弹窗遮罩点击防误触 ([InitiateJointReviewModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue))**：
+     - 移除遮罩层 `@click.self="handleClose"`，禁止点击外部关闭弹窗，仅允许用户点击右上角 `✕` 或底部“取消”按钮主动关闭，防止表单内容意外丢失。
+  2. **会审大厅全场景防重复弹窗机制 ([DailyReviewNoticeModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue))**：
+     - 增加 `isAtReviewHall()` 页面感知：当用户当前路由处于联合会审大厅（`joint_review_hall`）时，立即静默关闭并阻止任何新弹窗弹出；
+     - 增强 `recordSuppressedIds()` 机制：当用户进入会审大厅或通过通知跳转时，自动将当前名下所有待办会审 ID 记录为已感知抑制状态，即使用户后续离开会审大厅前往其他页面，也不会被已查看的单据重复弹窗打扰，仅在产生真正的新提请单据时才唤醒通知。
+  3. **后端小组会/联合会审核准更正字符串命名修复 ([joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - 在 `vote_joint_review` 中补齐 `patch_summary_str` 定义，提取发货数量、规格型号、送货车牌及车载管件明细组合为结构化更正摘要；
+     - 同步补齐 `force_arbitrate_joint_review` 中的更正摘要格式化逻辑，彻底解决核准全票通过时单据原子合入崩溃的问题。
+- **验证结论**：
+  - 前端生产环境打包：`npm run build` 100% 成功编译通过（751 个模块全部转换，耗时 13.60s，0 错误）；
+  - 后端 Python 语法检查：`python -m py_compile` 100% 成功通过，0 语法缺陷。
+
+## 2026-10-20 [现场协同小组会参会人员点选机制重构：取消默认推荐全选、改为交互式下拉菜单分组点选]
+- **需求背景与交互痛点**：
+  - 用户反馈：此前系统打开小组会议弹窗时会自动计算并默认勾选推荐人选，且采用平铺卡片网格罗列全部节点候选人，导致弹窗纵向篇幅偏长、信息密度偏高；
+  - 明确交互诉求：1. 不要推荐小组讨论的人员，默认均不选中；2. 改用下拉菜单点选模式，既保证按业务流程各节点清晰选人，又显著精简弹窗页面排版，适配桌面及移动端窄屏。
+- **改动清单与受影响物理文件**：
+  - **[InitiateJointReviewModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)**：
+    1. **默认无推荐与零预选逻辑**：在 `fetchCandidates` 加载责任人列表后，显式将 `selectedCandidateKeys.value` 置空（`[]`），移除自动推荐逻辑，完全由提请人根据现场实际需要自主勾选；
+    2. **响应式下拉点选组件 (Dropdown Selector)**：
+       - **触发条 (Trigger Bar)**：未选时显示温和占位提示 `📋 点击展开下拉菜单点选参会人员...`；选中后以自适应胶囊标签（Chips）呈现姓名与角色，支持胶囊尾部 `✕` 快捷剔除，无需反复展开下拉层；
+       - **下拉悬浮面板 (Dropdown Menu)**：采用分节点分组（供货单位 🏭、现场接货 🚚、施工单位 🏗️、仓库保管 🏢、仲裁统筹 ⚖️），以标准复选框项直观展示姓名、角色、电话及发起人免选状态；
+       - **便捷操作底栏**：顶部/底栏提供“清空已选”、“完成 ✕”及当前已选人员数量实时统计；
+    3. **移动端窄屏排版与触控优化**：针对 720px 以下屏幕自适应缩小胶囊标签宽度、加大选项触控热区、限定下拉浮层最高高度并优化滑动滚动条。
+- **验证结论**：
+  - 前端生产打包构建：`npm run build` 100% 成功编译通过（751 个模块全部转换，耗时 15.52s，零报错）。
+
+## 2026-10-20 [保温管物流链系统全流程任意状态发货单提请支持与 _extract_normalized_ids 命名空间修复]
+- **需求背景与痛点根因**：
+  - 运行时报错 `NameError: name '_extract_normalized_ids' is not defined`：在 `get_order_meeting_candidates` 解析标段管理配置时调用了未在本模块显式引入的辅助函数；
+  - 状态发起限制过于僵硬：此前仅处于待到货、待接收、待入库等特定流转中的单据能看到并提请会审，已完成归档（`completed`）等其他状态的单据无法发起现场商定；
+  - 用户明确规则要求：“对任意状态下的发货单都能够点击提请会审并都能进行小组讨论的模式（对于联合会审模式的条件与原来保持不变）”。
+- **改动清单与受影响物理文件**：
+  1. **后端服务修复与状态策略重构 ([backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py))**：
+     - **引入与安全包装 `_normalize_ids`**：引入 `_extract_normalized_ids` 并封装健壮的容错包装器，彻底根除候选人匹配时的 `NameError`；
+     - **发起状态双轨制鉴权**：
+       - `group_meeting` (现场协同小组会)：放开所有状态约束，针对已归档完成（`completed`）、待到货、待接收、待入库等任意单据均支持发起；
+       - `joint_review` (全员联合会审)：严格保持原有条件不变（仅限流转中待到货/待接收/待入库状态，已归档单据拦截并友好引导至小组会）；
+     - **针对归档单据智能推荐协同主体**：在 `get_order_meeting_candidates` 中对 `completed` 状态单据智能推荐供货方代表、现场主管与库管员联合协商。
+  2. **前端三大管理台账“提请会审”按钮全状态开放与供给端集成**：
+     - **[InitiateJointReviewModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue)**：计算 `isJointReviewAllowed`，若单据为归档状态则自动锁定/推荐“现场协同小组会”并禁用全员会审模式；修复 `deliveryId` 兼容提取；
+     - **[DemandManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)**：在直管与管件发货台账中，对任意非 `under_review` 状态（包括已完成归档）均开放“⚖️ 提请会审”按钮；
+     - **[WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)**：PC 表格及移动端明细卡片中，对所有非会审中单据（包括已入库历史记录）全量开放提请入口；
+     - **[SupplyManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue)**：供给端物流台账与管件发货卡片全量挂载会审弹窗与“提请会审/查看会审”按钮，赋予供货厂家发起现场小组协商的完整能力。
+- **验证结论**：
+  - 后端 Python 编译：`python -m py_compile` 100% 编译通过；
+  - 前端生产打包：`npm run build` 100% 编译通过（751 个模块，耗时 13.06s，0 错误）。
+
+## 2026-10-20 [保温管物流链系统新增“现场协同小组会议”敏捷协同模式：全流程节点提请权限与定向受邀人员轻量裁决]
+- **需求背景与痛点根因**：
+  - 用户反馈原有的“全员联合会审”流程过于沉重与正式，部分一线操作人员出于“怕给前序环节惹麻烦/公开挑毛病”的心理负担，遇到现场突发偏差时不敢轻易发起；
+  - 实际业务中，很多现场纠偏（如规格尺寸笔误、到货车牌号错记、现场急需换货）仅需特定关联环节（如供货单位代表与现场接货员，或接货员与施工单位）在场商定即可形成结论并订正。
+- **改动清单与受影响物理文件**：
+  1. **后端数据模型与接口升级 ([backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py), [backend/projects/insulation_pipe_supply_2026/api/joint_review.py](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py))**：
+     - **动态 DDL 升级**：底层表 `tube.tube_order_reviews` 自动新增 `review_type VARCHAR(32) DEFAULT 'joint_review'` 与 `invited_users JSONB DEFAULT '[]'::jsonb` 字段及索引；
+     - **全流程节点提请权限判定 (`get_order_meeting_candidates`)**：
+       - 放宽提请门槛：该单据业务流上的任意节点（已执行的历史节点、正在执行的当前节点、将来待执行的后续节点：供货单位、现场片区负责人、施工单位、库管员）以及 `Global_admin` / `dev_admin` 均具备发起小组会议与全员联合会审的资格；
+       - 智能聚合候选人库：基于单据标段/片区/供货商与 `tube_config.json` 自动梳理出 5 大节点关联人员列表（包含姓名、用户名、角色、电话），并自动标注“当前登录人”以及“推荐核心人选”；
+     - **轻量受邀表决机制 (`create_joint_review`)**：
+       - 当模式为 `group_meeting` 时，表决主体 (`required_entities`) 自动收敛为发起人指定的受邀人员名单（自动排除发起人自己，避免自投）；
+       - 消息通知精准投送：系统消息以 `msg_type="group_meeting"` 仅定向推送给受邀人员与发起人；
+     - **精准投票鉴权与自动纠偏生效 (`_check_user_can_vote_entity`, `vote_joint_review`)**：
+       - 支持受邀用户按 `username`、`display_name` 或主体标识精准匹配投票权限；
+       - 小组成员全员核准（全部投出赞同票）时，自动触发补丁数据合入生效，单据安全解锁并恢复流转，决议标题标注为 `【现场小组会商一致更正】`。
+  2. **前端交互与手机端响应式排版重构 ([frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/InitiateJointReviewModal.vue), [frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/JointReviewHallView.vue), [frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue), [frontend/src/projects/insulation_pipe_supply_2026/services/jointReviewApi.js](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/services/jointReviewApi.js))**：
+     - **协同模式卡片式切换**：弹窗顶部提供“🤝 现场协同小组会 (轻量快速)”与“⚖️ 全员联合会审 (正式仲裁)”双卡片切换，默认推荐小组会；
+     - **全流程节点人选精细选择器**：按“供货单位”、“现场接货”、“施工单位”、“仓库保管”、“仲裁统筹”分节点折叠/展开，支持一键“推荐人选”、“全选”、“清空”；
+     - **移动端窄屏极致适配 (Mobile Responsive)**：
+       - 针对小于 720px 的移动设备视口：模式卡片自适应为单列竖排，候选人名片转化为大触控区域（触摸高度 ≥ 44px），表单控件字号强制固定为 16px 防止 iOS 自动缩放；
+       - 弹窗底部操作按钮采用纵向弹性排布，确保小屏下单手拇指触达与滚屏顺畅；
+     - **会审大厅与通知联动**：
+       - 联合会审大厅顶部工具栏增加“协同类型”快速筛选（全部 / 🤝 小组会议 / ⚖️ 联合会审）；
+       - 会审单卡片与折叠条醒目标注 `🤝 小组会` 徽标与协商节点状态；
+       - 全局待办弹窗 (`DailyReviewNoticeModal.vue`) 同步辨识小组会议任务。
+- **验证结论**：
+  - 后端 Python 语法与模块编译：`python -m py_compile` 100% 编译通过，无语法缺陷；
+  - 前端生产构建：`npm run build` 100% 编译通过（751 个模块，耗时 12.08s，0 错误）。
+
+## 2026-10-19 [月报数据查询工具“向前穿透”趋势图均值标签彻底避让优化：右侧安全隔离带外置、去除底色遮挡、独立标注开关与Tooltip联动]
+- **需求背景与痛点根因**：
+  - 用户反馈图表中的均值标签可能遮挡指标的数据标签。
+  - **根因洞察**：只要均值标签被置于图表绘图区内部（无论是左侧 `insideStartTop` 还是右侧 `insideEndTop`），若对应周期的指标数值接近历史平均值，带有实心底色的均值标签就会直接盖在数据点上方的指标数据标签上，形成视觉冲突与数据遮蔽。
+- **改动清单与受影响物理文件**：
+  1. **前端图表与交互升级 ([frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue))**：
+     - **均值标签移至右侧外部安全区 (`position: 'end'`)**：
+       - 将均值标签彻底移出绘图区域内部，定位在均值线最右侧端点外侧（`position: 'end'`，偏移 8px），与所有周期的数据点在 X 轴水平方向上实现物理空间隔离，从几何上彻底消除与任何周期数据标签的重叠隐患；
+     - **去除实心底色，文本透明微标化**：
+       - 移除大面积厚重实心黄色背景框，精炼文字为 `均值 xx.xx`，字色与均值线琥珀色保持一致，杜绝“膏药式”遮挡；
+     - **坐标系右侧专属留白扩展 (`grid.right: 76`)**：
+       - 当开启均值标注时，`grid.right` 自适应扩大至 76px，为右侧均值文字开辟独立的排版通道，保证右侧边界留有安全余量，绝不移出容器边界；
+     - **控制工具栏新增独立交互开关 (`penetrationShowAvgLabel`)**：
+       - 在“显示数值标签”旁新增“均值标注”复选框（默认开启），支持用户一键切换是否在均值线上印字。关闭时均值辅助虚线依然保留，主副标题均值依然存在，满足用户对极致纯净图表的需求；
+     - **Tooltip 补充均值对比参考**：
+       - 鼠标悬停任意周期时，浮层底部自动增加一条虚线隔开的“历史均值参考”数据行，全方位方便用户对比。
+- **验证结论**：
+  - 前端生产构建：`npm run build` 100% 编译通过（751 个模块，耗时 17.30s，0 错误）。
+
+## 2026-10-19 [月报数据查询工具“向前穿透”趋势图均值标签避让优化：迁移至左侧起点与副标题双重呈现，杜绝遮挡最新数据点]
+- **需求背景与痛点根因**：
+  - 用户反馈原均值标签置于右侧终点上方（`insideEndTop`）时，由于恰好与最后一个周期（最新采暖期/最新月份）处于同一水平 X 位置，若最新周期的指标数值接近历史均值，均值底色胶囊便会与数据点上方的指标数值标签发生重叠遮挡。
+- **改动清单与受影响物理文件**：
+  1. **前端图表排版与均值显示升级 ([frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue))**：
+     - **均值标签移位避让 (`insideStartTop`)**：将 `itemConfig.markLine.label.position` 由右侧终点迁移至**左侧起点内侧上方**，彻底远离最右侧最新周期的数据标签密集区，零遮挡、零碰撞；
+     - **左上角副标题同步彰显均值**：在 `title.subtext` 中自适应计算并高亮拼接当前口径的 `历史均值: xx.xx [单位]`，使均值数值无论在图例区、副标题还是参考线起点均一目了然且绝对安全。
+- **验证结论**：
+  - 前端生产构建：`npm run build` 100% 编译通过（751 个模块，耗时 16.00s，0 错误）。
+
+## 2026-10-19 [月报数据查询工具“向前穿透”趋势图动态刻度缩放与均值线内嵌防溢出优化]
+- **需求背景与痛点根因**：
+  1. **以 0 为起点导致指标波动被拉平**：供热指标（如供暖热耗率、水耗率、面积等）各年度跨度差异有限，原 Y 轴以 0 为起点导致折线和柱状几乎水平平直，细微的年度差异无法直观呈现；
+  2. **历史均值线向右发射溢出画布**：原有 `markLine` 默认在末端向外绘制箭头，且均值标签默认位于线条最右侧外侧（`position: 'end'`），导致均值标签直接越界移出图片区域被裁切。
+- **改动清单与受影响物理文件**：
+  1. **前端图表坐标轴与均值线排版升级 ([frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue))**：
+     - **Y 轴启用动态智能缩放 (`scale: true` + 动态 min/max)**：
+       - 脱离 0 值强行对齐，自适应数据实际值域；
+       - 通过回调函数根据数据极差动态留出上下 15%~18% 安全呼吸缓冲区间，让指标细微差异充分拉开、趋势波动清晰显著；
+     - **历史均值线内嵌防溢出重构 (`insideEndTop`)**：
+       - 设置 `symbol: ['none', 'none']` 彻底消除向外突兀发射箭头；
+       - 标签位置由线条外侧重构为 `insideEndTop`（终点内侧上方）并附加微型背景底色胶囊标签（`padding`, `borderRadius`, `backgroundColor: rgba(254, 243, 199, 0.92)`），绝不跑出图表边界；
+       - 坐标系右侧内边距扩展至 `grid.right: 36`，提供稳健的安全距离。
+- **验证结论**：
+  - 前端生产构建：`npm run build` 100% 编译通过（751 个模块，耗时 17.12s，0 错误）。
+
+## 2026-10-19 [月报数据查询工具“向前穿透”趋势图视觉精简：去除最高/最低标签标点，提升画面纯净度]
+- **需求背景与优化目标**：
+  - 用户反馈图表无需在折线/柱状上显示“最高”、“最低”标签标点（markPoint），希望图表更加简洁直观、避免视觉干扰与多余气泡阻挡曲线。
+- **改动清单与受影响物理文件**：
+  1. **前端图表配置精简 ([frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue))**：
+     - 从 `renderPenetrationChart` 单口径配置中彻底移除 `itemConfig.markPoint`（最高值/最低值气泡标记）；
+     - 保留平滑曲线微渐变面积阴影与历史均值参考虚线（markLine），使折线走势与数据点清晰通透呈现；
+     - 历史最高、最低极值数据继续由上方的 4 维指标快览卡片与 Tooltip 规范提供。
+- **验证结论**：
+  - 前端生产构建：`npm run build` 100% 编译通过（751 个模块，耗时 16.23s，0 错误）。
+
+## 2026-10-19 [月报数据查询工具“向前穿透”趋势图全维度防重叠深度优化：双行时序轴、智能Label避让与布局解耦]
+- **需求背景与痛点根因**：
+  - 用户反馈在向前穿透趋势图表中，部分标签出现重叠遮挡现象。排查发现存在多处潜在重叠隐患：
+    1. **X 轴文字过长横向碰撞**：全量格式化文本（如 `2022年10月 ~ 2023年04月`）长达 16 个中文字符，当周期并列时首尾文字严重挤压；
+    2. **多口径对比数据标签纵向叠死**：多家单位在同一周期数值接近时，全部以 `position: 'top'` 输出，数字在同个像素区间叠在一起；
+    3. **单口径极值气泡（markPoint）与数值重合**：大号气泡直接覆盖在折线顶部的普通数值标签上方；
+    4. **右侧图例（Legend）与左侧主标题横向打架**：口径较多时图例挤占左侧标题空间。
+- **改动清单与受影响物理文件**：
+  1. **前端图表排版与防重叠逻辑升级 ([frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue))**：
+     - **X 轴智能双行格式化 (`formatCycleXAxisLabel`)**：跨年采暖期拆分为两行紧凑展示（第一行 `2022-2023供暖期`，第二行 `2022.10 ~ 2023.04`），横向宽度减少 50%，配合 `hideOverlap: true` 与 `lineHeight: 16` 彻底杜绝 X 轴标签挤压；
+     - **启用 ECharts 原生防重叠引擎 (`labelLayout`)**：为各折线/柱状 series 注入 `labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' }`，当多个系列数值接近时自动平滑上下错开或避让，不再重叠成团；
+     - **重构单口径极值标记 (`markPoint`)**：采用精美 Pin 气泡，内部自包含极值名称与格式化数值，并与 series 的 `labelLayout` 联动，自动让开重合点位的普通数字；
+     - **标题与图例空间解耦**：图例设置 `maxWidth: '52%'` 与 `type: 'scroll'`，并在单口径时自动隐藏冗余图例；
+     - **视口与容器舒展提升**：X 轴下边距扩展为 `bottom: 48`，图表容器高度微调为 `400px`，卡片文字补充省略号截断保护。
+- **验证结论**：
+  - 前端构建验证：`npm run build` 100% 编译通过（751 个模块，耗时 14.49s，0 错误）。
+
+## 2026-10-19 [月报数据查询工具新增“向前穿透”历史演变趋势图表与指标可视化分析能力]
+- **需求背景与业务场景**：
+  - 用户在选择“向前穿透”模式回溯多个完整历史周期（如采暖期 2022-2023 ~ 2025-2026 或单月份 2022 ~ 2026）后，希望能够自由点选/切换每一个查询指标，绘制直观、交互式的图形，以多维度洞察历史演变趋势与波动特征。
+- **改动清单与受影响物理文件**：
+  1. **前端交互与图表渲染中枢 ([frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue))**：
+     - **指标与口径交互工具栏**：提供“分析指标”下拉选择、“分析口径”切换（支持全口径对比或单一口径聚焦）、“图表类型”切换（平滑折线趋势图 / 柱状对比图）以及“显示数值标签”开关；
+     - **核心指标统计卡片**：自动提炼出当前所选指标与口径的“最新周期值”、“基准起始值”、“全周期总变动（差值与幅变率）”以及“历史最高/最低极值周期”4 维关键快览卡片；
+     - **ECharts 响应式图表引擎集成**：
+       - X 轴基于周期起始时间正序严谨排列（从历史最早向最新演进）；
+       - Y 轴自适应指标计量单位（万GJ、万kWh、kg/㎡、℃、% 等）；
+       - 折线图支持平滑曲线、单口径微渐变面积阴影、最高/最低极值标点（MarkPoint）以及历史均值参考线（MarkLine）；
+       - 智能 Tooltip：悬浮即时显示完整周期名称、指标口径、当前值，并自动换算出较上一周期的环比变动差值与增减百分比；
+     - **历史周期横向明细对比小表**：在图表下方以矩阵表格横向展开各历史周期的具体数值，并自动计算末期近一期环比变动与全期总变化率；
+     - **查询条数上限自适应提升**：在 `buildPayload()` 中将穿透模式的查询 `limit` 自动升至 1000（常规仍为 200），保障多口径多指标查询时所有历史周期数据完整呈现在图表中；
+     - **生命周期与性能保护**：采用普通非深层代理实例变量，在 `onMounted` 绑定窗口 resize 自适应监听，在 `onBeforeUnmount` 及时解绑并调用 `dispose()` 防范内存泄漏。
+- **验证结论**：
+  - 前端生产构建：运行 `npm run build`，751 个模块全部顺利编译打包通过（用时 13.97s，0 error，无构建阻断）。
+
+## 2026-10-19 [月报数据查询工具新增“向前穿透”历史周期回溯功能：支持单月与跨月时间段按完整相同周期逐年向前聚合查询]
+- **需求背景与业务场景**：
+  - 用户在月报数据查询页（`/projects/monthly_data_show/query-tool`）查询例如 `2025.10-2026.4` 供暖期跨度数据时，原有机制仅能提供本期与上一年度同期（`2024.10-2025.4`）的对比，无法连续回溯更早年份（如 `2023.10-2024.4`、`2022.10-2023.4`……）；
+  - 期望新增“向前穿透”查询模式，无论单月查询还是跨月时间段查询均可点选（默认不勾选），置于“4月口径”后同排显示。开启后系统根据所选月份或时间段，自动逐年向前探测，直到数据尽头（即最早的一个完整相同周期）；多月时间段以与系统一致的规则输出每个周期的聚合值，单月则逐年列出单月值。
+- **改动清单与受影响物理文件**：
+  1. **后端月报查询服务与模型扩展 ([backend/projects/monthly_data_show/api/workspace.py](file:///D:/编程项目/phoenix/backend/projects/monthly_data_show/api/workspace.py))**：
+     - 在 `QueryRequest` 入参模型中新增 `penetrate_history: bool = False` 字段；
+     - 新增 `_resolve_penetration_cycles(session, start_date, end_date)` 算法，通过数据库实际自然月度数据集合，智能推导并探测从本期逐年向前的完整周期，并在遇到首个数据不完整的年份时自然终止；
+     - 抽离并封装 `_fetch_cycle_query_rows(...)` 周期执行器，统一处理基础指标周期聚合（含状态量期末取值与累计量求和）、计算指标公式两轮收敛求解与平均气温采暖季加权计算；
+     - 重构 `_merge_and_sort_rows`，新增 `_parse_sort_date`，原生支持区间型时间标识（如 `2025-10 ~ 2026-04`）的精准排序与历史周期时间降序优先；
+  2. **前端查询界面交互与展示适配 ([frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue))**：
+     - 在筛选区第一行“4月口径”后新增“历史回溯 / 向前穿透”复选框（默认不勾选）；
+     - `filters` 响应式对象与 `buildPayload()` 接入 `penetrate_history`；
+     - 升级 `formatResultMonth(dateText)`，原生解析并美化周期区间为 `YYYY年MM月 ~ YYYY年MM月`；
+     - 在开启“向前穿透”时，聚合开关智能展示为“已自动按周期聚合”（多月）或“单月历史穿透”（单月），并禁用干扰项；
+     - 优化导出标签 `resolveExportMonthTag` 与缺失业务月份自检 `resolveMissingBusinessMonthTags`，避免误报缺失。
+- **验证结论**：
+  - 后端 Python 测试：以 `2025-10 ~ 2026-04` 测试，成功识别并穿透 4 个完整采暖期（2025-2026、2024-2025、2023-2024、2022-2023），并精确在缺少 2021-10 数据的尽头截断；基础指标、计算指标（供暖热耗率等）及平均气温均准确聚合出各周期值；
+  - 单月测试：以 `2026-03` 测试，成功穿透输出 2026、2025、2024、2023、2022 共 5 个年度单月值；
+  - 前端构建打包：`npm run build` 100% 成功编译通过（耗时 17.48s，0 错误）。
+
 ## 2026-10-19 [完成供暖期同项目滚动体系全维度细节收口：项目中文名自适应、数据分析环比下限动态推导与全周期缓存发布泛化支持]
 - **需求背景与优化目标**：
   - 在核心供暖期滚动与常量指标入库机制打通的基础上，进一步彻底消除全系统边缘环节的三大硬编码细节，确保从 25-26 跨入 26-27 或后续任意年份时 100% 优雅无缝：

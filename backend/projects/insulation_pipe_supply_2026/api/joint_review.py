@@ -16,6 +16,7 @@ from backend.projects.insulation_pipe_supply_2026.services.joint_review_service 
     cancel_joint_review,
     create_joint_review,
     get_joint_review_detail,
+    get_order_meeting_candidates,
     get_pending_review_notifications,
     list_joint_reviews,
     vote_joint_review,
@@ -35,8 +36,10 @@ class CreateJointReviewPayload(BaseModel):
     order_category: str = Field(..., description="物料大类: pipe (直管) 或 fitting (管件)")
     delivery_id: int = Field(..., ge=1, description="原发货单 ID")
     proposed_patch: Dict[str, Any] = Field(..., description="拟修正数据字典")
-    review_reason: str = Field(..., min_length=2, description="提请会审事由说明")
+    review_reason: str = Field(..., min_length=2, description="提请会审/会商事由说明")
     attachments: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="凭证附件列表")
+    review_type: Optional[str] = Field(default="group_meeting", description="模式: group_meeting (小组会议) 或 joint_review (多方联合会审)")
+    invited_users: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="受邀用户清单（用于小组会议定向邀请）")
 
 
 class VoteJointReviewPayload(BaseModel):
@@ -55,14 +58,30 @@ class ArbitrateJointReviewPayload(BaseModel):
     arbitration_reason: str = Field(..., min_length=2, description="管理员仲裁理由依据")
 
 
-@router.post("/create", summary="发起多方联合会审")
+@router.get("/order-candidates", summary="获取订单流转各环节合法候选人清单（用于小组会议定向邀请）")
+def handle_get_order_candidates(
+    order_category: str = Query(..., description="物料类别: pipe | fitting"),
+    delivery_id: int = Query(..., ge=1, description="原发货单 ID"),
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    display_name = session.username
+    return get_order_meeting_candidates(
+        order_category=order_category,
+        delivery_id=delivery_id,
+        session_username=session.username,
+        session_name=display_name,
+        session_group=session.group,
+    )
+
+
+@router.post("/create", summary="发起多方联合会审或小组会议")
 def handle_create_joint_review(
     payload: CreateJointReviewPayload,
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     client_ip = _get_client_ip(request)
-    display_name = session.unit or session.username
+    display_name = session.username
     return create_joint_review(
         order_category=payload.order_category,
         delivery_id=payload.delivery_id,
@@ -73,6 +92,8 @@ def handle_create_joint_review(
         operator_name=display_name,
         operator_group=session.group,
         client_ip=client_ip,
+        review_type=payload.review_type or "group_meeting",
+        invited_users=payload.invited_users or [],
     )
 
 
@@ -84,7 +105,7 @@ def handle_vote_joint_review(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     client_ip = _get_client_ip(request)
-    display_name = session.unit or session.username
+    display_name = session.username
     return vote_joint_review(
         review_id=review_id,
         vote_decision=payload.vote_decision,
@@ -140,11 +161,13 @@ def handle_list_joint_reviews(
     section_1_id: Optional[str] = Query(None, description="需求标段 ID"),
     supply_entity_id: Optional[str] = Query(None, description="供给主体 ID"),
     review_status: Optional[str] = Query(None, description="状态: voting | approved | rejected | cancelled"),
+    review_type: Optional[str] = Query(None, description="模式: group_meeting | joint_review"),
     search: Optional[str] = Query(None, description="单号/理由/经办人关键字"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    display_name = session.username
     return list_joint_reviews(
         tab=tab,
         order_category=order_category,
@@ -156,6 +179,8 @@ def handle_list_joint_reviews(
         limit=limit,
         session_username=session.username,
         session_group=session.group,
+        session_name=display_name,
+        review_type=review_type,
     )
 
 
@@ -163,9 +188,11 @@ def handle_list_joint_reviews(
 def handle_get_review_notifications(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    display_name = session.username
     return get_pending_review_notifications(
         session_username=session.username,
         session_group=session.group,
+        session_name=display_name,
     )
 
 
@@ -174,8 +201,10 @@ def handle_get_joint_review_detail(
     review_id: int,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    display_name = getattr(session, "name", "") or getattr(session, "display_name", "") or session.username
     return get_joint_review_detail(
         review_id=review_id,
         session_username=session.username,
         session_group=session.group,
+        session_name=display_name,
     )

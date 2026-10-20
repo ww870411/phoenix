@@ -20,7 +20,7 @@
         <div class="topbar-actions">
           <button type="button" class="btn primary btn-initiate-guide" @click="howToInitiateModalVisible = true">
             <span class="btn-icon">➕</span>
-            <span>提请会审流程说明</span>
+            <span>提请小组讨论/联合会审说明</span>
           </button>
         </div>
       </header>
@@ -89,6 +89,15 @@
       <section class="card filter-card">
         <div class="filter-controls-row">
           <div class="filter-field">
+            <span>协同类型</span>
+            <select v-model="filterReviewType" @change="handleFilterChange">
+              <option value="">全部类型</option>
+              <option value="group_meeting">🤝 小组会议</option>
+              <option value="joint_review">⚖️ 多方联合会审</option>
+            </select>
+          </div>
+
+          <div class="filter-field">
             <span>物料类型</span>
             <select v-model="filterCategory" @change="handleFilterChange">
               <option value="">全部物料</option>
@@ -105,7 +114,7 @@
               <option value="suspended">🟠 挂起中 (存在异议协商中)</option>
               <option value="voting_normal">🟡 会审推进中 (尚无异议)</option>
               <option value="approved">🟢 已通过（含裁决）</option>
-              <option value="rejected">🔴 终局裁决驳回</option>
+              <option value="rejected">🔴 终局驳回 / 协商失败</option>
               <option value="cancelled">⚪ 已撤销</option>
             </select>
           </div>
@@ -172,51 +181,87 @@
                 {
                   'needs-me': rev.needs_my_vote,
                   'is-card-collapsed': !isExpanded(rev.id),
-                  'is-suspended': rev.review_status === 'voting' && (rev.rejected_entities || []).length > 0
+                  'is-suspended': rev.review_status === 'voting' && (rev.rejected_entities || []).length > 0,
+                  'is-private-masked-card': rev.is_private_masked
                 }
               ]"
               @click="handleCardClick($event, rev.id)"
             >
-              <!-- 卡片顶栏（整行支持点击展开/折叠） -->
+              <!-- 卡片顶栏 -->
               <div
-                class="card-header-row clickable-head"
-                @click.stop="handleHeaderClick(rev.id)"
-                :title="isExpanded(rev.id) ? '点击收起提案详情' : '点击展开提案详情'"
+                class="card-header-row"
+                :class="{ 'clickable-head': !rev.is_private_masked, 'is-private-head': rev.is_private_masked }"
+                @click.stop="rev.is_private_masked ? null : handleHeaderClick(rev.id)"
+                :title="rev.is_private_masked ? '小组会议私密议案（仅参会当事人及超管可查阅明细）' : (isExpanded(rev.id) ? '点击收起提案详情' : '点击展开提案详情')"
               >
-                <div class="header-left">
-                  <span class="fold-arrow" :class="{ 'is-open': isExpanded(rev.id) }">
-                    {{ isExpanded(rev.id) ? '▼' : '▶' }}
-                  </span>
-                  <span class="cat-pill" :class="rev.order_category">
-                    {{ rev.order_category === 'pipe' ? '🔥 保温管' : '🔩 管件阀门' }}
-                  </span>
-                  <span class="review-no font-mono">{{ rev.review_no }}</span>
-                  <span class="order-ref font-mono">订单号: {{ rev.order_no }}</span>
-                </div>
-                <div class="header-right">
-                  <!-- 待我表决高亮红标 -->
-                  <span v-if="rev.needs_my_vote" class="needs-vote-badge">
-                    ⚡ 待我表决
-                  </span>
-                  <!-- 状态徽章 -->
-                  <span class="status-badge" :class="getStatusBadgeClass(rev)">
-                    {{ formatReviewStatus(rev) }}
-                  </span>
-                  <!-- 折叠/展开独立按钮 -->
-                  <button
-                    type="button"
-                    class="btn ghost btn-xs btn-fold-toggle"
-                    @click.stop="isExpanded(rev.id) ? collapseCard(rev.id) : expandCard(rev.id)"
-                  >
-                    {{ isExpanded(rev.id) ? '收起 ▴' : '展开 ▾' }}
-                  </button>
-                </div>
+                <!-- 私密记录顶栏紧凑布局（按需求仅显示：小组会标记、订单号、提请人[用户名+角色]、状态，不支持展开） -->
+                <template v-if="rev.is_private_masked">
+                  <div class="header-left private-left">
+                    <span class="type-pill group-meeting-pill" title="小组会议">
+                      🤝 小组会议
+                    </span>
+                    <span class="cat-pill" :class="rev.order_category">
+                      {{ rev.order_category === 'pipe' ? '🔥 保温管' : '🔩 管件阀门' }}
+                    </span>
+                    <span class="order-ref font-mono font-bold">订单号: {{ rev.order_no }}</span>
+                    <span class="initiator-ref">👤 提请人: <strong>{{ formatInitiator(rev) }}</strong></span>
+                  </div>
+                  <div class="header-right private-right">
+                    <span class="status-badge" :class="getStatusBadgeClass(rev)">
+                      {{ formatReviewStatus(rev) }}
+                    </span>
+                    <span class="private-lock-tag" title="具体修正明细、事由及表决记录受隐私保护">
+                      🔒 仅参会人员可见
+                    </span>
+                  </div>
+                </template>
+
+                <!-- 常规非保密记录（当事人/超管，或常规联合会审） -->
+                <template v-else>
+                  <div class="header-left">
+                    <span class="fold-arrow" :class="{ 'is-open': isExpanded(rev.id) }">
+                      {{ isExpanded(rev.id) ? '▼' : '▶' }}
+                    </span>
+                    <span v-if="rev.review_type === 'group_meeting'" class="type-pill group-meeting-pill" title="小组会议">
+                      🤝 小组会议
+                    </span>
+                    <span v-else class="type-pill joint-review-pill" title="多方联合会审">
+                      ⚖️ 多方联合会审
+                    </span>
+                    <span class="cat-pill" :class="rev.order_category">
+                      {{ rev.order_category === 'pipe' ? '🔥 保温管' : '🔩 管件阀门' }}
+                    </span>
+                    <span class="review-no font-mono">{{ rev.review_no }}</span>
+                    <span class="order-ref font-mono">订单号: {{ rev.order_no }}</span>
+                  </div>
+                  <div class="header-right">
+                    <!-- 待我表决高亮红标 -->
+                    <span v-if="rev.needs_my_vote" class="needs-vote-badge">
+                      ⚡ 待我表决
+                    </span>
+                    <!-- 状态徽章 -->
+                    <span class="status-badge" :class="getStatusBadgeClass(rev)">
+                      {{ formatReviewStatus(rev) }}
+                    </span>
+                    <!-- 折叠/展开独立按钮 -->
+                    <button
+                      type="button"
+                      class="btn ghost btn-xs btn-fold-toggle"
+                      @click.stop="isExpanded(rev.id) ? collapseCard(rev.id) : expandCard(rev.id)"
+                    >
+                      {{ isExpanded(rev.id) ? '收起 ▴' : '展开 ▾' }}
+                    </button>
+                  </div>
+                </template>
               </div>
 
-              <!-- 折叠态紧凑摘要条 (默认展示，点击任意位置一键顺畅展开) -->
-              <div v-if="!isExpanded(rev.id)" class="folded-summary-strip" @click.stop="expandCard(rev.id)">
+              <!-- 折叠态紧凑摘要条 (仅对非保密记录展示，保密记录不展示多余信息) -->
+              <div v-if="!isExpanded(rev.id) && !rev.is_private_masked" class="folded-summary-strip" @click.stop="expandCard(rev.id)">
                 <div class="summary-left">
-                  <span class="sum-tag">👤 提请人：<strong>{{ rev.initiator_name }}</strong> ({{ rev.initiator_role }})</span>
+                  <span v-if="rev.review_type === 'group_meeting'" class="sum-tag tag-group-meeting font-mono">
+                    🤝 小组会议
+                  </span>
+                  <span class="sum-tag">👤 提请人：<strong>{{ formatInitiator(rev) }}</strong></span>
                   <span class="sum-tag">📍 {{ rev.section_1_name }}</span>
                   <span class="sum-tag">🏭 {{ rev.supply_entity_name }}</span>
                   <span class="sum-patch-preview">
@@ -226,7 +271,7 @@
                     ✅ 办结生效: {{ rev.finalized_at || rev.updated_at }}
                   </span>
                   <span v-else-if="rev.review_status === 'rejected'" class="sum-tag tag-reject font-mono">
-                    🛑 终局驳回: {{ rev.finalized_at || rev.updated_at }}
+                    {{ rev.review_type === 'group_meeting' ? '❌ 协商失败' : '🛑 终局驳回' }}: {{ rev.finalized_at || rev.updated_at }}
                   </span>
                   <span v-else-if="rev.review_status === 'cancelled'" class="sum-tag tag-cancel font-mono">
                     ⚪ 已撤回: {{ rev.finalized_at || rev.updated_at }}
@@ -243,13 +288,13 @@
                 </div>
               </div>
 
-              <!-- 展开态完整详情区 (展开后展示，阻止内部冒泡) -->
-              <div v-if="isExpanded(rev.id)" class="expanded-details-body" @click.stop>
+              <!-- 展开态完整详情区 (仅对非保密记录展开) -->
+              <div v-if="isExpanded(rev.id) && !rev.is_private_masked" class="expanded-details-body" @click.stop>
                 <!-- 主体与元数据条 -->
                 <div class="meta-strip">
                   <span class="meta-item">📍 需求标段：<strong>{{ rev.section_1_name }}</strong></span>
                   <span class="meta-item">🏭 供货厂家：<strong>{{ rev.supply_entity_name }}</strong></span>
-                  <span class="meta-item">👤 提请人：<strong>{{ rev.initiator_name }}</strong> ({{ rev.initiator_role }})</span>
+                  <span class="meta-item">👤 提请人：<strong>{{ formatInitiator(rev) }}</strong></span>
                   <span class="meta-item time">🕒 提请时间：{{ rev.created_at }}</span>
                 </div>
 
@@ -262,7 +307,11 @@
                 <!-- 拟更正内容对比面板 (Diff Panel) -->
                 <div class="diff-block">
                   <div class="diff-title">📝 拟更正内容比对：</div>
-                  <div class="diff-items-grid">
+                  <div v-if="rev.is_private_masked" class="diff-masked-notice">
+                    <span class="masked-icon">🔒</span>
+                    <span>拟更正明细与数值比对受隐私保护，仅当事人与超级管理员可见</span>
+                  </div>
+                  <div v-else class="diff-items-grid">
                     <template v-for="(val, key) in rev.proposed_patch" :key="key">
                       <!-- 车载订单明细列表 -->
                       <div v-if="key === 'items' && Array.isArray(val)" class="diff-items-full-block">
@@ -326,7 +375,8 @@
                 <!-- 多方会签流转矩阵 (Consensus Pipeline) -->
                 <div class="pipeline-section">
                   <div class="pipeline-title">
-                    <span>👥 责任主体联审表决进度 (全票同意即生效)：</span>
+                    <span v-if="rev.review_type === 'group_meeting'">👥 协同小组成员核准进度 (小组成员一致同意即生效更正)：</span>
+                    <span v-else>👥 责任主体联审表决进度 (全票同意即生效)：</span>
                     <span class="pipeline-ratio font-mono">
                       已同意 {{ getApprovedVoteCount(rev) }} / {{ getTotalVoteCount(rev) }} 方
                     </span>
@@ -338,13 +388,13 @@
                       <div class="card-ent-top">
                         <div class="ent-info">
                           <span class="ent-role-tag initiator-pill">{{ rev.initiator_role || '现场负责人' }} · 提请人</span>
-                          <strong class="ent-name">{{ rev.initiator_name || '提请主体' }}</strong>
+                          <strong class="ent-name">{{ formatInitiator(rev) }}</strong>
                         </div>
                         <span class="vote-tag approved">✓ 发起并同意 (默认1票)</span>
                       </div>
                       <div class="card-vote-audit">
                         <div class="audit-row">
-                          <span class="audit-signer">✍️ 提请经办: <strong>{{ rev.initiator_name }}</strong></span>
+                          <span class="audit-signer">✍️ 提请经办: <strong>{{ rev.initiator_username || rev.initiator_name }}</strong></span>
                           <span class="audit-time">🕒 {{ rev.created_at }}</span>
                         </div>
                         <div class="audit-opinion" :title="rev.review_reason">
@@ -379,7 +429,7 @@
                       <!-- 审计详情：经办人、时间、签署意见 -->
                       <div v-if="getEntityVote(rev, ent)" class="card-vote-audit" :class="{ 'is-reject': hasEntityRejected(rev, ent) }">
                         <div class="audit-row">
-                          <span class="audit-signer">✍️ 经办签署: <strong>{{ getEntityVote(rev, ent).voter_name || getEntityVote(rev, ent).voter_username }}</strong></span>
+                          <span class="audit-signer">✍️ 经办签署: <strong>{{ formatVoterName(getEntityVote(rev, ent)) }}</strong></span>
                           <span class="audit-time">🕒 {{ getEntityVote(rev, ent).voted_at }}</span>
                         </div>
                         <div class="audit-opinion" :class="{ 'text-danger': hasEntityRejected(rev, ent) }">
@@ -407,7 +457,7 @@
                 <!-- 操作动作工具栏 -->
                 <div class="card-actions-bar">
                   <!-- 待我表决操作组 / 管理员代签入口 -->
-                  <div v-if="rev.review_status === 'voting' && (rev.can_i_vote || rev.needs_my_vote || isAdminUser)" class="action-group my-vote-group">
+                  <div v-if="!rev.is_private_masked && rev.review_status === 'voting' && (rev.can_i_vote || rev.needs_my_vote || isAdminUser)" class="action-group my-vote-group">
                     <span v-if="isAdminUser" class="admin-sign-badge" title="系统超级管理员可指定代表任意主体进行表决或覆盖签署">
                       👑 管理员代签
                     </span>
@@ -661,168 +711,344 @@
       <div class="modal-dialog guide-dialog">
         <div class="modal-head">
           <div class="head-title-wrap">
-            <span class="guide-icon">⚖️</span>
+            <span class="guide-icon">{{ guideActiveTab === 'group_meeting' ? '🤝' : '⚖️' }}</span>
             <div>
-              <h4>如何提请多方联合会审？</h4>
-              <p class="guide-subtitle">业务节点原位发起 · 全流程协同会签 · 实时纠错生效</p>
+              <h4>{{ guideActiveTab === 'group_meeting' ? '如何提请小组讨论（小组会议）？' : '如何提请多方联合会审？' }}</h4>
+              <p class="guide-subtitle">
+                {{ guideActiveTab === 'group_meeting'
+                  ? '定向受邀参会 · 一人一票协商一致 · 异议即恢复原单 · 私密全程留痕'
+                  : '业务节点原位发起 · 全流程协同会签 · 实时纠错生效' }}
+              </p>
             </div>
           </div>
           <button type="button" class="btn-x" @click="howToInitiateModalVisible = false">✕</button>
         </div>
+
+        <!-- 标签页导航栏 -->
+        <div class="guide-tabs-bar">
+          <button
+            type="button"
+            class="guide-tab-item"
+            :class="{ active: guideActiveTab === 'group_meeting' }"
+            @click="guideActiveTab = 'group_meeting'"
+          >
+            <span class="guide-tab-emoji">🤝</span>
+            <span class="guide-tab-label">小组讨论</span>
+            <span class="guide-tab-badge amber">敏捷核验</span>
+          </button>
+          <button
+            type="button"
+            class="guide-tab-item"
+            :class="{ active: guideActiveTab === 'joint_review' }"
+            @click="guideActiveTab = 'joint_review'"
+          >
+            <span class="guide-tab-emoji">⚖️</span>
+            <span class="guide-tab-label">联合会审</span>
+            <span class="guide-tab-badge blue">法定会签</span>
+          </button>
+        </div>
+
         <div class="modal-content guide-content">
-          <!-- 导语 Banner -->
-          <div class="guide-banner">
-            <span class="banner-badge">📌 设立宗旨</span>
-            <p class="guide-intro">
-              为保障物流信息流转的准确性与及时性，降低沟通成本，故设立本功能。联合会审由当前<strong>待办节点责任主体</strong>在各自业务工作台中针对具体待办订单提起：
-            </p>
-          </div>
+          <!-- 标签页 1：小组讨论 -->
+          <div v-if="guideActiveTab === 'group_meeting'" class="guide-tab-pane">
+            <!-- 导语 Banner -->
+            <div class="guide-banner amber-banner">
+              <span class="banner-badge amber">📌 设立宗旨</span>
+              <p class="guide-intro">
+                为应对现场物流与收发环节中的偶发错漏、单据笔误或细微偏差，设立<strong>小组讨论（小组会议）</strong>协同机制。旨在以小范围、面对面协商的方式快速核对纠偏，免除全流程大范围法定会签的高昂沟通成本。
+              </p>
+            </div>
 
-          <!-- 三大业务场景卡片 -->
-          <div class="guide-steps-grid">
-            <!-- 场景 1 -->
-            <div class="guide-step-card">
-              <div class="card-top-row">
-                <div class="badge-and-title">
-                  <span class="step-num-badge">场景 1</span>
-                  <span class="step-title-text">已发货，待现场负责人确认到货环节</span>
+            <!-- 三大业务场景卡片 -->
+            <div class="guide-steps-grid">
+              <!-- 场景 1 -->
+              <div class="guide-step-card">
+                <div class="card-top-row">
+                  <div class="badge-and-title">
+                    <span class="step-num-badge amber">场景 1</span>
+                    <span class="step-title-text">适用节点与提请原位</span>
+                  </div>
+                  <span class="role-pill amber">🚚 需求侧现场主管 / 🏢 责任库管员</span>
                 </div>
-                <span class="role-pill">🚚 现场负责人提请。</span>
+                <div class="card-detail-body">
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot amber"></span>适用情形：</span>
+                    <span class="detail-text">供货商发货后，现场在【待确认到货】、【待接收】或仓库【待入库】等流转环节中，发现实物与随车单据存在数量、规格型号、车牌等偶发笔误，且双方有明确更正意向。</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
+                    <span class="detail-text path-tag">需求侧工作台 / 库管员工作台 ➔ 订单操作列【⚖️ 提请会审】➔ 切换为【🤝 小组会议】模式</span>
+                  </div>
+                </div>
+                <div class="card-action-bar">
+                  <span class="action-label">⚡ 快捷直达：</span>
+                  <div class="action-btn-group">
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('pipe', 'logistics')">
+                      直达保温管物流台账 ➔
+                    </button>
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('fitting', 'fitting')">
+                      直达管件/阀门物流台账 ➔
+                    </button>
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToWarehouseWorkbench('pipe')">
+                      直达库管台账 ➔
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div class="card-detail-body">
-                <div class="detail-item">
-                  <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
-                  <span class="detail-text">供货商已发货，现场核对实物及随车单据中发现规格、数量或车牌号有误。</span>
+
+              <!-- 场景 2 -->
+              <div class="guide-step-card">
+                <div class="card-top-row">
+                  <div class="badge-and-title">
+                    <span class="step-num-badge amber">场景 2</span>
+                    <span class="step-title-text">定向受邀与一人一票协商机制</span>
+                  </div>
+                  <span class="role-pill amber">👥 仅限供给方、超管与仲裁人员</span>
                 </div>
-                <div class="detail-item">
-                  <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
-                  <span class="detail-text path-tag">需求侧工作台 ➔ 保温管物流台账 / 管件（阀门）物流台账</span>
+                <div class="card-detail-body">
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot amber"></span>参会范围：</span>
+                    <span class="detail-text">仅限定向受邀人员参会，提请人仅能勾选订单对应的<strong>供货厂家业务账号</strong>、<strong>系统超级管理员 (Global_admin)</strong> 或 <strong>集团特许仲裁人员</strong>列席，杜绝无关主体干扰。</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot red"></span>表决原则：</span>
+                    <span class="detail-text">严格实行<strong>一人一票、协商一致</strong>原则。全员投出“同意更正”即刻自动完成台账修正；只要有任一人提出“异议”，讨论立即终止并判定为“协商失败”。</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot green"></span>权能边界：</span>
+                    <span class="detail-text">仲裁人员受邀列席仅行使普通表决权，<strong>不享有终局强裁权</strong>，保障小组内部平等的面对面协同核验。</span>
+                  </div>
                 </div>
               </div>
-              <div class="card-action-bar">
-                <span class="action-label">⚡ 快捷直达：</span>
-                <div class="action-btn-group">
-                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('pipe', 'logistics')">
-                    直达保温管物流台账 ➔
-                  </button>
-                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('fitting', 'fitting')">
-                    直达管件/阀门物流台账 ➔
-                  </button>
+
+              <!-- 场景 3 -->
+              <div class="guide-step-card">
+                <div class="card-top-row">
+                  <div class="badge-and-title">
+                    <span class="step-num-badge amber">场景 3</span>
+                    <span class="step-title-text">隐私脱敏与即时原单恢复</span>
+                  </div>
+                  <span class="role-pill amber">🔒 私密保护 · 不挂起停滞</span>
+                </div>
+                <div class="card-detail-body">
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot green"></span>状态恢复：</span>
+                    <span class="detail-text">若协商未达成共识（有人异议），订单<strong>直接恢复为提请前的原流转状态</strong>，大厅提示“协商失败”，绝不挂起冻结，确保一线物资正常周转。</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot blue"></span>隐私保护：</span>
+                    <span class="detail-text">小组讨论支持私密保护，除参会当事人及 Global_admin 外，其他人员只能看到订单号等基本信息，无法展开查看拟更正细节与表决记录。</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 场景 2 -->
-            <div class="guide-step-card">
-              <div class="card-top-row">
-                <div class="badge-and-title">
-                  <span class="step-num-badge">场景 2</span>
-                  <span class="step-title-text">现场已确认到货，待施工单位接收环节</span>
-                </div>
-                <span class="role-pill">👷 施工单位提请</span>
+            <!-- 四步流转闭环流程可视化卡片 -->
+            <div class="guide-workflow-strip">
+              <div class="workflow-title">
+                <span class="strip-icon">🧭</span>
+                <span>小组讨论操作闭环（四步指引）</span>
               </div>
-              <div class="card-detail-body">
-                <div class="detail-item">
-                  <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
-                  <span class="detail-text">现场已确认到货，施工单位领用时发现实物与系统内订单规格或数量不符。</span>
+              <div class="workflow-steps">
+                <div class="wf-step">
+                  <div class="wf-step-idx amber">1</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">定位待办订单</div>
+                    <div class="wf-step-desc">进入对应业务工作台</div>
+                  </div>
                 </div>
-                <div class="detail-item">
-                  <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
-                  <span class="detail-text path-tag">需求侧工作台 ➔ 保温管物流台账 / 管件（阀门）物流台账</span>
+                <div class="wf-arrow">➔</div>
+                <div class="wf-step">
+                  <div class="wf-step-idx amber">2</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">选择【小组会议】</div>
+                    <div class="wf-step-desc">点击提请并切换模式</div>
+                  </div>
                 </div>
-              </div>
-              <div class="card-action-bar">
-                <span class="action-label">⚡ 快捷直达：</span>
-                <div class="action-btn-group">
-                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('pipe', 'logistics')">
-                    直达保温管物流台账 ➔
-                  </button>
-                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('fitting', 'fitting')">
-                    直达管件/阀门物流台账 ➔
-                  </button>
+                <div class="wf-arrow">➔</div>
+                <div class="wf-step">
+                  <div class="wf-step-idx amber">3</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">勾选受邀人与凭证</div>
+                    <div class="wf-step-desc">选厂家/仲裁员并传照片</div>
+                  </div>
+                </div>
+                <div class="wf-arrow">➔</div>
+                <div class="wf-step highlight">
+                  <div class="wf-step-idx success">✓</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">一致同意·秒级修正</div>
+                    <div class="wf-step-desc">全票同意更正 / 异议恢复</div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 场景 3 -->
-            <div class="guide-step-card">
-              <div class="card-top-row">
-                <div class="badge-and-title">
-                  <span class="step-num-badge">场景 3</span>
-                  <span class="step-title-text">待库管确认环节</span>
-                </div>
-                <span class="role-pill">🏢 库管人员提请</span>
-              </div>
-              <div class="card-detail-body">
-                <div class="detail-item">
-                  <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
-                  <span class="detail-text">施工单位已确认接收，库管人员在办结入库手续时发现台账与单据的规格型号、数量货车牌号等信息存在不一致。</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
-                  <span class="detail-text path-tag">库管员工作台 ➔ 库管台账</span>
-                </div>
-              </div>
-              <div class="card-action-bar">
-                <span class="action-label">⚡ 快捷直达：</span>
-                <div class="action-btn-group">
-                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToWarehouseWorkbench('pipe')">
-                    直达保温管台账 ➔
-                  </button>
-                  <button type="button" class="btn ghost btn-xs btn-jump" @click="goToWarehouseWorkbench('fitting', 'pending_warehouse')">
-                    直达管件待入库 ➔
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 四步流转闭环流程可视化卡片 -->
-          <div class="guide-workflow-strip">
-            <div class="workflow-title">
-              <span class="strip-icon">🧭</span>
-              <span>业务操作闭环（四步指引）</span>
-            </div>
-            <div class="workflow-steps">
-              <div class="wf-step">
-                <div class="wf-step-idx">1</div>
-                <div class="wf-step-content">
-                  <div class="wf-step-name">定位待办订单</div>
-                  <div class="wf-step-desc">进入对应工作台列表</div>
-                </div>
-              </div>
-              <div class="wf-arrow">➔</div>
-              <div class="wf-step">
-                <div class="wf-step-idx">2</div>
-                <div class="wf-step-content">
-                  <div class="wf-step-name">点击【⚖️ 提请会审】</div>
-                  <div class="wf-step-desc">右侧橙黄色专属按钮</div>
-                </div>
-              </div>
-              <div class="wf-arrow">➔</div>
-              <div class="wf-step">
-                <div class="wf-step-idx">3</div>
-                <div class="wf-step-content">
-                  <div class="wf-step-name">录入更正与凭证</div>
-                  <div class="wf-step-desc">修改数据/原因/上传照片</div>
-                </div>
-              </div>
-              <div class="wf-arrow">➔</div>
-              <div class="wf-step highlight">
-                <div class="wf-step-idx success">✓</div>
-                <div class="wf-step-content">
-                  <div class="wf-step-name">全票同意·即刻生效</div>
-                  <div class="wf-step-desc">单据变更并保留纪要</div>
-                </div>
+            <!-- 操作提示卡片 -->
+            <div class="guide-note-box">
+              <span class="note-icon">💡</span>
+              <div class="note-content">
+                <strong>操作提示</strong>：在对应工作台中找到该笔待办订单，点击右侧橙黄色的 <strong>【⚖️ 提请会审】</strong> 按钮，在弹窗顶部模式卡片中切换为 <strong>【🤝 小组会议】</strong>，系统将自动加载受邀人员列表（供给方人员、Global_admin、特许仲裁员）。勾选协同受邀人、录入拟修改的数据及原因并上传照片。提交后受邀人员将在大厅收到专属通知，全员一致表决同意后订单数据自动变更，高效敏捷！
               </div>
             </div>
           </div>
 
-          <!-- 操作提示卡片 -->
-          <div class="guide-note-box">
-            <span class="note-icon">💡</span>
-            <div class="note-content">
-              <strong>操作提示</strong>：在对应工作台中找到该笔待办订单，点击右侧橙黄色的 <strong>【⚖️ 提请会审】</strong> 按钮，录入拟修改的数据（数量/型号/车牌等）、原因并上传现场照片。提请后单据将自动锁定，相关前序主体会收到会签通知并进入大厅表决！取得一致同意后，订单信息立即变更，并保留会议纪要
+          <!-- 标签页 2：联合会审 -->
+          <div v-else-if="guideActiveTab === 'joint_review'" class="guide-tab-pane">
+            <!-- 导语 Banner -->
+            <div class="guide-banner">
+              <span class="banner-badge">📌 设立宗旨</span>
+              <p class="guide-intro">
+                为保障物流信息流转的准确性与及时性，降低沟通成本，故设立本功能。联合会审由当前<strong>待办节点责任主体</strong>在各自业务工作台中针对具体待办订单提起：
+              </p>
+            </div>
+
+            <!-- 三大业务场景卡片 -->
+            <div class="guide-steps-grid">
+              <!-- 场景 1 -->
+              <div class="guide-step-card">
+                <div class="card-top-row">
+                  <div class="badge-and-title">
+                    <span class="step-num-badge">场景 1</span>
+                    <span class="step-title-text">已发货，待现场负责人确认到货环节</span>
+                  </div>
+                  <span class="role-pill">🚚 现场负责人提请。</span>
+                </div>
+                <div class="card-detail-body">
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
+                    <span class="detail-text">供货商已发货，现场核对实物及随车单据中发现规格、数量或车牌号有误。</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
+                    <span class="detail-text path-tag">需求侧工作台 ➔ 保温管物流台账 / 管件（阀门）物流台账</span>
+                  </div>
+                </div>
+                <div class="card-action-bar">
+                  <span class="action-label">⚡ 快捷直达：</span>
+                  <div class="action-btn-group">
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('pipe', 'logistics')">
+                      直达保温管物流台账 ➔
+                    </button>
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('fitting', 'fitting')">
+                      直达管件/阀门物流台账 ➔
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 场景 2 -->
+              <div class="guide-step-card">
+                <div class="card-top-row">
+                  <div class="badge-and-title">
+                    <span class="step-num-badge">场景 2</span>
+                    <span class="step-title-text">现场已确认到货，待施工单位接收环节</span>
+                  </div>
+                  <span class="role-pill">👷 施工单位提请</span>
+                </div>
+                <div class="card-detail-body">
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
+                    <span class="detail-text">现场已确认到货，施工单位领用时发现实物与系统内订单规格或数量不符。</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
+                    <span class="detail-text path-tag">需求侧工作台 ➔ 保温管物流台账 / 管件（阀门）物流台账</span>
+                  </div>
+                </div>
+                <div class="card-action-bar">
+                  <span class="action-label">⚡ 快捷直达：</span>
+                  <div class="action-btn-group">
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('pipe', 'logistics')">
+                      直达保温管物流台账 ➔
+                    </button>
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToDemandWorkbench('fitting', 'fitting')">
+                      直达管件/阀门物流台账 ➔
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 场景 3 -->
+              <div class="guide-step-card">
+                <div class="card-top-row">
+                  <div class="badge-and-title">
+                    <span class="step-num-badge">场景 3</span>
+                    <span class="step-title-text">待库管确认环节</span>
+                  </div>
+                  <span class="role-pill">🏢 库管人员提请</span>
+                </div>
+                <div class="card-detail-body">
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot red"></span>异常情形：</span>
+                    <span class="detail-text">施工单位已确认接收，库管人员在办结入库手续时发现台账与单据的规格型号、数量货车牌号等信息存在不一致。</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label"><span class="label-dot blue"></span>所在位置：</span>
+                    <span class="detail-text path-tag">库管员工作台 ➔ 库管台账</span>
+                  </div>
+                </div>
+                <div class="card-action-bar">
+                  <span class="action-label">⚡ 快捷直达：</span>
+                  <div class="action-btn-group">
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToWarehouseWorkbench('pipe')">
+                      直达保温管台账 ➔
+                    </button>
+                    <button type="button" class="btn ghost btn-xs btn-jump" @click="goToWarehouseWorkbench('fitting', 'pending_warehouse')">
+                      直达管件待入库 ➔
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 四步流转闭环流程可视化卡片 -->
+            <div class="guide-workflow-strip">
+              <div class="workflow-title">
+                <span class="strip-icon">🧭</span>
+                <span>业务操作闭环（四步指引）</span>
+              </div>
+              <div class="workflow-steps">
+                <div class="wf-step">
+                  <div class="wf-step-idx">1</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">定位待办订单</div>
+                    <div class="wf-step-desc">进入对应工作台列表</div>
+                  </div>
+                </div>
+                <div class="wf-arrow">➔</div>
+                <div class="wf-step">
+                  <div class="wf-step-idx">2</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">点击【⚖️ 提请会审】</div>
+                    <div class="wf-step-desc">右侧橙黄色专属按钮</div>
+                  </div>
+                </div>
+                <div class="wf-arrow">➔</div>
+                <div class="wf-step">
+                  <div class="wf-step-idx">3</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">录入更正与凭证</div>
+                    <div class="wf-step-desc">修改数据/原因/上传照片</div>
+                  </div>
+                </div>
+                <div class="wf-arrow">➔</div>
+                <div class="wf-step highlight">
+                  <div class="wf-step-idx success">✓</div>
+                  <div class="wf-step-content">
+                    <div class="wf-step-name">全票同意·即刻生效</div>
+                    <div class="wf-step-desc">单据变更并保留纪要</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 操作提示卡片 -->
+            <div class="guide-note-box">
+              <span class="note-icon">💡</span>
+              <div class="note-content">
+                <strong>操作提示</strong>：在对应工作台中找到该笔待办订单，点击右侧橙黄色的 <strong>【⚖️ 提请会审】</strong> 按钮，录入拟修改的数据（数量/型号/车牌等）、原因并上传现场照片。提请后单据将自动锁定，相关前序主体会收到会签通知并进入大厅表决！取得一致同意后，订单信息立即变更，并保留会议纪要
+              </div>
             </div>
           </div>
         </div>
@@ -861,6 +1087,7 @@ const breadcrumbItems = computed(() => [
 ])
 
 const currentTab = ref('pending_my_vote')
+const filterReviewType = ref('')
 const filterCategory = ref('')
 const filterStatus = ref('')
 const searchKeyword = ref('')
@@ -886,9 +1113,11 @@ function isExpanded(revId) {
   return !!expandedMap.value[String(revId)]
 }
 
-// 展开卡片（幂等赋值 true，无论调用多少次均确保为展开态）
+// 展开卡片（幂等赋值 true，保密私密议案绝对禁止展开）
 function expandCard(revId) {
   if (revId == null) return
+  const rev = reviewItems.value.find(r => r.id === revId)
+  if (rev && rev.is_private_masked) return
   expandedMap.value = {
     ...expandedMap.value,
     [String(revId)]: true,
@@ -904,17 +1133,21 @@ function collapseCard(revId) {
   }
 }
 
-// 卡片容器点击：折叠态下点击卡片任意空白区域或文字，均 100% 顺畅展开
+// 卡片容器点击：折叠态下点击卡片任意空白区域或文字展开（保密记录拦截）
 function handleCardClick(event, revId) {
   if (revId == null) return
+  const rev = reviewItems.value.find(r => r.id === revId)
+  if (rev && rev.is_private_masked) return
   if (!isExpanded(revId)) {
     expandCard(revId)
   }
 }
 
-// 顶栏点击：根据当前状态明确执行收起或展开
+// 顶栏点击：根据当前状态明确执行收起或展开（保密记录拦截）
 function handleHeaderClick(revId) {
   if (revId == null) return
+  const rev = reviewItems.value.find(r => r.id === revId)
+  if (rev && rev.is_private_masked) return
   if (isExpanded(revId)) {
     collapseCard(revId)
   } else {
@@ -924,6 +1157,8 @@ function handleHeaderClick(revId) {
 
 function toggleExpand(revId) {
   if (revId == null) return
+  const rev = reviewItems.value.find(r => r.id === revId)
+  if (rev && rev.is_private_masked) return
   const k = String(revId)
   expandedMap.value = {
     ...expandedMap.value,
@@ -934,11 +1169,19 @@ function toggleExpand(revId) {
 function expandAll() {
   const next = {}
   for (const r of reviewItems.value) {
-    if (r && r.id != null) {
+    if (r && r.id != null && !r.is_private_masked) {
       next[String(r.id)] = true
     }
   }
   expandedMap.value = next
+}
+
+// 格式化提请人：用户名 + 角色（如 ww870411 (集团超级管理员)，李春 (责任库管员)）
+function formatInitiator(rev) {
+  if (!rev) return '—'
+  const uname = rev.initiator_username || rev.initiator_name || '提请人'
+  const role = rev.initiator_role || '现场负责人'
+  return `${uname} (${role})`
 }
 
 function collapseAll() {
@@ -968,6 +1211,7 @@ function getVoteProgressClass(rev) {
 }
 
 function formatPatchSummary(patch) {
+  if (patch && patch._masked) return '🔒 仅参会人员可见'
   if (!patch || typeof patch !== 'object') return '无变更数据'
   const keys = Object.keys(patch)
   if (keys.length === 0) return '现场事实认定 / 澄清会签'
@@ -1046,6 +1290,7 @@ const arbitrateReasonInput = ref('')
 
 const previewImageUrl = ref(null)
 const howToInitiateModalVisible = ref(false)
+const guideActiveTab = ref('group_meeting')
 
 function goToDemandWorkbench(category = 'pipe', tab = 'logistics') {
   howToInitiateModalVisible.value = false
@@ -1152,6 +1397,7 @@ async function loadReviews() {
   try {
     const res = focusId ? await getJointReviewDetail(focusId) : await listJointReviews({
       tab: currentTab.value,
+      review_type: filterReviewType.value || undefined,
       order_category: filterCategory.value || undefined,
       review_status: currentTab.value === 'all' ? (filterStatus.value || undefined) : undefined,
       search: searchKeyword.value ? searchKeyword.value.trim() : undefined,
@@ -1191,6 +1437,7 @@ function handleFilterChange() {
 
 function resetFilters() {
   clearFocusedReview()
+  filterReviewType.value = ''
   filterCategory.value = ''
   filterStatus.value = ''
   searchKeyword.value = ''
@@ -1208,15 +1455,16 @@ function formatReviewStatus(rev) {
   const st = rev.review_status
   const totalVotes = getTotalVoteCount(rev)
   const appVotes = getApprovedVoteCount(rev)
+  const isMeeting = rev.review_type === 'group_meeting'
   if (st === 'voting') {
     const rejCount = (rev.rejected_entities || []).length
-    if (rejCount > 0) return `🟠 挂起中 (${rejCount}方异议·${appVotes}/${totalVotes}同意)`
-    return `🟡 会审中 (${appVotes}/${totalVotes} 已同意)`
+    if (rejCount > 0) return `🟠 协商中 (${rejCount}人提出异议 · ${appVotes}/${totalVotes}同意)`
+    return isMeeting ? `🤝 会商中 (${appVotes}/${totalVotes} 已核准)` : `🟡 会审中 (${appVotes}/${totalVotes} 已同意)`
   }
   if (st === 'approved') return isArbitrationApproval(rev)
     ? `🟢 终局裁决通过已生效 (${appVotes}/${totalVotes} 同意)`
-    : `🟢 全票通过已生效 (${appVotes}/${totalVotes})`
-  if (st === 'rejected') return '🔴 终局裁决驳回'
+    : `🟢 ${isMeeting ? '小组成员核准生效' : '全票通过已生效'} (${appVotes}/${totalVotes})`
+  if (st === 'rejected') return isMeeting ? '🔴 协商失败' : '🔴 终局裁决驳回'
   if (st === 'cancelled') return '⚪ 已撤销'
   return st
 }
@@ -1292,6 +1540,17 @@ function getEntityVote(rev, ent) {
   ) || null
 }
 
+function formatVoterName(vote) {
+  if (!vote) return ''
+  const name = String(vote.voter_name || '').trim()
+  const username = String(vote.voter_username || '').trim()
+  // 若包含逗号或包含 lot_ 标段代码，降级显示其登录账号用户名或责任经办人
+  if (!name || name.includes(',') || name.toLowerCase().includes('lot_')) {
+    return username || '责任经办人'
+  }
+  return name
+}
+
 function getPendingEntities(rev) {
   if (!rev || !rev.required_entities) return []
   const votes = rev.votes || []
@@ -1319,15 +1578,16 @@ function formatPreStatus(status) {
 
 function formatTimelineStatus(rev) {
   if (!rev) return ''
+  const isMeeting = rev.review_type === 'group_meeting'
   if (rev.review_status === 'voting') {
     if ((rev.rejected_entities || []).length > 0) {
       return '🟠 挂起中·存在异议待协商或裁决'
     }
-    return '🟡 会审中·协同签署中'
+    return isMeeting ? '🤝 会商中·成员核准中' : '🟡 会审中·协同签署中'
   }
   const map = {
-    approved: isArbitrationApproval(rev) ? '🟢 终局裁决通过·已办结生效' : '🟢 全票通过·已办结生效',
-    rejected: '🔴 终局裁决驳回终止',
+    approved: isArbitrationApproval(rev) ? '🟢 终局裁决通过·已办结生效' : (isMeeting ? '🟢 小组成员核准·已办结生效' : '🟢 全票通过·已办结生效'),
+    rejected: isMeeting ? '🔴 协商失败·维持原单' : '🔴 终局裁决驳回终止',
     cancelled: '⚪ 已主动撤销',
   }
   return map[rev.review_status] || rev.review_status
@@ -1335,11 +1595,12 @@ function formatTimelineStatus(rev) {
 
 function getFinalStepBadge(rev) {
   if (!rev) return ''
-  if (rev.review_status === 'approved') return isArbitrationApproval(rev) ? '终局裁决·通过生效' : '全票共识·自动生效'
-  if (rev.review_status === 'rejected') return '终局驳回·维持原单'
+  const isMeeting = rev.review_type === 'group_meeting'
+  if (rev.review_status === 'approved') return isArbitrationApproval(rev) ? '终局裁决·通过生效' : (isMeeting ? '小组成员核准·自动生效' : '全票共识·自动生效')
+  if (rev.review_status === 'rejected') return isMeeting ? '小组成员异议·协商失败' : '终局驳回·维持原单'
   if (rev.review_status === 'cancelled') return '已主动撤销'
   if (rev.review_status === 'voting' && (rev.rejected_entities || []).length > 0) return '存在异议·挂起协商中'
-  return '等待全员达成共识'
+  return isMeeting ? '等待小组成员核准' : '等待全员达成共识'
 }
 
 function getFinalStepOperator(rev) {
@@ -1349,10 +1610,13 @@ function getFinalStepOperator(rev) {
     return `👤 ${rev.finalized_by || '系统自动处理'}`
   }
   if (rev.review_status === 'rejected') {
+    if (rev.review_type === 'group_meeting') {
+      return `👤 异议成员: ${rev.finalized_by || '小组成员'}`
+    }
     return `👤 ${rev.finalized_by || '会审异议/管理员裁决'}`
   }
   if (rev.review_status === 'cancelled') {
-    return `👤 提请人: ${rev.initiator_name}`
+    return `👤 提请人: ${formatInitiator(rev)}`
   }
   return '系统自动化监测中'
 }
@@ -2096,6 +2360,26 @@ function goProjectPages() {
   gap: 10px;
 }
 
+.type-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.type-pill.group-meeting-pill {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+.type-pill.joint-review-pill {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
 .cat-pill {
   font-size: 11px;
   font-weight: 700;
@@ -2357,6 +2641,8 @@ function goProjectPages() {
   flex-direction: column;
   gap: 8px;
   transition: all 0.15s ease;
+  min-width: 0;
+  overflow: hidden;
 }
 .entity-vote-card.is-approved {
   border-color: #86efac;
@@ -2382,6 +2668,8 @@ function goProjectPages() {
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 .card-vote-audit.is-reject {
   border-top-color: #fca5a5;
@@ -2396,16 +2684,27 @@ function goProjectPages() {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .audit-signer {
   color: #334155;
   font-size: 11.5px;
+  min-width: 0;
+  max-width: 100%;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+.audit-signer strong {
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .audit-time {
   color: #64748b;
   font-family: monospace;
   font-size: 11px;
+  flex-shrink: 0;
 }
 
 .audit-opinion {
@@ -2415,6 +2714,9 @@ function goProjectPages() {
   border-radius: 4px;
   line-height: 1.4;
   word-break: break-all;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  box-sizing: border-box;
   font-size: 12px;
 }
 .audit-wait-text {
@@ -2475,6 +2777,12 @@ function goProjectPages() {
 .sum-tag.tag-cancel {
   background: #f1f5f9;
   color: #64748b;
+}
+.sum-tag.tag-group-meeting {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-weight: 700;
 }
 .sum-tag.tag-suspended {
   background: #ffedd5;
@@ -2817,6 +3125,80 @@ function goProjectPages() {
   background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
 }
 
+/* 指引弹窗 标签页导航栏 */
+.guide-tabs-bar {
+  display: flex;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 24px 0;
+  gap: 8px;
+}
+
+.guide-tab-item {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.guide-tab-item:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.guide-tab-item.active {
+  color: #2563eb;
+  background: #ffffff;
+  border-bottom-color: #2563eb;
+  font-weight: 700;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.guide-tab-emoji {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.guide-tab-label {
+  font-size: 13.5px;
+}
+
+.guide-tab-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.guide-tab-badge.amber {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.guide-tab-badge.blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.guide-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .guide-content {
   padding: 20px 24px;
   overflow-y: auto;
@@ -2833,6 +3215,11 @@ function goProjectPages() {
   position: relative;
 }
 
+.guide-banner.amber-banner {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #fde68a;
+}
+
 .banner-badge {
   display: inline-block;
   font-size: 11px;
@@ -2843,6 +3230,12 @@ function goProjectPages() {
   border-radius: 4px;
   padding: 1px 6px;
   margin-bottom: 6px;
+}
+
+.banner-badge.amber {
+  color: #b45309;
+  background: #fef3c7;
+  border-color: #fde68a;
 }
 
 .guide-intro {
@@ -2903,6 +3296,12 @@ function goProjectPages() {
   letter-spacing: 0.2px;
 }
 
+.step-num-badge.amber {
+  color: #d97706;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
 .step-title-text {
   font-size: 14px;
   font-weight: 700;
@@ -2918,6 +3317,12 @@ function goProjectPages() {
   padding: 3px 10px;
   border-radius: 999px;
   white-space: nowrap;
+}
+
+.role-pill.amber {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde68a;
 }
 
 .card-detail-body {
@@ -2952,6 +3357,8 @@ function goProjectPages() {
 }
 .label-dot.red { background: #ef4444; }
 .label-dot.blue { background: #3b82f6; }
+.label-dot.amber { background: #f59e0b; }
+.label-dot.green { background: #10b981; }
 
 .detail-text {
   color: #334155;
@@ -3070,6 +3477,9 @@ function goProjectPages() {
 .wf-step-idx.success {
   background: #16a34a;
 }
+.wf-step-idx.amber {
+  background: #f59e0b;
+}
 
 .wf-step-content {
   display: flex;
@@ -3137,6 +3547,104 @@ function goProjectPages() {
 }
 
 /* ==========================================================================
+   🔒 私密小组会保护横幅与隐私遮罩占位 (Private Meeting Protection)
+   ========================================================================== */
+.review-pipeline-card.is-private-masked-card {
+  cursor: default !important;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.review-pipeline-card.is-private-masked-card:hover {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  transform: none !important;
+}
+.card-header-row.is-private-head {
+  cursor: default !important;
+  background: #f8fafc;
+  padding: 12px 16px;
+}
+.private-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.private-left .initiator-ref {
+  font-size: 13px;
+  color: #334155;
+}
+.private-left .initiator-ref strong {
+  color: #0f172a;
+}
+.private-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.private-lock-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.private-meeting-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.98));
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #64748b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.private-meeting-banner .banner-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  color: #475569;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.private-meeting-banner .banner-content {
+  flex: 1;
+}
+.private-meeting-banner .banner-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+.private-meeting-banner .banner-desc {
+  font-size: 0.82rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.diff-masked-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.diff-masked-notice .masked-icon {
+  font-size: 1.15rem;
+  color: #475569;
+}
+
+/* ==========================================================================
    📱 联合会审大厅手机移动端专属响应式重塑 (Joint Review Hall Mobile Optimization)
    对标工业级高保真协同工单设计，确保各尺寸移动端页面美观、整齐、紧凑、触控友好
    ========================================================================== */
@@ -3144,6 +3652,49 @@ function goProjectPages() {
   /* 1. 页面主容器与内边距紧凑化 */
   .tube-page-main.container {
     padding: 10px 8px !important;
+  }
+
+  .private-meeting-banner {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    border-radius: 6px !important;
+  }
+  .private-meeting-banner .banner-icon {
+    font-size: 1.15rem !important;
+  }
+  .private-meeting-banner .banner-title {
+    font-size: 0.85rem !important;
+  }
+  .private-meeting-banner .banner-desc {
+    font-size: 0.76rem !important;
+  }
+
+  .diff-masked-notice {
+    padding: 12px 14px !important;
+    font-size: 0.8rem !important;
+    gap: 6px !important;
+  }
+
+  .card-header-row.is-private-head {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+  .private-left {
+    gap: 8px !important;
+    font-size: 12.5px !important;
+  }
+  .private-right {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding-top: 6px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+  }
+  .private-lock-tag {
+    font-size: 11px !important;
+    padding: 2.5px 6px !important;
   }
 
   /* 2. 页面顶栏优化 */
@@ -3708,6 +4259,16 @@ function goProjectPages() {
   .guide-dialog {
     width: 95vw !important;
     max-width: 95vw !important;
+  }
+
+  .guide-tabs-bar {
+    padding: 6px 12px 0 !important;
+    gap: 4px !important;
+  }
+
+  .guide-tab-item {
+    padding: 8px 12px !important;
+    font-size: 12.5px !important;
   }
 
   .guide-content {

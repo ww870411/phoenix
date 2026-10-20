@@ -534,11 +534,11 @@
                           ⚖️ 查看会审
                         </button>
                         <button
-                          v-else-if="row.status === 'pending_warehouse'"
+                          v-else
                           type="button"
                           class="btn ghost btn-sm btn-action-review"
                           style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
-                          title="发现型号规格或数量有误时提请联合会审"
+                          title="发现型号规格或数量有误时提请会审/召开小组会"
                           @click.stop="openJointReviewModal(row, 'pipe')"
                         >
                           ⚖️ 提请会审
@@ -649,10 +649,10 @@
                       ⚖️ 查看会审
                     </button>
                     <button
-                      v-else-if="row.status === 'pending_warehouse'"
+                      v-else
                       type="button"
                       class="btn ghost btn-sm pm-action-btn btn-review"
-                      title="发现型号规格或数量有误时提请联合会审"
+                      title="发现型号规格或数量有误时提请会审/召开小组会"
                       @click="openJointReviewModal(row, 'pipe')"
                     >
                       ⚖️ 提请会审
@@ -777,11 +777,11 @@
                       ⚖️ 查看会审
                     </button>
                     <button
-                      v-else-if="row.status === 'pending_warehouse'"
+                      v-else
                       type="button"
                       class="btn ghost btn-sm btn-action-review"
                       style="height: 24px; padding: 0 6px; font-size: 11px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;"
-                      title="发现型号规格或数量有误时提请联合会审"
+                      title="发现型号规格或数量有误时提请会审/召开小组会"
                       @click.stop="openJointReviewModal(row, 'pipe')"
                     >
                       ⚖️ 提请会审
@@ -920,10 +920,10 @@
                   ⚖️ 查看会审
                 </button>
                 <button
-                  v-else-if="row.status === 'pending_warehouse'"
+                  v-else
                   type="button"
                   class="btn ghost btn-sm pm-action-btn btn-review"
-                  title="发现型号规格或数量有误时提请联合会审"
+                  title="发现型号规格或数量有误时提请会审/召开小组会"
                   @click="openJointReviewModal(row, 'pipe')"
                 >
                   ⚖️ 提请会审
@@ -1205,12 +1205,191 @@
 
       <!-- Tab 2: 管件发货记录 -->
       <div v-if="activeTab === 'fitting'">
+        <!-- 管件发货记录筛选卡片 -->
+        <section class="card elevated pipe-filter-card fitting-filter-card">
+          <div class="card-header">
+            <span>管件台账筛选</span>
+            <span class="muted">展示日期：{{ options?.show_date || options?.biz_date || '--' }}</span>
+          </div>
+          <div class="filter-grid pipe-filter-grid">
+            <!-- 需求主体 -->
+            <div class="field custom-multi-select-container" ref="fittingSection1DropdownRef">
+              <span>需求主体</span>
+              <div class="custom-multi-select">
+                <div class="select-trigger" @click="toggleDropdown('fittingSection1')" :class="{ active: activeDropdown === 'fittingSection1' }">
+                  <span class="trigger-text" :class="{ placeholder: fittingFilters.section1Ids.length === 0 }">
+                    {{ displayFittingSelectedSection1s }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'fittingSection1'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllFittingSection1s">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllFittingSection1s">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <div 
+                        v-for="item in section1Options" 
+                        :key="item.section_1_id" 
+                        class="dropdown-item"
+                        :class="{ selected: fittingFilters.section1Ids.includes(item.section_1_id) }"
+                        @click="toggleFittingSection1(item.section_1_id)"
+                      >
+                        <input type="checkbox" :checked="fittingFilters.section1Ids.includes(item.section_1_id)" @click.stop="toggleFittingSection1(item.section_1_id)" />
+                        <span class="item-label">{{ item.section_1_name }}（{{ item.section_1_id }}）</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
+            <!-- 供给主体 -->
+            <div class="field custom-multi-select-container" ref="fittingSupplyDropdownRef">
+              <span>供给主体</span>
+              <div class="custom-multi-select">
+                <div class="select-trigger" @click="toggleDropdown('fittingSupplier')" :class="{ active: activeDropdown === 'fittingSupplier' }">
+                  <span class="trigger-text" :class="{ placeholder: fittingFilters.supplyEntityIds.length === 0 }">
+                    {{ displayFittingSelectedSupplyEntities }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'fittingSupplier'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllFittingSupplyEntities">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllFittingSupplyEntities">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <div 
+                        v-for="item in supplyEntityOptions" 
+                        :key="item.entity_id" 
+                        class="dropdown-item"
+                        :class="{ selected: fittingFilters.supplyEntityIds.includes(item.entity_id) }"
+                        @click="toggleFittingSupplyEntity(item.entity_id)"
+                      >
+                        <input type="checkbox" :checked="fittingFilters.supplyEntityIds.includes(item.entity_id)" @click.stop="toggleFittingSupplyEntity(item.entity_id)" />
+                        <span class="item-label">{{ item.entity_name }}（{{ item.entity_id }}）</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
+            <!-- 管件类别 -->
+            <div class="field custom-multi-select-container" ref="fittingTypeDropdownRef">
+              <span>管件类别</span>
+              <div class="custom-multi-select">
+                <div class="select-trigger" @click="toggleDropdown('fittingType')" :class="{ active: activeDropdown === 'fittingType' }">
+                  <span class="trigger-text" :class="{ placeholder: fittingFilters.fittingTypes.length === 0 }">
+                    {{ displayFittingSelectedTypes }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'fittingType'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllFittingTypes">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllFittingTypes">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <div 
+                        v-for="typeName in fittingTypeOptions" 
+                        :key="typeName" 
+                        class="dropdown-item"
+                        :class="{ selected: fittingFilters.fittingTypes.includes(typeName) }"
+                        @click="toggleFittingType(typeName)"
+                      >
+                        <input type="checkbox" :checked="fittingFilters.fittingTypes.includes(typeName)" @click.stop="toggleFittingType(typeName)" />
+                        <span class="item-label">{{ typeName }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
+            <!-- 状态 -->
+            <div class="field custom-multi-select-container" ref="fittingStatusDropdownRef">
+              <span>状态</span>
+              <div class="custom-multi-select">
+                <div class="select-trigger" @click="toggleDropdown('fittingStatus')" :class="{ active: activeDropdown === 'fittingStatus' }">
+                  <span class="trigger-text" :class="{ placeholder: fittingFilters.statuses.length === 0 }">
+                    {{ displayFittingSelectedStatuses }}
+                  </span>
+                  <span class="trigger-arrow">▼</span>
+                </div>
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdown === 'fittingStatus'" class="select-dropdown">
+                    <div class="dropdown-actions">
+                      <button type="button" class="action-btn" @click="selectAllFittingStatuses">全选</button>
+                      <button type="button" class="action-btn" @click="clearAllFittingStatuses">清空</button>
+                    </div>
+                    <div class="dropdown-list">
+                      <div 
+                        v-for="item in fittingStatusOptions" 
+                        :key="item.value" 
+                        class="dropdown-item"
+                        :class="{ selected: fittingFilters.statuses.includes(item.value) }"
+                        @click="toggleFittingStatus(item.value)"
+                      >
+                        <input type="checkbox" :checked="fittingFilters.statuses.includes(item.value)" @click.stop="toggleFittingStatus(item.value)" />
+                        <span class="item-label">{{ item.label }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
+            <!-- 运输车次号 -->
+            <label class="field">
+              <span>运输车次号</span>
+              <input v-model.trim="fittingFilters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" @keyup.enter="loadWarehouseFittingDeliveries" />
+            </label>
+
+            <!-- 单号 -->
+            <label class="field">
+              <span>单号</span>
+              <input v-model.trim="fittingFilters.orderNo" class="input" type="text" placeholder="输入订单号筛选" @keyup.enter="loadWarehouseFittingDeliveries" />
+            </label>
+
+            <!-- 车牌号 -->
+            <label class="field">
+              <span>车牌号</span>
+              <input v-model.trim="fittingFilters.vehiclePlateNo" class="input" type="text" placeholder="输入车牌号筛选" @keyup.enter="loadWarehouseFittingDeliveries" />
+            </label>
+
+            <!-- 综合搜索 -->
+            <label class="field">
+              <span>综合搜索</span>
+              <input v-model.trim="fittingFilters.searchKeyword" class="input" type="text" placeholder="输入规格/备注等关键字" @keyup.enter="loadWarehouseFittingDeliveries" />
+            </label>
+          </div>
+          <div class="filter-actions" style="display: flex; gap: 8px;">
+            <button class="btn primary" type="button" :disabled="fittingLoading" @click="loadWarehouseFittingDeliveries">查询</button>
+            <button class="btn ghost" type="button" :disabled="fittingLoading" @click="resetFittingFilters">重置</button>
+            <button 
+              v-if="canExtractXlsx && fittingRows.length > 0" 
+              class="btn primary" 
+              type="button" 
+              style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; font-weight: 600;" 
+              :disabled="fittingExportLoading"
+              @click="exportWarehouseFittingExcel"
+            >
+              📥 导出管件台账
+            </button>
+          </div>
+        </section>
+
         <section class="card elevated fitting-ledger-card">
           <div class="fitting-ledger-header">
             <div class="fitting-ledger-heading">
               <h2>🔧 管件发货记录台账</h2>
               <p>
-                共 {{ groupedWarehouseFittingRows.length }} 个车次 · {{ fittingRows.length }} 项明细 ·
+                共 {{ groupedWarehouseFittingRows.length }} 个车次 · {{ filteredFittingRows.length }} 项明细 ·
                 {{ warehouseFittingTotalQty }} 个管件
               </p>
             </div>
@@ -2144,25 +2323,91 @@ const toggleAllFittingGroups = (expandAll = true) => {
 }
 
 const filteredFittingRows = computed(() => {
-  const validRows = fittingRows.value.filter(r => r.status !== 'cancelled')
+  let list = fittingRows.value.filter(r => r.status !== 'cancelled')
+
+  // 1. 需求主体多选过滤
+  if (fittingFilters.section1Ids.length > 0) {
+    const secSet = new Set(fittingFilters.section1Ids)
+    list = list.filter(r => secSet.has(String(r.section_1_id || '').trim()))
+  }
+
+  // 2. 供给主体多选过滤
+  if (fittingFilters.supplyEntityIds.length > 0) {
+    const supplySet = new Set(fittingFilters.supplyEntityIds)
+    list = list.filter(r => supplySet.has(String(r.supply_entity_id || '').trim()))
+  }
+
+  // 3. 管件类别多选过滤
+  if (fittingFilters.fittingTypes.length > 0) {
+    const typeSet = new Set(fittingFilters.fittingTypes)
+    list = list.filter(r => typeSet.has(String(r.fitting_type || r.category || '').trim()))
+  }
+
+  // 4. 车次号筛选
+  if (fittingFilters.shipmentNo.trim()) {
+    const sn = fittingFilters.shipmentNo.trim().toUpperCase()
+    list = list.filter(r => String(r.shipment_no || '').toUpperCase().includes(sn))
+  }
+
+  // 5. 单号筛选
+  if (fittingFilters.orderNo.trim()) {
+    const on = fittingFilters.orderNo.trim().toUpperCase()
+    list = list.filter(r => String(r.order_no || r.delivery_code || '').toUpperCase().includes(on))
+  }
+
+  // 6. 车牌号筛选
+  if (fittingFilters.vehiclePlateNo.trim()) {
+    const vp = fittingFilters.vehiclePlateNo.trim().toUpperCase()
+    list = list.filter(r => String(r.vehicle_plate_no || '').toUpperCase().includes(vp))
+  }
+
+  // 7. 综合关键字搜索（规格型号/备注等）
+  if (fittingFilters.searchKeyword.trim()) {
+    const kw = fittingFilters.searchKeyword.trim().toLowerCase()
+    list = list.filter(r => {
+      return (
+        String(r.model_spec || '').toLowerCase().includes(kw) ||
+        String(r.fitting_type || '').toLowerCase().includes(kw) ||
+        String(r.ship_remark || '').toLowerCase().includes(kw) ||
+        String(r.shipment_no || '').toLowerCase().includes(kw) ||
+        String(r.vehicle_plate_no || '').toLowerCase().includes(kw) ||
+        String(r.order_no || '').toLowerCase().includes(kw)
+      )
+    })
+  }
+
+  // 8. 筛选栏状态多选
+  if (fittingFilters.statuses.length > 0) {
+    const selected = new Set(fittingFilters.statuses)
+    list = list.filter(r => {
+      const st = r.status || 'shipped'
+      const pre = r.pre_review_status || ''
+      if (selected.has('pending_arrival') && (st === 'shipped' || st === 'pending_arrival')) return true
+      if (selected.has('pending_construction') && (st === 'arrived' || st === 'pending_receive')) return true
+      if (selected.has('pending_warehouse') && (st === 'construction_confirmed' || st === 'pending_warehouse' || st === 'received')) return true
+      if (selected.has('completed') && (st === 'warehouse_confirmed' || st === 'completed')) return true
+      if (selected.has('under_review') && (st === 'under_review' || pre === 'pending_warehouse')) return true
+      return selected.has(st)
+    })
+  }
+
+  // 9. 状态卡片子标签过滤 (流转四节点卡片)
   if (fittingSubTab.value === 'pending_arrival') {
-    return validRows.filter(r => (r.status || 'shipped') === 'shipped' || r.status === 'pending_arrival')
-  }
-  if (fittingSubTab.value === 'pending_construction') {
-    return validRows.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
-  }
-  if (fittingSubTab.value === 'pending_warehouse') {
-    return validRows.filter(r => 
+    list = list.filter(r => (r.status || 'shipped') === 'shipped' || r.status === 'pending_arrival')
+  } else if (fittingSubTab.value === 'pending_construction') {
+    list = list.filter(r => r.status === 'arrived' || r.status === 'pending_receive')
+  } else if (fittingSubTab.value === 'pending_warehouse') {
+    list = list.filter(r => 
       r.status === 'construction_confirmed' || 
       r.status === 'pending_warehouse' || 
       r.status === 'received' ||
       (r.status === 'under_review' && (r.pre_review_status === 'pending_warehouse' || !r.pre_review_status))
     )
+  } else if (fittingSubTab.value === 'completed') {
+    list = list.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
   }
-  if (fittingSubTab.value === 'completed') {
-    return validRows.filter(r => r.status === 'warehouse_confirmed' || r.status === 'completed')
-  }
-  return validRows
+
+  return list
 })
 
 const groupedWarehouseFittingRows = computed(() => {
@@ -2240,16 +2485,16 @@ function isStandardFittingType(typeStr) {
 }
 
 const warehouseFittingTotalQty = computed(() => {
-  return fittingRows.value.reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
+  return filteredFittingRows.value.reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
 })
 
 const warehouseFittingBatches = computed(() => {
-  const set = new Set(fittingRows.value.map(r => r.shipment_no || r.id))
+  const set = new Set(filteredFittingRows.value.map(r => r.shipment_no || r.id))
   return set.size
 })
 
 const warehouseFittingStandardQty = computed(() => {
-  return fittingRows.value
+  return filteredFittingRows.value
     .filter(r => isStandardFittingType(r.fitting_type))
     .reduce((sum, r) => sum + (Number(r.shipped_qty) || 0), 0)
 })
@@ -2297,12 +2542,11 @@ const loadWarehouseFittingDeliveries = async () => {
   fittingLoading.value = true
   try {
     const res = await getFittingDeliveriesList(projectKey, {
-      section1Id: filters.section1Ids ? filters.section1Ids.join(',') : '',
-      startDate: filters.startDate,
-      endDate: filters.endDate,
-      searchKeyword: filters.searchKeyword,
+      section1Id: fittingFilters.section1Ids.length ? fittingFilters.section1Ids.join(',') : '',
+      supplyEntityId: fittingFilters.supplyEntityIds.length ? fittingFilters.supplyEntityIds.join(',') : '',
+      searchKeyword: fittingFilters.searchKeyword.trim() || '',
       exclude_cancelled: true,
-      limit: 300,
+      limit: 500,
     })
     if (res && res.ok) {
       fittingRows.value = (res.items || [])
@@ -2318,6 +2562,19 @@ const loadWarehouseFittingDeliveries = async () => {
   } finally {
     fittingLoading.value = false
   }
+}
+
+const resetFittingFilters = async () => {
+  fittingFilters.section1Ids = []
+  fittingFilters.supplyEntityIds = []
+  fittingFilters.fittingTypes = []
+  fittingFilters.statuses = []
+  fittingFilters.shipmentNo = ''
+  fittingFilters.orderNo = ''
+  fittingFilters.vehiclePlateNo = ''
+  fittingFilters.searchKeyword = ''
+  fittingSubTab.value = 'all'
+  await loadWarehouseFittingDeliveries()
 }
 
 async function handleConfirmFittingWarehouse(items) {
@@ -2341,15 +2598,15 @@ async function handleConfirmFittingWarehouse(items) {
   }
 }
 
-
-
 const handleSwitchToFittingTab = () => {
   activeTab.value = 'fitting'
+  activeDropdown.value = ''
   syncTabStateToUrl('fitting')
   loadWarehouseFittingDeliveries()
 }
 
 watch(activeTab, (tab) => {
+  activeDropdown.value = ''
   syncTabStateToUrl(tab)
   if (tab === 'fitting') {
     loadWarehouseFittingDeliveries()
@@ -2358,24 +2615,43 @@ watch(activeTab, (tab) => {
   }
 })
 
+function getFittingStatusLabel(status) {
+  const map = {
+    'shipped': '待到货确认',
+    'pending_arrival': '待到货确认',
+    'arrived': '待施工接收',
+    'pending_receive': '待施工接收',
+    'construction_confirmed': '待库管确认',
+    'pending_warehouse': '待库管确认',
+    'received': '待库管确认',
+    'warehouse_confirmed': '库管已确认',
+    'completed': '库管已确认',
+    'under_review': '联合会审中',
+    'cancelled': '已撤销',
+  }
+  return map[status] || status || '—'
+}
+
 function exportWarehouseFittingExcel() {
-  if (!fittingRows.value.length) {
-    alert('当前暂无管件发货记录可导出')
+  const targetRows = filteredFittingRows.value.length ? filteredFittingRows.value : fittingRows.value
+  if (!targetRows.length) {
+    alert('当前筛选条件下暂无管件发货记录可导出')
     return
   }
   fittingExportLoading.value = true
   try {
-    const exportData = fittingRows.value.map(r => ({
+    const exportData = targetRows.map(r => ({
       '发货时间': formatDateTime(r.shipped_at),
       '发货车次号': r.shipment_no || '—',
       '订单号': r.order_no || '—',
       '运输车牌号': r.vehicle_plate_no || '—',
       '供给主体': r.supply_entity_name || r.supply_entity_id || '—',
-      '需求主体': r.section_1_name || r.section_1_id || '—',
+      '需求主体': r.section_1_name || getSection1Name(r.section_1_id) || r.section_1_id || '—',
       '管件类型': r.fitting_type || '—',
       '型号/规格': r.model_spec || '—',
       '发货数量': r.shipped_qty ?? '—',
       '单位': r.unit || '个',
+      '状态': getFittingStatusLabel(r.status),
       '整车备注': r.ship_remark || '—',
     }))
 
@@ -2509,6 +2785,18 @@ const filters = reactive({
   vehiclePlateNo: '',
 })
 
+// 管件筛选参数状态
+const fittingFilters = reactive({
+  section1Ids: [],
+  supplyEntityIds: [],
+  fittingTypes: [],
+  statuses: [],
+  shipmentNo: '',
+  orderNo: '',
+  vehiclePlateNo: '',
+  searchKeyword: '',
+})
+
 // 多选下拉组件状态与控制
 const activeDropdown = ref('')
 const section1DropdownRef = ref(null)
@@ -2516,10 +2804,12 @@ const supplyDropdownRef = ref(null)
 const pipeDropdownRef = ref(null)
 const statusDropdownRef = ref(null)
 
+const fittingSection1DropdownRef = ref(null)
+const fittingSupplyDropdownRef = ref(null)
+const fittingTypeDropdownRef = ref(null)
+const fittingStatusDropdownRef = ref(null)
+
 const toggleDropdown = (name) => {
-  if (activeTab.value === 'fitting' && (name === 'pipeModel' || name === 'status')) {
-    return
-  }
   activeDropdown.value = activeDropdown.value === name ? '' : name
 }
 
@@ -2536,6 +2826,122 @@ const handleGlobalClick = (e) => {
   if (activeDropdown.value === 'status' && statusDropdownRef.value && !statusDropdownRef.value.contains(e.target)) {
     activeDropdown.value = ''
   }
+  if (activeDropdown.value === 'fittingSection1' && fittingSection1DropdownRef.value && !fittingSection1DropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+  if (activeDropdown.value === 'fittingSupplier' && fittingSupplyDropdownRef.value && !fittingSupplyDropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+  if (activeDropdown.value === 'fittingType' && fittingTypeDropdownRef.value && !fittingTypeDropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+  if (activeDropdown.value === 'fittingStatus' && fittingStatusDropdownRef.value && !fittingStatusDropdownRef.value.contains(e.target)) {
+    activeDropdown.value = ''
+  }
+}
+
+// 管件状态选项与类别选项
+const fittingStatusOptions = [
+  { value: 'pending_arrival', label: '🚚 待现场到货' },
+  { value: 'pending_construction', label: '🏗️ 待施工接收' },
+  { value: 'pending_warehouse', label: '🏢 待库管确认' },
+  { value: 'completed', label: '✅ 库管已确认' },
+  { value: 'under_review', label: '⚖️ 联合会审中' },
+]
+
+const fittingTypeOptions = computed(() => {
+  const defaults = ['弯头', '三通', '大小头', '封头', '直缝弯管', '补偿器', '固定节', '球阀']
+  const set = new Set(defaults)
+  for (const r of fittingRows.value) {
+    if (r.fitting_type) set.add(String(r.fitting_type).trim())
+    if (r.category) set.add(String(r.category).trim())
+  }
+  return Array.from(set).filter(Boolean)
+})
+
+// 管件选中值格式化回显
+const displayFittingSelectedSection1s = computed(() => {
+  if (fittingFilters.section1Ids.length === 0) return '全部需求主体'
+  if (fittingFilters.section1Ids.length === section1Options.value.length) return '全部需求主体（全选）'
+  const names = section1Options.value
+    .filter(o => fittingFilters.section1Ids.includes(o.section_1_id))
+    .map(o => o.section_1_name)
+  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个需求主体`
+})
+
+const displayFittingSelectedSupplyEntities = computed(() => {
+  if (fittingFilters.supplyEntityIds.length === 0) return '全部供给主体'
+  if (fittingFilters.supplyEntityIds.length === supplyEntityOptions.value.length) return '全部供给主体（全选）'
+  const names = supplyEntityOptions.value
+    .filter(o => fittingFilters.supplyEntityIds.includes(o.entity_id))
+    .map(o => o.entity_name)
+  return names.length <= 2 ? names.join(', ') : `已选 ${names.length} 个主体`
+})
+
+const displayFittingSelectedTypes = computed(() => {
+  if (fittingFilters.fittingTypes.length === 0) return '全部管件类别'
+  if (fittingFilters.fittingTypes.length === fittingTypeOptions.value.length) return '全部类别（全选）'
+  return fittingFilters.fittingTypes.length <= 2
+    ? fittingFilters.fittingTypes.join(', ')
+    : `已选 ${fittingFilters.fittingTypes.length} 种类别`
+})
+
+const displayFittingSelectedStatuses = computed(() => {
+  if (fittingFilters.statuses.length === 0) return '全部状态'
+  if (fittingFilters.statuses.length === fittingStatusOptions.length) return '全部状态（全选）'
+  const labels = fittingStatusOptions
+    .filter(o => fittingFilters.statuses.includes(o.value))
+    .map(o => o.label)
+  return labels.length <= 2 ? labels.join(', ') : `已选 ${labels.length} 个状态`
+})
+
+// 管件复选操作函数
+const toggleFittingSection1 = (id) => {
+  const idx = fittingFilters.section1Ids.indexOf(id)
+  if (idx > -1) fittingFilters.section1Ids.splice(idx, 1)
+  else fittingFilters.section1Ids.push(id)
+}
+const selectAllFittingSection1s = () => {
+  fittingFilters.section1Ids = section1Options.value.map(o => o.section_1_id)
+}
+const clearAllFittingSection1s = () => {
+  fittingFilters.section1Ids = []
+}
+
+const toggleFittingSupplyEntity = (id) => {
+  const idx = fittingFilters.supplyEntityIds.indexOf(id)
+  if (idx > -1) fittingFilters.supplyEntityIds.splice(idx, 1)
+  else fittingFilters.supplyEntityIds.push(id)
+}
+const selectAllFittingSupplyEntities = () => {
+  fittingFilters.supplyEntityIds = supplyEntityOptions.value.map(o => o.entity_id)
+}
+const clearAllFittingSupplyEntities = () => {
+  fittingFilters.supplyEntityIds = []
+}
+
+const toggleFittingType = (typeName) => {
+  const idx = fittingFilters.fittingTypes.indexOf(typeName)
+  if (idx > -1) fittingFilters.fittingTypes.splice(idx, 1)
+  else fittingFilters.fittingTypes.push(typeName)
+}
+const selectAllFittingTypes = () => {
+  fittingFilters.fittingTypes = [...fittingTypeOptions.value]
+}
+const clearAllFittingTypes = () => {
+  fittingFilters.fittingTypes = []
+}
+
+const toggleFittingStatus = (val) => {
+  const idx = fittingFilters.statuses.indexOf(val)
+  if (idx > -1) fittingFilters.statuses.splice(idx, 1)
+  else fittingFilters.statuses.push(val)
+}
+const selectAllFittingStatuses = () => {
+  fittingFilters.statuses = fittingStatusOptions.map(o => o.value)
+}
+const clearAllFittingStatuses = () => {
+  fittingFilters.statuses = []
 }
 
 // 选中值格式化回显
@@ -3103,6 +3509,12 @@ async function loadOptions() {
 
   if (filters.section1Ids.length === 0 && section1Options.value.length === 1) {
     filters.section1Ids = [section1Options.value[0].section_1_id]
+  }
+
+  fittingFilters.section1Ids = fittingFilters.section1Ids.filter(id => section1IdSet.has(id))
+  fittingFilters.supplyEntityIds = fittingFilters.supplyEntityIds.filter(id => supplyEntityIdSet.has(id))
+  if (fittingFilters.section1Ids.length === 0 && section1Options.value.length === 1) {
+    fittingFilters.section1Ids = [section1Options.value[0].section_1_id]
   }
 }
 

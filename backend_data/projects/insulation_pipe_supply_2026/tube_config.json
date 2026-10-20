@@ -10,6 +10,7 @@
   "arbitration_config": {
     "enabled": true,
     "arbitrator_accounts": [
+      "ww870411",
       "王玮",
       "李绍",
       "张亮"

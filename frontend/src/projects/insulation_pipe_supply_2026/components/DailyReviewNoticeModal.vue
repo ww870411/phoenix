@@ -8,8 +8,8 @@
             <ScaleBalanceIcon :size="22" color="#f59e0b" />
           </span>
           <div>
-            <h3>待办多方联合会审提醒</h3>
-            <p class="subtitle">您有名下责任主体待表决签署的订单会审，请及时会签办理</p>
+            <h3>待办协同会商与会审提醒</h3>
+            <p class="subtitle">您有名下受邀参会或待表决签署的订单会审，请及时会签办理</p>
           </div>
         </div>
         <button type="button" class="btn-close" title="稍后处理" @click="handleClose">✕</button>
@@ -38,6 +38,12 @@
             @click="goToReview(item)"
           >
             <div class="item-header">
+              <span v-if="item.is_group_meeting || item.review_type === 'group_meeting'" class="type-badge group-meeting">
+                🤝 小组会议
+              </span>
+              <span v-else class="type-badge joint-review">
+                ⚖️ 多方联合会审
+              </span>
               <span class="category-tag" :class="item.order_category">
                 {{ item.category_label || (item.order_category === 'pipe' ? '保温直管' : '管件/阀门') }}
               </span>
@@ -176,6 +182,35 @@ function getItemDiffs(item) {
   return list
 }
 
+function isAtReviewHall() {
+  const p = route?.path || ''
+  return p.includes('joint_review_hall') || route?.name === 'JointReviewHall'
+}
+
+function recordSuppressedIds(ids) {
+  try {
+    const list = Array.isArray(ids) ? ids.map(Number) : []
+    const rawSuppressed = localStorage.getItem(getStorageKey())
+    let existingIds = []
+    if (rawSuppressed) {
+      try {
+        const parsed = JSON.parse(rawSuppressed)
+        if (parsed && Array.isArray(parsed.suppressedReviewIds)) {
+          existingIds = parsed.suppressedReviewIds.map(Number)
+        }
+      } catch (e) {}
+    }
+    const combined = Array.from(new Set([...existingIds, ...list]))
+    const payload = {
+      date: getTodayString(),
+      suppressedReviewIds: combined,
+    }
+    localStorage.setItem(getStorageKey(), JSON.stringify(payload))
+  } catch (e) {
+    console.warn('记录已感知会审失败:', e)
+  }
+}
+
 /**
  * 核心检查函数：
  * 1. 调接口获取当前名下未处理会审；
@@ -184,12 +219,16 @@ function getItemDiffs(item) {
  */
 async function checkPendingReviews() {
   if (isPolling) return
-  // 未登录或当前处于登录页，不弹出
+  // 未登录、当前处于登录页或已进入会审大厅，均不弹出打扰
   if (!auth.isLoggedIn && !auth.user && !auth.token) {
     visible.value = false
     return
   }
   if (route && (route.path === '/login' || route.path.startsWith('/login'))) {
+    visible.value = false
+    return
+  }
+  if (isAtReviewHall()) {
     visible.value = false
     return
   }
@@ -215,6 +254,12 @@ async function checkPendingReviews() {
       ? res.all_pending_review_ids.map(Number)
       : (res.pending_items || []).map(it => Number(it.review_id))
     allPendingIds.value = currentIds
+
+    // 若当前已在会审大厅，仅关闭本弹窗不弹窗打扰，但绝不提前持久化写入抑制快照
+    if (isAtReviewHall()) {
+      visible.value = false
+      return
+    }
 
     // 读取本地存储中的抑制快照
     const rawSuppressed = localStorage.getItem(getStorageKey())
@@ -267,28 +312,21 @@ function handleClose() {
 }
 
 function suppressToday() {
-  try {
-    const currentIds = (allPendingIds.value && allPendingIds.value.length > 0)
-      ? allPendingIds.value
-      : pendingItems.value.map(it => Number(it.review_id))
-
-    const payload = {
-      date: getTodayString(),
-      suppressedReviewIds: currentIds,
-    }
-    localStorage.setItem(getStorageKey(), JSON.stringify(payload))
-  } catch (e) {
-    console.warn('缓存会审抑制状态失败:', e)
-  }
+  const currentIds = (allPendingIds.value && allPendingIds.value.length > 0)
+    ? allPendingIds.value
+    : pendingItems.value.map(it => Number(it.review_id))
+  recordSuppressedIds(currentIds)
   visible.value = false
 }
 
 function goToHall() {
+  recordSuppressedIds(allPendingIds.value)
   visible.value = false
   router.push('/projects/insulation_pipe_supply_2026/pages/joint_review_hall?tab=pending_my_vote')
 }
 
 function goToReview(item) {
+  recordSuppressedIds(allPendingIds.value)
   visible.value = false
   const targetId = item.review_id || ''
   const searchKw = item.order_no || ''
@@ -303,6 +341,10 @@ function goToReview(item) {
 watch(
   () => route.path,
   () => {
+    if (isAtReviewHall()) {
+      visible.value = false
+      return
+    }
     // 延迟少许，等待页面路由切换完成
     setTimeout(() => {
       checkPendingReviews()
@@ -310,11 +352,23 @@ watch(
   }
 )
 
+// 监听当前登录用户切换（例如从超管切换至王玮登录），立刻执行检测
+watch(
+  () => auth.user?.username,
+  (newUname, oldUname) => {
+    if (newUname && newUname !== oldUname) {
+      setTimeout(() => {
+        checkPendingReviews()
+      }, 300)
+    }
+  }
+)
+
 onMounted(() => {
-  // 首次挂载延迟 1.5 秒执行，避开主页首屏并发请求
+  // 首次挂载延迟 600ms 执行检测
   setTimeout(() => {
     checkPendingReviews()
-  }, 1500)
+  }, 600)
 
   // 设置 45 秒轻量心跳定时器（全页面常驻轮询）
   pollTimer = setInterval(() => {
@@ -503,6 +557,26 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.type-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.type-badge.group-meeting {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+.type-badge.joint-review {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
 }
 
 .category-tag {

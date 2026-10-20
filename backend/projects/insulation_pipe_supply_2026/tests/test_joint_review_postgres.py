@@ -280,6 +280,243 @@ class JointReviewPostgresTests(unittest.TestCase):
         self.vote(rid)
         self.assertEqual(self.audit[-1]['before_value']['previous_vote']['vote_decision'], 'reject')
 
+    def test_group_meeting_reject_reverts_order_and_fails_negotiation(self):
+        """现场小组会有人提出异议时：立即判定协商失败，会审终结为 rejected，订单原子恢复发起前状态。"""
+        self.seed('pipe', 1, status='pending_arrival')
+        created = self.ns['create_joint_review'](
+            'pipe', 1, {'shipped_qty': 8}, '现场协同修正数量', [],
+            'manager-a', '张经理', 'tube_site_manager',
+            review_type='group_meeting', invited_users=['supplier-a']
+        )
+        rid = created['review_id']
+        self.assertEqual(self.rows('tube_delivery')[0]['status'], 'under_review')
+
+        # 成员投反对票
+        res = self.ns['vote_joint_review'](
+            rid, 'reject', '现场实测数量确实只有10米，不同意改为8米',
+            'supplier-a', '李厂家', 'tube_supplier'
+        )
+        self.assertTrue(res['ok'])
+        self.assertEqual(res['review_status'], 'rejected')
+        self.assertEqual(res['status_display'], '协商失败')
+        self.assertTrue(res['is_finalized'])
+        self.assertEqual(res['restored_status'], 'pending_arrival')
+
+        # 验证业务单据直接恢复原状
+        self.assertEqual(self.rows('tube_delivery')[0]['status'], 'pending_arrival')
+
+        # 验证会审表状态
+        rev_row = self.rows('tube_order_reviews')[0]
+        self.assertEqual(rev_row['review_status'], 'rejected')
+        self.assertIn('协商失败', rev_row['resolution_summary'])
+
+        # 验证操作审计与系统消息
+        self.assertEqual(self.audit[-1]['action_type'], 'GROUP_MEETING_REJECTED')
+        self.assertTrue(any('协商失败' in m.get('title', '') for m in self.messages))
+
+    def test_group_meeting_privacy_masking_for_third_party(self):
+        """小组会议隐私保护：非当事人/非超管仅能见基本条目，具体内容脱敏掩码。"""
+        self.seed('pipe', 1, status='pending_arrival')
+        created = self.ns['create_joint_review'](
+            'pipe', 1, {'shipped_qty': 8}, '现场小范围修正事由（保密）', [],
+            'manager-a', '张经理', 'tube_site_manager',
+            review_type='group_meeting', invited_users=['supplier-a']
+        )
+        rid = created['review_id']
+
+        # 1. 发起人视角：能看完整内容
+        res_init = self.ns['list_joint_reviews'](tab='all', review_id=rid, session_username='manager-a', session_group='tube_site_manager')
+        item_init = res_init['items'][0]
+        self.assertFalse(item_init['is_private_masked'])
+        self.assertEqual(item_init['review_reason'], '现场小范围修正事由（保密）')
+        self.assertEqual(str(item_init['proposed_patch']['shipped_qty']), '8')
+
+        # 2. 受邀成员视角：能看完整内容
+        res_inv = self.ns['list_joint_reviews'](tab='all', review_id=rid, session_username='supplier-a', session_group='tube_supplier')
+        item_inv = res_inv['items'][0]
+        self.assertFalse(item_inv['is_private_masked'])
+        self.assertEqual(item_inv['review_reason'], '现场小范围修正事由（保密）')
+
+        # 3. Global_admin 视角：能看完整内容
+        res_adm = self.ns['list_joint_reviews'](tab='all', review_id=rid, session_username='ww870411', session_group='Global_admin')
+        item_adm = res_adm['items'][0]
+        self.assertFalse(item_adm['is_private_masked'])
+        self.assertEqual(item_adm['review_reason'], '现场小范围修正事由（保密）')
+
+        # 4. 第三方无关用户（如 manager-b）视角：脱敏受保护
+        res_other = self.ns['list_joint_reviews'](tab='all', review_id=rid, session_username='manager-b', session_group='tube_site_manager')
+        item_other = res_other['items'][0]
+        self.assertTrue(item_other['is_private_masked'])
+        # 基本信息依然可见
+        self.assertEqual(item_other['id'], rid)
+        self.assertEqual(item_other['review_type'], 'group_meeting')
+        self.assertEqual(item_other['order_no'], 'TEST-1')
+        self.assertEqual(item_other['review_status'], 'voting')
+        # 敏感具体内容被脱敏遮蔽
+        self.assertIn('保密事项', item_other['review_reason'])
+        self.assertTrue(item_other['proposed_patch'].get('_masked'))
+        self.assertTrue(item_other['original_snapshot'].get('_masked'))
+        self.assertEqual(item_other['attachments'], [])
+        self.assertFalse(item_other['can_i_vote'])
+        self.assertFalse(item_other['can_cancel'])
+        self.assertFalse(item_other['can_arbitrate'])
+
+    def test_group_meeting_full_consensus_and_voter_clean_name(self):
+        """小组会议全员一致核准、签署人防标段串清洗及订单原子修单验证。"""
+        self.seed('pipe', 1, status='pending_arrival')
+        created = self.ns['create_joint_review'](
+            'pipe', 1, {'shipped_qty': 12.5}, '现场随车磅单核实，实发12.5米', [],
+            'manager-a', '张主管', 'tube_site_manager',
+            review_type='group_meeting', invited_users=['supplier-a']
+        )
+        rid = created['review_id']
+
+        # 1. 验证未受邀者（例如 manager-b）尝试签署会被拦截 403
+        with self.assertRaises(HTTPException) as ctx:
+            self.ns['vote_joint_review'](
+                rid, 'approve', '我来替他通过', 'manager-b', 'manager-b', 'tube_site_manager'
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
+
+        # 2. 受邀人 supplier-a 表决通过，且模拟 session_name 传了逗号标段串（如 'high_lot_1,low_lot_2'）
+        res_vote = self.ns['vote_joint_review'](
+            rid, 'approve', '供方核对随车磅单无误，同意更正',
+            'supplier-a', 'high_lot_1,high_lot_2,low_lot_1', 'tube_supplier'
+        )
+        self.assertEqual(res_vote['review_status'], 'approved')
+        self.assertTrue(res_vote['is_finalized'])
+
+        # 3. 验证数据库中入库的 voter_name 被清洗为纯净 username，无逗号标段残留
+        vote_rows = self.rows('tube_review_votes')
+        self.assertEqual(len(vote_rows), 1)
+        self.assertEqual(vote_rows[0]['voter_username'], 'supplier-a')
+        self.assertEqual(vote_rows[0]['voter_name'], 'supplier-a')
+
+        # 4. 验证业务订单数据已原子更新
+        del_row = self.rows('tube_delivery')[0]
+        self.assertEqual(del_row['status'], 'pending_arrival')
+        self.assertEqual(float(del_row['shipped_qty']), 12.5)
+
+        # 5. 验证会审单终结决议文本
+        rev_row = self.rows('tube_order_reviews')[0]
+        self.assertEqual(rev_row['review_status'], 'approved')
+        self.assertIn('小组会议', rev_row['resolution_summary'])
+        self.assertIn('小组成员一致同意通过', rev_row['resolution_summary'])
+
+        # 6. 验证列表查询 votes 装配的 voter_name 也为纯净人名
+        list_res = self.ns['list_joint_reviews'](tab='all', review_id=rid, session_username='manager-a', session_group='tube_site_manager')
+        item = list_res['items'][0]
+        self.assertEqual(item['votes'][0]['voter_name'], 'supplier-a')
+        self.assertEqual(item['approval_type'], 'consensus')
+
+    def test_group_meeting_candidate_range_and_invitation_restriction(self):
+        """小组会议候选人范围与受邀资格拦截验证：仅允许供给方人员、Global_admin和仲裁人员。"""
+        self.seed('pipe', 1, status='pending_arrival')
+        cand_res = self.ns['get_order_meeting_candidates'](
+            'pipe', 1, 'manager-a', '张主管', 'tube_site_manager'
+        )
+        cands = cand_res['candidates']
+        self.assertTrue(len(cands) > 0)
+        # 验证所有候选人的 entity_type 只能是 supplier, global_admin, arbitrator
+        valid_types = {'supplier', 'global_admin', 'arbitrator'}
+        for c in cands:
+            self.assertIn(c['entity_type'], valid_types)
+            self.assertNotIn(c['entity_type'], {'site_manager', 'warehouse_keeper', 'construction_unit'})
+
+        # 尝试越界邀请未被允许的现场负责人（如 manager-b），必须被 422 拦截
+        with self.assertRaises(HTTPException) as ctx:
+            self.ns['create_joint_review'](
+                'pipe', 1, {'shipped_qty': 11}, '尝试越权邀请现场主管', [],
+                'manager-a', '张主管', 'tube_site_manager',
+                review_type='group_meeting',
+                invited_users=[{'username': 'manager-b', 'entity_type': 'site_manager'}]
+            )
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertIn('不符合受邀资质', ctx.exception.detail)
+
+        # 正常邀请供给方人员（supplier-a）或 Global_admin（ww870411），创建成功
+        created = self.ns['create_joint_review'](
+            'pipe', 1, {'shipped_qty': 11}, '正常邀请供方和超管协同', [],
+            'manager-a', '张主管', 'tube_site_manager',
+            review_type='group_meeting',
+            invited_users=[
+                {'username': 'supplier-a', 'entity_type': 'supplier'},
+                {'username': 'ww870411', 'entity_type': 'global_admin'},
+            ]
+        )
+        self.assertTrue(created['ok'])
+
+    def test_arbitrator_rights_split_between_joint_review_and_group_meeting(self):
+        """仲裁员权限分流验证：对多方联合会审拥有裁决权，对小组会议只享有受邀表决权而无仲裁权。"""
+        # 1. 场景 A: 多方联合会审 (joint_review)
+        self.seed('pipe', 1, status='pending_arrival')
+        jr_created = self.ns['create_joint_review'](
+            'pipe', 1, {'shipped_qty': 13}, '联合会审事由', [],
+            'manager-a', '张主管', 'tube_site_manager',
+            review_type='joint_review'
+        )
+        jr_id = jr_created['review_id']
+
+        # 特许仲裁员（王玮，非超管）查看联合会审：拥有仲裁权 can_arbitrate == True
+        res_jr = self.ns['list_joint_reviews'](
+            tab='all', review_id=jr_id, session_username='王玮', session_group='tube_site_manager'
+        )
+        self.assertTrue(res_jr['items'][0]['can_arbitrate'])
+
+        # 王玮可以成功执行终局裁决
+        arb_res = self.ns['admin_arbitrate_joint_review'](
+            review_id=jr_id,
+            arbitration_decision='force_approve',
+            arbitration_reason='事实清楚，准予裁决更正',
+            session_username='王玮',
+            session_group='tube_site_manager'
+        )
+        self.assertTrue(arb_res['ok'])
+        self.assertEqual(arb_res['review_status'], 'approved')
+
+        # 2. 场景 B: 小组会议 (group_meeting)
+        self.seed('pipe', 2, status='pending_arrival')
+        gm_created = self.ns['create_joint_review'](
+            'pipe', 2, {'shipped_qty': 15}, '小组会议事由', [],
+            'manager-a', '张主管', 'tube_site_manager',
+            review_type='group_meeting',
+            invited_users=[{'username': '王玮', 'entity_type': 'arbitrator'}]
+        )
+        gm_id = gm_created['review_id']
+
+        # 特许仲裁员（王玮）查看小组会议：
+        res_gm = self.ns['list_joint_reviews'](
+            tab='all', review_id=gm_id, session_username='王玮', session_group='tube_site_manager'
+        )
+        item_gm = res_gm['items'][0]
+        # 核心断言：只有表决权（can_i_vote == True），而无仲裁权（can_arbitrate == False）！
+        self.assertTrue(item_gm['can_i_vote'])
+        self.assertFalse(item_gm['can_arbitrate'])
+
+        # 若尝试以仲裁员身份对小组会进行终局裁决强裁，接口必须抛出 403 明确拦截
+        with self.assertRaises(HTTPException) as ctx:
+            self.ns['admin_arbitrate_joint_review'](
+                review_id=gm_id,
+                arbitration_decision='force_approve',
+                arbitration_reason='尝试强行裁决小组会',
+                session_username='王玮',
+                session_group='tube_site_manager'
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertIn('小组会议不设特许仲裁权', ctx.exception.detail)
+
+        # 王玮作为受邀参会人员，正常行使表决权进行投票核准
+        vote_res = self.ns['vote_joint_review'](
+            review_id=gm_id,
+            vote_decision='approve',
+            vote_opinion='王玮核对无误，以小组成员身份同意',
+            session_username='王玮',
+            session_name='王玮',
+            session_group='tube_site_manager'
+        )
+        self.assertTrue(vote_res['ok'])
+        self.assertEqual(vote_res['review_status'], 'approved')
+
     def test_initialization_failure_is_not_swallowed(self):
         previous_factory, previous_state = self.ns['SessionLocal'], self.ns['_tables_initialized']
 

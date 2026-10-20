@@ -1133,6 +1133,16 @@
                           ⚖️ 提请会审
                         </button>
                       </div>
+                      <div v-else class="compact-action-group">
+                        <button
+                          type="button"
+                          class="joint-review-trigger-btn"
+                          title="发现数据有误或需协同商定时提请会审/召开小组会"
+                          @click.stop="openJointReviewModal(row, 'pipe')"
+                        >
+                          ⚖️ 提请会审
+                        </button>
+                      </div>
                     </td>
 
                     <!-- 13. 凭证快捷入口 -->
@@ -1314,11 +1324,11 @@
                       </button>
 
                       <button 
-                        v-if="group.status !== 'under_review' && (canConfirmArrival || canConfirmReceipt)"
+                        v-if="group.status !== 'under_review' && !group.items?.some(i => i.status === 'under_review')"
                         type="button" 
                         class="btn ghost btn-sm btn-fitting-action" 
                         style="height: 26px; padding: 0 7px; font-size: 11px; color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
-                        title="发现规格、型号或数量有误时提请联合会审"
+                        title="发现规格、型号或数量有误时提请会审/召开小组会"
                         @click.stop="openJointReviewModal(group, 'fitting')"
                       >
                         ⚖️ 提请会审

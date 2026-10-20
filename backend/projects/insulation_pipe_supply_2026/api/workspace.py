@@ -3886,6 +3886,8 @@ def get_warehouse_management_deliveries(
         sec_id = str(row.get("section_1_id") or "").strip()
 
         # 核心拦截：账号分管标段范围边界过滤
+        if selected_section_1s and sec_id not in selected_section_1s:
+            continue
         if accessible_section_1_ids and sec_id not in accessible_section_1_ids:
             continue
         if selected_supply_entities and row["supply_entity_id"] not in selected_supply_entities:

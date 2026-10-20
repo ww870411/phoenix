@@ -30,6 +30,13 @@
               <span>改用4月5日</span>
             </label>
           </div>
+          <div class="field month-field penetrate-history-field">
+            <span>历史回溯</span>
+            <label class="check-item penetrate-history-option">
+              <input type="checkbox" v-model="filters.penetrateHistory" />
+              <span>向前穿透</span>
+            </label>
+          </div>
           <div class="field span-full">
             <div class="field-head">
               <span class="panel-title">口径（可多选）</span>
@@ -135,9 +142,9 @@
                     <input type="checkbox" v-model="filters.aggregateCompanies" />
                     <span>{{ filters.aggregateCompanies ? '已聚合口径' : '逐口径列出' }}</span>
                   </label>
-                  <label class="switch-item aggregate-item">
-                    <input type="checkbox" v-model="filters.aggregateMonths" />
-                    <span>{{ filters.aggregateMonths ? '已聚合期间月份' : '逐月列出' }}</span>
+                  <label class="switch-item aggregate-item" :class="{ disabled: filters.penetrateHistory }">
+                    <input type="checkbox" v-model="filters.aggregateMonths" :disabled="filters.penetrateHistory" />
+                    <span>{{ filters.penetrateHistory ? (filters.dateMonthTo && filters.dateMonthFrom !== filters.dateMonthTo ? '已自动按周期聚合' : '单月历史穿透') : (filters.aggregateMonths ? '已聚合期间月份' : '逐月列出') }}</span>
                   </label>
                 </div>
               </div>
@@ -304,6 +311,135 @@
               <tbody>
                 <tr v-for="(row, idx) in rows" :key="`${row.company}-${row.item}-${row.date}-${row.period}-${row.type}-${idx}`">
                   <td v-for="col in resultColumns" :key="`cell-${col.field}-${idx}`">{{ getResultCellValue(row, col.field) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div v-if="hasSearched && filters.penetrateHistory && penetrationChartData.hasData" class="analysis-section penetration-analysis-section">
+          <div class="penetration-head">
+            <div class="penetration-title-group">
+              <h4 class="penetration-main-title">历史穿透趋势演变分析</h4>
+              <span class="penetration-tag">已穿透 {{ penetrationCycles.length }} 个完整周期</span>
+            </div>
+            <p class="sub">
+              根据业务日期向历史完整相同周期回溯，支持逐项指标切换、多口径横向对比与图形化趋势洞察。
+            </p>
+          </div>
+
+          <div class="penetration-toolbar">
+            <div class="penetration-control-item">
+              <span class="penetration-label">分析指标</span>
+              <select v-model="selectedPenetrationItem" class="penetration-select">
+                <option v-for="item in availablePenetrationItems" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+
+            <div class="penetration-control-item">
+              <span class="penetration-label">分析口径</span>
+              <select v-model="selectedPenetrationCompany" class="penetration-select">
+                <option value="all">全部已选口径对比</option>
+                <option v-for="comp in availablePenetrationCompanies" :key="comp" :value="comp">{{ comp }}</option>
+              </select>
+            </div>
+
+            <div class="penetration-control-item">
+              <span class="penetration-label">图表类型</span>
+              <div class="mode-switch-group">
+                <button
+                  type="button"
+                  class="mode-switch-btn"
+                  :class="{ active: penetrationChartType === 'line' }"
+                  @click="penetrationChartType = 'line'"
+                >
+                  折线趋势
+                </button>
+                <button
+                  type="button"
+                  class="mode-switch-btn"
+                  :class="{ active: penetrationChartType === 'bar' }"
+                  @click="penetrationChartType = 'bar'"
+                >
+                  柱状对比
+                </button>
+              </div>
+            </div>
+
+            <div class="penetration-checkbox-group">
+              <label class="check-item penetration-checkbox">
+                <input type="checkbox" v-model="penetrationShowLabels" />
+                <span>显示数值标签</span>
+              </label>
+              <label class="check-item penetration-checkbox">
+                <input type="checkbox" v-model="penetrationShowAvgLabel" />
+                <span>均值标注</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="penetration-summary-grid">
+            <div class="penetration-summary-card">
+              <div class="card-caption">最新周期值 ({{ formatCycleShortLabel(penetrationMetricSummary.latestCycle) }})</div>
+              <div class="card-val">{{ penetrationMetricSummary.latestValStr }}</div>
+              <div class="card-extra">{{ selectedPenetrationItem }} · {{ penetrationMetricSummary.targetCompany }}</div>
+            </div>
+            <div class="penetration-summary-card">
+              <div class="card-caption">基准起始值 ({{ formatCycleShortLabel(penetrationMetricSummary.earliestCycle) }})</div>
+              <div class="card-val">{{ penetrationMetricSummary.earliestValStr }}</div>
+              <div class="card-extra">穿透最远完整周期</div>
+            </div>
+            <div class="penetration-summary-card">
+              <div class="card-caption">全周期总变动 (最新较基准)</div>
+              <div class="card-val" :class="deltaClass(penetrationMetricSummary.totalChangeRate)">
+                {{ penetrationMetricSummary.totalDiffStr }}
+              </div>
+              <div class="card-extra" :class="deltaClass(penetrationMetricSummary.totalChangeRate)">
+                幅变率: {{ formatRate(penetrationMetricSummary.totalChangeRate) }}
+              </div>
+            </div>
+            <div class="penetration-summary-card">
+              <div class="card-caption">历史极值周期</div>
+              <div class="card-val-small">
+                最高: <span>{{ penetrationMetricSummary.maxValStr }}</span> ({{ formatCycleShortLabel(penetrationMetricSummary.maxCycle) }})
+              </div>
+              <div class="card-val-small">
+                最低: <span>{{ penetrationMetricSummary.minValStr }}</span> ({{ formatCycleShortLabel(penetrationMetricSummary.minCycle) }})
+              </div>
+            </div>
+          </div>
+
+          <div class="penetration-chart-container">
+            <div ref="penetrationChartRef" class="penetration-echarts-box"></div>
+          </div>
+
+          <div class="table-wrap penetration-table-wrap">
+            <table class="data-table penetration-table">
+              <thead>
+                <tr>
+                  <th>口径</th>
+                  <th>指标</th>
+                  <th>单位</th>
+                  <th v-for="cycle in penetrationCycles" :key="`th-${cycle}`">
+                    {{ formatResultMonth(cycle) }}
+                  </th>
+                  <th>近一期变动</th>
+                  <th>全期总变动率</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="compRow in penetrationTableRows" :key="`pt-row-${compRow.company}`">
+                  <td>{{ compRow.company }}</td>
+                  <td>{{ selectedPenetrationItem }}</td>
+                  <td>{{ currentPenetrationUnit }}</td>
+                  <td v-for="cycle in penetrationCycles" :key="`pt-val-${compRow.company}-${cycle}`">
+                    {{ compRow.valuesByCycle[cycle] == null ? '—' : formatValue(compRow.valuesByCycle[cycle], currentPenetrationUnit, selectedPenetrationItem) }}
+                  </td>
+                  <td :class="deltaClass(compRow.latestChangeRate)">
+                    {{ compRow.latestDiffStr }} ({{ formatRate(compRow.latestChangeRate) }})
+                  </td>
+                  <td :class="deltaClass(compRow.totalChangeRate)">
+                    {{ formatRate(compRow.totalChangeRate) }}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -566,8 +702,9 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import * as XLSX from 'xlsx'
+import * as echarts from 'echarts'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import AiAgentSettingsDialog from '../../daily_report_25_26/components/AiAgentSettingsDialog.vue'
 import AiChatWorkspace from '../../daily_report_25_26/components/AiChatWorkspace.vue'
@@ -638,6 +775,7 @@ const filters = reactive({
   aggregateCompanies: false,
   aggregateMonths: false,
   useApril5ForCurrent: false,
+  penetrateHistory: false,
   zeroFilterMode: 'off',
 })
 const layerOptions = [
@@ -1358,7 +1496,7 @@ function listSelectedMonthTags() {
 }
 
 function resolveMissingBusinessMonthTags() {
-  if (filters.aggregateMonths) return []
+  if (filters.aggregateMonths || filters.penetrateHistory) return []
   const expectedTags = listSelectedMonthTags()
   if (!expectedTags.length) return []
   const existingTags = new Set()
@@ -1375,6 +1513,10 @@ function resolveMissingBusinessMonthTags() {
 function formatResultMonth(dateText) {
   const text = String(dateText || '').trim()
   if (!text) return '—'
+  const rangeMatch = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?\s*~\s*(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (rangeMatch) {
+    return `${rangeMatch[1]}年${Number(rangeMatch[2])}月 ~ ${rangeMatch[3]}年${Number(rangeMatch[4])}月`
+  }
   const matched = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
   if (!matched) return text
   return `${matched[1]}年${Number(matched[2])}月`
@@ -1429,15 +1571,16 @@ function resolveExportMonthTag() {
   const fromDate = String(filters.dateMonthFrom || '').trim()
   const toDate = String(filters.dateMonthTo || '').trim()
   const monthRe = /^(\d{4})-(\d{2})$/
+  const suffix = filters.penetrateHistory ? '_向前穿透' : ''
 
   if (monthRe.test(fromDate) && monthRe.test(toDate) && fromDate !== toDate) {
-    return `${fromDate}_~_${toDate}`
+    return `${fromDate}_~_${toDate}${suffix}`
   }
   if (monthRe.test(fromDate) && (!toDate || fromDate === toDate)) {
-    return fromDate
+    return `${fromDate}${suffix}`
   }
   if (!fromDate && monthRe.test(toDate)) {
-    return toDate
+    return `${toDate}${suffix}`
   }
 
   const windowLabel = String(comparisonMeta.currentWindowLabel || '').trim()
@@ -1822,9 +1965,10 @@ function buildPayload() {
     aggregate_companies: Boolean(filters.aggregateCompanies),
     aggregate_months: Boolean(filters.aggregateMonths),
     use_april_5_for_current: Boolean(filters.useApril5ForCurrent),
+    penetrate_history: Boolean(filters.penetrateHistory),
     exclude_zero_values: filters.zeroFilterMode !== 'off',
     exclude_zero_mode: filters.zeroFilterMode === 'off' ? 'row' : filters.zeroFilterMode,
-    limit,
+    limit: filters.penetrateHistory ? 1000 : limit,
     offset: offset.value,
   }
 }
@@ -2208,7 +2352,13 @@ async function resetFilters() {
   filters.aggregateCompanies = false
   filters.aggregateMonths = false
   filters.useApril5ForCurrent = false
+  filters.penetrateHistory = false
   filters.zeroFilterMode = 'off'
+  selectedPenetrationItem.value = ''
+  selectedPenetrationCompany.value = 'all'
+  if (penetrationChartInstance) {
+    penetrationChartInstance.clear()
+  }
   hasSearched.value = false
   rows.value = []
   total.value = 0
@@ -2235,6 +2385,548 @@ async function resetFilters() {
   errorMessage.value = ''
 }
 
+// --- 向前穿透历史可视化状态与逻辑 ---
+const selectedPenetrationItem = ref('')
+const selectedPenetrationCompany = ref('all')
+const penetrationChartType = ref('line')
+const penetrationShowLabels = ref(true)
+const penetrationShowAvgLabel = ref(true)
+const penetrationChartRef = ref(null)
+let penetrationChartInstance = null
+
+function parseCycleSortKey(cycleStr) {
+  const text = String(cycleStr || '').trim()
+  const rangeMatch = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?\s*~/)
+  if (rangeMatch) {
+    return `${rangeMatch[1]}-${rangeMatch[2]}`
+  }
+  const singleMatch = text.match(/^(\d{4})-(\d{2})/)
+  if (singleMatch) {
+    return `${singleMatch[1]}-${singleMatch[2]}`
+  }
+  return text
+}
+
+function formatCycleShortLabel(cycleStr) {
+  const text = String(cycleStr || '').trim()
+  if (!text) return '—'
+  const rangeMatch = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?\s*~\s*(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (rangeMatch) {
+    return `${rangeMatch[1].slice(2)}-${rangeMatch[3].slice(2)}期`
+  }
+  const singleMatch = text.match(/^(\d{4})-(\d{2})/)
+  if (singleMatch) {
+    return `${singleMatch[1].slice(2)}年${singleMatch[2]}月`
+  }
+  return text
+}
+
+function formatCycleXAxisLabel(cycleStr) {
+  const text = String(cycleStr || '').trim()
+  if (!text) return ''
+  const rangeMatch = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?\s*~\s*(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (rangeMatch) {
+    const y1 = rangeMatch[1]
+    const m1 = Number(rangeMatch[2])
+    const y2 = rangeMatch[3]
+    const m2 = Number(rangeMatch[4])
+    const seasonLabel = `${y1}-${y2}供暖期`
+    const periodLabel = `${y1}.${String(m1).padStart(2, '0')} ~ ${y2}.${String(m2).padStart(2, '0')}`
+    return `${seasonLabel}\n${periodLabel}`
+  }
+  const singleMatch = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (singleMatch) {
+    return `${singleMatch[1]}年${Number(singleMatch[2])}月`
+  }
+  return text
+}
+
+const availablePenetrationItems = computed(() => {
+  if (!filters.penetrateHistory || !rows.value.length) return []
+  const itemSet = new Set()
+  const list = []
+  const filterItemOrder = new Map(filters.items.map((it, idx) => [it, idx]))
+  for (const r of rows.value) {
+    if (r?.item && !itemSet.has(r.item)) {
+      itemSet.add(r.item)
+      list.push(r.item)
+    }
+  }
+  list.sort((a, b) => {
+    const oa = filterItemOrder.has(a) ? filterItemOrder.get(a) : 999
+    const ob = filterItemOrder.has(b) ? filterItemOrder.get(b) : 999
+    return oa - ob
+  })
+  return list
+})
+
+const availablePenetrationCompanies = computed(() => {
+  if (!filters.penetrateHistory || !rows.value.length) return []
+  const compSet = new Set()
+  const list = []
+  const filterCompOrder = new Map(filters.companies.map((c, idx) => [c, idx]))
+  for (const r of rows.value) {
+    if (r?.company && !compSet.has(r.company)) {
+      compSet.add(r.company)
+      list.push(r.company)
+    }
+  }
+  list.sort((a, b) => {
+    const oa = filterCompOrder.has(a) ? filterCompOrder.get(a) : 999
+    const ob = filterCompOrder.has(b) ? filterCompOrder.get(b) : 999
+    return oa - ob
+  })
+  return list
+})
+
+const currentPenetrationUnit = computed(() => {
+  const target = rows.value.find((r) => r?.item === selectedPenetrationItem.value && r?.unit)
+  return target?.unit || ''
+})
+
+const penetrationCycles = computed(() => {
+  if (!filters.penetrateHistory || !rows.value.length) return []
+  const dateSet = new Set()
+  for (const r of rows.value) {
+    const d = String(r?.date || r?.report_month || '').trim()
+    if (d) dateSet.add(d)
+  }
+  const cycles = Array.from(dateSet)
+  cycles.sort((a, b) => parseCycleSortKey(a).localeCompare(parseCycleSortKey(b)))
+  return cycles
+})
+
+const penetrationChartData = computed(() => {
+  const hasData = Boolean(
+    filters.penetrateHistory &&
+    rows.value.length &&
+    availablePenetrationItems.value.length &&
+    penetrationCycles.value.length
+  )
+  return { hasData }
+})
+
+watch(
+  availablePenetrationItems,
+  (newItems) => {
+    if (!newItems || !newItems.length) {
+      selectedPenetrationItem.value = ''
+      return
+    }
+    if (!selectedPenetrationItem.value || !newItems.includes(selectedPenetrationItem.value)) {
+      selectedPenetrationItem.value = newItems[0]
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  availablePenetrationCompanies,
+  (newCompanies) => {
+    if (!newCompanies || !newCompanies.length) {
+      selectedPenetrationCompany.value = 'all'
+      return
+    }
+    if (selectedPenetrationCompany.value !== 'all' && !newCompanies.includes(selectedPenetrationCompany.value)) {
+      selectedPenetrationCompany.value = 'all'
+    }
+  },
+  { immediate: true }
+)
+
+const penetrationMetricSummary = computed(() => {
+  const empty = {
+    targetCompany: '—',
+    latestCycle: '',
+    earliestCycle: '',
+    latestVal: null,
+    earliestVal: null,
+    latestValStr: '—',
+    earliestValStr: '—',
+    totalDiffStr: '—',
+    totalChangeRate: null,
+    maxCycle: '',
+    maxValStr: '—',
+    minCycle: '',
+    minValStr: '—',
+  }
+  if (!penetrationChartData.value.hasData || !selectedPenetrationItem.value) return empty
+
+  let targetCompany = selectedPenetrationCompany.value
+  if (targetCompany === 'all') {
+    if (availablePenetrationCompanies.value.includes('全口径')) {
+      targetCompany = '全口径'
+    } else {
+      targetCompany = availablePenetrationCompanies.value[0] || '—'
+    }
+  }
+
+  const unit = currentPenetrationUnit.value
+  const item = selectedPenetrationItem.value
+  const cycleList = penetrationCycles.value
+  if (!cycleList.length) return empty
+
+  const rowMap = new Map()
+  for (const r of rows.value) {
+    if (r?.company === targetCompany && r?.item === item) {
+      const d = String(r?.date || r?.report_month || '').trim()
+      rowMap.set(d, toFiniteOrNull(r.value))
+    }
+  }
+
+  const earliestCycle = cycleList[0]
+  const latestCycle = cycleList[cycleList.length - 1]
+  const earliestVal = rowMap.get(earliestCycle) ?? null
+  const latestVal = rowMap.get(latestCycle) ?? null
+
+  let totalDiffStr = '—'
+  let totalChangeRate = null
+  if (latestVal != null && earliestVal != null) {
+    const diff = latestVal - earliestVal
+    totalDiffStr = formatSignedNumber(diff, item)
+    if (unit && unit !== '%') totalDiffStr += ` ${unit}`
+    totalChangeRate = calcRate(latestVal, earliestVal)
+  }
+
+  let maxCycle = ''
+  let maxVal = -Infinity
+  let minCycle = ''
+  let minVal = Infinity
+
+  for (const c of cycleList) {
+    const val = rowMap.get(c)
+    if (val != null) {
+      if (val > maxVal) {
+        maxVal = val
+        maxCycle = c
+      }
+      if (val < minVal) {
+        minVal = val
+        minCycle = c
+      }
+    }
+  }
+
+  return {
+    targetCompany,
+    latestCycle,
+    earliestCycle,
+    latestVal,
+    earliestVal,
+    latestValStr: latestVal != null ? formatValueWithUnit(latestVal, unit, item) : '—',
+    earliestValStr: earliestVal != null ? formatValueWithUnit(earliestVal, unit, item) : '—',
+    totalDiffStr,
+    totalChangeRate,
+    maxCycle,
+    maxValStr: Number.isFinite(maxVal) ? formatValueWithUnit(maxVal, unit, item) : '—',
+    minCycle,
+    minValStr: Number.isFinite(minVal) ? formatValueWithUnit(minVal, unit, item) : '—',
+  }
+})
+
+const penetrationTableRows = computed(() => {
+  if (!penetrationChartData.value.hasData || !selectedPenetrationItem.value) return []
+  const companies = selectedPenetrationCompany.value === 'all'
+    ? availablePenetrationCompanies.value
+    : [selectedPenetrationCompany.value]
+
+  const item = selectedPenetrationItem.value
+  const unit = currentPenetrationUnit.value
+  const cycles = penetrationCycles.value
+  const earliestCycle = cycles[0]
+  const latestCycle = cycles[cycles.length - 1]
+  const prevCycle = cycles.length > 1 ? cycles[cycles.length - 2] : null
+
+  return companies.map((company) => {
+    const valuesByCycle = {}
+    for (const r of rows.value) {
+      if (r?.company === company && r?.item === item) {
+        const d = String(r?.date || r?.report_month || '').trim()
+        valuesByCycle[d] = toFiniteOrNull(r.value)
+      }
+    }
+
+    const latestVal = valuesByCycle[latestCycle] ?? null
+    const earliestVal = valuesByCycle[earliestCycle] ?? null
+    const prevVal = prevCycle ? (valuesByCycle[prevCycle] ?? null) : null
+
+    let latestDiffStr = '—'
+    let latestChangeRate = null
+    if (latestVal != null && prevVal != null) {
+      const diff = latestVal - prevVal
+      latestDiffStr = formatSignedNumber(diff, item)
+      latestChangeRate = calcRate(latestVal, prevVal)
+    }
+
+    let totalChangeRate = null
+    if (latestVal != null && earliestVal != null) {
+      totalChangeRate = calcRate(latestVal, earliestVal)
+    }
+
+    return {
+      company,
+      valuesByCycle,
+      latestDiffStr,
+      latestChangeRate,
+      totalChangeRate,
+    }
+  })
+})
+
+function renderPenetrationChart() {
+  if (!penetrationChartRef.value) return
+  const containerWidth = penetrationChartRef.value.clientWidth
+  if (containerWidth <= 0) {
+    requestAnimationFrame(() => renderPenetrationChart())
+    return
+  }
+
+  if (!penetrationChartInstance) {
+    penetrationChartInstance = echarts.init(penetrationChartRef.value)
+  }
+
+  if (!penetrationChartData.value.hasData || !selectedPenetrationItem.value) {
+    penetrationChartInstance.clear()
+    return
+  }
+
+  const cycles = penetrationCycles.value
+  const xLabels = cycles.map((c) => formatResultMonth(c))
+  const unit = currentPenetrationUnit.value
+  const item = selectedPenetrationItem.value
+
+  const companiesToRender = selectedPenetrationCompany.value === 'all'
+    ? availablePenetrationCompanies.value
+    : [selectedPenetrationCompany.value]
+
+  const colorPalette = [
+    '#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
+    '#06b6d4', '#f97316', '#6366f1', '#14b8a6', '#84cc16',
+  ]
+
+  const series = companiesToRender.map((company, cIdx) => {
+    const cycleValMap = new Map()
+    for (const r of rows.value) {
+      if (r?.company === company && r?.item === item) {
+        const d = String(r?.date || r?.report_month || '').trim()
+        cycleValMap.set(d, toFiniteOrNull(r.value))
+      }
+    }
+    const dataVals = cycles.map((c) => cycleValMap.get(c) ?? null)
+    const isSingleCompany = companiesToRender.length === 1
+    const seriesColor = colorPalette[cIdx % colorPalette.length]
+
+    const itemConfig = {
+      name: company,
+      type: penetrationChartType.value,
+      smooth: true,
+      data: dataVals,
+      symbolSize: isSingleCompany ? 8 : 6,
+      itemStyle: { color: seriesColor },
+      lineStyle: { width: isSingleCompany ? 3 : 2, color: seriesColor },
+      label: {
+        show: penetrationShowLabels.value,
+        position: 'top',
+        distance: 6,
+        fontSize: 10,
+        color: isSingleCompany ? '#1e293b' : seriesColor,
+        formatter: (p) => {
+          if (p.value == null) return ''
+          return formatValue(p.value, unit, item)
+        },
+      },
+      labelLayout: {
+        hideOverlap: true,
+        moveOverlap: 'shiftY',
+      },
+    }
+
+    if (isSingleCompany) {
+      if (penetrationChartType.value === 'line') {
+        itemConfig.areaStyle = {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(37, 99, 235, 0.28)' },
+            { offset: 1, color: 'rgba(37, 99, 235, 0.02)' },
+          ]),
+        }
+      }
+      itemConfig.markLine = {
+        symbol: ['none', 'none'],
+        lineStyle: { type: 'dashed', color: '#f59e0b', width: 1.5 },
+        label: {
+          show: penetrationShowAvgLabel.value,
+          position: 'end',
+          distance: 8,
+          color: '#b45309',
+          fontSize: 10,
+          fontWeight: 600,
+          formatter: (p) => `均值 ${formatNumber(p.value, valueDecimalDigitsByItem(item))}`,
+        },
+        data: [{ type: 'average', name: '历史均值' }],
+      }
+    }
+
+    return itemConfig
+  })
+
+  // 单口径模式下计算历史均值以强化在标题与Tooltip中呈现
+  let singleAvgValue = null
+  if (companiesToRender.length === 1) {
+    const singleComp = companiesToRender[0]
+    const validVals = []
+    for (const r of rows.value) {
+      if (r?.company === singleComp && r?.item === item) {
+        const num = toFiniteOrNull(r.value)
+        if (num != null) validVals.push(num)
+      }
+    }
+    if (validVals.length) {
+      singleAvgValue = validVals.reduce((acc, v) => acc + v, 0) / validVals.length
+    }
+  }
+
+  const option = {
+    color: colorPalette,
+    title: {
+      text: `${selectedPenetrationItem.value} - 历年/历周期演变趋势`,
+      subtext: (() => {
+        const parts = []
+        if (unit) parts.push(`计量单位: ${unit}`)
+        if (singleAvgValue != null) {
+          parts.push(`历史均值: ${formatValueWithUnit(singleAvgValue, unit, item)}`)
+        }
+        return parts.join('   |   ')
+      })(),
+      left: 12,
+      top: 8,
+      textStyle: { fontSize: 14, fontWeight: 600, color: '#1e293b' },
+      subtextStyle: { fontSize: 11, color: '#64748b' },
+    },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255, 255, 255, 0.98)',
+      borderColor: '#cbd5e1',
+      borderWidth: 1,
+      padding: [8, 12],
+      extraCssText: 'box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1); border-radius: 8px;',
+      textStyle: { color: '#0f172a', fontSize: 12 },
+      formatter: (params) => {
+        if (!Array.isArray(params) || !params.length) return ''
+        const dataIdx = params[0].dataIndex
+        const cycleText = formatResultMonth(cycles[dataIdx])
+        let html = `<div style="font-weight:600;font-size:13px;margin-bottom:6px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;">${cycleText}</div>`
+        html += `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">指标：${item} ${unit ? `(${unit})` : ''}</div>`
+        params.forEach((param) => {
+          const val = param.value
+          const valFormatted = val == null ? 'NULL' : formatValue(val, unit, item)
+          html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin:4px 0;">`
+          html += `<span>${param.marker} ${param.seriesName}:</span>`
+          html += `<span style="font-weight:600;color:#0f172a;">${valFormatted} ${unit || ''}</span>`
+          html += `</div>`
+        })
+        if (singleAvgValue != null) {
+          html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:6px;padding-top:4px;border-top:1px dashed #e2e8f0;color:#b45309;font-size:11px;">`
+          html += `<span>--- 历史均值参考:</span>`
+          html += `<span style="font-weight:600;">${formatValue(singleAvgValue, unit, item)} ${unit || ''}</span>`
+          html += `</div>`
+        }
+        return html
+      },
+    },
+    legend: {
+      show: companiesToRender.length > 1,
+      top: 10,
+      right: 14,
+      type: 'scroll',
+      maxWidth: '52%',
+      textStyle: { fontSize: 12, color: '#475569' },
+    },
+    grid: {
+      top: 65,
+      left: 16,
+      right: penetrationShowAvgLabel.value ? 76 : 36,
+      bottom: 48,
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      data: cycles,
+      boundaryGap: penetrationChartType.value === 'bar',
+      axisLine: { lineStyle: { color: '#cbd5e1' } },
+      axisTick: { alignWithLabel: true },
+      axisLabel: {
+        color: '#334155',
+        fontSize: 11,
+        lineHeight: 16,
+        interval: 0,
+        hideOverlap: true,
+        formatter: (val) => formatCycleXAxisLabel(val),
+      },
+    },
+    yAxis: {
+      type: 'value',
+      scale: true,
+      min: (val) => {
+        if (val.min == null || !Number.isFinite(val.min)) return 0
+        const delta = val.max - val.min
+        if (delta <= 1e-6) {
+          return Number((val.min * 0.95).toFixed(4))
+        }
+        const pad = delta * 0.15
+        const lower = val.min - pad
+        return val.min >= 0 ? Math.max(0, Number(lower.toFixed(4))) : Number(lower.toFixed(4))
+      },
+      max: (val) => {
+        if (val.max == null || !Number.isFinite(val.max)) return 100
+        const delta = val.max - val.min
+        if (delta <= 1e-6) {
+          return Number((val.max * 1.05).toFixed(4))
+        }
+        const pad = delta * 0.18
+        return Number((val.max + pad).toFixed(4))
+      },
+      name: unit ? `(${unit})` : '',
+      nameTextStyle: { color: '#64748b', fontSize: 11, align: 'right', padding: [0, 6, 0, 0] },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } },
+      axisLabel: {
+        color: '#475569',
+        fontSize: 11,
+        formatter: (val) => formatNumber(val, valueDecimalDigitsByItem(item)),
+      },
+    },
+    series,
+  }
+
+  penetrationChartInstance.setOption(option, true)
+}
+
+function handlePenetrationResize() {
+  if (penetrationChartInstance) {
+    penetrationChartInstance.resize()
+  }
+}
+
+watch(
+  [
+    () => filters.penetrateHistory,
+    selectedPenetrationItem,
+    selectedPenetrationCompany,
+    penetrationChartType,
+    penetrationShowLabels,
+    penetrationShowAvgLabel,
+    () => rows.value,
+  ],
+  () => {
+    if (!filters.penetrateHistory) return
+    nextTick(() => {
+      renderPenetrationChart()
+    })
+  },
+  { deep: true }
+)
+
 async function prevPage() {
   if (offset.value <= 0) return
   offset.value = Math.max(0, offset.value - limit)
@@ -2248,6 +2940,7 @@ async function nextPage() {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', handlePenetrationResize)
   loading.value = true
   errorMessage.value = ''
   try {
@@ -2286,6 +2979,11 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopAiReportPolling()
+  window.removeEventListener('resize', handlePenetrationResize)
+  if (penetrationChartInstance) {
+    penetrationChartInstance.dispose()
+    penetrationChartInstance = null
+  }
 })
 </script>
 
@@ -2505,6 +3203,11 @@ onBeforeUnmount(() => {
   min-height: 22px;
   align-items: center;
   white-space: nowrap;
+}
+
+.aggregate-item.disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
 }
 
 .zero-filter-option span {
@@ -3453,6 +4156,196 @@ onBeforeUnmount(() => {
 
   .inline-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+/* --- 向前穿透历史分析与图表样式 --- */
+.penetration-analysis-section {
+  margin-top: 24px;
+  padding: 20px;
+  background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 120px);
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+}
+
+.penetration-head {
+  margin-bottom: 16px;
+}
+
+.penetration-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.penetration-main-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.penetration-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid #bfdbfe;
+}
+
+.penetration-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.penetration-control-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.penetration-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.penetration-select {
+  padding: 6px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.penetration-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.penetration-checkbox-group {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.penetration-checkbox {
+  font-size: 13px;
+  color: #475569;
+}
+
+.penetration-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.penetration-summary-card {
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.penetration-summary-card .card-caption {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.penetration-summary-card .card-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.penetration-summary-card .card-val-small {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.penetration-summary-card .card-val-small span {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.penetration-summary-card .card-extra {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.penetration-chart-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin-bottom: 16px;
+}
+
+.penetration-echarts-box {
+  width: 100%;
+  height: 400px;
+}
+
+.penetration-table-wrap {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.penetration-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+}
+
+@media (max-width: 900px) {
+  .penetration-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .penetration-toolbar {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .penetration-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .penetration-checkbox {
+    margin-left: 0;
   }
 }
 </style>

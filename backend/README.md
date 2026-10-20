@@ -1,3 +1,215 @@
+## 2026-10-20 insulation_pipe_supply_2026 仲裁员权限分流：会审享终局裁决权，小组会仅享受邀表决权 (Arbitrator Authority Split: Joint Review vs Group Meeting)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与测试**：
+    - [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+    - [`test_joint_review_postgres.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py)；
+  - **权能分流定位与接口强拦截**：
+    1. **权限计算分流 (`list_joint_reviews`)**：
+       - **多方联合会审（`joint_review`）**：特许仲裁员（王玮、李绍、张亮等）及系统超级管理员享有最高一锤定音裁决权（`can_arbitrate: True`），支持在各方异议争议时终局裁决；
+       - **小组会议（`group_meeting`）**：遵循“一人一票、协商一致，异议即失败”原则，特许仲裁员受邀参会时定位为协同核验成员，**仅享有普通表决权**（`can_i_vote: True`），**严禁行使终局仲裁权**（`can_arbitrate: False`），会审大厅前端自动隐藏“⚖️ 终局裁决”按钮；
+    2. **端点强拦截防线 (`admin_arbitrate_joint_review`)**：
+       - 服务层加入严格业务类型防线，若非超管的特许仲裁人员尝试对小组会议执行强制裁决，接口直接拦截并抛出 403 异常（`小组会议不设特许仲裁权，仲裁人员仅享有受邀参会表决权，无权进行终局裁决`）；
+    3. **决议归档文本空值保护**：
+       - 在 `vote_joint_review` 中处理成员 `conf_names` 拼接决议时，增加安全类型转换与 username 回退，杜绝受邀成员入参异常时引发 `TypeError`；
+    4. **自动化测试扩充**：
+       - 新增测试用例 `test_arbitrator_rights_split_between_joint_review_and_group_meeting`，验证双重权限分流与拦截机制，全量 15 项独立测试 100% 通过。
+
+## 2026-10-20 insulation_pipe_supply_2026 小组会议受邀人员范围收敛与强校验 (Group Meeting Candidate Range Restriction)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与测试**：
+    - [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+    - [`test_joint_review_postgres.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py)；
+  - **受邀范围精准收敛**：
+    - `get_order_meeting_candidates` 彻底移除现场主管（`site_manager`）与责任库管员（`warehouse_keeper`）候选人，严格收敛为：
+      1. **供给方人员**：关联发货单对应的供货厂家（如 `kaiyuan` 等）；
+      2. **Global_admin**：系统超级管理员（`ww870411`）；
+      3. **仲裁人员**：特许仲裁员白名单账号（如 `王玮`, `李绍`, `张亮` 等）；
+    - `create_joint_review` 增设受邀身份强校验防线，任何非上述三类人员的提交请求直接拦截并抛出 422 异常；
+    - 自动化测试用例扩充至 14 项（新增 `test_group_meeting_candidate_range_and_invitation_restriction`），100% 通过。
+
+## 2026-10-20 insulation_pipe_supply_2026 协同模式名称规范化与终验测试加固 (Review Mode Terminology Normalization & Final Verification)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API**：
+    - [`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)；
+    - [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+    - [`test_joint_review_postgres.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py)；
+  - **术语规范与上线前终验**：
+    - 接口与服务层术语统一由“现场协同小组会”更名为“小组会议”，由“全员联合会审”更名为“多方联合会审”；
+    - 决议文案与系统消息通知标准化：更新办结决议文本为 `【小组会议商一致更正】` 与 `【小组会议未达成共识·协商失败】`；消息中心标题更新为 `🤝【小组会议】`、`🎉【小组会议核准通过】`、`❌【小组会议协商失败】`；
+    - 扩充全链路自动化测试 `test_group_meeting_full_consensus_and_voter_clean_name`，覆盖权限校验（403）、签署人姓名标段代码过滤、订单数据原子修正、状态自动恢复及决议归档，全量 13 项独立 PostgreSQL 测试全数通过。
+
+## 2026-10-20 insulation_pipe_supply_2026 经办签署人姓名口径纠偏与排版越界防护 (Voter Name Correction & Overflow Prevention)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API**：
+    - [`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)；
+    - [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **签署人姓名口径归一化与防御洗涤**：
+    - 针对 `api/joint_review.py` 中 `handle_vote_joint_review`、`handle_list_joint_reviews` 和 `handle_get_review_notifications`，将原本错误引用的 `session.unit`（多标段管理人员账户中该字段为逗号拼接的长串标段代码）彻底更正为真实登录账号 `session.username`；
+    - 在服务层 `vote_joint_review` 与 `list_joint_reviews` 中建立针对 `voter_name` 的防御性过滤：若姓名包含逗号 `,` 或 `lot_` 标段特征字符串，自动降级回退取 `voter_username`，绝不将分管标段代码误存/误返为签署人姓名；
+    - 对既有数据库中历史记录执行清洗更新，将此前写入长串标段代码的投票签署人还原为正确的用户账号（如 `王玮`）。
+
+## 2026-10-20 insulation_pipe_supply_2026 提请人账号规范化与历史标段名称修正 (Initiator Identity Account Normalization)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API**：
+    - [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+    - [`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)；
+  - **提请人归一化改造**：
+    - 移除 `api/joint_review.py` 中取 `session.unit` 赋给操作人名称的错误逻辑，统一为 `session.username`；
+    - 在服务层 `create_joint_review` 与 `list_joint_reviews` 中强制优先读取真实登录用户名 `initiator_username`，杜绝出现以标段代号（如 `low_lot_2`、`一标段`）充当提请人姓名的现象；
+    - 对既有数据库中历史写入的非账号提请人字段执行自动洗涤更新。
+
+## 2026-10-20 insulation_pipe_supply_2026 会审列表全状态 is_grp_meeting 作用域修复 (Review List Scope Fix)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **修复细节**：
+    - 针对 `list_joint_reviews` 函数，将 `is_grp_meeting` 布尔判定提升至单据遍历顶部全局作用域；
+    - 彻底杜绝在已通过（`approved`）、已驳回/协商失败（`rejected`）以及已撤销（`cancelled`）历史办结状态下因未进入 `voting` 分支引发的 `UnboundLocalError`，保障分页与多维筛选高可用。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会非当事人隐私隔离与明细脱敏 (Group Review Privacy Isolation & Masking)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API**：
+    - [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+    - [`joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)；
+  - **当事人识别机制 (`_is_party_of_group_meeting`)**：
+    - 针对现场协同小组会（`group_meeting`），以“发起人”与“受邀参会成员”作为当事人判定口径；
+    - 允许发起人、受邀人与系统 `Global_admin` / `dev_admin` 查阅完整修正数值、快照、照片附件及具体会商意见；
+  - **数据级脱敏规范 (`list_joint_reviews` / `get_joint_review_detail`)**：
+    - 非当事人员仅可获知基本条目元数据（单号、标段、供货厂家、会审类型、流转状态、提请人及时间）；
+    - 敏感修正数据（`proposed_patch`、`original_snapshot`）、现场事由、决议摘要、凭据照片及发言意见自动执行数据级遮蔽与清空，并剥离任何操作权限（`can_i_vote=False`, `can_cancel=False`, `can_arbitrate=False`）。
+
+## 2026-10-20 insulation_pipe_supply_2026 会审增量表字段生产迁移与启动自动同步加固 (Review Schema Migration & Startup Auto-Sync)
+
+- **服务改造与接口演化说明**：
+  - **核心路由与服务**：
+    - [`main.py`](file:///D:/编程项目/phoenix/backend/main.py)；
+    - [`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **缺陷根因与修复点**：
+    - 生产数据库缺少 `review_type` 与 `invited_users` 字段导致创建与查询报错；
+    - 在运行中数据库 `tube.tube_order_reviews` 实装补齐字段并建立索引；
+    - 在 `ensure_joint_review_tables` 中支持 `force=True` 强制执行模式；
+    - 在 FastAPI 应用入口 `main.py` 的 `@app.on_event("startup")` 中接入显式初始化，确保任意部署或重启环境下数据库结构百分之百与代码版本对齐。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会异议敏捷闭环与订单自动恢复 (Group Meeting Rejection Reversion & Failed Negotiation)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **自动化测试**：[`test_joint_review_postgres.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/tests/test_joint_review_postgres.py)；
+  - **表决异议敏捷闭环 (`vote_joint_review`)**：
+    - 在小组成员投反对票（`reject`）导致 `len(rejected_list) > 0` 且 `is_grp_meeting` 时，不再让单据长时间停留在 `voting` 挂起状态；
+    - 立即调用 `_revert_review_order_status` 将业务订单从 `under_review` 还原回发起前流转状态（`pre_status`，如待到货、待接收、待入库等）；
+    - 会审记录置为终结办结态 `review_status = 'rejected'`，写入决议文本 `【现场协同小组会未达成共识·协商失败】...`；
+    - 自动向发起人发送 `❌【现场小组会协商失败】` 系统消息，审计类型记录为 `GROUP_MEETING_REJECTED`；
+    - 接口返回 `status_display = '协商失败'`，`is_finalized = True`。
+  - **候选受邀实体入参兼容优化 (`create_joint_review`)**：
+    - 兼容 `invited_users` 为字典数组或纯 `username` 字符串数组，确保微服务各调用场景下的高鲁棒性。
+
+## 2026-10-20 insulation_pipe_supply_2026 库管发货记录接口需求主体过滤缺陷修复 (Warehouse Deliveries Section1 Filter Fix)
+
+- **服务改造与接口演化说明**：
+  - **核心路由**：[`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)（`GET /warehouse-management/deliveries`）；
+  - **缺陷根因与修复点**：
+    - 此前接口虽然在接收到 `section_1_id` 参数后生成了多选集合 `selected_section_1s`，但在 `filtered_rows` 过滤循环中漏掉了对 `selected_section_1s` 的有效性校验；
+    - 本轮在遍历逻辑中正式追加 `if selected_section_1s and sec_id not in selected_section_1s: continue`，使库管员工作台在根据需求主体（标段）执行单选或多选过滤时完全正常生效。
+
+## 2026-10-20 insulation_pipe_supply_2026 协同小组会受邀核验与消息直达验证 (Verified Group Review Invitations & Direct Messaging)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **派发与待办链路验证**：
+    - 针对受邀人（如 `王玮`）发起的小组会通知派发，已验证 `logs.system_messages` 会精确写入收件人 `receiver_username = 王玮`；
+    - 在未办结期间，`get_pending_review_notifications` 经 `_is_user_invited_to_group_meeting` 100% 准确匹对 `session_username == 王玮` 并下发待办；办结（如投票 approve 完成）后状态更新，待办计数动态归零。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会受邀候选人与通知核验全面基于登录账号重构 (Account-Based Group Review Candidates & Notifications)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **供货厂家受邀候选人绑定系统登录账号 (`get_order_meeting_candidates`)**：
+    - 移除历史联系人名册（`supply_entity_contacts`）遍历逻辑与 `contact_name` 取词；
+    - 供货方候选人直接绑定系统登录账号（`username`），大连开元统一展示为 `kaiyuan (大连开元热力管道股份有限公司)`，候选人对象 `username` 锁定为 `kaiyuan`，杜绝出现未注册登录账号的“薛向新”、“宋波”等人名；
+  - **受邀核验机制与消息直投**：
+    - 在 `_is_user_invited_to_group_meeting` 中基于登录用户名 `session_username` 与受邀实体 `username` 执行严格等值核验；
+    - 系统消息中心发送受邀通知时，直接将通知派发至受邀账号的 `receiver_username`（如 `kaiyuan`），确保厂家、现场主管与管理员登录各自账号时精确收到通知与待办；
+    - 修复常规会审 `_check_user_can_vote_entity` 中对空姓名字符串执行 `startswith("")` 导致的非受邀人员误匹配漏洞。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会受邀候选人纳入 ww870411 (Include ww870411 in Review Candidates)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **配置文件更新**：[`tube_config.json`](file:///D:/编程项目/phoenix/backend_data/projects/insulation_pipe_supply_2026/tube_config.json)；
+  - **受邀候选人与仲裁名单扩充**：
+    - 在 `tube_config.json` 的 `arbitration_config.arbitrator_accounts` 以及 `DEFAULT_ARBITRATOR_ACCOUNTS` 常量中追加 `"ww870411"`；
+    - 在 `get_order_meeting_candidates` 的监督裁决环节中将 `ww870411` 账号置顶呈现为 `ww870411 (集团超管/仲裁)`，方便各标段各节点经办人主动勾选邀请；
+    - 在 `_is_user_invited_to_group_meeting` 中支持 `ww870411` 与“王玮”的映射识别，受邀后准确派发待办与通知。
+
+## 2026-10-20 insulation_pipe_supply_2026 小组会定向通知受邀人精准匹配与候选人剔除施工方 (Strict Group Notification & Exclude Construction Units)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **受邀身份精准匹配与超管权限脱钩 (`_is_user_invited_to_group_meeting`)**：
+    - 重构通知与待办判定逻辑：小组会议模式下，严格仅当当前登录用户的用户名、entity_id 或姓名被明确包含在受邀名单（`required_entities`）中时才判定为需要表决；
+    - 移除了 `Global_admin` / `dev_admin` 在 `_check_user_can_vote_entity` 中的无条件匹配，彻底解决管理员即便未受邀也会收到全网小组会弹窗打扰与待办催办的严重缺陷；
+  - **候选人选单去除施工单位 (`get_order_meeting_candidates`)**：
+    - 依据最新业务规则，移除施工单位在小组会中的候选人提取与展示，仅保留供货厂家、标段现场主管、责任库管员以及特许裁决员四大环节。
+
+## 2026-10-20 insulation_pipe_supply_2026 协同更正决议摘要生成与 patch_summary_str 命名空间修复 (Consensus Summary String Resolution & Def Fix)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **修复决议摘要变量未定义异常**：在 `vote_joint_review` 以及 `force_arbitrate_joint_review` 中补齐 `patch_summary_str` 格式化解析逻辑；
+  - **更正项多品类细化聚合**：解析拟修改补丁（`proposed_patch`），结构化提取直管发货数量（米）、直管规格型号、送货车牌号及多管件订单项差异，生成结构化摘要字符串，嵌入审计日志与会签决议记录中，杜绝小组成员或会审代表全部同意时触发自动修单崩溃。
+
+## 2026-10-20 insulation_pipe_supply_2026 全状态发货单小组会协商支持与 _extract_normalized_ids 修复 (Arbitrary Status Group Review & Scope Fix)
+
+- **服务改造与接口演化说明**：
+  - **核心服务**：[`joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+  - **修复命名空间异常**：显式引入 `_extract_normalized_ids` 并构建封装函数 `_normalize_ids`，彻底解决拉取候选人时的 `NameError` 崩溃；
+  - **发起校验双轨策略**：
+    - `review_type == "group_meeting"`：允许任意发货单状态（包含已完成归档 `completed` 等全生命周期单据）提请召开小组协同会议；
+    - `review_type == "joint_review"`：严格保持法定会审的初始严谨条件（仅支持流转中未闭环的待到货、待接收、待入库单据发起）；
+  - **全状态候选人推荐算法**：针对已归档单据，系统在 `get_order_meeting_candidates` 中自动将供货商业务代表、现场主管与责任库管员标记为核心推荐人员。
+
+## 2026-10-20 insulation_pipe_supply_2026 现场协同小组会议与全流程节点权限支持 (Group Meeting Service & Cross-Node Initiation)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API**：
+    - [`backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/joint_review_service.py)；
+    - [`backend/projects/insulation_pipe_supply_2026/api/joint_review.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/joint_review.py)；
+  - **数据层动态迁移与字段扩充**：
+    - 在服务初始化时通过 `_ensure_tables()` 自动为 `tube.tube_order_reviews` 补齐字段：
+      - `review_type VARCHAR(32) DEFAULT 'joint_review'`（区分 `joint_review` 与 `group_meeting`）；
+      - `invited_users JSONB DEFAULT '[]'::jsonb`（存储指定受邀协商人列表）；
+      - 创建索引 `idx_tube_order_reviews_type` 加速类型筛选；
+  - **全流程节点发起权限校验与人选探测 (`get_order_meeting_candidates`)**：
+    - 突破单一节点发起限制：针对选定单据，系统校验当前登录人是否属于该单据业务流上的任何节点（供货单位、现场片区负责人、施工单位、库管员，或系统管理员 `Global_admin`/`dev_admin`）；只要持有任一节点的有效操作权限，即可发起会商；
+    - 新增接口 `GET /api/v1/projects/insulation_pipe_supply_2026/joint-reviews/order-candidates`：根据单据上下文动态解析关联的 5 类主体人员列表，附带用户名、姓名、角色、电话及推荐标记；
+  - **轻量化定向表决与敏捷合入 (`create_joint_review`, `vote_joint_review`)**：
+    - 创建单据时，若 `review_type == "group_meeting"`，将发起人选定的受邀人员名单（自动剔除发起人自身）转换为动态受邀表决实体（`entity_type="invited_user"`）；
+    - 投票鉴权时，`_check_user_can_vote_entity` 支持按照 `username`、`display_name` 及主体 ID 精准匹对受邀人投票权；
+    - 小组成员全员达成共识（100% 同意）后，即刻自动将修正补丁合并入主单并流转解锁，在单据中写入决议记录，消息中心定向推送通知。
+
+## 2026-10-19 monthly_data_show 月报查询接口“向前穿透”历史周期回溯服务 (Monthly Data Show Historical Penetration Service)
+
+- **服务改造与接口演化说明**：
+  - **接口入参模型扩展 ([workspace.py](file:///D:/编程项目/phoenix/backend/projects/monthly_data_show/api/workspace.py))**：
+    - 在 `QueryRequest` 中新增 `penetrate_history: bool = False` 开关字段；
+  - **历史完整周期探测算法 (`_resolve_penetration_cycles`)**：
+    - 读取底层月报数据（`period='month'` 且 `type='real'`）实际存在的自然月份集合；
+    - 基于用户选定的起止月份跨度，以年为单位逐年向前探测相同月份序列（例如 10月~次年4月），确保每个历史周期中的所有月份在数据库中均完整存在；
+    - 一旦探测到某一历史年份出现数据缺失（例如 2021 年缺失 10 月），立即在最早的完整周期处安全截断，杜绝残缺数据影响统计；
+  - **多周期隔离聚合与计算指标公式求解 (`_fetch_cycle_query_rows`)**：
+    - 支持多月时间段按周期自动进行聚合（状态量取期末最新、累计量求和），单月查询则保持单月统计；
+    - 针对计算指标（如供暖热耗率），根据各个历史周期的实际日历天数（`day_count`）以及该周期的基础指标聚合值，动态完成两轮收敛公式计算；
+    - 统一将各周期的输出结果映射为标准周期标签（如 `2025-10 ~ 2026-04` 或单月日期 `2026-03-01`）；
+  - **排序与数据输出流优化 (`_merge_and_sort_rows`)**：
+    - 升级 `_parse_sort_date`，原生兼容区间型时间字符串的时间序提取，支持无论是否在排序列显式包含 `time` 均能稳定按时间降序（最新周期优先）或升序呈现。
+
 ## 2026-10-19 daily_report_25_26 项目中文名动态自适应与看板全周期缓存发布泛化 (Dynamic Project Display Name & Generalized Season Cache Preset)
 
 - **服务改造与接口演化说明**：

@@ -602,6 +602,26 @@
                     <td>
                       <div class="action-stack">
                         <button
+                          v-if="row.status === 'under_review'"
+                          type="button"
+                          class="btn ghost btn-sm"
+                          style="color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; padding: 2px 7px; font-size: 11.5px; white-space: nowrap;"
+                          title="查看此单据的多方会审或小组会详情"
+                          @click="goToJointReview(row)"
+                        >
+                          ⚖️ 查看会审
+                        </button>
+                        <button
+                          v-else
+                          type="button"
+                          class="btn ghost btn-sm"
+                          style="color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; padding: 2px 7px; font-size: 11.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
+                          title="发现发货数据错误或需现场协同商定时提请会审/召开小组会"
+                          @click="openJointReviewModal(row, 'pipe')"
+                        >
+                          ⚖️ 提请会审
+                        </button>
+                        <button
                           v-if="['Global_admin', 'tube_supplier_admin'].includes(currentGroup)"
                           type="button"
                           class="btn primary"
@@ -1041,6 +1061,27 @@
                         title="整车统一修改：统一修改本车次的车牌号、接收标段、发货时间与统一发货备注"
                       >
                         ✏️ 整车修改
+                      </button>
+
+                      <button
+                        v-if="group.status === 'under_review' || group.items?.some(i => i.status === 'under_review')"
+                        type="button"
+                        class="btn ghost btn-sm"
+                        style="padding: 3px 8px; font-size: 11.5px; color: #ea580c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+                        title="查看此车次多方会审或小组会表决详情"
+                        @click.stop="goToJointReview(group)"
+                      >
+                        ⚖️ 查看会审
+                      </button>
+                      <button
+                        v-else
+                        type="button"
+                        class="btn ghost btn-sm"
+                        style="padding: 3px 8px; font-size: 11.5px; color: #c2410c; border: 1px solid #fed7aa; background: #fff7ed; cursor: pointer; flex-shrink: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;"
+                        title="发现管件规格或数量有误时提请会审/召开小组会"
+                        @click.stop="openJointReviewModal(group, 'fitting')"
+                      >
+                        ⚖️ 提请会审
                       </button>
 
                       <button
@@ -2936,6 +2977,15 @@
       default-filename="管件发货历史台账"
       @close="showFittingExportModal = false"
     />
+    <!-- ⚖️ 多方联合会审 / 现场协同小组会发起弹窗 -->
+    <InitiateJointReviewModal
+      v-if="jointReviewModalVisible"
+      :visible="jointReviewModalVisible"
+      :order="selectedReviewOrder"
+      @close="jointReviewModalVisible = false"
+      @success="handleJointReviewSuccess"
+    />
+
     <div v-if="showNonStandardModal" class="modal-overlay" @click.self="handleCancelNonStandard">
       <div class="modal-card elevated" style="max-width: 500px; width: 92%; background: #ffffff; border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.2); overflow: hidden;">
         <div class="modal-header" style="padding: 18px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #fffbeb;">
@@ -3114,6 +3164,85 @@ import * as XLSX from 'xlsx-js-style'
 import { useAuthStore } from '../../daily_report_25_26/store/auth'
 import { AppHeader, Breadcrumbs, useTubePageShell, useTubeRealtimeRefresh, getDeliveryStatus, navigateToUserInDirectory } from './shared'
 import ExportSettingsModal from './ExportSettingsModal.vue'
+import InitiateJointReviewModal from '../components/InitiateJointReviewModal.vue'
+
+// ⚖️ 联合会审 / 现场协同小组会
+const jointReviewModalVisible = ref(false)
+const selectedReviewOrder = ref(null)
+
+function openJointReviewModal(rowOrGroup, category = 'pipe') {
+  if (!rowOrGroup) return
+  if (category === 'fitting') {
+    const isGroup = Array.isArray(rowOrGroup.items) && rowOrGroup.items.length > 0
+    const firstItem = isGroup ? rowOrGroup.items[0] : rowOrGroup
+    selectedReviewOrder.value = {
+      order_category: 'fitting',
+      order_id: firstItem.id || firstItem.deliveryId,
+      delivery_id: firstItem.id || firstItem.deliveryId,
+      order_no: isGroup ? (rowOrGroup.shipmentNo || `车次 ${rowOrGroup.shipmentNo}`) : (firstItem.order_no || firstItem.deliveryCode || firstItem.shipment_no),
+      shipment_no: rowOrGroup.shipmentNo || firstItem.shipment_no || firstItem.shipmentNo || '',
+      vehicle_plate_no: rowOrGroup.vehiclePlateNo || firstItem.vehicle_plate_no || firstItem.vehiclePlateNo || '',
+      supply_entity_id: rowOrGroup.supplyEntityId || firstItem.supply_entity_id || firstItem.supplyEntityId || '',
+      supply_entity_name: rowOrGroup.supplyEntityName || firstItem.supply_entity_name || firstItem.supplyEntityName || '',
+      section_1_id: rowOrGroup.section1Id || rowOrGroup.section_1_id || firstItem.section_1_id || firstItem.section1Id || '',
+      section_1_name: rowOrGroup.section1Name || rowOrGroup.section_1_name || firstItem.section_1_name || firstItem.section1Name || '',
+      status: rowOrGroup.status || firstItem.status,
+      shipped_at: rowOrGroup.shippedAt || firstItem.shipped_at || firstItem.shippedAt || '',
+      items: isGroup ? rowOrGroup.items.map(it => ({
+        id: it.id,
+        order_no: it.order_no || '—',
+        fitting_type: it.fitting_type || '',
+        model_spec: it.model_spec || '',
+        shipped_qty: it.shipped_qty,
+        unit: it.unit || '件',
+        status: it.status,
+      })) : [{
+        id: firstItem.id,
+        order_no: firstItem.order_no || '—',
+        fitting_type: firstItem.fitting_type || '',
+        model_spec: firstItem.model_spec || '',
+        shipped_qty: firstItem.shipped_qty,
+        unit: firstItem.unit || '件',
+        status: firstItem.status,
+      }]
+    }
+  } else {
+    selectedReviewOrder.value = {
+      ...rowOrGroup,
+      order_category: 'pipe',
+      order_id: rowOrGroup.id || rowOrGroup.deliveryId,
+      delivery_id: rowOrGroup.id || rowOrGroup.deliveryId,
+      order_no: rowOrGroup.order_no || rowOrGroup.deliveryCode || rowOrGroup.delivery_code,
+      shipment_no: rowOrGroup.shipmentNo || rowOrGroup.shipment_no || '',
+      pipe_model_id: rowOrGroup.pipe_model_id || rowOrGroup.pipeModelId || '',
+      pipe_model_name: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      model_name: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      specification: rowOrGroup.pipe_model_name || rowOrGroup.pipeModelName || '',
+      shipped_qty: rowOrGroup.shipped_qty !== undefined ? rowOrGroup.shipped_qty : rowOrGroup.shippedQty,
+      vehicle_plate_no: rowOrGroup.vehicle_plate_no || rowOrGroup.vehiclePlateNo || rowOrGroup.plateNo || '',
+      supply_entity_name: rowOrGroup.supply_entity_name || rowOrGroup.supplyEntityName || rowOrGroup.supplyName || '',
+      section_1_name: rowOrGroup.section_1_name || rowOrGroup.section1Name || '',
+      status: rowOrGroup.status,
+    }
+  }
+  jointReviewModalVisible.value = true
+}
+
+function handleJointReviewSuccess() {
+  jointReviewModalVisible.value = false
+  setActionMessage('success', '⚖️ 会审/协同会议已成功提请，单据已锁定流转并发送核验提醒！')
+  loadDeliveries()
+  loadFittingDeliveries()
+}
+
+function goToJointReview(rowOrGroup) {
+  if (!rowOrGroup) return
+  const searchKey = rowOrGroup.order_no || rowOrGroup.deliveryCode || rowOrGroup.shipmentNo || rowOrGroup.shipment_no || rowOrGroup.orderNo || ''
+  router.push({
+    path: '/projects/insulation_pipe_supply_2026/pages/joint_review_hall',
+    query: searchKey ? { search: String(searchKey).trim() } : {}
+  })
+}
 import {
   cancelTubeSupplyManagementDelivery,
   createTubeSupplyManagementDeliveryBatch,
