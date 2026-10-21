@@ -1347,29 +1347,29 @@
             <!-- 运输车次号 -->
             <label class="field">
               <span>运输车次号</span>
-              <input v-model.trim="fittingFilters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" @keyup.enter="loadWarehouseFittingDeliveries" />
+              <input v-model.trim="fittingFilters.shipmentNo" class="input" type="text" placeholder="输入车次号筛选" @keyup.enter="handleSearchWarehouseFittings" />
             </label>
 
             <!-- 单号 -->
             <label class="field">
               <span>单号</span>
-              <input v-model.trim="fittingFilters.orderNo" class="input" type="text" placeholder="输入订单号筛选" @keyup.enter="loadWarehouseFittingDeliveries" />
+              <input v-model.trim="fittingFilters.orderNo" class="input" type="text" placeholder="输入订单号筛选" @keyup.enter="handleSearchWarehouseFittings" />
             </label>
 
             <!-- 车牌号 -->
             <label class="field">
               <span>车牌号</span>
-              <input v-model.trim="fittingFilters.vehiclePlateNo" class="input" type="text" placeholder="输入车牌号筛选" @keyup.enter="loadWarehouseFittingDeliveries" />
+              <input v-model.trim="fittingFilters.vehiclePlateNo" class="input" type="text" placeholder="输入车牌号筛选" @keyup.enter="handleSearchWarehouseFittings" />
             </label>
 
             <!-- 综合搜索 -->
             <label class="field">
               <span>综合搜索</span>
-              <input v-model.trim="fittingFilters.searchKeyword" class="input" type="text" placeholder="输入规格/备注等关键字" @keyup.enter="loadWarehouseFittingDeliveries" />
+              <input v-model.trim="fittingFilters.searchKeyword" class="input" type="text" placeholder="输入规格/备注等关键字" @keyup.enter="handleSearchWarehouseFittings" />
             </label>
           </div>
           <div class="filter-actions" style="display: flex; gap: 8px;">
-            <button class="btn primary" type="button" :disabled="fittingLoading" @click="loadWarehouseFittingDeliveries">查询</button>
+            <button class="btn primary" type="button" :disabled="fittingLoading" @click="handleSearchWarehouseFittings">查询</button>
             <button class="btn ghost" type="button" :disabled="fittingLoading" @click="resetFittingFilters">重置</button>
             <button 
               v-if="canExtractXlsx && fittingRows.length > 0" 
@@ -2322,48 +2322,86 @@ const toggleAllFittingGroups = (expandAll = true) => {
   }
 }
 
+// 管件筛选参数表单状态 (界面上用户操作的草稿态)
+const fittingFilters = reactive({
+  section1Ids: [],
+  supplyEntityIds: [],
+  fittingTypes: [],
+  statuses: [],
+  shipmentNo: '',
+  orderNo: '',
+  vehiclePlateNo: '',
+  searchKeyword: '',
+})
+
+// 已生效的管件查询参数状态 (仅在用户显式点击“查询”按钮或回车时同步更新生效)
+const appliedFittingFilters = reactive({
+  section1Ids: [],
+  supplyEntityIds: [],
+  fittingTypes: [],
+  statuses: [],
+  shipmentNo: '',
+  orderNo: '',
+  vehiclePlateNo: '',
+  searchKeyword: '',
+})
+
+const applyFittingFilters = () => {
+  appliedFittingFilters.section1Ids = [...fittingFilters.section1Ids]
+  appliedFittingFilters.supplyEntityIds = [...fittingFilters.supplyEntityIds]
+  appliedFittingFilters.fittingTypes = [...fittingFilters.fittingTypes]
+  appliedFittingFilters.statuses = [...fittingFilters.statuses]
+  appliedFittingFilters.shipmentNo = String(fittingFilters.shipmentNo || '')
+  appliedFittingFilters.orderNo = String(fittingFilters.orderNo || '')
+  appliedFittingFilters.vehiclePlateNo = String(fittingFilters.vehiclePlateNo || '')
+  appliedFittingFilters.searchKeyword = String(fittingFilters.searchKeyword || '')
+}
+
 const filteredFittingRows = computed(() => {
   let list = fittingRows.value.filter(r => r.status !== 'cancelled')
 
-  // 1. 需求主体多选过滤
-  if (fittingFilters.section1Ids.length > 0) {
-    const secSet = new Set(fittingFilters.section1Ids)
-    list = list.filter(r => secSet.has(String(r.section_1_id || '').trim()))
+  // 1. 需求主体多选过滤 (不区分大小写匹配，仅在点击查询后生效)
+  if (appliedFittingFilters.section1Ids.length > 0) {
+    const secSet = new Set(appliedFittingFilters.section1Ids.map(id => String(id || '').trim().toLowerCase()))
+    list = list.filter(r => secSet.has(String(r.section_1_id || '').trim().toLowerCase()))
   }
 
-  // 2. 供给主体多选过滤
-  if (fittingFilters.supplyEntityIds.length > 0) {
-    const supplySet = new Set(fittingFilters.supplyEntityIds)
-    list = list.filter(r => supplySet.has(String(r.supply_entity_id || '').trim()))
+  // 2. 供给主体多选过滤 (不区分大小写与前后空格，兼容数据库大写实体ID与前端小写配置，仅在点击查询后生效)
+  if (appliedFittingFilters.supplyEntityIds.length > 0) {
+    const supplySet = new Set(appliedFittingFilters.supplyEntityIds.map(id => String(id || '').trim().toLowerCase()))
+    list = list.filter(r => supplySet.has(String(r.supply_entity_id || '').trim().toLowerCase()))
   }
 
-  // 3. 管件类别多选过滤
-  if (fittingFilters.fittingTypes.length > 0) {
-    const typeSet = new Set(fittingFilters.fittingTypes)
-    list = list.filter(r => typeSet.has(String(r.fitting_type || r.category || '').trim()))
+  // 3. 管件类别多选过滤 (支持前后包含与模糊容错，仅在点击查询后生效)
+  if (appliedFittingFilters.fittingTypes.length > 0) {
+    const typeList = appliedFittingFilters.fittingTypes.map(t => String(t || '').trim().toLowerCase()).filter(Boolean)
+    list = list.filter(r => {
+      const typeStr = String(r.fitting_type || r.category || '').trim().toLowerCase()
+      return typeList.some(t => typeStr.includes(t) || t.includes(typeStr))
+    })
   }
 
-  // 4. 车次号筛选
-  if (fittingFilters.shipmentNo.trim()) {
-    const sn = fittingFilters.shipmentNo.trim().toUpperCase()
+  // 4. 车次号筛选 (仅在点击查询后生效)
+  if (appliedFittingFilters.shipmentNo.trim()) {
+    const sn = appliedFittingFilters.shipmentNo.trim().toUpperCase()
     list = list.filter(r => String(r.shipment_no || '').toUpperCase().includes(sn))
   }
 
-  // 5. 单号筛选
-  if (fittingFilters.orderNo.trim()) {
-    const on = fittingFilters.orderNo.trim().toUpperCase()
+  // 5. 单号筛选 (仅在点击查询后生效)
+  if (appliedFittingFilters.orderNo.trim()) {
+    const on = appliedFittingFilters.orderNo.trim().toUpperCase()
     list = list.filter(r => String(r.order_no || r.delivery_code || '').toUpperCase().includes(on))
   }
 
-  // 6. 车牌号筛选
-  if (fittingFilters.vehiclePlateNo.trim()) {
-    const vp = fittingFilters.vehiclePlateNo.trim().toUpperCase()
+  // 6. 车牌号筛选 (仅在点击查询后生效)
+  if (appliedFittingFilters.vehiclePlateNo.trim()) {
+    const vp = appliedFittingFilters.vehiclePlateNo.trim().toUpperCase()
     list = list.filter(r => String(r.vehicle_plate_no || '').toUpperCase().includes(vp))
   }
 
-  // 7. 综合关键字搜索（规格型号/备注等）
-  if (fittingFilters.searchKeyword.trim()) {
-    const kw = fittingFilters.searchKeyword.trim().toLowerCase()
+  // 7. 综合关键字搜索（规格型号/备注等，仅在点击查询后生效）
+  if (appliedFittingFilters.searchKeyword.trim()) {
+    const kw = appliedFittingFilters.searchKeyword.trim().toLowerCase()
     list = list.filter(r => {
       return (
         String(r.model_spec || '').toLowerCase().includes(kw) ||
@@ -2376,9 +2414,9 @@ const filteredFittingRows = computed(() => {
     })
   }
 
-  // 8. 筛选栏状态多选
-  if (fittingFilters.statuses.length > 0) {
-    const selected = new Set(fittingFilters.statuses)
+  // 8. 筛选栏状态多选 (仅在点击查询后生效)
+  if (appliedFittingFilters.statuses.length > 0) {
+    const selected = new Set(appliedFittingFilters.statuses)
     list = list.filter(r => {
       const st = r.status || 'shipped'
       const pre = r.pre_review_status || ''
@@ -2542,9 +2580,9 @@ const loadWarehouseFittingDeliveries = async () => {
   fittingLoading.value = true
   try {
     const res = await getFittingDeliveriesList(projectKey, {
-      section1Id: fittingFilters.section1Ids.length ? fittingFilters.section1Ids.join(',') : '',
-      supplyEntityId: fittingFilters.supplyEntityIds.length ? fittingFilters.supplyEntityIds.join(',') : '',
-      searchKeyword: fittingFilters.searchKeyword.trim() || '',
+      section1Id: appliedFittingFilters.section1Ids.length ? appliedFittingFilters.section1Ids.join(',') : '',
+      supplyEntityId: appliedFittingFilters.supplyEntityIds.length ? appliedFittingFilters.supplyEntityIds.join(',') : '',
+      searchKeyword: appliedFittingFilters.searchKeyword.trim() || '',
       exclude_cancelled: true,
       limit: 500,
     })
@@ -2564,8 +2602,18 @@ const loadWarehouseFittingDeliveries = async () => {
   }
 }
 
+// 显式点击“查询”按钮或输入框回车时触发
+const handleSearchWarehouseFittings = async () => {
+  applyFittingFilters()
+  await loadWarehouseFittingDeliveries()
+}
+
 const resetFittingFilters = async () => {
-  fittingFilters.section1Ids = []
+  if (section1Options.value.length === 1) {
+    fittingFilters.section1Ids = [section1Options.value[0].section_1_id]
+  } else {
+    fittingFilters.section1Ids = []
+  }
   fittingFilters.supplyEntityIds = []
   fittingFilters.fittingTypes = []
   fittingFilters.statuses = []
@@ -2574,6 +2622,9 @@ const resetFittingFilters = async () => {
   fittingFilters.vehiclePlateNo = ''
   fittingFilters.searchKeyword = ''
   fittingSubTab.value = 'all'
+
+  // 同步重置生效状态并拉取最新全量
+  applyFittingFilters()
   await loadWarehouseFittingDeliveries()
 }
 
@@ -2783,18 +2834,6 @@ const filters = reactive({
   shipmentNo: '',
   orderNo: '',
   vehiclePlateNo: '',
-})
-
-// 管件筛选参数状态
-const fittingFilters = reactive({
-  section1Ids: [],
-  supplyEntityIds: [],
-  fittingTypes: [],
-  statuses: [],
-  shipmentNo: '',
-  orderNo: '',
-  vehiclePlateNo: '',
-  searchKeyword: '',
 })
 
 // 多选下拉组件状态与控制
@@ -3516,6 +3555,7 @@ async function loadOptions() {
   if (fittingFilters.section1Ids.length === 0 && section1Options.value.length === 1) {
     fittingFilters.section1Ids = [section1Options.value[0].section_1_id]
   }
+  applyFittingFilters()
 }
 
 async function loadAllDeliveries() {
@@ -3655,6 +3695,7 @@ watch(
 )
 
 onMounted(async () => {
+  document.addEventListener('click', handleGlobalClick)
   nowTimer = setInterval(() => {
     nowTick.value = Date.now()
   }, 60000)
@@ -3664,6 +3705,7 @@ onMounted(async () => {
 useTubeRealtimeRefresh(reloadAll)
 
 onBeforeUnmount(() => {
+  document.removeEventListener('click', handleGlobalClick)
   if (nowTimer) {
     clearInterval(nowTimer)
     nowTimer = null

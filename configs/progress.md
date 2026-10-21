@@ -1,4 +1,40 @@
 
+## 2026-10-21 [管件台账筛选交互由即时自动过滤重构为点击查询按钮受控触发]
+- **需求背景与交互模式重塑**：
+  - 用户反馈：“当我点选某项筛选条件时，不等我点击查询按钮，就已经自动筛选记录了，我希望在点击查询按钮后再执行查询操作”；
+  - **交互行为对齐与架构分离**：
+    1. **问题成因**：原先管件计算属性 `filteredFittingRows` 直接监听表单双向绑定状态 `fittingFilters`，导致用户在下拉框勾选/取消、或在输入框打字时，触发 computed 立即重算与过滤，违背了后台管理系统经典的“表单填写 ➔ 点击查询按钮执行生效”交互预期；
+    2. **表单草稿态与生效态解耦**：引入 `appliedFittingFilters` 状态对象与 `applyFittingFilters` 同步方法；
+    3. **受控过滤驱动**：`filteredFittingRows` 改为依据已生效的 `appliedFittingFilters` 执行过滤比对，用户在上方表单修改任何条件时，列表与看板数据保持不动；
+    4. **显式触发刷新**：用户点击【查询】按钮或在输入框按【Enter】时，调用 `handleSearchWarehouseFittings` 同步草稿状态至生效状态并向后端拉取数据；点击【重置】按钮时一键复位并同步执行全量刷新。
+- **改动清单与受影响物理文件**：
+  1. **库管工作台页面 ([WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue))**：
+     - 新增 `appliedFittingFilters` 响应式对象与 `applyFittingFilters` 同步方法；
+     - 重构 `filteredFittingRows`：全量切换为依赖 `appliedFittingFilters.*`，实现无感知草稿编辑；
+     - 新增 `handleSearchWarehouseFittings` 查询触发函数，绑定至“查询”按钮及 4 个文本输入框的 `@keyup.enter`；
+     - 更新 `loadWarehouseFittingDeliveries` 与 `resetFittingFilters`：接口入参与重置生效状态统一与 `appliedFittingFilters` 对齐。
+- **验证结论**：
+  - 前端静态构建全量通过（`vite build` 751 个模块正常编译，耗时 14.21s，0 错误）；
+  - 实操交互核验：点选下拉框与输入文字不再触发页面数据闪烁变动，点击“查询”或回车后精准生效并刷新台账。
+
+## 2026-10-21 [库管端管件台账筛选供给主体大小写不敏感匹配修复与下拉面板交互完善]
+- **需求背景与排障溯源**：
+  - 用户反馈：“在页面 `/projects/insulation_pipe_supply_2026/pages/warehouse_management?tab=fitting` 的筛选中，供给主体选择‘天津卡尔斯阀门有限公司’，下方显示‘当前筛选条件下暂无管件发货记录’，但实际数据库中存在该厂家的管件订单”；
+  - **根本原因剖析**：
+    1. **实体 ID 大小写断层**：数据库 `tube.tube_fitting_delivery` 表中录入的厂家代码为大写字符串（如 `'KAERSI'`，卡尔斯共 57 条发货明细），而前端配置与多选下拉框绑定的 `entity_id` 均取自 `tube_config.json` 的小写字符串（如 `'kaersi'`）；
+    2. **前端内存过滤严格区分大小写**：计算属性 `filteredFittingRows` 采用 `Set.has(r.supply_entity_id)` 进行原生集合查找，导致 `'kaersi'` 无法命中 `'KAERSI'`，将所有匹配记录全部清空；
+    3. **下拉面板事件监听遗漏**：筛选栏中已定义外部点击关闭函数 `handleGlobalClick`，但未在 `onMounted` 中添加 `document.addEventListener('click', handleGlobalClick)`，导致点开下拉框后点击空白区域无法自动收起。
+- **改动清单与受影响物理文件**：
+  1. **库管工作台页面 ([WarehouseManagementView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue))**：
+     - **供给主体过滤不区分大小写**：在 `filteredFittingRows` 中将 `supplyEntityIds` 统一转换为 `toLowerCase()` 后再构建 `Set`，匹配时同时对 `r.supply_entity_id` 转小写比对，彻底打通前后端大小写断层；
+     - **需求主体容错防御**：同理在需求主体过滤中加入 `toLowerCase()` 规范化，杜绝标段 ID 大小写偏差隐患；
+     - **管件类别包含匹配增强**：将原先完全相等匹配升级为双向包含匹配（如类别选项“弯头”可兼容匹配数据中的“预制保温弯头”）；
+     - **全局点击事件监听补齐**：在 `onMounted` 钩子中挂载 `document.addEventListener('click', handleGlobalClick)`，并在 `onBeforeUnmount` 中执行 `removeEventListener`，实现下拉框点选空白处自动收起的平滑体验；
+     - **单标段重置回显保护**：在 `resetFittingFilters` 中优化为：当用户仅具备单标段权限时保留默认标段选中，避免清空后回显为“全部需求主体”。
+- **验证结论**：
+  - 前端生产打包构建全量通过（751 个模块正常编译，0 错误）；
+  - 数据库实机核验：`KAERSI` 厂家 57 条管件记录在前端筛选勾选后能即时、完整呈现。
+
 ## 2026-10-20 [会审大厅指引弹窗升级为双标签结构（新增“小组讨论”说明，规范“联合会审”说明）]
 - **需求背景与指引重塑**：
   - 用户在会审大厅提出需求：“在页面右上方，有一个提请会审流程说明，请将此按钮改为‘提请小组讨论/联合会审说明’，在其中增加标签，当前的联合会审内容作为第二个标签页，第一个标签为‘小组讨论’，仿照‘联合会审’标签页内容，写一个小组讨论的内容说明”；

@@ -1,3 +1,34 @@
+## 2026-10-21 insulation_pipe_supply_2026 库管管件台账筛选交互由即时自动过滤重构为点击查询受控触发 (Controlled Query Trigger Refactoring for Fitting Ledger)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)；
+  - **交互体验重塑与状态解耦说明**：
+    1. **解耦表单草稿状态与生效查询状态**：
+       - 表单控件（下拉框与输入框）绑定 `fittingFilters`，用于用户日常勾选与输入；
+       - 数据过滤计算属性 `filteredFittingRows` 改为依赖独立的生效状态 `appliedFittingFilters`，在用户调整筛选项时不再提前触发列表重算；
+    2. **显式触发查询通道 (`handleSearchWarehouseFittings`)**：
+       - 仅当用户显式点击【查询】按钮或在输入框中敲击【Enter】时，同步草稿状态至生效状态，并触发接口拉取与台账刷新；
+    3. **一键复位机制**：
+       - 点击【重置】按钮时，同时将草稿状态与生效状态清空复位，即时拉取全量最新数据。
+
+## 2026-10-21 insulation_pipe_supply_2026 库管管件台账筛选供给主体大小写不敏感匹配与全局点击交互完善 (Warehouse Fitting Filter Case-Insensitive Matching & Global Dropdown Auto-Close)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面**：
+    - [`WarehouseManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/WarehouseManagementView.vue)；
+  - **交互体验完善与核心逻辑修复**：
+    1. **供给主体大小写断层消除**：
+       - 修复在管件发货记录筛选中勾选厂家（如“天津卡尔斯阀门股份有限公司”）后结果变为空的 Bug；
+       - `filteredFittingRows` 将 `supplyEntityIds` 统一 `toLowerCase()` 比对，完美兼容数据库中的大写 `KAERSI` 与配置中的小写 `kaersi`；
+    2. **管件类别与需求主体容错防御增强**：
+       - 管件类别由严格等于升级为双向包含匹配（如“弯头”兼容命中“预制保温弯头”）；
+       - 需求主体 ID 增加大小写规整比对；
+    3. **多选下拉框点击外部空白自动收起**：
+       - 在 `onMounted` 中正确注册 `document.addEventListener('click', handleGlobalClick)`，并在组件卸载时安全移除，解决下拉框点击空白无法关闭的问题；
+    4. **单标段权限用户重置体验优化**：
+       - `resetFittingFilters` 中保留单标段用户的默认标段选中。
+
 ## 2026-10-20 insulation_pipe_supply_2026 会审大厅提请指引弹窗双标签重构 (Dual-Tab Review & Discussion Guide Dialog)
 
 - **涉及页面与界面组件演进说明**：

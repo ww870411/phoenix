@@ -1,3 +1,26 @@
+## 2026-10-21 insulation_pipe_supply_2026 库管管件发货记录受控查询协议与前后端协同确认 (Controlled Query Protocol Alignment for Fitting Deliveries)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API**：
+    - [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)；
+    - [`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)；
+  - **接口契约与数据流向对齐**：
+    1. **显式查询链路规范**：
+       - 前端管件台账筛选交互重构为“点击查询按钮受控触发”，接口 `/workspace/fitting_deliveries/list` 仅在用户显式提交查询或回车时发起，杜绝了表单编辑期间高频发起冗余 HTTP 请求；
+       - 后端维持原有高效的分页与条件检索逻辑，配合前端受控状态，极大减轻并发负载并提升数据展示稳定性。
+
+## 2026-10-21 insulation_pipe_supply_2026 库管管件发货记录供给主体编码兼容性验证与前端协同说明 (Fitting Delivery Supply Entity Code Compatibility Sync)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API**：
+    - [`fitting_delivery_service.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/services/fitting_delivery_service.py)；
+    - [`workspace.py`](file:///D:/编程项目/phoenix/backend/projects/insulation_pipe_supply_2026/api/workspace.py)；
+  - **接口契约与数据一致性说明**：
+    1. **供给主体编码规范溯源**：
+       - 后端 `tube_fitting_delivery` 表中 `supply_entity_id` 在创建时强制大写存储（如 `KAERSI`、`KAIYUAN`、`WOSHENG` 等，共 57 条卡尔斯发货记录）；
+       - 后端查询接口 `/workspace/fitting_deliveries/list` 的 SQL 层（`LOWER(TRIM(supply_entity_id)) = ANY(:supply_ids)`）及映射层（`_decorate_delivery_rows`）已支持大小写不敏感匹配并能正确输出厂家中文全称；
+       - 前端工作台消费此接口时，已同步跟进大小写不敏感比对机制，确保跨端数据字典与内存计算属性保持严格统一。
+
 ## 2026-10-20 insulation_pipe_supply_2026 仲裁员权限分流：会审享终局裁决权，小组会仅享受邀表决权 (Arbitrator Authority Split: Joint Review vs Group Meeting)
 
 - **服务改造与接口演化说明**：

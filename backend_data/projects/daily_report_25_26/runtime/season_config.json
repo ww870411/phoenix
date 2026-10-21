@@ -1,10 +1,10 @@
 {
-  "active_period": "25-26",
-  "peer_period": "24-25",
-  "start_date": "2025-11-01",
-  "end_date": "2026-04-05",
+  "active_period": "26-27",
+  "peer_period": "25-26",
+  "start_date": "2026-11-01",
+  "end_date": "2027-04-05",
   "switch_date_rule": "10-01",
   "stat_days": 156,
-  "description": "恢复为 25-26 供暖期",
-  "updated_at": "2026-10-19T16:43:01.541790+08:00"
+  "description": "切换供暖期至 26-27",
+  "updated_at": "2026-10-21T08:48:56.732771+08:00"
 }
