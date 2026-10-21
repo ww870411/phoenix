@@ -43,7 +43,8 @@ DEFAULT_PROJECT_KEY = get_default_project_key()
 EAST_8 = timezone(timedelta(hours=8))
 # 支持 `0.5.xxx` 这类小数序号板块，避免并行抽取时漏掉折叠详表。
 SECTION_PREFIX_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)")
-HEATING_SEASON_START = date(2025, 11, 1)
+from backend.services.heating_metrics.season_utils import get_season_windows, get_season_period, parse_date
+from backend.services.heating_season_service import get_period_settings, get_calculation_signature
 
 
 @dataclass
@@ -64,6 +65,8 @@ class DashboardResult:
             "push_date": self.push_date,
             "generated_at": self.generated_at,
             "source": self.source,
+            "calculation_signature": get_calculation_signature(self.project_key),
+            "calculation_signature": __import__("backend.services.heating_season_service", fromlist=["get_calculation_signature"]).get_calculation_signature(self.project_key),
             "data": self.data,
         }
 
@@ -647,7 +650,7 @@ def evaluate_dashboard(
                 peer_bucket.clear()
                 for dt in main_dates:
                     main_bucket[dt.isoformat()] = []
-                peer_dates = [dt - timedelta(days=365) for dt in main_dates]
+                peer_dates = [_add_years(dt, -1) for dt in main_dates]
                 for dt in peer_dates:
                     peer_bucket[dt.isoformat()] = []
                 _fill_temperature_block(session, main_bucket, main_dates)
@@ -1140,7 +1143,7 @@ def _fill_daily_trend_section(
     # 优化：默认仅展示/缓存最近10天的数据（含当日），进一步减轻低性能服务器压力
     # 起始日期 = max(供暖期开始, 10天前)
     window_start = push_dt - timedelta(days=9)
-    start_dt = window_start if window_start > HEATING_SEASON_START else HEATING_SEASON_START
+    start_dt = max(window_start, parse_date(get_period_settings(get_season_period(push_dt))["start_date"]))
     
     if start_dt > push_dt:
         start_dt = push_dt
@@ -1334,12 +1337,8 @@ def _fetch_temperature_value_from_view(session, target_date: Optional[date]) -> 
 
 
 def _resolve_heating_season_start(anchor: date) -> date:
-    """根据 anchor 所在年份计算供暖期起始日期。"""
-    base_year = anchor.year
-    season_start = date(base_year, HEATING_SEASON_START.month, HEATING_SEASON_START.day)
-    if anchor < season_start:
-        season_start = date(base_year - 1, HEATING_SEASON_START.month, HEATING_SEASON_START.day)
-    return season_start
+    """按查询日期所属供暖期读取气温起算日。"""
+    return parse_date(get_period_settings(get_season_period(anchor))["temperature_start_date"])
 
 
 SUMMARY_PERIOD_CANONICAL = {
@@ -1384,27 +1383,16 @@ def _split_metric_label(label: str) -> Tuple[str, str]:
 
 
 def _build_temperature_summary_metrics(session, target_date: Optional[date]) -> Dict[str, Optional[float]]:
-    """构造平均气温的本期/同期、多窗口聚合结果。"""
+    """气温日值独立显示；月均和期均按所属期设置截断。"""
     if target_date is None:
         return {"daily": None, "monthly": None, "seasonal": None}
-
-    month_start = target_date.replace(day=1)
-    season_start = _resolve_heating_season_start(target_date)
-
-    daily_value = _fetch_temperature_value_from_view(session, target_date)
-    month_avg = _fetch_average_temperature_between(session, month_start, target_date)
-    season_avg = _fetch_average_temperature_between(session, season_start, target_date)
-
-    def _round(value: Optional[float]) -> Optional[float]:
-        if value is None:
-            return None
-        return round(value, 2)
-
-    return {
-        "daily": _round(daily_value),
-        "monthly": _round(month_avg),
-        "seasonal": _round(season_avg),
+    windows = get_season_windows(target_date)
+    values = {
+        "daily": _fetch_temperature_value_from_view(session, target_date),
+        "monthly": _fetch_average_temperature_between(session, windows["biz_month_start"], windows["biz_month_end"]),
+        "seasonal": _fetch_average_temperature_between(session, windows["biz_temperature_start"], windows["biz_ytd_end"]),
     }
+    return {key: None if value is None else round(value, 2) for key, value in values.items()}
 
 
 def _build_group_summary_metrics(
@@ -1511,16 +1499,17 @@ def _fill_cumulative_cards(
     try:
         push_dt = date.fromisoformat(push_date)
     except ValueError:
-        push_dt = HEATING_SEASON_START
+        push_dt = parse_date(None)
 
     # 计算供暖期平均气温（本期/同期），返回逐日列表
     temp_bucket = section.get("供暖期平均气温")
     if isinstance(temp_bucket, dict):
-        season_start = HEATING_SEASON_START if HEATING_SEASON_START <= push_dt else push_dt
-        main_series = _fetch_daily_average_temperature_map(session, season_start, push_dt)
+        windows = get_season_windows(push_dt)
+        season_start = windows["biz_temperature_start"]
+        main_series = _fetch_daily_average_temperature_map(session, season_start, windows["biz_ytd_end"])
 
-        peer_start = _add_years(season_start, -1)
-        peer_end = _add_years(push_dt, -1)
+        peer_start = windows["peer_temperature_start"]
+        peer_end = windows["peer_ytd_end"]
         peer_series = _fetch_daily_average_temperature_map(session, peer_start, peer_end)
 
         temp_bucket["本期"] = [

@@ -3,6 +3,7 @@
   "project_key": "daily_report_25_26",
   "show_date": "2026-11-01",
   "push_date": "2026-11-01",
-  "generated_at": "2026-10-21T08:49:05.245189+08:00",
-  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json"
+  "generated_at": "2026-10-21T10:15:27.263492+08:00",
+  "source": "projects/daily_report_25_26/config/数据结构_数据看板.json",
+  "calculation_signature": "{\"active_period\": \"26-27\", \"peer_settings\": {\"end_date\": \"2026-04-05\", \"start_date\": \"2025-11-01\", \"temperature_start_date\": \"2025-11-01\"}, \"seasons\": {\"25-26\": {\"end_date\": \"2026-04-05\", \"start_date\": \"2025-11-01\", \"temperature_start_date\": \"2025-11-01\"}, \"26-27\": {\"end_date\": \"2027-04-05\", \"start_date\": \"2026-11-01\", \"temperature_start_date\": \"2026-11-01\"}}, \"version\": 3}"
 }

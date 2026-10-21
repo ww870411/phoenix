@@ -15,7 +15,7 @@ from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.services import dashboard_cache
 from backend.services.auth_manager import EAST_8, AuthSession, get_current_session
 from backend.services.dashboard_cache_job import cache_publish_job_manager
-from backend.services.dashboard_expression import evaluate_dashboard, load_default_push_date
+from backend.services.dashboard_expression import evaluate_dashboard, load_default_push_date, normalize_show_date
 from backend.services.weather_importer import (
     WeatherImporterError,
     compare_with_existing,
@@ -124,6 +124,8 @@ def get_dashboard_data(
         description="展示日期，格式为 YYYY-MM-DD；留空时返回默认配置",
     ),
 ):
+    # 默认展示日也按真实日期命中手动生成的缓存。
+    show_date = normalize_show_date(show_date) or load_default_push_date(PROJECT_KEY)
     cache_key = dashboard_cache.resolve_cache_key(show_date)
     cached_payload, cache_status = dashboard_cache.get_cached_payload(PROJECT_KEY, cache_key)
     if cached_payload is not None:
@@ -131,9 +133,7 @@ def get_dashboard_data(
 
     result = evaluate_dashboard(PROJECT_KEY, show_date=show_date)
     payload = _build_dashboard_payload(result)
-    if cache_status.get("disabled"):
-        return _attach_cache_metadata(payload, cache_status, cache_hit=False, cache_key=cache_key)
-    cache_status = dashboard_cache.update_cache_entry(PROJECT_KEY, cache_key, payload)
+    # 查询不写缓存，避免已清除的日期因查看看板而重新生成。
     return _attach_cache_metadata(payload, cache_status, cache_hit=False, cache_key=cache_key)
 
 
@@ -228,13 +228,15 @@ def get_dashboard_temperature_trend(
 
 @router.post(
     "/dashboard/cache/publish",
-    summary="批量发布数据看板缓存（默认最近 7 日，可按 days 指定）",
+    summary="按日期区间生成看板缓存（保留区间外缓存）",
     tags=["daily_report_25_26"],
 )
 def publish_dashboard_cache(
     session: AuthSession = Depends(get_current_session),
     days: int = Query(default=7, ge=1, le=30, description="发布窗口天数（含 set_biz_date 当天）"),
     preset: str | None = Query(default=None, description="缓存发布预设档位"),
+    start_date: str | None = Query(default=None, description="缓存开始日期，含当天"),
+    end_date: str | None = Query(default=None, description="缓存结束日期，含当天"),
 ):
     _ensure_cache_operator(session)
     try:
@@ -242,6 +244,8 @@ def publish_dashboard_cache(
             window=days,
             project_key=PROJECT_KEY,
             preset=preset,
+            start_date=start_date,
+            end_date=end_date,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -250,16 +254,40 @@ def publish_dashboard_cache(
     return {
         "ok": True,
         "started": started,
-        "days": days,
+        "days": len(target_dates),
         "preset": preset,
         "selection_label": selection_label,
         "job": snapshot,
     }
 
 
+@router.get("/dashboard/cache/status", summary="查询已有缓存日期和发布任务")
+def get_dashboard_cache_inventory(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    from backend.services.heating_season_service import get_season_config
+    cfg = get_season_config(PROJECT_KEY)
+    return {"ok": True, **dashboard_cache.get_cache_status(PROJECT_KEY), "job": cache_publish_job_manager.snapshot(PROJECT_KEY), "default_range": {"start_date": cfg["start_date"], "end_date": cfg["end_date"]}}
+
+
+@router.delete("/dashboard/cache/range", summary="只清除指定日期区间的缓存")
+def delete_dashboard_cache_range(
+    start_date: str = Query(...),
+    end_date: str = Query(...),
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    if cache_publish_job_manager.snapshot(PROJECT_KEY).get("status") == "running":
+        raise HTTPException(status_code=409, detail="缓存生成任务正在运行，请先停止任务再清除")
+    try:
+        status = dashboard_cache.delete_cache_range(PROJECT_KEY, start_date, end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **status}
+
+
 @router.delete(
     "/dashboard/cache",
-    summary="禁用并清空数据看板缓存",
+    summary="禁用数据看板缓存（保留历史文件）",
     tags=["daily_report_25_26"],
 )
 def disable_dashboard_cache_endpoint(
@@ -428,6 +456,10 @@ class SeasonConfigRequest(BaseModel):
     start_date: Optional[str] = Field(default=None, description="供暖季开栓起始日")
     end_date: Optional[str] = Field(default=None, description="供暖季停热结束日")
     description: Optional[str] = Field(default=None, description="调整说明")
+    temperature_start_date: Optional[str] = Field(default=None, description="本期平均气温起算日，默认11月1日")
+    peer_start_date: Optional[str] = Field(default=None, description="同期日报统计开始日")
+    peer_end_date: Optional[str] = Field(default=None, description="同期日报统计结束日")
+    peer_temperature_start_date: Optional[str] = Field(default=None, description="同期平均气温起算日")
 
 
 @public_router.get(
@@ -456,6 +488,10 @@ def update_season_configuration(payload: SeasonConfigRequest):
             start_date=payload.start_date,
             end_date=payload.end_date,
             description=payload.description,
+            temperature_start_date=payload.temperature_start_date,
+            peer_start_date=payload.peer_start_date,
+            peer_end_date=payload.peer_end_date,
+            peer_temperature_start_date=payload.peer_temperature_start_date,
         )
         return {
             "ok": True,

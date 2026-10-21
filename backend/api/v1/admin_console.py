@@ -1206,6 +1206,8 @@ def publish_dashboard_cache(
     session: AuthSession = Depends(get_current_session),
     days: int = Query(default=7, ge=1, le=30),
     preset: str | None = Query(default=None),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
 ):
     _ensure_admin_console_access(session)
     _ensure_cache_operator(session)
@@ -1214,6 +1216,8 @@ def publish_dashboard_cache(
             window=days,
             project_key=PROJECT_KEY,
             preset=preset,
+            start_date=start_date,
+            end_date=end_date,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1222,7 +1226,7 @@ def publish_dashboard_cache(
     return {
         "ok": True,
         "started": started,
-        "days": days,
+        "days": len(target_dates),
         "preset": preset,
         "selection_label": selection_label,
         "job": snapshot,
@@ -1242,7 +1246,7 @@ def cancel_cache_publish(session: AuthSession = Depends(get_current_session)):
     return {"ok": True, "job": cache_publish_job_manager.request_cancel(PROJECT_KEY)}
 
 
-@router.delete("/admin/cache", summary="禁用并清空缓存")
+@router.delete("/admin/cache", summary="禁用缓存并保留文件")
 def disable_cache(session: AuthSession = Depends(get_current_session)):
     _ensure_admin_console_access(session)
     _ensure_cache_operator(session)

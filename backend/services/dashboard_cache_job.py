@@ -560,6 +560,8 @@ def _build_publish_payload(project_key: str, show_date: str) -> Dict[str, Any]:
     if show_date:
         payload = _build_parallel_payload(project_key, show_date)
         payload["ok"] = True
+        from backend.services.heating_season_service import get_calculation_signature
+        payload["calculation_signature"] = get_calculation_signature(project_key)
         return payload
     return _build_serial_payload(project_key, show_date)
 

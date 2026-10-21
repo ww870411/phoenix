@@ -946,58 +946,16 @@ def _query_analysis_rows(
     end_date: date,
     sheet_name: Optional[str] = None,
 ) -> Dict[str, Dict[str, Any]]:
+    """统一使用供暖期引擎，禁止失败后返回旧视图的跨期累计。"""
     if not metric_keys:
         return {}
-    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，解耦数据库重型视图
-    try:
-        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
-        with SessionLocal() as session:
-            engine = HeatingAnalysisEngine(session)
-            engine_res = engine.compute_analysis_rows(
-                unit_key=unit_key,
-                metric_keys=metric_keys,
-                start_date=start_date,
-                end_date=end_date,
-                sheet_name=sheet_name,
-            )
-            if engine_res is not None:
-                return engine_res
-    except Exception as exc:
-        logger.warning("HeatingAnalysisEngine.compute_analysis_rows 计算失败，安全回退视图: %s", exc)
-
-    sanitized = _sanitize_identifier(view_name)
-    if sanitized is None:
-        raise ValueError(f"非法视图名称: {view_name}")
-    sheet_clause = "AND sheet_name = :sheet_name" if sheet_name else ""
-    stmt = (
-        text(
-            f"""
-            SELECT company, company_cn, item, item_cn, unit, biz_date, peer_date,
-                   value_biz_date, value_peer_date
-            FROM {sanitized}
-            WHERE company = :company
-              AND item IN :items
-              {sheet_clause}
-            """
-        ).bindparams(bindparam("items", expanding=True))
-    )
+    from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
     with SessionLocal() as session:
-        with session.begin():
-            _apply_analysis_window_settings(session, sanitized, start_date, end_date)
-            rows = session.execute(
-                stmt,
-                {
-                    "company": unit_key,
-                    "items": list(metric_keys),
-                    "sheet_name": sheet_name,
-                },
-            ).mappings().all()
-    result: Dict[str, Dict[str, Any]] = {}
-    for row in rows:
-        item_key = row.get("item")
-        if isinstance(item_key, str) and item_key and item_key not in result:
-            result[item_key] = dict(row)
-    return result
+        return HeatingAnalysisEngine(session).compute_analysis_rows(
+            unit_key=unit_key, metric_keys=metric_keys, start_date=start_date,
+            end_date=end_date, sheet_name=sheet_name,
+            aggregate=view_name.endswith("_sum"),
+        )
 
 
 
@@ -1053,114 +1011,14 @@ def _query_analysis_timeline(
     end_date: date,
     sheet_name: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    if not metric_keys:
+    """时序与汇总共用日期引擎，空结果不触发旧 SQL 回退。"""
+    if not metric_keys or start_date > end_date:
         return {}
-    if start_date > end_date:
-        return {}
-    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，单次拉取全区间时序流，彻底消灭逐日 SQL 循环
-    try:
-        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
-        with SessionLocal() as session:
-            engine = HeatingAnalysisEngine(session)
-            timeline_res = engine.compute_analysis_timeline(
-                unit_key=unit_key,
-                metric_keys=metric_keys,
-                start_date=start_date,
-                end_date=end_date,
-                sheet_name=sheet_name,
-            )
-            if timeline_res:
-                return timeline_res
-    except Exception as exc:
-        logger.warning("HeatingAnalysisEngine.compute_analysis_timeline 计算失败，安全回退视图: %s", exc)
-
-    sanitized = _sanitize_identifier(view_name)
-    if sanitized is None:
-        raise ValueError(f"非法视图名称: {view_name}")
-    sheet_clause = "AND sheet_name = :sheet_name" if sheet_name else ""
-    base_stmt = (
-        text(
-            f"""
-            SELECT item, item_cn, unit, biz_date, peer_date,
-                   value_biz_date, value_peer_date
-            FROM {sanitized}
-            WHERE company = :company
-              AND item IN :items
-              {sheet_clause}
-            """
-        ).bindparams(bindparam("items", expanding=True))
-    )
-    batch_stmt = (
-        text(
-            f"""
-            WITH requested_dates AS (
-              SELECT generate_series(:start_date::date, :end_date::date, INTERVAL '1 day')::date AS requested_date
-            )
-            SELECT v.item, v.item_cn, v.unit, v.biz_date, v.peer_date,
-                   v.value_biz_date, v.value_peer_date,
-                   d.requested_date
-            FROM requested_dates d
-            CROSS JOIN LATERAL (
-              SELECT set_config('phoenix.biz_date', d.requested_date::text, true) AS applied_biz_date
-            ) cfg
-            CROSS JOIN LATERAL (
-              SELECT item, item_cn, unit, biz_date, peer_date,
-                     value_biz_date, value_peer_date
-              FROM {sanitized}
-              WHERE company = :company
-                AND item IN :items
-                {sheet_clause}
-            ) v
-            ORDER BY d.requested_date, v.item
-            """
-        )
-        .bindparams(bindparam("items", expanding=True))
-    )
-    try:
-        with SessionLocal() as session:
-            with session.begin():
-                rows = session.execute(
-                    batch_stmt,
-                    {
-                        "start_date": start_date.isoformat(),
-                        "end_date": end_date.isoformat(),
-                        "company": unit_key,
-                        "items": list(metric_keys),
-                        "sheet_name": sheet_name,
-                    },
-                ).mappings().all()
-        timeline: Dict[str, List[Dict[str, Any]]] = {}
-        for row in rows:
-            item_key = row.get("item")
-            if not isinstance(item_key, str) or not item_key:
-                continue
-            requested_date = row.get("requested_date")
-            entry_date = (
-                requested_date.isoformat()
-                if isinstance(requested_date, date)
-                else row.get("biz_date").isoformat()
-                if isinstance(row.get("biz_date"), date)
-                else None
-            )
-            entry = {
-                "date": entry_date,
-                "current": _decimal_to_float(row.get("value_biz_date")),
-                "peer": _decimal_to_float(row.get("value_peer_date")),
-                "peer_date": row.get("peer_date").isoformat()
-                if isinstance(row.get("peer_date"), date)
-                else None,
-            }
-            timeline.setdefault(item_key, []).append(entry)
-        return timeline
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.warning("批量逐日明细查询失败，回退逐天查询: %s", exc)
-        return _query_analysis_timeline_iterative(
-            base_stmt,
-            unit_key,
-            metric_keys,
-            start_date,
-            end_date,
-            sheet_name=sheet_name,
+    from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
+    with SessionLocal() as session:
+        return HeatingAnalysisEngine(session).compute_analysis_timeline(
+            unit_key=unit_key, metric_keys=metric_keys, start_date=start_date,
+            end_date=end_date, sheet_name=sheet_name,
         )
 
 def _sanitize_identifier(value: str) -> Optional[str]:
@@ -1464,106 +1322,15 @@ def _query_temperature_rows(
     analysis_mode: str,
     column_lookup: Optional[Dict[str, str]] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
+    """气温聚合使用同一统计引擎，异常时不绕过日期口径。"""
     if not metric_keys:
         return {}, {}
-    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，解耦 calc_temperature_data 视图
-    try:
-        column_lookup = column_lookup or _build_temperature_column_lookup(metric_keys)
-        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
-        with SessionLocal() as session:
-            engine = HeatingAnalysisEngine(session)
-            temp_res, lookup = engine.compute_temperature_rows(
-                metric_keys=metric_keys,
-                start_date=start_date,
-                end_date=end_date,
-                analysis_mode=analysis_mode,
-                column_lookup=column_lookup,
-            )
-            if temp_res:
-                return temp_res, lookup
-    except Exception as exc:
-        logger.warning("HeatingAnalysisEngine.compute_temperature_rows 计算失败，安全回退视图: %s", exc)
-
-    sanitized = _sanitize_identifier(view_name)
-    if sanitized is None:
-        raise ValueError(f"非法气温视图: {view_name}")
-
-    column_lookup = column_lookup or _build_temperature_column_lookup(metric_keys)
-    columns = sorted(set(column_lookup.values()))
-    if not columns:
-        return {}, column_lookup
-
-    row: Optional[Dict[str, Any]] = None
-    peer_row: Optional[Dict[str, Any]] = None
+    from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
     with SessionLocal() as session:
-        if analysis_mode == "range":
-            select_clause = ", ".join(f"AVG({col}) AS {col}" for col in columns)
-            stmt = text(
-                f"""
-                SELECT {select_clause}
-                FROM {sanitized}
-                WHERE date BETWEEN :start AND :end
-                """
-            )
-            row = session.execute(
-                stmt,
-                {"start": start_date, "end": end_date},
-            ).mappings().first()
-            peer_start = _shift_year(start_date)
-            peer_end = _shift_year(end_date)
-            if peer_start and peer_end:
-                peer_stmt = text(
-                    f"""
-                    SELECT {select_clause}
-                    FROM {sanitized}
-                    WHERE date BETWEEN :start AND :end
-                    """
-                )
-                peer_row = session.execute(
-                    peer_stmt,
-                    {"start": peer_start, "end": peer_end},
-                ).mappings().first()
-        else:
-            select_clause = ", ".join(columns)
-            stmt = text(
-                f"""
-                SELECT {select_clause}
-                FROM {sanitized}
-                WHERE date = :target
-                LIMIT 1
-                """
-            )
-            row = session.execute(
-                stmt,
-                {"target": start_date},
-            ).mappings().first()
-            peer_target = _shift_year(start_date)
-            if peer_target:
-                peer_stmt = text(
-                    f"""
-                    SELECT {select_clause}
-                    FROM {sanitized}
-                    WHERE date = :target
-                    LIMIT 1
-                    """
-                )
-                peer_row = session.execute(
-                    peer_stmt,
-                    {"target": peer_target},
-                ).mappings().first()
-
-    result: Dict[str, Dict[str, Any]] = {}
-    for key, column in column_lookup.items():
-        value = row.get(column) if row else None
-        peer_value = peer_row.get(column) if peer_row else None
-        result[key] = {
-            "value": _decimal_to_float(value),
-            "peer": _decimal_to_float(peer_value),
-            "unit": TEMPERATURE_UNIT,
-            "source_view": sanitized,
-            "missing": value is None,
-        }
-    return result, column_lookup
+        return HeatingAnalysisEngine(session).compute_temperature_rows(
+            metric_keys, start_date, end_date, analysis_mode,
+            column_lookup or _build_temperature_column_lookup(metric_keys),
+        )
 
 
 def _query_temperature_timeline(
@@ -1572,78 +1339,12 @@ def _query_temperature_timeline(
     start_date: date,
     end_date: date,
 ) -> Dict[str, List[Dict[str, Any]]]:
+    """逐日温度明细独立查询，失败直接报告。"""
     if start_date > end_date or not column_lookup:
         return {}
-    # 优先采用纯 Python 高性能计算引擎 HeatingAnalysisEngine，解耦 calc_temperature_data 视图
-    try:
-        from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
-        with SessionLocal() as session:
-            engine = HeatingAnalysisEngine(session)
-            temp_tl = engine.compute_temperature_timeline(
-                column_lookup=column_lookup,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            if temp_tl:
-                return temp_tl
-    except Exception as exc:
-        logger.warning("HeatingAnalysisEngine.compute_temperature_timeline 计算失败，安全回退视图: %s", exc)
-
-    sanitized = _sanitize_identifier(view_name)
-    if sanitized is None:
-        raise ValueError(f"非法气温视图: {view_name}")
-    columns = sorted(set(column_lookup.values()))
-    select_clause = ", ".join(["date"] + columns)
+    from backend.services.heating_metrics.analysis_engine import HeatingAnalysisEngine
     with SessionLocal() as session:
-        current_rows = session.execute(
-            text(
-                f"""
-                SELECT {select_clause}
-                FROM {sanitized}
-                WHERE date BETWEEN :start AND :end
-                """
-            ),
-            {"start": start_date, "end": end_date},
-        ).mappings().all()
-    peer_start = _shift_year(start_date)
-    peer_end = _shift_year(end_date)
-    peer_rows = []
-    if peer_start and peer_end:
-        with SessionLocal() as session:
-            peer_rows = session.execute(
-                text(
-                    f"""
-                    SELECT {select_clause}
-                    FROM {sanitized}
-                    WHERE date BETWEEN :start AND :end
-                    """
-                ),
-                {"start": peer_start, "end": peer_end},
-            ).mappings().all()
-    peer_map: Dict[date, Dict[str, Any]] = {}
-    for row in peer_rows:
-        peer_date_val = row.get("date")
-        if isinstance(peer_date_val, date):
-            peer_map[peer_date_val] = dict(row)
-    timeline: Dict[str, List[Dict[str, Any]]] = {}
-    current_date = start_date
-    while current_date <= end_date:
-        current_row = next(
-            (row for row in current_rows if isinstance(row.get("date"), date) and row.get("date") == current_date),
-            None,
-        )
-        peer_date_val = _shift_year(current_date)
-        peer_row = peer_map.get(peer_date_val) if peer_date_val else None
-        for key, column in column_lookup.items():
-            entry = {
-                "date": current_date.isoformat(),
-                "current": _decimal_to_float(current_row.get(column)) if current_row else None,
-                "peer": _decimal_to_float(peer_row.get(column)) if peer_row else None,
-                "peer_date": peer_date_val.isoformat() if peer_date_val else None,
-            }
-            timeline.setdefault(key, []).append(entry)
-        current_date += timedelta(days=1)
-    return timeline
+        return HeatingAnalysisEngine(session).compute_temperature_timeline(column_lookup, start_date, end_date)
 
 
 def _build_plan_comparison_payload(

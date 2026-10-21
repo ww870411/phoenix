@@ -1660,13 +1660,28 @@ export async function getDashboardBizDate(projectKey) {
   return response.json()
 }
 
+function dashboardCachePublishQuery(params) {
+  if (params.startDate || params.endDate) {
+    return new URLSearchParams({ start_date: params.startDate || '', end_date: params.endDate || '' }).toString()
+  }
+  return params.preset ? `preset=${encodeURIComponent(params.preset)}` : `days=${params.days || 7}`
+}
+
+export async function getDashboardCacheInventory(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/status`, { headers: attachAuthHeaders() })
+  if (!response.ok) throw new Error(await response.text() || '读取缓存日期失败')
+  return response.json()
+}
+
+export async function deleteDashboardCacheRange(projectKey, params) {
+  const query = new URLSearchParams({ start_date: params.startDate, end_date: params.endDate })
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/range?${query}`, { method: 'DELETE', headers: attachAuthHeaders() })
+  if (!response.ok) throw new Error(await response.text() || '清除缓存失败')
+  return response.json()
+}
+
 export async function publishDashboardCache(projectKey, params = {}) {
-  const rawPreset = typeof params?.preset === 'string' ? params.preset.trim() : ''
-  const rawDays = Number(params?.days)
-  const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
-  const query = rawPreset
-    ? `preset=${encodeURIComponent(rawPreset)}`
-    : `days=${days}`
+  const query = dashboardCachePublishQuery(params)
   const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/cache/publish?${query}`, {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),
@@ -2332,12 +2347,7 @@ export async function testAdminAiSettings(payload) {
 }
 
 export async function publishAdminDashboardCache(params = {}) {
-  const rawPreset = typeof params?.preset === 'string' ? params.preset.trim() : ''
-  const rawDays = Number(params?.days)
-  const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(30, Math.floor(rawDays))) : 7
-  const query = rawPreset
-    ? `preset=${encodeURIComponent(rawPreset)}`
-    : `days=${days}`
+  const query = dashboardCachePublishQuery(params)
   const response = await authAwareFetch(normalized(`/admin/cache/publish?${query}`), {
     method: 'POST',
     headers: attachAuthHeaders(JSON_HEADERS),

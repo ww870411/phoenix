@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .season_utils import get_season_windows, parse_date
+from .season_utils import get_season_windows, parse_date, get_heating_income_fraction
 from .formulas import (
     add_vec,
     sub_vec,
@@ -62,18 +62,20 @@ class DailyDashboardEngine:
                 MAX(unit) AS unit,
                 COALESCE(SUM(value) FILTER (WHERE date = :biz_date), 0)::float AS v_biz,
                 COALESCE(SUM(value) FILTER (WHERE date = :peer_date), 0)::float AS v_peer,
-                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :biz_7d_start AND :biz_date), 0)::float AS s7_biz,
-                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :peer_7d_start AND :peer_date), 0)::float AS s7_peer,
-                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :biz_month_start AND :biz_date), 0)::float AS sm_biz,
-                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :peer_month_start AND :peer_date), 0)::float AS sm_peer,
-                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :biz_ytd_start AND :biz_date), 0)::float AS sy_biz,
-                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :peer_ytd_start AND :peer_date), 0)::float AS sy_peer
+                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :biz_7d_start AND :biz_7d_end), 0)::float AS s7_biz,
+                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :peer_7d_start AND :peer_7d_end), 0)::float AS s7_peer,
+                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :biz_month_start AND :biz_month_end), 0)::float AS sm_biz,
+                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :peer_month_start AND :peer_month_end), 0)::float AS sm_peer,
+                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :biz_ytd_start AND :biz_ytd_end), 0)::float AS sy_biz,
+                COALESCE(SUM(value) FILTER (WHERE date BETWEEN :peer_ytd_start AND :peer_ytd_end), 0)::float AS sy_peer
             FROM daily_basic_data
-            WHERE date BETWEEN :peer_ytd_start AND :biz_date
+            WHERE date BETWEEN :source_start AND :biz_date
             GROUP BY company, item
         """)
 
         rows = self.session.execute(sql, {
+            **{key: value for key, value in windows.items() if key.endswith("_end")},
+            "source_start": min(windows["peer_date"], windows["peer_7d_start"], windows["peer_month_start"], windows["peer_ytd_start"]),
             "biz_date": windows["biz_date"],
             "peer_date": windows["peer_date"],
             "biz_7d_start": windows["biz_7d_start"],
@@ -97,7 +99,48 @@ class DailyDashboardEngine:
                 "unit": str(r[4] or ""),
                 "vec": vec,
             }
+        # 手填累计量是计数器，取区间末值减起点前基线，禁止累加每日累计快照。
+        counters = self.get_complaint_counter_values(windows, base_dict.keys())
+        for key, (biz_value, peer_value) in counters.items():
+            base_dict[key]["vec"] = [biz_value, peer_value] * 4
         return base_dict
+
+    def get_complaint_counter_values(self, windows: Dict[str, Any], keys) -> Dict[Tuple[str, str], Tuple[float, float]]:
+        """按各期月/季累计基线裁剪手填净投诉累计量，保留正式底表原值。"""
+        counters = {key for key in keys if key[1] in {"sum_month_total_net_complaints", "sum_season_total_net_complaints"}}
+        if not counters:
+            return {}
+        anchors = [windows["biz_date"], windows["peer_date"]]
+        scope_starts = [date(day.year if day.month >= 10 else day.year - 1, 10, 1) for day in anchors]
+        rows = self.session.execute(text("""
+            SELECT company, item, date, SUM(value) AS value
+            FROM daily_basic_data
+            WHERE item IN ('sum_month_total_net_complaints', 'sum_season_total_net_complaints')
+              AND date BETWEEN :source_start AND :source_end
+            GROUP BY company, item, date
+        """), {"source_start": min(scope_starts), "source_end": max(anchors)}).mappings().all()
+        series = {}
+        for row in rows:
+            series.setdefault((row["company"], row["item"]), {})[row["date"]] = float(row["value"] or 0)
+        result = {}
+        for key in counters:
+            values = []
+            scope = "month" if key[1] == "sum_month_total_net_complaints" else "ytd"
+            points = series.get(key, {})
+            for side, anchor, season_start in zip(("biz", "peer"), anchors, scope_starts):
+                first, last = windows[f"{side}_{scope}_start"], windows[f"{side}_{scope}_end"]
+                if first > last:
+                    values.append(0.0)
+                    continue
+                # 原手填季累计在11月1日归零，不能减去10月旧快照（会产生负累计）。
+                reset = anchor.replace(day=1) if scope == "month" else date(season_start.year, 11, 1)
+                available = [day for day in points if reset <= day <= last]
+                baseline = [day for day in available if day < first]
+                end_value = points[max(available)] if available else 0.0
+                start_value = points[max(baseline)] if baseline else 0.0
+                values.append(end_value - start_value)
+            result[key] = tuple(values)
+        return result
 
     def fetch_constants(
         self,
@@ -140,6 +183,15 @@ class DailyDashboardEngine:
         windows = get_season_windows(biz_date_in)
         biz_date = windows["biz_date"]
         peer_date = windows["peer_date"]
+        # 仅暖收入使用有效分摊天数，其他当日实物指标保持原日期取数。
+        heating_fractions = [
+            get_heating_income_fraction(
+                windows[f"{side}_date"] if window == "day" else windows[f"{side}_{window}_start"],
+                windows[f"{side}_date"] if window == "day" else windows[f"{side}_{window}_end"],
+                windows[f"{side}_period"],
+            )
+            for window in ("day", "7d", "month", "ytd") for side in ("biz", "peer")
+        ]
         base_dict = self.fetch_base_aggregated_data(windows)
         const_biz, const_peer = self.fetch_constants(windows["biz_period"], windows["peer_period"])
 
@@ -227,19 +279,11 @@ class DailyDashboardEngine:
             income_inner_heat = mul_scalar(mul_biz_peer(heat_supply, cb.get("price_inner_heat_sales", 0.0), cp.get("price_inner_heat_sales", 0.0)), 1.0 / 10000.0)
             result_rows.append(self._make_row(c, c_cn, "eco_inner_heat_supply_income", "其中：内售热收入", "万元", biz_date, peer_date, income_inner_heat))
 
-            # 其中：暖收入 (万元) = c.eco_season_heating_income * days / 156.0
+            # 其中：暖收入 = 本期总额 × 有效窗口天数 / 本期设定总天数。
             season_heat_biz = cb.get("eco_season_heating_income", 0.0)
             season_heat_peer = cp.get("eco_season_heating_income", 0.0)
-            income_heating = [
-                season_heat_biz * windows["days_day_biz"] / 156.0,
-                season_heat_peer * windows["days_day_peer"] / 156.0,
-                season_heat_biz * windows["days_7_biz"] / 156.0,
-                season_heat_peer * windows["days_7_peer"] / 156.0,
-                season_heat_biz * windows["days_month_biz"] / 156.0,
-                season_heat_peer * windows["days_month_peer"] / 156.0,
-                season_heat_biz * windows["days_ytd_biz"] / 156.0,
-                season_heat_peer * windows["days_ytd_peer"] / 156.0,
-            ]
+            income_heating = [(season_heat_biz if i % 2 == 0 else season_heat_peer) * fraction
+                              for i, fraction in enumerate(heating_fractions)]
             result_rows.append(self._make_row(c, c_cn, "eco_heating_supply_income", "其中：暖收入", "万元", biz_date, peer_date, income_heating))
 
             # 其中：售高温水收入 (万元)

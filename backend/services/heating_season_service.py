@@ -196,9 +196,38 @@ def get_season_config(project_key: str = "daily_report_25_26") -> Dict[str, Any]
         except Exception:
             pass
 
+    active = config["active_period"]
+    config.setdefault("temperature_start_date", get_default_season_dates(active)[0])
+    seasons = dict(config.get("seasons") or {})
+    seasons[active] = {key: config[key] for key in ("start_date", "end_date", "temperature_start_date")}
+    config["seasons"] = seasons
+    config["peer_settings"] = _period_settings_from_config(config, config["peer_period"])
+    config["stat_days"] = (date.fromisoformat(config["end_date"]) - date.fromisoformat(config["start_date"])).days + 1
     config["current_biz_date"] = read_current_biz_date(project_key)
     config["available_seasons"] = AVAILABLE_SEASONS
     return config
+
+
+def _period_settings_from_config(config: Dict[str, Any], period: str) -> Dict[str, str]:
+    """按期保存独立窗口；未配置的历史供暖期使用标准日期。"""
+    start, end = get_default_season_dates(period)
+    saved = (config.get("seasons") or {}).get(period) or {}
+    if period == config.get("active_period"):
+        saved = {**saved, **{key: config[key] for key in ("start_date", "end_date", "temperature_start_date") if config.get(key)}}
+    return {"start_date": saved.get("start_date", start), "end_date": saved.get("end_date", end),
+            "temperature_start_date": saved.get("temperature_start_date", start)}
+
+
+def get_period_settings(period: str, project_key: str = "daily_report_25_26") -> Dict[str, str]:
+    """计算只按查询日期所属期读取设置，不随当前激活期挪动历史口径。"""
+    return _period_settings_from_config(get_season_config(project_key), period)
+
+
+def get_calculation_signature(project_key: str = "daily_report_25_26") -> str:
+    """缓存记录计算口径版本及各期设置，保留文件但不复用旧公式结果。"""
+    cfg = get_season_config(project_key)
+    return json.dumps({"version": 4, "active_period": cfg["active_period"], "seasons": cfg["seasons"],
+                       "peer_settings": cfg["peer_settings"]}, ensure_ascii=False, sort_keys=True)
 
 
 def update_season_config(
@@ -208,6 +237,10 @@ def update_season_config(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     description: Optional[str] = None,
+    temperature_start_date: Optional[str] = None,
+    peer_start_date: Optional[str] = None,
+    peer_end_date: Optional[str] = None,
+    peer_temperature_start_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     手动设置并滚动当前供暖期。
@@ -225,10 +258,28 @@ def update_season_config(
     def_start, def_end = get_default_season_dates(active_period)
 
     current_cfg = get_season_config(project_key)
+    previous_settings = _period_settings_from_config(current_cfg, active_period)
+    seasons = dict(current_cfg.get("seasons") or {})
     current_cfg["active_period"] = active_period
     current_cfg["peer_period"] = peer_period
-    current_cfg["start_date"] = (start_date or "").strip() or def_start
-    current_cfg["end_date"] = (end_date or "").strip() or def_end
+    current_cfg["start_date"] = (start_date or "").strip() or previous_settings["start_date"]
+    current_cfg["end_date"] = (end_date or "").strip() or previous_settings["end_date"]
+    current_cfg["temperature_start_date"] = (temperature_start_date or "").strip() or previous_settings["temperature_start_date"]
+    peer_settings = _period_settings_from_config({"seasons": seasons}, peer_period)
+    for key, value in (("start_date", peer_start_date), ("end_date", peer_end_date), ("temperature_start_date", peer_temperature_start_date)):
+        if value:
+            peer_settings[key] = value.strip()
+    seasons[active_period] = {key: current_cfg[key] for key in ("start_date", "end_date", "temperature_start_date")}
+    seasons[peer_period] = peer_settings
+    for period, settings in ((active_period, seasons[active_period]), (peer_period, peer_settings)):
+        years = parse_period_years(period)
+        if not years or years[1] != (years[0] + 1) % 100:
+            raise ValueError("供暖期必须是连续的跨年编码")
+        start, end, temp = (date.fromisoformat(settings[key]) for key in ("start_date", "end_date", "temperature_start_date"))
+        if start > end or temp > end:
+            raise ValueError("统计开始日、气温起算日不能晚于统计结束日")
+        if any(not (date(2000 + years[0], 10, 1) <= d < date(2000 + years[1], 10, 1)) for d in (start, end, temp)):
+            raise ValueError(f"{period} 的日期必须位于该期10月1日至次年9月30日内")
     if description:
         current_cfg["description"] = description
     current_cfg["updated_at"] = datetime.now(tz=EAST_8).isoformat()
@@ -245,7 +296,8 @@ def update_season_config(
         else:
             target_biz_date = existing_date
 
-    write_current_biz_date(project_key, target_biz_date)
+    if not write_current_biz_date(project_key, target_biz_date):
+        raise IOError("展示日期更新失败，未保存供暖期设置")
     current_cfg["current_biz_date"] = target_biz_date
 
     # 写入 season_config.json
@@ -255,8 +307,10 @@ def update_season_config(
         "peer_period": current_cfg["peer_period"],
         "start_date": current_cfg["start_date"],
         "end_date": current_cfg["end_date"],
+        "temperature_start_date": current_cfg["temperature_start_date"],
+        "seasons": seasons,
         "switch_date_rule": current_cfg.get("switch_date_rule", "10-01"),
-        "stat_days": current_cfg.get("stat_days", 156),
+        "stat_days": (date.fromisoformat(current_cfg["end_date"]) - date.fromisoformat(current_cfg["start_date"])).days + 1,
         "description": current_cfg.get("description", "供热集团生产日报供暖期全局运行参数"),
         "updated_at": current_cfg["updated_at"],
     }

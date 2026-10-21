@@ -2085,11 +2085,15 @@ def _persist_sheet_ai_report_switch(
 
 
 def _collect_seed_units() -> List[str]:
-    known = auth_manager.list_known_units()
-    ordered: List[str] = list(known)
-    if "Group" not in ordered:
-        ordered.append("Group")
-    return ordered
+    """审批主体仅来自日报项目填报模板，排除其他项目账号的单位与标段。"""
+    template = _read_json(BASIC_TEMPLATE_PATH)
+    return sorted({
+        names["unit_id"]
+        for payload in template.values()
+        if isinstance(payload, dict)
+        for names in [_extract_names(payload)]
+        if names["unit_id"]
+    })
 
 
 def _current_biz_datetime() -> datetime:
@@ -2104,7 +2108,7 @@ def _build_workflow_response(session: AuthSession) -> WorkflowStatusResponse:
     biz_datetime = _current_biz_datetime()
     display_date = auth_manager.current_display_date()
     seed_units = _collect_seed_units()
-    visible_units = session.resolve_allowed_units(PROJECT_KEY) or set(seed_units)
+    visible_units = (session.resolve_allowed_units(PROJECT_KEY) or set(seed_units)) & set(seed_units)
     snapshot = workflow_status_manager.get_snapshot(
         project_key=project_key,
         biz_date=biz_datetime,
@@ -2158,7 +2162,7 @@ def approve_unit_workflow(
     if not action_flags.can_approve:
         raise HTTPException(status_code=403, detail="当前账号无审批权限")
     target_unit = payload.unit
-    allowed_units = session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())
+    allowed_units = (session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())) & set(_collect_seed_units())
     if target_unit not in allowed_units:
         raise HTTPException(status_code=403, detail="无权审批该单位")
     workflow_status_manager.mark_approved(
@@ -2183,7 +2187,7 @@ def revoke_unit_workflow(
     if not action_flags.can_revoke:
         raise HTTPException(status_code=403, detail="当前账号无取消批准权限")
     target_unit = payload.unit
-    allowed_units = session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())
+    allowed_units = (session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())) & set(_collect_seed_units())
     if target_unit not in allowed_units:
         raise HTTPException(status_code=403, detail="无权取消该单位审批")
     workflow_status_manager.mark_pending(

@@ -131,74 +131,8 @@ def map_columns_to_frames(columns: List[str]) -> Dict[int, str]:
 # 数据预取：指标与常量
 # ------------------------
 def _fetch_metrics_from_view(session: Session, table: str, company: str, biz_date: Optional[str] = None) -> Dict[str, Dict[str, Decimal]]:
-    """
-    从视图按 company 维度一次性拉取所有 item 的 6 个窗口值。
-    允许表名为白名单：sum_basic_data | groups
-    返回结构：{ item: {field_name: Decimal, ...}, ... }
-    """
-    table_whitelist = {"sum_basic_data", "groups"}
-    target = table if table in table_whitelist else "sum_basic_data"
-
-    try:
-        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
-        engine = DailyDashboardEngine(session)
-        records = engine.compute_groups(biz_date) if target == "groups" else engine.compute_sum_basic_data(biz_date)
-        out: Dict[str, Dict[str, Decimal]] = {}
-        for r in records:
-            if r.get("company") != company:
-                continue
-            item = r["item"]
-            bucket = {
-                "value_biz_date": _to_decimal(r.get("value_biz_date")),
-                "value_peer_date": _to_decimal(r.get("value_peer_date")),
-                "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
-                "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
-                "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
-                "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
-            }
-            out[item] = bucket
-            if r.get("item_cn"):
-                cn_key = str(r.get("item_cn")).strip()
-                if cn_key and cn_key not in out:
-                    out[cn_key] = bucket
-        if out:
-            return out
-    except Exception:
-        pass
-
-    if biz_date and biz_date.lower() != "regular":
-        session.execute(text("SET LOCAL phoenix.biz_date = :biz_date"), {"biz_date": biz_date})
-    else:
-        session.execute(text("SET LOCAL phoenix.biz_date = DEFAULT"))
-    sql = text(
-        f"""
-        SELECT item, item_cn, unit,
-               value_biz_date, value_peer_date,
-               sum_month_biz, sum_month_peer,
-               sum_ytd_biz, sum_ytd_peer
-          FROM {target}
-         WHERE company = :company
-        """
-    )
-    rows = session.execute(sql, {"company": company}).mappings().all()
-    out: Dict[str, Dict[str, Decimal]] = {}
-    for r in rows:
-        item = r["item"]
-        bucket = {
-            "value_biz_date": _to_decimal(r.get("value_biz_date")),
-            "value_peer_date": _to_decimal(r.get("value_peer_date")),
-            "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
-            "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
-            "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
-            "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
-        }
-        out[item] = bucket
-        # 兼容：允许用中文项目名直接取值（当模板或字典未提供映射时）
-        if r.get("item_cn"):
-            cn_key = str(r.get("item_cn")).strip()
-            if cn_key and cn_key not in out:
-                out[cn_key] = bucket
-    return out
+    """使用统一日期引擎取数；失败直接报告，禁止回退固定旧供暖期的 SQL 视图。"""
+    return _fetch_metrics_from_view_batch(session, table, [company], biz_date).get(company, {})
 
 
 def _fetch_constants_for_table(session: Session, table_name: str, company: str) -> Dict[str, Dict[str, Decimal]]:
@@ -306,101 +240,22 @@ def _fetch_temperature_extremes(session: Session, biz_date: Optional[str]) -> Di
     }
 
 
-def _fetch_sum_coal_inventory_constants(session: Session, company: str) -> Dict[str, Dict[str, Decimal]]:
-    """
-    针对 sum_coal_inventory_data 视图的取值逻辑：
-    - 仅关注最新日期、storage_type='all_sites' 的汇总行
-    - 支持两种 company 取值：原始 company（如 JinZhou）及附加后缀 _sum（如 JinZhou_sum）
-    - 返回形如 { 'JinZhou_sum': {'25-26': value, '24-25': value} }
-    """
-    sql = text(
-        """
-        SELECT company, storage_type, value
-        FROM sum_coal_inventory_data
-        WHERE company = :company
-        """
-    )
-    try:
-        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
-        engine = DailyDashboardEngine(session)
-        coal_records = engine.compute_coal_inventory(None)
-        cand_set = set()
-        if company:
-            cand_set.add(company)
-            if not company.endswith("_sum"):
-                cand_set.add(f"{company}_sum")
-            else:
-                base = company[:-4]
-                if base:
-                    cand_set.add(base)
-        engine_rows = [r for r in coal_records if r.get("company") in cand_set]
-        if engine_rows:
-            out_engine: Dict[str, Dict[str, Decimal]] = {}
-            for r in engine_rows:
-                comp_raw = str(r.get("company") or "").strip()
-                storage_type = str(r.get("storage_type") or "").strip()
-                val = _to_decimal(r.get("value"))
-                if not comp_raw:
-                    continue
-                if storage_type == "all_sites":
-                    if comp_raw.endswith("_sum"):
-                        key = comp_raw
-                    else:
-                        key = f"{comp_raw}_sum"
-                elif storage_type:
-                    key = f"{comp_raw}_{storage_type}"
-                else:
-                    key = comp_raw
-                out_engine[key] = {
-                    FRAME_TO_PERIOD["biz_date"]: val,
-                    FRAME_TO_PERIOD["peer_date"]: val,
-                }
-            return out_engine
-    except Exception:
-        pass
-
-    candidates: List[str] = []
-    if company:
-        candidates.append(company)
-        if not company.endswith("_sum"):
-            candidates.append(f"{company}_sum")
-        else:
-            base = company[:-4]
-            if base:
-                candidates.append(base)
-    seen: Set[str] = set()
-    rows: List[Dict[str, Any]] = []
-    for cand in candidates:
-        key = cand.strip()
-        if not key or key in seen:
+def _fetch_sum_coal_inventory_constants(session: Session, company: str, biz_date: Optional[str] = None) -> Dict[str, Dict[str, Decimal]]:
+    """库存和常量别名均按本次查询日期，不回退旧汇总视图。"""
+    from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+    from backend.services.heating_metrics.season_utils import parse_date, get_peer_date, get_season_period
+    anchor = parse_date(biz_date)
+    periods = (get_season_period(anchor), get_season_period(get_peer_date(anchor)))
+    candidates = {company, company[:-4] if company.endswith("_sum") else f"{company}_sum"}
+    result = {}
+    for row in DailyDashboardEngine(session).compute_coal_inventory(anchor):
+        comp = str(row.get("company") or "")
+        if comp not in candidates:
             continue
-        seen.add(key)
-        part = session.execute(sql, {"company": key}).mappings().all()
-        if part:
-            rows.extend(part)
-    if not rows:
-        return {}
-    out: Dict[str, Dict[str, Decimal]] = {}
-    for r in rows:
-        comp_raw = str(r.get("company") or "").strip()
-        storage_type = str(r.get("storage_type") or "").strip()
-        val = _to_decimal(r.get("value"))
-        if not comp_raw:
-            continue
-        if storage_type == "all_sites":
-            if comp_raw.endswith("_sum"):
-                key = comp_raw
-            else:
-                key = f"{comp_raw}_sum"
-        elif storage_type:
-            key = f"{comp_raw}_{storage_type}"
-        else:
-            key = comp_raw
-        out[key] = {
-            FRAME_TO_PERIOD["biz_date"]: val,
-            FRAME_TO_PERIOD["peer_date"]: val,
-        }
-    return out
+        storage = row.get("storage_type")
+        key = (comp if comp.endswith("_sum") else f"{comp}_sum") if storage == "all_sites" else f"{comp}_{storage}" if storage else comp
+        result[key] = {period: _to_decimal(row.get("value")) for period in periods}
+    return result
 
 
 def _to_decimal(v: Any) -> Decimal:
@@ -480,6 +335,12 @@ class Evaluator:
                  all_metrics_cache: Optional[Dict[str, Dict[str, Dict[str, Decimal]]]] = None,
                  company_code: Optional[str] = None):
         self.ctx = ctx
+        # 历史回看必须随查询日期取常量，不能跟随当前激活期。
+        from backend.services.heating_metrics.season_utils import get_season_period, get_peer_date, parse_date
+        anchor = parse_date((ctx.context or {}).get("biz_date"))
+        current_period = get_season_period(anchor)
+        peer_period = get_season_period(get_peer_date(anchor))
+        self.frame_to_period = {frame: (peer_period if "peer" in frame else current_period) for frame in FRAME_FIELDS}
         self.metrics = metrics_cache
         self.consts = const_cache
         self.consts_all = all_const_cache if isinstance(all_const_cache, dict) else {}
@@ -614,7 +475,7 @@ class Evaluator:
         - 表中 key 为英文 item（如 price_power_sales），表达式里使用中文（如 售电单价）
         - 先用项目字典反查中文→英文；若找不到，再用中文原值兜底
         """
-        period = _normalize_period_key(FRAME_TO_PERIOD[frame])
+        period = _normalize_period_key(self.frame_to_period[frame])
         target_alias = alias or "c"
         # cn -> en
         key_en = self.item_cn_to_item.get(name_cn, name_cn)
@@ -1158,17 +1019,18 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
             except Exception:
                 for comp in missing_companies:
                     metrics_by_company[comp] = {}
+                raise RuntimeError(f"日报指标计算失败（{table_name}），未使用旧供暖期视图")
         for comp in companies_needed:
             consts_by_company[comp] = {}
             for alias, table_name in (alias_map or {}).items():
                 try:
-                    constants_cache_key = f"{table_name}::{comp}"
+                    constants_cache_key = f"{table_name}::{comp}::{context_biz_date or 'regular'}" if table_name == "sum_coal_inventory_data" else f"{table_name}::{comp}"
                     if constants_cache_key in shared_constants_cache:
                         constants_cache_hits += 1
                         consts_by_company[comp][alias] = shared_constants_cache[constants_cache_key]
                     elif isinstance(table_name, str) and table_name == "sum_coal_inventory_data":
                         fetch_started_at = perf_counter()
-                        consts_by_company[comp][alias] = _fetch_sum_coal_inventory_constants(session, comp)
+                        consts_by_company[comp][alias] = _fetch_sum_coal_inventory_constants(session, comp, context_biz_date)
                         constants_fetch_ms += (perf_counter() - fetch_started_at) * 1000
                         constants_fetch_count += 1
                         shared_constants_cache[constants_cache_key] = consts_by_company[comp][alias]
@@ -1611,8 +1473,9 @@ def render_spec(spec: Dict[str, Any], project_key: str, primary_key: Dict[str, A
         month_biz = f"{anchor.year:04d}-{anchor.month:02d}"
         month_peer = f"{peer.year:04d}-{peer.month:02d}"
         # 4) 供暖期标签采用帧到 period 的映射（已在常量读取中统一归一化）
-        ytd_biz = FRAME_TO_PERIOD["sum_ytd_biz"]
-        ytd_peer = FRAME_TO_PERIOD["sum_ytd_peer"]
+        from backend.services.heating_metrics.season_utils import get_season_period
+        ytd_biz = get_season_period(anchor)
+        ytd_peer = get_season_period(peer)
         # 5) 执行替换
         cols_in = list(columns) if isinstance(columns, list) else []
         cols_out: List[str] = []
@@ -1667,87 +1530,23 @@ def _fetch_metrics_from_view_batch(
     companies: List[str],
     biz_date: Optional[str] = None,
 ) -> Dict[str, Dict[str, Dict[str, Decimal]]]:
-    """
-    从视图按 company IN (...) 批量拉取多个公司所有 item 的 6 个窗口值。
-    返回结构：{ company: { item: {field_name: Decimal, ...}, ... }, ... }
-    """
-    normalized_companies = []
-    seen: Set[str] = set()
-    for company in companies or []:
-        token = str(company or "").strip()
-        if not token or token in seen:
-            continue
-        seen.add(token)
-        normalized_companies.append(token)
-    if not normalized_companies:
+    """批量读取统一引擎结果，空结果仍是有效结果，异常不切换旧视图。"""
+    from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+
+    normalized = list(dict.fromkeys(str(c).strip() for c in companies or [] if str(c or "").strip()))
+    if not normalized:
         return {}
-
-    table_whitelist = {"sum_basic_data", "groups"}
-    target = table if table in table_whitelist else "sum_basic_data"
-
-    try:
-        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
-        engine = DailyDashboardEngine(session)
-        records = engine.compute_groups(biz_date) if target == "groups" else engine.compute_sum_basic_data(biz_date)
-        comp_set = set(normalized_companies)
-        out_engine: Dict[str, Dict[str, Dict[str, Decimal]]] = {company: {} for company in normalized_companies}
-        for r in records:
-            comp = str(r.get("company") or "").strip()
-            if comp not in comp_set:
-                continue
-            company_bucket = out_engine.setdefault(comp, {})
-            item = r["item"]
-            bucket = {
-                "value_biz_date": _to_decimal(r.get("value_biz_date")),
-                "value_peer_date": _to_decimal(r.get("value_peer_date")),
-                "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
-                "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
-                "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
-                "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
-            }
-            company_bucket[item] = bucket
-            if r.get("item_cn"):
-                cn_key = str(r.get("item_cn")).strip()
-                if cn_key and cn_key not in company_bucket:
-                    company_bucket[cn_key] = bucket
-        return out_engine
-    except Exception:
-        pass
-    if biz_date and biz_date.lower() != "regular":
-        session.execute(text("SET LOCAL phoenix.biz_date = :biz_date"), {"biz_date": biz_date})
-    else:
-        session.execute(text("SET LOCAL phoenix.biz_date = DEFAULT"))
-    sql = text(
-        f"""
-        SELECT company, item, item_cn, unit,
-               value_biz_date, value_peer_date,
-               sum_month_biz, sum_month_peer,
-               sum_ytd_biz, sum_ytd_peer
-          FROM {target}
-         WHERE company = ANY(:companies)
-        """
-    )
-    rows = session.execute(sql, {"companies": normalized_companies}).mappings().all()
-    out: Dict[str, Dict[str, Dict[str, Decimal]]] = {company: {} for company in normalized_companies}
-    for r in rows:
-        company = str(r.get("company") or "").strip()
-        if not company:
+    engine = DailyDashboardEngine(session)
+    records = engine.compute_groups(biz_date) if table == "groups" else engine.compute_sum_basic_data(biz_date)
+    out = {company: {} for company in normalized}
+    for row in records:
+        company = row.get("company")
+        if company not in out:
             continue
-        company_bucket = out.setdefault(company, {})
-        item = r["item"]
-        bucket = {
-            "value_biz_date": _to_decimal(r.get("value_biz_date")),
-            "value_peer_date": _to_decimal(r.get("value_peer_date")),
-            "sum_month_biz": _to_decimal(r.get("sum_month_biz")),
-            "sum_month_peer": _to_decimal(r.get("sum_month_peer")),
-            "sum_ytd_biz": _to_decimal(r.get("sum_ytd_biz")),
-            "sum_ytd_peer": _to_decimal(r.get("sum_ytd_peer")),
-        }
-        company_bucket[item] = bucket
-        if r.get("item_cn"):
-            cn_key = str(r.get("item_cn")).strip()
-            if cn_key and cn_key not in company_bucket:
-                company_bucket[cn_key] = bucket
+        bucket = {field: _to_decimal(row.get(field)) for field in FRAME_FIELDS.values()}
+        out[company][row["item"]] = bucket
+        if row.get("item_cn"):
+            out[company].setdefault(str(row["item_cn"]).strip(), bucket)
     return out
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo

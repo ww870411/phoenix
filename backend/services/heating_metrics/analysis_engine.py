@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .season_utils import get_peer_date, get_season_period, parse_date
+from .season_utils import get_peer_date, get_season_period, parse_date, get_heating_income_fraction
 from .daily_engine import (
     DailyDashboardEngine,
     ZHUCHENGQU_COMPANIES,
@@ -94,6 +94,7 @@ class HeatingAnalysisEngine:
         peer_start: date,
         peer_end: date,
         companies: Optional[Sequence[str]] = None,
+        counter_anchor: Optional[date] = None,
     ) -> Dict[Tuple[str, str], Dict[str, Any]]:
         """
         拉取底表 daily_basic_data 在指定业务区间与同期区间的合计值。
@@ -104,6 +105,8 @@ class HeatingAnalysisEngine:
             "biz_end": biz_end,
             "peer_start": peer_start,
             "peer_end": peer_end,
+            "source_start": min(peer_start, peer_end),
+            "source_end": max(biz_start, biz_end),
         }
         comp_clause = ""
         if companies:
@@ -126,7 +129,7 @@ class HeatingAnalysisEngine:
                        OR (d.item NOT IN ('sum_month_total_net_complaints', 'sum_season_total_net_complaints') AND d.date BETWEEN :peer_start AND :peer_end)
                 ), 0) AS val_peer
             FROM daily_basic_data d
-            WHERE ((d.date BETWEEN :biz_start AND :biz_end) OR (d.date BETWEEN :peer_start AND :peer_end))
+            WHERE d.date BETWEEN :source_start AND :source_end
               {comp_clause}
             GROUP BY d.company, d.item
         """)
@@ -148,6 +151,12 @@ class HeatingAnalysisEngine:
                 "biz": v_biz,
                 "peer": v_peer,
             }
+        # 累计计数器与日报口径一致；区间查询不能带入统计起点之前的累计。
+        from .season_utils import get_season_windows
+        counters = self._daily_engine.get_complaint_counter_values(get_season_windows(counter_anchor or biz_end), base_dict.keys())
+        for key, (biz_value, peer_value) in counters.items():
+            base_dict[key]["biz"] = biz_value if biz_start <= biz_end else 0.0
+            base_dict[key]["peer"] = peer_value if peer_start <= peer_end else 0.0
         return base_dict
 
     def fetch_base_beihai_sub(
@@ -167,6 +176,8 @@ class HeatingAnalysisEngine:
             "biz_end": biz_end,
             "peer_start": peer_start,
             "peer_end": peer_end,
+            "source_start": min(peer_start, peer_end),
+            "source_end": max(biz_start, biz_end),
         }
         sheet_filter = "AND d.sheet_name = :sheet_name" if sheet_name else "AND d.sheet_name IN ('BeiHai_co_generation_Sheet', 'BeiHai_water_boiler_Sheet')"
         if sheet_name:
@@ -185,7 +196,7 @@ class HeatingAnalysisEngine:
             FROM daily_basic_data d
             WHERE d.company = 'BeiHai'
               {sheet_filter}
-              AND ((d.date BETWEEN :biz_start AND :biz_end) OR (d.date BETWEEN :peer_start AND :peer_end))
+              AND d.date BETWEEN :source_start AND :source_end
             GROUP BY d.sheet_name, d.company, d.item
         """)
         rows = self.session.execute(sql, params).fetchall()
@@ -216,6 +227,7 @@ class HeatingAnalysisEngine:
         start_date_in: Any,
         end_date_in: Any,
         target_company: Optional[str] = None,
+        aggregate: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         计算等价于 `analysis_company_daily` (start==end) 或 `analysis_company_sum` (start!=end) 的全量公司级指标。
@@ -224,17 +236,22 @@ class HeatingAnalysisEngine:
         d_end = parse_date(end_date_in)
         biz_start = min(d_start, d_end)
         biz_end = max(d_start, d_end)
+        requested_end = biz_end
         peer_start = get_peer_date(biz_start)
         peer_end = get_peer_date(biz_end)
+        if biz_start != biz_end or aggregate:
+            # 单日明细不裁剪；区间累计只使用各期独立的统计日期。
+            from .season_utils import clip_statistical_range
+            biz_start, biz_end = clip_statistical_range(biz_start, biz_end, get_season_period(requested_end))
+            peer_start, peer_end = clip_statistical_range(peer_start, peer_end, get_season_period(get_peer_date(requested_end)))
 
-        days_biz = (biz_end - biz_start).days + 1
-        days_peer = (peer_end - peer_start).days + 1
+        biz_period = get_season_period(requested_end)
+        peer_period = get_season_period(get_peer_date(requested_end))
 
-        biz_period = get_season_period(biz_end)
-        peer_period = get_season_period(peer_end)
-
+        heating_fraction_biz = get_heating_income_fraction(biz_start, biz_end, biz_period)
+        heating_fraction_peer = get_heating_income_fraction(peer_start, peer_end, peer_period)
         companies_filter = [target_company] if target_company else None
-        base_dict = self.fetch_base_aggregated_range(biz_start, biz_end, peer_start, peer_end, companies_filter)
+        base_dict = self.fetch_base_aggregated_range(biz_start, biz_end, peer_start, peer_end, companies_filter, counter_anchor=requested_end)
         const_biz, const_peer = self.fetch_constants(biz_period, peer_period)
 
         companies: Set[str] = {k[0] for k in base_dict.keys()}
@@ -378,11 +395,11 @@ class HeatingAnalysisEngine:
                 "value_biz_date": inc_hi_b, "value_peer_date": inc_hi_p,
             })
 
-            # 3. 暖收入 = eco_season_heating_income * days / 156
+            # 3. 暖收入按各自供暖期设定区间分摊，单日越界也为0。
             sh_b = cb.get("eco_season_heating_income", 0.0)
             sh_p = cp.get("eco_season_heating_income", 0.0)
-            inc_heat_b = sh_b * days_biz / 156.0
-            inc_heat_p = sh_p * days_peer / 156.0
+            inc_heat_b = sh_b * heating_fraction_biz
+            inc_heat_p = sh_p * heating_fraction_peer
             results.append({
                 "company": c, "company_cn": c_cn,
                 "item": "eco_heating_supply_income", "item_cn": "其中：暖收入", "unit": "万元",
@@ -580,6 +597,7 @@ class HeatingAnalysisEngine:
         start_date_in: Any,
         end_date_in: Any,
         target_group: Optional[str] = None,
+        aggregate: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         计算等价于 `analysis_groups_daily` 或 `analysis_groups_sum` 的分组指标。
@@ -596,7 +614,7 @@ class HeatingAnalysisEngine:
         peer_period = get_season_period(peer_end)
 
         # 1. 递归获取各基础公司的全量指标
-        company_rows = self.compute_company_analysis(biz_start, biz_end, None)
+        company_rows = self.compute_company_analysis(biz_start, biz_end, None, aggregate=aggregate)
         const_biz, const_peer = self.fetch_constants(biz_period, peer_period)
 
         # 整理公司指标哈希表: { (company, item): (val_biz, val_peer, item_cn, unit) }
@@ -924,6 +942,7 @@ class HeatingAnalysisEngine:
         start_date_in: Any,
         end_date_in: Any,
         sheet_name: Optional[str] = None,
+        aggregate: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         计算等价于 `analysis_beihai_sub_daily` 或 `analysis_beihai_sub_sum` 的北海子表指标。
@@ -933,15 +952,20 @@ class HeatingAnalysisEngine:
         d_end = parse_date(end_date_in)
         biz_start = min(d_start, d_end)
         biz_end = max(d_start, d_end)
+        requested_end = biz_end
         peer_start = get_peer_date(biz_start)
         peer_end = get_peer_date(biz_end)
 
-        days_biz = (biz_end - biz_start).days + 1
-        days_peer = (peer_end - peer_start).days + 1
+        if biz_start != biz_end or aggregate:
+            from .season_utils import clip_statistical_range
+            biz_start, biz_end = clip_statistical_range(biz_start, biz_end, get_season_period(requested_end))
+            peer_start, peer_end = clip_statistical_range(peer_start, peer_end, get_season_period(get_peer_date(requested_end)))
 
-        biz_period = get_season_period(biz_end)
-        peer_period = get_season_period(peer_end)
+        biz_period = get_season_period(requested_end)
+        peer_period = get_season_period(get_peer_date(requested_end))
 
+        heating_fraction_biz = get_heating_income_fraction(biz_start, biz_end, biz_period)
+        heating_fraction_peer = get_heating_income_fraction(peer_start, peer_end, peer_period)
         sub_dict = self.fetch_base_beihai_sub(biz_start, biz_end, peer_start, peer_end, sheet_name)
         const_biz, const_peer = self.fetch_constants(biz_period, peer_period)
         cb = {k[1]: v for k, v in const_biz.items() if k[0] == "BeiHai"}
@@ -1063,8 +1087,8 @@ class HeatingAnalysisEngine:
             })
 
             # 暖收入、高温水、售汽
-            inc_heat_b = cb.get("eco_season_heating_income", 0.0) * days_biz / 156.0
-            inc_heat_p = cp.get("eco_season_heating_income", 0.0) * days_peer / 156.0
+            inc_heat_b = cb.get("eco_season_heating_income", 0.0) * heating_fraction_biz
+            inc_heat_p = cp.get("eco_season_heating_income", 0.0) * heating_fraction_peer
 
             hw_b, hw_p = _get_sub("amount_hot_water_sales")
             inc_hw_b = hw_b * cb.get("price_hot_water_sales", 0.0) / 10000.0
@@ -1149,6 +1173,7 @@ class HeatingAnalysisEngine:
         start_date: date,
         end_date: date,
         sheet_name: Optional[str] = None,
+        aggregate: bool = False,
     ) -> Dict[str, Dict[str, Any]]:
         """
         高精细对齐并替代 `_query_analysis_rows`。
@@ -1160,11 +1185,11 @@ class HeatingAnalysisEngine:
         req_items = set(metric_keys)
 
         if sheet_name in ("BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet") or (unit_key == "BeiHai" and sheet_name):
-            all_rows = self.compute_beihai_sub_analysis(start_date, end_date, sheet_name)
+            all_rows = self.compute_beihai_sub_analysis(start_date, end_date, sheet_name, aggregate=aggregate)
         elif unit_key in ("ZhuChengQu", "Group"):
-            all_rows = self.compute_groups_analysis(start_date, end_date, unit_key)
+            all_rows = self.compute_groups_analysis(start_date, end_date, unit_key, aggregate=aggregate)
         else:
-            all_rows = self.compute_company_analysis(start_date, end_date, unit_key)
+            all_rows = self.compute_company_analysis(start_date, end_date, unit_key, aggregate=aggregate)
 
         res: Dict[str, Dict[str, Any]] = {}
         for r in all_rows:
@@ -1233,6 +1258,12 @@ class HeatingAnalysisEngine:
 
         peer_start = get_peer_date(start_date)
         peer_end = get_peer_date(end_date)
+        if analysis_mode == "range":
+            from .season_utils import clip_statistical_range
+            period = get_season_period(end_date)
+            peer_period = get_season_period(peer_end)
+            start_date, end_date = clip_statistical_range(start_date, end_date, period)
+            peer_start, peer_end = clip_statistical_range(peer_start, peer_end, peer_period)
 
         cur_rows = self._daily_engine.compute_temperature_data(start_date, end_date)
         peer_rows = self._daily_engine.compute_temperature_data(peer_start, peer_end)

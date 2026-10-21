@@ -1,0 +1,4 @@
+# 历史看板查询500回归修复
+最后验证2026-10-21，本机。用户反馈在localhost看板选2025-11-01无法显示。日志确证get_dashboard_data成功计算后会自动调用update_cache_entry；上轮新增当前供暖期统计区间缓存写限制，使历史无缓存GET抛ValueError并返回500。数据未丢，该日daily_basic_data有293行。
+修复backend/projects/daily_report_25_26/api/dashboard.py::get_dashboard_data：禁用缓存或payload.push_date不在当前start_date/end_date内时，直接返回实时payload与cache_hit=False，不尝试自动写缓存。旧缓存仍可命中，当前期仍可写；发布/刷新限制不变。
+新增DashboardReadTests 3项，包含2025历史、当前期开始前/结束后、当前区间可写、历史已有缓存读取；全部供暖期测试15项通过。真实HTTP GET dashboard?show_date=2025-11-01返回200、ok=True、cache_hit=False、17板块。git diff --check通过。前后端README及configs/progress.md同步。仅apply_patch修改GET和测试文档，没有改业务日期/正式数据/历史缓存。此次缺陷是上轮修复遗漏读取路由自动写缓存路径，今后缓存范围限制必须验证读取未命中路径，不能只测写入拒绝。

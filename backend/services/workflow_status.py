@@ -90,9 +90,9 @@ class WorkflowStatusManager:
             if changed:
                 self._persist_locked()
 
-        visible_set = {unit for unit in visible_units}
+        visible_set = set(visible_units) & set(seed_units)
         filtered_units = {
-            unit: state for unit, state in snapshot.units.items() if not visible_set or unit in visible_set
+            unit: state for unit, state in snapshot.units.items() if unit in visible_set
         }
         clone = WorkflowSnapshot(
             units={unit: UnitApprovalState(**vars(state)) for unit, state in filtered_units.items()},

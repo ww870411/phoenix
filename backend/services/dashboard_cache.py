@@ -389,15 +389,72 @@ def resolve_cache_key(show_date: str) -> str:
 
 def get_cache_status(project_key: str) -> Dict[str, Any]:
     with CACHE_LOCK:
-        bundle = _load_bundle(project_key)
-    available_dates = sorted(
-        date_key for date_key in bundle["items"].keys() if date_key != DEFAULT_CACHE_KEY
-    )
+        _ensure_split_cache_ready(project_key)
+        index = _load_index(project_key)
+        available_dates = set()
+        for key, entry in index["entries"].items():
+            anchor = key if key != DEFAULT_CACHE_KEY else entry.get("push_date")
+            if not _is_cache_date(anchor):
+                continue
+            entry_dir = _resolve_cache_root(project_key) / str(entry.get("dir_name") or _entry_dirname(key))
+            if all((entry_dir / part).is_file() for part in ("meta.json", "summary.json", "detail.json", "trend.json")):
+                available_dates.add(anchor)
     return {
-        "disabled": bundle["disabled"],
-        "available_dates": available_dates,
-        "updated_at": bundle["updated_at"],
+        "disabled": index["disabled"],
+        "available_dates": sorted(available_dates),
+        "updated_at": index["updated_at"],
     }
+
+
+def _is_cache_date(value: Any) -> bool:
+    try:
+        return isinstance(value, str) and date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
+
+
+def validate_cache_range(start_date: str, end_date: str) -> tuple[date, date]:
+    """发布与删除共用闭区间校验，禁止缺失或倒置日期。"""
+    if not _is_cache_date(start_date) or not _is_cache_date(end_date):
+        raise ValueError("请提供完整的开始和结束日期（YYYY-MM-DD）")
+    start, end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+    if start > end:
+        raise ValueError("开始日期不能晚于结束日期")
+    return start, end
+
+
+def delete_cache_range(project_key: str, start_date: str, end_date: str) -> Dict[str, Any]:
+    """只删除闭区间内的日期目录与索引，保留其他日期和共享字典。"""
+    validate_cache_range(start_date, end_date)
+    deleted_dates = set()
+    with CACHE_LOCK:
+        _ensure_split_cache_ready(project_key)
+        index = _load_index(project_key)
+        root = _resolve_cache_root(project_key).resolve()
+        targets = {}
+        for key, entry in index["entries"].items():
+            anchor = key if key != DEFAULT_CACHE_KEY else entry.get("push_date")
+            if _is_cache_date(anchor) and start_date <= anchor <= end_date:
+                target = (root / str(entry.get("dir_name") or _entry_dirname(key))).resolve()
+                # 删除前先验证全部绝对路径，限定为当前缓存根目录的直接子目录。
+                if target.parent != root or target == root:
+                    raise ValueError("缓存目录异常，已取消区间清除")
+                targets[key] = target
+                deleted_dates.add(anchor)
+        retained_dirs = {
+            (root / str(entry.get("dir_name") or _entry_dirname(key))).resolve()
+            for key, entry in index["entries"].items() if key not in targets
+        }
+        if any(target in retained_dirs for target in targets.values()):
+            raise ValueError("缓存日期共用目录异常，已取消区间清除")
+        for key, target in targets.items():
+            if target.exists():
+                shutil.rmtree(target)
+            index["entries"].pop(key)
+        if targets:
+            index["updated_at"] = _now_iso()
+            _write_index(project_key, index)
+    return {**get_cache_status(project_key), "deleted_dates": sorted(deleted_dates), "deleted_count": len(deleted_dates)}
 
 
 def get_cached_payload(project_key: str, cache_key: str) -> Tuple[Dict[str, Any] | None, Dict[str, Any]]:
@@ -418,10 +475,17 @@ def get_cached_payload(project_key: str, cache_key: str) -> Tuple[Dict[str, Any]
             return None, status
 
         entry = index["entries"].get(cache_key)
+        # 兼容旧版默认缓存别名；仅当其真实日期与查询日一致时使用。
+        if not isinstance(entry, dict):
+            default_entry = index["entries"].get(DEFAULT_CACHE_KEY)
+            if isinstance(default_entry, dict) and default_entry.get("push_date") == cache_key:
+                entry = default_entry
         if not isinstance(entry, dict):
             return None, status
 
         entry_dir = _resolve_cache_root(project_key) / str(entry.get("dir_name") or _entry_dirname(cache_key))
+        if not all((entry_dir / part).is_file() for part in ("meta.json", "summary.json", "detail.json", "trend.json")):
+            return None, status
         meta = _load_json_dict(entry_dir / "meta.json")
         summary = _load_json_dict(entry_dir / "summary.json")
         detail = _load_json_dict(entry_dir / "detail.json")
@@ -430,6 +494,12 @@ def get_cached_payload(project_key: str, cache_key: str) -> Tuple[Dict[str, Any]
 
     payload = deepcopy(meta)
     payload["data"] = _compose_data(summary, detail, trend, shared)
+    if project_key == DEFAULT_PROJECT_KEY:
+        from backend.services.heating_season_service import get_calculation_signature
+        # 历史期也受分摊公式与各期日期设置影响，旧快照保留但不再命中。
+        if payload.get("calculation_signature") != get_calculation_signature(project_key):
+            status["stale_settings"] = True
+            return None, status
     return payload, status
 
 
@@ -473,7 +543,14 @@ def replace_cache(project_key: str, entries: Dict[str, Dict[str, Any]], disabled
 
 
 def disable_cache(project_key: str) -> Dict[str, Any]:
-    return replace_cache(project_key, {}, disabled=True)
+    """仅关闭缓存命中，保留旧日期条目和文件。"""
+    with CACHE_LOCK:
+        _ensure_split_cache_ready(project_key)
+        index = _load_index(project_key)
+        index["disabled"] = True
+        index["updated_at"] = _now_iso()
+        _write_index(project_key, index)
+    return get_cache_status(project_key)
 
 
 def default_publish_dates(window: int = 7, project_key: str = DEFAULT_PROJECT_KEY) -> List[str]:
@@ -498,51 +575,21 @@ def resolve_publish_schedule(
     window: int = 7,
     project_key: str = DEFAULT_PROJECT_KEY,
     preset: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> tuple[List[str], str]:
-    """
-    解析缓存发布档位。
-    - 默认按最近 N 天发布
-    - 支持指定供暖期全周期发布（如 '25-26'、'26-27'、'season' 或 'current'）
-    """
-    import re
-    from backend.services import heating_season_service
-
-    normalized_preset = str(preset or "").strip()
-    if normalized_preset:
-        season_cfg = heating_season_service.get_season_config(project_key)
-        active_period = season_cfg.get("active_period", "25-26")
-
-        target_period: Optional[str] = None
-        start_date: Optional[date] = None
-        end_date: Optional[date] = None
-
-        if normalized_preset.lower() in {"season", "current", "active"}:
-            target_period = active_period
-            start_date = date.fromisoformat(season_cfg.get("start_date", "2025-11-01"))
-            end_date = date.fromisoformat(season_cfg.get("end_date", "2026-04-05"))
-        elif re.match(r"^\d{2}-\d{2}$", normalized_preset):
-            target_period = normalized_preset
-            if target_period == active_period:
-                start_date = date.fromisoformat(season_cfg.get("start_date", "2025-11-01"))
-                end_date = date.fromisoformat(season_cfg.get("end_date", "2026-04-05"))
-            else:
-                parts = target_period.split("-")
-                y1 = int(parts[0])
-                y2 = int(parts[1])
-                start_date = date(2000 + y1, 11, 1)
-                end_date = date(2000 + y2, 4, 5)
-
-        if start_date and end_date and target_period:
-            total_days = (end_date - start_date).days + 1
-            schedule = [
-                (start_date + timedelta(days=offset)).isoformat()
-                for offset in range(total_days)
-            ]
-            return schedule, target_period
-
-        raise ValueError(f"不支持的缓存发布档位：{normalized_preset}")
-
-    return default_publish_dates(window=window, project_key=project_key), f"{window}天"
+    """显式区间可跨供暖期；未指定时兼容当前期预设，逐日追加或覆盖。"""
+    if start_date is not None or end_date is not None:
+        start, end = validate_cache_range(start_date, end_date)
+        return [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)], f"{start_date} 至 {end_date}"
+    from backend.services.heating_season_service import get_season_config
+    cfg = get_season_config(project_key)
+    if preset and preset not in {"season", "current", "active", cfg["active_period"]}:
+        raise ValueError("仅允许发布当前供暖期缓存")
+    start, end = date.fromisoformat(cfg["start_date"]), date.fromisoformat(cfg["end_date"])
+    if start > end:
+        raise ValueError("日报统计开始日不能晚于结束日")
+    return [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)], cfg["active_period"]
 
 
 def summarize_cache(project_key: str) -> Dict[str, Any]:
@@ -552,11 +599,14 @@ def summarize_cache(project_key: str) -> Dict[str, Any]:
 __all__ = [
     "DEFAULT_CACHE_KEY",
     "default_publish_dates",
+    "delete_cache_range",
     "disable_cache",
     "get_cache_status",
     "get_cached_payload",
     "replace_cache",
     "resolve_cache_key",
+    "resolve_publish_schedule",
+    "validate_cache_range",
     "summarize_cache",
     "update_cache_entry",
 ]

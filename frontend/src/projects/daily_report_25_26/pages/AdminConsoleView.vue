@@ -394,22 +394,11 @@
                 <button class="btn ghost" type="button" :disabled="!canManageCache || cachePending || bizDateLoading" @click="syncDashboardBizDate">
                   {{ bizDateLoading ? '读取中…' : '读取业务日期' }}
                 </button>
-                <label>
-                  <span>发布范围</span>
-                  <select v-model="publishDays" :disabled="!canManageCache || cachePending">
-                    <option :value="1">1</option>
-                    <option :value="3">3</option>
-                    <option :value="7">7</option>
-                    <option :value="14">14</option>
-                    <option :value="30">30</option>
-                    <option value="25-26">25-26</option>
-                  </select>
-                </label>
+                <DashboardCacheManager v-if="canManageCache" :project-key="TARGET_PROJECT_KEY" @started="loadProjectSettings" @changed="loadProjectSettings" />
                 <label>
                   <span>刷新日期</span>
                   <input v-model="refreshDate" :disabled="!canManageCache || cachePending" type="date" />
                 </label>
-                <button class="btn primary" type="button" :disabled="!canManageCache || cachePending" @click="publishCache">发布缓存</button>
                 <button class="btn ghost" type="button" :disabled="!canManageCache || cachePending" @click="refreshCache">刷新单日</button>
                 <button class="btn ghost" type="button" :disabled="!canManageCache || cachePending" @click="cancelPublish">停止任务</button>
                 <button class="btn danger" type="button" :disabled="!canManageCache || cachePending" @click="disableCache">禁用缓存</button>
@@ -1961,6 +1950,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRoute, useRouter } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
 import AppHeader from '../components/AppHeader.vue'
+import DashboardCacheManager from '../components/DashboardCacheManager.vue'
 import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
 import AiChatWorkspace from '../components/AiChatWorkspace.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
@@ -2004,7 +1994,6 @@ import {
   moveSuperPath,
   queryAdminDbTable,
   readSuperFile,
-  publishAdminDashboardCache,
   refreshAdminCache,
   importProjectTemperatureData,
   commitProjectTemperatureData,
@@ -2577,7 +2566,6 @@ const pageAccessGroupCollapsed = ref(true)
 const pageAccessGroupBulkPending = ref('')
 const aiSettingsDialogVisible = ref(false)
 const cachePending = ref(false)
-const publishDays = ref('1')
 const refreshDate = ref('')
 const dashboardBizDate = ref('')
 const bizDateLoading = ref(false)
@@ -4694,20 +4682,6 @@ async function toggleValidationMaster() {
     await loadProjectSettings()
   } finally {
     validationPending.value = false
-  }
-}
-
-async function publishCache() {
-  if (!canManageCache.value) return
-  cachePending.value = true
-  try {
-    const publishParams = publishDays.value === '25-26'
-      ? { preset: '25-26' }
-      : { days: Number(publishDays.value) || 7 }
-    await publishAdminDashboardCache(publishParams)
-    await loadProjectSettings()
-  } finally {
-    cachePending.value = false
   }
 }
 

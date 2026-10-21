@@ -3,8 +3,21 @@
   "peer_period": "25-26",
   "start_date": "2026-11-01",
   "end_date": "2027-04-05",
+  "temperature_start_date": "2026-11-01",
+  "seasons": {
+    "26-27": {
+      "start_date": "2026-11-01",
+      "end_date": "2027-04-05",
+      "temperature_start_date": "2026-11-01"
+    },
+    "25-26": {
+      "start_date": "2025-11-01",
+      "end_date": "2026-04-05",
+      "temperature_start_date": "2025-11-01"
+    }
+  },
   "switch_date_rule": "10-01",
   "stat_days": 156,
   "description": "切换供暖期至 26-27",
-  "updated_at": "2026-10-21T08:48:56.732771+08:00"
+  "updated_at": "2026-10-21T09:51:59.960830+08:00"
 }

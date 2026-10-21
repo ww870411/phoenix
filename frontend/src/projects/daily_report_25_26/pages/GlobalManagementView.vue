@@ -554,15 +554,34 @@
                 </label>
 
                 <label class="field">
-                  <span class="field-title">❄️ 供暖期开栓起始日 (start_date)</span>
+                  <span class="field-title">日报统计开始日</span>
                   <input v-model="formStartDate" type="date" class="input" />
-                  <small class="field-help">供暖季开栓第一天，标准期至今(YTD)累计从此日开始计算。</small>
+                  <small class="field-help">月累计、近7日与供暖期累计均只统计此日起的数据，当日明细不受限制。</small>
                 </label>
 
                 <label class="field">
-                  <span class="field-title">🌸 供暖期停热结束日 (end_date)</span>
+                  <span class="field-title">日报统计结束日</span>
                   <input v-model="formEndDate" type="date" class="input" />
-                  <small class="field-help">供暖季停热法定结束日。</small>
+                  <small class="field-help">累计统计止于此日，之后录入的当日明细仍可查询。</small>
+                </label>
+
+                <label class="field">
+                  <span class="field-title">本期平均气温起算日</span>
+                  <input v-model="formTemperatureStartDate" type="date" class="input" />
+                  <small class="field-help">默认当期11月1日，独立于日报统计开始日；期均温计算至查询日，最晚统计结束日。</small>
+                </label>
+                <label class="field">
+                  <span class="field-title">同期平均气温起算日（{{ seasonConfig.peer_period }}）</span>
+                  <input v-model="formPeerTemperatureStartDate" type="date" class="input" />
+                </label>
+                <label class="field">
+                  <span class="field-title">同期日报统计开始日</span>
+                  <input v-model="formPeerStartDate" type="date" class="input" />
+                </label>
+                <label class="field">
+                  <span class="field-title">同期日报统计结束日</span>
+                  <input v-model="formPeerEndDate" type="date" class="input" />
+                  <small class="field-help">本期与同期分别保存各自的日期设置，回看历史时使用历史期的设置。</small>
                 </label>
 
                 <label class="field full-width">
@@ -587,7 +606,7 @@
               <div class="card-header-row">
                 <div>
                   <div class="card-header">⚙️ 供暖期与时间窗口参数管理</div>
-                  <p class="sub block-sub">配置供暖季开栓分界线、标准采暖期天数（156天）、闰年同期日映射与跨期自适应规则。</p>
+                  <p class="sub block-sub">暖收入按各期设定的统计起止日期等额分摊，天数自动计算并包含首尾日期。</p>
                 </div>
               </div>
               <div class="field-grid core-field-grid">
@@ -597,9 +616,9 @@
                   <small class="field-help">由 season_utils 根据当前系统日期自动推导，免人工硬编码。</small>
                 </label>
                 <label class="field">
-                  <span>法定采暖期核算天数</span>
-                  <input type="number" class="input" value="156" disabled />
-                  <small class="field-help">暖收入每日平摊基准天数 (eco_season_heating_income / 156.0)。</small>
+                  <span>当期暖收入分摊天数</span>
+                  <input type="number" class="input" :value="seasonConfig.stat_days" disabled />
+                  <small class="field-help">整期暖收入 ÷ 当期统计总天数；只向设定区间内的日期分摊，同期按其自身设置计算。</small>
                 </label>
                 <label class="field">
                   <span>新旧采暖季切换基准月日</span>
@@ -728,6 +747,10 @@ const selectedPeriod = ref('25-26')
 const formBizDate = ref('')
 const formStartDate = ref('')
 const formEndDate = ref('')
+const formTemperatureStartDate = ref('')
+const formPeerStartDate = ref('')
+const formPeerEndDate = ref('')
+const formPeerTemperatureStartDate = ref('')
 const formDescription = ref('')
 const savingSeason = ref(false)
 const seasonTip = ref(null)
@@ -788,6 +811,10 @@ async function loadSeasonConfig() {
         formBizDate.value = data.current_biz_date || currentBizDate.value || ''
         formStartDate.value = data.start_date || '2025-11-01'
         formEndDate.value = data.end_date || '2026-04-05'
+        formTemperatureStartDate.value = data.temperature_start_date || `${data.start_date.slice(0, 4)}-11-01`
+        formPeerStartDate.value = data.peer_settings.start_date
+        formPeerEndDate.value = data.peer_settings.end_date
+        formPeerTemperatureStartDate.value = data.peer_settings.temperature_start_date
       }
     }
   } catch (err) {
@@ -807,6 +834,14 @@ function onPeriodSelectChange() {
       seasonConfig.value.peer_period = `${String(py1).padStart(2, '0')}-${String(py2).padStart(2, '0')}`
       formStartDate.value = `20${String(y1).padStart(2, '0')}-11-01`
       formEndDate.value = `20${String(y2).padStart(2, '0')}-04-05`
+      const saved = seasonConfig.value.seasons?.[p]
+      formStartDate.value = saved?.start_date || formStartDate.value
+      formEndDate.value = saved?.end_date || formEndDate.value
+      formTemperatureStartDate.value = saved?.temperature_start_date || `20${String(y1).padStart(2, '0')}-11-01`
+      const peerSaved = seasonConfig.value.seasons?.[seasonConfig.value.peer_period]
+      formPeerStartDate.value = peerSaved?.start_date || `20${String(py1).padStart(2, '0')}-11-01`
+      formPeerEndDate.value = peerSaved?.end_date || `20${String(py2).padStart(2, '0')}-04-05`
+      formPeerTemperatureStartDate.value = peerSaved?.temperature_start_date || `20${String(py1).padStart(2, '0')}-11-01`
       formBizDate.value = formStartDate.value
     }
   }
@@ -824,6 +859,10 @@ async function saveSeasonConfig() {
         biz_date: autoAlignBizDate.value ? formStartDate.value : (standaloneBizDate.value || currentBizDate.value),
         start_date: formStartDate.value,
         end_date: formEndDate.value,
+        temperature_start_date: formTemperatureStartDate.value,
+        peer_start_date: formPeerStartDate.value,
+        peer_end_date: formPeerEndDate.value,
+        peer_temperature_start_date: formPeerTemperatureStartDate.value,
         description: formDescription.value || `切换供暖期至 ${selectedPeriod.value}`,
       }),
     })

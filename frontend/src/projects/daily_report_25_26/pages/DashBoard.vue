@@ -107,25 +107,7 @@
         <button class="pdf-download-btn" @click="downloadPDF">下载PDF</button>
         <div v-if="canManageCache" class="dashboard-cache-controls">
           <div class="dashboard-cache-buttons">
-            <label class="cache-days-control" title="缓存发布窗口天数">
-              <span>发布范围</span>
-              <select v-model="cachePublishPreset">
-                <option :value="1">1天</option>
-                <option :value="3">3天</option>
-                <option :value="7">7天</option>
-                <option :value="14">14天</option>
-                <option :value="30">30天</option>
-                <option value="25-26">25-26</option>
-              </select>
-            </label>
-            <button
-              class="cache-btn"
-              type="button"
-              @click="handlePublishDashboardCache"
-              :disabled="cacheActionBusy || cacheJob.status === 'running'"
-            >
-              发布缓存
-            </button>
+            <DashboardCacheManager :project-key="projectKey" @started="handleCacheManagerStarted" @changed="handleManagedCacheChanged" />
             <button
               v-if="cacheJob.status === 'running'"
               class="cache-btn cache-btn--warning"
@@ -693,6 +675,7 @@
 <script setup>
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import DashboardCacheManager from '../components/DashboardCacheManager.vue'
 import {
   cancelCachePublishJob,
   disableDashboardCache,
@@ -701,7 +684,6 @@ import {
   getDashboardData,
   importTemperatureData,
   commitTemperatureData,
-  publishDashboardCache,
 } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
@@ -1197,7 +1179,6 @@ const { canPublish } = storeToRefs(authStore)
 const canManageCache = computed(() => Boolean(canPublish.value))
 const cacheActionBusy = ref(false)
 const cacheActionMessage = ref('')
-const cachePublishPreset = ref('1')
 const temperatureImportBusy = ref(false)
 const temperatureImportDialogVisible = ref(false)
 const temperatureImportCommitBusy = ref(false)
@@ -1405,30 +1386,15 @@ async function loadDashboardData(showDate = '', options = {}) {
   }
 }
 
-async function handlePublishDashboardCache() {
-  if (!canManageCache.value || cacheActionBusy.value || cacheJob.status === 'running') return
-  cacheActionBusy.value = true
-  cacheActionMessage.value = ''
-  try {
-    const publishParams = cachePublishPreset.value === '25-26'
-      ? { preset: '25-26' }
-      : { days: Number(cachePublishPreset.value) || 7 }
-    const payload = await publishDashboardCache(projectKey, publishParams)
-    if (payload?.job) {
-      handleCacheJobSnapshot(payload.job)
-      if (payload.job.status === 'running') {
-        cacheActionMessage.value = `缓存发布任务已启动（${payload?.selection_label || cachePublishLabel.value}）`
-        startCacheJobPolling()
-      } else if (payload.job.status === 'completed') {
-        cacheActionMessage.value = '缓存发布完成'
-        await loadDashboardData(selectedShowDate.value, { allowCache: false })
-      }
-    }
-  } catch (err) {
-    cacheActionMessage.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    cacheActionBusy.value = false
-  }
+function handleCacheManagerStarted(snapshot) {
+  if (snapshot) handleCacheJobSnapshot(snapshot)
+  if (snapshot?.status === 'running') startCacheJobPolling()
+}
+
+async function handleManagedCacheChanged() {
+  // 服务端区间变化后丢弃本页面记忆的所有日期，防止再次切换到已清除的旧快照。
+  dashboardCache.clear()
+  await loadDashboardData(selectedShowDate.value, { allowCache: false })
 }
 
 async function handleCancelCacheJob() {
@@ -1600,7 +1566,7 @@ const calcAverageFromList = (values) => {
   }
   if (values && typeof values === 'object' && !Array.isArray(values)) {
     const candidate = [values.avg, values.aver_temp, values.average, values.value]
-      .map((item) => Number(item))
+      .map((item) => item === null || item === undefined || item === '' ? NaN : Number(item))
       .find((item) => Number.isFinite(item))
     if (Number.isFinite(candidate)) {
       return Number(candidate.toFixed(2))
@@ -3265,9 +3231,9 @@ const handleCacheJobSnapshot = (job) => {
   updateCacheJob(job)
   if (previous === 'running' && job?.status !== 'running') {
     stopCacheJobPolling()
+    handleManagedCacheChanged()
     if (job?.status === 'completed') {
       cacheActionMessage.value = '缓存发布完成'
-      loadDashboardData(selectedShowDate.value, { allowCache: false })
     } else if (job?.status === 'failed') {
       cacheActionMessage.value = `缓存发布失败：${job?.error || '未知错误'}`
     } else if (job?.status === 'aborted') {
@@ -6282,8 +6248,3 @@ onMounted(() => {
   text-transform: uppercase;
 }
 </style>
-const cachePublishLabel = computed(() => {
-  if (cachePublishPreset.value === '25-26') return '25-26'
-  const days = Number(cachePublishPreset.value)
-  return Number.isFinite(days) ? `${days}天` : '7天'
-})
