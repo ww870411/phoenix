@@ -1,3 +1,109 @@
+## 2026-10-27 动态计划指标：动态分解默认增加“平均气温”参考曲线与自由开闭功能 (Default Average Temperature Curve with Toggle)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **默认叠加平均气温参考曲线**：勾选“动态分解”时，默认将每日平均气温（℃）作为关键环境参照线同步绘制在走势图中，呈现计划与气温波动的真实对照；
+      - **专属开闭切换胶囊**：在二级控制横栏中新增 `[☑ 🌡️ 平均气温曲线]` 专属交互开关，支持一键开闭，且与 ECharts 图例双向联动；
+      - **自适应多坐标轴体系**：单单位指标时气温占右轴，双单位指标时气温作为右轴 2 独立外挂偏移，杜绝刻度挤压与数值失真。
+
+## 2026-10-27 动态计划指标：双纵轴映射指引条门槛放宽 (Dual-Axis Mapping Banner for Two Metrics)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **双轴指标标签门槛放宽**：调整计算属性 `chartAxisMappingInfo` 的展示门槛（由 `> 2` 改为 `>= 2`），只要图表勾选的指标存在不同单位分属左右轴（如供热量 GJ 与标煤耗量 吨），立即展示双纵轴对照指引横幅；
+      - **清晰标注左右轴标签名**：横幅左右两侧分别展示左轴单位与指标标签名（Pill 形式）、右轴单位与指标标签名，并支持点击标签一键高亮聚焦；
+      - **多图表模式通用**：解除动态分解模式下的排他限制，让动态分解走势图在分左右轴时同样享有清晰的指标对照引导。
+
+## 2026-10-27 动态计划指标：移除二次筛选“同步”按钮并还原三大核心指标默认值 (Remove Sync Button & Restore Core Defaults)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **移除“同步”按钮**：二次筛选浮动选单顶部快捷操作区精简为【全选】与【清空】，界面更干净整洁；
+      - **还原核心默认值**：图表二次筛选默认且稳定呈现三大核心生产指标：供热量、发电量与标煤耗量；
+      - **优化联动保护**：优化全局指标 `watch` 行为，仅在上层筛选取消勾选某指标时剔除图表对应项，不再强制改写图表的默认核心指标集合。
+
+## 2026-10-27 动态计划指标：二次筛选“同步”功能行为重构 (Sync Chart Metrics with Global Selection)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **“同步”按钮逻辑重构**：彻底解绑此前默认还原 3 项核心指标的写死逻辑，在点击【同步】按钮时调用 `syncWithGlobalSelectedMetrics`，将图表呈现指标严格赋值为上方全局指标选择器勾选的全部指标集合（`[...selectedMetricKeys]`）；
+      - **自适应响应联动机制**：重构 `watch(selectedMetricKeys)`，在用户未进行个性化定制时，上方指标列表的任何勾选变化都会实时驱动图表 100% 同步呈现；若用户手动进行过二次筛选增删，则仅做差集安全过滤；
+      - **按钮语义与行为统一**：【同步】负责与上方选单完全对齐；【全选】负责全选当前列表所有指标；【清空】负责完全置空图表呈现。
+
+## 2026-10-27 动态计划指标：二次筛选下拉浮层截断修复与双层分级控制栏专业排版重构 (Dropdown Overlay & Sub-Toolbar Hierarchy)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **彻底消除截断与外部垂直滚动条**：移除顶栏容器上被隐式触发的 `overflow-x: auto`，显式指定 `overflow: visible !important`；将二次筛选下拉面板提升至 `z-index: 9999`，使其自由无阻悬浮在图表上方，仅在面板内部维持平滑滚动；
+      - **双层分级控制栏全新专业排版**：
+        - **顶层主工具栏**：左侧 4 个模式 Tab，右侧仅保留高质感胶囊开关【⚡ 动态分解】与【📉 图表呈现 (X项) ▼】二次筛选器，单行呼吸感极好，杜绝任何折行与拥挤；
+        - **专属二级控制横栏**：开启动态分解时独立平滑展开，整齐排布 `📅 分解计划月份`、`🌡️ 全月日均温`、`🔥 月平均 HDD20`、`✓ 严格守恒审计徽章` 以及 `[📋 查看 30 天逐日明细表]`；
+      - **彻底消除文字叠印**：ECharts 内嵌标题设为 `{ show: false }`，图例独占顶层（top: 8），网格充足留白，图例与指标曲线、气温曲线清晰分层。
+
+## 2026-10-27 动态计划指标：图表布局防换行、清空清爽态与ECharts零遮挡分层重构 (Layout & Anti-Collision Polish)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **布局防折行**：开启动态分解时隐藏原长范围标签，工具栏容器设定 `flex-wrap: nowrap` 与 `flex-shrink: 0`，确保勾选展开后整行纹丝不动；
+      - **清空置空**：修复二次筛选清空后的 fallback 逻辑，清空后严格返回空数组并呈现引导态；
+      - **图表防遮挡重构**：ECharts 主标题单行居顶（top: 8），图例下移至独立行（top: 42），网格安全高度扩展至 top: 85，彻底隔离各视觉层；Tooltip 开启 `confine: true`，对非 $k$ 指标显式提示“无k·日均摊”。
+
+## 2026-10-27 动态计划指标：动态分解复选框、气温门禁联动与逐日计划走势图 (Dynamic Decomposition View)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - 图表工具栏新增【⚡ 动态分解】复选框（默认不选中），支持快捷切换目标计划月份；
+      - **气温门禁校验与拦截**：当选中月份未覆盖全月气温时，图表及上方横幅以醒目预警形式提示缺少日期，并支持一键拉取预报；
+      - **逐日动态分解走势曲线**：当全月气温齐备时，图表 X 轴自动切换为当月日期（如 11-01 至 11-30），呈现各具备 $k$ 值指标的自适应平滑日计划曲线，Tooltip 实时呈现当日日均温、HDD20、指标计划值与日权重；
+      - **全月逐日明细核对表**：支持一键展开/收起 30 天逐日计划矩阵，底部附带“全月合计守恒”审计核验；
+    - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)：新增 `fetchDynamicDailyDecomposition` 接口。
+
+## 2026-10-27 保温管子项目：解除 tube_site_manager 用户组数据导出 Excel 限制 (Enable Site Manager Excel Export)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与导出组件**：
+    - [`HistoryQueryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue)（历史综合查询页：主界面表格导出与发运单明细导出）；
+    - [`DemandManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue)（需求侧管理页：到货确认流水与需求台账导出）；
+    - [`DashboardView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/insulation_pipe_supply_2026/pages/DashboardView.vue)（运营看板页：数据透视表与标段需求库存导出）。
+  - **前端交互与控制表现**：
+    - 前端权限状态管理 [`auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js) 通过 `canExtractXlsxFor('insulation_pipe_supply_2026')` 读取到 `can_extract_xlsx` 为 `true`；
+    - 各视图上绑定 `v-if="canExtractXlsx"` 的“📥 导出 Excel”按钮对 `tube_site_manager` 角色组解除隐藏，恢复正常渲染与交互，支持利用 `xlsx-js-style` 生成并下载各表格与台账数据。
+
+## 2026-10-27 26-27供暖期“动态计划指标”页面全流程上线 (Dynamic Plan Metrics Visualization)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与路由**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)（新增页面，路由 `/projects/:projectKey/pages/dynamic_plan`）；
+    - [`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)（在功能选择主页中新增“动态计划指标”导航卡片）；
+    - [`auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js)（放行 `dynamic_plan` 页面访问权限）；
+    - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)（追加 `getDynamicPlanMeta` 与 `getDynamicPlanData` 接口封装）。
+  - **交互体验与界面设计亮点**：
+    1. **单位口径全覆盖**：顶部提供 10 个单位（集团、北海、热力、供热、金山、庄河、润东、华顺、长海、研究院）的交互式快捷筛选；
+    2. **连续月份多选与周期预设**：可自由多选 26.11~27.4（及 26.10 备用月），并支持一键切换“全采暖期 (11-4月)”、“含供暖初期 (10-4月)”；
+    3. **6 大核心 KPI 动态卡片**：自动汇总结算区间内的计划供热量、标煤耗、原煤耗、发电量（附带售电量）、外购水量及供暖综合单耗（累计），其中供暖综合热单耗、水单耗、电单耗全部统一使用各月累计求和值（Total），真实反映采暖期强度指标；
+    4. **指标驱动的全局动态图表体系与二次筛选器 (所选即所绘)**：
+       - 彻底打通顶部全局指标池、图表专属筛选与下方表格的三位一体深度联动；
+       - **图表专属二次筛选器**：位于图表顶栏（显示“图表呈现: X / Y 项”），**默认仅选中【供热量】、【发电量】、【标煤耗量】3 个核心指标**（避免 30 条曲线过于拥挤），用户可随时下拉勾选更多或取消特定曲线，仅作用于图表呈现，不破坏下方表格完整数据；支持【默认核心(3项)】、【全选同步】、【清空】快捷操作；
+       - **动态走势对比 (dynamic_trend)**：随图表勾选实时绘制多指标连续月度折线，具备智能单位探测与自适应双 Y 轴分布（解决单耗与总量量级差异），单选时展示优雅面积填充，点击表格行实现图表加粗高亮与非选淡化；
+       - **动态柱状对比 (dynamic_bar)**：多指标多月份并排柱状对比；
+       - **负荷占比环形图 (donut_distribution)**：随当前聚焦指标或勾选主指标动态切换，呈现该指标 7 个月的占比分布；
+       - **供热燃煤基准专题 (trend_heat_coal)**：保留暖通核心能耗双轴专题图；
+    5. **指标下拉复选列表与数据矩阵**：移除原有分类胶囊与搜索框，重构为轻量级下拉复选列表（支持全选/清空/反选/外部点击收起），与下方矩阵表格实时联动；彻底移除表格中的【指标分类】列，首列直接固定展示【指标名称】（带全口径聚合胶囊标签），并同步移除导出 Excel 中的指标分类列及 CSS样式，支持首列与表头冻结、峰值标注及 XLSX 导出；
+    6. **双纵轴对照指引条与全景轴向标注体系 (Axis Mapping Banner & Indicator Routing)**：当图表选中的指标项超过 2 个且存在不同单位时，图表正上方自适应展示高颜值渐变对照横幅，左右两侧分别清晰标明“左纵轴 (主单位)”与“右纵轴 (辅单位集合)”，动态罗列指标胶囊与专属调色板色点，支持点击指标胶囊高亮聚焦；图例保持纯净指标名称，移除中间冗余文字，视觉极为清爽干练；
+    7. **35天集合气温预报一键导入与状态反馈**：在月份选择工具栏新增【⛅ 导入35天预报】按钮，调用 Open-Meteo GFS05 集合预报服务，自动对 31 个 member 逐小时计算算术均值并截断全 null 时刻，以 `type='far'` 写入 `temperature_data` 表，配备防重放加载态与操作结果动态提示。
+
+## 2026-10-22 庄河每日填报煤耗项目
+
+- 庄河每日填报模板不再展示“原煤耗量(张屯)”“标煤耗量(张屯)”两行（本期和同期列一并隐藏），其他指标保持原样。刷新模板后生效，历史数据库记录及分析、展示取数不删除。
+- 本期未填张屯煤耗时，集团汇总对应贡献为0；已存值不会因隐藏自动清零，同期仍参与历史比较。无需前端构建或数据迁移。
+
 ## 2026-10-21 暖收入动态分摊口径
 
 - 全局管理中心显示“当期暖收入分摊天数”，读取服务端根据统计起止日计算的`stat_days`，移除固定156天及法定天数说明。指标目录公式也同步为动态分摊。

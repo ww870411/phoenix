@@ -110,7 +110,7 @@
         "can_manage_modularization": false,
         "can_manage_validation": false,
         "can_manage_ai_settings": false,
-        "can_extract_xlsx": false
+        "can_extract_xlsx": true
       }
     },
     "tube_construction_unit": {

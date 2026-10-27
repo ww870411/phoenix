@@ -71,6 +71,10 @@ const routes = [
     component: () => import('../projects/daily_report_25_26/pages/SpotElectricityView.vue'),
   },
   {
+    path: '/projects/:projectKey/pages/dynamic_plan',
+    component: () => import('../projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue'),
+  },
+  {
     path: '/projects/:projectKey/pages/global_management',
     component: () => import('../projects/daily_report_25_26/pages/GlobalManagementView.vue'),
   },
@@ -195,6 +199,15 @@ router.beforeEach(async (to) => {
     const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
     if (!auth.hasProjectAccess(pKey)) {
       return makeForbiddenRedirect(to, pKey, 'spot_electricity')
+    }
+    return true
+  }
+
+  // 5.1.1 动态计划指标专属路由校验：凡是有权访问该项目的用户均可直接进入
+  if (to.path.endsWith('/pages/dynamic_plan')) {
+    const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
+    if (!auth.hasProjectAccess(pKey)) {
+      return makeForbiddenRedirect(to, pKey, 'dynamic_plan')
     }
     return true
   }

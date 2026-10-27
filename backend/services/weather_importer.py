@@ -228,7 +228,7 @@ def persist_hourly_temperatures(
 
     now = datetime.now(tz=EAST_8)
     rows = [
-        TemperatureData(date_time=dt, value=val, operation_time=now)
+        TemperatureData(date_time=dt, value=val, operation_time=now, type="near")
         for dt, val in deduped.items()
     ]
     session.bulk_save_objects(rows)

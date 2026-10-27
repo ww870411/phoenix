@@ -40,6 +40,12 @@
         "数据源":"projects/daily_report_25_26/config/数据结构_数据分析表.json",
         "页面描述":"数据自由组合提取"
       },
+      "dynamic_plan":
+      {
+        "页面名称":"动态计划指标",
+        "数据源":"paln_and_real_month_data",
+        "页面描述":"供暖期各单位月度计划与指标趋势图谱"
+      },
       "spot_electricity":
       {
         "页面名称":"电力现货市场数据",

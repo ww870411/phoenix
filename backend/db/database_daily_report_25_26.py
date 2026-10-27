@@ -1,4 +1,3 @@
-
 """SQLAlchemy session and ORM models for daily_report_25_26."""
 
 from __future__ import annotations
@@ -67,6 +66,7 @@ class TemperatureData(Base):
     date_time = Column(DateTime, nullable=False)
     value = Column(Numeric(18, 4))
     operation_time = Column(DateTime, nullable=False)
+    type = Column(Text, default="near")
 
 
 class CoalInventoryData(Base):
@@ -101,6 +101,23 @@ class PlanAndRealMonthData(Base):
     value = Column(Numeric(18, 4))
     type = Column(Text, nullable=False)
     operation_time = Column(DateTime, nullable=False)
+
+
+class DynamicMonthPlanK(Base):
+    """动态计划月度分解气温敏感度建议 k 参数模型。"""
+    __tablename__ = "dynamic_month_plan_k"
+
+    id = Column(Integer, primary_key=True)
+    model_no = Column(Integer)
+    company = Column(Text, nullable=False)
+    company_cn = Column(Text)
+    month = Column(Integer, nullable=False)
+    item = Column(Text, nullable=False)
+    item_cn = Column(Text)
+    unit = Column(Text)
+    k_value = Column(Numeric(24, 16), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
 
 def get_session() -> Generator:
     session = SessionLocal()

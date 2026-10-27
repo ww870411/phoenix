@@ -1,0 +1,12 @@
+{
+  "rows": 83,
+  "centers": 70,
+  "sourceRecords": 153,
+  "missing": 9,
+  "sheets": [
+    "单位常量搜集",
+    "供热分中心搜集",
+    "填报口径说明"
+  ],
+  "target": "D:\\编程项目\\phoenix\\outputs\\2026-10-22-constants\\26-27供暖期常量指标搜集表（含25-26参考）.xlsx"
+}

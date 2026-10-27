@@ -632,6 +632,14 @@
       "unit": "项目全局浏览",
       "project_roles": {}
     },
+    "数据管理员": {
+      "password": "shuju_1026",
+      "groups": [
+        "tube_data_viewer"
+      ],
+      "unit": "项目全局浏览",
+      "project_roles": {}
+    },
     "张文韬": {
       "password": "zhangwentao_0831",
       "groups": [

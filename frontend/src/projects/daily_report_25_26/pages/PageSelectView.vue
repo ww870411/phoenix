@@ -150,6 +150,7 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   data_entry: '填写并提交日报数据',
   constant_data: '维护常量指标数据',
   data_analysis: '数据自由组合提取',
+  dynamic_plan: '供暖期各单位月度计划指标图谱与多维趋势分析',
   spot_electricity: '15分钟日前/实时电价、实时与日前价差走势',
   global_management: '生产指标与算法体系字典、实时验算沙盒与核心运行参数',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
@@ -407,6 +408,14 @@ function openPage(page) {
     router.push({
       path: `${base}`,
       query: { pageName: targetName },
+    })
+    return
+  }
+  const isDynamicPlan = normalizedKey === 'dynamic_plan'
+  if (isDynamicPlan) {
+    router.push({
+      path: `${base}`,
+      query: { pageName: page.page_name || '动态计划指标' },
     })
     return
   }

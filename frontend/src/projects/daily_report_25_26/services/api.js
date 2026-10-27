@@ -3234,6 +3234,68 @@ export async function manualSyncSpotElectricity(projectKey = 'daily_report_25_26
   return response.json()
 }
 
+export async function getDynamicPlanMeta(projectKey = 'daily_report_25_26') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dynamic_plan/meta`, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取动态计划元数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getDynamicPlanData(projectKey = 'daily_report_25_26', params = {}) {
+  const query = new URLSearchParams()
+  if (params.company) query.set('company', params.company)
+  if (params.start_month) query.set('start_month', params.start_month)
+  if (params.end_month) query.set('end_month', params.end_month)
+  if (params.plan_type) query.set('plan_type', params.plan_type)
+
+  const url = `${projectPath(projectKey)}/dynamic_plan/plans?${query.toString()}`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取动态计划数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function importEnsembleTemperature(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/dynamic_plan/import_ensemble_temperature`
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '导入35天集合气温预报失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function fetchDynamicDailyDecomposition({
+  projectKey = 'daily_report_25_26',
+  company = 'Group',
+  yearMonth = '2026-11',
+} = {}) {
+  const url = `${projectPath(projectKey)}/dynamic_plan/daily_decomposition?company=${encodeURIComponent(company)}&year_month=${encodeURIComponent(yearMonth)}`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取动态日分解计划失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+
 export async function checkSpotElectricityExists(projectKey = 'daily_report_25_26', date) {
   const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/sync/check_exists?date=${encodeURIComponent(date)}`)
   const response = await authAwareFetch(url, {

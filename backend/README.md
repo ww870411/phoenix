@@ -1,3 +1,74 @@
+## 2026-10-27 动态计划日分解全量指标均摊与非k水平基准线支持 (Non-K Constant Baseline Support)
+
+- **核心服务与计算逻辑说明**：
+  - **全量指标均摊平直走势**：
+    - [`dynamic_decomposition_service.py`](file:///D:/编程项目/phoenix/backend/services/dynamic_decomposition_service.py)：
+      - 针对未纳入建议 $k$ 值模型的其他生产计划指标（如耗水量、耗酸量、耗碱量、外购电量等），算法将其视作 $k=0$；
+      - 每日计划严格等分均摊：$P_{daily}(d) = P_{month} / N$（平差后首尾一致），在动态分解走势图中呈现为一条**水平基准直线**（每天无差别且合计守恒），满足多指标综合对比需求。
+
+## 2026-10-27 动态计划 HDD20 月度日分解核心计算服务与 API (Dynamic Decomposition Engine)
+
+- **核心服务与计算逻辑说明**：
+  - **新建分解服务模块**：
+    - [`dynamic_decomposition_service.py`](file:///D:/编程项目/phoenix/backend/services/dynamic_decomposition_service.py)：
+      - `check_temperature_completeness`：核查 `calc_temperature_data` 中目标月份每日气温是否 100% 齐备；
+      - `decompose_single_series`：应用公式 $HDD20_d = \max(20 - T_d, 0)$ 与 $W_d = \max(0, 1 + k \times (HDD20_d - \overline{HDD20}))$ 进行日权重计算，实施尾差分厘平差确保全月守恒；
+      - `get_dynamic_daily_decomposition`：实体子口径直接分解；聚合口径（Group、ZhuChengQu）对各子口径分解后逐日相加聚合显示，单耗指标按聚合口径专属参数匹配。
+  - **接口挂载**：
+    - [`dynamic_plan.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dynamic_plan.py) 暴露 `GET /api/v1/projects/daily_report_25_26/dynamic_plan/daily_decomposition`。
+
+## 2026-10-27 Open-Meteo 35天集合气温预报拉取与分类入库服务 (Ensemble Weather Service & Far Type)
+
+- **核心服务与数据库演化说明**：
+  - **数据库表结构扩展**：
+    - `public.temperature_data` 表新增 `type TEXT DEFAULT 'near'` 字段，存量 22,848 条记录统一初始化为 `'near'`；
+    - ORM 映射模型 [`database_daily_report_25_26.py`](file:///D:/编程项目/phoenix/backend/db/database_daily_report_25_26.py) 同步在 `TemperatureData` 中声明 `type = Column(Text, default="near")`。
+  - **新建集合预报处理服务**：
+    - [`ensemble_weather_service.py`](file:///D:/编程项目/phoenix/backend/services/ensemble_weather_service.py)：抓取 Open-Meteo 35天集合预报（GFS05 模型，包含 31 个数组成员），逐小时剔除 null 后计算算术平均值；遇到全 null 时刻停止并截断，以 `type='far'` 幂等覆盖写入数据库。
+  - **接口挂载**：
+    - [`dynamic_plan.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dynamic_plan.py) 暴露 `POST /api/v1/projects/daily_report_25_26/dynamic_plan/import_ensemble_temperature`。
+
+## 2026-10-27 动态计划气温敏感度参数表 public.dynamic_month_plan_k 建表与入库 (Dynamic Month Plan K Parameters)
+
+- **数据库存储与 ORM 演化说明**：
+  - **新建数据表与索引**：
+    - 在 PostgreSQL `public` 下新建 `dynamic_month_plan_k` 表，字段包括 `id` (主键), `model_no` (模型编号), `company` (口径代码), `company_cn` (口径中文), `month` (月份1~12), `item` (指标代码), `item_cn` (指标中文), `unit` (计量单位), `k_value` (建议k参数, NUMERIC(24,16)), `created_at`；
+    - 建立联合唯一约束 `idx_dynamic_month_plan_k_unique ON dynamic_month_plan_k (company, month, item)`。
+  - **SQLAlchemy ORM 模型**：
+    - [`database_daily_report_25_26.py`](file:///D:/编程项目/phoenix/backend/db/database_daily_report_25_26.py) 新增 `DynamicMonthPlanK(Base)` 实体类映射。
+  - **数据入库成果**：
+    - 从权威表《10.27（4） 完整指标_最新情况导入用.xlsx》完整写入 360 条参数数据（覆盖 10 大口径、5 个采暖月、11 项核心指标，312 条气温敏感 $k>0$，48 条均摊占位 $k=0$）。
+
+## 2026-10-27 保温管子项目：开放 tube_site_manager 用户组数据导出 Excel 权限 (Insulation Pipe Supply 2026 Site Manager Export Permission)
+
+- **权限配置与鉴权调整说明**：
+  - **受影响配置文件**：
+    - [`insulation_pipe_supply_2026.json`](file:///D:/编程项目/phoenix/backend_data/shared/auth/permissions/insulation_pipe_supply_2026.json)（在 `tube_site_manager` 角色组的 `actions` 字段中将 `"can_extract_xlsx"` 从 `false` 调整为 `true`）。
+  - **运行逻辑与鉴权表现**：
+    - 后端权限服务模块 [`auth_manager.py`](file:///D:/编程项目/phoenix/backend/services/auth_manager.py) 的文件修改时间监测机制（`_ensure_loaded`）感知到该权限文件更新后，会自动重新加载各角色组的项目权限；
+    - `tube_site_manager` 用户在获取项目权限时，其 actions 字典中 `can_extract_xlsx` 为 `True`，配合后端现存的导出与查询接口，为前端导出能力提供有效授权。
+
+## 2026-10-27 26-27供暖期月度计划数据入库与动态计划专属 API (Dynamic Plan Backend & Storage)
+
+- **服务改造与接口演化说明**：
+  - **核心服务与 API 模块**：
+    - [`dynamic_plan.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dynamic_plan.py)（新建专属接口文件，按标准30项生产业务次序强制排序输出）；
+    - [`router.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/router.py)（挂载 `dynamic_plan_router` 与 `dynamic_plan_public_router`）。
+  - **数据存储与底层库结构**：
+    - 数据源基于标准 Excel《填好_全量计划表.xlsx》之“月度计划填报表”，完成 26-27 供暖期 7 个月（2026-10 至 2027-04）、10 大口径单位、116 项原生指标，共计 812 条 `type='plan'` 记录全量写入 PostgreSQL 表 `paln_and_real_month_data`；
+    - 在数据库创建联合唯一索引 `idx_paln_and_real_month_unique ON paln_and_real_month_data (company, item, period, type)`，确保后续增量更新幂等。
+  - **接口契约与特性**：
+    1. `GET /api/v1/daily_report_25_26/dynamic_plan/meta`：返回可用的单位口径列表及数据库中包含的所有计划月份（`2026-10-01` ~ `2027-04-01`）；
+    2. `GET /api/v1/daily_report_25_26/dynamic_plan/plans`：按 `company` 与连续 `months` 集合查询，自动返回：
+       - `matrix`：指标与多月份交叉数据行，按严格的 30 项标准业务次序输出（供热、发电、售电、高温水、售汽、煤、油、热、气、电、水、补水、辅材、单耗、网口/站内热）；
+       - `kpi_summary`：供热量、标煤耗、原煤耗、发电量与售电量、水量及供暖综合单耗（累计），其中各单耗指标统一采用全期累计求和（Total），并在 `summary_cards` 中提供 `power_sales_total`、`heat_rate_total`、`water_rate_total`、`power_rate_total` 等字段；
+       - `monthly_distribution`：供热量等关键指标在所选月份区间内的逐月占比分布。
+
+## 2026-10-22 庄河每日填报隐藏张屯煤耗
+
+- `数据结构_基本指标表.json`的`ZhuangHe_Sheet.数据`移除张屯原煤、标煤两行，保留指标字典和历史记录。模板接口按文件变更指纹重新加载；查询回填与提交沿用剩余模板行，无数据库迁移。
+- 集团张屯汇总仍读取`consumption_amount_raw_coal_zhangtun`和`consumption_std_coal_zhangtun`；缺失按0，有值继续计入。本期不填不影响同期历史张屯取数，不执行清零或强制忽略已有值。
+
 ## 2026-10-21 暖收入按各期统计区间动态分摊
 
 - 替代此前固定156天规则。`season_utils.get_heating_income_fraction`用该期设定起止日计算完整天数（含首尾），按窗口交集天数分摊；区间外当日暖收入为0，其他单日实物指标仍取原日期。
