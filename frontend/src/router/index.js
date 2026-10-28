@@ -82,6 +82,11 @@ const routes = [
     meta: { title: '全局管理中心' },
   },
   {
+    path: '/projects/:projectKey/pages/dispatch_info',
+    component: () => import('../projects/daily_report_25_26/pages/DispatchInfoView.vue'),
+    meta: { title: '调度信息' },
+  },
+  {
     path: '/admin-console',
     component: () => import('../projects/daily_report_25_26/pages/AdminConsoleView.vue'),
   },

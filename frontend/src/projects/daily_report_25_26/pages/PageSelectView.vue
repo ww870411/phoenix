@@ -153,6 +153,7 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   dynamic_plan: '供暖期各单位月度计划指标图谱与多维趋势分析',
   spot_electricity: '15分钟日前/实时电价、实时与日前价差走势',
   global_management: '生产指标与算法体系字典、实时验算沙盒与核心运行参数',
+  dispatch_info: '主城区生产调度信息解析提取、综合入库与全景工况监控',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
 function filterVisiblePages(list) {
@@ -424,6 +425,14 @@ function openPage(page) {
     router.push({
       path: `${base}`,
       query: { pageName: page.page_name || '全局管理中心' },
+    })
+    return
+  }
+  const isDispatchInfo = normalizedKey === 'dispatch_info'
+  if (isDispatchInfo) {
+    router.push({
+      path: `${base}`,
+      query: { pageName: page.page_name || '调度信息' },
     })
     return
   }

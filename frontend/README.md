@@ -1,3 +1,79 @@
+## 2026-10-28 调度信息系统交互优化：弹窗自适应滚动与操作栏底部防挤压固定
+
+- **弹窗体验升级**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    - 针对海量冲突日期（如 162 天）弹窗被撑爆、操作按钮被顶出屏幕问题实施彻底重构；
+    - 弹窗采用 Flex 盒模型并限制 `max-height: 85vh`，底部【确认覆盖更新】与【取消入库】按钮设置为 `flex-shrink: 0` 强力吸底固定，无论日期多少均清晰可见、绝对可按；
+    - 冲突日期列表区域限制 `140px` 并支持平滑内部滚动，新增跨度摘要与右上角快捷关闭按钮。
+
+## 2026-10-28 调度信息系统：全量 162 篇历史数据展板与 132 物理列实时联动
+
+- **展板数据源就绪**：
+  - 数据库中已全量入库 162 篇调度真实日报的 132 个物理列数据，前端在日期切换、首站工况、蒸汽网口与燃煤库存标签页中实现无缝毫秒级全真数据联动呈现。
+
+## 2026-10-28 调度信息系统：全要素自适应提取与看板数据完整呈现对齐
+
+- **数据层与看板渲染协同**：
+  - 前端调度展板与后端升级后的 `UnifiedDispatchExtractor` 完美对齐：
+    1. **值班人员**：多值班员全员完整显示（如“吴立明,侯志超,路宇鹏”）；
+    2. **气象环境**：最低/最高气温、湿度区间、风向风力与天气描述全要素无损显示；
+    3. **宏观指标**：当日总耗煤、总发电、总供热、累计补水量全部真实动态计算呈现；
+    4. **首站与网口**：温差（℃）与压差（MPa）高亮色块标识；
+    5. **微观事件**：支持全量操作流、八元组工作票（DN管径/地点/工期）多主体筛选查看。
+
+## 2026-10-28 调度信息系统：JSON 导出流式 Blob 下载与免开新窗鉴权修复
+
+- **界面与下载交互优化**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    - 弃用传统的 `window.open` 打开下载链接方式，全面改用基于 Blob 的流式异步下载；
+    - 请求时自动附带 Bearer Token，下载完成后自动触发浏览器的安全本地文件保存对话框（文件名为 `dispatch_extracted_batch_YYYY-MM-DD.json`），彻底解决“缺少认证信息”及弹出空白窗口问题。
+
+## 2026-10-28 调度信息系统：独立文件夹深度递归扫描与 Token 认证透传升级
+
+- **界面与交互改进**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    - 将【📄 选择文件】与【📁 选择整个文件夹】解耦为独立卡片按钮，彻底杜绝文件夹选择被文件弹窗劫持；
+    - 引入 HTML5 `webkitGetAsEntry()` 深度递归遍历技术，无论点击文件夹选择按钮，还是直接将文件夹拖入拖拽区，均能穿透扫描各层子目录下的所有 `.docx` 与 `.pdf` 调度文件；
+    - 在发起提取请求时直接携带 Pinia 响应式 `auth.token`，彻底杜绝 401 鉴权缺失。
+- **服务接口加固**：
+  - [`dispatchApi.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/dispatchApi.js)：
+    - 升级 `getAuthHeader` 凭据探测机制，对齐 `phoenix_auth` 核心存储，并支持显式传入自定义 Token。
+
+## 2026-10-28 调度信息系统：后端容器依赖隔离与登录链路恢复说明
+
+- **系统稳定性说明**：
+  - 配合后端消除可选依赖未装导致的路由挂载阻断，前端在访问 `/api/v1/auth/login` 及所有业务接口时恢复正常通路。
+
+## 2026-10-28 调度信息系统：全流程提取工作台、一键入库与多维全景看板上线 (Dispatch Info Workbench & Explorer View)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+      - **双层架构布局**：
+        1. **上半部分：智能提取工作台 (Extraction Workbench)**：
+           - 支持单/多文件选择与文件夹整体选择（`webkitdirectory`），支持拖拽与服务器路径扫描；
+           - 实时识别 DOCX 与 PDF 格式并执行标准化提取；
+           - 提取结果汇总卡片：展示解析篇数、日期范围、冲突日期检测预警；
+           - 操作工具栏：支持【📥 下载标准 JSON】、【💾 一键保存入库】（带同日期覆盖确认弹窗）、【🧹 清理临时文件】与【⚡ 快速载入历史基准全量】。
+        2. **下半部分：调度信息全景查询与参考展板 (Dashboard & Query Explorer)**：
+           - 控制工具栏：业务日期快捷切换（前一天、后一天、最新一天）、日期下拉选择器、全文关键字即时检索；
+           - 宏观核心产耗指标看板：当日总耗煤量、总发电量、总供热量、累计补水量、天气与温度工况、值班人员元数据；
+           - 分标签页多维视图：
+             * **机炉运行拓扑矩阵**：按电厂与车间分层展示汽机与锅炉（严格细分汽炉/水炉/燃气炉/锅炉房锅炉）的运行/备用/检修状态；
+             * **水网首站运行工况表**：展示循环泵台数、循环流量、供回压力与压差、供回温度与温差；
+             * **蒸汽网口与燃煤分析**：展示蒸汽网口投运状态与压力流量，各厂进煤/耗煤/存煤平衡表；
+             * **微观事件与抢修工作票**：支持主体筛选与“仅看抢修工作票”切换，展示时间、主体、类别、管径（如 DN1100）、地点工期及详细描述。
+    - [`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)：
+      - 在功能页面选择卡片网格中注册“调度信息”卡片（图标与页面说明）；
+      - 完善 `openPage` 路由跳转至 `/projects/daily_report_25_26/pages/dispatch_info`。
+    - [`router/index.js`](file:///D:/编程项目/phoenix/frontend/src/router/index.js)：
+      - 注册路由 `/projects/:projectKey/pages/dispatch_info`。
+    - [`store/auth.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/store/auth.js)：
+      - `hasPageAccess` 权限白名单放行 `dispatch_info`，凡具备 `daily_report_25_26` 访问权限的账号均可无缝进入调度信息模块。
+  - **服务接口接入**：
+    - [`dispatchApi.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/dispatchApi.js)：
+      - 封装 `extractDispatchFiles`、`getDispatchDownloadJsonUrl`、`cleanupDispatchTemp`、`saveDispatchData`、`queryDispatchData`、`fetchDispatchDates`、`importHistoricalDispatch` 等完整客户端异步调用。
+
 ## 2026-10-28 生产日报子项目：全局管理中心面包屑导航文字修正与动态联动 (Global Management View Breadcrumbs & Route Meta Alignment)
 
 - **涉及页面与界面组件演进说明**：

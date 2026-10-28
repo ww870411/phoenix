@@ -1,0 +1,353 @@
+[
+  {
+    "project_key": "daily_report_25_26",
+    "biz_date": "2025-11-17",
+    "issue_date": "2025-11-18",
+    "duty_staff": "吴立明,侯志超,路宇鹏",
+    "wth_date": "2025-11-18",
+    "wth_weekday": "星期二",
+    "wth_condition": "晴间多云",
+    "wth_temp_min": 2.0,
+    "wth_temp_max": 6.0,
+    "wth_hum_min": 30,
+    "wth_hum_max": 65,
+    "wth_wind_dir": "西北风",
+    "wth_wind_scale": "5~6级阵风7级",
+    "wth_raw_text": "11月18日 星期二 2℃~6℃ 晴间多云 相对湿度:30%~65% 西北风5~6级阵风7级。",
+    "eqp_status_json": {
+      "matrix": {
+        "北海": {
+          "机": {
+            "运行": [
+              "#2",
+              "#3"
+            ],
+            "备用": [
+              "#1"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [
+              "#1",
+              "#3",
+              "#4"
+            ],
+            "备用": [],
+            "检修": [
+              "#2"
+            ]
+          }
+        },
+        "水炉": {
+          "水炉": {
+            "运行": [
+              "#3"
+            ],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          }
+        },
+        "燃气炉": {
+          "燃气炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#5",
+              "#6",
+              "#7",
+              "#8",
+              "#9",
+              "#10"
+            ],
+            "检修": []
+          }
+        },
+        "香海": {
+          "机": {
+            "运行": [
+              "#3",
+              "#4"
+            ],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [
+              "#3",
+              "#4"
+            ],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          }
+        },
+        "金州": {
+          "机": {
+            "运行": [
+              "#2",
+              "#3"
+            ],
+            "备用": [],
+            "检修": [
+              "#1"
+            ]
+          },
+          "炉": {
+            "运行": [
+              "#2",
+              "#3",
+              "#4"
+            ],
+            "备用": [
+              "#1",
+              "#6"
+            ],
+            "检修": []
+          }
+        },
+        "北方": {
+          "机": {
+            "运行": [
+              "#1"
+            ],
+            "备用": [
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [
+              "#1",
+              "#3"
+            ],
+            "备用": [
+              "#2"
+            ],
+            "检修": []
+          }
+        }
+      },
+      "flat_map": {
+        "北海_#2机": "运行",
+        "北海_#3机": "运行",
+        "北海_#1炉": "运行",
+        "北海_#3炉": "运行",
+        "北海_#4炉": "运行",
+        "北海_#1机": "备用",
+        "北海_#2炉": "检修",
+        "水炉_#3炉": "运行",
+        "水炉_#1炉": "备用",
+        "水炉_#2炉": "备用",
+        "燃气炉_#1炉": "备用",
+        "燃气炉_#2炉": "备用",
+        "燃气炉_#3炉": "备用",
+        "燃气炉_#4炉": "备用",
+        "燃气炉_#5炉": "备用",
+        "燃气炉_#6炉": "备用",
+        "燃气炉_#7炉": "备用",
+        "燃气炉_#8炉": "备用",
+        "燃气炉_#9炉": "备用",
+        "燃气炉_#10炉": "备用",
+        "香海_#3机": "运行",
+        "香海_#4机": "运行",
+        "香海_#3炉": "运行",
+        "香海_#4炉": "运行",
+        "香海_#1机": "备用",
+        "香海_#2机": "备用",
+        "香海_#1炉": "备用",
+        "香海_#2炉": "备用",
+        "金州_#2机": "运行",
+        "金州_#3机": "运行",
+        "金州_#2炉": "运行",
+        "金州_#3炉": "运行",
+        "金州_#4炉": "运行",
+        "金州_#1炉": "备用",
+        "金州_#6炉": "备用",
+        "金州_#1机": "检修",
+        "北方_#1机": "运行",
+        "北方_#1炉": "运行",
+        "北方_#3炉": "运行",
+        "北方_#2机": "备用",
+        "北方_#2炉": "备用"
+      }
+    },
+    "bh_s1_pumps": 4,
+    "bh_s1_flow": 5082.0,
+    "bh_s1_press_sup": 0.95,
+    "bh_s1_press_ret": 0.38,
+    "bh_s1_temp_sup": 77.4,
+    "bh_s1_temp_ret": 44.5,
+    "bh_s2_pumps": 1,
+    "bh_s2_flow": 3124.0,
+    "bh_s2_press_sup": 0.99,
+    "bh_s2_press_ret": 0.49,
+    "bh_s2_temp_sup": 69.8,
+    "bh_s2_temp_ret": 41.2,
+    "bh_wl_pumps": 1,
+    "bh_wl_flow": 1676.0,
+    "bh_wl_press_sup": 1.02,
+    "bh_wl_press_ret": 0.49,
+    "bh_wl_temp_sup": 92.5,
+    "bh_wl_temp_ret": 44.9,
+    "xh_lv1_pumps": 1,
+    "xh_lv1_flow": 3632.0,
+    "xh_lv1_press_sup": 0.79,
+    "xh_lv1_press_ret": 0.19,
+    "xh_lv1_temp_sup": 33.5,
+    "xh_lv1_temp_ret": 29.4,
+    "xh_lv3_pumps": 1,
+    "xh_lv3_flow": 3343.0,
+    "xh_lv3_press_sup": 0.66,
+    "xh_lv3_press_ret": 0.23,
+    "xh_lv3_temp_sup": 41.1,
+    "xh_lv3_temp_ret": 34.9,
+    "xh_main_pumps": 2,
+    "xh_main_flow": 3939.0,
+    "xh_main_press_sup": 0.93,
+    "xh_main_press_ret": 0.51,
+    "xh_main_temp_sup": 68.4,
+    "xh_main_temp_ret": 46.4,
+    "bh_south_status": "投运",
+    "bh_south_press": 0.61,
+    "bh_south_flow": 15.0,
+    "xb_link_status": "投运",
+    "xb_link_press": 0.3,
+    "xb_link_flow": 64.0,
+    "xh_east_status": "投运",
+    "xh_east_press": 0.51,
+    "xh_east_flow": 39.0,
+    "xh_west_status": "投运",
+    "xh_west_press": 0.51,
+    "xh_west_flow": 35.0,
+    "coal_remark": "北海进煤:0。 香海进煤:0。",
+    "coal_bh_in": 0.0,
+    "coal_bh_use": 1640.0,
+    "coal_bh_stock": 183118.0,
+    "coal_xh_in": 0.0,
+    "coal_xh_use": 1376.0,
+    "coal_xh_stock": 14606.0,
+    "coal_main_sum_in": 0.0,
+    "coal_main_sum_use": 3016.0,
+    "coal_main_sum_stock": 197724.0,
+    "coal_jz_in": 0.0,
+    "coal_jz_use": 607.0,
+    "coal_jz_stock": 107332.0,
+    "coal_bf_in": 0.0,
+    "coal_bf_use": 397.0,
+    "coal_bf_stock": 44432.0,
+    "coal_zh_in": 0.0,
+    "coal_zh_use": 6.0,
+    "coal_zh_stock": 1600.0,
+    "coal_dlg_in": null,
+    "coal_dlg_use": null,
+    "coal_dlg_stock": null,
+    "coal_total_in": 0.0,
+    "coal_total_use": 4026.0,
+    "coal_total_stock": 351088.0,
+    "prod_bh_steam_coal_plan": 1896.0,
+    "prod_bh_steam_coal_act": 1495.0,
+    "prod_bh_water_coal_plan": null,
+    "prod_bh_water_coal_act": 145.0,
+    "prod_bh_power_plan": 180.0,
+    "prod_bh_power_act": 181.0,
+    "prod_bh_heat_plan": 29000.0,
+    "prod_bh_heat_act": 26313.0,
+    "prod_xh_steam_coal_plan": 1202.0,
+    "prod_xh_steam_coal_act": 1376.0,
+    "prod_xh_water_coal_plan": null,
+    "prod_xh_water_coal_act": null,
+    "prod_xh_power_plan": 117.0,
+    "prod_xh_power_act": 120.0,
+    "prod_xh_heat_plan": 18000.0,
+    "prod_xh_heat_act": 17635.0,
+    "prod_main_coal_plan": 3098.0,
+    "prod_main_coal_act": 3016.0,
+    "prod_main_power_plan": 297.0,
+    "prod_main_power_act": 301.0,
+    "prod_main_heat_plan": 47000.0,
+    "prod_main_heat_act": 43948.0,
+    "gw_high_temp_water": 34424.0,
+    "gw_lv1_heat": 1905.0,
+    "gw_lv3_heat": 2243.0,
+    "gw_bh_south_steam": 360.0,
+    "gw_xh_ew_steam": 1462.0,
+    "gw_xb_link_steam": 1401.0,
+    "water_sup_bh_s1": null,
+    "water_sup_bh_s2": null,
+    "water_sup_period_last_year": null,
+    "water_sup_accum": null,
+    "water_sup_accum_last": null,
+    "substations_filled": null,
+    "log_items_json": [
+      {
+        "seq": 1,
+        "category": "operation",
+        "entity": "北海电厂",
+        "time": "16:18",
+        "content": "启动水炉热网循环泵C 泵。",
+        "sub_events": [
+          {
+            "time": "16:18",
+            "action": "启动水炉热网循环泵C 泵。"
+          }
+        ]
+      },
+      {
+        "seq": 2,
+        "category": "operation",
+        "entity": "北海电厂",
+        "time": "16:22",
+        "content": "#3水炉点火,20:25并入热网。",
+        "sub_events": [
+          {
+            "time": "16:22",
+            "action": "#3水炉点火"
+          },
+          {
+            "time": "20:25",
+            "action": "并入热网"
+          }
+        ]
+      },
+      {
+        "seq": 3,
+        "category": "operation",
+        "entity": "北海电厂",
+        "time": "16:45",
+        "content": "#1首站东环#2热网循环泵投运。",
+        "sub_events": [
+          {
+            "time": "16:45",
+            "action": "#1首站东环#2热网循环泵投运。"
+          }
+        ]
+      },
+      {
+        "seq": 4,
+        "category": "operation",
+        "entity": "金州电厂",
+        "time": "12:40",
+        "content": "#4炉并汽。",
+        "sub_events": [
+          {
+            "time": "12:40",
+            "action": "#4炉并汽。"
+          }
+        ]
+      }
+    ],
+    "log_raw_text": "[北海电厂 16:18] 启动水炉热网循环泵C 泵。\n[北海电厂 16:22] #3水炉点火,20:25并入热网。\n[北海电厂 16:45] #1首站东环#2热网循环泵投运。\n[金州电厂 12:40] #4炉并汽。"
+  }
+]

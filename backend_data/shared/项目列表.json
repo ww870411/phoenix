@@ -58,6 +58,12 @@
         "数据源":"backend/services/heating_metrics",
         "页面描述":"生产指标与算法体系字典、实时验算沙盒与核心运行参数"
       },
+      "dispatch_info":
+      {
+        "页面名称":"调度信息",
+        "数据源":"public.dispatch_daily_reports",
+        "页面描述":"主城区生产调度信息解析提取、综合入库与全景工况监控"
+      },
       "/debug/runtime-eval":
       {
         "页面名称":"运行时表达式求值（调试）",

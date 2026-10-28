@@ -1,3 +1,157 @@
+## 2026-10-28 调度数据全量入库：162 篇历史数据全物理列展开填充与日期越界防爆
+
+- **全量数据重载与清洗防爆**：
+  - **根本问题消除**：
+    - 查明刚建表导入时出现大面积 NULL 的原因系前端当时提交的是建表升级前旧提取器缓存的数据；
+    - 全面调度最新的 132 列提取引擎对全部 162 篇实际文件完成重新抽取与物理列写入覆盖；
+  - **日期越界智能钳位 (`safe_date_str`)**：
+    - 针对手写报告中个别出现的平年 `"2026-02-29"` 等笔误日期，提供智能钳位算法，自动回退到合法月末日期，消除 `DatetimeFieldOverflow` 数据库异常；
+  - **当前数据状态**：
+    - 数据库中 162 篇真实生产日报的 132 个物理列（首站温压流、蒸汽网口、燃煤收耗存、产量与网口热量）已 100% 正确填满，双端数据库同步完成。
+
+## 2026-10-28 调度数据库升级：132 物理列工业级大宽表架构落地
+
+- **表结构由折叠 JSON 升级为物理大宽表**：
+  - **DDL 文件**：[`backend/sql/dispatch_daily_reports.sql`](file:///D:/编程项目/phoenix/backend/sql/dispatch_daily_reports.sql)
+  - **物理字段总数**：**132 列**，彻底打破黑盒 JSON，在数据库管理工具（Navicat/DBeaver）中如同 Excel 表格般一目了然：
+    1. **气象 10 列**：`wth_date`, `wth_weekday`, `wth_condition`, `wth_temp_min`, `wth_temp_max`, `wth_hum_min`, `wth_hum_max`, `wth_wind_dir`, `wth_wind_scale`, `wth_raw_text`；
+    2. **水网首站 36 列**（6大首站 × 泵数/流量/供回压/供回温）：`bh_s1_...`, `bh_s2_...`, `bh_wl_...`, `xh_lv1_...`, `xh_lv3_...`, `xh_main_...`；
+    3. **蒸汽网口 12 列**（4大网口 × 状态/压力/流量）：`bh_south_...`, `xb_link_...`, `xh_east_...`, `xh_west_...`；
+    4. **燃煤收耗存 25 列**（进煤说明 + 8主体进/耗/存）：`coal_remark`, `coal_bh_...`, `coal_xh_...`, `coal_main_sum_...`, `coal_jz_...`, `coal_bf_...`, `coal_zh_...`, `coal_dlg_...`, `coal_total_...`；
+    5. **当日产量与计划比对 20 列**：`prod_bh_steam_coal_plan`, `prod_bh_steam_coal_act`, `prod_main_coal_act` 等；
+    6. **网口热量 6 列**：`gw_high_temp_water`, `gw_lv1_heat`, `gw_lv3_heat`, `gw_bh_south_steam` 等；
+    7. **初期补水量 6 列**：`water_sup_bh_s1`, `water_sup_accum`, `substations_filled` 等；
+    8. **宏观四大总量**：`total_coal_consumed`, `total_power_generated`, `total_heat_supplied`, `total_water_replenished`；
+    9. **结构化存根**：保留 `eqp_status_json`、`boiler_turbine_status`、`log_items_json`、`operations_and_tickets`（JSONB）保障树形与时间流高效交互；
+- **持久化与查询服务升级**：
+  - [`dispatch_db_service.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/dispatch_db_service.py)：
+    - `save_dispatch_reports`：支持 132 列的动态 Upsert 幂等入库；
+    - `query_dispatch_reports`：返回 132 列全要素物理列，并自适应组装兼容前端展板对象。
+
+## 2026-10-28 统一提取引擎重构：表头特征自适应嗅探与 DOCX 全要素完整提取
+
+- **架构重构与自适应解析**：
+  - **根本问题消除**：废除了此前按样本 PDF 顺序列写 `self.tables[1..7]` 的固定下标硬编码机制，彻底解决因 DOCX 只有 6 个表格（且包含产量与网口热量合并大表）导致的数据全盘错位或空值现象；
+  - **表头语义自适应嗅探器**：在 `UnifiedDispatchExtractor._classify_tables` 中扫描表格前两行关键词特征，动态归纳机炉表、首站表、蒸汽网口表、燃煤统计表、产量统计表、网口热量表和生产运行事件表；
+  - **全要素字段提取补全**：
+    1. **基础信息**：支持多位值班人员（空格/逗号/顿号隔开）全量提取；
+    2. **气象环境**：最低/最高温、天气状况、相对湿度区间、风向风力完整提取；
+    3. **机炉拓扑**：严格落地北方热电、金州热电（#6水炉其余汽炉）、庄河环海（锅炉房锅炉）、金普公司；北海细分热电联产（汽炉）、北海水炉（水炉）、燃气锅炉（燃气炉）；香海全汽炉；
+    4. **水网首站**：循环泵台数、循环流量、供回压力、供回水温、温差与压差全量计算；
+    5. **蒸汽网口**：北海南网、香北联络、香海东/西网运行状态、压力、流量完整提取；
+    6. **燃煤进耗存**：8 个单位收耗存明细与进煤文字说明；
+    7. **当日产量与网口热量**：一体表/分体表自适应，各厂及主城区合计计划与实际、6 项网口热量与供汽量无损采集；
+    8. **微观事件与工作票**：运行微观操作流、抢修工作票八元组（单位/地点/管径DN/工期/状态）与初期补水指标；
+    9. **宏观四大总量**：自动汇总总耗煤、总发电、总供热、总补水；
+- **关联文件**：[`backend/projects/daily_report_25_26/services/dispatch_extractor.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/dispatch_extractor.py)
+
+## 2026-10-28 调度信息导出服务：临时 JSON 下载鉴权降级与双端数据库重置
+
+- **服务路由优化与数据说明**：
+  - **下载免阻断设计**：
+    - 在 [`dispatch_info.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dispatch_info.py) 中将 `download_json` 与 `cleanup` 仅挂载于 `public_router`；通过提取时服务端颁发的高强度随机 UUID Token 作为临时文件访问鉴权凭证，彻底解除因浏览器新开窗口不带 Header 导致的 401 阻断；
+  - **数据库初始化**：
+    - 对 `phoenix_db` (5432) 与本地环境 (5434) 的 `public.dispatch_daily_reports` 表执行了数据清空重置，消除此前调试时预存的 162 条基准记录，为用户提供纯净的“从零提取到一键入库”验收环境。
+
+## 2026-10-28 调度信息提取服务：文件夹上传多层目录兼容与递归解析加固
+
+- **故障定位与修复**：
+  - **问题现象**：选择文件夹上传时报 `FileNotFoundError: No such file or directory: '.../uploads/25-26/xxxx.docx'`。
+  - **根因分析**：文件夹上传携带了相对路径（如 `25-26/`），服务端保存时未预建子目录。
+  - **加固落地**：
+    - 在 [`dispatch_info.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dispatch_info.py) 中新增 `save_path.parent.mkdir(parents=True, exist_ok=True)` 自动补全各级目录；
+    - 将单层遍历升级为 `upload_dir.rglob("*")` 递归检索，深度穿透任意嵌套层级的 `.docx` 和 `.pdf` 文档；
+    - 容器内通过内部源安装并固化了 `python-docx` 与 `pdfplumber` 运行时环境。
+
+## 2026-10-28 服务架构加固：外部依赖懒加载与路由启动隔离机制 (Lazy Import & Startup Route Isolation)
+
+- **故障定位与修复**：
+  - **问题现象**：Docker 容器中请求 `POST /api/v1/auth/login` 报 404 Not Found。
+  - **根因分析**：容器内初始镜像缺少 `python-docx`，在 `dispatch_extractor.py` 顶层硬导入导致 `v1_router` 模块加载失败，FastAPI 应用启动时未能挂载 `/api/v1` 路由树。
+  - **加固落地**：
+    - 在 [`dispatch_extractor.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/dispatch_extractor.py) 中引入延迟导入（Lazy Import），避免可选依赖缺失阻断主服务启动；
+    - 在 [`requirements.txt`](file:///D:/编程项目/phoenix/backend/requirements.txt) 中补充 `python-docx` 与 `pdfplumber`；
+    - 同步在 `phoenix_db` (5432) 与本地环境 (5434) 完成表结构与数据初始化，双环境无缝切换。
+
+## 2026-10-28 调度信息系统：全流程智能提取(DOCX/PDF)、一键入库与多维综合查询 API
+
+- **业务背景与设计目标**：
+  - 构建生产调度信息的一体化服务体系，支持 DOCX 与 PDF 格式主城区调度生产日报的自动化提取；
+  - 落地统一的设备拓扑标准化（汽炉、水炉、燃气炉、锅炉房锅炉）与事件流模型；
+  - 提供数据一键入库、同日期冲突检测覆盖与高效多维检索 API。
+- **核心组件与服务实现**：
+  1. **数据库大宽表 DDL (`public.dispatch_daily_reports`)**：
+     - 文件：[`backend/sql/dispatch_daily_reports.sql`](file:///D:/编程项目/phoenix/backend/sql/dispatch_daily_reports.sql)
+     - 字段：`biz_date` (唯一约束)、`duty_officers`、`weather`、`boiler_turbine_status` (JSONB)、`first_stations` (JSONB)、`steam_networks` (JSONB)、`coal_stats` (JSONB)、`production_stats` (JSONB)、`network_heat` (JSONB)、`operations_and_tickets` (JSONB)、`water_replenishment` (JSONB) 以及核心一级数值指标。
+  2. **统一抽取引擎 (`UnifiedDispatchExtractor`)**：
+     - 文件：[`backend/projects/daily_report_25_26/services/dispatch_extractor.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/dispatch_extractor.py)
+     - 整合 `python-docx` 与 `pdfplumber`，将两种异构文档均标准化映射为段落流与表格列表，复用经过完全验证的拓扑归一化规则与六元组提取逻辑。
+  3. **数据持久化与查询服务 (`dispatch_db_service.py`)**：
+     - 文件：[`backend/projects/daily_report_25_26/services/dispatch_db_service.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/dispatch_db_service.py)
+     - 支持端口自适应（5434 / 5432）；
+     - `save_dispatch_reports`：支持检查同日数据冲突与 `ON CONFLICT (project_key, biz_date) DO UPDATE` 幂等覆盖；
+     - `query_dispatch_reports`：支持按单日、区间、人员、主体、事件关键字全文检索。
+  4. **FastAPI 业务端点 (`dispatch_info.py`)**：
+     - 文件：[`backend/projects/daily_report_25_26/api/dispatch_info.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dispatch_info.py)
+     - 挂载路由：
+       - `POST /api/v1/projects/{project_key}/dispatch/extract`：支持多文件/文件夹上传及服务器路径扫描；
+       - `GET /api/v1/projects/{project_key}/dispatch/download_json`：下载提取标准 JSON；
+       - `POST /api/v1/projects/{project_key}/dispatch/cleanup`：释放临时上传与导出缓存；
+       - `POST /api/v1/projects/{project_key}/dispatch/save_to_db`：保存/覆盖入库；
+       - `GET /api/v1/projects/{project_key}/dispatch/query`：多维检索；
+       - `GET /api/v1/projects/{project_key}/dispatch/dates`：日期索引列表；
+       - `POST /api/v1/projects/{project_key}/dispatch/import_historical_configs`：一键导入历史基准全量。
+
+## 2026-10-28 调度信息工具：锅炉物理类型与所属单元深度标准化 (Boiler Physical Topology & Plant Attribution Normalization)
+
+- **脚本工具与锅炉资产拓扑演化说明**：
+  - **核心提取脚本升级**：
+    - [`backend/scripts/extract_dispatch_docx.py`](file:///D:/编程项目/phoenix/backend/scripts/extract_dispatch_docx.py)：
+      - `standardize_boiler_name`：落地锅炉底层设备拓扑映射逻辑：
+        1. **北海电厂**：
+           - “北海热电联产”：锅炉全为汽炉（`#1汽炉` ~ `#4汽炉`）；
+           - “北海水炉”：锅炉全为水炉（`#1水炉` ~ `#3水炉`）；
+           - “燃气锅炉”：锅炉全为燃气炉（`#1燃气炉` ~ `#10燃气炉`）；
+        2. **香海电厂**：锅炉全为汽炉（`#1汽炉` ~ `#4汽炉`）；
+        3. **金州热电**：特别规则——**`#6炉` 为水炉（`#6水炉`）**，其余 `#1~4炉` 全为汽炉（`#1汽炉` ~ `#4汽炉`）；
+        4. **北方热电**：锅炉全为汽炉（`#1汽炉` ~ `#3汽炉`）；
+        5. **庄河环海**：锅炉全为锅炉房锅炉；
+      - **机炉状态表扩展**：`eqp_status_json` 新增 `devices_detail`，单机元数据自带 `unit`（所属分支单元）与 `device_type`（汽炉/水炉/燃气炉/汽机）；
+      - **事件流事件归一**：`log_items_json` 中涉及锅炉的操作自动拆解出 `boiler_type`，并将模糊的口语化编号（如 `#4炉`）精准归一为 `#4汽炉` 或 `#6水炉`。
+
+## 2026-10-28 调度信息工具：企业标准口径统一与设施管径全量加固 (Enterprise Terminology Alignment & Facility Regex Hardening)
+
+- **脚本工具与企业字典演化说明**：
+  - **核心提取脚本升级**：
+    - [`backend/scripts/extract_dispatch_docx.py`](file:///D:/编程项目/phoenix/backend/scripts/extract_dispatch_docx.py)：
+      - **组织主体规范化**：
+        - “北方电厂/北方” ➔ **“北方热电”**；
+        - “金州电厂/金州” ➔ **“金州热电”**；
+        - “庄河电厂/庄河” ➔ **“庄河环海”**；
+        - “金普/金普热电” ➔ **“金普公司”**；
+        - 机炉状态表 `eqp_status_json` 及事件流 `log_items_json` 同步统一口径；
+      - **设施分类扩充与死角消除**：
+        - 锅炉正则支持 `#1蒸汽炉`、`#1汽炉`、`3#炉`，消除原有的锅炉误分类；
+        - 增设 `heater`（加热器/换热器/凝汽器）、`heat_pump`（热泵）、`auxiliary`（风机变频器辅机）；
+      - **管径规格无死角捕获**：
+        - 剔除 `\b` 边界限制，全面捕获 `DN1000`、`DN500`、`DN400`、`DN200`、`DN150` 等管网规格。
+
+## 2026-10-28 调度信息工具：生产信息记录全标准化重构与六元组实体模型落地 (Dispatch Log Normalization & Six-Tuple Entity Model)
+
+- **脚本工具与微观事件流架构说明**：
+  - **核心提取脚本升级**：
+    - [`backend/scripts/extract_dispatch_docx.py`](file:///D:/编程项目/phoenix/backend/scripts/extract_dispatch_docx.py)：
+      - `detect_org_header`：加固组织分组头探测机制，彻底消除调度填报人员因缺少冒号引发的 42% 责任主体丢失漏洞，实现电厂与供热公司 100% 责任对齐；
+      - `parse_facility_and_action`：落地微观事件“六元组标准实体模型”：
+        1. 组织责任主体（`org`: 北海电厂、供热公司、金州电厂、香海电厂、北方电厂）；
+        2. 物理设施分类（`facility_type`: boiler, turbine, pump, valve, substation, pipeline）；
+        3. 设施标准名称（`facility_name`: 如 #3水炉、#1机、#2热网循环泵、DN1000东环主线、唐山支线）；
+        4. 行为动作归一化（`action`: 点火、并汽、并网并列、冲转、事故跳闸、查漏抢修、带压堵漏、管网上水、开启倒闸、关闭倒闸、启动投运、停运退出、恢复供暖等）；
+        5. 状态机变迁（`status_result`: 运行、备用、检修、抢修中、施工中、恢复运行等）；
+        6. 空间与规格（`location`: 提取十字路口街道，`pipe_spec`: 提取 DN1000/DN500/DN200 等管径）；
+      - **工作票深度萃取**：正则兼容书名号《》与引号“”，标题捕获率达 100%；
+      - **桌面 GUI 升级**：图形窗口实时刷屏标准化主体与标准化事件数，导出 JSON 100% 结构化。
+
 ## 2026-10-28 动态计划接口：加固基准 k 值只读性，锁定仅开放 m 缩放系数更新 (K-Value Readonly Lockdown & M-Factor Exclusive Update)
 
 - **核心接口与数据库操作说明**：

@@ -253,12 +253,13 @@ def list_project_pages(
         if isinstance(page, dict)
     }
     has_project_override = project_id in session.permissions.projects
+    special_pages = ("spot_electricity", "dynamic_plan", "dispatch_info")
     if has_project_override and not allowed_pages:
-        pages = [page for page in pages if page.get("page_key") in ("spot_electricity", "dynamic_plan")]
+        pages = [page for page in pages if page.get("page_key") in special_pages]
     elif allowed_pages:
         pages = [
             page for page in pages 
-            if page.get("page_key") in allowed_pages or (project_id == "daily_report_25_26" and page.get("page_key") in ("spot_electricity", "dynamic_plan"))
+            if page.get("page_key") in allowed_pages or (project_id == "daily_report_25_26" and page.get("page_key") in special_pages)
         ]
 
     project_name = (

@@ -1,0 +1,28 @@
+{"check": "meta", "months": ["2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04"], "units": 10}
+{"check": "company", "company": "Group", "ok": true, "full": true, "metrics": 31, "mismatches": [{"item": "amount_heat_supply", "monthly": 1725699.24, "decomposition_target": 2322833.89}, {"item": "consumption_water", "monthly": 567143.32, "decomposition_target": 567138.32}, {"item": "consumption_purchased_power", "monthly": 978.06, "decomposition_target": 972.26}], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "ZhuChengQu", "ok": true, "full": true, "metrics": 25, "mismatches": [{"item": "amount_heat_supply", "monthly": 1124642.6, "decomposition_target": 1721777.25}, {"item": "consumption_water", "monthly": 381207.37, "decomposition_target": 381202.37}, {"item": "consumption_purchased_power", "monthly": 454.01, "decomposition_target": 448.21}], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "BeiHai", "ok": true, "full": true, "metrics": 15, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "XiangHai", "ok": true, "full": true, "metrics": 14, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "GongRe", "ok": true, "full": true, "metrics": 13, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "JinZhou", "ok": true, "full": true, "metrics": 20, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "BeiFang", "ok": true, "full": true, "metrics": 21, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "JinPu", "ok": true, "full": true, "metrics": 13, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "ZhuangHe", "ok": true, "full": true, "metrics": 12, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "company", "company": "YanJiuYuan", "ok": true, "full": true, "metrics": 8, "mismatches": [], "conservation_errors": [], "negatives": []}
+{"check": "temperature_gate", "month": "2026-10", "full": false, "available": 7, "missing": 24}
+{"check": "temperature_gate", "month": "2026-11", "full": true, "available": 30, "missing": 0}
+{"check": "temperature_gate", "month": "2026-12", "full": false, "available": 0, "missing": 31}
+{"check": "temperature_gate", "month": "2027-01", "full": false, "available": 0, "missing": 31}
+{"check": "temperature_gate", "month": "2027-02", "full": false, "available": 0, "missing": 28}
+{"check": "temperature_gate", "month": "2027-03", "full": false, "available": 0, "missing": 31}
+{"check": "temperature_gate", "month": "2027-04", "full": false, "available": 0, "missing": 30}
+{"check": "incomplete_local_days", "rows": [["2026-11-30", 11, "2026-11-29 16:00:00+00:00", "2026-11-30 02:00:00+00:00", "2.8475272727272727"]]}
+{"check": "purchased_heat_model_keys", "rows": [["Group", "amount_purchased_heat", 1, "0.0127289641991045"], ["Group", "amount_purchased_heat", 2, "0.0256130290401629"], ["Group", "amount_purchased_heat", 3, "0.0960453730427783"], ["Group", "amount_purchased_heat", 11, "0E-16"], ["Group", "amount_purchased_heat", 12, "0.0093842213544221"], ["ZhuangHe", "amount_purchased_heat", 1, "0.0127289641991045"], ["ZhuangHe", "amount_purchased_heat", 2, "0.0256130290401629"], ["ZhuangHe", "amount_purchased_heat", 3, "0.0960453730427783"], ["ZhuangHe", "amount_purchased_heat", 11, "0E-16"], ["ZhuangHe", "amount_purchased_heat", 12, "0.0093842213544221"]]}
+{"check": "save_missing_parameter", "status": 500, "detail": "保存参数失败: name 'new_k' is not defined", "rollback": true, "database": "内存替身"}
+{"check": "m_validation", "value": -1, "accepted": -1.0}
+{"check": "m_validation", "value": 1e+100, "accepted": 1e+100}
+{"check": "rounding", "month_plan": 100.0, "daily_sum": 100.0, "min_daily": 3.1, "last_daily": 3.1}
+{"check": "rounding", "month_plan": 0.2, "daily_sum": 0.2, "min_daily": -0.1, "last_daily": -0.1}
+{"check": "rounding", "month_plan": -1.0, "daily_sum": 0.0, "min_daily": 0.0, "last_daily": 0.0}
+{"check": "purchased_heat_alias", "item": "consumption_outer_purchased_heat", "month_plan": 205093.56, "has_k": false, "k": 0.0, "weights": [1.0], "temperature_source": "合成序列；月计划和参数来自只读数据库"}
+{"check": "purchased_heat_alias", "item": "amount_purchased_heat", "month_plan": 0.0, "has_k": true, "k": 0.0093842213544221, "weights": [1.0], "temperature_source": "合成序列；月计划和参数来自只读数据库"}

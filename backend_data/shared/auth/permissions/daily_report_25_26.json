@@ -11,6 +11,7 @@
         "data_analysis",
         "dynamic_plan",
         "global_management",
+        "dispatch_info",
         "placeholder"
       ],
       "sheet_rules": {
@@ -54,6 +55,7 @@
         "data_analysis",
         "dynamic_plan",
         "global_management",
+        "dispatch_info",
         "placeholder"
       ],
       "sheet_rules": {
@@ -94,7 +96,8 @@
         "data_approval",
         "data_entry",
         "data_analysis",
-        "dynamic_plan"
+        "dynamic_plan",
+        "dispatch_info"
       ],
       "sheet_rules": {
         "data_show": {
@@ -148,7 +151,8 @@
       "page_access": [
         "data_approval",
         "data_entry",
-        "dynamic_plan"
+        "dynamic_plan",
+        "dispatch_info"
       ],
       "sheet_rules": {
         "data_approval": {
@@ -178,7 +182,8 @@
     "unit_filler": {
       "page_access": [
         "data_entry",
-        "dynamic_plan"
+        "dynamic_plan",
+        "dispatch_info"
       ],
       "sheet_rules": {
         "data_entry": {
@@ -205,7 +210,8 @@
     "shoudian_filler": {
       "page_access": [
         "data_entry",
-        "dynamic_plan"
+        "dynamic_plan",
+        "dispatch_info"
       ],
       "sheet_rules": {
         "data_entry": {
@@ -238,6 +244,7 @@
         "data_show",
         "dynamic_plan",
         "global_management",
+        "dispatch_info",
         "placeholder"
       ],
       "sheet_rules": {
