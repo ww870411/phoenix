@@ -366,6 +366,7 @@
         <!-- 动态分解专属控制横栏 (仅开启动态分解时展示，排版整洁大方，绝不拥挤换行) -->
         <div v-if="isDynamicDecomposeEnabled" class="decomp-sub-toolbar">
           <div class="decomp-sub-left">
+            <span v-if="dynamicDecompData?.is_rollup" class="sub-label">总量：子口径逐日汇总；单耗：本口径分解</span>
             <span class="sub-label">📅 分解计划月份：</span>
             <select
               v-model="dynamicTargetMonth"
@@ -386,7 +387,7 @@
                 🔥 月平均 HDD20: <b>{{ dynamicDecompData.avg_hdd20 }}</b>
               </span>
               <span class="decomp-badge-audit">
-                ✓ 逐日计划加总严格等于月计划
+                ✓ 逐日计划加总与分解基准一致
               </span>
             </template>
           </div>
@@ -580,7 +581,8 @@
                       <td class="td-k-unit text-center text-muted">{{ m.unit || '—' }}</td>
                       <td class="td-k-val text-right font-mono">
                         <!-- 基准 k 值保持只读 -->
-                        <span v-if="m.has_k" class="k-badge-num active" :title="'基准 k 值: ' + m.k_value">
+                        <span v-if="m.aggregation_method === 'sum_children'">子口径参数</span>
+                        <span v-else-if="m.has_k" class="k-badge-num active" :title="'基准 k 值: ' + m.k_value">
                           {{ Number(m.k_value).toFixed(6) }}
                         </span>
                         <span v-else class="k-badge-num zero" title="未配置 k 值模型，视作 0 等额均摊">
@@ -589,7 +591,8 @@
                       </td>
                       <td class="td-m-val text-center font-mono">
                         <!-- 管理员在线输入 m 缩放系数 -->
-                        <template v-if="isGlobalAdmin && editingParams[m.item]">
+                        <template v-if="m.aggregation_method === 'sum_children'">—</template>
+                        <template v-else-if="isGlobalAdmin && editingParams[m.item]">
                           <input
                             type="number"
                             step="0.05"
@@ -613,7 +616,8 @@
                         </template>
                       </td>
                       <td class="td-k-type text-center">
-                        <span v-if="m.has_k" class="k-type-pill temp-driven">🔥 气温驱动</span>
+                        <span v-if="m.aggregation_method === 'sum_children'">子口径逐日汇总</span>
+                        <span v-else-if="m.has_k" class="k-type-pill temp-driven">🔥 气温驱动</span>
                         <span v-else class="k-type-pill baseline">➖ 基线均摊</span>
                       </td>
                       <td class="td-k-plan text-right font-mono font-bold">
@@ -656,6 +660,7 @@
         </div>
 
         <!-- 双纵轴对应指引条 (只要分左右轴即呈现对应指标标签名) -->
+        <div v-if="chartAxisMappingInfo.units.length > 2" class="axis-mapping-banner">各计量单位独立刻度：{{ chartAxisMappingInfo.units.join("、") }}（左侧首轴，其余从内到外位于右侧）</div>
         <div v-if="chartAxisMappingInfo.showBanner" class="axis-mapping-banner">
           <div class="axis-indicator-group axis-left-group">
             <span class="axis-badge axis-left-badge">左纵轴 ({{ chartAxisMappingInfo.leftUnit }})</span>
@@ -732,7 +737,8 @@
                   <th class="th-hdd">HDD20</th>
                   <th v-for="m in activeDecompositionMetrics" :key="'th_d_' + m.item" class="th-metric">
                     {{ m.item_cn }} ({{ m.unit }})
-                    <span class="th-k">k={{ Number(m.k_value || 0).toFixed(4) }}</span>
+                    <span v-if="m.aggregation_method === 'sum_children'" class="th-k">子口径逐日汇总</span>
+                    <span v-else class="th-k">k={{ Number(m.k_value || 0).toFixed(4) }}</span>
                   </th>
                 </tr>
               </thead>
@@ -751,7 +757,8 @@
                   <td class="td-hdd font-bold">{{ dynamicDecompData.avg_hdd20 }} (均值)</td>
                   <td v-for="m in activeDecompositionMetrics" :key="'td_d_sum_' + m.item" class="td-val font-bold text-primary">
                     {{ formatNumber(m.daily_plans.reduce((a, b) => a + b, 0)) }}
-                    <span class="sub-target" title="月计划基准值">(原计划: {{ formatNumber(m.month_plan) }})</span>
+                    <span v-if="m.aggregation_method === 'sum_children' && m.reported_month_plan != null && Math.abs(m.month_plan_difference) > 0.01" class="sub-target">直报: {{ formatNumber(m.reported_month_plan) }}；差额: {{ formatNumber(m.month_plan_difference) }}</span>
+                    <span class="sub-target" title="分解基准值">({{ m.aggregation_method === 'sum_children' ? '子口径月计划合计' : '原计划' }}: {{ formatNumber(m.month_plan) }})</span>
                   </td>
                 </tr>
               </tbody>
@@ -871,6 +878,7 @@ const paramFeedback = ref(null)
 function syncEditingParamsFromMetrics(metrics) {
   const next = {}
   ;(metrics || []).forEach((m) => {
+    if (m.aggregation_method === 'sum_children') return
     const k = Number(m.k_value || 0)
     const mv = Number(m.m_value !== undefined ? m.m_value : 1.0)
     next[m.item] = {
@@ -1019,7 +1027,7 @@ async function handleImportEnsembleWeather() {
     if (res.ok) {
       weatherSyncStatus.value = {
         success: true,
-        message: `预报同步成功：共入库 ${res.inserted_or_updated} 条逐小时均值，覆盖至 ${res.end_time?.slice(0, 10)} 10:00 (type=far)`,
+        message: `预报同步成功：写入 ${res.inserted_or_updated} 条，保留已有近端气温 ${res.skipped_near || 0} 条，预报截止 ${res.end_time?.replace('T', ' ')}`,
       }
     } else {
       weatherSyncStatus.value = {
@@ -1083,26 +1091,38 @@ const activeDecompositionMetrics = computed(() => {
   return allDecomp.filter((m) => selectedSet.has(m.item))
 })
 
+// 只接受当前口径的最新响应，避免旧请求覆盖新选择。
+let decompositionRequestId = 0
+let planRequestId = 0
 async function loadDynamicDecompositionData() {
+  const requestId = ++decompositionRequestId
+  const company = currentCompany.value
+  const yearMonth = dynamicTargetMonth.value
+  const isCurrent = () => requestId === decompositionRequestId && company === currentCompany.value && yearMonth === dynamicTargetMonth.value && isDynamicDecomposeEnabled.value
   if (!isDynamicDecomposeEnabled.value) {
     renderChart()
     return
   }
   dynamicDecompLoading.value = true
+  dynamicDecompData.value = null
   dynamicDecompError.value = ''
   try {
     const res = await fetchDynamicDailyDecomposition({
       projectKey,
-      company: currentCompany.value,
-      yearMonth: dynamicTargetMonth.value,
+      company,
+      yearMonth,
     })
+    if (!isCurrent()) return
     dynamicDecompData.value = res
     if (!res.has_full_month) {
       dynamicDecompError.value = res.message || `${dynamicTargetMonth.value} 气温数据不完整，缺少全月气温，无法执行动态分解`
     }
   } catch (err) {
+    if (!isCurrent()) return
+    dynamicDecompData.value = null
     dynamicDecompError.value = err.message || '加载动态日分解数据失败'
   } finally {
+    if (!isCurrent()) return
     dynamicDecompLoading.value = false
     await nextTick()
     renderChart()
@@ -1110,6 +1130,9 @@ async function loadDynamicDecompositionData() {
 }
 
 function handleDynamicDecomposeToggle() {
+  ++decompositionRequestId
+  dynamicDecompLoading.value = false
+  dynamicDecompData.value = null
   if (isDynamicDecomposeEnabled.value) {
     showDecompTemperature.value = true // 选中“动态分解”时，默认开启平均气温参考曲线
     showDecompAlgorithmPanel.value = false // 算法与各指标 k 值面板默认保持收起状态
@@ -1227,90 +1250,27 @@ function getMetricColor(itemKey) {
 }
 
 // 智能计算双纵轴映射与提示指引信息
+// 所有数值图统一按计量单位分轴；第三种单位也拥有独立刻度。
+function metricUnits(metrics) {
+  return [...new Set(metrics.map(m => m.unit || '数值'))].sort((a, b) => a === b ? 0 : a === 'GJ' ? -1 : b === 'GJ' ? 1 : a.localeCompare(b))
+}
+function metricAxes(metrics) {
+  return metricUnits(metrics).map((unit, index) => ({
+    type: 'value', name: unit, position: index === 0 ? 'left' : 'right',
+    offset: index > 0 ? (index - 1) * 65 : 0,
+    splitLine: { show: index === 0 }, axisLabel: { formatter: formatAxisNum },
+  }))
+}
 const chartAxisMappingInfo = computed(() => {
-  const targets = chartMetrics.value
-  if (!targets.length) {
-    return {
-      showBanner: false,
-      hasDualAxis: false,
-      leftMetrics: [],
-      rightMetrics: [],
-      leftUnit: '',
-      rightUnit: '',
-      leftKeys: new Set(),
-      rightKeys: new Set(),
-    }
-  }
-
-  // 统计各单位
-  const unitMap = new Map()
-  targets.forEach((m) => {
-    const u = m.unit || '数值'
-    if (!unitMap.has(u)) {
-      unitMap.set(u, [])
-    }
-    unitMap.get(u).push(m)
-  })
-
-  // 如果仅有一种单位，无需双轴
-  if (unitMap.size <= 1) {
-    const onlyUnit = Array.from(unitMap.keys())[0] || ''
-    return {
-      showBanner: false,
-      hasDualAxis: false,
-      leftMetrics: targets,
-      rightMetrics: [],
-      leftUnit: onlyUnit,
-      rightUnit: '',
-      leftKeys: new Set(targets.map((m) => m.item)),
-      rightKeys: new Set(),
-    }
-  }
-
-  // 存在多种单位：优先将 GJ（热力行业核心生产量）定为左主轴；若无 GJ 则按指标项数最多者为主轴
-  let leftUnit = ''
-  if (unitMap.has('GJ')) {
-    leftUnit = 'GJ'
-  } else {
-    let maxCount = -1
-    for (const [u, list] of unitMap.entries()) {
-      if (list.length > maxCount) {
-        maxCount = list.length
-        leftUnit = u
-      }
-    }
-  }
-
-  const leftMetrics = unitMap.get(leftUnit) || []
-  const rightMetrics = []
-  const rightUnits = []
-
-  for (const [u, list] of unitMap.entries()) {
-    if (u !== leftUnit) {
-      rightMetrics.push(...list)
-      rightUnits.push(u)
-    }
-  }
-
-  const rightUnit = rightUnits.join(' / ')
-  const leftKeys = new Set(leftMetrics.map((m) => m.item))
-  const rightKeys = new Set(rightMetrics.map((m) => m.item))
-
-  // 只要分属左右双轴（存在双轴映射），即使仅选中两个指标，也呈现对照指引横幅
-  const showBanner =
-    targets.length >= 2 &&
-    rightMetrics.length > 0 &&
-    ['dynamic_trend', 'dynamic_bar'].includes(activeChartTab.value)
-
+  const targets = isDynamicDecomposeEnabled.value ? activeDecompositionMetrics.value : chartMetrics.value
+  const units = metricUnits(targets)
+  const leftMetrics = targets.filter(m => (m.unit || '数值') === units[0])
+  const rightMetrics = targets.filter(m => (m.unit || '数值') === units[1])
   return {
-    showBanner,
-    hasDualAxis: rightMetrics.length > 0,
-    leftMetrics,
-    rightMetrics,
-    leftUnit,
-    rightUnit,
-    leftKeys,
-    rightKeys,
+    units, showBanner: units.length === 2 && (isDynamicDecomposeEnabled.value || ['dynamic_trend', 'dynamic_bar'].includes(activeChartTab.value)),
+    hasDualAxis: units.length > 1, leftUnit: units[0] || '', rightUnit: units[1] || '',
+    leftMetrics, rightMetrics,
+    leftKeys: new Set(leftMetrics.map(m => m.item)), rightKeys: new Set(rightMetrics.map(m => m.item)),
   }
 })
 
@@ -1533,16 +1493,30 @@ async function initMeta() {
 }
 
 async function fetchData() {
+  const requestId = ++planRequestId
+  const company = currentCompany.value
+  const start = startMonth.value
+  const end = endMonth.value
+  const isCurrent = () => requestId === planRequestId && company === currentCompany.value && start === startMonth.value && end === endMonth.value
+  ++decompositionRequestId
+  dynamicDecompLoading.value = false
+  dynamicDecompData.value = null
+  metricsList.value = []
+  summaryCards.value = {}
   loading.value = true
   try {
     const res = await getDynamicPlanData(projectKey, {
-      company: currentCompany.value,
-      start_month: startMonth.value,
-      end_month: endMonth.value,
+      company,
+      start_month: start,
+      end_month: end,
       plan_type: 'plan',
     })
+    if (!isCurrent()) return
     if (res.ok) {
       displayedMonths.value = res.months || []
+      if (!displayedMonths.value.includes(dynamicTargetMonth.value)) {
+        dynamicTargetMonth.value = displayedMonths.value[0] || ''
+      }
       metricsList.value = res.metrics || []
       summaryCards.value = res.summary_cards || {}
       // 表格保持全选当前单位下的全部指标
@@ -1552,13 +1526,17 @@ async function fetchData() {
       isChartCustomized.value = false
 
       // 若开启动态分解模式，同步刷新动态日分解数据
-      if (isDynamicDecomposeEnabled.value) {
+      if (isDynamicDecomposeEnabled.value && dynamicTargetMonth.value) {
         await loadDynamicDecompositionData()
       }
     }
   } catch (err) {
+    if (!isCurrent()) return
+    displayedMonths.value = []
+    dynamicDecompError.value = err.message || '读取计划失败，请刷新重试'
     console.error('读取动态计划数据失败:', err)
   } finally {
+    if (!isCurrent()) return
     loading.value = false
     await nextTick()
     renderChart()
@@ -1635,7 +1613,7 @@ function renderDynamicDecomposeChart() {
   }
 
   // 分析这批指标的单位分布
-  const unitList = Array.from(new Set(activeMetrics.map((m) => m.unit).filter(Boolean)))
+  const unitList = metricUnits(activeMetrics)
   const leftUnit = unitList[0] || ''
   const rightUnit = unitList.length > 1 ? unitList[1] : ''
   const hasDualAxis = unitList.length > 1
@@ -1652,7 +1630,7 @@ function renderDynamicDecomposeChart() {
     const baseSeries = {
       name: `${m.item_cn} (${m.unit || '—'})`,
       type: 'line',
-      yAxisIndex: useRightAxis ? 1 : 0,
+      yAxisIndex: unitList.indexOf(m.unit || '数值'),
       smooth: true,
       symbol: isFocused ? 'circle' : 'emptyCircle',
       symbolSize: isFocused ? 8 : 5,
@@ -1681,26 +1659,7 @@ function renderDynamicDecomposeChart() {
   const includeTemp = showDecompTemperature.value && temperatures && temperatures.length > 0
   let tempYAxisIndex = -1
 
-  const yAxes = [
-    {
-      type: 'value',
-      name: leftUnit || '',
-      nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
-      splitLine: { lineStyle: { color: '#f1f5f9' } },
-      axisLabel: { formatter: (v) => formatAxisNum(v) },
-    },
-  ]
-
-  if (hasDualAxis) {
-    yAxes.push({
-      type: 'value',
-      name: rightUnit || '',
-      position: 'right',
-      nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
-      splitLine: { show: false },
-      axisLabel: { formatter: (v) => formatAxisNum(v) },
-    })
-  }
+  const yAxes = metricAxes(activeMetrics)
 
   if (includeTemp) {
     if (!hasDualAxis) {
@@ -1715,12 +1674,12 @@ function renderDynamicDecomposeChart() {
         axisLine: { show: true, lineStyle: { color: '#0284c7' } },
       })
     } else {
-      tempYAxisIndex = 2
+      tempYAxisIndex = unitList.length
       yAxes.push({
         type: 'value',
         name: '平均气温 (℃)',
         position: 'right',
-        offset: 55,
+        offset: (unitList.length - 1) * 65,
         nameTextStyle: { color: '#0284c7', fontSize: 11, padding: [0, 0, 4, 0] },
         splitLine: { show: false },
         axisLabel: { formatter: (v) => `${v}℃` },
@@ -1766,7 +1725,7 @@ function renderDynamicDecomposeChart() {
       },
       grid: {
         left: '3%',
-        right: hasDualAxis && includeTemp ? '8%' : (hasDualAxis || includeTemp ? '5%' : '3%'),
+        right: Math.max(65, (unitList.length - 1 + (includeTemp ? 1 : 0)) * 65),
         top: 48,
         bottom: '8%',
         containLabel: true,
@@ -1803,7 +1762,7 @@ function renderDynamicDecomposeChart() {
                 <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};"></span>
                 <span>${p.seriesName}:</span>
               </span>
-              <span style="font-weight:700;">${formatNumber(p.value)} ${hasK && w !== undefined ? `<small style="color:#64748b;font-weight:normal;">(权重 ${w})</small>` : '<small style="color:#94a3b8;font-weight:normal;">(无k·日均摊)</small>'}</span>
+              <span style="font-weight:700;">${formatNumber(p.value)} ${hasK && w !== undefined ? `<small style="color:#64748b;font-weight:normal;">(权重 ${w})</small>` : `<small style="color:#94a3b8;font-weight:normal;">${metricItem?.aggregation_method === 'sum_children' ? '(子口径逐日汇总)' : '(无k·日均摊)'}</small>`}</span>
             </div>`
           })
           return tip
@@ -1875,7 +1834,7 @@ function renderChart() {
       const baseSeries = {
         name: `${m.item_cn} (${m.unit || '—'})`,
         type: 'line',
-        yAxisIndex: useRightAxis ? 1 : 0,
+        yAxisIndex: metricUnits(targetMetrics).indexOf(m.unit || '数值'),
         smooth: true,
         symbol: isFocused || isSingle ? 'circle' : 'emptyCircle',
         symbolSize: isFocused ? 10 : isSingle ? 8 : 6,
@@ -1907,25 +1866,7 @@ function renderChart() {
       return baseSeries
     })
 
-    const yAxes = [
-      {
-        type: 'value',
-        name: mapping.leftUnit || '',
-        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
-        splitLine: { lineStyle: { color: '#f1f5f9' } },
-        axisLabel: { formatter: (v) => formatAxisNum(v) },
-      },
-    ]
-    if (hasDualAxis) {
-      yAxes.push({
-        type: 'value',
-        name: mapping.rightUnit || '',
-        position: 'right',
-        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
-        splitLine: { show: false },
-        axisLabel: { formatter: (v) => formatAxisNum(v) },
-      })
-    }
+    const yAxes = metricAxes(targetMetrics)
 
     chartInstance.setOption(
       {
@@ -1954,7 +1895,7 @@ function renderChart() {
           left: 100,
           textStyle: { fontSize: 12 },
         },
-        grid: { left: '3%', right: hasDualAxis ? '4%' : '3%', bottom: '8%', top: '16%', containLabel: true },
+        grid: { left: '3%', right: Math.max(65, (metricUnits(targetMetrics).length - 1) * 65), bottom: '8%', top: '16%', containLabel: true },
         xAxis: { type: 'category', data: monthLabels, axisLabel: { interval: 0, rotate: 12 } },
         yAxis: yAxes,
         series,
@@ -1997,7 +1938,7 @@ function renderChart() {
       return {
         name: `${m.item_cn} (${m.unit || '—'})`,
         type: 'bar',
-        yAxisIndex: useRightAxis ? 1 : 0,
+        yAxisIndex: metricUnits(targetMetrics).indexOf(m.unit || '数值'),
         barMaxWidth: targetMetrics.length > 4 ? 20 : 32,
         data: months.map((mo) => m.values[mo] ?? 0),
         itemStyle: {
@@ -2008,25 +1949,7 @@ function renderChart() {
       }
     })
 
-    const yAxes = [
-      {
-        type: 'value',
-        name: mapping.leftUnit || '',
-        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
-        splitLine: { lineStyle: { color: '#f1f5f9' } },
-        axisLabel: { formatter: (v) => formatAxisNum(v) },
-      },
-    ]
-    if (hasDualAxis) {
-      yAxes.push({
-        type: 'value',
-        name: mapping.rightUnit || '',
-        position: 'right',
-        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
-        splitLine: { show: false },
-        axisLabel: { formatter: (v) => formatAxisNum(v) },
-      })
-    }
+    const yAxes = metricAxes(targetMetrics)
 
     chartInstance.setOption(
       {
@@ -2055,7 +1978,7 @@ function renderChart() {
           left: 100,
           textStyle: { fontSize: 12 },
         },
-        grid: { left: '3%', right: hasDualAxis ? '4%' : '3%', bottom: '8%', top: '16%', containLabel: true },
+        grid: { left: '3%', right: Math.max(65, (metricUnits(targetMetrics).length - 1) * 65), bottom: '8%', top: '16%', containLabel: true },
         xAxis: { type: 'category', data: monthLabels, axisLabel: { interval: 0, rotate: 12 } },
         yAxis: yAxes,
         series,

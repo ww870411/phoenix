@@ -2,13 +2,11 @@
   {
     "check": "request_race",
     "selected": "BeiHai",
-    "displayed": "Group"
+    "displayed": "BeiHai"
   },
   {
     "check": "failure_retains_old_data",
     "selected": "JinPu",
-    "displayed": "Group",
-    "has_full_month": true,
     "error": "模拟网络失败"
   },
   {
@@ -24,7 +22,7 @@
       },
       {
         "name": "发电量 (万kWh)",
-        "axis": "GJ"
+        "axis": "万kWh"
       },
       {
         "name": "平均气温 (℃)",

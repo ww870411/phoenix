@@ -335,7 +335,7 @@ def get_dynamic_plan_data(
             ).mappings().all()
 
     # 4. 构建指标矩阵（汇总口径已有直报值则以直报权威值为准，未直报项由下属单位向上聚合求和补齐）
-    direct_items = {r["item"] for r in direct_rows}
+    direct_items = {(r["item"], _format_month_label(r["period"])) for r in direct_rows}
     grouped: Dict[str, Dict[str, Any]] = {}
 
     for r in direct_rows:
@@ -357,7 +357,7 @@ def get_dynamic_plan_data(
 
     for r in rollup_rows:
         item_key = r["item"]
-        if item_key in direct_items:
+        if (item_key, _format_month_label(r["period"])) in direct_items:
             # 汇总口径已有经核准的直报值（已做内部关联抵消），保留直报值
             continue
         if item_key not in grouped:
@@ -595,7 +595,8 @@ async def update_k_parameters_endpoint(
                     )
                     updated_count += 1
             else:
-                final_k = new_k if new_k is not None else 0.0
+                # 新指标没有基准模型时按均摊处理，客户端不能修改基准 k。
+                final_k = 0.0
                 final_m = new_m if new_m is not None else 1.0
                 db.execute(
                     text("""

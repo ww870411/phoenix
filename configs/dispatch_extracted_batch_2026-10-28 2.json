@@ -1,0 +1,7171 @@
+[
+  {
+    "project_key": "daily_report_25_26",
+    "biz_date": "2026-10-22",
+    "issue_date": "2026-10-23",
+    "publish_date": "2026-10-23",
+    "duty_staff": "张桂林,刘忠元",
+    "duty_officers": "张桂林,刘忠元",
+    "file_name": "2026年10月22日生产信息.pdf",
+    "wth_date": "2026-10-23",
+    "wth_weekday": "",
+    "wth_condition": "多云有分散性阵雨转晴",
+    "wth_temp_min": 13.0,
+    "wth_temp_max": 17.0,
+    "wth_hum_min": 55,
+    "wth_hum_max": 95,
+    "wth_wind_dir": "南风",
+    "wth_wind_scale": "4~5",
+    "wth_raw_text": "10月23日 13℃~17℃ 多云有分散性阵雨转晴相对湿度:55%~95% 南风4~5 级。",
+    "weather": {
+      "raw_text": "10月23日 13℃~17℃ 多云有分散性阵雨转晴相对湿度:55%~95% 南风4~5 级。",
+      "forecast_date": "2026-10-23",
+      "weekday": "",
+      "weather_desc": "多云有分散性阵雨转晴",
+      "temp_min": 13.0,
+      "temp_max": 17.0,
+      "humidity_min": 55,
+      "humidity_max": 95,
+      "wind": "南风4~5",
+      "wind_direction": "南风",
+      "wind_scale": "4~5",
+      "humidity": "55%~95%"
+    },
+    "bh_s1_pumps": 3,
+    "bh_s1_flow": 4829.0,
+    "bh_s1_press_sup": 0.76,
+    "bh_s1_press_ret": 0.58,
+    "bh_s1_temp_sup": null,
+    "bh_s1_temp_ret": null,
+    "bh_s2_pumps": null,
+    "bh_s2_flow": null,
+    "bh_s2_press_sup": null,
+    "bh_s2_press_ret": null,
+    "bh_s2_temp_sup": null,
+    "bh_s2_temp_ret": null,
+    "bh_wl_pumps": null,
+    "bh_wl_flow": null,
+    "bh_wl_press_sup": null,
+    "bh_wl_press_ret": null,
+    "bh_wl_temp_sup": null,
+    "bh_wl_temp_ret": null,
+    "xh_lv1_pumps": null,
+    "xh_lv1_flow": null,
+    "xh_lv1_press_sup": null,
+    "xh_lv1_press_ret": null,
+    "xh_lv1_temp_sup": null,
+    "xh_lv1_temp_ret": null,
+    "xh_lv3_pumps": null,
+    "xh_lv3_flow": null,
+    "xh_lv3_press_sup": null,
+    "xh_lv3_press_ret": null,
+    "xh_lv3_temp_sup": null,
+    "xh_lv3_temp_ret": null,
+    "xh_main_pumps": null,
+    "xh_main_flow": null,
+    "xh_main_press_sup": null,
+    "xh_main_press_ret": null,
+    "xh_main_temp_sup": null,
+    "xh_main_temp_ret": null,
+    "first_stations": [
+      {
+        "plant": "北海电厂",
+        "station_name": "#1首站",
+        "pump_count": 3,
+        "flow_rate_th": 4829.0,
+        "supply_pressure_mpa": 0.76,
+        "return_pressure_mpa": 0.58,
+        "pressure_diff_mpa": 0.18,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "#2首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "水炉",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#1低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#3低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      }
+    ],
+    "bh_south_status": "投运",
+    "bh_south_press": null,
+    "bh_south_flow": null,
+    "xb_link_status": "投运",
+    "xb_link_press": null,
+    "xb_link_flow": null,
+    "xh_east_status": "投运",
+    "xh_east_press": null,
+    "xh_east_flow": null,
+    "xh_west_status": null,
+    "xh_west_press": null,
+    "xh_west_flow": null,
+    "steam_networks": [
+      {
+        "network_name": "北海南网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香北联络",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香海东、西网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      }
+    ],
+    "coal_remark": "北海进煤:汽运车混煤 香海进煤:汽运车混煤",
+    "coal_bh_in": null,
+    "coal_bh_use": null,
+    "coal_bh_stock": null,
+    "coal_xh_in": null,
+    "coal_xh_use": null,
+    "coal_xh_stock": null,
+    "coal_main_sum_in": null,
+    "coal_main_sum_use": null,
+    "coal_main_sum_stock": null,
+    "coal_jz_in": null,
+    "coal_jz_use": null,
+    "coal_jz_stock": null,
+    "coal_bf_in": null,
+    "coal_bf_use": null,
+    "coal_bf_stock": null,
+    "coal_zh_in": null,
+    "coal_zh_use": null,
+    "coal_zh_stock": null,
+    "coal_dlg_in": null,
+    "coal_dlg_use": null,
+    "coal_dlg_stock": null,
+    "coal_total_in": null,
+    "coal_total_use": null,
+    "coal_total_stock": null,
+    "coal_stats": [
+      {
+        "category": "北海",
+        "standard_org": "北海电厂",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "香海",
+        "standard_org": "香海电厂",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "主城区合计",
+        "standard_org": "主城区合计",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "金州",
+        "standard_org": "金州热电",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "北方",
+        "standard_org": "北方热电",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "庄河",
+        "standard_org": "庄河环海",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "合计",
+        "standard_org": "全网合计",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      }
+    ],
+    "prod_bh_steam_coal_plan": null,
+    "prod_bh_steam_coal_act": null,
+    "prod_bh_water_coal_plan": null,
+    "prod_bh_water_coal_act": null,
+    "prod_bh_power_plan": null,
+    "prod_bh_power_act": null,
+    "prod_bh_heat_plan": null,
+    "prod_bh_heat_act": null,
+    "prod_xh_steam_coal_plan": null,
+    "prod_xh_steam_coal_act": null,
+    "prod_xh_power_plan": null,
+    "prod_xh_power_act": null,
+    "prod_xh_heat_plan": null,
+    "prod_xh_heat_act": null,
+    "prod_main_coal_plan": null,
+    "prod_main_coal_act": null,
+    "prod_main_power_plan": null,
+    "prod_main_power_act": null,
+    "prod_main_heat_plan": null,
+    "prod_main_heat_act": null,
+    "gw_high_temp_water": null,
+    "gw_lv1_heat": null,
+    "gw_lv3_heat": null,
+    "gw_bh_south_steam": null,
+    "gw_xh_ew_steam": null,
+    "gw_xb_link_steam": null,
+    "production_stats": {
+      "beihai_plan_coal": null,
+      "beihai_actual_coal": null,
+      "beihai_plan_power": null,
+      "beihai_actual_power": null,
+      "beihai_plan_heat": null,
+      "beihai_actual_heat": null,
+      "xianghai_plan_coal": null,
+      "xianghai_actual_coal": null,
+      "xianghai_plan_power": null,
+      "xianghai_actual_power": null,
+      "xianghai_plan_heat": null,
+      "xianghai_actual_heat": null,
+      "urban_total_plan_coal": null,
+      "urban_total_actual_coal": null,
+      "urban_total_plan_power": null,
+      "urban_total_actual_power": null,
+      "urban_total_plan_heat": null,
+      "urban_total_actual_heat": null,
+      "beihai_steam_coal_plan": null,
+      "beihai_steam_coal_act": null,
+      "beihai_water_coal_plan": null,
+      "beihai_water_coal_act": null
+    },
+    "network_heat": {
+      "gw_high_temp_water": null,
+      "gw_lv1_heat": null,
+      "gw_lv3_heat": null,
+      "gw_bh_south_steam": null,
+      "gw_xh_ew_steam": null,
+      "gw_xb_link_steam": null
+    },
+    "water_sup_bh_s1": null,
+    "water_sup_bh_s2": null,
+    "water_sup_period_last_year": null,
+    "water_sup_accum": null,
+    "water_sup_accum_last": 17814.0,
+    "substations_filled": null,
+    "water_replenishment": {
+      "first_station_1_water_tons": null,
+      "first_station_2_water_tons": null,
+      "period_last_year_water_tons": null,
+      "accumulated_water_tons": null,
+      "accumulated_last_year_water_tons": 17814.0,
+      "substations_filled": null
+    },
+    "total_coal_consumed": null,
+    "total_power_generated": null,
+    "total_heat_supplied": null,
+    "total_water_replenished": null,
+    "boiler_turbine_status": [
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#5炉",
+        "standard_name": "#5燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#7炉",
+        "standard_name": "#7燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#8炉",
+        "standard_name": "#8燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#9炉",
+        "standard_name": "#9燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#10炉",
+        "standard_name": "#10燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#4机",
+        "standard_name": "#4汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6水炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      }
+    ],
+    "eqp_status_json": {
+      "matrix": {
+        "北海热电联产": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [],
+            "检修": [
+              "#1",
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "北海水炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          }
+        },
+        "燃气锅炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#5",
+              "#6",
+              "#7",
+              "#8",
+              "#9",
+              "#10"
+            ],
+            "检修": []
+          }
+        },
+        "香海电厂": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#2",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#1"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1"
+            ],
+            "检修": [
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "金州热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#6"
+            ],
+            "检修": []
+          }
+        },
+        "北方热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          }
+        }
+      },
+      "flat_map": {
+        "北海热电联产_#1机": "备用",
+        "北海热电联产_#2机": "备用",
+        "北海热电联产_#3机": "检修",
+        "北海热电联产_#1汽炉": "检修",
+        "北海热电联产_#2汽炉": "检修",
+        "北海热电联产_#3汽炉": "检修",
+        "北海热电联产_#4汽炉": "检修",
+        "北海水炉_#1水炉": "备用",
+        "北海水炉_#2水炉": "备用",
+        "北海水炉_#3水炉": "检修",
+        "燃气锅炉_#1燃气炉": "备用",
+        "燃气锅炉_#2燃气炉": "备用",
+        "燃气锅炉_#3燃气炉": "备用",
+        "燃气锅炉_#4燃气炉": "备用",
+        "燃气锅炉_#5燃气炉": "备用",
+        "燃气锅炉_#6燃气炉": "备用",
+        "燃气锅炉_#7燃气炉": "备用",
+        "燃气锅炉_#8燃气炉": "备用",
+        "燃气锅炉_#9燃气炉": "备用",
+        "燃气锅炉_#10燃气炉": "备用",
+        "香海电厂_#2机": "备用",
+        "香海电厂_#3机": "备用",
+        "香海电厂_#4机": "备用",
+        "香海电厂_#1汽炉": "备用",
+        "香海电厂_#1机": "检修",
+        "香海电厂_#2汽炉": "检修",
+        "香海电厂_#3汽炉": "检修",
+        "香海电厂_#4汽炉": "检修",
+        "金州热电_#1机": "备用",
+        "金州热电_#2机": "备用",
+        "金州热电_#3机": "备用",
+        "金州热电_#1汽炉": "备用",
+        "金州热电_#2汽炉": "备用",
+        "金州热电_#3汽炉": "备用",
+        "金州热电_#4汽炉": "备用",
+        "金州热电_#6水炉": "备用",
+        "北方热电_#1机": "备用",
+        "北方热电_#2机": "备用",
+        "北方热电_#1汽炉": "备用",
+        "北方热电_#2汽炉": "备用",
+        "北方热电_#3汽炉": "备用"
+      },
+      "facilities": [
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#5炉",
+          "standard_name": "#5燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#7炉",
+          "standard_name": "#7燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#8炉",
+          "standard_name": "#8燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#9炉",
+          "standard_name": "#9燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#10炉",
+          "standard_name": "#10燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#4机",
+          "standard_name": "#4汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6水炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        }
+      ]
+    },
+    "operations_and_tickets": [
+      {
+        "time": "10:10",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "启动投运",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#1首站东环#2热网循环泵投运"
+      },
+      {
+        "time": "22:17",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "故障跳闸",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "东环#1热网循环泵运行中跳闸,启 动南环#2泵运行"
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "10:10",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "启动投运",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#1首站东环#2热网循环泵投运"
+      },
+      {
+        "time": "22:17",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "故障跳闸",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "东环#1热网循环泵运行中跳闸,启 动南环#2泵运行"
+      }
+    ]
+  },
+  {
+    "project_key": "daily_report_25_26",
+    "biz_date": "2026-10-23",
+    "issue_date": "2026-10-24",
+    "publish_date": "2026-10-24",
+    "duty_staff": "吴立明,陈祎仲",
+    "duty_officers": "吴立明,陈祎仲",
+    "file_name": "2026年10月23日生产信息.pdf",
+    "wth_date": "2026-10-24",
+    "wth_weekday": "",
+    "wth_condition": "晴",
+    "wth_temp_min": 10.0,
+    "wth_temp_max": 19.0,
+    "wth_hum_min": 30,
+    "wth_hum_max": 70,
+    "wth_wind_dir": "",
+    "wth_wind_scale": "",
+    "wth_raw_text": "10 月 24 日 10℃~19℃ 晴 相对湿度:30%~70% 北 风 4~5 级。",
+    "weather": {
+      "raw_text": "10 月 24 日 10℃~19℃ 晴 相对湿度:30%~70% 北 风 4~5 级。",
+      "forecast_date": "2026-10-24",
+      "weekday": "",
+      "weather_desc": "晴",
+      "temp_min": 10.0,
+      "temp_max": 19.0,
+      "humidity_min": 30,
+      "humidity_max": 70,
+      "wind": "",
+      "wind_direction": "",
+      "wind_scale": "",
+      "humidity": "30%~70%"
+    },
+    "bh_s1_pumps": 3,
+    "bh_s1_flow": 4217.0,
+    "bh_s1_press_sup": 0.72,
+    "bh_s1_press_ret": 0.58,
+    "bh_s1_temp_sup": null,
+    "bh_s1_temp_ret": null,
+    "bh_s2_pumps": null,
+    "bh_s2_flow": null,
+    "bh_s2_press_sup": null,
+    "bh_s2_press_ret": null,
+    "bh_s2_temp_sup": null,
+    "bh_s2_temp_ret": null,
+    "bh_wl_pumps": null,
+    "bh_wl_flow": null,
+    "bh_wl_press_sup": null,
+    "bh_wl_press_ret": null,
+    "bh_wl_temp_sup": null,
+    "bh_wl_temp_ret": null,
+    "xh_lv1_pumps": null,
+    "xh_lv1_flow": null,
+    "xh_lv1_press_sup": null,
+    "xh_lv1_press_ret": null,
+    "xh_lv1_temp_sup": null,
+    "xh_lv1_temp_ret": null,
+    "xh_lv3_pumps": null,
+    "xh_lv3_flow": null,
+    "xh_lv3_press_sup": null,
+    "xh_lv3_press_ret": null,
+    "xh_lv3_temp_sup": null,
+    "xh_lv3_temp_ret": null,
+    "xh_main_pumps": null,
+    "xh_main_flow": null,
+    "xh_main_press_sup": null,
+    "xh_main_press_ret": null,
+    "xh_main_temp_sup": null,
+    "xh_main_temp_ret": null,
+    "first_stations": [
+      {
+        "plant": "北海电厂",
+        "station_name": "#1首站",
+        "pump_count": 3,
+        "flow_rate_th": 4217.0,
+        "supply_pressure_mpa": 0.72,
+        "return_pressure_mpa": 0.58,
+        "pressure_diff_mpa": 0.14,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "#2首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "水炉",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#1低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#3低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      }
+    ],
+    "bh_south_status": "投运",
+    "bh_south_press": null,
+    "bh_south_flow": null,
+    "xb_link_status": "投运",
+    "xb_link_press": null,
+    "xb_link_flow": null,
+    "xh_east_status": "投运",
+    "xh_east_press": null,
+    "xh_east_flow": null,
+    "xh_west_status": null,
+    "xh_west_press": null,
+    "xh_west_flow": null,
+    "steam_networks": [
+      {
+        "network_name": "北海南网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香北联络",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香海东、西网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      }
+    ],
+    "coal_remark": "北海进煤:汽运车混煤 香海进煤:汽运车混煤",
+    "coal_bh_in": null,
+    "coal_bh_use": null,
+    "coal_bh_stock": null,
+    "coal_xh_in": null,
+    "coal_xh_use": null,
+    "coal_xh_stock": null,
+    "coal_main_sum_in": null,
+    "coal_main_sum_use": null,
+    "coal_main_sum_stock": null,
+    "coal_jz_in": null,
+    "coal_jz_use": null,
+    "coal_jz_stock": null,
+    "coal_bf_in": null,
+    "coal_bf_use": null,
+    "coal_bf_stock": null,
+    "coal_zh_in": null,
+    "coal_zh_use": null,
+    "coal_zh_stock": null,
+    "coal_dlg_in": null,
+    "coal_dlg_use": null,
+    "coal_dlg_stock": null,
+    "coal_total_in": null,
+    "coal_total_use": null,
+    "coal_total_stock": null,
+    "coal_stats": [
+      {
+        "category": "北海",
+        "standard_org": "北海电厂",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "香海",
+        "standard_org": "香海电厂",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "主城区合计",
+        "standard_org": "主城区合计",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "金州",
+        "standard_org": "金州热电",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "北方",
+        "standard_org": "北方热电",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "庄河",
+        "standard_org": "庄河环海",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "合计",
+        "standard_org": "全网合计",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      }
+    ],
+    "prod_bh_steam_coal_plan": null,
+    "prod_bh_steam_coal_act": null,
+    "prod_bh_water_coal_plan": null,
+    "prod_bh_water_coal_act": null,
+    "prod_bh_power_plan": null,
+    "prod_bh_power_act": null,
+    "prod_bh_heat_plan": null,
+    "prod_bh_heat_act": null,
+    "prod_xh_steam_coal_plan": null,
+    "prod_xh_steam_coal_act": null,
+    "prod_xh_power_plan": null,
+    "prod_xh_power_act": null,
+    "prod_xh_heat_plan": null,
+    "prod_xh_heat_act": null,
+    "prod_main_coal_plan": null,
+    "prod_main_coal_act": null,
+    "prod_main_power_plan": null,
+    "prod_main_power_act": null,
+    "prod_main_heat_plan": null,
+    "prod_main_heat_act": null,
+    "gw_high_temp_water": null,
+    "gw_lv1_heat": null,
+    "gw_lv3_heat": null,
+    "gw_bh_south_steam": null,
+    "gw_xh_ew_steam": null,
+    "gw_xb_link_steam": null,
+    "production_stats": {
+      "beihai_plan_coal": null,
+      "beihai_actual_coal": null,
+      "beihai_plan_power": null,
+      "beihai_actual_power": null,
+      "beihai_plan_heat": null,
+      "beihai_actual_heat": null,
+      "xianghai_plan_coal": null,
+      "xianghai_actual_coal": null,
+      "xianghai_plan_power": null,
+      "xianghai_actual_power": null,
+      "xianghai_plan_heat": null,
+      "xianghai_actual_heat": null,
+      "urban_total_plan_coal": null,
+      "urban_total_actual_coal": null,
+      "urban_total_plan_power": null,
+      "urban_total_actual_power": null,
+      "urban_total_plan_heat": null,
+      "urban_total_actual_heat": null,
+      "beihai_steam_coal_plan": null,
+      "beihai_steam_coal_act": null,
+      "beihai_water_coal_plan": null,
+      "beihai_water_coal_act": null
+    },
+    "network_heat": {
+      "gw_high_temp_water": null,
+      "gw_lv1_heat": null,
+      "gw_lv3_heat": null,
+      "gw_bh_south_steam": null,
+      "gw_xh_ew_steam": null,
+      "gw_xb_link_steam": null
+    },
+    "water_sup_bh_s1": null,
+    "water_sup_bh_s2": null,
+    "water_sup_period_last_year": null,
+    "water_sup_accum": null,
+    "water_sup_accum_last": 20454.0,
+    "substations_filled": null,
+    "water_replenishment": {
+      "first_station_1_water_tons": null,
+      "first_station_2_water_tons": null,
+      "period_last_year_water_tons": null,
+      "accumulated_water_tons": null,
+      "accumulated_last_year_water_tons": 20454.0,
+      "substations_filled": null
+    },
+    "total_coal_consumed": null,
+    "total_power_generated": null,
+    "total_heat_supplied": null,
+    "total_water_replenished": null,
+    "boiler_turbine_status": [
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#5炉",
+        "standard_name": "#5燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#7炉",
+        "standard_name": "#7燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#8炉",
+        "standard_name": "#8燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#9炉",
+        "standard_name": "#9燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#10炉",
+        "standard_name": "#10燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#4机",
+        "standard_name": "#4汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6水炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      }
+    ],
+    "eqp_status_json": {
+      "matrix": {
+        "北海热电联产": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [],
+            "检修": [
+              "#1",
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "北海水炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          }
+        },
+        "燃气锅炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#5",
+              "#6",
+              "#7",
+              "#8",
+              "#9",
+              "#10"
+            ],
+            "检修": []
+          }
+        },
+        "香海电厂": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#2",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#1"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1"
+            ],
+            "检修": [
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "金州热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#6"
+            ],
+            "检修": []
+          }
+        },
+        "北方热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          }
+        }
+      },
+      "flat_map": {
+        "北海热电联产_#1机": "备用",
+        "北海热电联产_#2机": "备用",
+        "北海热电联产_#3机": "检修",
+        "北海热电联产_#1汽炉": "检修",
+        "北海热电联产_#2汽炉": "检修",
+        "北海热电联产_#3汽炉": "检修",
+        "北海热电联产_#4汽炉": "检修",
+        "北海水炉_#1水炉": "备用",
+        "北海水炉_#2水炉": "备用",
+        "北海水炉_#3水炉": "检修",
+        "燃气锅炉_#1燃气炉": "备用",
+        "燃气锅炉_#2燃气炉": "备用",
+        "燃气锅炉_#3燃气炉": "备用",
+        "燃气锅炉_#4燃气炉": "备用",
+        "燃气锅炉_#5燃气炉": "备用",
+        "燃气锅炉_#6燃气炉": "备用",
+        "燃气锅炉_#7燃气炉": "备用",
+        "燃气锅炉_#8燃气炉": "备用",
+        "燃气锅炉_#9燃气炉": "备用",
+        "燃气锅炉_#10燃气炉": "备用",
+        "香海电厂_#2机": "备用",
+        "香海电厂_#3机": "备用",
+        "香海电厂_#4机": "备用",
+        "香海电厂_#1汽炉": "备用",
+        "香海电厂_#1机": "检修",
+        "香海电厂_#2汽炉": "检修",
+        "香海电厂_#3汽炉": "检修",
+        "香海电厂_#4汽炉": "检修",
+        "金州热电_#1机": "备用",
+        "金州热电_#2机": "备用",
+        "金州热电_#3机": "备用",
+        "金州热电_#1汽炉": "备用",
+        "金州热电_#2汽炉": "备用",
+        "金州热电_#3汽炉": "备用",
+        "金州热电_#4汽炉": "备用",
+        "金州热电_#6水炉": "备用",
+        "北方热电_#1机": "备用",
+        "北方热电_#2机": "备用",
+        "北方热电_#1汽炉": "备用",
+        "北方热电_#2汽炉": "备用",
+        "北方热电_#3汽炉": "备用"
+      },
+      "facilities": [
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#5炉",
+          "standard_name": "#5燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#7炉",
+          "standard_name": "#7燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#8炉",
+          "standard_name": "#8燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#9炉",
+          "standard_name": "#9燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#10炉",
+          "standard_name": "#10燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#4机",
+          "standard_name": "#4汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6水炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        }
+      ]
+    },
+    "operations_and_tickets": [
+      {
+        "time": "10:43",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#3机低真空系统开始上水"
+      },
+      {
+        "time": "12:00",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "上满水定压"
+      },
+      {
+        "time": "15:30",
+        "responsible_org": "供热公司",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN900",
+        "location": "开启北岗街",
+        "time_range": "",
+        "raw_description": "开启北岗街DN900门,高温水南环开始上水（莲花山支线除外）。"
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "10:43",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#3机低真空系统开始上水"
+      },
+      {
+        "time": "12:00",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "上满水定压"
+      },
+      {
+        "time": "15:30",
+        "responsible_org": "供热公司",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN900",
+        "location": "开启北岗街",
+        "time_range": "",
+        "raw_description": "开启北岗街DN900门,高温水南环开始上水（莲花山支线除外）。"
+      }
+    ]
+  },
+  {
+    "project_key": "daily_report_25_26",
+    "biz_date": "2026-10-24",
+    "issue_date": "2026-10-25",
+    "publish_date": "2026-10-25",
+    "duty_staff": "张希刚,徐世辉",
+    "duty_officers": "张希刚,徐世辉",
+    "file_name": "2026年10月24日生产信息.pdf",
+    "wth_date": "2026-10-25",
+    "wth_weekday": "",
+    "wth_condition": "晴转多云",
+    "wth_temp_min": 11.0,
+    "wth_temp_max": 19.0,
+    "wth_hum_min": 40,
+    "wth_hum_max": 70,
+    "wth_wind_dir": "",
+    "wth_wind_scale": "",
+    "wth_raw_text": "10 月 25 日 11℃~19℃ 晴转多云 相对湿度:40%~70% 偏北 风 5~6 级。",
+    "weather": {
+      "raw_text": "10 月 25 日 11℃~19℃ 晴转多云 相对湿度:40%~70% 偏北 风 5~6 级。",
+      "forecast_date": "2026-10-25",
+      "weekday": "",
+      "weather_desc": "晴转多云",
+      "temp_min": 11.0,
+      "temp_max": 19.0,
+      "humidity_min": 40,
+      "humidity_max": 70,
+      "wind": "",
+      "wind_direction": "",
+      "wind_scale": "",
+      "humidity": "40%~70%"
+    },
+    "bh_s1_pumps": 3,
+    "bh_s1_flow": 4304.0,
+    "bh_s1_press_sup": 0.72,
+    "bh_s1_press_ret": 0.58,
+    "bh_s1_temp_sup": null,
+    "bh_s1_temp_ret": null,
+    "bh_s2_pumps": null,
+    "bh_s2_flow": null,
+    "bh_s2_press_sup": null,
+    "bh_s2_press_ret": null,
+    "bh_s2_temp_sup": null,
+    "bh_s2_temp_ret": null,
+    "bh_wl_pumps": null,
+    "bh_wl_flow": null,
+    "bh_wl_press_sup": null,
+    "bh_wl_press_ret": null,
+    "bh_wl_temp_sup": null,
+    "bh_wl_temp_ret": null,
+    "xh_lv1_pumps": null,
+    "xh_lv1_flow": null,
+    "xh_lv1_press_sup": null,
+    "xh_lv1_press_ret": null,
+    "xh_lv1_temp_sup": null,
+    "xh_lv1_temp_ret": null,
+    "xh_lv3_pumps": null,
+    "xh_lv3_flow": null,
+    "xh_lv3_press_sup": null,
+    "xh_lv3_press_ret": null,
+    "xh_lv3_temp_sup": null,
+    "xh_lv3_temp_ret": null,
+    "xh_main_pumps": null,
+    "xh_main_flow": null,
+    "xh_main_press_sup": null,
+    "xh_main_press_ret": null,
+    "xh_main_temp_sup": null,
+    "xh_main_temp_ret": null,
+    "first_stations": [
+      {
+        "plant": "北海电厂",
+        "station_name": "#1首站",
+        "pump_count": 3,
+        "flow_rate_th": 4304.0,
+        "supply_pressure_mpa": 0.72,
+        "return_pressure_mpa": 0.58,
+        "pressure_diff_mpa": 0.14,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "#2首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "水炉",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#1低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#3低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      }
+    ],
+    "bh_south_status": "停运",
+    "bh_south_press": null,
+    "bh_south_flow": null,
+    "xb_link_status": "停运",
+    "xb_link_press": null,
+    "xb_link_flow": null,
+    "xh_east_status": "停运",
+    "xh_east_press": null,
+    "xh_east_flow": null,
+    "xh_west_status": null,
+    "xh_west_press": null,
+    "xh_west_flow": null,
+    "steam_networks": [
+      {
+        "network_name": "北海南网",
+        "status": "停运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香北联络",
+        "status": "停运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香海东、西网",
+        "status": "停运",
+        "pressure_mpa": null,
+        "flow_th": null
+      }
+    ],
+    "coal_remark": "北海进煤:汽运车混煤 香海进煤:汽运车混煤",
+    "coal_bh_in": null,
+    "coal_bh_use": null,
+    "coal_bh_stock": null,
+    "coal_xh_in": null,
+    "coal_xh_use": null,
+    "coal_xh_stock": null,
+    "coal_main_sum_in": null,
+    "coal_main_sum_use": null,
+    "coal_main_sum_stock": null,
+    "coal_jz_in": null,
+    "coal_jz_use": null,
+    "coal_jz_stock": null,
+    "coal_bf_in": null,
+    "coal_bf_use": null,
+    "coal_bf_stock": null,
+    "coal_zh_in": null,
+    "coal_zh_use": null,
+    "coal_zh_stock": null,
+    "coal_dlg_in": null,
+    "coal_dlg_use": null,
+    "coal_dlg_stock": null,
+    "coal_total_in": null,
+    "coal_total_use": null,
+    "coal_total_stock": null,
+    "coal_stats": [
+      {
+        "category": "北海",
+        "standard_org": "北海电厂",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "香海",
+        "standard_org": "香海电厂",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "主城区合计",
+        "standard_org": "主城区合计",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "金州",
+        "standard_org": "金州热电",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "北方",
+        "standard_org": "北方热电",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "庄河",
+        "standard_org": "庄河环海",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "合计",
+        "standard_org": "全网合计",
+        "in_coal_tons": null,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      }
+    ],
+    "prod_bh_steam_coal_plan": null,
+    "prod_bh_steam_coal_act": null,
+    "prod_bh_water_coal_plan": null,
+    "prod_bh_water_coal_act": null,
+    "prod_bh_power_plan": null,
+    "prod_bh_power_act": null,
+    "prod_bh_heat_plan": null,
+    "prod_bh_heat_act": null,
+    "prod_xh_steam_coal_plan": null,
+    "prod_xh_steam_coal_act": null,
+    "prod_xh_power_plan": null,
+    "prod_xh_power_act": null,
+    "prod_xh_heat_plan": null,
+    "prod_xh_heat_act": null,
+    "prod_main_coal_plan": null,
+    "prod_main_coal_act": null,
+    "prod_main_power_plan": null,
+    "prod_main_power_act": null,
+    "prod_main_heat_plan": null,
+    "prod_main_heat_act": null,
+    "gw_high_temp_water": null,
+    "gw_lv1_heat": null,
+    "gw_lv3_heat": null,
+    "gw_bh_south_steam": null,
+    "gw_xh_ew_steam": null,
+    "gw_xb_link_steam": null,
+    "production_stats": {
+      "beihai_plan_coal": null,
+      "beihai_actual_coal": null,
+      "beihai_plan_power": null,
+      "beihai_actual_power": null,
+      "beihai_plan_heat": null,
+      "beihai_actual_heat": null,
+      "xianghai_plan_coal": null,
+      "xianghai_actual_coal": null,
+      "xianghai_plan_power": null,
+      "xianghai_actual_power": null,
+      "xianghai_plan_heat": null,
+      "xianghai_actual_heat": null,
+      "urban_total_plan_coal": null,
+      "urban_total_actual_coal": null,
+      "urban_total_plan_power": null,
+      "urban_total_actual_power": null,
+      "urban_total_plan_heat": null,
+      "urban_total_actual_heat": null,
+      "beihai_steam_coal_plan": null,
+      "beihai_steam_coal_act": null,
+      "beihai_water_coal_plan": null,
+      "beihai_water_coal_act": null
+    },
+    "network_heat": {
+      "gw_high_temp_water": null,
+      "gw_lv1_heat": null,
+      "gw_lv3_heat": null,
+      "gw_bh_south_steam": null,
+      "gw_xh_ew_steam": null,
+      "gw_xb_link_steam": null
+    },
+    "water_sup_bh_s1": 2895.0,
+    "water_sup_bh_s2": null,
+    "water_sup_period_last_year": null,
+    "water_sup_accum": 24924.0,
+    "water_sup_accum_last": 22069.0,
+    "substations_filled": 168,
+    "water_replenishment": {
+      "first_station_1_water_tons": 2895.0,
+      "first_station_2_water_tons": null,
+      "period_last_year_water_tons": null,
+      "accumulated_water_tons": 24924.0,
+      "accumulated_last_year_water_tons": 22069.0,
+      "substations_filled": 168
+    },
+    "total_coal_consumed": null,
+    "total_power_generated": null,
+    "total_heat_supplied": null,
+    "total_water_replenished": 24924.0,
+    "boiler_turbine_status": [
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#5炉",
+        "standard_name": "#5燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#7炉",
+        "standard_name": "#7燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#8炉",
+        "standard_name": "#8燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#9炉",
+        "standard_name": "#9燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#10炉",
+        "standard_name": "#10燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#4机",
+        "standard_name": "#4汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6水炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      }
+    ],
+    "eqp_status_json": {
+      "matrix": {
+        "北海热电联产": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [],
+            "检修": [
+              "#1",
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "北海水炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          }
+        },
+        "燃气锅炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#5",
+              "#6",
+              "#7",
+              "#8",
+              "#9",
+              "#10"
+            ],
+            "检修": []
+          }
+        },
+        "香海电厂": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#2",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#1"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1"
+            ],
+            "检修": [
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "金州热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#6"
+            ],
+            "检修": []
+          }
+        },
+        "北方热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          }
+        }
+      },
+      "flat_map": {
+        "北海热电联产_#1机": "备用",
+        "北海热电联产_#2机": "备用",
+        "北海热电联产_#3机": "检修",
+        "北海热电联产_#1汽炉": "检修",
+        "北海热电联产_#2汽炉": "检修",
+        "北海热电联产_#3汽炉": "检修",
+        "北海热电联产_#4汽炉": "检修",
+        "北海水炉_#1水炉": "备用",
+        "北海水炉_#2水炉": "备用",
+        "北海水炉_#3水炉": "检修",
+        "燃气锅炉_#1燃气炉": "备用",
+        "燃气锅炉_#2燃气炉": "备用",
+        "燃气锅炉_#3燃气炉": "备用",
+        "燃气锅炉_#4燃气炉": "备用",
+        "燃气锅炉_#5燃气炉": "备用",
+        "燃气锅炉_#6燃气炉": "备用",
+        "燃气锅炉_#7燃气炉": "备用",
+        "燃气锅炉_#8燃气炉": "备用",
+        "燃气锅炉_#9燃气炉": "备用",
+        "燃气锅炉_#10燃气炉": "备用",
+        "香海电厂_#2机": "备用",
+        "香海电厂_#3机": "备用",
+        "香海电厂_#4机": "备用",
+        "香海电厂_#1汽炉": "备用",
+        "香海电厂_#1机": "检修",
+        "香海电厂_#2汽炉": "检修",
+        "香海电厂_#3汽炉": "检修",
+        "香海电厂_#4汽炉": "检修",
+        "金州热电_#1机": "备用",
+        "金州热电_#2机": "备用",
+        "金州热电_#3机": "备用",
+        "金州热电_#1汽炉": "备用",
+        "金州热电_#2汽炉": "备用",
+        "金州热电_#3汽炉": "备用",
+        "金州热电_#4汽炉": "备用",
+        "金州热电_#6水炉": "备用",
+        "北方热电_#1机": "备用",
+        "北方热电_#2机": "备用",
+        "北方热电_#1汽炉": "备用",
+        "北方热电_#2汽炉": "备用",
+        "北方热电_#3汽炉": "备用"
+      },
+      "facilities": [
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#5炉",
+          "standard_name": "#5燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#7炉",
+          "standard_name": "#7燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#8炉",
+          "standard_name": "#8燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#9炉",
+          "standard_name": "#9燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#10炉",
+          "standard_name": "#10燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#4机",
+          "standard_name": "#4汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6水炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        }
+      ]
+    },
+    "operations_and_tickets": [
+      {
+        "time": "11:00",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#1机低真空系统开始上水"
+      },
+      {
+        "time": "13:00",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "上满水定压"
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "11:00",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#1机低真空系统开始上水"
+      },
+      {
+        "time": "13:00",
+        "responsible_org": "香海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "上满水定压"
+      }
+    ]
+  },
+  {
+    "project_key": "daily_report_25_26",
+    "biz_date": "2026-10-25",
+    "issue_date": "2026-10-26",
+    "publish_date": "2026-10-26",
+    "duty_staff": "梁帅,鲍春来",
+    "duty_officers": "梁帅,鲍春来",
+    "file_name": "2026年10月25日生产信息.pdf",
+    "wth_date": "2026-10-26",
+    "wth_weekday": "",
+    "wth_condition": "多云转晴",
+    "wth_temp_min": 10.0,
+    "wth_temp_max": 16.0,
+    "wth_hum_min": 19,
+    "wth_hum_max": 75,
+    "wth_wind_dir": "北风",
+    "wth_wind_scale": "4~5",
+    "wth_raw_text": "10 月 26 日 10℃~16℃ 多云转晴 相对湿度:19%~ 75% 北风 4~5 级转 5~6 级。",
+    "weather": {
+      "raw_text": "10 月 26 日 10℃~16℃ 多云转晴 相对湿度:19%~ 75% 北风 4~5 级转 5~6 级。",
+      "forecast_date": "2026-10-26",
+      "weekday": "",
+      "weather_desc": "多云转晴",
+      "temp_min": 10.0,
+      "temp_max": 16.0,
+      "humidity_min": 19,
+      "humidity_max": 75,
+      "wind": "北风4~5",
+      "wind_direction": "北风",
+      "wind_scale": "4~5",
+      "humidity": "19%~75%"
+    },
+    "bh_s1_pumps": 3,
+    "bh_s1_flow": 3846.0,
+    "bh_s1_press_sup": 0.76,
+    "bh_s1_press_ret": 0.58,
+    "bh_s1_temp_sup": 34.0,
+    "bh_s1_temp_ret": 34.5,
+    "bh_s2_pumps": null,
+    "bh_s2_flow": null,
+    "bh_s2_press_sup": null,
+    "bh_s2_press_ret": null,
+    "bh_s2_temp_sup": null,
+    "bh_s2_temp_ret": null,
+    "bh_wl_pumps": 1,
+    "bh_wl_flow": 1357.0,
+    "bh_wl_press_sup": 0.76,
+    "bh_wl_press_ret": 0.64,
+    "bh_wl_temp_sup": 76.0,
+    "bh_wl_temp_ret": 34.6,
+    "xh_lv1_pumps": null,
+    "xh_lv1_flow": null,
+    "xh_lv1_press_sup": null,
+    "xh_lv1_press_ret": null,
+    "xh_lv1_temp_sup": null,
+    "xh_lv1_temp_ret": null,
+    "xh_lv3_pumps": null,
+    "xh_lv3_flow": null,
+    "xh_lv3_press_sup": null,
+    "xh_lv3_press_ret": null,
+    "xh_lv3_temp_sup": null,
+    "xh_lv3_temp_ret": null,
+    "xh_main_pumps": null,
+    "xh_main_flow": null,
+    "xh_main_press_sup": null,
+    "xh_main_press_ret": null,
+    "xh_main_temp_sup": null,
+    "xh_main_temp_ret": null,
+    "first_stations": [
+      {
+        "plant": "北海电厂",
+        "station_name": "#1首站",
+        "pump_count": 3,
+        "flow_rate_th": 3846.0,
+        "supply_pressure_mpa": 0.76,
+        "return_pressure_mpa": 0.58,
+        "pressure_diff_mpa": 0.18,
+        "supply_temp_c": 34.0,
+        "return_temp_c": 34.5,
+        "temp_diff_c": -0.5
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "#2首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "水炉",
+        "pump_count": 1,
+        "flow_rate_th": 1357.0,
+        "supply_pressure_mpa": 0.76,
+        "return_pressure_mpa": 0.64,
+        "pressure_diff_mpa": 0.12,
+        "supply_temp_c": 76.0,
+        "return_temp_c": 34.6,
+        "temp_diff_c": 41.4
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#1低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#3低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      }
+    ],
+    "bh_south_status": "投运",
+    "bh_south_press": null,
+    "bh_south_flow": null,
+    "xb_link_status": "投运",
+    "xb_link_press": null,
+    "xb_link_flow": null,
+    "xh_east_status": "投运",
+    "xh_east_press": null,
+    "xh_east_flow": null,
+    "xh_west_status": null,
+    "xh_west_press": null,
+    "xh_west_flow": null,
+    "steam_networks": [
+      {
+        "network_name": "北海南网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香北联络",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香海东、西网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      }
+    ],
+    "coal_remark": "北海进煤:0。 香海进煤:0。",
+    "coal_bh_in": 0.0,
+    "coal_bh_use": 216.0,
+    "coal_bh_stock": 196626.0,
+    "coal_xh_in": 0.0,
+    "coal_xh_use": 0.0,
+    "coal_xh_stock": 18559.0,
+    "coal_main_sum_in": 0.0,
+    "coal_main_sum_use": 216.0,
+    "coal_main_sum_stock": 215185.0,
+    "coal_jz_in": 0.0,
+    "coal_jz_use": null,
+    "coal_jz_stock": null,
+    "coal_bf_in": 0.0,
+    "coal_bf_use": null,
+    "coal_bf_stock": null,
+    "coal_zh_in": 0.0,
+    "coal_zh_use": null,
+    "coal_zh_stock": null,
+    "coal_dlg_in": null,
+    "coal_dlg_use": null,
+    "coal_dlg_stock": null,
+    "coal_total_in": 0.0,
+    "coal_total_use": 216.0,
+    "coal_total_stock": 215185.0,
+    "coal_stats": [
+      {
+        "category": "北海",
+        "standard_org": "北海电厂",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 216.0,
+        "storage_coal_tons": 196626.0
+      },
+      {
+        "category": "香海",
+        "standard_org": "香海电厂",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 0.0,
+        "storage_coal_tons": 18559.0
+      },
+      {
+        "category": "主城区合计",
+        "standard_org": "主城区合计",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 216.0,
+        "storage_coal_tons": 215185.0
+      },
+      {
+        "category": "金州",
+        "standard_org": "金州热电",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "北方",
+        "standard_org": "北方热电",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "庄河",
+        "standard_org": "庄河环海",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "合计",
+        "standard_org": "全网合计",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 216.0,
+        "storage_coal_tons": 215185.0
+      }
+    ],
+    "prod_bh_steam_coal_plan": null,
+    "prod_bh_steam_coal_act": null,
+    "prod_bh_water_coal_plan": null,
+    "prod_bh_water_coal_act": 216.0,
+    "prod_bh_power_plan": null,
+    "prod_bh_power_act": null,
+    "prod_bh_heat_plan": null,
+    "prod_bh_heat_act": 2240.0,
+    "prod_xh_steam_coal_plan": null,
+    "prod_xh_steam_coal_act": null,
+    "prod_xh_power_plan": null,
+    "prod_xh_power_act": null,
+    "prod_xh_heat_plan": null,
+    "prod_xh_heat_act": null,
+    "prod_main_coal_plan": null,
+    "prod_main_coal_act": 216.0,
+    "prod_main_power_plan": null,
+    "prod_main_power_act": null,
+    "prod_main_heat_plan": null,
+    "prod_main_heat_act": 2240.0,
+    "gw_high_temp_water": null,
+    "gw_lv1_heat": null,
+    "gw_lv3_heat": null,
+    "gw_bh_south_steam": null,
+    "gw_xh_ew_steam": null,
+    "gw_xb_link_steam": null,
+    "production_stats": {
+      "beihai_plan_coal": null,
+      "beihai_actual_coal": 216.0,
+      "beihai_plan_power": null,
+      "beihai_actual_power": null,
+      "beihai_plan_heat": null,
+      "beihai_actual_heat": 2240.0,
+      "xianghai_plan_coal": null,
+      "xianghai_actual_coal": null,
+      "xianghai_plan_power": null,
+      "xianghai_actual_power": null,
+      "xianghai_plan_heat": null,
+      "xianghai_actual_heat": null,
+      "urban_total_plan_coal": null,
+      "urban_total_actual_coal": 216.0,
+      "urban_total_plan_power": null,
+      "urban_total_actual_power": null,
+      "urban_total_plan_heat": null,
+      "urban_total_actual_heat": 2240.0,
+      "beihai_steam_coal_plan": null,
+      "beihai_steam_coal_act": null,
+      "beihai_water_coal_plan": null,
+      "beihai_water_coal_act": 216.0
+    },
+    "network_heat": {
+      "gw_high_temp_water": null,
+      "gw_lv1_heat": null,
+      "gw_lv3_heat": null,
+      "gw_bh_south_steam": null,
+      "gw_xh_ew_steam": null,
+      "gw_xb_link_steam": null
+    },
+    "water_sup_bh_s1": 2191.0,
+    "water_sup_bh_s2": null,
+    "water_sup_period_last_year": null,
+    "water_sup_accum": 27115.0,
+    "water_sup_accum_last": 26932.0,
+    "substations_filled": 170,
+    "water_replenishment": {
+      "first_station_1_water_tons": 2191.0,
+      "first_station_2_water_tons": null,
+      "period_last_year_water_tons": null,
+      "accumulated_water_tons": 27115.0,
+      "accumulated_last_year_water_tons": 26932.0,
+      "substations_filled": 170
+    },
+    "total_coal_consumed": 216.0,
+    "total_power_generated": null,
+    "total_heat_supplied": 2240.0,
+    "total_water_replenished": 27115.0,
+    "boiler_turbine_status": [
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "运行"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#5炉",
+        "standard_name": "#5燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#7炉",
+        "standard_name": "#7燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#8炉",
+        "standard_name": "#8燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#9炉",
+        "standard_name": "#9燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#10炉",
+        "standard_name": "#10燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#4机",
+        "standard_name": "#4汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6水炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      }
+    ],
+    "eqp_status_json": {
+      "matrix": {
+        "北海热电联产": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [],
+            "检修": [
+              "#1",
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "北海水炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [
+              "#1"
+            ],
+            "备用": [
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          }
+        },
+        "燃气锅炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#5",
+              "#6",
+              "#7",
+              "#8",
+              "#9",
+              "#10"
+            ],
+            "检修": []
+          }
+        },
+        "香海电厂": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#2",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#1"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#2"
+            ]
+          }
+        },
+        "金州热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#6"
+            ],
+            "检修": []
+          }
+        },
+        "北方热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          }
+        }
+      },
+      "flat_map": {
+        "北海热电联产_#1机": "备用",
+        "北海热电联产_#2机": "备用",
+        "北海热电联产_#3机": "检修",
+        "北海热电联产_#1汽炉": "检修",
+        "北海热电联产_#2汽炉": "检修",
+        "北海热电联产_#3汽炉": "检修",
+        "北海热电联产_#4汽炉": "检修",
+        "北海水炉_#1水炉": "运行",
+        "北海水炉_#2水炉": "备用",
+        "北海水炉_#3水炉": "检修",
+        "燃气锅炉_#1燃气炉": "备用",
+        "燃气锅炉_#2燃气炉": "备用",
+        "燃气锅炉_#3燃气炉": "备用",
+        "燃气锅炉_#4燃气炉": "备用",
+        "燃气锅炉_#5燃气炉": "备用",
+        "燃气锅炉_#6燃气炉": "备用",
+        "燃气锅炉_#7燃气炉": "备用",
+        "燃气锅炉_#8燃气炉": "备用",
+        "燃气锅炉_#9燃气炉": "备用",
+        "燃气锅炉_#10燃气炉": "备用",
+        "香海电厂_#2机": "备用",
+        "香海电厂_#3机": "备用",
+        "香海电厂_#4机": "备用",
+        "香海电厂_#1汽炉": "备用",
+        "香海电厂_#3汽炉": "备用",
+        "香海电厂_#4汽炉": "备用",
+        "香海电厂_#1机": "检修",
+        "香海电厂_#2汽炉": "检修",
+        "金州热电_#1机": "备用",
+        "金州热电_#2机": "备用",
+        "金州热电_#3机": "备用",
+        "金州热电_#1汽炉": "备用",
+        "金州热电_#2汽炉": "备用",
+        "金州热电_#3汽炉": "备用",
+        "金州热电_#4汽炉": "备用",
+        "金州热电_#6水炉": "备用",
+        "北方热电_#1机": "备用",
+        "北方热电_#2机": "备用",
+        "北方热电_#1汽炉": "备用",
+        "北方热电_#2汽炉": "备用",
+        "北方热电_#3汽炉": "备用"
+      },
+      "facilities": [
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "运行"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#5炉",
+          "standard_name": "#5燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#7炉",
+          "standard_name": "#7燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#8炉",
+          "standard_name": "#8燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#9炉",
+          "standard_name": "#9燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#10炉",
+          "standard_name": "#10燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#4机",
+          "standard_name": "#4汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6水炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        }
+      ]
+    },
+    "operations_and_tickets": [
+      {
+        "time": "9:50",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "点火",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#1水炉点火"
+      },
+      {
+        "time": "14:28",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "停油枪接带负荷"
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "9:50",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "点火",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#1水炉点火"
+      },
+      {
+        "time": "14:28",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "停油枪接带负荷"
+      }
+    ]
+  },
+  {
+    "project_key": "daily_report_25_26",
+    "biz_date": "2026-10-26",
+    "issue_date": "2026-10-27",
+    "publish_date": "2026-10-27",
+    "duty_staff": "张桂林,刘忠元",
+    "duty_officers": "张桂林,刘忠元",
+    "file_name": "2026年10月26日生产信息.pdf",
+    "wth_date": "2026-10-27",
+    "wth_weekday": "",
+    "wth_condition": "晴间多云",
+    "wth_temp_min": 8.0,
+    "wth_temp_max": 13.0,
+    "wth_hum_min": 20,
+    "wth_hum_max": 70,
+    "wth_wind_dir": "北风",
+    "wth_wind_scale": "5~6",
+    "wth_raw_text": "10 月 27 日 8℃~13℃ 晴间多云相对湿度:20%~70% 北风 5~6 级阵风 7~8 级转东南风 4~5 级 。",
+    "weather": {
+      "raw_text": "10 月 27 日 8℃~13℃ 晴间多云相对湿度:20%~70% 北风 5~6 级阵风 7~8 级转东南风 4~5 级 。",
+      "forecast_date": "2026-10-27",
+      "weekday": "",
+      "weather_desc": "晴间多云",
+      "temp_min": 8.0,
+      "temp_max": 13.0,
+      "humidity_min": 20,
+      "humidity_max": 70,
+      "wind": "北风5~6",
+      "wind_direction": "北风",
+      "wind_scale": "5~6",
+      "humidity": "20%~70%"
+    },
+    "bh_s1_pumps": 3,
+    "bh_s1_flow": 4495.0,
+    "bh_s1_press_sup": 0.78,
+    "bh_s1_press_ret": 0.58,
+    "bh_s1_temp_sup": 45.1,
+    "bh_s1_temp_ret": 45.0,
+    "bh_s2_pumps": null,
+    "bh_s2_flow": null,
+    "bh_s2_press_sup": null,
+    "bh_s2_press_ret": null,
+    "bh_s2_temp_sup": null,
+    "bh_s2_temp_ret": null,
+    "bh_wl_pumps": 1,
+    "bh_wl_flow": 1642.0,
+    "bh_wl_press_sup": 0.63,
+    "bh_wl_press_ret": 0.77,
+    "bh_wl_temp_sup": 84.9,
+    "bh_wl_temp_ret": 46.5,
+    "xh_lv1_pumps": null,
+    "xh_lv1_flow": null,
+    "xh_lv1_press_sup": null,
+    "xh_lv1_press_ret": null,
+    "xh_lv1_temp_sup": null,
+    "xh_lv1_temp_ret": null,
+    "xh_lv3_pumps": null,
+    "xh_lv3_flow": null,
+    "xh_lv3_press_sup": null,
+    "xh_lv3_press_ret": null,
+    "xh_lv3_temp_sup": null,
+    "xh_lv3_temp_ret": null,
+    "xh_main_pumps": null,
+    "xh_main_flow": null,
+    "xh_main_press_sup": null,
+    "xh_main_press_ret": null,
+    "xh_main_temp_sup": null,
+    "xh_main_temp_ret": null,
+    "first_stations": [
+      {
+        "plant": "北海电厂",
+        "station_name": "#1首站",
+        "pump_count": 3,
+        "flow_rate_th": 4495.0,
+        "supply_pressure_mpa": 0.78,
+        "return_pressure_mpa": 0.58,
+        "pressure_diff_mpa": 0.2,
+        "supply_temp_c": 45.1,
+        "return_temp_c": 45.0,
+        "temp_diff_c": 0.1
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "#2首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "水炉",
+        "pump_count": 1,
+        "flow_rate_th": 1642.0,
+        "supply_pressure_mpa": 0.63,
+        "return_pressure_mpa": 0.77,
+        "pressure_diff_mpa": -0.14,
+        "supply_temp_c": 84.9,
+        "return_temp_c": 46.5,
+        "temp_diff_c": 38.4
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#1低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#3低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      }
+    ],
+    "bh_south_status": "投运",
+    "bh_south_press": null,
+    "bh_south_flow": null,
+    "xb_link_status": "投运",
+    "xb_link_press": null,
+    "xb_link_flow": null,
+    "xh_east_status": "投运",
+    "xh_east_press": null,
+    "xh_east_flow": null,
+    "xh_west_status": null,
+    "xh_west_press": null,
+    "xh_west_flow": null,
+    "steam_networks": [
+      {
+        "network_name": "北海南网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香北联络",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香海东、西网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      }
+    ],
+    "coal_remark": "北海进煤:0。 香海进煤:0。",
+    "coal_bh_in": 0.0,
+    "coal_bh_use": 340.0,
+    "coal_bh_stock": 196286.0,
+    "coal_xh_in": 0.0,
+    "coal_xh_use": 0.0,
+    "coal_xh_stock": 18559.0,
+    "coal_main_sum_in": 0.0,
+    "coal_main_sum_use": 340.0,
+    "coal_main_sum_stock": 214845.0,
+    "coal_jz_in": 0.0,
+    "coal_jz_use": null,
+    "coal_jz_stock": null,
+    "coal_bf_in": 0.0,
+    "coal_bf_use": null,
+    "coal_bf_stock": null,
+    "coal_zh_in": 0.0,
+    "coal_zh_use": null,
+    "coal_zh_stock": null,
+    "coal_dlg_in": null,
+    "coal_dlg_use": null,
+    "coal_dlg_stock": null,
+    "coal_total_in": 0.0,
+    "coal_total_use": 340.0,
+    "coal_total_stock": 214845.0,
+    "coal_stats": [
+      {
+        "category": "北海",
+        "standard_org": "北海电厂",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 340.0,
+        "storage_coal_tons": 196286.0
+      },
+      {
+        "category": "香海",
+        "standard_org": "香海电厂",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 0.0,
+        "storage_coal_tons": 18559.0
+      },
+      {
+        "category": "主城区合计",
+        "standard_org": "主城区合计",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 340.0,
+        "storage_coal_tons": 214845.0
+      },
+      {
+        "category": "金州",
+        "standard_org": "金州热电",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "北方",
+        "standard_org": "北方热电",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "庄河",
+        "standard_org": "庄河环海",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "合计",
+        "standard_org": "全网合计",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 340.0,
+        "storage_coal_tons": 214845.0
+      }
+    ],
+    "prod_bh_steam_coal_plan": null,
+    "prod_bh_steam_coal_act": null,
+    "prod_bh_water_coal_plan": null,
+    "prod_bh_water_coal_act": null,
+    "prod_bh_power_plan": null,
+    "prod_bh_power_act": null,
+    "prod_bh_heat_plan": null,
+    "prod_bh_heat_act": null,
+    "prod_xh_steam_coal_plan": null,
+    "prod_xh_steam_coal_act": null,
+    "prod_xh_power_plan": null,
+    "prod_xh_power_act": null,
+    "prod_xh_heat_plan": null,
+    "prod_xh_heat_act": null,
+    "prod_main_coal_plan": null,
+    "prod_main_coal_act": null,
+    "prod_main_power_plan": null,
+    "prod_main_power_act": null,
+    "prod_main_heat_plan": null,
+    "prod_main_heat_act": null,
+    "gw_high_temp_water": null,
+    "gw_lv1_heat": null,
+    "gw_lv3_heat": null,
+    "gw_bh_south_steam": null,
+    "gw_xh_ew_steam": null,
+    "gw_xb_link_steam": null,
+    "production_stats": {
+      "beihai_plan_coal": null,
+      "beihai_actual_coal": null,
+      "beihai_plan_power": null,
+      "beihai_actual_power": null,
+      "beihai_plan_heat": null,
+      "beihai_actual_heat": null,
+      "xianghai_plan_coal": null,
+      "xianghai_actual_coal": null,
+      "xianghai_plan_power": null,
+      "xianghai_actual_power": null,
+      "xianghai_plan_heat": null,
+      "xianghai_actual_heat": null,
+      "urban_total_plan_coal": null,
+      "urban_total_actual_coal": null,
+      "urban_total_plan_power": null,
+      "urban_total_actual_power": null,
+      "urban_total_plan_heat": null,
+      "urban_total_actual_heat": null,
+      "beihai_steam_coal_plan": null,
+      "beihai_steam_coal_act": null,
+      "beihai_water_coal_plan": null,
+      "beihai_water_coal_act": null
+    },
+    "network_heat": {
+      "gw_high_temp_water": null,
+      "gw_lv1_heat": null,
+      "gw_lv3_heat": null,
+      "gw_bh_south_steam": null,
+      "gw_xh_ew_steam": null,
+      "gw_xb_link_steam": null
+    },
+    "water_sup_bh_s1": 2041.0,
+    "water_sup_bh_s2": null,
+    "water_sup_period_last_year": null,
+    "water_sup_accum": 29156.0,
+    "water_sup_accum_last": 30058.0,
+    "substations_filled": 180,
+    "water_replenishment": {
+      "first_station_1_water_tons": 2041.0,
+      "first_station_2_water_tons": null,
+      "period_last_year_water_tons": null,
+      "accumulated_water_tons": 29156.0,
+      "accumulated_last_year_water_tons": 30058.0,
+      "substations_filled": 180
+    },
+    "total_coal_consumed": 340.0,
+    "total_power_generated": null,
+    "total_heat_supplied": null,
+    "total_water_replenished": 29156.0,
+    "boiler_turbine_status": [
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "运行"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#5炉",
+        "standard_name": "#5燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#7炉",
+        "standard_name": "#7燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#8炉",
+        "standard_name": "#8燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#9炉",
+        "standard_name": "#9燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#10炉",
+        "standard_name": "#10燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#4机",
+        "standard_name": "#4汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6水炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      }
+    ],
+    "eqp_status_json": {
+      "matrix": {
+        "北海热电联产": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [],
+            "检修": [
+              "#1",
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "北海水炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [
+              "#1"
+            ],
+            "备用": [
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          }
+        },
+        "燃气锅炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#5",
+              "#6",
+              "#7",
+              "#8",
+              "#9",
+              "#10"
+            ],
+            "检修": []
+          }
+        },
+        "香海电厂": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#2",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#1"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#2"
+            ]
+          }
+        },
+        "金州热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#6"
+            ],
+            "检修": []
+          }
+        },
+        "北方热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          }
+        }
+      },
+      "flat_map": {
+        "北海热电联产_#1机": "备用",
+        "北海热电联产_#2机": "备用",
+        "北海热电联产_#3机": "检修",
+        "北海热电联产_#1汽炉": "检修",
+        "北海热电联产_#2汽炉": "检修",
+        "北海热电联产_#3汽炉": "检修",
+        "北海热电联产_#4汽炉": "检修",
+        "北海水炉_#1水炉": "运行",
+        "北海水炉_#2水炉": "备用",
+        "北海水炉_#3水炉": "检修",
+        "燃气锅炉_#1燃气炉": "备用",
+        "燃气锅炉_#2燃气炉": "备用",
+        "燃气锅炉_#3燃气炉": "备用",
+        "燃气锅炉_#4燃气炉": "备用",
+        "燃气锅炉_#5燃气炉": "备用",
+        "燃气锅炉_#6燃气炉": "备用",
+        "燃气锅炉_#7燃气炉": "备用",
+        "燃气锅炉_#8燃气炉": "备用",
+        "燃气锅炉_#9燃气炉": "备用",
+        "燃气锅炉_#10燃气炉": "备用",
+        "香海电厂_#2机": "备用",
+        "香海电厂_#3机": "备用",
+        "香海电厂_#4机": "备用",
+        "香海电厂_#1汽炉": "备用",
+        "香海电厂_#3汽炉": "备用",
+        "香海电厂_#4汽炉": "备用",
+        "香海电厂_#1机": "检修",
+        "香海电厂_#2汽炉": "检修",
+        "金州热电_#1机": "备用",
+        "金州热电_#2机": "备用",
+        "金州热电_#3机": "备用",
+        "金州热电_#1汽炉": "备用",
+        "金州热电_#2汽炉": "备用",
+        "金州热电_#3汽炉": "备用",
+        "金州热电_#4汽炉": "备用",
+        "金州热电_#6水炉": "备用",
+        "北方热电_#1机": "备用",
+        "北方热电_#2机": "备用",
+        "北方热电_#1汽炉": "备用",
+        "北方热电_#2汽炉": "备用",
+        "北方热电_#3汽炉": "备用"
+      },
+      "facilities": [
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "运行"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#5炉",
+          "standard_name": "#5燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#7炉",
+          "standard_name": "#7燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#8炉",
+          "standard_name": "#8燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#9炉",
+          "standard_name": "#9燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#10炉",
+          "standard_name": "#10燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#4机",
+          "standard_name": "#4汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6水炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        }
+      ]
+    },
+    "operations_and_tickets": [
+      {
+        "time": "10:02",
+        "responsible_org": "供热公司",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN900",
+        "location": "开启北岗街",
+        "time_range": "",
+        "raw_description": "开启北岗街DN900大门,关闭DN100旁路门。"
+      },
+      {
+        "time": "10:25",
+        "responsible_org": "供热公司",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN800",
+        "location": "开启久寿街",
+        "time_range": "",
+        "raw_description": "开启久寿街DN800大门旁路DN100门（回水管）,莲花山支线开始上水。"
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "10:02",
+        "responsible_org": "供热公司",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN900",
+        "location": "开启北岗街",
+        "time_range": "",
+        "raw_description": "开启北岗街DN900大门,关闭DN100旁路门。"
+      },
+      {
+        "time": "10:25",
+        "responsible_org": "供热公司",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN800",
+        "location": "开启久寿街",
+        "time_range": "",
+        "raw_description": "开启久寿街DN800大门旁路DN100门（回水管）,莲花山支线开始上水。"
+      }
+    ]
+  },
+  {
+    "project_key": "daily_report_25_26",
+    "biz_date": "2026-10-27",
+    "issue_date": "2026-10-28",
+    "publish_date": "2026-10-28",
+    "duty_staff": "吴立明,陈祎仲",
+    "duty_officers": "吴立明,陈祎仲",
+    "file_name": "2026年10月27日生产信息.pdf",
+    "wth_date": "2026-10-28",
+    "wth_weekday": "",
+    "wth_condition": "晴转小雨",
+    "wth_temp_min": 12.0,
+    "wth_temp_max": 17.0,
+    "wth_hum_min": 40,
+    "wth_hum_max": 70,
+    "wth_wind_dir": "西南风",
+    "wth_wind_scale": "5~6",
+    "wth_raw_text": "10 月 28 日 12℃~17℃ 晴转小雨 相对湿度:40%~ 70% 西南风 5~6 级 。",
+    "weather": {
+      "raw_text": "10 月 28 日 12℃~17℃ 晴转小雨 相对湿度:40%~ 70% 西南风 5~6 级 。",
+      "forecast_date": "2026-10-28",
+      "weekday": "",
+      "weather_desc": "晴转小雨",
+      "temp_min": 12.0,
+      "temp_max": 17.0,
+      "humidity_min": 40,
+      "humidity_max": 70,
+      "wind": "西南风5~6",
+      "wind_direction": "西南风",
+      "wind_scale": "5~6",
+      "humidity": "40%~70%"
+    },
+    "bh_s1_pumps": 3,
+    "bh_s1_flow": 4348.0,
+    "bh_s1_press_sup": 0.85,
+    "bh_s1_press_ret": 0.58,
+    "bh_s1_temp_sup": 45.3,
+    "bh_s1_temp_ret": 44.9,
+    "bh_s2_pumps": null,
+    "bh_s2_flow": null,
+    "bh_s2_press_sup": null,
+    "bh_s2_press_ret": null,
+    "bh_s2_temp_sup": null,
+    "bh_s2_temp_ret": null,
+    "bh_wl_pumps": 1,
+    "bh_wl_flow": 1509.0,
+    "bh_wl_press_sup": 0.84,
+    "bh_wl_press_ret": 0.65,
+    "bh_wl_temp_sup": 89.6,
+    "bh_wl_temp_ret": 46.7,
+    "xh_lv1_pumps": null,
+    "xh_lv1_flow": null,
+    "xh_lv1_press_sup": null,
+    "xh_lv1_press_ret": null,
+    "xh_lv1_temp_sup": null,
+    "xh_lv1_temp_ret": null,
+    "xh_lv3_pumps": null,
+    "xh_lv3_flow": null,
+    "xh_lv3_press_sup": null,
+    "xh_lv3_press_ret": null,
+    "xh_lv3_temp_sup": null,
+    "xh_lv3_temp_ret": null,
+    "xh_main_pumps": null,
+    "xh_main_flow": null,
+    "xh_main_press_sup": null,
+    "xh_main_press_ret": null,
+    "xh_main_temp_sup": null,
+    "xh_main_temp_ret": null,
+    "first_stations": [
+      {
+        "plant": "北海电厂",
+        "station_name": "#1首站",
+        "pump_count": 3,
+        "flow_rate_th": 4348.0,
+        "supply_pressure_mpa": 0.85,
+        "return_pressure_mpa": 0.58,
+        "pressure_diff_mpa": 0.27,
+        "supply_temp_c": 45.3,
+        "return_temp_c": 44.9,
+        "temp_diff_c": 0.4
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "#2首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "北海电厂",
+        "station_name": "水炉",
+        "pump_count": 1,
+        "flow_rate_th": 1509.0,
+        "supply_pressure_mpa": 0.84,
+        "return_pressure_mpa": 0.65,
+        "pressure_diff_mpa": 0.19,
+        "supply_temp_c": 89.6,
+        "return_temp_c": 46.7,
+        "temp_diff_c": 42.9
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#1低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "#3低真空",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      },
+      {
+        "plant": "香海电厂",
+        "station_name": "首站",
+        "pump_count": null,
+        "flow_rate_th": null,
+        "supply_pressure_mpa": null,
+        "return_pressure_mpa": null,
+        "pressure_diff_mpa": null,
+        "supply_temp_c": null,
+        "return_temp_c": null,
+        "temp_diff_c": null
+      }
+    ],
+    "bh_south_status": "投运",
+    "bh_south_press": null,
+    "bh_south_flow": null,
+    "xb_link_status": "投运",
+    "xb_link_press": null,
+    "xb_link_flow": null,
+    "xh_east_status": "投运",
+    "xh_east_press": null,
+    "xh_east_flow": null,
+    "xh_west_status": null,
+    "xh_west_press": null,
+    "xh_west_flow": null,
+    "steam_networks": [
+      {
+        "network_name": "北海南网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香北联络",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      },
+      {
+        "network_name": "香海东、西网",
+        "status": "投运",
+        "pressure_mpa": null,
+        "flow_th": null
+      }
+    ],
+    "coal_remark": "北海进煤:汽运车混煤 香海进煤:汽运车混煤",
+    "coal_bh_in": 0.0,
+    "coal_bh_use": 379.0,
+    "coal_bh_stock": 195907.0,
+    "coal_xh_in": 0.0,
+    "coal_xh_use": 0.0,
+    "coal_xh_stock": 18559.0,
+    "coal_main_sum_in": 0.0,
+    "coal_main_sum_use": 379.0,
+    "coal_main_sum_stock": 214466.0,
+    "coal_jz_in": 0.0,
+    "coal_jz_use": null,
+    "coal_jz_stock": null,
+    "coal_bf_in": 0.0,
+    "coal_bf_use": null,
+    "coal_bf_stock": null,
+    "coal_zh_in": 0.0,
+    "coal_zh_use": null,
+    "coal_zh_stock": null,
+    "coal_dlg_in": null,
+    "coal_dlg_use": null,
+    "coal_dlg_stock": null,
+    "coal_total_in": 0.0,
+    "coal_total_use": 379.0,
+    "coal_total_stock": 214466.0,
+    "coal_stats": [
+      {
+        "category": "北海",
+        "standard_org": "北海电厂",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 379.0,
+        "storage_coal_tons": 195907.0
+      },
+      {
+        "category": "香海",
+        "standard_org": "香海电厂",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 0.0,
+        "storage_coal_tons": 18559.0
+      },
+      {
+        "category": "主城区合计",
+        "standard_org": "主城区合计",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 379.0,
+        "storage_coal_tons": 214466.0
+      },
+      {
+        "category": "金州",
+        "standard_org": "金州热电",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "北方",
+        "standard_org": "北方热电",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "庄河",
+        "standard_org": "庄河环海",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": null,
+        "storage_coal_tons": null
+      },
+      {
+        "category": "合计",
+        "standard_org": "全网合计",
+        "in_coal_tons": 0.0,
+        "consumed_coal_tons": 379.0,
+        "storage_coal_tons": 214466.0
+      }
+    ],
+    "prod_bh_steam_coal_plan": null,
+    "prod_bh_steam_coal_act": null,
+    "prod_bh_water_coal_plan": null,
+    "prod_bh_water_coal_act": 379.0,
+    "prod_bh_power_plan": null,
+    "prod_bh_power_act": null,
+    "prod_bh_heat_plan": null,
+    "prod_bh_heat_act": 6561.0,
+    "prod_xh_steam_coal_plan": null,
+    "prod_xh_steam_coal_act": null,
+    "prod_xh_power_plan": null,
+    "prod_xh_power_act": null,
+    "prod_xh_heat_plan": null,
+    "prod_xh_heat_act": null,
+    "prod_main_coal_plan": null,
+    "prod_main_coal_act": 379.0,
+    "prod_main_power_plan": null,
+    "prod_main_power_act": null,
+    "prod_main_heat_plan": null,
+    "prod_main_heat_act": 6561.0,
+    "gw_high_temp_water": null,
+    "gw_lv1_heat": null,
+    "gw_lv3_heat": null,
+    "gw_bh_south_steam": null,
+    "gw_xh_ew_steam": null,
+    "gw_xb_link_steam": null,
+    "production_stats": {
+      "beihai_plan_coal": null,
+      "beihai_actual_coal": 379.0,
+      "beihai_plan_power": null,
+      "beihai_actual_power": null,
+      "beihai_plan_heat": null,
+      "beihai_actual_heat": 6561.0,
+      "xianghai_plan_coal": null,
+      "xianghai_actual_coal": null,
+      "xianghai_plan_power": null,
+      "xianghai_actual_power": null,
+      "xianghai_plan_heat": null,
+      "xianghai_actual_heat": null,
+      "urban_total_plan_coal": null,
+      "urban_total_actual_coal": 379.0,
+      "urban_total_plan_power": null,
+      "urban_total_actual_power": null,
+      "urban_total_plan_heat": null,
+      "urban_total_actual_heat": 6561.0,
+      "beihai_steam_coal_plan": null,
+      "beihai_steam_coal_act": null,
+      "beihai_water_coal_plan": null,
+      "beihai_water_coal_act": 379.0
+    },
+    "network_heat": {
+      "gw_high_temp_water": null,
+      "gw_lv1_heat": null,
+      "gw_lv3_heat": null,
+      "gw_bh_south_steam": null,
+      "gw_xh_ew_steam": null,
+      "gw_xb_link_steam": null
+    },
+    "water_sup_bh_s1": 2924.0,
+    "water_sup_bh_s2": 653.0,
+    "water_sup_period_last_year": 1659.0,
+    "water_sup_accum": 32733.0,
+    "water_sup_accum_last": 31717.0,
+    "substations_filled": 187,
+    "water_replenishment": {
+      "first_station_1_water_tons": 2924.0,
+      "first_station_2_water_tons": 653.0,
+      "period_last_year_water_tons": 1659.0,
+      "accumulated_water_tons": 32733.0,
+      "accumulated_last_year_water_tons": 31717.0,
+      "substations_filled": 187
+    },
+    "total_coal_consumed": 379.0,
+    "total_power_generated": null,
+    "total_heat_supplied": 6561.0,
+    "total_water_replenished": 32733.0,
+    "boiler_turbine_status": [
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "北海热电联产",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "运行"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3水炉",
+        "unit_or_plant": "北海水炉",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#5炉",
+        "standard_name": "#5燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#7炉",
+        "standard_name": "#7燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#8炉",
+        "standard_name": "#8燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#9炉",
+        "standard_name": "#9燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "燃气炉",
+        "raw_name": "#10炉",
+        "standard_name": "#10燃气炉",
+        "unit_or_plant": "燃气锅炉",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#4机",
+        "standard_name": "#4汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "香海电厂",
+        "status": "检修"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#3机",
+        "standard_name": "#3汽机",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#4炉",
+        "standard_name": "#4汽炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "水炉",
+        "raw_name": "#6炉",
+        "standard_name": "#6水炉",
+        "unit_or_plant": "金州热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#1机",
+        "standard_name": "#1汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "汽机",
+        "raw_name": "#2机",
+        "standard_name": "#2汽机",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#1炉",
+        "standard_name": "#1汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#2炉",
+        "standard_name": "#2汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      },
+      {
+        "facility_type": "锅炉",
+        "boiler_type": "汽炉",
+        "raw_name": "#3炉",
+        "standard_name": "#3汽炉",
+        "unit_or_plant": "北方热电",
+        "status": "备用"
+      }
+    ],
+    "eqp_status_json": {
+      "matrix": {
+        "北海热电联产": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [],
+            "检修": [
+              "#1",
+              "#2",
+              "#3",
+              "#4"
+            ]
+          }
+        },
+        "北海水炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [
+              "#1"
+            ],
+            "备用": [
+              "#2"
+            ],
+            "检修": [
+              "#3"
+            ]
+          }
+        },
+        "燃气锅炉": {
+          "机": {
+            "运行": [],
+            "备用": [],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#5",
+              "#6",
+              "#7",
+              "#8",
+              "#9",
+              "#10"
+            ],
+            "检修": []
+          }
+        },
+        "香海电厂": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#2",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#1"
+            ]
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#3",
+              "#4"
+            ],
+            "检修": [
+              "#2"
+            ]
+          }
+        },
+        "金州热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3",
+              "#4",
+              "#6"
+            ],
+            "检修": []
+          }
+        },
+        "北方热电": {
+          "机": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2"
+            ],
+            "检修": []
+          },
+          "炉": {
+            "运行": [],
+            "备用": [
+              "#1",
+              "#2",
+              "#3"
+            ],
+            "检修": []
+          }
+        }
+      },
+      "flat_map": {
+        "北海热电联产_#1机": "备用",
+        "北海热电联产_#2机": "备用",
+        "北海热电联产_#3机": "检修",
+        "北海热电联产_#1汽炉": "检修",
+        "北海热电联产_#2汽炉": "检修",
+        "北海热电联产_#3汽炉": "检修",
+        "北海热电联产_#4汽炉": "检修",
+        "北海水炉_#1水炉": "运行",
+        "北海水炉_#2水炉": "备用",
+        "北海水炉_#3水炉": "检修",
+        "燃气锅炉_#1燃气炉": "备用",
+        "燃气锅炉_#2燃气炉": "备用",
+        "燃气锅炉_#3燃气炉": "备用",
+        "燃气锅炉_#4燃气炉": "备用",
+        "燃气锅炉_#5燃气炉": "备用",
+        "燃气锅炉_#6燃气炉": "备用",
+        "燃气锅炉_#7燃气炉": "备用",
+        "燃气锅炉_#8燃气炉": "备用",
+        "燃气锅炉_#9燃气炉": "备用",
+        "燃气锅炉_#10燃气炉": "备用",
+        "香海电厂_#2机": "备用",
+        "香海电厂_#3机": "备用",
+        "香海电厂_#4机": "备用",
+        "香海电厂_#1汽炉": "备用",
+        "香海电厂_#3汽炉": "备用",
+        "香海电厂_#4汽炉": "备用",
+        "香海电厂_#1机": "检修",
+        "香海电厂_#2汽炉": "检修",
+        "金州热电_#1机": "备用",
+        "金州热电_#2机": "备用",
+        "金州热电_#3机": "备用",
+        "金州热电_#1汽炉": "备用",
+        "金州热电_#2汽炉": "备用",
+        "金州热电_#3汽炉": "备用",
+        "金州热电_#4汽炉": "备用",
+        "金州热电_#6水炉": "备用",
+        "北方热电_#1机": "备用",
+        "北方热电_#2机": "备用",
+        "北方热电_#1汽炉": "备用",
+        "北方热电_#2汽炉": "备用",
+        "北方热电_#3汽炉": "备用"
+      },
+      "facilities": [
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "北海热电联产",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "运行"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3水炉",
+          "unit_or_plant": "北海水炉",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#5炉",
+          "standard_name": "#5燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#7炉",
+          "standard_name": "#7燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#8炉",
+          "standard_name": "#8燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#9炉",
+          "standard_name": "#9燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "燃气炉",
+          "raw_name": "#10炉",
+          "standard_name": "#10燃气炉",
+          "unit_or_plant": "燃气锅炉",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#4机",
+          "standard_name": "#4汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "香海电厂",
+          "status": "检修"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#3机",
+          "standard_name": "#3汽机",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#4炉",
+          "standard_name": "#4汽炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "水炉",
+          "raw_name": "#6炉",
+          "standard_name": "#6水炉",
+          "unit_or_plant": "金州热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#1机",
+          "standard_name": "#1汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "汽机",
+          "raw_name": "#2机",
+          "standard_name": "#2汽机",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#1炉",
+          "standard_name": "#1汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#2炉",
+          "standard_name": "#2汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        },
+        {
+          "facility_type": "锅炉",
+          "boiler_type": "汽炉",
+          "raw_name": "#3炉",
+          "standard_name": "#3汽炉",
+          "unit_or_plant": "北方热电",
+          "status": "备用"
+        }
+      ]
+    },
+    "operations_and_tickets": [
+      {
+        "time": "14:15",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN1100",
+        "location": "",
+        "time_range": "",
+        "raw_description": "开启#2首站出口DN1100隔离门,关闭春柳方向放水门。"
+      },
+      {
+        "time": "15:00",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#2首站开直补门向北网上水。"
+      },
+      {
+        "time": "",
+        "responsible_org": "供热公司",
+        "is_ticket": true,
+        "action": "查漏抢修",
+        "pipe_size": "",
+        "location": "民众街交北京街西",
+        "time_range": "27/10 14:00~28/10 8:30",
+        "raw_description": "签发“高温水网抢修（民众街交北京街西）”工作票,工期27/10 14:00~28/10 8:30。"
+      },
+      {
+        "time": "",
+        "responsible_org": "供热公司",
+        "is_ticket": true,
+        "action": "查漏抢修",
+        "pipe_size": "",
+        "location": "五四路交市场街",
+        "time_range": "27/10 14:00~28/10 8:30",
+        "raw_description": "签发“高温水网唐山支线泄漏抢修（五四路交市场街）”工作票,工期27/10 14:00~28/10 8:30。"
+      },
+      {
+        "time": "",
+        "responsible_org": "供热公司",
+        "is_ticket": true,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "绿港湾站蒸汽管道",
+        "time_range": "27/1016:00~4/1124:00",
+        "raw_description": "签发“绿港湾站蒸汽管道局部更换”工作票,工期27/1016:00~4/1124:00。"
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "14:15",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "开启倒闸",
+        "pipe_size": "DN1100",
+        "location": "",
+        "time_range": "",
+        "raw_description": "开启#2首站出口DN1100隔离门,关闭春柳方向放水门。"
+      },
+      {
+        "time": "15:00",
+        "responsible_org": "北海电厂",
+        "is_ticket": false,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "",
+        "time_range": "",
+        "raw_description": "#2首站开直补门向北网上水。"
+      },
+      {
+        "time": "",
+        "responsible_org": "供热公司",
+        "is_ticket": true,
+        "action": "查漏抢修",
+        "pipe_size": "",
+        "location": "民众街交北京街西",
+        "time_range": "27/10 14:00~28/10 8:30",
+        "raw_description": "签发“高温水网抢修（民众街交北京街西）”工作票,工期27/10 14:00~28/10 8:30。"
+      },
+      {
+        "time": "",
+        "responsible_org": "供热公司",
+        "is_ticket": true,
+        "action": "查漏抢修",
+        "pipe_size": "",
+        "location": "五四路交市场街",
+        "time_range": "27/10 14:00~28/10 8:30",
+        "raw_description": "签发“高温水网唐山支线泄漏抢修（五四路交市场街）”工作票,工期27/10 14:00~28/10 8:30。"
+      },
+      {
+        "time": "",
+        "responsible_org": "供热公司",
+        "is_ticket": true,
+        "action": "运行操作",
+        "pipe_size": "",
+        "location": "绿港湾站蒸汽管道",
+        "time_range": "27/1016:00~4/1124:00",
+        "raw_description": "签发“绿港湾站蒸汽管道局部更换”工作票,工期27/1016:00~4/1124:00。"
+      }
+    ]
+  }
+]

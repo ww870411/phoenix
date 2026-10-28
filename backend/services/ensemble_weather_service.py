@@ -5,7 +5,7 @@
 2. 逐小时计算有效 member 的算术平均值 (遇到某个 member 为 null 忽略，不计入分子及分母);
 3. 当遇到某一时刻全部 member 均为 null 时，截断至该时刻前的最后一个非全 null 时刻;
 4. 结果入库 public.temperature_data 表，type 字段标记为 'far';
-5. 若已存在同时间戳记录，采用 ON CONFLICT (date_time) DO UPDATE 覆盖更新 value 与 type。
+5. 同时刻已有 near 记录时跳过；其他记录允许更新为 far。
 """
 
 import os
@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Tuple
 import httpx
 import psycopg2
-from psycopg2.extras import execute_batch
+from psycopg2.extras import execute_values
 
 EAST_8 = timezone(timedelta(hours=8))
 
@@ -109,17 +109,21 @@ def fetch_and_import_ensemble_weather(
     upsert_sql = """
     INSERT INTO public.temperature_data (
         date_time, value, type, operation_time
-    ) VALUES (%s, %s, 'far', CURRENT_TIMESTAMP)
+    ) VALUES %s
     ON CONFLICT (date_time) DO UPDATE SET
         value = EXCLUDED.value,
         type = 'far',
-        operation_time = CURRENT_TIMESTAMP;
+        operation_time = CURRENT_TIMESTAMP
+    WHERE temperature_data.type IS DISTINCT FROM 'near'
+    RETURNING date_time;
     """
 
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cur:
-            execute_batch(cur, upsert_sql, records_to_upsert, page_size=200)
+            written = execute_values(cur, upsert_sql, records_to_upsert,
+                                     template="(%s, %s, 'far', CURRENT_TIMESTAMP)",
+                                     page_size=200, fetch=True)
         conn.commit()
     finally:
         conn.close()
@@ -129,8 +133,9 @@ def fetch_and_import_ensemble_weather(
 
     return {
         "ok": True,
-        "message": f"成功拉取并入库 35 天集合预报均值气温共 {len(records_to_upsert)} 条",
-        "inserted_or_updated": len(records_to_upsert),
+        "message": f"预报写入 {len(written)} 条，跳过已有 near 记录 {len(records_to_upsert) - len(written)} 条",
+        "inserted_or_updated": len(written),
+        "skipped_near": len(records_to_upsert) - len(written),
         "start_time": start_dt,
         "end_time": end_dt,
         "truncated_at": truncated_at,

@@ -10,7 +10,7 @@
 4. 没有纳入 k 值范畴的指标：k 视为 0，日权重均为 1.0，各日均摊呈现水平直线 (每天无差别)
 5. 初始日计划 P_daily(d) = 月计划 * W_d / sum(W)，尾差按分厘调整保持全月分毫不差
 6. 聚合口径（集团全口径、主城区）在各子口径分解后按既定算法进行聚合显示：
-   - 总量指标（供热量、发电量、耗煤等）：逐日相加聚合 (sum of sub_companies)
+   - 总量指标优先使用本口径直报月计划（含内部抵消），无直报时汇总子口径；有本口径 k 则使用该模型，无 k 的直报按日均摊
    - 单耗指标（热单耗、电单耗）：按聚合口径专属建议 k 与月计划分解
 7. 全月气温门禁校验：需数据库（calc_temperature_data）全月每日气温齐全方可分解。
 """
@@ -272,72 +272,24 @@ def get_dynamic_daily_decomposition(
             precision = 4 if is_rate_metric else 2
 
             if not is_rate_metric:
-                # 统计聚合口径下的月计划总量（优先汇总各子口径计划之和；若无子口径则取直报）
-                total_month_plan = 0.0
-                for sub_c in sub_companies:
-                    sub_m = sub_decompositions[sub_c].get("metrics_map", {}).get(item_key)
-                    if sub_m:
-                        total_month_plan += sub_m["month_plan"]
-
-                if total_month_plan <= 0 and item_key in direct_map:
-                    total_month_plan = direct_map[item_key][0]
-
-                total_month_plan = round(total_month_plan, precision)
-
-                if has_k:
-                    # 关键逻辑：当前聚合口径若配置了专属 k 值与 m 缩放系数模型，
-                    # 严格应用该口径自身的有效系数 effective_k = k * m 进行动态度日分解，
-                    # 确保当前口径展板中展示的 k、m 参数与图表走势、分布律 100% 对齐生效！
-                    daily_plans, daily_weights = decompose_single_series(
-                        month_plan=total_month_plan,
-                        k_value=effective_k,
-                        hdd20_series=hdd20_series,
-                        avg_hdd20=avg_hdd20,
-                        precision=precision,
-                    )
-                else:
-                    # 若当前聚合口径未配置 k 模型，则逐日累加各子口径分解结果
-                    daily_sum = [0.0] * len(dates)
-                    for sub_c in sub_companies:
-                        sub_m = sub_decompositions[sub_c].get("metrics_map", {}).get(item_key)
-                        if sub_m:
-                            for i, v in enumerate(sub_m["daily_plans"]):
-                                daily_sum[i] += v
-
-                    if sum(daily_sum) <= 0 and total_month_plan > 0:
-                        # 若子口径也无分解序列，按无k等额均摊
-                        daily_plans, daily_weights = decompose_single_series(
-                            month_plan=total_month_plan,
-                            k_value=0.0,
-                            hdd20_series=hdd20_series,
-                            avg_hdd20=avg_hdd20,
-                            precision=precision,
-                        )
-                    else:
-                        daily_plans = [round(v, precision) for v in daily_sum]
-                        diff = round(total_month_plan - sum(daily_plans), precision)
-                        if abs(diff) > 0 and len(daily_plans) > 0:
-                            daily_plans[-1] = round(daily_plans[-1] + diff, precision)
-
-                        daily_weights = []
-                        for v in daily_plans:
-                            w = round((v / total_month_plan * len(dates)), 4) if total_month_plan > 0 else 1.0
-                            daily_weights.append(w)
-
+                # 总量严格由子口径逐日分解汇总，不再用聚合口径的 k/m 二次分解。
+                children = [sub_decompositions[c]["metrics_map"][item_key]
+                            for c in sub_companies if item_key in sub_decompositions[c]["metrics_map"]]
+                daily_plans = [round(sum(m["daily_plans"][i] for m in children), precision)
+                               for i in range(len(dates))]
+                total_month_plan = round(sum(m["month_plan"] for m in children), precision)
+                daily_weights = [round(v / total_month_plan * len(dates), 4)
+                                 if total_month_plan else 1.0 for v in daily_plans]
+                reported_plan = direct_map.get(item_key, (None,))[0]
                 rollup_metrics.append({
-                    "item": item_key,
-                    "item_cn": it_cn,
-                    "unit": unit,
-                    "k_value": k_val,
-                    "m_value": m_val,
-                    "effective_k": effective_k,
-                    "has_k": has_k,
+                    "item": item_key, "item_cn": it_cn, "unit": unit,
+                    "k_value": 0.0, "m_value": 1.0, "effective_k": 0.0, "has_k": False,
+                    "aggregation_method": "sum_children",
                     "month_plan": total_month_plan,
-                    "daily_plans": daily_plans,
-                    "daily_weights": daily_weights,
-                    "is_ratio": False,
-                    "is_rate": False,
-                    "is_rollup": True,
+                    "reported_month_plan": reported_plan,
+                    "month_plan_difference": round(total_month_plan - reported_plan, precision) if reported_plan is not None else None,
+                    "daily_plans": daily_plans, "daily_weights": daily_weights,
+                    "is_ratio": False, "is_rate": False, "is_rollup": True,
                 })
             else:
                 # 单耗指标：使用聚合口径专属月计划与建议 k 分解（无 k 则水平直线）

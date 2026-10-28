@@ -180,7 +180,8 @@ class UnifiedDispatchExtractor:
             if not tbl or len(tbl) == 0:
                 continue
 
-            feature_text = " ".join([self.clean_text(c) for row in tbl[:3] for c in row])
+            feature_text = " ".join([self.clean_text(c) for row in tbl[:6] for c in row])
+            feature_all = " ".join([self.clean_text(c) for row in tbl for c in row])
 
             # 1. 机炉运行情况表
             if ("运行" in feature_text and "备用" in feature_text and "检修" in feature_text) and \
@@ -211,7 +212,7 @@ class UnifiedDispatchExtractor:
 
             # 5. 当日产量统计表
             if ("当日计划" in feature_text and "当日实际" in feature_text) or \
-               ("汽炉耗煤" in feature_text or "水炉耗煤" in feature_text or "耗煤总量" in feature_text):
+               ("汽炉耗煤" in feature_all or "水炉耗煤" in feature_all or "耗煤总量" in feature_all or "当日产量" in feature_text):
                 if not self.table_production:
                     self.table_production = tbl
                     continue
@@ -296,16 +297,39 @@ class UnifiedDispatchExtractor:
         }
 
     def extract_weather(self, biz_date: Optional[str] = None) -> Dict[str, Any]:
-        """提取气象环境全要素物理指标"""
-        weather_text = ""
-        for i, p in enumerate(self.paragraphs):
+        """提取气象环境全要素物理指标（支持多行跨行合并与全角波浪号清洗）"""
+        weather_lines = []
+        capturing = False
+
+        for p in self.paragraphs:
             p_clean = self.clean_text(p)
-            if "天气情况" in p_clean or "相对湿度" in p_clean or "℃" in p_clean:
-                if p_clean == "天气情况" and i + 1 < len(self.paragraphs):
-                    weather_text = self.clean_text(self.paragraphs[i + 1])
-                else:
-                    weather_text = p_clean
-                break
+            if not p_clean:
+                continue
+
+            if "天气情况" in p_clean:
+                capturing = True
+                after_title = re.sub(r"^[一二三四五六七八九0-9\s、.．]*天气情况[:：]?", "", p_clean).strip()
+                if after_title:
+                    weather_lines.append(after_title)
+                continue
+
+            if capturing:
+                # 遇到下一个大章节小标题（如 "二、电厂主设备运行情况"）终止
+                if re.search(r"^[一二三四五六七八九0-9\s、.．]+[、.．]?\s*(电厂|主设备|生产|首站)", p_clean) or \
+                   "主设备运行情况" in p_clean or "生产运行情况" in p_clean:
+                    break
+                weather_lines.append(p_clean)
+                if len(weather_lines) >= 3:
+                    break
+
+        if not weather_lines:
+            for p in self.paragraphs:
+                p_clean = self.clean_text(p)
+                if ("℃" in p_clean or "相对湿度" in p_clean) and ("风" in p_clean or "晴" in p_clean or "雨" in p_clean or "阴" in p_clean):
+                    weather_lines.append(p_clean)
+                    break
+
+        weather_text = " ".join(weather_lines).strip()
 
         res = {
             "raw_text": weather_text,
@@ -354,13 +378,14 @@ class UnifiedDispatchExtractor:
             res["humidity_max"] = max(h1, h2)
             res["humidity"] = f"{min(h1, h2)}%~{max(h1, h2)}%"
 
-        desc_m = re.search(r"℃\s*([^\d相对湿度风]+?)(?:相对湿度|西南风|西北风|东北风|东南风|北风|南风|东风|西风|$)", weather_text)
+        desc_m = re.search(r"℃\s*([^\d相对湿度风]+?)(?:相对湿度|(?:东|西|南|北|偏|微)+[\s\u00a0]*风|$)", weather_text)
         if desc_m:
             res["weather_desc"] = desc_m.group(1).strip()
 
-        wind_m = re.search(r"((?:东|西|南|北|偏|微)+风)\s*([\d~级阵风\-]+(?:级)?)", weather_text)
+        wind_m = re.search(r"((?:东|西|南|北|偏|微)+[\s\u00a0]*风)\s*([\d~～级阵风转\-]+(?:级)?)", weather_text)
         if wind_m:
-            res["wind_direction"] = wind_m.group(1).strip()
+            clean_dir = re.sub(r"[\s\u00a0]+", "", wind_m.group(1))
+            res["wind_direction"] = clean_dir
             res["wind_scale"] = wind_m.group(2).strip()
             res["wind"] = f"{res['wind_direction']}{res['wind_scale']}"
 
@@ -973,9 +998,54 @@ class UnifiedDispatchExtractor:
                     return std_name
         return None
 
+    @staticmethod
+    def split_compound_event(time_str: str, desc: str) -> List[Tuple[str, str]]:
+        """
+        智能拆分包含多个明确时刻的复合操作事件（如: 10:10 投运... 22:17 跳闸倒泵）
+        注意：工作票工期严禁拆分
+        """
+        if "工作票" in desc or "工期" in desc:
+            return [(time_str, desc)]
+
+        pattern = re.compile(r"([。；;\n!！,，]|\s+)(\d{1,2}:\d{2})")
+        matches = list(pattern.finditer(desc))
+        if not matches:
+            return [(time_str, desc)]
+
+        sub_events = []
+        split_indices = []
+        for m in matches:
+            t_val = m.group(2)
+            start_pos = m.start(2)
+            split_indices.append((start_pos, t_val))
+
+        current_time = time_str
+        last_end = 0
+
+        for idx, (pos, t_val) in enumerate(split_indices):
+            if pos <= 2 and desc[:pos].strip() in ["", "，", ",", ":", "："]:
+                current_time = t_val
+                last_end = pos + len(t_val)
+                continue
+
+            part_desc = desc[last_end:pos].strip(" 。；;,，\n")
+            if part_desc:
+                sub_events.append((current_time, part_desc))
+
+            current_time = t_val
+            last_end = pos + len(t_val)
+            while last_end < len(desc) and desc[last_end] in [" ", ":", "：", "、"]:
+                last_end += 1
+
+        final_desc = desc[last_end:].strip(" 。；;,，\n")
+        if final_desc:
+            sub_events.append((current_time, final_desc))
+
+        return sub_events if sub_events else [(time_str, desc)]
+
     def extract_operations_and_tickets(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
-        提取微观操作流、抢修工作票八元组与初期补水指标
+        提取微观操作流、抢修工作票八元组与初期补水指标（支持跨行粘合、原子时刻解耦拆分与跳闸识别）
         返回: (result_dict, flat_water_metrics_6)
         """
         result: Dict[str, Any] = {
@@ -1006,6 +1076,8 @@ class UnifiedDispatchExtractor:
         events = []
         current_org = "北海电厂"
 
+        # 1. 表格行智能预处理与跨行碎片向上缝合
+        normalized_rows = []
         for row_idx, row in enumerate(table):
             if row_idx == 0:
                 continue
@@ -1015,10 +1087,32 @@ class UnifiedDispatchExtractor:
 
             time_str = cells[0].strip() if len(cells) > 0 else ""
             desc = cells[1].strip() if len(cells) > 1 else ""
+            if not desc and not time_str:
+                continue
 
-            new_org = self.detect_org_header(time_str, desc)
-            if new_org:
-                current_org = new_org
+            # 探测组织机构抬头（如 "供热公司："、"北海电厂："）
+            org = self.detect_org_header(time_str, desc)
+            if org:
+                normalized_rows.append((time_str, desc, org))
+                continue
+
+            # 跨行残片缝合：如果当前行时间为空，且上一行是未闭合的工作票/工期行
+            if not time_str and normalized_rows and not normalized_rows[-1][2]:
+                prev_t, prev_d, _ = normalized_rows[-1]
+                if (re.search(r"[~～至到-]\s*$", prev_d) or 
+                    prev_d.endswith("工期") or 
+                    prev_d.endswith("工期:") or 
+                    prev_d.endswith("工期：") or
+                    (re.match(r"^\d{1,2}/\d{1,2}", desc) and ("工作票" in prev_d or "工期" in prev_d))):
+                    normalized_rows[-1] = (prev_t, prev_d + desc, None)
+                    continue
+
+            normalized_rows.append((time_str, desc, None))
+
+        # 2. 逐行解析与复合事件拆分
+        for time_str, desc, org in normalized_rows:
+            if org:
+                current_org = org
                 continue
 
             for std_name, aliases in self.KNOWN_ORGS:
@@ -1031,7 +1125,8 @@ class UnifiedDispatchExtractor:
                 continue
 
             combined = (time_str + " " + desc).strip()
-            if "补水量" in combined or "上水换热站" in combined:
+            # 补水指标行探测（含换行产生的 "去年同期:22069吨"）
+            if "补水量" in combined or "上水换热站" in combined or re.search(r"去年同期\s*[:：]?\s*\d+\s*吨?", combined):
                 s1_m = re.search(r"#1\s*首站补水量\s*[:：]\s*(\d+(?:\.\d+)?)\s*吨?", combined)
                 if s1_m:
                     val = float(s1_m.group(1))
@@ -1069,40 +1164,55 @@ class UnifiedDispatchExtractor:
                     flat_water_metrics["substations_filled"] = val
                 continue
 
-            is_ticket = "工作票" in desc or "签发" in desc or "抢修" in desc
-            pipe_size_m = re.search(r"(DN\d+)", desc, re.IGNORECASE)
-            pipe_size = pipe_size_m.group(1).upper() if pipe_size_m else ""
+            # 智能拆分复合事件为原子事件
+            sub_events = self.split_compound_event(time_str, desc)
+            for sub_t, sub_d in sub_events:
+                is_ticket = "工作票" in sub_d or "签发" in sub_d or "抢修" in sub_d
+                if is_ticket:
+                    # 智能补全因排版紧凑或字距压缩导致缺失的日期时间空格：DD/MMHH:MM -> DD/MM HH:MM
+                    sub_d = re.sub(r"(\d{1,2}/\d{1,2})(\d{1,2}:\d{2})", r"\1 \2", sub_d)
+                    sub_d = re.sub(r"(工期)[:：]?\s*(\d)", r"\1 \2", sub_d)
 
-            loc_m = re.search(r"((?:[\u4e00-\u9fa5]+(?:路|街|巷|道|广场|酒店|大厦|桥|苑|村|小区|港))(?:\s*交\s*[\u4e00-\u9fa5]+(?:路|街|巷|道))?(?:[东西南北中侧]+)?)", desc)
-            location = loc_m.group(1).strip() if loc_m else ""
+                pipe_size_m = re.search(r"(DN\d+)", sub_d, re.IGNORECASE)
+                pipe_size = pipe_size_m.group(1).upper() if pipe_size_m else ""
 
-            time_range_m = re.search(r"工期\s*([0-9/:\s~～-]+)", desc)
-            time_range = time_range_m.group(1).strip() if time_range_m else ""
+                loc_m = re.search(r"((?:[\u4e00-\u9fa5]+(?:路|街|巷|道|广场|酒店|大厦|桥|苑|村|小区|港))(?:\s*交\s*[\u4e00-\u9fa5]+(?:路|街|巷|道))?(?:[东西南北中侧]+)?)", sub_d)
+                location = loc_m.group(1).strip() if loc_m else ""
 
-            action = "运行操作"
-            if "并网" in desc or "并入" in desc or "并汽" in desc:
-                action = "并网并列"
-            elif "点火" in desc or "点炉" in desc:
-                action = "点火"
-            elif "抢修" in desc or "查漏" in desc:
-                action = "查漏抢修"
-            elif "开启" in desc or desc.startswith("开"):
-                action = "开启倒闸"
-            elif "关闭" in desc or desc.startswith("关"):
-                action = "关闭倒闸"
-            elif "启动" in desc or "投运" in desc:
-                action = "启动投运"
+                time_range_m = re.search(r"工期\s*([0-9/:\s~～-]+)", sub_d)
+                time_range = time_range_m.group(1).strip() if time_range_m else ""
+                if time_range:
+                    # 规范化工期内的时间格式与空格
+                    time_range = re.sub(r"(\d{1,2}/\d{1,2})(\d{1,2}:\d{2})", r"\1 \2", time_range)
+                    time_range = re.sub(r"\s*([~～])\s*", r" ~ ", time_range)
+                    time_range = re.sub(r"\s+", " ", time_range).strip()
 
-            events.append({
-                "time": time_str,
-                "responsible_org": current_org,
-                "is_ticket": is_ticket,
-                "action": action,
-                "pipe_size": pipe_size,
-                "location": location,
-                "time_range": time_range,
-                "raw_description": desc
-            })
+                action = "运行操作"
+                if "跳闸" in sub_d or "事故" in sub_d or "保护动作" in sub_d:
+                    action = "故障跳闸"
+                elif "并网" in sub_d or "并入" in sub_d or "并汽" in sub_d:
+                    action = "并网并列"
+                elif "点火" in sub_d or "点炉" in sub_d:
+                    action = "点火"
+                elif "抢修" in sub_d or "查漏" in sub_d:
+                    action = "查漏抢修"
+                elif "开启" in sub_d or sub_d.startswith("开"):
+                    action = "开启倒闸"
+                elif "关闭" in sub_d or sub_d.startswith("关"):
+                    action = "关闭倒闸"
+                elif "启动" in sub_d or "投运" in sub_d:
+                    action = "启动投运"
+
+                events.append({
+                    "time": sub_t,
+                    "responsible_org": current_org,
+                    "is_ticket": is_ticket,
+                    "action": action,
+                    "pipe_size": pipe_size,
+                    "location": location,
+                    "time_range": time_range,
+                    "raw_description": sub_d
+                })
 
         result["events"] = events
         return result, flat_water_metrics

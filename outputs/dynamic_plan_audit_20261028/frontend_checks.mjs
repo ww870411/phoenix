@@ -8,6 +8,7 @@ const checks = []
 const loaderSource = source.slice(source.indexOf('async function loadDynamicDecompositionData()'), source.indexOf('\nfunction handleDynamicDecomposeToggle()'))
 const pending = []
 const state = {
+  decompositionRequestId: 0,
   isDynamicDecomposeEnabled: { value: true },
   dynamicDecompLoading: { value: false },
   dynamicDecompError: { value: '' },
@@ -33,7 +34,8 @@ state.currentCompany.value = 'JinPu'
 const failedRequest = state.loadDynamicDecompositionData()
 pending[2].reject(new Error('模拟网络失败'))
 await failedRequest
-checks.push({ check: 'failure_retains_old_data', selected: state.currentCompany.value, displayed: state.dynamicDecompData.value.company, has_full_month: state.dynamicDecompData.value.has_full_month, error: state.dynamicDecompError.value })
+checks.push({ check: 'failure_retains_old_data', selected: state.currentCompany.value, displayed: state.dynamicDecompData.value?.company, has_full_month: state.dynamicDecompData.value?.has_full_month, error: state.dynamicDecompError.value })
+if (checks[0].displayed !== 'BeiHai' || state.dynamicDecompData.value !== null) throw Error('响应隔离回归失败')
 
 const renderSource = source.slice(source.indexOf('function renderDynamicDecomposeChart()'), source.indexOf('\n// -------------------------------------------------------------\n// ECharts 图表渲染引擎'))
 let option
@@ -53,9 +55,11 @@ const graphState = {
   formatAxisNum: (value) => value,
 }
 vm.createContext(graphState)
+vm.runInContext(source.slice(source.indexOf('function metricUnits('), source.indexOf('const chartAxisMappingInfo')), graphState)
 vm.runInContext(renderSource, graphState)
 graphState.renderDynamicDecomposeChart()
 checks.push({ check: 'default_three_unit_axes', series: option.series.map((s) => ({ name: s.name, axis: option.yAxis[s.yAxisIndex].name })) })
+if (option.series.some(s => !s.name.includes(option.yAxis[s.yAxisIndex].name.replace('平均气温 (℃)', '℃')))) throw Error('坐标轴单位回归失败')
 
 await fs.writeFile(`${root}/outputs/dynamic_plan_audit_20261028/frontend_results.json`, JSON.stringify(checks, null, 2), 'utf8')
 console.log(JSON.stringify(checks, null, 2))
