@@ -20,11 +20,20 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path as SysPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import bindparam, delete, text, or_, and_
 
+from backend.projects.daily_report_25_26.services.beihai_efficiency_parser import (
+    parse_beihai_efficiency_excel,
+)
+from backend.projects.daily_report_25_26.services.xianghai_efficiency_parser import (
+    parse_xianghai_efficiency_excel,
+)
+from backend.projects.daily_report_25_26.services.gongre_efficiency_parser import (
+    parse_gongre_efficiency_excel,
+)
 from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import (
     CoalInventoryData,
@@ -3350,6 +3359,138 @@ def list_sheets(
             },
     )
     return JSONResponse(status_code=200, content=catalog)
+
+
+@router.post(
+    "/data_entry/beihai/parse_efficiency_report",
+    summary="解析北海能效报表Excel",
+)
+async def parse_beihai_efficiency_report_endpoint(
+    file: UploadFile = File(..., description="北海能效分析表 Excel 文件"),
+    biz_date: str = Form(..., description="业务日期 YYYY-MM-DD"),
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    接收上传的北海能效分析表 Excel，自动抽取当前业务日期的三张子表格数据。
+    """
+    filename = file.filename or ""
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": f"不支持的文件类型: {filename}，仅支持 .xlsx 或 .xls 格式",
+            },
+        )
+    try:
+        contents = await file.read()
+        res = parse_beihai_efficiency_excel(contents, biz_date)
+        return JSONResponse(status_code=200, content=res)
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": str(e),
+            },
+        )
+    except Exception as e:
+        logging.exception("解析北海能效报表失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "message": f"解析能效报表时发生内部错误: {e}",
+            },
+        )
+
+
+@router.post(
+    "/data_entry/xianghai/parse_efficiency_report",
+    summary="解析香海热电厂能效报表Excel",
+)
+async def parse_xianghai_efficiency_report_endpoint(
+    file: UploadFile = File(..., description="香海能效分析表 Excel 文件"),
+    biz_date: str = Form(..., description="业务日期 YYYY-MM-DD"),
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    接收上传的香海热电厂能效分析表 Excel，自动抽取当前业务日期的生产数据。
+    """
+    filename = file.filename or ""
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": f"不支持的文件类型: {filename}，仅支持 .xlsx 或 .xls 格式",
+            },
+        )
+    try:
+        contents = await file.read()
+        res = parse_xianghai_efficiency_excel(contents, biz_date)
+        return JSONResponse(status_code=200, content=res)
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": str(e),
+            },
+        )
+    except Exception as e:
+        logging.exception("解析香海能效报表失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "message": f"解析香海能效报表时发生内部错误: {e}",
+            },
+        )
+
+
+@router.post(
+    "/data_entry/gongre/parse_efficiency_report",
+    summary="解析供热公司能效报表Excel",
+)
+async def parse_gongre_efficiency_report_endpoint(
+    file: UploadFile = File(..., description="供热公司能效分析表 Excel 文件"),
+    biz_date: str = Form(..., description="业务日期 YYYY-MM-DD"),
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    接收上传的供热公司能效分析表 Excel，自动抽取当前业务日期的总表及分中心补水量明细数据。
+    """
+    filename = file.filename or ""
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": f"不支持的文件类型: {filename}，仅支持 .xlsx 或 .xls 格式",
+            },
+        )
+    try:
+        contents = await file.read()
+        res = parse_gongre_efficiency_excel(contents, biz_date)
+        return JSONResponse(status_code=200, content=res)
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": str(e),
+            },
+        )
+    except Exception as e:
+        logging.exception("解析供热公司能效报表失败: %s", e)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "message": f"解析供热公司能效报表时发生内部错误: {e}",
+            },
+        )
 
 
 @router.get(

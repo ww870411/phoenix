@@ -1,5 +1,266 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-10-28 [供热公司能效报表识别调优：收入指标剥离留空、分中心耗水量动态嗅探与表级列索引隔离]
+- **需求明确**：
+  - 用户明确指示：
+    1. 供热公司的“售高温水收入”“售汽收入”不做自动识别，留空；
+    2. “分中心”的表中，“换热站补水量”在能效报表中位于下部，列出各中心简称且指标叫做“耗水量”，要求精准识别并回填；
+- **根因分析与架构修复**：
+  1. **收入指标剥离留空 (`gongre_efficiency_parser.py`)**：
+     - 从 `gongre_cells` 中彻底删除“其中：售高温水收入”和“其中：售汽收入”；
+     - 后端返回载荷不再输出该两项，前端回填引擎跳过处理，保持单元格原有留空状态；
+  2. **分中心“耗水量”动态嗅探 (`gongre_efficiency_parser.py`)**：
+     - 在能效表下部引入动态文本嗅探算法，扫描包含各中心简称（华乐、东港、春海、中山、北岗、双兴、香炉礁、兴工、大纺、管网）且包含“耗水”字样的行（Row 188~197）；
+     - 对应系统指标“其中：换热站补水量”，绑定 `sub_label`（各分中心全称），指定写入 `col_index: 3`（分中心明细表的本期日列）；
+  3. **表级列索引与同期列识别隔离修复 (`DataEntryView.vue`)**：
+     - **排查出的关键 Bug**：先前在回填引擎 `applyEfficiencyDataToSheets` 中，调用了全局绑定的 `isPeerColumnIndex(targetCol)`。由于当时活动表为 5 列标准表（`columns.length = 5`，第 3 列为同期日），而分中心明细表总共有 6 列（第 3 列为本期日，第 4 列才为同期日）。调用全局判定导致分中心补水量的 `targetCol = 3` 被误判为同期列而被 `continue` 跳过，导致未能成功回填；
+     - **修复方案**：引入 `isPeerColumnForTable(targetCol, currentTableCols, baseCols)`，基于具体子表真实的列定义进行同期判定；并在目标写入列未指定时，自适应寻找包含“本期”字样的列索引；
+     - **复合行双向兼容匹配**：`findRowIndexInList` 升级为支持分中心简称（如“华乐”）与全称（“华乐中心”）双向包含匹配。
+- **验证结果**：
+  - Python 单元测试通过：供热公司总表输出 11 项纯净指标（不包含两项收入），分中心补水量 10 项精准提取（东港7吨、双兴2250吨等，合计3290.1吨）；
+  - 前端全量静态构建通过（`npm run build` 耗时 13.87s，758 个模块无错误）。
+
+## 2026-10-28 [扩展香海热电厂与供热公司能效报表自动解析与精准回填]
+- **需求概述**：
+  - 用户明确要求参照北海热电厂的模式，扩展支持香海热电厂和供热公司的能效报表自动识别功能；
+  - 提供源报表文件：
+    1. 香海：《2025-2026香海能效分析表 1.xlsx》
+    2. 供热：《2026-2027供热公司能效表.xlsx》
+  - 核心要求：纯净抽取本期数值（严禁篡改同期值）；机炉运行台数为空识别为 0；设备启停与突发情况说明不伪造记事；单位换算规范化。
+- **架构设计与实现原理**：
+  1. **香海能效解析服务 (`xianghai_efficiency_parser.py`)**：
+     - 新建 [`xianghai_efficiency_parser.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/xianghai_efficiency_parser.py)；
+     - 自动匹配工作表（支持 `香海YYYY.M` 等变体）；
+     - 解析第 2 行 Excel 序列日期精准定位当前业务日期所在列；
+     - 指标映射：发电量(Row 13)、供热量(Row 50)、供汽量(Row 43)、售电量(Row 28)、原煤耗量(Row 58)、标煤耗量(Row 63)、耗水量(Row 73自来水量)、电厂耗水量(Row 76)、外购电量(Row 89 kWh转万kWh)、电厂外购电量、耗酸量(Row 109)、耗碱量(Row 114)、耗油量(Row 84)、耗氨水量(Row 94)、耗石灰石粉量(Row 99)；
+     - 机炉运行方式：Row 10 语义解析得出运行汽炉数与运行汽轮机数（空/停归零）；
+  2. **供热公司能效解析服务 (`gongre_efficiency_parser.py`)**：
+     - 新建 [`gongre_efficiency_parser.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/gongre_efficiency_parser.py)；
+     - 自动匹配 `YYYY.M` 工作表并定位第 2 行业务日期列；
+     - 支持跨表联合输出：
+       - `GongRe_Sheet`（5.供热公司表）：网口供热量(Row 10)、售汽量(Row 40)、耗水量(Row 24)、电厂一次网补水(Row 23)、换热站补水(Row 22)、站内外购电量(Row 29 kWh转万kWh)、站内耗热量(Row 15)、高温水收入(Row 82)、售汽收入(Row 77)、日最高最低气温(Row 7/6)；
+       - `GongRe_branches_detail_Sheet`（6.供热公司分中心明细表）：精准抓取 10 个分中心（华乐、东港、春海、中山、北岗、双兴、香炉礁、兴工、大纺、管网）换热站补水量（Row 188~197），指定写入 `col_index: 3`（本期日列）；
+  3. **后端接口注册 (`legacy_full.py`)**：
+     - 在 [`legacy_full.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py) 新增：
+       - `POST /data_entry/xianghai/parse_efficiency_report`
+       - `POST /data_entry/gongre/parse_efficiency_report`
+  4. **前端接口与交互增强 (`api.js`, `DataEntryView.vue`)**：
+     - 在 [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js) 封装 `uploadXianghaiEfficiencyReport` 与 `uploadGongreEfficiencyReport`；
+     - 在 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue) 实现 `currentEfficiencyUnitType` 计算属性，北海、香海、供热三家单位均展示专属【📁 上传能效分析表】按钮；
+     - 回填引擎 `applyEfficiencyDataToSheets` 全面升级：支持 `sub_label` 复合匹配、指定 `col_index` 回填、同期列严格只读保护与备注列占位符安全保护。
+- **验证结果**：
+  - Python 单元测试通过：香海（17项指标，发电量203.136，4炉3机）、供热（总表13项指标，分中心10项补水量明细）100% 断言正确；
+  - 前端全量静态构建通过（`npm run build` 耗时 15.87s，758 个模块无错误）。
+
+
+## 2026-10-28 [北海能效报表自动解析：运行设备台数指标为空时默认识别为 0]
+- **需求明确**：
+  - 用户明确要求：“表中的运行汽炉数、运行汽轮机数、运行水炉数和运行天然气炉数，如果能效报表中为空，则识别为0”。
+- **架构加固与实现原理 (`beihai_efficiency_parser.py`)**：
+  - 修改 [`beihai_efficiency_parser.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/beihai_efficiency_parser.py)；
+  - **空值兜底归零**：引入 `_parse_steam_boiler_and_turbine` 与 `_parse_boiler_count` 语义解析器。当对应业务日期的运行方式单元格为空（`None`）、空字符串、`'0'`、`'停'` 或 `'无'` 时，运行台数统一识别为 `0`；
+  - **必出输出项保证**：
+    - 联产表：`运行汽炉数` 与 `运行汽轮机数` 恒定纳入提取 cells（为空识别为 0，有工况如 `#1#2#4炉 #2#3机` 准确统计为 3 炉 2 机）；
+    - 水炉表：`运行水炉数` 恒定纳入提取 cells（为空识别为 0，有工况如 `#1、2炉` 准确统计为 2 炉）；
+    - 燃气炉表：`运行天然气炉数` 恒定纳入提取 cells（为空识别为 0）；
+- **验证结果**：
+  - Python 单元测试证实：在能效分析表 2026-11-01 运行方式为空的场景下，联产汽炉数、汽轮机数、水炉数、天然气炉数全部稳定输出 `0`；
+  - 多种实际工况用例（单炉、多炉、多机、停运）解析准确率 100%；前端打包顺利通过。
+
+## 2026-10-28 [规范启停与突发指标填报结构：剥离能效表工况误传，守护本期占位符与备注列规范]
+- **问题反馈与现象分析**：
+  - 用户敏锐指出两项核心业务与布局问题：
+    1. **指标结构规范**：“主设备启停情况”和“突发情况说明”并不填在本期列（`c2`），而是填在最后一列（`c4` 备注/解释说明列）。之前自动回填却直接写入了 `c2`，覆盖掉了提示占位符；
+    2. **语义混淆与误识别**：能效分析表中的“运行方式 炉/机”（如 `#1炉`）记录的是在网运行方式，而不是当天发生了设备启动事件。且 2026 本期水炉当天根本没有启动（原表为空），之前误将 2025 年同期的 `#1炉` 当作启停事件输出，导致回填出现“一号水炉”。
+- **架构加固与改动点**：
+  1. **后端彻底剥离非启停字段 (`beihai_efficiency_parser.py`)**：
+     - 修改 [`beihai_efficiency_parser.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/beihai_efficiency_parser.py)；
+     - 彻底删除在 `cells` 中输出“主设备启停情况”的错误逻辑；
+     - 能效分析表中只有工况代号，仅用于推导各子表的台数指标（运行汽炉数、运行汽轮机数、运行水炉数、运行天然气炉数），严禁将工况代号当做设备启停事件输出；
+  2. **前端回填位置与占位符强保护 (`DataEntryView.vue`)**：
+     - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+     - 建立 `NOTE_ONLY_LABELS` 保护白名单（“主设备启停情况”、“设备启停情况”、“突发情况说明”）；
+     - 严禁任何自动回填修改该类指标的 `c2`（保留固定占位语 `"（若有请填右侧）"`）与 `c3`（保留 `"——→"`）；
+     - 若未来传入合法文本，只允许写入最后一列（`c4` 备注列），确保与数据库 `DailyBasicData.note` 存储结构与视觉设计严格吻合。
+- **验证结果**：
+  - Python 服务单元测试通过：北海三张子表格的 cells 中彻底清除了“主设备启停情况”，台数指标与数值指标纯净输出；
+  - 前端全量构建成功（`npm run build` 耗时 15.13s，758 个模块无错误）。
+
+## 2026-10-28 [修复能效报表跨表回填异常：补全未激活子表格 queryData 镜像查询，杜绝同期值丢失]
+- **问题反馈与现象分析**：
+  - 用户反馈：“为什么我点击上传了北海的能效表格，表1没问题，表2，表3的同期值全不见了”；
+  - **根因定位**：
+    1. 用户进入页面时默认处于表 1（热电联产表），表 1 正常经历了完整的主加载流程（`loadTemplate` -> 后端 `queryData` 镜像查询），因此表 1 的 `c3` 同期值能够正确展示；
+    2. 此时表 2（水炉表）和表 3（天然气炉表）尚未被用户点击打开，`sheetCache` 内存缓存中尚无两表的记录；
+    3. 点击【上传能效分析表】后，`applyEfficiencyDataToSheets` 在向后台子表填充数据时，仅调用了 `getTemplate`（获取静态空白模板），但**漏掉了调用 `queryData` 向数据库拉取同期数据**，导致暂存进 `sheetCache` 中的 `gridSource` 仅有本期数据 `c2`，而 `c3` 保持为空白字符串 `""`；
+    4. 随后用户点击切换至表 2 或表 3 时，`onSwitchSheetTab` 识别到缓存存在直接执行 `restoreSheetFromCache`，跳过了本应在初次进入时执行的 `loadTemplate` 及数据库查询，导致表 2、表 3 同期值看似全部丢失。
+- **改动点与实现原理 (`DataEntryView.vue`)**：
+  - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+  - **补齐子表完整查询**：在 `applyEfficiencyDataToSheets` 预构建缓存时，除调用 `getTemplate` 与日期列头格式化外，显式调用 `queryData(projectKey, sheetKey, { biz_date })`，确保数据库已存的真实同期值（`c3`）被完整装配到 `tplRows` 与 `gridSource` 中，再仅向 `c2` 写入导入数值；
+  - **标签页切换状态加固**：在 `onSwitchSheetTab` 恢复缓存后，自动触发行规则校验刷新、联动结构初始化与 `applyReadonlyToColumns()` 权限锁定。
+- **验证结果**：
+  - 前端全量静态打包通过（`npm run build` 耗时 13.86s，758 个模块无错误）。
+
+## 2026-10-28 [能效报表回填边界加固：严格仅提取与导入本期数据，严禁触碰与改变同期值]
+- **需求与安全边界明确**：
+  - 用户明确强调：“注意，只导入本期的数值，而不改变同期值”。
+- **架构加固与实现原理**：
+  1. **后端数据源纯净化 (`beihai_efficiency_parser.py`)**：
+     - 修改 [`beihai_efficiency_parser.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/beihai_efficiency_parser.py)；
+     - 彻底废除任何跨行回退到 2025 年同期行的逻辑，锁定各指标单一本期物理行号（如联产发电量 Row 174、供热量 Row 199、煤耗 Row 204/209；水炉供热量 Row 346、煤耗 Row 351/356 等）；
+     - 若当前日期本期行无数据或为 0，如实返回 `0.0`，严禁提取同期历史数据；
+  2. **前端单元格回填隔离保护 (`DataEntryView.vue`)**：
+     - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+     - 明确限定数据回填与联动仅作用于 `c2` 列（当日填报值），对 `c3` 列（同期值）施加绝对隔离，结合既有只读列与权限守卫双重锁定，确保同期基准值毫厘不差；
+- **验证结果**：
+  - Python 单元测试证实 2026-11-01 发电量等指标如实提取本期填报值（0.0），同期行（2.016）被严格隔离；
+  - 前端静态构建打包顺利通过（耗时 13.99s，758 个模块无错误）。
+
+## 2026-10-28 [修复能效报表回填异常：彻底清除冗余的 hasModified 标记，采用响应式直接驱动提交]
+- **问题定位**：
+  - 用户反馈报错：`解析能效报表失败：hasModified is not defined`；
+  - 经排查组件原本依托 `gridSource` 响应式状态与 `submitButtonDisabled` 进行提交控制，并不存在全局 `hasModified` 响应式变量。
+- **改动点与验证**：
+  - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)，彻底移除多余的 `hasModified` 赋值，数据更新直接同步进 `gridSource` 并存入 `sheetCache`；
+  - 前端 `npm run build` 构建成功（耗时 14.56s，758 个模块无错误）。
+
+## 2026-10-28 [修复能效报表回填异常：消除未定义重算函数，改用标准联动遍历与逐行校验]
+- **问题定位**：
+  - 用户在上传北海能效报表后反馈报错：`解析能效报表失败：recomputeVirtualRows is not defined`；
+  - 经查在回填函数 `applyEfficiencyDataToSheets` 中，原先调用了虚拟重算函数的伪代码名称，导致运行时异常中断。
+- **改动点 (`DataEntryView.vue`)**：
+  - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+  - 消除未定义的函数调用，接入组件原生联动体系：
+    - 遍历 `linkageMap` 完成关联行数据的同步更新；
+    - 在校验开启状态下，调用原生的 `validateRow(r)` 对各行数据进行标准合规验算；
+- **验证结果**：
+  - 前端执行 `npm run build` 构建成功（耗时 14.50s，758 个模块无错误）。
+
+## 2026-10-28 [北海热电厂能效报表自动解析与三表多标签页一键回填系统]
+- **需求背景**：
+  - 用户提出需求：“为北海热电厂增加一个上传能效报表的功能”；
+  - 北海热电厂兼顾集团生产日报与能效分析报表两套填报体系，手工跨表录入繁重且易错。需实现用户上传《北海能效分析表》（Excel）后，系统自动基于当前填报业务日期，精准识别并提取每日生产指标，自动分发回填至北海热电厂全部 3 张子表（热电联产表、水炉表、天然气炉表）。
+- **架构设计与改动点**：
+  1. **后端智能解析引擎 (`beihai_efficiency_parser.py`)**：
+     - 新建 [`beihai_efficiency_parser.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/beihai_efficiency_parser.py)；
+     - **年月 Sheet 智能定位**：自动根据业务日期 `biz_date` 寻址对应月份子表（如 `2026.11`）；
+     - **日期列精确匹配**：扫描首行时间戳或日期列标（支持 `datetime` 或 `1~31` 日标），锁定目标业务日所在列；
+     - **三板块物理映射**：
+       - `电厂部分`（Row 169~340）-> 提取发电量、供热量、外供汽量、售电量、原煤/标煤耗量、电厂耗水、电厂外购电、环保辅料（酸/碱/油/氨水/石灰石）及主设备运行方式等 15 项核心指标；
+       - `水炉部分`（Row 341~427）-> 提取水炉供热量、原煤/标煤耗量、水炉耗水、水炉耗电、辅料及运行水炉数等 12 项指标；
+       - `燃气炉部分`（Row 428~470）-> 提取天然气炉供热量、供汽量、耗气量、耗水耗电及启停情况等 8 项指标；
+  2. **后端 API 端点 (`legacy_full.py`)**：
+     - 修改 [`legacy_full.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/legacy_full.py)；
+     - 新增 `POST /api/v1/projects/{project_key}/data_entry/beihai/parse_efficiency_report`，接收 Excel 文件与 `biz_date`，完成格式校验与权限会话保护；
+  3. **前端 API 客户端 (`api.js`)**：
+     - 修改 [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)；
+     - 封装 `uploadBeihaiEfficiencyReport(projectKey, file, bizDate)` 函数，支持 FormData 文件流传输；
+  4. **前端填报界面交互与跨表回填 (`DataEntryView.vue`)**：
+     - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+     - **专属上传入口**：当检测到当前填报单位为北海热电厂（`isBeihaiUnit`）时，在顶部操作栏呈现天蓝色科技感【📁 上传能效分析表】专属按钮；
+     - **跨表内存渗透回填 (`applyEfficiencyDataToSheets`)**：
+       - 当前活动的 Tab 表格即时更新 `gridSource` 与 `rows`，触发公式重算与数据校验；
+       - 其它 2 张未激活的子表格自动在 `sheetCache` 内存中完成数据回填与预渲染，用户切换 Tab 无缝预览填报结果；
+     - **核对确认与一并提交**：弹窗展示匹配成果汇总（工作表名、业务日、35 项指标提取成功反馈），核对后点击【一并提交】一次性保存入库。
+- **验证结果**：
+  - Python 独立单元测试通过，提取数值与能效分析表 100% 对齐；
+  - 模拟真实登录会话执行端到端 HTTP API 请求，接口正常响应 200 OK 并成功提取 3 表共 35 项生产数据；
+  - 前端执行 `npm run build` 全量静态编译打包通过（耗时 19.65s，758 个模块无错误）。
+
+## 2026-10-28 [每日数据填报列表页两栏等宽布局重构：正常情况下分两栏，每个主体框体宽度严格一致]
+- **需求明确**：
+  - 用户明确提出要求：“正常情况下分两栏，每个主体框体的宽度一致”。
+- **改动点与实现原理 (`Sheets.vue`)**：
+  - 修改 [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)；
+  - **默认两栏等宽网格 (`.unit-card-grid`)**：
+    - 将正常桌面端网格设定为严格等分的两栏：`grid-template-columns: repeat(2, minmax(0, 1fr))`；
+    - 两栏各占 50% 可用宽度（约为 430px），间距 `gap: 20px`；
+    - 窄屏（<= 640px）自适应切为单栏 `1fr`；
+  - **主体框体盒模型加固 (`.unit-card`)**：
+    - `.unit-card` 统一使用 `width: 100%; min-width: 0; box-sizing: border-box; justify-content: space-between; padding: 20px;`；
+    - 确保每个主体卡片框体左右宽度完全对等，内部标签拥有充裕横向排布空间，视觉大气匀称。
+- **验证结果**：
+  - 前端执行 `npm run build` 构建成功（耗时 20.60s，758 个模块无错误，退出码 0）；
+  - 页面各主体卡片严格按照 50%/50% 双栏等宽排布。
+
+## 2026-10-28 [每日数据填报列表页主体卡片尺寸标准化：彻底消除内容撑开差异，实现全量主体卡片严格等宽]
+- **需求背景**：
+  - 用户反馈每日数据填报列表页中，各个填报主体的卡片宽度存在视觉差异，要求将“每个主体的卡片宽度都改成一致”；
+  - 经排查，此前网格采用 `repeat(auto-fill, minmax(320px, 1fr))`，在 CSS Grid 规范中 `1fr` 默认带有 `minmax(auto, 1fr)` 的固有尺寸机制。当北海热电厂（3张表）或供热公司包含较多较长的表名胶囊时，所在列的 `min-content` 会被无形撑大，而仅含 1 张短表名的主体所在列宽度更窄；此外最后一行单出的卡片排布也会破坏统一感。
+- **改动点与实现原理 (`Sheets.vue`)**：
+  - 修改 [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)；
+  - **严格等宽三列网格体系 (`.unit-card-grid`)**：
+    - 将网格重构为 `grid-template-columns: repeat(3, minmax(0, 1fr))`，强制每一列平分 1/3 容器宽度；
+    - 配备响应式媒体查询：屏幕宽度 <= 860px 时平滑切为 2 列（`repeat(2, minmax(0, 1fr))`），<= 560px 时单列（`1fr`），确保在任何屏幕分辨率下卡片宽度绝对一致；
+  - **主体卡片盒模型与防撑开加固 (`.unit-card`)**：
+    - 为 `.unit-card` 显式声明 `width: 100%; min-width: 0; box-sizing: border-box; justify-content: space-between;`，消除原生 `<button>` 的尺寸漂移；
+    - 针对内部标题 `.unit-card-title` 与胶囊文字 `.pill-title` 注入 `overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`，杜绝任何长内容对列宽的横向撑大；
+    - 统一步长与内边距，使全部 9 个主体（北海、香海、供热、金州、北方、金普、庄河、研究院、售电）呈工整的 3×3 九宫格排列，宽度严丝合缝完全一致。
+- **验证结果**：
+  - 执行 `npm run build` 成功完成全量生产构建打包（758 个模块无错误，耗时 21.96s）；
+  - 页面各主体卡片宽度完全等比对齐。
+
+## 2026-10-28 [生产日报填报权限精细化管控：非 Global_admin 角色全量锁定“同期值”列不可修改]
+- **需求背景**：
+  - 用户明确要求：“这些表格的同期值字段，对 Global_admin 之外都改为不可修改”。
+  - 每日数据填报中，各供热及发电单位的填报人员仅负责提报当期实际生产数据，上年同期数据应作为历史基准严禁随意篡改；仅集团级最高管理员（`Global_admin`）在特殊数据校准或历史补录场景下拥有编辑权限。
+- **改动点与实现原理 (`DataEntryView.vue`)**：
+  - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+  - **智能识别同期值列 (`isPeerColumnIndex`)**：
+    - 结合配置列名（如“同期”、“去年”）、动态换算出的同期业务日期列名（匹配 `peerDateYYYYMMDD(bizDate.value)`），以及标准五列日报表固定第 3 列（index 3）等多维度特征精准锁定同期列；
+  - **表格渲染层只读锁定 (`setupStandardGrid` / `applyReadonlyToColumns`)**：
+    - 针对当前用户非 `isGlobalAdmin`（`group !== 'global_admin'`）的情形，在 RevoGrid 列定义配置中统一注入 `readonly: true` 与 `__locked: true`，并在表头列名后追加锁标识 `🔒`，直观提示用户只读锁定；
+  - **编辑事件拦截与强制复原防御 (`handleAfterEdit`)**：
+    - 在单元格修改后置事件中追加安全防御层：若非 `isGlobalAdmin` 用户试图通过任何手段改写同期值列，立即中断更新逻辑并强制回滚复原单元格数值，确保数据资产安全。
+- **验证结果**：
+  - 执行 `npm run build` 构建成功，前端代码全量打包通过无报错；
+  - 非 Global_admin 用户进入填报页面时，同期值列不可聚焦编辑且表头标锁；Global_admin 角色正常保留修改能力。
+
+## 2026-10-28 [填报界面视觉美学与层级体验升级：恢复列表卡片表格序号、重塑现代分段胶囊标签栏（Segmented Pill Tabs）]
+- **反馈问题定位**：
+  1. 列表页（`Sheets.vue`）：北海、供热等单位窗格内的表格胶囊中，原表名的前导序号（如 `1.`、`2.`、`5.`、`6.`）丢失；经查系之前的正则洗词过度截断导致；
+  2. 填报页（`DataEntryView.vue`）：标签栏排版过于粗糙生硬（外包厚重灰色浮起边框、左侧带有生硬的“单位报表切换：”文本标签、按钮样式老旧割裂且同样丢失了表序号）。
+- **优化落实与改动点**：
+  1. **列表卡片独立序号徽标体系 (`Sheets.vue`)**：
+     - 修改 [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)；
+     - 引入 `parseSheetNumber` 与 `cleanSheetBodyName` 双层解构；
+     - 在单位卡片内部胶囊中，独立渲染出高对比度的深色数字徽标 `.pill-number`（如 `[1]`、`[2]`、`[3]`、`[5]`、`[6]`），使集团核心序号醒目立显，悬停时支持展示完整表名；
+  2. **现代分段胶囊标签栏 (Segmented Pill Tabs) 重塑 (`DataEntryView.vue`)**：
+     - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+     - 彻底删除外围厚重卡片框与冗余的“单位报表切换：”文字；
+     - 引入现代设计规范（类似 Linear/Vercel/macOS）的悬浮分段胶囊底槽 `.unit-tabs-nav`；
+     - 每个 Tab 胶囊集成独立高亮序号 `.tab-index`、精炼表名 `.tab-name` 与极简状态微标 `.tab-status-dot`（已提交显示微脉冲绿光点，异常显示红点）；
+     - 激活项采用纯白浮雕高质感卡片（双层细腻微阴影与高亮主题色），未激活项采用透明舒适悬停过渡；
+     - 提交按钮组采用翡翠渐变与微阴影，整体界面层级分明、极具专业工控美感。
+- **验证结果**：
+  - 前端执行 `npm run build` 成功完成全量生产打包（耗时 16.80s），758 个模块无错误。
+
+## 2026-10-28 [每日数据填报单位入口归一化与多表格标签页（Tabs）一并提交重构]
+- **需求背景与痛点**：
+  - 用户指出在每日数据填报中，北海热电厂（3张表：热电联产、水炉、天然气炉）、供热公司（2张表：公司表、分中心明细表）等单位，原先被拆成若干孤立的表卡片散落排列；
+  - 填报人员每次填报都需要反复进出不同页面、在多张表中重复选择业务日期、多次手动点击提交，流程极其繁琐且存在业务日期填错错位的隐患；
+  - 用户明确要求：“将各单位的入口都做成一个，然后进去之后，有多张表格的，以标签页的形式展示，一并提交”。
+- **架构重构与改动点**：
+  1. **表格列表页单位入口归一化 (`Sheets.vue`)**：
+     - 修改 [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)；
+     - 将原先“按单位分组下平铺展示每张小表格”的模式，升级为**“单位聚合卡片网格 (`unit-card-grid`)”**；
+     - 每个单位聚合成独立卡片，展示单位名称（如“北海热电厂”）、包含报表数及精炼胶囊标签（`热电联产` / `水炉` / `天然气炉`）、以及综合填报进度指示器（已完成 / 部分完成 / 待填报）；
+     - 点击单位卡片即可直达该单位的综合填报入口。
+  2. **填报页多表格 Tabs 标签页导航与多表内存保活 (`DataEntryView.vue`)**：
+     - 修改 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)；
+     - 引入 `listSheets` 动态识别当前填报表格所属的单位及其下属全部表格清单 `unitSheets`；
+     - 当表格数大于 1 时，在顶部呈现响应式 Tabs 标签切换栏，动态标注各表状态徽章（正常/已提交/异常）；
+     - 设计 `sheetCache` 内存多表状态缓存，在用户切换 Tab 时完整暂存与瞬时恢复单元格输入、校验问题与联动计算状态，做到**毫秒级平滑切表、已录入数据零丢失**；
+     - 业务日期 `bizDate` 在单位层全局统一，切换日期时所有子表严格同步查询，彻底杜绝单表日期错位。
+  3. **一键“一并提交”与跨表原子化校验 (`DataEntryView.vue`)**：
+     - 顶部操作栏对多表单位提供【一并提交全部表格 (共X张)】主按钮；
+     - 点击时前置统一遍历所有子表格的校验规则：若发现阻断性错误，自动平滑切换到报错的 Tab 标签并高亮提示修正；
+     - 校验全部通过后，使用 `Promise.all` 并发向后端提交本单位全部表格数据，统一弹窗反馈“全部报表数据已成功一并提交入库”。
+- **验证结果**：
+  - 前端执行 `npm run build` 生产构建成功，758 个模块顺利编译无错误；
+  - 现有多表单位（北海热电厂 3 表、供热公司 2 表）与单表单位（香海、金州、北方等）自适应兼容。
+
+
 ## 2026-10-28 [全局项目元数据秒级直显与零闪烁优化：引入LocalStorage双级缓存与动态供暖期兜底对齐]
 - **现象定位与根因剖析**：
   - 用户反馈：“刚进入页面时，面包屑会先显示为【2025-2026供暖期生产日报】，然后一闪变为【2026-2027供暖期生产日报】”；

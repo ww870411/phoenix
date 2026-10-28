@@ -16,8 +16,8 @@
     </transition>
     <header class="topbar">
       <div class="topbar__title-group">
-        <h2>数据填报</h2>
-        <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
+        <h2>{{ unitGroupName ? `${unitGroupName} 数据填报` : '数据填报' }}</h2>
+        <div class="sub">项目：{{ projectName }} ｜ 当前表：{{ sheetDisplayName }}</div>
       </div>
       <div class="topbar__actions">
         <div class="topbar__status-row">
@@ -57,13 +57,81 @@
           </label>
           <div class="topbar__buttons">
             <button class="btn ghost" type="button" @click="reloadTemplate()">重载模板</button>
-            <button class="btn primary" type="button" :disabled="submitButtonDisabled" @click="onSubmit">
+            <button
+              v-if="canUploadEfficiency"
+              class="btn secondary efficiency-upload-btn"
+              type="button"
+              :disabled="efficiencyUploading"
+              :title="efficiencyUploadTitle"
+              @click="triggerEfficiencyUpload"
+            >
+              <span v-if="efficiencyUploading">⏳ 解析中…</span>
+              <span v-else>📁 上传能效分析表</span>
+            </button>
+            <input
+              v-if="canUploadEfficiency"
+              ref="efficiencyFileInputRef"
+              type="file"
+              accept=".xlsx, .xls"
+              style="display: none"
+              @change="onEfficiencyFileSelected"
+            />
+            <button
+              v-if="unitSheets.length > 1"
+              class="btn primary submit-all-btn"
+              type="button"
+              :disabled="submitButtonDisabled"
+              :title="`一并提交 ${unitGroupName || '本单位'} 全部 ${unitSheets.length} 张表格`"
+              @click="onSubmitAll"
+            >
+              {{ canSubmitCurrentProject ? `一并提交全部表格 (共${unitSheets.length}张)` : '当前账号无提交权限' }}
+            </button>
+            <button
+              v-else
+              class="btn primary"
+              type="button"
+              :disabled="submitButtonDisabled"
+              @click="onSubmit"
+            >
               {{ canSubmitCurrentProject ? '提交' : '当前账号无提交权限' }}
+            </button>
+            <button
+              v-if="unitSheets.length > 1"
+              class="btn ghost text-btn"
+              type="button"
+              :disabled="submitButtonDisabled"
+              title="仅提交当前选中的这一张表格"
+              @click="onSubmit"
+            >
+              仅提交当前表
             </button>
           </div>
         </div>
       </div>
     </header>
+
+    <!-- 多表格单位现代分段标签栏 (Segmented Tabs) -->
+    <div v-if="unitSheets.length > 1" class="unit-tabs-nav-wrapper">
+      <div class="unit-tabs-nav" role="tablist" aria-label="单位所属报表切换">
+        <button
+          v-for="s in unitSheets"
+          :key="s.sheet_key"
+          type="button"
+          role="tab"
+          :aria-selected="s.sheet_key === activeSheetKey"
+          :class="['unit-tab-pill', { 'unit-tab-pill--active': s.sheet_key === activeSheetKey }]"
+          @click="onSwitchSheetTab(s.sheet_key)"
+        >
+          <span class="tab-index" v-if="parseSheetNumber(s.sheet_name)">{{ parseSheetNumber(s.sheet_name) }}</span>
+          <span class="tab-name">{{ cleanTabTitle(s.sheet_name, unitGroupName) }}</span>
+          <span
+            v-if="getSheetTabBadge(s.sheet_key)"
+            :class="['tab-status-dot', getSheetTabBadge(s.sheet_key).badgeClass]"
+            :title="getSheetTabBadge(s.sheet_key).text"
+          ></span>
+        </button>
+      </div>
+    </div>
 
     <section
       v-if="validationEnabled && validationIssues.length"
@@ -135,11 +203,15 @@ import {
   getTemplate,
   queryData,
   submitData,
+  listSheets,
   getSheetValidationSwitch,
   setSheetValidationSwitch,
   getSheetAiSwitch,
   setSheetAiSwitch,
   getDataAnalysisSchema,
+  uploadBeihaiEfficiencyReport,
+  uploadXianghaiEfficiencyReport,
+  uploadGongreEfficiencyReport,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
@@ -152,7 +224,32 @@ const auth = useAuthStore()
 const { applyTemplatePlaceholders } = useTemplatePlaceholders()
 const projectKey = String(route.params.projectKey ?? '')
 const pageKey = String(route.params.pageKey ?? '')
-const sheetKey = String(route.params.sheetKey ?? '')
+const activeSheetKey = ref(String(route.params.sheetKey ?? ''))
+const sheetKey = computed(() => activeSheetKey.value)
+
+// --- 单位多表格 Tabs 支持 ---
+const unitSheets = ref([])
+const unitGroupName = ref('')
+const currentEfficiencyUnitType = computed(() => {
+  const gName = (unitGroupName.value || unitName.value || '').trim()
+  const sKey = (activeSheetKey.value || '').toLowerCase()
+  if (gName.includes('北海') || sKey.startsWith('beihai')) return 'beihai'
+  if (gName.includes('香海') || sKey.startsWith('xianghai')) return 'xianghai'
+  if (gName.includes('供热') || sKey.startsWith('gongre')) return 'gongre'
+  return null
+})
+const canUploadEfficiency = computed(() => !!currentEfficiencyUnitType.value)
+const isBeihaiUnit = computed(() => currentEfficiencyUnitType.value === 'beihai')
+const efficiencyUploadTitle = computed(() => {
+  const type = currentEfficiencyUnitType.value
+  if (type === 'beihai') return '上传《北海能效分析表》Excel，自动根据当前业务日期识别并填入北海三张表格'
+  if (type === 'xianghai') return '上传《香海能效分析表》Excel，自动根据当前业务日期识别并填入香海热电厂表格'
+  if (type === 'gongre') return '上传《供热公司能效表》Excel，自动根据当前业务日期识别并填入供热公司表及分中心补水量'
+  return ''
+})
+const efficiencyUploading = ref(false)
+const efficiencyFileInputRef = ref(null)
+const sheetCache = new Map() // sheet_key -> 完整表格状态缓存
 const pageConfig = computed(() => {
   const raw = route.query.config;
   return typeof raw === 'string' ? raw : '';
@@ -181,7 +278,7 @@ const sheetAiReportEnabled = ref(false)
 const sheetAiSwitchLoading = ref(false)
 const sheetAiSwitchSaving = ref(false)
 const aiFeatureAccessible = computed(() => isGlobalAdmin.value || isGroupAdminOrHigher.value || sheetAiReportEnabled.value)
-const shouldShowSheetAiToggle = computed(() => isGroupAdminOrHigher.value && sheetKey !== 'Coal_inventory_Sheet')
+const shouldShowSheetAiToggle = computed(() => isGroupAdminOrHigher.value && activeSheetKey.value !== 'Coal_inventory_Sheet')
 const sheetAiToggleDisabled = computed(() => sheetAiSwitchLoading.value || sheetAiSwitchSaving.value)
 
 function formatDateYYYYMMDD(dateStr) {
@@ -265,12 +362,12 @@ const unitAnalysisToggleMap = ref(loadUnitAnalysisToggleMap());
 const canEditUnitAnalysisToggle = computed(() => normalizedGroup.value === 'global_admin');
 
 const isUnitAnalysisEnabled = computed(() => {
-  if (!sheetKey) return false;
+  if (!activeSheetKey.value) return false;
   const map = unitAnalysisToggleMap.value || {};
-  if (Object.prototype.hasOwnProperty.call(map, sheetKey)) {
-    return !!map[sheetKey];
+  if (Object.prototype.hasOwnProperty.call(map, activeSheetKey.value)) {
+    return !!map[activeSheetKey.value];
   }
-  return UNIT_ANALYSIS_DEFAULT_ENABLED.has(sheetKey);
+  return UNIT_ANALYSIS_DEFAULT_ENABLED.has(activeSheetKey.value);
 });
 
 function persistUnitAnalysisToggle(map) {
@@ -283,9 +380,9 @@ function persistUnitAnalysisToggle(map) {
 }
 
 function updateUnitAnalysisToggle(value) {
-  if (!sheetKey) return;
+  if (!activeSheetKey.value) return;
   const nextMap = { ...(unitAnalysisToggleMap.value || {}) };
-  nextMap[sheetKey] = !!value;
+  nextMap[activeSheetKey.value] = !!value;
   unitAnalysisToggleMap.value = nextMap;
   persistUnitAnalysisToggle(nextMap);
 }
@@ -295,7 +392,7 @@ function handleUnitAnalysisToggleChange(event) {
   updateUnitAnalysisToggle(event.target.checked);
 }
 
-if (!projectKey || !pageKey || !sheetKey) {
+if (!projectKey || !pageKey || !activeSheetKey.value) {
   router.replace({ name: 'projects' });
 }
 
@@ -303,7 +400,7 @@ if (!projectKey || !pageKey || !sheetKey) {
 const projectName = computed(() => getProjectNameById(projectKey));
 const sheetName = ref('');
 const unitName = ref('');
-const sheetDisplayName = computed(() => sheetName.value || sheetKey);
+const sheetDisplayName = computed(() => sheetName.value || activeSheetKey.value);
 
 const pageListPath = computed(() => {
   const base = `/projects/${encodeURIComponent(projectKey)}/pages/${encodeURIComponent(pageKey)}/sheets`;
@@ -446,7 +543,7 @@ const blockingValidationIssues = computed(() => {
 });
 
 const hasBlockingValidation = computed(() => blockingValidationIssues.value.length > 0);
-const shouldShowSheetValidationToggle = computed(() => sheetKey !== 'Coal_inventory_Sheet');
+const shouldShowSheetValidationToggle = computed(() => activeSheetKey.value !== 'Coal_inventory_Sheet');
 const canToggleSheetValidation = computed(() => auth.canManageValidationFor(projectKey));
 const sheetValidationToggleDisabled = computed(
   () =>
@@ -1375,28 +1472,53 @@ function resolveReadonlyLimit(columnList) {
   return targetIndex >= 0 ? targetIndex : 1;
 }
 
+// 智能识别“同期值”列索引（对除 Global_admin 之外全量锁定只读）
+function isPeerColumnIndex(index, colName = null) {
+  // 1. 优先检查原始未替换占位符的列名
+  const rawName = Array.isArray(baseColumns.value) ? baseColumns.value[index] : null;
+  if (typeof rawName === 'string') {
+    if (rawName.includes('同期') || rawName.includes('去年')) return true;
+  }
+  // 2. 检查当前显示的列名或日期
+  const currentName = colName || (Array.isArray(columns.value) ? columns.value[index] : null);
+  if (typeof currentName === 'string') {
+    if (currentName.includes('同期') || currentName.includes('去年')) return true;
+    const peerStr = peerDateYYYYMMDD(bizDate.value);
+    if (peerStr && currentName.includes(peerStr)) return true;
+  }
+  // 3. 5 列标准日报表 (项目, 计量单位, 本期日, 同期日, 解释说明) -> 第 3 列固定为同期日
+  if (Array.isArray(columns.value) && columns.value.length === 5 && index === 3) {
+    return true;
+  }
+  return false;
+}
+
 function applyReadonlyToColumns() {
   if (!Array.isArray(gridColumns.value)) return;
   const shouldLockAll = isReadOnlyForDate.value;
   gridColumns.value = gridColumns.value.map((def, index) => {
-    const locked = Boolean(def.__locked) || (shouldLockAll && (templateType.value === 'standard' || templateType.value === 'crosstab'));
+    let locked = Boolean(def.__locked) || (shouldLockAll && (templateType.value === 'standard' || templateType.value === 'crosstab'));
+    // 同期值字段权限控制：除 Global_admin 之外，全量强制设为只读不可修改
+    if (!isGlobalAdmin.value && isPeerColumnIndex(index, def.name)) {
+      locked = true;
+    }
     const currentReadonly = def.readonly === undefined ? false : def.readonly;
     if (currentReadonly === locked) {
       return def;
     }
-    return { ...def, readonly: locked };
+    return { ...def, readonly: locked, __locked: Boolean(def.__locked) || (!isGlobalAdmin.value && isPeerColumnIndex(index, def.name)) };
   });
 }
 
 async function loadSheetValidationSwitch() {
-  if (!shouldShowSheetValidationToggle.value || !projectKey || !sheetKey) {
+  if (!shouldShowSheetValidationToggle.value || !projectKey || !activeSheetKey.value) {
     sheetValidationEnabled.value = true;
     return;
   }
   sheetValidationLoading.value = true;
   sheetValidationError.value = '';
   try {
-    const payload = await getSheetValidationSwitch(projectKey, sheetKey, { config: pageConfig.value });
+    const payload = await getSheetValidationSwitch(projectKey, activeSheetKey.value, { config: pageConfig.value });
     sheetValidationEnabled.value = Boolean(payload?.validation_enabled ?? true);
   } catch (err) {
     console.error(err);
@@ -1411,7 +1533,7 @@ async function updateSheetValidationSwitch(nextValue) {
     !shouldShowSheetValidationToggle.value ||
     !canToggleSheetValidation.value ||
     !projectKey ||
-    !sheetKey
+    !activeSheetKey.value
   ) {
     return;
   }
@@ -1419,7 +1541,7 @@ async function updateSheetValidationSwitch(nextValue) {
   const previous = sheetValidationEnabled.value;
   sheetValidationEnabled.value = nextValue;
   try {
-    await setSheetValidationSwitch(projectKey, sheetKey, nextValue, { config: pageConfig.value });
+    await setSheetValidationSwitch(projectKey, activeSheetKey.value, nextValue, { config: pageConfig.value });
     await reloadTemplate();
     await loadSheetValidationSwitch();
   } catch (err) {
@@ -1442,13 +1564,13 @@ function onSheetValidationToggle(event) {
 }
 
 async function loadSheetAiSwitch() {
-  if (!projectKey || !sheetKey) {
+  if (!projectKey || !activeSheetKey.value) {
     sheetAiReportEnabled.value = false
     return
   }
   sheetAiSwitchLoading.value = true
   try {
-    const payload = await getSheetAiSwitch(projectKey, sheetKey, { config: pageConfig.value })
+    const payload = await getSheetAiSwitch(projectKey, activeSheetKey.value, { config: pageConfig.value })
     sheetAiReportEnabled.value = Boolean(payload?.ai_report_enabled)
   } catch (err) {
     // fail silently or log
@@ -1459,12 +1581,12 @@ async function loadSheetAiSwitch() {
 }
 
 async function updateSheetAiSwitch(nextValue) {
-  if (!projectKey || !sheetKey || !shouldShowSheetAiToggle.value) return
+  if (!projectKey || !activeSheetKey.value || !shouldShowSheetAiToggle.value) return
   sheetAiSwitchSaving.value = true
   const previous = sheetAiReportEnabled.value
   sheetAiReportEnabled.value = nextValue
   try {
-    await setSheetAiSwitch(projectKey, sheetKey, nextValue, { config: pageConfig.value })
+    await setSheetAiSwitch(projectKey, activeSheetKey.value, nextValue, { config: pageConfig.value })
   } catch (err) {
     console.error('Failed to save AI switch:', err)
     sheetAiReportEnabled.value = previous
@@ -1490,7 +1612,8 @@ async function setupStandardGrid(tpl) {
   const isConstant = templateType.value === 'constant';
   gridColumns.value = tpl.columns.map((colName, index) => {
     const isConstantPeerColumn = isConstant && (index === tpl.columns.length - 1) && (index > readonlyLimit);
-    const locked = index <= readonlyLimit || isConstantPeerColumn;
+    const isPeer = isPeerColumnIndex(index, colName);
+    const locked = index <= readonlyLimit || isConstantPeerColumn || (!isGlobalAdmin.value && isPeer);
     return {
       prop: `c${index}`,
       name: String(colName ?? ''),
@@ -1537,10 +1660,11 @@ async function setupCrosstabGrid(tpl) {
 }
 
 // --- 主数据加载逻辑 ---
-async function loadTemplate() {
+async function loadTemplate(targetKey = null) {
+  const currentKey = targetKey || activeSheetKey.value;
   isLoadingTemplate.value = true;
   linkageMap.value = new Map();
-  const rawTemplate = await getTemplate(projectKey, sheetKey, { config: pageConfig.value });
+  const rawTemplate = await getTemplate(projectKey, currentKey, { config: pageConfig.value });
   // 强制首次查询已移除，统一在下方“初次加载后的镜像查询”中处理
   // 应用日期占位到列头（仅每日数据填报页面）
   if (isDailyPage.value && Array.isArray(rawTemplate?.columns)) {
@@ -1592,8 +1716,8 @@ async function loadTemplate() {
       const __rid1 = newRequestId(); latestRequestId.value = __rid1;
       const q = await queryData(
         projectKey,
-        sheetKey,
-        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, request_id: __rid1 },
+        currentKey,
+        { project_key: projectKey, sheet_key: currentKey, biz_date: bizDate.value, request_id: __rid1 },
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
@@ -1605,8 +1729,8 @@ async function loadTemplate() {
       const __ridc = newRequestId(); latestRequestId.value = __ridc;
       const q = await queryData(
         projectKey,
-        sheetKey,
-        { project_key: projectKey, sheet_key: sheetKey, request_id: __ridc },
+        currentKey,
+        { project_key: projectKey, sheet_key: currentKey, request_id: __ridc },
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
@@ -1617,8 +1741,8 @@ async function loadTemplate() {
       const __rid2 = newRequestId(); latestRequestId.value = __rid2;
       const q = await queryData(
         projectKey,
-        sheetKey,
-        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, request_id: __rid2 },
+        currentKey,
+        { project_key: projectKey, sheet_key: currentKey, biz_date: bizDate.value, request_id: __rid2 },
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
@@ -1798,7 +1922,7 @@ async function onSubmit() {
   const payload = {
     project_key: projectKey,
     project_name: projectName.value || projectKey,
-    sheet_key: sheetKey,
+    sheet_key: activeSheetKey.value,
     sheet_name: sheetName.value || '',
     unit_name: unitName.value || '',
     biz_date: bizDate.value,
@@ -1823,8 +1947,9 @@ async function onSubmit() {
 
   isSubmitting.value = true;
   try {
-    await submitData(projectKey, sheetKey, payload, { config: pageConfig.value });
+    await submitData(projectKey, activeSheetKey.value, payload, { config: pageConfig.value });
     submitTime.value = currentSubmitTime;
+    saveCurrentSheetToCache(activeSheetKey.value);
     startRefreshCountdown(3);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1833,6 +1958,606 @@ async function onSubmit() {
     showSubmitFeedback('error', `提交失败：${message || '请稍后重试'}`);
   } finally {
     isSubmitting.value = false;
+  }
+}
+
+// --- 单位多表格 Tabs 支持与一并提交方法 ---
+
+function parseSheetNumber(sheetName) {
+  if (!sheetName) return ''
+  const m = String(sheetName).match(/^(\d+)[\.、\s]*/)
+  return m ? m[1] : ''
+}
+
+function cleanTabTitle(title, unitNameStr) {
+  if (!title) return ''
+  let s = String(title)
+  // 去掉前导序号（由 parseSheetNumber 独立展示数字徽标）
+  s = s.replace(/^\d+[\.、\s]*/, '').trim()
+  // 去掉单位名重复
+  if (unitNameStr && s.includes(unitNameStr)) {
+    const trimmed = s.replace(unitNameStr, '').trim()
+    if (trimmed && trimmed !== '表' && trimmed !== '（表）' && trimmed !== '()') {
+      s = trimmed
+    }
+  }
+  // 去掉外层括号
+  s = s.replace(/^[（\(](.*?)[）\)]/, '$1').trim()
+  if (!s.endsWith('表')) {
+    s += '表'
+  }
+  return s || title
+}
+
+function getSheetTabBadge(targetKey) {
+  const cached = sheetCache.get(targetKey)
+  if (!cached) return null
+  const issues = Array.from(cached.cellValidationMap?.values() || [])
+  const hasErr = issues.some(i => i.level === 'error')
+  if (hasErr) {
+    return { text: '校验未通过', badgeClass: 'tab-status-dot--error' }
+  }
+  if (cached.submitTime) {
+    return { text: '已提交', badgeClass: 'tab-status-dot--success' }
+  }
+  return null
+}
+
+async function loadUnitSheets() {
+  if (!projectKey || !pageConfig.value) return
+  try {
+    const res = await listSheets(projectKey, pageConfig.value)
+    const catalog = res?.content || res
+    if (!catalog || typeof catalog !== 'object') return
+    
+    let targetUnit = ''
+    for (const [k, meta] of Object.entries(catalog)) {
+      if (k === activeSheetKey.value) {
+        targetUnit = meta?.unit_name ? String(meta.unit_name).trim() : ''
+        break
+      }
+    }
+    unitGroupName.value = targetUnit
+    
+    if (targetUnit) {
+      const matched = []
+      for (const [k, meta] of Object.entries(catalog)) {
+        const u = meta?.unit_name ? String(meta.unit_name).trim() : ''
+        if (u === targetUnit) {
+          matched.push({
+            sheet_key: k,
+            sheet_name: meta?.sheet_name || k,
+            unit_name: u,
+          })
+        }
+      }
+      unitSheets.value = matched
+    } else {
+      unitSheets.value = [{
+        sheet_key: activeSheetKey.value,
+        sheet_name: sheetName.value || activeSheetKey.value,
+        unit_name: unitName.value || ''
+      }]
+    }
+  } catch (err) {
+    console.warn('[DataEntryView] 加载单位表格列表失败', err)
+  }
+}
+
+function saveCurrentSheetToCache(key = null) {
+  const targetKey = key || activeSheetKey.value
+  if (!targetKey) return
+  sheetCache.set(targetKey, {
+    columns: [...columns.value],
+    baseColumns: [...baseColumns.value],
+    rows: JSON.parse(JSON.stringify(rows.value || [])),
+    gridColumns: [...gridColumns.value],
+    gridSource: JSON.parse(JSON.stringify(gridSource.value || [])),
+    sheetName: sheetName.value,
+    unitName: unitName.value,
+    unitId: unitId.value,
+    templateType: templateType.value,
+    templateDicts: JSON.parse(JSON.stringify(templateDicts.value || {})),
+    submitTime: submitTime.value,
+    readOnlyThreshold: readOnlyThreshold.value,
+    linkageMap: new Map(linkageMap.value),
+    rowLabelIndex: new Map(rowLabelIndex.value),
+    templateValidationRaw: templateValidationRaw.value,
+    validationRuleMap: new Map(validationRuleMap.value),
+    validationDependents: new Map(validationDependents.value),
+    cellValidationMap: new Map(cellValidationMap.value),
+    virtualValidationRules: [...virtualValidationRules.value],
+    validationExplanationMap: new Map(validationExplanationMap.value),
+    sheetValidationEnabled: sheetValidationEnabled.value,
+    sheetAiReportEnabled: sheetAiReportEnabled.value,
+    isLoaded: true,
+  })
+}
+
+function restoreSheetFromCache(targetKey) {
+  const cached = sheetCache.get(targetKey)
+  if (!cached) return
+  columns.value = [...cached.columns]
+  baseColumns.value = [...cached.baseColumns]
+  rows.value = JSON.parse(JSON.stringify(cached.rows))
+  gridColumns.value = [...cached.gridColumns]
+  gridSource.value = JSON.parse(JSON.stringify(cached.gridSource))
+  sheetName.value = cached.sheetName
+  unitName.value = cached.unitName
+  unitId.value = cached.unitId
+  templateType.value = cached.templateType
+  templateDicts.value = JSON.parse(JSON.stringify(cached.templateDicts))
+  submitTime.value = cached.submitTime
+  readOnlyThreshold.value = cached.readOnlyThreshold
+  linkageMap.value = new Map(cached.linkageMap)
+  rowLabelIndex.value = new Map(cached.rowLabelIndex)
+  templateValidationRaw.value = cached.templateValidationRaw
+  validationRuleMap.value = new Map(cached.validationRuleMap)
+  validationDependents.value = new Map(cached.validationDependents)
+  cellValidationMap.value = new Map(cached.cellValidationMap)
+  virtualValidationRules.value = [...cached.virtualValidationRules]
+  validationExplanationMap.value = new Map(cached.validationExplanationMap)
+  sheetValidationEnabled.value = cached.sheetValidationEnabled
+  sheetAiReportEnabled.value = cached.sheetAiReportEnabled
+}
+
+async function onSwitchSheetTab(targetKey) {
+  if (!targetKey || targetKey === activeSheetKey.value || isSubmitting.value) {
+    return
+  }
+  // 1. 保存当前 sheet 的状态到缓存
+  saveCurrentSheetToCache(activeSheetKey.value)
+
+  // 2. 切换当前活跃 sheetKey
+  activeSheetKey.value = targetKey
+
+  // 3. 尝试从缓存恢复
+  if (sheetCache.has(targetKey)) {
+    restoreSheetFromCache(targetKey)
+    if (templateType.value === 'standard') {
+      rebuildValidationRulesFromRows(rows.value)
+      const linkagePayload = {
+        entries: (templateDicts.value && templateDicts.value.entries) ? templateDicts.value.entries : {},
+        linkage_dict: templateDicts.value ? templateDicts.value.linkage_dict : undefined,
+        ['指标联动']: templateDicts.value ? templateDicts.value['指标联动'] : undefined,
+      }
+      rebuildLinkageMapFromPayload(rows.value, linkagePayload, { syncGrid: false })
+      if (validationEnabled.value) {
+        runFullValidation()
+      } else {
+        clearAllValidationIssues()
+      }
+    }
+    applyReadonlyToColumns()
+  } else {
+    // 4. 首次加载该 sheet
+    await loadTemplate(targetKey)
+    saveCurrentSheetToCache(targetKey)
+  }
+
+  // 5. 替换 URL 路由，保持当前 Tab 状态
+  try {
+    router.replace({
+      params: { ...route.params, sheetKey: targetKey },
+      query: route.query,
+    })
+  } catch (err) {
+    // 忽略导航相同路由报错
+  }
+
+  // 6. 重新检查校验状态与分析开关
+  loadSheetValidationSwitch()
+  loadSheetAiSwitch()
+}
+
+function buildPayloadForCachedState(targetSheetKey, cached, currentSubmitTime) {
+  let submissionData
+  if (cached.templateType === 'crosstab') {
+    submissionData = {
+      columns: cached.columns,
+      rows: (cached.gridSource || []).map(record => cached.columns.map((_, i) => record[`c${i}`] ?? '')),
+    }
+  } else {
+    const readonlyLimit = resolveReadonlyLimit(cached.columns)
+    const filledRows = (cached.rows || []).map((row, ri) => {
+      const newRow = [...row]
+      const record = cached.gridSource?.[ri] ?? {}
+      for (let ci = readonlyLimit + 1; ci < cached.columns.length; ci++) {
+        const key = `c${ci}`
+        if (record[key] !== undefined) {
+          newRow[ci] = record[key]
+        }
+      }
+      return newRow
+    })
+    submissionData = {
+      columns: cached.columns,
+      rows: filledRows,
+    }
+  }
+
+  const payload = {
+    project_key: projectKey,
+    project_name: projectName.value || projectKey,
+    sheet_key: targetSheetKey,
+    sheet_name: cached.sheetName || targetSheetKey,
+    unit_name: cached.unitName || unitGroupName.value || '',
+    biz_date: bizDate.value,
+    unit_id: cached.unitId || '',
+    submit_time: currentSubmitTime,
+    status: 'submit',
+    ...submissionData,
+  }
+
+  const dictBundle = cached.templateDicts || {}
+  const entryMap = dictBundle.entries || {}
+  for (const [dictKey, dictValue] of Object.entries(entryMap)) {
+    payload[dictKey] = cloneDictValue(dictValue)
+  }
+  if (!payload.item_dict && dictBundle.itemPrimary) {
+    payload.item_dict = cloneDictValue(dictBundle.itemPrimary)
+  }
+  if (!payload.company_dict && dictBundle.companyPrimary) {
+    payload.company_dict = cloneDictValue(dictBundle.companyPrimary)
+  }
+  return payload
+}
+
+async function onSubmitAll() {
+  if (!canSubmitCurrentProject.value) {
+    window.alert('当前账号未获授权提交该项目日报数据。')
+    return
+  }
+  if (submitDisabled.value) {
+    window.alert('所选日期仅支持查看，不能提交修改。')
+    return
+  }
+  if (isSubmitting.value) {
+    return
+  }
+
+  // 1. 保存当前活跃表格状态
+  saveCurrentSheetToCache(activeSheetKey.value)
+
+  // 2. 补齐尚未加载过的其他表格
+  for (const s of unitSheets.value) {
+    if (!sheetCache.has(s.sheet_key)) {
+      try {
+        await onSwitchSheetTab(s.sheet_key)
+        saveCurrentSheetToCache(s.sheet_key)
+      } catch (e) {
+        console.error(`补齐加载表格 ${s.sheet_key} 失败`, e)
+      }
+    }
+  }
+
+  // 3. 统一全局校验：检查每一张表格是否有阻断性错误
+  if (validationEnabled.value) {
+    for (const s of unitSheets.value) {
+      const cached = sheetCache.get(s.sheet_key)
+      if (!cached) continue
+      const issues = Array.from(cached.cellValidationMap?.values() || [])
+      const blocking = issues.filter(issue => issue.level === 'error')
+      if (blocking.length > 0) {
+        await onSwitchSheetTab(s.sheet_key)
+        showSubmitFeedback('error', `【${cleanTabTitle(s.sheet_name, unitGroupName.value)}】存在未通过的校验项，已为您自动切换到该表，请修正后再提交。`, { autoHide: false })
+        return
+      }
+    }
+  }
+
+  // 4. 并发向后端提交全部表格
+  isSubmitting.value = true
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const currentSubmitTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+
+  try {
+    const submitTasks = unitSheets.value.map(async (s) => {
+      const cached = sheetCache.get(s.sheet_key)
+      if (!cached) return { ok: true }
+      const payload = buildPayloadForCachedState(s.sheet_key, cached, currentSubmitTime)
+      return submitData(projectKey, s.sheet_key, payload, { config: pageConfig.value })
+    })
+
+    await Promise.all(submitTasks)
+    submitTime.value = currentSubmitTime
+    for (const s of unitSheets.value) {
+      const cached = sheetCache.get(s.sheet_key)
+      if (cached) cached.submitTime = currentSubmitTime
+    }
+
+    showSubmitFeedback('success', `【${unitGroupName.value || unitName.value}】全部报表（共 ${unitSheets.value.length} 张）数据已成功一并提交入库！`)
+    startRefreshCountdown(3)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[data-entry] 一并提交失败', message)
+    clearRefreshCountdown()
+    showSubmitFeedback('error', `一并提交失败：${message || '请稍后重试'}`)
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// --- 能效报表上传与回填（支持北海、香海、供热公司） ---
+function triggerEfficiencyUpload() {
+  if (efficiencyUploading.value) return
+  if (efficiencyFileInputRef.value) {
+    efficiencyFileInputRef.value.value = ''
+    efficiencyFileInputRef.value.click()
+  }
+}
+
+async function onEfficiencyFileSelected(event) {
+  const files = event?.target?.files
+  if (!files || !files.length) return
+  const file = files[0]
+  if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+    alert('请选择 Excel 文件（.xlsx 或 .xls）')
+    return
+  }
+
+  const unitType = currentEfficiencyUnitType.value
+  const unitDisplayName = unitType === 'beihai' ? '北海热电厂' : (unitType === 'xianghai' ? '香海热电厂' : '供热公司')
+
+  efficiencyUploading.value = true
+  showSubmitFeedback('info', `正在智能解析${unitDisplayName}能效报表（业务日期: ${bizDate.value}）…`, { autoHide: false })
+  try {
+    let res = null
+    if (unitType === 'beihai') {
+      res = await uploadBeihaiEfficiencyReport(projectKey, file, bizDate.value)
+    } else if (unitType === 'xianghai') {
+      res = await uploadXianghaiEfficiencyReport(projectKey, file, bizDate.value)
+    } else if (unitType === 'gongre') {
+      res = await uploadGongreEfficiencyReport(projectKey, file, bizDate.value)
+    } else {
+      throw new Error('当前单位暂不支持能效报表上传解析')
+    }
+
+    if (!res || !res.ok) {
+      throw new Error(res?.message || '解析能效分析表失败')
+    }
+
+    await applyEfficiencyDataToSheets(res.data)
+
+    showSubmitFeedback(
+      'success',
+      `🎉 ${res.summary?.message || `已成功自动识别填入${unitDisplayName}报表本期数据！`}（同期值严格保持原状未修改，请核对各标签页确认无误后点击“一并提交”入库）。`,
+      { autoHide: false }
+    )
+  } catch (err) {
+    console.error('[DataEntryView] 解析能效分析表失败', err)
+    showSubmitFeedback('error', `解析能效报表失败：${err.message || String(err)}`, { autoHide: false })
+  } finally {
+    efficiencyUploading.value = false
+    if (event?.target) event.target.value = ''
+  }
+}
+
+function findRowIndexInList(rowsList, cell) {
+  if (!Array.isArray(rowsList)) return -1
+  const targetLabel = String(cell.row_label || '').trim()
+  const targetSub = cell.sub_label ? String(cell.sub_label).trim() : ''
+  if (targetSub) {
+    const found = rowsList.findIndex(row => {
+      const c0 = String(row.c0 || '').trim()
+      const c1 = String(row.c1 || '').trim()
+      const labelMatch = c0 === targetLabel || c0.includes(targetLabel) || targetLabel.includes(c0)
+      const subMatch = c1 === targetSub || c1.startsWith(targetSub) || targetSub.startsWith(c1)
+      return labelMatch && subMatch
+    })
+    if (found !== -1) return found
+  }
+  return rowsList.findIndex(row => String(row.c0 || '').trim() === targetLabel)
+}
+
+function isPeerColumnForTable(colIdx, tableCols, baseCols = null) {
+  if (!Array.isArray(tableCols) || colIdx < 0 || colIdx >= tableCols.length) return false
+  if (Array.isArray(baseCols) && typeof baseCols[colIdx] === 'string') {
+    const raw = baseCols[colIdx]
+    if (raw.includes('同期') || raw.includes('去年')) return true
+  }
+  const cName = String(tableCols[colIdx] ?? '')
+  if (cName.includes('同期') || cName.includes('去年')) return true
+  const peerStr = peerDateYYYYMMDD(bizDate.value)
+  if (peerStr && cName.includes(peerStr)) return true
+  if (tableCols.length === 5 && colIdx === 3 && !cName.includes('本期')) {
+    return true
+  }
+  return false
+}
+
+async function applyEfficiencyDataToSheets(sheetsData) {
+  if (!sheetsData || typeof sheetsData !== 'object') return
+
+  saveCurrentSheetToCache(activeSheetKey.value)
+
+  const NOTE_ONLY_LABELS = new Set(['主设备启停情况', '设备启停情况', '突发情况说明'])
+
+  for (const [sheetKey, sheetPayload] of Object.entries(sheetsData)) {
+    const cells = sheetPayload?.cells || []
+    if (!cells.length) continue
+
+    if (sheetKey === activeSheetKey.value) {
+      // 当前活动表格
+      const curCols = columns.value || []
+      const curBaseCols = baseColumns.value || []
+      let updatedCount = 0
+      for (const cell of cells) {
+        const targetLabel = String(cell.row_label || '').trim()
+        const rIdx = findRowIndexInList(gridSource.value, cell)
+        if (rIdx === -1) continue
+
+        // 规范安全保护：设备启停情况与突发情况说明绝不写入本期或同期列，必须保留占位符，说明只能填在最后一列（备注）
+        if (NOTE_ONLY_LABELS.has(targetLabel) || String(gridSource.value[rIdx]?.c2 || '').includes('若有请填右侧')) {
+          const lastColIdx = (curCols.length || 5) - 1
+          const noteProp = `c${lastColIdx}`
+          const valStr = cell.value !== null && cell.value !== undefined ? String(cell.value).trim() : ''
+          if (valStr && valStr !== '（若有请填右侧）' && valStr !== '——→') {
+            gridSource.value[rIdx][noteProp] = valStr
+            if (rows.value && rows.value[rIdx]) rows.value[rIdx][lastColIdx] = valStr
+            updatedCount++
+          }
+          continue
+        }
+
+        let targetCol = (cell.col_index !== undefined && cell.col_index !== null) ? Number(cell.col_index) : -1
+        if (targetCol === -1) {
+          const currentIdx = curCols.findIndex(c => String(c ?? '').includes('本期'))
+          targetCol = currentIdx !== -1 ? currentIdx : 2
+        }
+        // 安全保护：表级严格判定，严禁向同期列写入数据
+        if (isPeerColumnForTable(targetCol, curCols, curBaseCols)) continue
+
+        const valStr = cell.value !== null && cell.value !== undefined ? String(cell.value) : ''
+        const colProp = `c${targetCol}`
+        gridSource.value[rIdx][colProp] = valStr
+        if (rows.value && rows.value[rIdx]) rows.value[rIdx][targetCol] = valStr
+        updatedCount++
+      }
+      if (updatedCount > 0) {
+        gridSource.value = [...gridSource.value]
+        // 联动关联行同步
+        const map = linkageMap.value
+        if (map instanceof Map && map.size > 0) {
+          for (let r = 0; r < gridSource.value.length; r++) {
+            const related = map.get(r)
+            if (related && related.size > 0) {
+              const val = gridSource.value[r]?.c2
+              related.forEach(linkedIdx => {
+                if (gridSource.value[linkedIdx]) {
+                  gridSource.value[linkedIdx].c2 = val
+                  if (rows.value && rows.value[linkedIdx]) rows.value[linkedIdx][2] = val
+                }
+              })
+            }
+          }
+        }
+        // 校验当前表所有行
+        if (validationEnabled.value && templateType.value === 'standard') {
+          for (let r = 0; r < gridSource.value.length; r++) {
+            validateRow(r)
+          }
+        }
+        saveCurrentSheetToCache(activeSheetKey.value)
+      }
+    } else {
+      // 其它子表格（缓存在 sheetCache）
+      let cached = sheetCache.get(sheetKey)
+      if (!cached) {
+        try {
+          const rawTpl = await getTemplate(projectKey, sheetKey, { config: pageConfig.value })
+          if (rawTpl && Array.isArray(rawTpl.rows)) {
+            // 处理列头日期占位符（生成权威日期列头，如 2026-11-05 与 2025-11-05）
+            const baseCols = Array.isArray(rawTpl.columns) ? [...rawTpl.columns] : []
+            const renderedCols = isDailyPage.value ? replaceDatePlaceholdersInColumns(baseCols) : baseCols
+            rawTpl.columns = renderedCols
+            const { template: tpl } = applyTemplatePlaceholders(rawTpl)
+
+            // 关键：必须调用 queryData 镜像查询，拉取该表在当前业务日期下的数据库已存数据（尤其是同期值！）
+            let tplRows = tpl.rows || []
+            try {
+              const q = await queryData(
+                projectKey,
+                sheetKey,
+                { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value },
+                { config: pageConfig.value }
+              )
+              if (q && Array.isArray(q.rows)) {
+                tplRows = q.rows
+              }
+            } catch (qErr) {
+              console.warn('[DataEntryView] 预加载子表格 queryData 失败', sheetKey, qErr)
+            }
+
+            const readonlyLimit = resolveReadonlyLimit(tpl.columns)
+            const isConstant = (tpl.template_type || 'standard') === 'constant'
+            const gridCols = (tpl.columns || []).map((name, index) => {
+              const isConstantPeer = isConstant && (index === tpl.columns.length - 1) && (index > readonlyLimit)
+              const isPeer = isPeerColumnIndex(index, name)
+              const locked = index <= readonlyLimit || isConstantPeer || (!isGlobalAdmin.value && isPeer)
+              return {
+                prop: `c${index}`,
+                name: String(name ?? '') + (!isGlobalAdmin.value && isPeer ? ' 🔒' : ''),
+                size: index === 0 ? 220 : 120,
+                __locked: locked,
+                readonly: locked || isReadOnlyForDate.value,
+              }
+            })
+
+            const src = tplRows.map(row => {
+              const rec = {}
+              for (let ci = 0; ci < (tpl.columns?.length || 5); ci++) {
+                rec[`c${ci}`] = (row?.[ci] !== null && row?.[ci] !== undefined) ? String(row[ci]) : ''
+              }
+              return rec
+            })
+
+            sheetCache.set(sheetKey, {
+              columns: tpl.columns || [],
+              baseColumns: baseCols,
+              rows: JSON.parse(JSON.stringify(tplRows)),
+              gridColumns: gridCols,
+              gridSource: src,
+              sheetName: tpl.sheet_name || sheetKey,
+              unitName: tpl.unit_name || unitGroupName.value || '',
+              unitId: tpl.unit_id || '',
+              templateType: tpl.template_type || 'standard',
+              templateDicts: tpl.dicts || {},
+              submitTime: '',
+              readOnlyThreshold: readonlyLimit,
+              linkageMap: new Map(),
+              rowLabelIndex: new Map(),
+              templateValidationRaw: tpl.validation || null,
+              validationRuleMap: new Map(),
+              validationDependents: new Map(),
+              cellValidationMap: new Map(),
+              virtualValidationRules: [],
+              validationExplanationMap: new Map(),
+              sheetValidationEnabled: true,
+              sheetAiReportEnabled: false,
+              isLoaded: true,
+            })
+            cached = sheetCache.get(sheetKey)
+          }
+        } catch (e) {
+          console.warn('[DataEntryView] 预加载子表格失败', sheetKey, e)
+        }
+      }
+
+      if (cached && Array.isArray(cached.gridSource)) {
+        const cachedCols = cached.columns || []
+        const cachedBaseCols = cached.baseColumns || []
+        for (const cell of cells) {
+          const targetLabel = String(cell.row_label || '').trim()
+          const rIdx = findRowIndexInList(cached.gridSource, cell)
+          if (rIdx === -1) continue
+
+          if (NOTE_ONLY_LABELS.has(targetLabel) || String(cached.gridSource[rIdx]?.c2 || '').includes('若有请填右侧')) {
+            const lastColIdx = (cachedCols.length || 5) - 1
+            const noteProp = `c${lastColIdx}`
+            const valStr = cell.value !== null && cell.value !== undefined ? String(cell.value).trim() : ''
+            if (valStr && valStr !== '（若有请填右侧）' && valStr !== '——→') {
+              cached.gridSource[rIdx][noteProp] = valStr
+              if (cached.rows && cached.rows[rIdx]) cached.rows[rIdx][lastColIdx] = valStr
+            }
+            continue
+          }
+
+          let targetCol = (cell.col_index !== undefined && cell.col_index !== null) ? Number(cell.col_index) : -1
+          if (targetCol === -1) {
+            const currentIdx = cachedCols.findIndex(c => String(c ?? '').includes('本期'))
+            targetCol = currentIdx !== -1 ? currentIdx : 2
+          }
+          if (isPeerColumnForTable(targetCol, cachedCols, cachedBaseCols)) continue
+
+          const valStr = cell.value !== null && cell.value !== undefined ? String(cell.value) : ''
+          const colProp = `c${targetCol}`
+          cached.gridSource[rIdx][colProp] = valStr
+          if (cached.rows && cached.rows[rIdx]) cached.rows[rIdx][targetCol] = valStr
+        }
+      }
+    }
   }
 }
 
@@ -1846,6 +2571,11 @@ function handleAfterEdit(evt) {
   for (const change of changes) {
     const { rowIndex, prop, val } = change || {};
     if (rowIndex == null || !prop) continue;
+    // 非 Global_admin 用户严禁修改同期值列
+    const colIdx = parseInt(String(prop).replace('c', ''), 10);
+    if (!isNaN(colIdx) && !isGlobalAdmin.value && isPeerColumnIndex(colIdx)) {
+      continue;
+    }
     if (!gridSource.value[rowIndex]) continue;
     gridSource.value[rowIndex][prop] = val;
     const isStandardTemplate = templateType.value === 'standard';
@@ -1891,9 +2621,11 @@ function handleAfterEdit(evt) {
 onMounted(async () => {
   await nextTick();
   await ensureProjectsLoaded().catch(() => {});
+  await loadUnitSheets();
   await loadSheetValidationSwitch();
   await loadSheetAiSwitch();
   await loadTemplate();
+  saveCurrentSheetToCache(activeSheetKey.value);
 });
 
 // --- 遗留功能：仅用于标准模板 ---
@@ -1988,6 +2720,8 @@ const stop = watch(
   () => bizDate.value,
   async () => {
     if (isLoadingTemplate.value) return;
+    // 日期变更时清空多表旧日期缓存
+    sheetCache.clear();
     if (templateType.value === 'standard') {
       if (!Array.isArray(baseColumns.value) || !baseColumns.value.length) return;
       const recalculated = replaceDatePlaceholdersInColumns(baseColumns.value);
@@ -2003,14 +2737,15 @@ const stop = watch(
       const __rid4 = newRequestId(); latestRequestId.value = __rid4;
       const q = await queryData(
         projectKey,
-        sheetKey,
-        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, request_id: __rid4 },
+        activeSheetKey.value,
+        { project_key: projectKey, sheet_key: activeSheetKey.value, biz_date: bizDate.value, request_id: __rid4 },
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
         return
       }
       await applyStandardQueryResult(q);
+      saveCurrentSheetToCache(activeSheetKey.value);
     } catch (err) {
       // console.error('query on bizDate change failed:', err);
     }
@@ -2023,12 +2758,13 @@ watch(
   async () => {
     if (isLoadingTemplate.value) return;
     if (templateType.value !== 'crosstab') return;
+    sheetCache.clear();
     try {
       const __rid5 = newRequestId(); latestRequestId.value = __rid5;
       const q = await queryData(
         projectKey,
-        sheetKey,
-        { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value, request_id: __rid5 },
+        activeSheetKey.value,
+        { project_key: projectKey, sheet_key: activeSheetKey.value, biz_date: bizDate.value, request_id: __rid5 },
         { config: pageConfig.value }
       );
       if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
@@ -2083,6 +2819,24 @@ watch(
     loadSheetAiSwitch();
   },
 );
+
+async function loadAiFlag() {
+  try {
+    const payload = await getDataAnalysisSchema(projectKey)
+    const flags = payload?.ai_report_flags || {}
+    allowNonAdminAiReport.value = Boolean(flags.allow_non_admin)
+  } catch (err) {
+    allowNonAdminAiReport.value = false
+  }
+}
+
+watch(
+  () => pageConfig.value,
+  () => {
+    loadAiFlag()
+  },
+  { immediate: true },
+)
 
 onBeforeUnmount(() => {
   if (submitFeedbackTimer !== null) {
@@ -2269,21 +3023,149 @@ onBeforeUnmount(() => {
   }
 }
 
-</style>
-async function loadAiFlag() {
-  try {
-    const payload = await getDataAnalysisSchema(projectKey)
-    const flags = payload?.ai_report_flags || {}
-    allowNonAdminAiReport.value = Boolean(flags.allow_non_admin)
-  } catch (err) {
-    allowNonAdminAiReport.value = false
-  }
+/* 多表格单位 Tabs 栏样式 */
+/* 多表格单位现代分段胶囊标签栏 (Segmented Pill Tabs) */
+.unit-tabs-nav-wrapper {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.unit-tabs-nav-wrapper::-webkit-scrollbar {
+  display: none;
 }
 
-watch(
-  () => pageConfig.value,
-  () => {
-    loadAiFlag()
-  },
-  { immediate: true },
-)
+.unit-tabs-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.unit-tab-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unit-tab-pill:hover:not(.unit-tab-pill--active) {
+  color: #1e293b;
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.unit-tab-pill--active {
+  background-color: #ffffff !important;
+  color: #1d4ed8 !important;
+  font-weight: 600;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+.tab-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background-color: #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.unit-tab-pill--active .tab-index {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.tab-name {
+  line-height: 1.2;
+}
+
+.tab-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  margin-left: 2px;
+}
+
+.tab-status-dot--success {
+  background-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.tab-status-dot--error {
+  background-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+
+/* 顶部操作区按钮优化 */
+.efficiency-upload-btn {
+  font-weight: 600 !important;
+  color: #0369a1 !important;
+  background: #f0f9ff !important;
+  border: 1px solid #bae6fd !important;
+  border-radius: 8px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.efficiency-upload-btn:hover {
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0284c7 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.15);
+}
+
+.submit-all-btn {
+  font-weight: 600 !important;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border-color: #047857 !important;
+  box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+  transition: all 0.2s ease;
+}
+.submit-all-btn:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.25);
+  transform: translateY(-1px);
+}
+.text-btn {
+  font-size: 13px !important;
+  color: #64748b !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  padding: 6px 10px !important;
+}
+.text-btn:hover {
+  color: #1e293b !important;
+  background: #f1f5f9 !important;
+}
+</style>

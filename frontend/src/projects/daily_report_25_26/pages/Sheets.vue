@@ -38,34 +38,41 @@
         </header>
         <div v-if="loading" class="sheet-state">表格列表加载中，请稍候…</div>
         <div v-else-if="errorMessage" class="sheet-state error">{{ errorMessage }}</div>
-        <div v-else>
-          <div v-for="group in groupedSheets" :key="group.groupKey" class="sheet-group">
-            <h3 class="group-title">{{ group.groupName }}</h3>
-            <div class="card-grid">
-              <button
-                v-for="sheet in group.items"
-                :key="sheet.sheet_key"
-                type="button"
-                class="card elevated sheet-card"
-                @click="openSheet(sheet)"
+        <div v-else class="unit-card-grid">
+          <button
+            v-for="group in groupedSheets"
+            :key="group.groupKey"
+            type="button"
+            class="card elevated unit-card"
+            @click="openUnit(group)"
+          >
+            <div class="unit-card-header">
+              <div class="unit-card-title">{{ group.groupName }}</div>
+              <div
+                class="status-indicator"
+                :class="getUnitStatus(group).statusClass"
+                :title="getUnitStatus(group).title"
               >
-                <div class="sheet-card-header">
-                  <div class="sheet-card-title">{{ sheet.sheet_name }}</div>
-                  <div 
-                    class="status-indicator" 
-                    :class="{ 
-                      'status-indicator--partial': getSheetStatus(sheet.sheet_key)?.count > 0 && (!getSheetStatus(sheet.sheet_key)?.expected || getSheetStatus(sheet.sheet_key).count / getSheetStatus(sheet.sheet_key).expected < 0.85),
-                      'status-indicator--complete': getSheetStatus(sheet.sheet_key)?.count > 0 && getSheetStatus(sheet.sheet_key)?.expected > 0 && getSheetStatus(sheet.sheet_key).count / getSheetStatus(sheet.sheet_key).expected >= 0.85
-                    }"
-                    :title="getSheetStatus(sheet.sheet_key)?.text ? `填报进度: ${getSheetStatus(sheet.sheet_key).text}` : '暂无数据提交'"
-                  >
-                    <span class="status-text">{{ getSheetStatus(sheet.sheet_key)?.text || '' }}</span>
-                  </div>
-                </div>
-                <div class="sheet-card-desc">填报单位：{{ sheet.unit_name || '未配置' }}</div>
-              </button>
+                <span class="status-text">{{ getUnitStatus(group).statusText }}</span>
+              </div>
             </div>
-          </div>
+            <div class="unit-card-body">
+              <div class="unit-card-meta">
+                <span class="unit-table-count">共 {{ group.items.length }} 张表格</span>
+              </div>
+              <div class="unit-tags-row">
+                <span
+                  v-for="sheet in group.items"
+                  :key="sheet.sheet_key"
+                  class="unit-sheet-pill"
+                  :title="sheet.sheet_name"
+                >
+                  <span class="pill-number" v-if="parseSheetNumber(sheet.sheet_name)">{{ parseSheetNumber(sheet.sheet_name) }}</span>
+                  <span class="pill-title">{{ cleanSheetBodyName(sheet.sheet_name, group.groupName) }}</span>
+                </span>
+              </div>
+            </div>
+          </button>
         </div>
       </section>
     </main>
@@ -209,6 +216,73 @@ function openSheet(sheet) {
     path = `${base}/sheets/${encodeURIComponent(sheet.sheet_key)}`
   }
   router.push({ path, query: { config: pageConfig.value, pageName: pageDisplayName.value } })
+}
+
+function openUnit(unit) {
+  if (!unit || !unit.items || unit.items.length === 0) return
+  openSheet(unit.items[0])
+}
+
+function getUnitStatus(unit) {
+  if (!unit || !unit.items || unit.items.length === 0) {
+    return { statusClass: '', statusText: '暂无表格', title: '暂无表格' }
+  }
+  const total = unit.items.length
+  let completeCount = 0
+  let partialCount = 0
+  for (const s of unit.items) {
+    const st = getSheetStatus(s.sheet_key)
+    if (st?.count > 0 && st?.expected > 0 && st.count / st.expected >= 0.85) {
+      completeCount++
+    } else if (st?.count > 0) {
+      partialCount++
+    }
+  }
+  if (completeCount === total) {
+    return {
+      statusClass: 'status-indicator--complete',
+      statusText: total > 1 ? `已填报 ${total}/${total}` : '已提交',
+      title: '该单位所有表格均已提交'
+    }
+  }
+  if (completeCount > 0 || partialCount > 0) {
+    return {
+      statusClass: 'status-indicator--partial',
+      statusText: `已填报 ${completeCount}/${total}`,
+      title: `该单位已填报 ${completeCount}/${total} 张表格`
+    }
+  }
+  return {
+    statusClass: '',
+    statusText: total > 1 ? `共 ${total} 张表` : '待填报',
+    title: '暂未提交数据'
+  }
+}
+
+function parseSheetNumber(sheetName) {
+  if (!sheetName) return ''
+  const m = String(sheetName).match(/^(\d+)[\.、\s]*/)
+  return m ? m[1] : ''
+}
+
+function cleanSheetBodyName(sheetName, unitName) {
+  if (!sheetName) return ''
+  let s = String(sheetName)
+  // 去除序号部分
+  s = s.replace(/^\d+[\.、\s]*/, '').trim()
+  // 去除单位名重复
+  if (unitName && s.includes(unitName)) {
+    const trimmed = s.replace(unitName, '').trim()
+    if (trimmed && trimmed !== '表' && trimmed !== '（表）' && trimmed !== '()') {
+      s = trimmed
+    }
+  }
+  // 去除外层括号
+  s = s.replace(/^[（\(](.*?)[）\)]/, '$1').trim()
+  if (!s.endsWith('表')) {
+    s += '表'
+  }
+  return s || sheetName
 }
 
 onMounted(() => {
@@ -433,5 +507,134 @@ watch(projectKey, () => {
 .sheet-card-desc {
   font-size: 14px;
   color: var(--neutral-500);
+}
+
+.unit-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .unit-card-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.unit-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unit-card:hover {
+  transform: translateY(-3px);
+  border-color: #3b82f6;
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.15), 0 8px 10px -6px rgba(59, 130, 246, 0.1);
+}
+
+.unit-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.unit-card-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.unit-card-meta {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.unit-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+}
+
+.unit-sheet-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background-color: #f1f5f9;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.pill-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background-color: #e2e8f0;
+  color: #1e293b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pill-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-card:hover .unit-sheet-pill {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.unit-card:hover .pill-number {
+  background-color: #dbeafe;
+  color: #1d4ed8;
 }
 </style>

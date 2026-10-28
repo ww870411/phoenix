@@ -1,3 +1,81 @@
+## 2026-10-28 每日数据填报：香海热电厂与供热公司能效报表上传与多表自动回填系统
+
+- **前端能效报表上传入口与跨表回填引擎升级 (`DataEntryView.vue`)**：
+  - [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)：
+    1. **多主体自适应上传入口 (`currentEfficiencyUnitType`)**：根据当前活动填报主体智能识别（北海、香海、供热），在顶部操作栏自适应展示专属【📁 上传能效分析表】按钮与悬浮提示；
+    2. **分发解析通信**：针对香海调用 `uploadXianghaiEfficiencyReport`，针对供热调用 `uploadGongreEfficiencyReport`；
+    3. **回填引擎全面增强 (`applyEfficiencyDataToSheets`)**：
+       - **复合行精准定位 (`findRowIndexInList`)**：支持单一指标行（`row_label`）与双字段复合明细行（`row_label` + `sub_label`），中心名称自适应支持简称（如“华乐”）与全称（“华乐中心”）双向模糊匹配；
+       - **表级同期列安全判定与隔离 (`isPeerColumnForTable`)**：废除全局列头绑定判定，改为根据具体子表的实际列头（如 6 列分中心明细表）进行同期判定，彻底解决由于全局 5 列规则导致分中心本期列（c3）被误判为同期列而遭跳过的致命隐患；
+       - **指定列索引自适应回填**：优先采用指定的 `col_index`，未指定时自适应定位包含“本期”字样的列索引，杜绝写错列；
+       - **同期值双重物理隔离**：无论是普通表（`c3`）还是分中心明细表（`c4`），同期日列均处于绝对锁死状态，严禁修改；
+       - **备注列与占位符强守护**：“主设备启停情况”与“突发情况说明”严格保留 `c2: （若有请填右侧）` 和 `c3: ——→` 占位符，不伪造记事；
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)：
+    1. 封装 `uploadXianghaiEfficiencyReport` 和 `uploadGongreEfficiencyReport` 通信函数。
+
+## 2026-10-28 每日数据填报：北海热电厂能效报表上传与三表自动回填系统
+
+- **前端能效报表上传入口与跨表回填 (`DataEntryView.vue`)**：
+  - [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)：
+    1. **北海专属操作入口**：检测到北海热电厂填报主体时，顶部操作栏呈现【📁 上传能效分析表】专属按钮；
+    2. **Excel 文件解析通信**：用户选择 `.xlsx` 文件后，携带当前选择的业务日期 `bizDate` 调用后端解析接口；
+    3. **严格本期回填与同期值锁定**：数据回填严格限定写入 `c2` 列（当日填报值），`c3` 列（同期值）被绝对物理隔离且结合只读属性双重锁定，绝不更改历史同期基准；
+    4. **未激活子表完整镜像预加载 (`applyEfficiencyDataToSheets`)**：针对未点击过的后台子表（水炉、天然气炉），在注入能效数据前同步调用 `queryData` 拉取数据库真实同期值与已存数据，杜绝由于跳过初次加载导致的同期值丢失，同时在切换 Tab 时重新执行规则校验与权限锁定；
+    5. **启停与突发指标占位符与备注列守护**：“主设备启停情况”与“突发情况说明”行本期与同期列严格锁定占位提示（`c2: （若有请填右侧）`，`c3: ——→`），严禁自动写入 `c2`，有效文本强制落入最后一列备注列（`c4`）。
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)：
+    1. 封装 `uploadBeihaiEfficiencyReport` 支持文件流与日期参数的标准上传交互。
+
+## 2026-10-28 每日数据填报：正常情况下两栏等宽布局重构（双栏严格 50% 对齐）
+
+- **双栏等宽主体卡片网格 (`Sheets.vue`)**：
+  - [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)：
+    1. **正常情况下两栏严格等宽**：网格设定为 `grid-template-columns: repeat(2, minmax(0, 1fr))`，间距 `gap: 20px`，左右两栏各占 50% 均等宽度；
+    2. **响应式与卡片盒模型**：屏幕 <= 640px 自动折叠为单栏，卡片使用 `width: 100%; min-width: 0; box-sizing: border-box; justify-content: space-between;`，确保每个主体框体宽度严格一致。
+
+## 2026-10-28 每日数据填报：填报主体卡片宽度统一与严格等宽网格重构
+
+- **主体卡片严格等宽九宫格布局 (`Sheets.vue`)**：
+  - [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)：
+    1. **三列严格等宽网格**：将原弹性自适应列宽重构为 `grid-template-columns: repeat(3, minmax(0, 1fr))`，配合响应式断点（860px 2 列，560px 1 列），消除由于长表名或多标签产生的列宽差异；
+    2. **盒模型与文本防撑开处理**：卡片声明 `width: 100%; min-width: 0; box-sizing: border-box;`，内部标题与标签文字引入 `overflow: hidden; text-overflow: ellipsis;`，确保 9 大填报单位（北海、香海、供热、金州、北方、金普、庄河、研究院、售电）卡片宽度绝对一致。
+
+## 2026-10-28 每日数据填报：同期值字段权限精细化管控（除 Global_admin 之外全量锁定只读）
+
+- **同期值列只读锁定与多重拦截防御 (`DataEntryView.vue`)**：
+  - [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)：
+    1. **权限判定分流**：基于 `group` 判定当前用户是否为 `Global_admin`；
+    2. **同期列特征识别 (`isPeerColumnIndex`)**：自动识别包含“同期”、“去年”或上年同期计算日期对应列，以及标准生产日报的第 3 列（同期值列）；
+    3. **列定义锁定**：对非 `Global_admin` 用户，将同期值列属性强制设置为 `readonly: true` 与 `__locked: true`，并在表头附加只读锁徽标（如 `2025-11-15 🔒`）；
+    4. **事件级硬拦截防御 (`handleAfterEdit`)**：在单元格提交修改事件处增加权限守卫拦截，非 `Global_admin` 用户对同期列的任何输入尝试将被直接拒绝并强制复原。
+
+## 2026-10-28 每日数据填报：表格序号恢复与现代分段胶囊标签栏 (Segmented Pill Tabs) 优化
+
+- **列表卡片独立序号徽标体系 (`Sheets.vue`)**：
+  - [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)：
+    1. **序号全面恢复**：引入 `parseSheetNumber` 与 `cleanSheetBodyName`，在单位卡片内将表格序号解构成独立的深色数字徽标 `.pill-number`（如 `[1]`、`[2]`、`[3]`、`[5]`、`[6]`），杜绝序号丢失；
+    2. **悬停提示**：鼠标悬停胶囊时提示完整的原始表名；
+- **现代分段胶囊标签栏 (Segmented Pill Tabs) (`DataEntryView.vue`)**：
+  - [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)：
+    1. **极简轻量底槽**：彻底删除外围厚重边框卡片与生硬的“单位报表切换：”文本，引入类似 Linear/macOS 的现代分段胶囊底槽 `.unit-tabs-nav`；
+    2. **多态悬浮胶囊**：激活项为纯白立体浮雕卡片（细腻投射微阴影与品牌蓝文字），未激活项为柔和低饱和过渡；
+    3. **数字圆标与极简状态微光**：每个 Tab 拥有高对比度的序号方标 `.tab-index`，右侧配备已提交（翡翠微光点）与异常（红点）的呼吸光点，排版专业通透；
+    4. **提交按钮视觉调优**：一并提交按钮赋予高质感翡翠绿渐变与层次微阴影。
+
+## 2026-10-28 每日数据填报：单位聚合入口归一化与多表格标签页（Tabs）一并提交
+
+- **单位入口归一化与卡片聚合 (`Sheets.vue`)**：
+  - [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)：
+    1. **单位聚合卡片网格**：废弃原先按单位分组后在每组下平铺多张小表格的离散排版，将每个填报单位（北海热电厂、香海热电厂、供热公司等）聚合为唯一的实体入口卡片；
+    2. **表格概览与胶囊标签**：卡片上醒目展示该单位包含的表格总数与各表简略胶囊（如北海：`热电联产` / `水炉` / `天然气炉`）；
+    3. **单位综合进度指示**：动态汇总各子表填报进度，呈现“已填报 X/Y”及完成状态指示；
+- **多表格 Tabs 标签页导航与内存保活 (`DataEntryView.vue`)**：
+  - [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)：
+    1. **智能识别单位下属子表格**：进入填报页面时，动态检索当前单位归属的所有表格清单 `unitSheets`；
+    2. **顶部多表 Tabs 栏**：在多表单位下自动激活标签栏，支持自由切换子表格；
+    3. **内存多表状态缓存 (`sheetCache`)**：切换标签页时完整保存当前表格的编辑源、校验状态与修改标记，切表无网络开销、毫秒级秒切且用户输入不丢失；
+    4. **全局统一业务日期**：单位层面统领单一业务日期 `bizDate`，杜绝多张子表各自选错日期的隐患；
+    5. **一键“一并提交”**：提供【一并提交全部表格 (共X张)】主按钮，自动统一前置校验全部表格；若有阻断性校验项自动精准定位切换到报错 Tab；全部通过后以 `Promise.all` 并发提交入库并给出汇总反馈。
+
 ## 2026-10-28 调度信息系统：面包屑上一级项目名称秒级同步直显与零闪烁（LocalStorage 缓存持久化）
 
 - **项目元数据本地同步持久化与供暖期对齐**：

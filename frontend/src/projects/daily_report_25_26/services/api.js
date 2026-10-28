@@ -1442,6 +1442,66 @@ export async function getMonthlyDataShowAiReport(projectKey, jobId) {
   return response.json()
 }
 
+export async function uploadBeihaiEfficiencyReport(projectKey, file, bizDate) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('biz_date', bizDate)
+
+  const response = await authAwareFetch(
+    `${projectPath(projectKey)}/data_entry/beihai/parse_efficiency_report`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(),
+      body: formData,
+    },
+  )
+  const result = await response.json()
+  if (!response.ok || !result.ok) {
+    throw new Error(result?.message || `解析能效报表失败: ${response.status}`)
+  }
+  return result
+}
+
+export async function uploadXianghaiEfficiencyReport(projectKey, file, bizDate) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('biz_date', bizDate)
+
+  const response = await authAwareFetch(
+    `${projectPath(projectKey)}/data_entry/xianghai/parse_efficiency_report`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(),
+      body: formData,
+    },
+  )
+  const result = await response.json()
+  if (!response.ok || !result.ok) {
+    throw new Error(result?.message || `解析香海能效报表失败: ${response.status}`)
+  }
+  return result
+}
+
+export async function uploadGongreEfficiencyReport(projectKey, file, bizDate) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('biz_date', bizDate)
+
+  const response = await authAwareFetch(
+    `${projectPath(projectKey)}/data_entry/gongre/parse_efficiency_report`,
+    {
+      method: 'POST',
+      headers: attachAuthHeaders(),
+      body: formData,
+    },
+  )
+  const result = await response.json()
+  if (!response.ok || !result.ok) {
+    throw new Error(result?.message || `解析供热公司能效报表失败: ${response.status}`)
+  }
+  return result
+}
+
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
   const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {
