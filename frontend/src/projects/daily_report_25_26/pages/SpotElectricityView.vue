@@ -1317,7 +1317,7 @@ import {
 const route = useRoute()
 const router = useRouter()
 const projectKey = String(route.params.projectKey || 'daily_report_25_26')
-const projectName = computed(() => getProjectNameById(projectKey) || '2025-2026供暖期生产日报')
+const projectName = computed(() => getProjectNameById(projectKey) || '2026-2027供暖期生产日报')
 
 const pageDisplayName = computed(() => {
   const raw = route.query.pageName

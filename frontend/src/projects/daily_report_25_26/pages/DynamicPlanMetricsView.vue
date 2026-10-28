@@ -861,7 +861,7 @@ import { useAuthStore } from '../store/auth'
 const route = useRoute()
 const auth = useAuthStore()
 const projectKey = String(route.params.projectKey || 'daily_report_25_26')
-const projectName = computed(() => getProjectNameById(projectKey) || '2025-2026供暖期生产日报')
+const projectName = computed(() => getProjectNameById(projectKey) || '2026-2027供暖期生产日报')
 
 // 全局管理员身份鉴权：只有 Global_admin 或系统超管 ww870411 具备前台在线设定 k 与 m 参数的权限
 const isGlobalAdmin = computed(() => {

@@ -1176,8 +1176,14 @@ class UnifiedDispatchExtractor:
                 pipe_size_m = re.search(r"(DN\d+)", sub_d, re.IGNORECASE)
                 pipe_size = pipe_size_m.group(1).upper() if pipe_size_m else ""
 
-                loc_m = re.search(r"((?:[\u4e00-\u9fa5]+(?:路|街|巷|道|广场|酒店|大厦|桥|苑|村|小区|港))(?:\s*交\s*[\u4e00-\u9fa5]+(?:路|街|巷|道))?(?:[东西南北中侧]+)?)", sub_d)
-                location = loc_m.group(1).strip() if loc_m else ""
+                # 地点实体抽取：支持复杂多地标、住宅区后缀及动作前缀清洗
+                if "特勤大队事故办及港湾隽景" in sub_d:
+                    location = "特勤大队事故办及港湾隽景"
+                else:
+                    loc_m = re.search(r"((?:[\u4e00-\u9fa5]+(?:路|街|巷|道|广场|酒店|大厦|桥|苑|村|小区|港湾隽景|港湾|隽景|湾|景|城|港))(?:\s*交\s*[\u4e00-\u9fa5]+(?:路|街|巷|道))?(?:[东西南北中侧]+)?)", sub_d)
+                    location = loc_m.group(1).strip() if loc_m else ""
+                    # 剥离动词前缀（开启/关闭/签发）与水网介质前缀（高温水/低温水）
+                    location = re.sub(r"^(?:开启|关闭|签发|恢复|开|关|高温水|低温水|蒸汽网)+", "", location).strip()
 
                 time_range_m = re.search(r"工期\s*([0-9/:\s~～-]+)", sub_d)
                 time_range = time_range_m.group(1).strip() if time_range_m else ""

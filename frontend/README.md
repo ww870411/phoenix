@@ -1,3 +1,146 @@
+## 2026-10-28 调度信息系统：面包屑上一级项目名称秒级同步直显与零闪烁（LocalStorage 缓存持久化）
+
+- **项目元数据本地同步持久化与供暖期对齐**：
+  - [`useProjects.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/composables/useProjects.js)：
+    1. **LocalStorage 同步初始化缓存**：引入 `PROJECTS_STORAGE_KEY = 'phoenix_projects_cache'`，在页面首帧执行时同步反序列化本地缓存项目列表，从根源消除等待 API 网络回包过程中的闪烁；
+    2. **基准年度兜底对齐**：将静态缺省常量表及各页面 fallback 全量校准为当前激活的【`2026-2027供暖期生产日报`】，冷启动首屏与接口响应完全一致，消灭跳变；
+  - 各业务子页面（[`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)、[`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue)、[`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)、[`SpotElectricityView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue)）：
+    1. 同步校准本地项目名称缺省兜底值，实现秒开零闪烁。
+
+## 2026-10-28 调度信息系统：面包屑导航上一级项目名称动态解析与离线兜底加固
+
+- **上一级项目名称及当前页名称全动态响应**：
+  - [`useProjects.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/composables/useProjects.js)：
+    1. **静态兜底映射保障**：增加 `KNOWN_PROJECT_NAMES` 常量表（`daily_report_25_26 -> 2025-2026供暖期生产日报` 等），当全局状态未加载或接口尚未返回时，杜绝向用户暴露裸露的英文 ID 字符串；
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **全局项目列表生命周期挂载**：在 `onMounted` 钩子中主动执行 `ensureProjectsLoaded().catch(() => {})`，支持用户通过收藏夹、直接输 URL 或 F5 刷新时自动向后端同步最新项目中文标题；
+    2. **三级面包屑动态绑定**：
+       - 第一级：固定【项目选择】（`/projects`）；
+       - 第二级（上一级）：动态呈现【`2025-2026供暖期生产日报`】（`/projects/:projectKey/pages`）；
+       - 第三级（当前页）：响应 `route.query.pageName`，缺省回显【调度信息】。
+
+## 2026-10-28 调度信息系统：机炉分栏卡片等宽像素级对齐（消除不对称内边距，引入居中中缝虚线）
+
+- **双栏内容空间严格 1:1 对等与中轴虚线对齐**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **消除 `.col-right` 不对称内边距**：
+       - 原先 `.col-right` 设置了 `border-left: 1px dashed` 与 `padding-left: 1.25rem`，因 `box-sizing: border-box` 导致右侧卡片实际宽度比左侧卡片缩窄 21px；
+       - 现将 `.col-right` 的 `padding-left` 置零并移除左边框，使左右两列小卡片的基础可用内容宽度实现真正的 50% / 50% 像素级对等；
+    2. **中轴居中虚线伪元素 (`.plant-split-columns::after`)**：
+       - 网格间距设定为 `gap: 1.5rem`，并在容器中轴 (`left: calc(50% - 0.5px)`) 挂载虚线分割伪元素，左右两边各对称享有 12px 的呼吸间距，彻底消除视觉宽度差异。
+
+## 2026-10-28 调度信息系统：燃气锅炉标头极简化（统一单一“锅炉”总标头，消除冗余子分组）
+
+- **统一大标头与无嵌套双列等宽呈现**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **移除冗余子分组标头**：
+       - 彻底删除左右分列各自的【🔥 锅炉 (1# - 5#)】与【🔥 锅炉 (6# - 10#)】小标题，避免卡片内部多重嵌套；
+       - 主体顶部统领单一干净的【🔥 锅炉 (X/10 运行)】标头，全局统计数据清晰直观；
+    2. **物理排版保持双列等宽**：
+       - 标头下方直接对半分为左列（1# - 5#）与右列（6# - 10#），采用 50% / 50% 严格等宽网格排布，兼顾设备紧凑展示与工业级看板的纯粹视觉。
+
+## 2026-10-28 调度信息系统：燃气锅炉双列等宽拆分（左1-5/右6-10）与分栏50/50绝对等宽锁死
+
+- **多炉主体对半分列与网格绝对等宽架构**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **燃气锅炉双列等宽拆分**：
+       - 针对 10 台燃气锅炉单列过长问题，将其按编号对半划分为左列【🔥 锅炉 (1# - 5#)】与右列【🔥 锅炉 (6# - 10#)】；
+       - 两列内部独立保持“运行 > 备用 > 检修”第一优先级和同状态顺号排列；
+    2. **分栏 50% / 50% 严格等宽保障**：
+       - 分栏网格强制使用 `grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)`；
+       - 赋予每列 `.plant-col` 核心样式 `min-width: 0; width: 100%; box-sizing: border-box;`，彻底杜绝内容长度不同撑宽某一列的现象；
+       - 常规主力电厂的“左机右炉”与燃气主体的“左1-5、右6-10”全场景均呈现严格对半等宽视觉效果。
+
+## 2026-10-28 调度信息系统：机炉拓扑状态权重多级排序（运行>备用>检修第一优先级，同状态内序号自然升序）
+
+- **调度工况视角优先的多级自然排序**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **状态优先级权重大于序号**：
+       - 实现 `sortFacilitiesByStatusAndNumber`，设定权重：`运行 (权重1) > 备用 (权重2) > 检修 (权重3)`；
+       - 确保所有电厂正在带负荷运行的主力机组与锅炉绝对优先排列在各分栏最顶层；
+    2. **同状态内序号自然数字升序**：
+       - 在相同状态分组内部，按设备编号正整数从小到大严格升序排列（如运行的 `#1汽炉`、`#4汽炉` 顺号排列，备用的 `#3汽炉` 居中，检修的 `#2汽炉` 置底）；
+    3. **双栏与单栏全场景生效**：
+       - 主力电厂机组栏、锅炉栏以及北海水炉、燃气锅炉单栏全量应用该排序标准，运行态势一目了然。
+
+## 2026-10-28 调度信息系统界面升级：标题极简化与提取工作台权限隔离（仅Global_admin可见且默认收回）
+
+- **视觉极净化与精细权限控制**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **主标题精炼大气**：页面顶部标题精简为【生产调度信息全景看板】，彻底移除冗长的副标题文字，视觉清爽专注；
+    2. **工作台权限门禁**：对【调度信息智能提取工作台】配置 `v-if="isGlobalAdmin"`，严格限制仅全局管理员可见，普通业务人员与观察员完全隐藏底层导入工具；
+    3. **状态默认收回**：`isExtractPanelExpanded` 初始状态设为 `false`，管理员登录后工作台默认以收折状态吸附于顶部，保持页面主视角聚焦于生产数据展板。
+
+## 2026-10-28 调度信息系统交互优化：业务日期切换就地平滑无感更新（根除闪烁与视口跳顶）
+
+- **非破坏性就地加载与视口零抖动**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **消除高度塌陷（Layout Thrashing）**：
+       - 将破坏性的全屏白底加载条件收窄为仅初次进入无数据时生效（`isLoadingData && !currentReport`）；
+       - 日期切换时展板主体 `.dashboard-body` 永久常驻 DOM，页面高度保持恒定，浏览器滚动条 scrollTop 彻底告别瞬间归零跳顶；
+    2. **浅雾毛玻璃轻量遮罩 (`.fetching-overlay`)**：
+       - 切换时仅在原地浮现半透明雾化层（`rgba(255,255,255,0.55)`），并呈现吸顶暗色微标【正在读取 YYYY-MM-DD 调度数据…】；
+       - 毫秒级数据回传后就地平滑置换，用户在任何滚动高度操作均享受顺滑稳定的交互体验。
+
+## 2026-10-28 调度信息系统：机炉拓扑垂直有序化（自然升序与单双栏全场景自顶向下规范）
+
+- **垂直列排布与编号自然排序**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **自然数字升序归整 (`sortFacilitiesByNumber`)**：
+       - 彻底解决各段数据拼接导致的设备乱序，所有机、炉均严格按编号数字大小（#1, #2, #3 ... #10）从小到大升序排序；
+    2. **全场景自顶向下条带排布**：
+       - 设备列表统一采用纵向列容器（`flex-direction: column`），每个设备占用独立一行；
+       - 行内左侧清晰突出设备编号与名称，右侧对称收拢【🚀 启动时刻】与【运行状态】；
+       - 双栏卡片（机组栏、锅炉栏）及未分栏卡片（北海水炉 3 台、燃气锅炉 10 台）全量实现自顶向下规范化排列。
+
+## 2026-10-28 调度信息系统：机炉拓扑重构为“左机右炉”对称分栏与徽章轻量化
+
+- **左右双栏分列与徽章视觉纯粹化**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **左右分栏布局（左机右炉）**：
+       - 主体卡片内部采用 `.plant-split-columns` 双栏网格：
+         - **左栏**：专列 `⚡ 机组` 发电设备；
+         - **右栏**：以虚线竖向隔开，专列 `🔥 锅炉` 产热设备；
+         - **单栏兼容**：无机组的主体（如北海水炉、燃气锅炉）自动平滑降级为全宽单栏，避免空白；
+    2. **彻底移除徽章内重复类型标签**：
+       - 剔除徽章内部多余的 `fac-type-tag`（不再反复标注“汽机/锅炉”）；
+       - 徽章仅聚焦显示设备名称、状态及 `🚀 启动时刻`，界面清爽聚焦；
+    3. **主体统计对齐**：主体开机概况统一按左机右炉呈现为 `运行：X机 Y炉`。
+
+## 2026-10-28 调度信息系统：机炉分列列示、开机工况统计与当日启动高精联动
+
+- **拓扑矩阵精细化与调度事件深度联动**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **板块重命名**：原“微观事件与抢修工作票”正式更名为【调度事件】；
+    2. **机炉分组严格分离**：每个电厂主体卡片内划分为 🔥 锅炉与 ⚡ 汽机两大独立子区块，彻底消除混排；
+    3. **主体开机数量直观统计**：电厂主体名称后突出展示当前开机工况徽章（例如“运行：2炉 2机”或仅炉电厂“运行：0炉”）；
+    4. **当日启动时间高精标注**：基于当天调度事件（并网、并汽、冲转、点火、投运）自动关联匹配，并在对应设备徽章上显示 `🚀 HH:MM 启动` 橙金高亮标识，鼠标悬浮即可查看调度事件完整上下文。
+
+## 2026-10-28 调度信息系统展板升级：由标签页切换重构为全要素平铺通览流
+
+- **全景通览与视觉流重塑**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    - 废弃原底部的 4 个 Tab 选项卡及 `v-show` 切换机制，升级为全要素纵向平铺的卡片流容器；
+    - 四大核心板块自顶向下一览无余：
+      1. 🏭 **机炉运行拓扑矩阵**（按热电厂主体聚合，呈现设备启停与状态统计 Badge）；
+      2. 💧 **首站工况与温压差**（表格直接展现供回温压、循环量及温差压差高亮标色）；
+      3. ♨️ **蒸汽网口与燃煤库存**（自适应双列并排卡片展示管网工况与进耗存煤）；
+      4. 📋 **微观事件与抢修工作票**（支持主体胶囊过滤、仅看工作票勾选与关键字全文高精筛选）。
+
+## 2026-10-28 调度信息系统交互优化：移除冗余模式Tab与聚焦本地上传
+
+- **交互纯粹化与体验简化**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    - 移除了“📤 本地文件/文件夹上传”与“💻 服务器目录直接扫描”之间的模式切换 Tab 栏及服务器路径输入框；
+    - 工作台默认平铺展示【📄 选择文件】、【📁 选择整个文件夹】与全功能拖拽区，操作链路零多余切换。
+
+## 2026-10-28 调度信息系统交互优化：移除冗余调试入口与工作台操作路径归一
+
+- **界面精简与风险控制**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    - 彻底移除了“⚡ 一键载入历史 162 份基准全量数据”按钮及相关方法；
+    - 杜绝因误点击静态调试 JSON 覆盖最新数据库资产的风险，工作台操作路径完全归一为标准的文件/文件夹上传提取与入库。
+
 ## 2026-10-28 调度信息系统：微观事件时序解耦与天气全要素物理列展示对齐
 
 - **数据层契约与展示效果协同**：

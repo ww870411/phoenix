@@ -10,10 +10,7 @@
           <div class="banner-title-row">
             <div class="banner-icon">📋</div>
             <div>
-              <h2 class="banner-title">主城区生产调度信息智能提取与全景工况看板</h2>
-              <p class="banner-subtitle">
-                支持 DOCX / PDF 调度日报自动化解析、设备拓扑标准化归一、微观事件流提取与一键入库检索
-              </p>
+              <h2 class="banner-title">生产调度信息全景看板</h2>
             </div>
           </div>
           <div class="banner-meta">
@@ -28,8 +25,8 @@
         </div>
       </section>
 
-      <!-- 1. 顶部：信息提取与入库工作台 (可折叠) -->
-      <section class="card elevated extract-card">
+      <!-- 1. 顶部：信息提取与入库工作台 (仅 Global_admin 可见，默认折叠收回) -->
+      <section v-if="isGlobalAdmin" class="card elevated extract-card">
         <header class="section-header" @click="isExtractPanelExpanded = !isExtractPanelExpanded">
           <div class="header-left">
             <span class="header-icon">⚙️</span>
@@ -42,26 +39,8 @@
         </header>
 
         <div v-show="isExtractPanelExpanded" class="extract-body">
-          <!-- 上传模式切换与选择 -->
-          <div class="mode-tabs">
-            <button
-              :class="['mode-tab', { active: extractMode === 'upload' }]"
-              type="button"
-              @click="extractMode = 'upload'"
-            >
-              📤 本地文件 / 文件夹上传
-            </button>
-            <button
-              :class="['mode-tab', { active: extractMode === 'server' }]"
-              type="button"
-              @click="extractMode = 'server'"
-            >
-              💻 服务器目录直接扫描
-            </button>
-          </div>
-
-          <!-- 模式 A：本地上传 -->
-          <div v-if="extractMode === 'upload'" class="upload-container">
+          <!-- 本地文件 / 文件夹上传区 -->
+          <div class="upload-container">
             <!-- 隐藏的原生输入控件 -->
             <input
               ref="fileInputRef"
@@ -147,41 +126,16 @@
             </div>
           </div>
 
-          <!-- 模式 B：服务器本地路径扫描 -->
-          <div v-else class="server-folder-container">
-            <div class="form-group-row">
-              <label>服务器文件目录绝对/相对路径：</label>
-              <input
-                v-model="serverFolderPath"
-                type="text"
-                class="form-input path-input"
-                placeholder="例如：configs/ 或 D:\历史日报\2026年"
-              />
-            </div>
-            <p class="text-muted text-sm">
-              直接由后台服务遍历该路径下的全部 .docx 和 .pdf 调度文档，适用于海量历史数据直接解析。
-            </p>
-          </div>
-
           <!-- 执行提取控制栏 -->
           <div class="extract-action-bar">
             <button
               class="btn primary btn-extract"
               type="button"
-              :disabled="isExtracting || (extractMode === 'upload' && selectedFiles.length === 0)"
+              :disabled="isExtracting || selectedFiles.length === 0"
               @click="startExtraction"
             >
               <span v-if="isExtracting" class="spinner"></span>
               {{ isExtracting ? '正在解析提取中，请稍候…' : '🚀 开始智能批量提取' }}
-            </button>
-            <button
-              class="btn ghost"
-              type="button"
-              :disabled="isExtracting"
-              title="载入服务器已预提取的 162 份基准数据"
-              @click="quickImportHistorical"
-            >
-              ⚡ 一键载入历史 162 份基准全量数据
             </button>
           </div>
 
@@ -312,8 +266,8 @@
           </div>
         </div>
 
-        <!-- 加载中与空状态提示 -->
-        <div v-if="isLoadingData" class="state-container">
+        <!-- 初次载入且无任何已有数据时，展示全屏初始加载状态 -->
+        <div v-if="isLoadingData && !currentReport" class="state-container">
           <div class="spinner large"></div>
           <p>正在读取调度综合数据…</p>
         </div>
@@ -321,11 +275,18 @@
         <div v-else-if="!currentReport" class="state-container empty">
           <span class="empty-icon">📭</span>
           <p class="empty-title">当前日期暂无已入库的调度数据</p>
-          <p class="empty-hint">请在上方的智能提取工作台上传或直接载入历史数据入库</p>
+          <p class="empty-hint">请在上方的智能提取工作台上传文件或文件夹开始提取入库</p>
         </div>
 
-        <!-- 调度数据展示全景展板 -->
-        <div v-else class="dashboard-body">
+        <!-- 调度数据展示全景展板（就地无感平滑更新，绝不销毁DOM和引起滚动条塌陷） -->
+        <div v-else :class="['dashboard-body', { 'is-fetching': isLoadingData }]">
+          <!-- 切换日期时的平滑半透明遮罩与微提示，视口不跳动 -->
+          <div v-if="isLoadingData" class="fetching-overlay">
+            <div class="fetching-pill">
+              <span class="spinner fetching-spinner"></span>
+              <span>正在读取 {{ currentBizDate }} 调度数据…</span>
+            </div>
+          </div>
           <!-- 报告抬头元数据 -->
           <div class="report-meta-header">
             <div class="meta-main">
@@ -415,223 +376,354 @@
             </div>
           </div>
 
-          <!-- 分项明细标签页导航 -->
-          <div class="detail-nav-tabs">
-            <button
-              :class="['detail-tab', { active: activeTab === 'facilities' }]"
-              type="button"
-              @click="activeTab = 'facilities'"
-            >
-              🏭 机炉运行拓扑矩阵 ({{ currentReport.boiler_turbine_status?.length || 0 }})
-            </button>
-            <button
-              :class="['detail-tab', { active: activeTab === 'first_stations' }]"
-              type="button"
-              @click="activeTab = 'first_stations'"
-            >
-              💧 首站工况与温压差 ({{ currentReport.first_stations?.length || 0 }})
-            </button>
-            <button
-              :class="['detail-tab', { active: activeTab === 'steam_coal' }]"
-              type="button"
-              @click="activeTab = 'steam_coal'"
-            >
-              ♨️ 蒸汽网口与燃煤库存
-            </button>
-            <button
-              :class="['detail-tab', { active: activeTab === 'events' }]"
-              type="button"
-              @click="activeTab = 'events'"
-            >
-              📋 微观事件与抢修工作票 ({{ filteredEvents.length }})
-            </button>
-          </div>
-
-          <!-- Tab 1: 机炉拓扑状态视图 -->
-          <div v-show="activeTab === 'facilities'" class="tab-pane">
-            <div class="facilities-grid">
-              <div
-                v-for="group in groupedFacilities"
-                :key="group.plant"
-                class="plant-facilities-card"
-              >
-                <div class="plant-card-header">
-                  <span class="plant-name">{{ group.plant }}</span>
-                  <span class="plant-summary">共 {{ group.items.length }} 台设备</span>
+          <!-- 全量平铺数据板块流（一览通览各核心维度） -->
+          <div class="dashboard-sections-flow">
+            <!-- 板块 1: 机炉拓扑状态视图 -->
+            <section class="dashboard-section-block">
+              <div class="section-block-header">
+                <div class="section-block-title">
+                  <span class="section-block-icon">🏭</span>
+                  <h4>机炉运行拓扑矩阵</h4>
+                  <span class="section-badge">共 {{ currentReport.boiler_turbine_status?.length || 0 }} 台设备</span>
                 </div>
-                <div class="facility-badges">
-                  <div
-                    v-for="(fac, fIdx) in group.items"
-                    :key="fIdx"
-                    :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
-                  >
-                    <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
-                    <span class="fac-type-tag">{{ fac.facility_type === '锅炉' ? fac.boiler_type || '锅炉' : '汽机' }}</span>
-                    <span class="fac-status-tag">{{ fac.status }}</span>
+              </div>
+              <div class="facilities-grid">
+                <div
+                  v-for="group in groupedFacilities"
+                  :key="group.plant"
+                  class="plant-facilities-card"
+                >
+                  <div class="plant-card-header">
+                    <span class="plant-name">{{ group.plant }}</span>
+                    <span class="plant-running-summary">{{ group.runningSummary }}</span>
+                  </div>
+
+                  <!-- 1. 燃气锅炉：仅一个“锅炉”统一标头，下方设备分为左(1-5)右(6-10)严格等宽两列显示 -->
+                  <div v-if="group.isSplitBoilers" class="plant-unified-group">
+                    <div class="col-header">
+                      <span class="col-icon">🔥</span>
+                      <span class="col-title">锅炉</span>
+                      <span class="col-stat">({{ group.runningBoilers }}/{{ group.boilers.length }} 运行)</span>
+                    </div>
+
+                    <div class="plant-split-columns">
+                      <!-- 左列: 1-5号锅炉 -->
+                      <div class="plant-col col-left">
+                        <div class="facility-badges">
+                          <div
+                            v-for="(fac, fIdx) in group.boilersLeft"
+                            :key="fIdx"
+                            :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                          >
+                            <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                            <div class="fac-meta">
+                              <span
+                                v-if="fac.startTime"
+                                class="fac-start-pill"
+                                :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                              >
+                                🚀 {{ fac.startTime }} 启动
+                              </span>
+                              <span class="fac-status-tag">{{ fac.status }}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 右列: 6-10号锅炉 (严格等宽) -->
+                      <div class="plant-col col-right">
+                        <div class="facility-badges">
+                          <div
+                            v-for="(fac, fIdx) in group.boilersRight"
+                            :key="fIdx"
+                            :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                          >
+                            <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                            <div class="fac-meta">
+                              <span
+                                v-if="fac.startTime"
+                                class="fac-start-pill"
+                                :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                              >
+                                🚀 {{ fac.startTime }} 启动
+                              </span>
+                              <span class="fac-status-tag">{{ fac.status }}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 2. 常规主体分栏：左机右炉严格等宽分列 (或仅炉单列全宽) -->
+                  <div v-else :class="['plant-split-columns', { 'single-column': group.turbines.length === 0 || group.boilers.length === 0 }]">
+                    <!-- 左栏: 汽机 (机组) -->
+                    <div v-if="group.turbines.length > 0" class="plant-col col-left col-turbine">
+                      <div class="col-header">
+                        <span class="col-icon">⚡</span>
+                        <span class="col-title">机组</span>
+                        <span class="col-stat">({{ group.runningTurbines }}/{{ group.turbines.length }} 运行)</span>
+                      </div>
+                      <div class="facility-badges">
+                        <div
+                          v-for="(fac, fIdx) in group.turbines"
+                          :key="fIdx"
+                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                        >
+                          <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                          <div class="fac-meta">
+                            <span
+                              v-if="fac.startTime"
+                              class="fac-start-pill"
+                              :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                            >
+                              🚀 {{ fac.startTime }} 启动
+                            </span>
+                            <span class="fac-status-tag">{{ fac.status }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 右栏: 锅炉 (有汽机时严格等宽居右) -->
+                    <div v-if="group.boilers.length > 0" :class="['plant-col', 'col-boiler', { 'col-right': group.turbines.length > 0 }]">
+                      <div class="col-header">
+                        <span class="col-icon">🔥</span>
+                        <span class="col-title">锅炉</span>
+                        <span class="col-stat">({{ group.runningBoilers }}/{{ group.boilers.length }} 运行)</span>
+                      </div>
+                      <div class="facility-badges">
+                        <div
+                          v-for="(fac, fIdx) in group.boilers"
+                          :key="fIdx"
+                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                        >
+                          <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                          <div class="fac-meta">
+                            <span
+                              v-if="fac.startTime"
+                              class="fac-start-pill"
+                              :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                            >
+                              🚀 {{ fac.startTime }} 启动
+                            </span>
+                            <span class="fac-status-tag">{{ fac.status }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 其他设备（若有） -->
+                    <div v-if="group.others.length > 0" class="plant-col col-other">
+                      <div class="col-header">
+                        <span class="col-icon">⚙️</span>
+                        <span class="col-title">其他设备</span>
+                        <span class="col-stat">({{ group.others.length }} 台)</span>
+                      </div>
+                      <div class="facility-badges">
+                        <div
+                          v-for="(fac, fIdx) in group.others"
+                          :key="fIdx"
+                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                        >
+                          <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                          <div class="fac-meta">
+                            <span
+                              v-if="fac.startTime"
+                              class="fac-start-pill"
+                              :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                            >
+                              🚀 {{ fac.startTime }} 启动
+                            </span>
+                            <span class="fac-status-tag">{{ fac.status }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </section>
 
-          <!-- Tab 2: 首站运行工况表 -->
-          <div v-show="activeTab === 'first_stations'" class="tab-pane">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>电厂主体</th>
-                    <th>首站名称</th>
-                    <th>循环泵方式</th>
-                    <th>循环流量 (t/h)</th>
-                    <th>供/回压力 (MPa)</th>
-                    <th>压差 (MPa)</th>
-                    <th>供/回温度 (℃)</th>
-                    <th>温差 (℃)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(st, sIdx) in currentReport.first_stations" :key="sIdx">
-                    <td><strong>{{ st.plant }}</strong></td>
-                    <td>{{ st.station_name }}</td>
-                    <td>{{ st.pump_count ? `${st.pump_count} 台循环泵` : '—' }}</td>
-                    <td class="text-num">{{ formatNum(st.flow_rate_th) }}</td>
-                    <td class="text-num">
-                      {{ st.supply_pressure_mpa != null ? `${st.supply_pressure_mpa} / ${st.return_pressure_mpa}` : '—' }}
-                    </td>
-                    <td class="text-num">
-                      <span v-if="st.pressure_diff_mpa != null" class="badge-blue">
-                        {{ st.pressure_diff_mpa }}
-                      </span>
-                      <span v-else>—</span>
-                    </td>
-                    <td class="text-num">
-                      {{ st.supply_temp_c != null ? `${st.supply_temp_c} / ${st.return_temp_c}` : '—' }}
-                    </td>
-                    <td class="text-num">
-                      <span v-if="st.temp_diff_c != null" class="badge-orange">
-                        {{ st.temp_diff_c }} ℃
-                      </span>
-                      <span v-else>—</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Tab 3: 蒸汽网口与燃煤库存 -->
-          <div v-show="activeTab === 'steam_coal'" class="tab-pane">
-            <div class="sub-split-grid">
-              <!-- 蒸汽网口卡片 -->
-              <div class="card elevated inner-card">
-                <h4 class="card-title">💨 蒸汽网口运行情况</h4>
+            <!-- 板块 2: 首站运行工况表 -->
+            <section class="dashboard-section-block">
+              <div class="section-block-header">
+                <div class="section-block-title">
+                  <span class="section-block-icon">💧</span>
+                  <h4>首站工况与温压差</h4>
+                  <span class="section-badge">共 {{ currentReport.first_stations?.length || 0 }} 个首站</span>
+                </div>
+              </div>
+              <div class="table-container">
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th>网口名称</th>
-                      <th>运行状态</th>
-                      <th>压力 (MPa)</th>
-                      <th>流量 (t/h)</th>
+                      <th>电厂主体</th>
+                      <th>首站名称</th>
+                      <th>循环泵方式</th>
+                      <th>循环流量 (t/h)</th>
+                      <th>供/回压力 (MPa)</th>
+                      <th>压差 (MPa)</th>
+                      <th>供/回温度 (℃)</th>
+                      <th>温差 (℃)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(stm, smIdx) in currentReport.steam_networks" :key="smIdx">
-                      <td>{{ stm.network_name }}</td>
-                      <td>
-                        <span :class="['status-pill', stm.status === '投运' ? 'run' : 'stop']">
-                          {{ stm.status }}
-                        </span>
+                    <tr v-for="(st, sIdx) in currentReport.first_stations" :key="sIdx">
+                      <td><strong>{{ st.plant }}</strong></td>
+                      <td>{{ st.station_name }}</td>
+                      <td>{{ st.pump_count ? `${st.pump_count} 台循环泵` : '—' }}</td>
+                      <td class="text-num">{{ formatNum(st.flow_rate_th) }}</td>
+                      <td class="text-num">
+                        {{ st.supply_pressure_mpa != null ? `${st.supply_pressure_mpa} / ${st.return_pressure_mpa}` : '—' }}
                       </td>
-                      <td class="text-num">{{ stm.pressure_mpa != null ? stm.pressure_mpa : '—' }}</td>
-                      <td class="text-num">{{ stm.flow_th != null ? stm.flow_th : '—' }}</td>
+                      <td class="text-num">
+                        <span v-if="st.pressure_diff_mpa != null" class="badge-blue">
+                          {{ st.pressure_diff_mpa }}
+                        </span>
+                        <span v-else>—</span>
+                      </td>
+                      <td class="text-num">
+                        {{ st.supply_temp_c != null ? `${st.supply_temp_c} / ${st.return_temp_c}` : '—' }}
+                      </td>
+                      <td class="text-num">
+                        <span v-if="st.temp_diff_c != null" class="badge-orange">
+                          {{ st.temp_diff_c }} ℃
+                        </span>
+                        <span v-else>—</span>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
+            </section>
 
-              <!-- 燃煤库存表 -->
-              <div class="card elevated inner-card">
-                <h4 class="card-title">🪨 燃煤进耗存统计</h4>
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>单位 / 口径</th>
-                      <th>进煤 (吨)</th>
-                      <th>耗煤 (吨)</th>
-                      <th>存煤 (吨)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(coal, cIdx) in currentReport.coal_stats" :key="cIdx">
-                      <td><strong>{{ coal.standard_org || coal.category }}</strong></td>
-                      <td class="text-num">{{ formatNum(coal.in_coal_tons) }}</td>
-                      <td class="text-num">{{ formatNum(coal.consumed_coal_tons) }}</td>
-                      <td class="text-num">{{ formatNum(coal.storage_coal_tons) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+            <!-- 板块 3: 蒸汽网口与燃煤库存 -->
+            <section class="dashboard-section-block">
+              <div class="section-block-header">
+                <div class="section-block-title">
+                  <span class="section-block-icon">♨️</span>
+                  <h4>蒸汽网口与燃煤库存</h4>
+                </div>
               </div>
-            </div>
-          </div>
+              <div class="sub-split-grid">
+                <!-- 蒸汽网口卡片 -->
+                <div class="card elevated inner-card">
+                  <h4 class="card-title">💨 蒸汽网口运行情况</h4>
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>网口名称</th>
+                        <th>运行状态</th>
+                        <th>压力 (MPa)</th>
+                        <th>流量 (t/h)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(stm, smIdx) in currentReport.steam_networks" :key="smIdx">
+                        <td>{{ stm.network_name }}</td>
+                        <td>
+                          <span :class="['status-pill', stm.status === '投运' ? 'run' : 'stop']">
+                            {{ stm.status }}
+                          </span>
+                        </td>
+                        <td class="text-num">{{ stm.pressure_mpa != null ? stm.pressure_mpa : '—' }}</td>
+                        <td class="text-num">{{ stm.flow_th != null ? stm.flow_th : '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
 
-          <!-- Tab 4: 微观事件与抢修工作票 -->
-          <div v-show="activeTab === 'events'" class="tab-pane">
-            <div class="events-toolbar">
-              <div class="org-filter-pills">
-                <button
-                  :class="['filter-pill', { active: eventOrgFilter === 'ALL' }]"
-                  type="button"
-                  @click="eventOrgFilter = 'ALL'"
-                >
-                  全部主体
-                </button>
-                <button
-                  v-for="org in availableEventOrgs"
-                  :key="org"
-                  :class="['filter-pill', { active: eventOrgFilter === org }]"
-                  type="button"
-                  @click="eventOrgFilter = org"
-                >
-                  {{ org }}
-                </button>
+                <!-- 燃煤库存表 -->
+                <div class="card elevated inner-card">
+                  <h4 class="card-title">🪨 燃煤进耗存统计</h4>
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>单位 / 口径</th>
+                        <th>进煤 (吨)</th>
+                        <th>耗煤 (吨)</th>
+                        <th>存煤 (吨)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(coal, cIdx) in currentReport.coal_stats" :key="cIdx">
+                        <td><strong>{{ coal.standard_org || coal.category }}</strong></td>
+                        <td class="text-num">{{ formatNum(coal.in_coal_tons) }}</td>
+                        <td class="text-num">{{ formatNum(coal.consumed_coal_tons) }}</td>
+                        <td class="text-num">{{ formatNum(coal.storage_coal_tons) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <!-- 板块 4: 调度事件 -->
+            <section class="dashboard-section-block">
+              <div class="section-block-header">
+                <div class="section-block-title">
+                  <span class="section-block-icon">📋</span>
+                  <h4>调度事件</h4>
+                  <span class="section-badge">共 {{ filteredEvents.length }} 条记录</span>
+                </div>
+              </div>
+              <div class="events-toolbar">
+                <div class="org-filter-pills">
+                  <button
+                    :class="['filter-pill', { active: eventOrgFilter === 'ALL' }]"
+                    type="button"
+                    @click="eventOrgFilter = 'ALL'"
+                  >
+                    全部主体
+                  </button>
+                  <button
+                    v-for="org in availableEventOrgs"
+                    :key="org"
+                    :class="['filter-pill', { active: eventOrgFilter === org }]"
+                    type="button"
+                    @click="eventOrgFilter = org"
+                  >
+                    {{ org }}
+                  </button>
+                </div>
+
+                <label class="checkbox-label">
+                  <input v-model="onlyWorkTickets" type="checkbox" />
+                  仅看抢修工作票
+                </label>
               </div>
 
-              <label class="checkbox-label">
-                <input v-model="onlyWorkTickets" type="checkbox" />
-                仅看抢修工作票
-              </label>
-            </div>
+              <div v-if="filteredEvents.length === 0" class="empty-events">
+                无匹配的操作或抢修记录
+              </div>
 
-            <div v-if="filteredEvents.length === 0" class="empty-events">
-              无匹配的操作或抢修记录
-            </div>
-
-            <div v-else class="event-timeline">
-              <div
-                v-for="(ev, eIdx) in filteredEvents"
-                :key="eIdx"
-                :class="['event-card', { 'is-ticket': ev.is_ticket }]"
-              >
-                <div class="event-header">
-                  <div class="event-meta-left">
-                    <span v-if="ev.time" class="event-time">⏰ {{ ev.time }}</span>
-                    <span class="event-org">{{ ev.responsible_org }}</span>
-                    <span v-if="ev.is_ticket" class="badge-ticket">🎫 抢修工作票</span>
-                    <span v-else class="badge-op">🔧 运行操作</span>
-                    <span v-if="ev.pipe_size" class="badge-pipe">
-                      管径: {{ ev.pipe_size }}
+              <div v-else class="event-timeline">
+                <div
+                  v-for="(ev, eIdx) in filteredEvents"
+                  :key="eIdx"
+                  :class="['event-card', { 'is-ticket': ev.is_ticket }]"
+                >
+                  <div class="event-header">
+                    <div class="event-meta-left">
+                      <span v-if="ev.time" class="event-time">⏰ {{ ev.time }}</span>
+                      <span class="event-org">{{ ev.responsible_org }}</span>
+                      <span v-if="ev.is_ticket" class="badge-ticket">🎫 抢修工作票</span>
+                      <span v-else class="badge-op">🔧 运行操作</span>
+                      <span v-if="ev.pipe_size" class="badge-pipe">
+                        管径: {{ ev.pipe_size }}
+                      </span>
+                    </div>
+                    <span v-if="ev.time_range" class="event-duration">
+                      工期：{{ ev.time_range }}
                     </span>
                   </div>
-                  <span v-if="ev.time_range" class="event-duration">
-                    工期：{{ ev.time_range }}
-                  </span>
-                </div>
-                <div class="event-content">
-                  {{ ev.raw_description }}
+                  <div class="event-content">
+                    {{ ev.raw_description }}
+                  </div>
                 </div>
               </div>
-            </div>
+            </section>
           </div>
         </div>
       </section>
@@ -678,7 +770,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { getProjectNameById } from '../composables/useProjects'
+import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 import {
   extractDispatchFiles,
@@ -687,26 +779,37 @@ import {
   cleanupDispatchTemp,
   saveDispatchData,
   queryDispatchData,
-  fetchDispatchDates,
-  importHistoricalDispatch
+  fetchDispatchDates
 } from '../services/dispatchApi'
 
 const auth = useAuthStore()
 const route = useRoute()
 const projectKey = computed(() => route.params.projectKey || 'daily_report_25_26')
-const projectName = computed(() => getProjectNameById(projectKey.value) ?? '2025-2026供暖期生产日报')
+const projectName = computed(() => getProjectNameById(projectKey.value) || '2026-2027供暖期生产日报')
+
+const pageDisplayName = computed(() => {
+  const raw = route.query.pageName
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim()
+  }
+  return '调度信息'
+})
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
   { label: projectName.value, to: `/projects/${encodeURIComponent(projectKey.value)}/pages` },
-  { label: '调度信息', to: null },
+  { label: pageDisplayName.value, to: null },
 ])
 
-// 提取工作台状态
-const isExtractPanelExpanded = ref(true)
-const extractMode = ref('upload') // 'upload' | 'server'
+// 权限判定：仅 Global_admin 可见提取工作台
+const isGlobalAdmin = computed(() => {
+  const grp = String(auth.user?.group || auth.user?.role || '').trim()
+  return grp === 'Global_admin' || grp.toLowerCase() === 'global_admin' || Boolean(auth.canAccessAdminConsole)
+})
+
+// 提取工作台状态 (默认收回)
+const isExtractPanelExpanded = ref(false)
 const selectedFiles = ref([])
-const serverFolderPath = ref('')
 const isExtracting = ref(false)
 const extractError = ref('')
 const extractSummary = ref(null)
@@ -733,7 +836,6 @@ const currentBizDate = ref('')
 const searchKeyword = ref('')
 const isLoadingData = ref(false)
 const currentReport = ref(null)
-const activeTab = ref('facilities') // 'facilities' | 'first_stations' | 'steam_coal' | 'events'
 
 // 事件过滤状态
 const eventOrgFilter = ref('ALL')
@@ -760,20 +862,231 @@ const hasNextDate = computed(() => {
   return idx > 0
 })
 
+/**
+ * 根据调度事件判断某设备是否当日启动，返回启动时刻与原文说明
+ */
+function getFacilityStartTime(fac, events) {
+  if (!events || !events.length) return null
+  const fName = fac.standard_name || fac.raw_name || ''
+  const fType = fac.facility_type || ''
+  const fPlant = fac.unit_or_plant || ''
+
+  // 提取数字编号
+  const m = fName.match(/#?(\d+)#?/)
+  if (!m) return null
+  const num = m[1]
+
+  const isBoiler = fType === '锅炉' || fName.includes('炉')
+  const isTurbine = fType === '汽机' || fName.includes('机')
+
+  const startKeywords = ['点火', '启动', '投运', '并汽', '并网', '并列', '冲转', '恢复加热', '并热网', '投']
+  const stopKeywords = ['停运', '停炉', '停机', '灭火', '解列', '退出', '跳闸']
+
+  for (const e of events) {
+    const org = e.responsible_org || ''
+    const desc = e.raw_description || ''
+    const timeStr = e.time || ''
+    const action = e.action || ''
+
+    // 1. 机构匹配过滤
+    if (fPlant.includes('北海')) {
+      if (org && !org.includes('北海')) continue
+    } else if (fPlant.includes('香海')) {
+      if (org && !org.includes('香海')) continue
+    } else if (fPlant.includes('金州')) {
+      if (org && !org.includes('金州')) continue
+    } else if (fPlant.includes('北方')) {
+      if (org && !org.includes('北方')) continue
+    } else if (fPlant.includes('燃气')) {
+      if (org && !org.includes('北海') && !org.includes('燃气')) continue
+    } else if (org) {
+      if (!fPlant.includes(org) && !org.includes(fPlant)) continue
+    }
+
+    // 2. 设备排他匹配
+    let devStr = ''
+    if (isBoiler) {
+      const pattern = new RegExp(`(?<!\\d)#?${num}#?(汽炉|水炉|蒸汽炉|燃气炉|炉)`)
+      const mDev = desc.match(pattern)
+      if (!mDev) continue
+      devStr = mDev[0]
+
+      if (fPlant.includes('水炉') || fName.includes('水炉')) {
+        if (devStr.includes('汽炉') || devStr.includes('蒸汽炉') || devStr.includes('燃气')) continue
+        if (!devStr.includes('水炉') && !desc.includes('水炉')) continue
+      } else if (fPlant.includes('燃气') || fName.includes('燃气')) {
+        if (!devStr.includes('燃气') && !desc.includes('燃气')) continue
+      } else {
+        // 主厂汽炉，排除明确为水炉或燃气炉
+        if (devStr.includes('水炉') || devStr.includes('燃气')) continue
+      }
+    } else if (isTurbine) {
+      const pattern = new RegExp(`(?<!\\d)#?${num}#?(汽机|机组|机)`)
+      const mDev = desc.match(pattern)
+      if (!mDev) continue
+      devStr = mDev[0]
+    } else {
+      continue
+    }
+
+    // 3. 动作判断
+    const hasStart = startKeywords.some((k) => desc.includes(k) || action.includes(k))
+    const hasStop = stopKeywords.some((k) => desc.includes(k) || action.includes(k))
+
+    if (!hasStart) continue
+    if (hasStop && !['并汽', '并列', '并热网', '恢复', '冲转', '点火', '并网'].some((k) => desc.includes(k))) {
+      continue
+    }
+
+    // 4. 提取时间
+    let finalTime = ''
+    if (timeStr) {
+      finalTime = timeStr.split('/')[0].trim()
+    } else {
+      const tm = desc.match(/(\d{1,2}:\d{2})/)
+      if (tm) finalTime = tm[1]
+    }
+
+    if (finalTime) {
+      return {
+        time: finalTime,
+        desc: desc
+      }
+    }
+  }
+
+  return null
+}
+
+const STATUS_PRIORITY = {
+  '运行': 1,
+  '备用': 2,
+  '检修': 3
+}
+
+function getStatusWeight(status) {
+  const s = String(status || '').trim()
+  return STATUS_PRIORITY[s] || 99
+}
+
+/**
+ * 设备多级排序：
+ * 1. 优先按运行状态：运行 > 备用 > 检修 > 其他
+ * 2. 同状态下按设备序号自然数字升序：#1, #2, #3 ... #10
+ */
+function sortFacilitiesByStatusAndNumber(facList) {
+  return [...facList].sort((a, b) => {
+    // 第一级：运行 > 备用 > 检修
+    const weightA = getStatusWeight(a.status)
+    const weightB = getStatusWeight(b.status)
+    if (weightA !== weightB) {
+      return weightA - weightB
+    }
+
+    // 第二级：同状态下按设备编号数字升序
+    const nameA = a.standard_name || a.raw_name || ''
+    const nameB = b.standard_name || b.raw_name || ''
+    const numA = parseInt((nameA.match(/\d+/) || [0])[0], 10)
+    const numB = parseInt((nameB.match(/\d+/) || [0])[0], 10)
+    if (numA !== numB) {
+      return numA - numB
+    }
+
+    // 第三级：兜底字符拼音比对
+    return nameA.localeCompare(nameB, 'zh-CN')
+  })
+}
+
 const groupedFacilities = computed(() => {
   if (!currentReport.value || !Array.isArray(currentReport.value.boiler_turbine_status)) return []
+  const events = currentReport.value.operations_and_tickets || []
   const map = {}
-  for (const fac of currentReport.value.boiler_turbine_status) {
-    const plant = fac.unit_or_plant || '其他'
+  for (const rawFac of currentReport.value.boiler_turbine_status) {
+    const plant = rawFac.unit_or_plant || '其他'
     if (!map[plant]) {
       map[plant] = []
     }
-    map[plant].push(fac)
+    const startInfo = getFacilityStartTime(rawFac, events)
+    map[plant].push({
+      ...rawFac,
+      startTime: startInfo ? startInfo.time : null,
+      startDesc: startInfo ? startInfo.desc : ''
+    })
   }
-  return Object.keys(map).map((k) => ({
-    plant: k,
-    items: map[k]
-  }))
+
+  return Object.keys(map).map((k) => {
+    const allItems = map[k]
+    const boilers = sortFacilitiesByStatusAndNumber(
+      allItems.filter(
+        (f) => f.facility_type === '锅炉' || (f.standard_name || f.raw_name || '').includes('炉')
+      )
+    )
+    const turbines = sortFacilitiesByStatusAndNumber(
+      allItems.filter(
+        (f) => f.facility_type === '汽机' || (f.standard_name || f.raw_name || '').includes('机')
+      )
+    )
+    const others = sortFacilitiesByStatusAndNumber(
+      allItems.filter(
+        (f) => !boilers.includes(f) && !turbines.includes(f)
+      )
+    )
+
+    const runningBoilers = boilers.filter((f) => f.status === '运行').length
+    const runningTurbines = turbines.filter((f) => f.status === '运行').length
+
+    // 燃气锅炉等大型锅炉主体：分两列等宽显示（左侧 1-5，右侧 6-10）
+    const isSplitBoilers = turbines.length === 0 && (k.includes('燃气') || boilers.length > 5)
+    let boilersLeft = []
+    let boilersRight = []
+    let runningBoilersLeft = 0
+    let runningBoilersRight = 0
+
+    if (isSplitBoilers) {
+      boilersLeft = sortFacilitiesByStatusAndNumber(
+        boilers.filter((f) => {
+          const num = parseInt(((f.standard_name || f.raw_name || '').match(/\d+/) || [0])[0], 10)
+          return num >= 1 && num <= 5
+        })
+      )
+      boilersRight = sortFacilitiesByStatusAndNumber(
+        boilers.filter((f) => {
+          const num = parseInt(((f.standard_name || f.raw_name || '').match(/\d+/) || [0])[0], 10)
+          return num > 5
+        })
+      )
+      runningBoilersLeft = boilersLeft.filter((f) => f.status === '运行').length
+      runningBoilersRight = boilersRight.filter((f) => f.status === '运行').length
+    }
+
+    let runningSummary = ''
+    if (turbines.length > 0 && boilers.length > 0) {
+      runningSummary = `运行：${runningTurbines}机 ${runningBoilers}炉`
+    } else if (turbines.length > 0) {
+      runningSummary = `运行：${runningTurbines}机`
+    } else if (boilers.length > 0) {
+      runningSummary = `运行：${runningBoilers}炉`
+    } else {
+      const runningCount = allItems.filter((f) => f.status === '运行').length
+      runningSummary = `运行：${runningCount}台`
+    }
+
+    return {
+      plant: k,
+      items: allItems,
+      boilers,
+      turbines,
+      others,
+      runningBoilers,
+      runningTurbines,
+      runningSummary,
+      isSplitBoilers,
+      boilersLeft,
+      boilersRight,
+      runningBoilersLeft,
+      runningBoilersRight
+    }
+  })
 })
 
 const availableEventOrgs = computed(() => {
@@ -808,6 +1121,7 @@ const filteredEvents = computed(() => {
 })
 
 onMounted(async () => {
+  ensureProjectsLoaded().catch(() => {})
   await loadAvailableDates()
   if (availableDates.value.length > 0) {
     currentBizDate.value = availableDates.value[0]
@@ -937,21 +1251,19 @@ function clearSelectedFiles() {
 }
 
 async function startExtraction() {
+  if (selectedFiles.value.length === 0) {
+    extractError.value = '请先选择待提取的调度文件或文件夹'
+    return
+  }
+
   isExtracting.value = true
   extractError.value = ''
   extractSummary.value = null
 
   try {
     const formData = new FormData()
-    if (extractMode.value === 'upload') {
-      for (const f of selectedFiles.value) {
-        formData.append('files', f)
-      }
-    } else {
-      if (!serverFolderPath.value) {
-        throw new Error('请输入有效的服务器文件目录路径')
-      }
-      formData.append('folder_path', serverFolderPath.value)
+    for (const f of selectedFiles.value) {
+      formData.append('files', f)
     }
 
     const res = await extractDispatchFiles(projectKey.value, formData, auth.token)
@@ -984,26 +1296,6 @@ async function cleanupTemp() {
     extractSummary.value.token = null
   } catch (err) {
     alert('清理失败：' + err.message)
-  }
-}
-
-async function quickImportHistorical() {
-  if (!confirm('是否立即导入 configs/10.28 dispatch_extracted_batch.json 中的 162 份基准全量数据？')) {
-    return
-  }
-  isExtracting.value = true
-  try {
-    const res = await importHistoricalDispatch(projectKey.value, true)
-    alert(`全量数据导入成功！共入库 ${res.total_saved} 条数据。`)
-    await loadAvailableDates()
-    if (availableDates.value.length > 0) {
-      currentBizDate.value = availableDates.value[0]
-      await fetchCurrentData()
-    }
-  } catch (err) {
-    alert('导入失败：' + err.message)
-  } finally {
-    isExtracting.value = false
   }
 }
 
@@ -1098,7 +1390,7 @@ function jumpToLatestDate() {
 }
 
 function handleSearch() {
-  activeTab.value = 'events'
+  // 关键字过滤通过 computed filteredEvents 实时响应
 }
 
 function clearSearch() {
@@ -1581,6 +1873,51 @@ function formatTemp(minT, maxT) {
   margin-top: 0.25rem;
 }
 
+/* 展板主体与就地平滑刷新蒙层（防视口高度塌陷与跳顶） */
+.dashboard-body {
+  position: relative;
+  min-height: 400px;
+  transition: opacity 0.2s ease;
+}
+.dashboard-body.is-fetching {
+  pointer-events: none;
+}
+.fetching-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 10vh;
+  border-radius: 8px;
+  animation: fadeIn 0.15s ease;
+}
+.fetching-pill {
+  position: sticky;
+  top: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: rgba(15, 23, 42, 0.92);
+  color: #ffffff;
+  padding: 0.6rem 1.25rem;
+  border-radius: 30px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.fetching-spinner {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #38bdf8;
+}
+
 /* 报告抬头 */
 .report-meta-header {
   display: flex;
@@ -1666,75 +2003,192 @@ function formatTemp(minT, maxT) {
   color: #64748b;
 }
 
-/* 标签页导航 */
-.detail-nav-tabs {
+/* 全量平铺数据板块流 */
+.dashboard-sections-flow {
   display: flex;
-  gap: 0.5rem;
-  border-bottom: 2px solid #e2e8f0;
-  margin-bottom: 1.25rem;
+  flex-direction: column;
+  gap: 1.75rem;
 }
-.detail-tab {
-  padding: 0.75rem 1.25rem;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #64748b;
-  cursor: pointer;
-  transition: all 0.2s;
+
+.dashboard-section-block {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
-.detail-tab:hover {
+
+.section-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.85rem;
+  margin-bottom: 1.15rem;
+}
+
+.section-block-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.section-block-title h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
   color: #1e293b;
 }
-.detail-tab.active {
-  color: #2563eb;
-  border-bottom-color: #2563eb;
+
+.section-block-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.section-badge {
+  font-size: 0.78rem;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-weight: 600;
 }
 
 /* 机炉拓扑卡片 */
 .facilities-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   gap: 1rem;
 }
 .plant-facilities-card {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 1.1rem;
 }
 .plant-card-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 0.5rem;
-  margin-bottom: 0.75rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.85rem;
 }
 .plant-name {
   font-weight: 700;
   color: #1e293b;
+  font-size: 1rem;
+}
+.plant-running-summary {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
+}
+
+/* 左机右炉 / 燃气分列分栏容器（严格 50/50 绝对等宽，卡片尺寸像素级对等） */
+.plant-split-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+}
+.plant-split-columns.single-column {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.plant-split-columns:not(.single-column)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 0;
+  border-left: 1px dashed #e2e8f0;
+  pointer-events: none;
+}
+.plant-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* 核心：防止内部元素把单列撑宽，确保双列绝对 50/50 等宽 */
+  width: 100%;
+  box-sizing: border-box;
+}
+.col-right {
+  /* 彻底消除原不对称的 padding-left 与 border-left，确保左右卡片内容宽度 100% 绝对一致 */
+  border-left: none;
+  padding-left: 0;
+  box-sizing: border-box;
+}
+.plant-split-columns.single-column .col-right {
+  border-left: none;
+  padding-left: 0;
+}
+.col-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+.col-icon {
   font-size: 0.95rem;
 }
-.plant-summary {
-  font-size: 0.8rem;
+.col-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+.col-stat {
+  font-size: 0.75rem;
   color: #64748b;
+  margin-left: 0.2rem;
+}
+
+/* 当日启动标签 */
+.fac-start-pill {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(234, 88, 12, 0.3);
+  white-space: nowrap;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
 }
 .facility-badges {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 .fac-badge {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.6rem;
+  justify-content: space-between;
+  padding: 0.38rem 0.65rem;
   border-radius: 6px;
   font-size: 0.82rem;
   font-weight: 600;
   border: 1px solid transparent;
+}
+.fac-name {
+  font-weight: 700;
+  color: #1e293b;
+}
+.fac-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .status-run {
   background: #dcfce7;
@@ -1750,12 +2204,6 @@ function formatTemp(minT, maxT) {
   background: #fee2e2;
   color: #b91c1c;
   border-color: #fecaca;
-}
-.fac-type-tag {
-  font-size: 0.7rem;
-  background: rgba(0,0,0,0.06);
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px;
 }
 .fac-status-tag {
   font-size: 0.75rem;
@@ -2119,5 +2567,18 @@ function formatTemp(minT, maxT) {
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .plant-split-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .col-right {
+    border-left: none;
+    padding-left: 0;
+    margin-top: 0.75rem;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 0.75rem;
+  }
 }
 </style>
