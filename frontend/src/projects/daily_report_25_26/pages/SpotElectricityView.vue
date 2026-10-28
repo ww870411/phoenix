@@ -2819,9 +2819,6 @@ onMounted(async () => {
       },
     })
   }
-  if (typeof document !== 'undefined') {
-    document.title = `${pageDisplayName.value} - 凤凰计划`
-  }
   checkMobileScreen()
   window.addEventListener('resize', handleResize)
   initResizeObserver()

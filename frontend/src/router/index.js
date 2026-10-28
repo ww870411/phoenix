@@ -69,14 +69,17 @@ const routes = [
   {
     path: '/projects/:projectKey/pages/spot_electricity',
     component: () => import('../projects/daily_report_25_26/pages/SpotElectricityView.vue'),
+    meta: { title: '电力现货市场' },
   },
   {
     path: '/projects/:projectKey/pages/dynamic_plan',
     component: () => import('../projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue'),
+    meta: { title: '计划动态分解模块' },
   },
   {
     path: '/projects/:projectKey/pages/global_management',
     component: () => import('../projects/daily_report_25_26/pages/GlobalManagementView.vue'),
+    meta: { title: '全局管理中心' },
   },
   {
     path: '/admin-console',
@@ -203,7 +206,7 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // 5.1.1 动态计划指标专属路由校验：凡是有权访问该项目的用户均可直接进入
+  // 5.1.1 计划动态分解模块专属路由校验：凡是有权访问该项目的用户均可直接进入
   if (to.path.endsWith('/pages/dynamic_plan')) {
     const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
     if (!auth.hasProjectAccess(pKey)) {
@@ -212,7 +215,7 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // 5.2 生产日报全局管控中心专属路由校验
+  // 5.2 生产日报全局管理中心专属路由校验
   if (to.path.endsWith('/pages/global_management')) {
     const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
     if (!auth.hasProjectAccess(pKey)) {

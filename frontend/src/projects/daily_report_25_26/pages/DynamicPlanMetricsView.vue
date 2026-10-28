@@ -286,7 +286,7 @@
           </div>
           <div class="chart-actions">
             <!-- 动态分解独立高质感开关 -->
-            <label class="decomp-toggle-pill" :class="{ 'is-active': isDynamicDecomposeEnabled }" title="基于目标月份逐日气温HDD20与优化建议k模型，将月度计划自适应分解至每日">
+            <label class="decomp-toggle-pill" :class="{ 'is-active': isDynamicDecomposeEnabled }" title="基于目标月份逐日气温HDD20与k值模型，将月度计划自适应分解至每日">
               <input
                 type="checkbox"
                 v-model="isDynamicDecomposeEnabled"
@@ -409,6 +409,17 @@
               <span class="temp-label">🌡️ 平均气温曲线</span>
             </label>
 
+            <!-- 动态分解算法与 k 值模型开关按钮 -->
+            <button
+              type="button"
+              class="btn-toggle-decomp-algorithm"
+              :class="{ active: showDecompAlgorithmPanel }"
+              @click="showDecompAlgorithmPanel = !showDecompAlgorithmPanel"
+              title="展开/收起动态分解数学算法原理与各指标 k 值模型"
+            >
+              {{ showDecompAlgorithmPanel ? '📐 收起算法与 k 值' : '📐 查看算法与 k 值' }}
+            </button>
+
             <button
               type="button"
               class="btn-toggle-decomp-table"
@@ -418,6 +429,229 @@
             >
               {{ showDecompDetailTable ? '📋 收起 30 天逐日明细表' : '📋 查看 30 天逐日明细表' }}
             </button>
+          </div>
+        </div>
+
+        <!-- 动态分解算法原理与各指标 k 值模型展示面板 -->
+        <div v-if="isDynamicDecomposeEnabled && showDecompAlgorithmPanel" class="decomp-algorithm-panel">
+          <div class="panel-header">
+            <div class="panel-title-wrap">
+              <span class="panel-badge-icon">📐</span>
+              <h4 class="panel-heading">动态分解算法原理与各指标气温敏感度 k 值模型</h4>
+              <span class="panel-context-tag">
+                🏢 {{ currentUnitLabel }} ｜ 📅 {{ formatMonthCn(dynamicTargetMonth) }}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="btn-close-panel"
+              title="收起算法与 k 值面板"
+              @click="showDecompAlgorithmPanel = false"
+            >
+              ✕ 收起
+            </button>
+          </div>
+
+          <!-- 管理员操作反馈提示条 -->
+          <div v-if="paramFeedback" :class="['admin-param-alert', paramFeedback.type]">
+            <span class="alert-icon">{{ paramFeedback.type === 'success' ? '✅' : paramFeedback.type === 'info' ? 'ℹ️' : '⚠️' }}</span>
+            <span class="alert-text">{{ paramFeedback.message }}</span>
+          </div>
+
+          <div class="panel-body-grid">
+            <!-- 左侧：算法数学公式与逻辑推演 -->
+            <div class="algo-formula-col">
+              <div class="algo-sub-title">
+                <span class="sub-step-num">∑</span>
+                <span>HDD20 采暖度日与日计划分解模型原理</span>
+              </div>
+              <div class="formula-cards-list">
+                <div class="formula-card">
+                  <div class="formula-card-header">
+                    <span class="card-step-badge">1. 供热度日 (HDD20)</span>
+                    <span class="card-tag">室外负荷驱动</span>
+                  </div>
+                  <div class="formula-math-box">
+                    <code>HDD20<sub>d</sub> = max(20 - T<sub>d</sub>, 0)</code>
+                  </div>
+                  <p class="formula-card-desc">
+                    以 <b>20℃</b> 为采暖平衡室外基准气温，<code>T<sub>d</sub></code> 为当日平均气温。当室外均温低于 20℃ 时产生供热负荷需求，温度越低度日越大。
+                  </p>
+                </div>
+
+                <div class="formula-card">
+                  <div class="formula-card-header">
+                    <span class="card-step-badge">2. 日敏感度权重 (W<sub>d</sub>)</span>
+                    <span class="card-tag">k 参数弹性调制</span>
+                  </div>
+                  <div class="formula-math-box">
+                    <code>W<sub>d</sub> = max(0, 1 + (k × m) × (HDD20<sub>d</sub> - avg_HDD20))</code>
+                  </div>
+                  <p class="formula-card-desc">
+                    <code>avg_HDD20</code> 为全月平均度日；<code>k</code> 为基准敏感度参数；<code>m</code> 为人工缩放系数（默认 1.0）。
+                    实际生效系数 <code>k<sub>eff</sub> = k × m</code>。当 <code>k<sub>eff</sub> > 0</code> 时负荷随气温偏冷上浮、偏暖下浮；若无模型或为 0 则权重恒为 <code>1.0</code>（日均摊水平直线）。
+                  </p>
+                </div>
+
+                <div class="formula-card">
+                  <div class="formula-card-header">
+                    <span class="card-step-badge">3. 全月守恒日分解计划 (P<sub>d</sub>)</span>
+                    <span class="card-tag">总量绝对守恒</span>
+                  </div>
+                  <div class="formula-math-box">
+                    <code>P<sub>d</sub> = P<sub>month</sub> × (W<sub>d</sub> / &sum;W<sub>i</sub>)</code>
+                  </div>
+                  <p class="formula-card-desc">
+                    按权重归一化分解月度计划总量 <code>P<sub>month</sub></code>，并实施分厘平差调整，确保全月各日分解合计严格守恒等于月计划总量。
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右侧：当前口径当前月份各指标 k 值参数矩阵表 -->
+            <div class="algo-k-col">
+              <div class="algo-sub-title">
+                <div class="title-with-count">
+                  <span class="sub-step-num">k</span>
+                  <span>{{ currentUnitLabel }} ｜ 各指标 k 值字典 (含 m 缩放)</span>
+                  <span v-if="isGlobalAdmin" class="admin-role-badge" title="当前登录为 Global_admin，可直接编辑单元格输入数值并保存生效">
+                    🔑 管理员可编辑
+                  </span>
+                </div>
+                <div class="algo-k-header-actions">
+                  <span v-if="decompositionMetricsWithK.length" class="k-count-badge">
+                    共 {{ decompositionMetricsWithK.length }} 项指标（{{ decompositionMetricsWithK.filter(m => m.has_k).length }} 项受气温驱动）
+                  </span>
+                  <template v-if="isGlobalAdmin && modifiedParamsCount > 0">
+                    <button
+                      type="button"
+                      class="btn-admin-save-all"
+                      :disabled="savingParams"
+                      @click="saveAllModifiedParams"
+                      title="保存全部已修改的 m 缩放系数"
+                    >
+                      {{ savingParams ? '⏳ 保存中...' : `💾 保存修改 (${modifiedParamsCount})` }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-admin-reset-all"
+                      :disabled="savingParams"
+                      @click="resetParamEdits"
+                      title="撤销未保存的改动"
+                    >
+                      ↩️ 撤销
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <div class="k-table-scroll-wrap">
+                <table class="k-dictionary-table">
+                  <thead>
+                    <tr>
+                      <th class="th-k-item">指标名称</th>
+                      <th class="th-k-unit text-center">单位</th>
+                      <th class="th-k-val text-right">基准 k 值</th>
+                      <th class="th-m-val text-center">
+                        m 缩放系数
+                        <small v-if="isGlobalAdmin" class="th-admin-tip">(点击输入)</small>
+                      </th>
+                      <th class="th-k-type text-center">模型机制</th>
+                      <th class="th-k-plan text-right">月计划总量</th>
+                      <th class="th-k-action text-center">
+                        {{ isGlobalAdmin ? '操作 / 聚焦' : '图表聚焦' }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="m in decompositionMetricsWithK"
+                      :key="'k_tbl_' + m.item"
+                      :class="{
+                        'row-focused': focusedMetricKey === m.item,
+                        'row-modified': isGlobalAdmin && isParamRowModified(m.item)
+                      }"
+                    >
+                      <td class="td-k-item">
+                        <i class="color-dot" :style="{ backgroundColor: getMetricColor(m.item) }"></i>
+                        <span class="item-name font-bold">{{ m.item_cn }}</span>
+                        <span v-if="isGlobalAdmin && isParamRowModified(m.item)" class="modified-dot" title="存在未保存的 m 缩放系数改动">●</span>
+                      </td>
+                      <td class="td-k-unit text-center text-muted">{{ m.unit || '—' }}</td>
+                      <td class="td-k-val text-right font-mono">
+                        <!-- 基准 k 值保持只读 -->
+                        <span v-if="m.has_k" class="k-badge-num active" :title="'基准 k 值: ' + m.k_value">
+                          {{ Number(m.k_value).toFixed(6) }}
+                        </span>
+                        <span v-else class="k-badge-num zero" title="未配置 k 值模型，视作 0 等额均摊">
+                          0.000000
+                        </span>
+                      </td>
+                      <td class="td-m-val text-center font-mono">
+                        <!-- 管理员在线输入 m 缩放系数 -->
+                        <template v-if="isGlobalAdmin && editingParams[m.item]">
+                          <input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            class="admin-inline-input m-input"
+                            :class="{ modified: Math.abs(Number(editingParams[m.item].m_value !== undefined ? editingParams[m.item].m_value : 1.0) - Number(editingParams[m.item].origin_m !== undefined ? editingParams[m.item].origin_m : 1.0)) > 1e-5 }"
+                            v-model.number="editingParams[m.item].m_value"
+                            title="设定 m 缩放系数（默认 1.0）"
+                            placeholder="1.0000"
+                          />
+                        </template>
+                        <!-- 非管理员只读展示 -->
+                        <template v-else>
+                          <span
+                            class="m-val-badge"
+                            :class="{ modified: Number(m.m_value || 1.0) !== 1.0 }"
+                            :title="'m 缩放系数: ' + (m.m_value !== undefined ? m.m_value : 1.0) + (Number(m.m_value || 1.0) !== 1.0 ? ' (生效 k=' + Number(m.effective_k).toFixed(6) + ')' : '')"
+                          >
+                            {{ Number(m.m_value !== undefined ? m.m_value : 1.0).toFixed(4) }}
+                          </span>
+                        </template>
+                      </td>
+                      <td class="td-k-type text-center">
+                        <span v-if="m.has_k" class="k-type-pill temp-driven">🔥 气温驱动</span>
+                        <span v-else class="k-type-pill baseline">➖ 基线均摊</span>
+                      </td>
+                      <td class="td-k-plan text-right font-mono font-bold">
+                        {{ formatNumber(m.month_plan) }}
+                      </td>
+                      <td class="td-k-action text-center">
+                        <div class="k-row-actions">
+                          <button
+                            type="button"
+                            class="btn-k-focus"
+                            :class="{ active: focusedMetricKey === m.item }"
+                            title="在图表中高亮聚焦该指标走势"
+                            @click="focusMetric(m)"
+                          >
+                            {{ focusedMetricKey === m.item ? '已聚焦' : '🎯 聚焦' }}
+                          </button>
+                          <button
+                            v-if="isGlobalAdmin && isParamRowModified(m.item)"
+                            type="button"
+                            class="btn-k-save-single"
+                            :disabled="savingParams"
+                            title="保存当前指标设置"
+                            @click="saveSingleParam(m)"
+                          >
+                            💾
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="!decompositionMetricsWithK.length">
+                      <td colspan="7" class="td-k-empty">
+                        {{ dynamicDecompLoading ? '正在加载当前口径 k 值模型与计划数据…' : '暂无当前月份的指标 k 值数据' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -613,10 +847,154 @@ import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { getDynamicPlanMeta, getDynamicPlanData, importEnsembleTemperature, fetchDynamicDailyDecomposition } from '../services/api'
+import { getDynamicPlanMeta, getDynamicPlanData, importEnsembleTemperature, fetchDynamicDailyDecomposition, updateDynamicPlanKParameters } from '../services/api'
+import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
+import { useAuthStore } from '../store/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
 const projectKey = String(route.params.projectKey || 'daily_report_25_26')
+const projectName = computed(() => getProjectNameById(projectKey) || '2025-2026供暖期生产日报')
+
+// 全局管理员身份鉴权：只有 Global_admin 或系统超管 ww870411 具备前台在线设定 k 与 m 参数的权限
+const isGlobalAdmin = computed(() => {
+  const grp = String(auth.user?.group || '').toLowerCase()
+  const name = String(auth.user?.username || '').toLowerCase()
+  return grp === 'global_admin' || name === 'ww870411' || Boolean(auth.canAccessAdminConsole)
+})
+
+// 管理员在线参数编辑状态池：{ [item]: { k_value, m_value, origin_k, origin_m, item_cn, unit } }
+const editingParams = ref({})
+const savingParams = ref(false)
+const paramFeedback = ref(null)
+
+function syncEditingParamsFromMetrics(metrics) {
+  const next = {}
+  ;(metrics || []).forEach((m) => {
+    const k = Number(m.k_value || 0)
+    const mv = Number(m.m_value !== undefined ? m.m_value : 1.0)
+    next[m.item] = {
+      k_value: k,
+      m_value: mv,
+      origin_k: k,
+      origin_m: mv,
+      item_cn: m.item_cn || m.item,
+      unit: m.unit || '',
+    }
+  })
+  editingParams.value = next
+}
+
+function isParamRowModified(itemKey) {
+  const cur = editingParams.value[itemKey]
+  if (!cur) return false
+  const diffM = Math.abs(Number(cur.m_value !== undefined ? cur.m_value : 1.0) - Number(cur.origin_m !== undefined ? cur.origin_m : 1.0)) > 1e-5
+  return diffM
+}
+
+const modifiedParamRows = computed(() => {
+  const rows = []
+  for (const [key, p] of Object.entries(editingParams.value)) {
+    if (isParamRowModified(key)) {
+      rows.push({ item: key, ...p })
+    }
+  }
+  return rows
+})
+
+const modifiedParamsCount = computed(() => modifiedParamRows.value.length)
+
+function resetParamEdits() {
+  for (const p of Object.values(editingParams.value)) {
+    p.m_value = p.origin_m
+  }
+  paramFeedback.value = {
+    type: 'info',
+    message: '已撤销当前未保存的 m 缩放系数改动',
+  }
+  setTimeout(() => {
+    if (paramFeedback.value?.type === 'info') paramFeedback.value = null
+  }, 2500)
+}
+
+const targetMonthNumber = computed(() => {
+  const parts = String(dynamicTargetMonth.value || '2026-11').split('-')
+  return parts.length >= 2 ? parseInt(parts[1], 10) : 11
+})
+
+async function saveSingleParam(m) {
+  const p = editingParams.value[m.item]
+  if (!p) return
+  await executeSaveParams([
+    {
+      company: currentCompany.value,
+      month: targetMonthNumber.value,
+      item: m.item,
+      item_cn: m.item_cn,
+      unit: m.unit,
+      m_value: Number(p.m_value !== undefined ? p.m_value : 1.0),
+    },
+  ])
+}
+
+async function saveAllModifiedParams() {
+  const list = modifiedParamRows.value.map((p) => ({
+    company: currentCompany.value,
+    month: targetMonthNumber.value,
+    item: p.item,
+    item_cn: p.item_cn,
+    unit: p.unit,
+    m_value: Number(p.m_value !== undefined ? p.m_value : 1.0),
+  }))
+  if (!list.length) return
+  await executeSaveParams(list)
+}
+
+async function executeSaveParams(updates) {
+  if (savingParams.value) return
+  savingParams.value = true
+  paramFeedback.value = null
+  try {
+    const res = await updateDynamicPlanKParameters(projectKey, { updates })
+    if (res.ok) {
+      paramFeedback.value = {
+        type: 'success',
+        message: res.message || 'm 缩放系数保存成功，已实时重新试算日分解分布律！',
+      }
+      updates.forEach((u) => {
+        if (editingParams.value[u.item]) {
+          editingParams.value[u.item].origin_m = u.m_value
+        }
+      })
+      // 重新加载日分解计算数据，使图表、Tooltip与表格即时响应
+      await loadDynamicDecompositionData()
+    } else {
+      paramFeedback.value = {
+        type: 'error',
+        message: res.message || '保存 m 缩放系数失败',
+      }
+    }
+  } catch (err) {
+    paramFeedback.value = {
+      type: 'error',
+      message: err.message || '网络连接或后端异常',
+    }
+  } finally {
+    savingParams.value = false
+    setTimeout(() => {
+      paramFeedback.value = null
+    }, 6000)
+  }
+}
+
+const pageDisplayName = computed(() => {
+  const raw = route.query.pageName
+  const legacyNames = new Set(['动态计划指标', '动态计划模块'])
+  if (typeof raw === 'string' && raw.trim() && !legacyNames.has(raw.trim())) {
+    return raw.trim()
+  }
+  return '计划动态分解模块'
+})
 
 // 页面基础响应状态
 const loading = ref(false)
@@ -670,6 +1048,28 @@ const dynamicDecompData = ref(null)
 const dynamicDecompError = ref('')
 const showDecompDetailTable = ref(false)
 const showDecompTemperature = ref(true) // 动态分解时默认展示平均气温曲线，支持勾选切换关闭
+const showDecompAlgorithmPanel = ref(false) // 动态分解算法与各指标 k 值面板（默认收起状态）
+
+// 当前单位口径在目标月份下的全部指标及 k 值字典列表（按是否有 k 值与数值大小排序）
+const decompositionMetricsWithK = computed(() => {
+  if (!dynamicDecompData.value || !dynamicDecompData.value.metrics) return []
+  return [...dynamicDecompData.value.metrics].sort((a, b) => {
+    if (a.has_k && !b.has_k) return -1
+    if (!a.has_k && b.has_k) return 1
+    const diffK = Number(b.k_value || 0) - Number(a.k_value || 0)
+    if (Math.abs(diffK) > 1e-6) return diffK
+    return (a.item_cn || '').localeCompare(b.item_cn || '', 'zh-CN')
+  })
+})
+
+// 监听指标列表变化，同步初始化管理员编辑池
+watch(
+  decompositionMetricsWithK,
+  (list) => {
+    syncEditingParamsFromMetrics(list)
+  },
+  { immediate: true }
+)
 
 // 当前在动态分解模式下处于激活展示状态的指标（与图表二次筛选严格联动）
 const activeDecompositionMetrics = computed(() => {
@@ -712,6 +1112,7 @@ async function loadDynamicDecompositionData() {
 function handleDynamicDecomposeToggle() {
   if (isDynamicDecomposeEnabled.value) {
     showDecompTemperature.value = true // 选中“动态分解”时，默认开启平均气温参考曲线
+    showDecompAlgorithmPanel.value = false // 算法与各指标 k 值面板默认保持收起状态
     if (startMonth.value === endMonth.value) {
       dynamicTargetMonth.value = startMonth.value
     } else if (displayedMonths.value.includes('2026-11')) {
@@ -778,8 +1179,8 @@ const presetRanges = [
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
-  { label: '2025-2026供暖期生产日报', to: `/projects/${encodeURIComponent(projectKey)}/pages` },
-  { label: '动态计划指标', to: null },
+  { label: projectName.value, to: `/projects/${encodeURIComponent(projectKey)}/pages` },
+  { label: pageDisplayName.value, to: null },
 ])
 
 const currentUnitLabel = computed(() => {
@@ -1170,7 +1571,7 @@ async function fetchData() {
 }
 
 // -------------------------------------------------------------
-// 动态日计划分解图表渲染引擎 (基于 HDD20 与建议 k 模型)
+// 动态日计划分解图表渲染引擎 (基于 HDD20 与 k 值模型)
 // -------------------------------------------------------------
 function renderDynamicDecomposeChart() {
   if (!chartContainerRef.value) return
@@ -1218,7 +1619,7 @@ function renderDynamicDecomposeChart() {
       {
         title: {
           text: '未勾选具备 k 值的分解指标',
-          subtext: '请在右上角【图表呈现】中勾选具备建议 k 模型的指标项（如供热量、发电量、耗煤等）',
+          subtext: '请在右上角【图表呈现】中勾选具备 k 模型的指标项（如供热量、发电量、耗煤等）',
           left: 'center',
           top: 'center',
           textStyle: { color: '#94a3b8', fontSize: 16, fontWeight: 500 },
@@ -1283,7 +1684,7 @@ function renderDynamicDecomposeChart() {
   const yAxes = [
     {
       type: 'value',
-      name: leftUnit ? `左纵轴 (${leftUnit})` : '',
+      name: leftUnit || '',
       nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
       splitLine: { lineStyle: { color: '#f1f5f9' } },
       axisLabel: { formatter: (v) => formatAxisNum(v) },
@@ -1293,7 +1694,7 @@ function renderDynamicDecomposeChart() {
   if (hasDualAxis) {
     yAxes.push({
       type: 'value',
-      name: `右纵轴 (${rightUnit})`,
+      name: rightUnit || '',
       position: 'right',
       nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
       splitLine: { show: false },
@@ -1509,7 +1910,8 @@ function renderChart() {
     const yAxes = [
       {
         type: 'value',
-        name: mapping.leftUnit ? `左纵轴 (${mapping.leftUnit})` : '',
+        name: mapping.leftUnit || '',
+        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
         splitLine: { lineStyle: { color: '#f1f5f9' } },
         axisLabel: { formatter: (v) => formatAxisNum(v) },
       },
@@ -1517,7 +1919,9 @@ function renderChart() {
     if (hasDualAxis) {
       yAxes.push({
         type: 'value',
-        name: mapping.rightUnit ? `右纵轴 (${mapping.rightUnit})` : '',
+        name: mapping.rightUnit || '',
+        position: 'right',
+        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
         splitLine: { show: false },
         axisLabel: { formatter: (v) => formatAxisNum(v) },
       })
@@ -1607,7 +2011,8 @@ function renderChart() {
     const yAxes = [
       {
         type: 'value',
-        name: mapping.leftUnit ? `左纵轴 (${mapping.leftUnit})` : '',
+        name: mapping.leftUnit || '',
+        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
         splitLine: { lineStyle: { color: '#f1f5f9' } },
         axisLabel: { formatter: (v) => formatAxisNum(v) },
       },
@@ -1615,7 +2020,9 @@ function renderChart() {
     if (hasDualAxis) {
       yAxes.push({
         type: 'value',
-        name: mapping.rightUnit ? `右纵轴 (${mapping.rightUnit})` : '',
+        name: mapping.rightUnit || '',
+        position: 'right',
+        nameTextStyle: { color: '#64748b', fontSize: 11, padding: [0, 0, 4, 0] },
         splitLine: { show: false },
         axisLabel: { formatter: (v) => formatAxisNum(v) },
       })
@@ -1834,11 +2241,12 @@ function exportToExcel() {
   const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '动态计划数据')
-  const fileName = `${currentUnitLabel.value}_动态计划指标_${startMonth.value}_${endMonth.value}.xlsx`
+  const fileName = `${currentUnitLabel.value}_${pageDisplayName.value}_${startMonth.value}_${endMonth.value}.xlsx`
   XLSX.writeFile(wb, fileName)
 }
 
 onMounted(async () => {
+  ensureProjectsLoaded().catch(() => {})
   window.addEventListener('resize', handleResize)
   window.addEventListener('click', handleGlobalClick)
   if (chartContainerRef.value && typeof ResizeObserver !== 'undefined') {
@@ -3132,6 +3540,33 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 6px rgba(2, 132, 199, 0.6);
 }
 
+.btn-toggle-decomp-algorithm {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-toggle-decomp-algorithm:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.btn-toggle-decomp-algorithm.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
 .btn-toggle-decomp-table {
   padding: 4px 12px;
   font-size: 12px;
@@ -3154,6 +3589,506 @@ onBeforeUnmount(() => {
   background: #eff6ff;
   border-color: #3b82f6;
   color: #1d4ed8;
+}
+
+/* 动态分解算法与各指标 k 值模型展示面板 */
+.decomp-algorithm-panel {
+  margin-top: 12px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06);
+  animation: fadeInDown 0.2s ease;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 14px;
+}
+
+.panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.panel-badge-icon {
+  font-size: 16px;
+}
+
+.panel-heading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.panel-context-tag {
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.btn-close-panel {
+  padding: 3px 8px;
+  font-size: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-close-panel:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.panel-body-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .panel-body-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.algo-formula-col,
+.algo-k-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.algo-sub-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 10px;
+}
+
+.title-with-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sub-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #eff6ff;
+  color: #2563eb;
+  border-radius: 4px;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.k-count-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* 公式卡片列表 */
+.formula-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.formula-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: all 0.15s ease;
+}
+
+.formula-card:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.formula-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.card-step-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.card-tag {
+  font-size: 11px;
+  color: #475569;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.formula-math-box {
+  background: #1e293b;
+  color: #38bdf8;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  margin-bottom: 6px;
+  letter-spacing: 0.3px;
+  overflow-x: auto;
+}
+
+.formula-card-desc {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.formula-card-desc b {
+  color: #1e293b;
+}
+
+.formula-card-desc code {
+  background: #e2e8f0;
+  color: #334155;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+/* k 值矩阵表 */
+.k-table-scroll-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  max-height: 310px;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.k-dictionary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.k-dictionary-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  z-index: 1;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.k-dictionary-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.k-dictionary-table tr:hover td {
+  background: #f8fafc;
+}
+
+.k-dictionary-table tr.row-focused td {
+  background: #eff6ff;
+}
+
+.td-k-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.k-badge-num {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.2px;
+}
+
+.k-badge-num.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+  border: 1px solid #bfdbfe;
+}
+
+.k-badge-num.zero {
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.m-val-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.m-val-badge.modified {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #b45309;
+  font-weight: 700;
+}
+
+.k-type-pill {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.k-type-pill.temp-driven {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.k-type-pill.baseline {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-k-focus {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.btn-k-focus:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.btn-k-focus.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Global_admin 在线参数编辑控制样式 */
+.admin-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: #fef3c7;
+  border: 1px solid #fde047;
+  color: #854d0e;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.algo-k-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-admin-save-all {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  background: #16a34a;
+  border: 1px solid #15803d;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.3);
+}
+
+.btn-admin-save-all:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.btn-admin-save-all:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-admin-reset-all {
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-admin-reset-all:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.th-admin-tip {
+  font-size: 10px;
+  color: #2563eb;
+  font-weight: normal;
+  margin-left: 2px;
+}
+
+.admin-inline-input {
+  width: 90px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: right;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #0f172a;
+  transition: all 0.15s ease;
+}
+
+.admin-inline-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.admin-inline-input.k-input {
+  width: 98px;
+}
+
+.admin-inline-input.m-input {
+  width: 78px;
+  text-align: center;
+}
+
+.admin-inline-input.modified {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #b45309;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px #f59e0b;
+}
+
+.modified-dot {
+  color: #f59e0b;
+  font-size: 10px;
+  margin-left: 2px;
+}
+
+.k-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.btn-k-save-single {
+  padding: 2px 5px;
+  font-size: 11px;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+  background: #f0fdf4;
+  color: #16a34a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-k-save-single:hover:not(:disabled) {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.row-modified td {
+  background-color: #fffdf5 !important;
+}
+
+.admin-param-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  animation: fadeInDown 0.2s ease;
+}
+
+.admin-param-alert.success {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #15803d;
+}
+
+.admin-param-alert.error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+}
+
+.admin-param-alert.info {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0369a1;
+}
+
+.td-k-empty {
+  text-align: center;
+  padding: 24px;
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .decomp-meta-badge {

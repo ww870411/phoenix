@@ -415,7 +415,7 @@ function openPage(page) {
   if (isDynamicPlan) {
     router.push({
       path: `${base}`,
-      query: { pageName: page.page_name || '动态计划指标' },
+      query: { pageName: page.page_name || '计划动态分解模块' },
     })
     return
   }

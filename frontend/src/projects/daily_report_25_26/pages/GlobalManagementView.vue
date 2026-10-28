@@ -711,18 +711,29 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
 
+const route = useRoute()
 const router = useRouter()
-const projectKey = 'daily_report_25_26'
+const projectKey = String(route.params.projectKey || 'daily_report_25_26')
+const projectName = computed(() => getProjectNameById(projectKey) || '2025-2026供暖期生产日报')
 
-const breadcrumbItems = [
+const pageDisplayName = computed(() => {
+  const raw = route.query.pageName
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim()
+  }
+  return '全局管理中心'
+})
+
+const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
-  { label: '2025-2026供暖期生产日报', to: `/projects/${projectKey}/pages` },
-  { label: '全局管控中心', to: null },
-]
+  { label: projectName.value, to: `/projects/${encodeURIComponent(projectKey)}/pages` },
+  { label: pageDisplayName.value, to: null },
+])
 
 // 选项卡状态
 const activeTab = ref('algorithms')
@@ -790,13 +801,14 @@ const unitList = [
 ]
 
 onMounted(async () => {
+  ensureProjectsLoaded().catch(() => {})
   await loadSeasonConfig()
   await loadBizDate()
   await loadCatalog()
 })
 
 function goProjectPages() {
-  router.push(`/projects/${projectKey}/pages`)
+  router.push(`/projects/${encodeURIComponent(projectKey)}/pages`)
 }
 
 async function loadSeasonConfig() {

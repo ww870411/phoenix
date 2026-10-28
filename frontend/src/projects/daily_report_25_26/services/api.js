@@ -3296,6 +3296,20 @@ export async function fetchDynamicDailyDecomposition({
 }
 
 
+export async function updateDynamicPlanKParameters(projectKey = 'daily_report_25_26', payload) {
+  const url = `${projectPath(projectKey)}/dynamic_plan/update_k_parameters`
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '保存 k/m 模型参数失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
 export async function checkSpotElectricityExists(projectKey = 'daily_report_25_26', date) {
   const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/sync/check_exists?date=${encodeURIComponent(date)}`)
   const response = await authAwareFetch(url, {

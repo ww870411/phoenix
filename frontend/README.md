@@ -1,3 +1,105 @@
+## 2026-10-28 生产日报子项目：全局管理中心面包屑导航文字修正与动态联动 (Global Management View Breadcrumbs & Route Meta Alignment)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue)：
+      - **面包屑响应式重构**：将原本静态写死的 `breadcrumbItems` 数组重构为 `computed` 响应式计算属性；
+      - **动态项目与页面名称适配**：引入 `useRoute` 与 `useProjects` (`getProjectNameById`, `ensureProjectsLoaded`)，动态获取项目名称 `projectName` 与页面名 `pageDisplayName`（优先读取 URL 中的 `?pageName=全局管理中心`，默认兜底 `'全局管理中心'`），彻底消除原本陈旧写死的 `'全局管控中心'`；
+      - **生命周期优化**：在 `onMounted` 钩子中同步拉取项目名称，返回按钮使用 `encodeURIComponent(projectKey)` 规范化跳转；彻底清除自作主张追加的 `document.title`，严格遵循系统统一标准。
+    - [`AppHeader.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/AppHeader.vue)：
+      - `getCurrentPageName` 在特殊页面识别中补充 `/pages/global_management`、`/pages/dynamic_plan`、`/pages/spot_electricity` 的准确中文名称映射，并优先响应 `route.query.pageName`，保证全局在线人员状态与页面标题高度一致。
+    - [`router/index.js`](file:///D:/编程项目/phoenix/frontend/src/router/index.js)：
+      - 为 `global_management`、`dynamic_plan`、`spot_electricity` 路由补充 `meta: { title: ... }` 元属性，并将守卫注释收敛为“全局管理中心”。
+
+## 2026-10-28 计划动态分解模块：基准 k 值恢复只读，前台仅开放 m 缩放系数在线设定 (Pure Readonly K-Value & M-Factor Online Editing)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **基准 $k$ 值纯只读化**：彻底移除 $k$ 值列的输入框分支，统一渲染为严肃客观的只读 Badge，杜绝意外变动；
+      - **$m$ 缩放系数在线微调**：仅保留管理员对 $m$ 缩放系数列的在线输入设定与单行/批量保存，输入修改后黄色高亮指示，保存后即时重算并刷新图表分布律。
+
+## 2026-10-28 计划动态分解模块：Global_admin 前台在线设定 k 与 m 参数 (Admin Online K & M Parameter Editing)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **管理员权限自适应**：基于 `useAuthStore` 识别 `Global_admin` / 系统超管身份，展板顶部点亮【🔑 管理员可编辑】身份徽章；
+      - **行内输入与即时改动感知**：针对基准 $k$ 值与 $m$ 缩放系数列提供微型数字输入框，改动时实时黄色高亮提示，显示待保存小圆点；
+      - **批量保存与即时重绘**：右上角提供【💾 保存修改 (N)】与【↩️ 撤销】按钮，表格行末提供独立 `💾` 保存按钮，点击保存调用接口入库并即时自动重新拉取日分解计算，图表分布律平滑重绘。
+  - **服务接口接入**：
+    - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)：新增 `updateDynamicPlanKParameters` 统一请求方法。
+
+## 2026-10-28 计划动态分解模块：聚合口径图表与逐日计划联动 m 缩放生效 (Rollup View Responsive to M-Factor)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - 配合后端分解服务算法升级，在查看“集团全口径”或“主城区”等聚合口径时，图表走势、Tooltip 权重及逐日分解明细严格响应当前口径所配 $m$ 缩放系数的调节，分布律即时呈现弹性放大或收敛。
+
+## 2026-10-28 计划动态分解模块：缩放系数全面规范收敛为小写 m (Scale Factor Standardized to Lowercase m)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **公式符号规范**：步骤 2 日敏感度权重公式规范为 $W_d = \max(0, 1 + (k \times m) \times (HDD20_d - \overline{HDD20}))$，说明文案同步将 $M$ 全面替换为小写 $m$（“$m$ 为人工缩放系数”、“$k_{eff} = k \times m$”）；
+      - **展板表头与标题小写化**：指标参数字典展板标题更新为【各指标 k 值字典 (含 m 缩放)】，表格列头正式定为【m 缩放系数】；
+      - **浮层提示对齐**：表格数据项 Tooltip 同步变更为 `'m 缩放系数: ...'`。
+
+## 2026-10-28 计划动态分解模块：M 缩放系数列与有效敏感度公式展示 (M-Factor Scaling Column & Display)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **公式模型更新**：步骤 2 日敏感度权重公式升级为 $W_d = \max(0, 1 + (k \times M) \times (HDD20_d - \overline{HDD20}))$，明确 $M$ 系数的调节机制；
+      - **矩阵表格新增 M 列**：各指标字典表中增加【M 缩放系数】列（默认显示 `1.0000` 浅灰徽章，若被手动调节则自动以金色高亮指示）。
+
+## 2026-10-28 计划动态分解模块：算法与k值区域默认收起与文案收敛规范 (Default Collapsed & Pure K-Value Label)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **默认折叠收起**：算法与 k 值模型区域默认处于收起状态（`showDecompAlgorithmPanel = false`），保持界面主视图清爽，用户通过二级控制栏 `[📐 查看算法与 k 值]` 按钮按需展开；
+      - **文案统一精炼**：清退“建议k值”称谓，表头与说明统一收敛为标准“k值” / “k 值”。
+
+## 2026-10-28 计划动态分解模块：上线分解算法原理推演与各指标建议k值模型展板 (Decomposition Algorithm & K-Matrix Panel)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **算法与 k 值模型专属卡片**：勾选“动态分解”时默认呈现 `decomp-algorithm-panel`，支持二级控制栏按钮随时一键折叠/展开；
+      - **公式步骤清晰展示**：图文并茂展示 HDD20 采暖度日公式、日敏感度权重计算公式与全月守恒日分解公式；
+      - **指标 k 值字典矩阵**：呈现当前口径当前月份各指标专属建议 $k$ 值（精确至 6 位小数）、驱动模型机制与月计划总量，并支持一键【🎯 聚焦】图表对应曲线。
+
+## 2026-10-28 计划动态分解模块：移除图表内部“左纵轴/右纵轴”冗余字样 (Remove Redundant Axis Prefixes)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **Y 轴名称视觉瘦身**：全面清理动态分解日走势、月度动态走势与柱状对比图中的 `yAxes` 配置，去除 `左纵轴 (...)` 与 `右纵轴 (...)` 字样；
+      - **纯单位轴标**：图表轴名直接渲染纯单位（`leftUnit || ''` 与 `rightUnit || ''`），搭配淡雅色温样式与边距垫底，与上方横幅指引形成完美的视觉互补。
+
+## 2026-10-28 页面名称终版校准：“计划动态分解模块” (Rename to Plan Dynamic Decomposition Module)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)：
+      - **卡片跳转兜底命名校准**：将 `isDynamicPlan` 分支中的路由跳转 query 兜底值更新为 `'计划动态分解模块'`。
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **多重历史参数兼容升级**：`pageDisplayName` 将旧名称 `'动态计划指标'` 与过渡名称 `'动态计划模块'` 统一收敛归一化为 `'计划动态分解模块'`；
+      - **全系统视图同步**：面包屑末级、浏览器窗口标题（`document.title`）及 Excel 导出文件前缀保持全流程一致。
+
+## 2026-10-28 功能更名与面包屑校准：“动态计划指标”更名为“动态计划模块” (Dynamic Plan Metrics to Dynamic Plan Module)
+
+- **涉及页面与界面组件演进说明**：
+  - **核心页面与功能更新**：
+    - [`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)：
+      - **卡片跳转兜底命名校准**：将 `isDynamicPlan` 分支中的路由跳转 query 兜底值更新为 `'动态计划模块'`。
+    - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+      - **面包屑导航动态响应与旧名称自动归一化**：面包屑第三项解除硬编码，由计算属性 `pageDisplayName` 动态提供。优先读取 `route.query.pageName`，若检测到旧参数 `'动态计划指标'` 则自动矫正为 `'动态计划模块'`，解决带历史 query 访问时面包屑不符的问题；
+      - **项目层级动态联动**：第二项项目名称通过 `projectName` 与 `useProjects` 响应式联动，并在挂载时执行 `ensureProjectsLoaded()`；
+      - **浏览器标题与导出文件命名统一**：挂载阶段同步设置 `document.title = `${pageDisplayName.value} - 凤凰计划``，Excel 导出文件自动包含规范名称。
+
 ## 2026-10-27 动态计划指标：动态分解默认增加“平均气温”参考曲线与自由开闭功能 (Default Average Temperature Curve with Toggle)
 
 - **涉及页面与界面组件演进说明**：

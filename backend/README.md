@@ -1,3 +1,61 @@
+## 2026-10-28 动态计划接口：加固基准 k 值只读性，锁定仅开放 m 缩放系数更新 (K-Value Readonly Lockdown & M-Factor Exclusive Update)
+
+- **核心接口与数据库操作说明**：
+  - **接口更新范围收敛**：
+    - [`dynamic_plan.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dynamic_plan.py)：
+      - `POST /api/v1/projects/{project_key}/dynamic_plan/update_k_parameters` 接口后端逻辑加固：严格锁定底层历史拟合的基准 `k_value` 不受任何前台修改，执行 SQL `UPDATE` 时仅更新 `m_value`，切实保障核心基准敏感度模型的客观严肃性。
+
+## 2026-10-28 动态计划接口：Global_admin 专属 k 与 m 参数更新 API (K & M Parameters Update API)
+
+- **核心接口与数据库操作说明**：
+  - **接口暴露与鉴权门禁**：
+    - [`dynamic_plan.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dynamic_plan.py)：
+      - 暴露 `POST /api/v1/projects/{project_key}/dynamic_plan/update_k_parameters`；
+      - 依赖 `get_current_session_optional` 提取会话，限制仅允许 `Global_admin`、系统超管（`ww870411`）或具备全局后台访问权限（`can_access_admin_console`）的角色调用，非授权账号直接拦截并返回 `403 Forbidden`；
+      - 接收批量修改项，执行 `INSERT ... ON CONFLICT (company, month, item) DO UPDATE` 幂等写入，支持更新存量或插入新参数。
+
+## 2026-10-28 动态计划分解服务：聚合口径启用自身专属 k 与 m 缩放模型 (Dynamic Plan Rollup K & M Model Activation)
+
+- **核心服务与计算逻辑升级说明**：
+  - **聚合口径计算缺陷修复**：
+    - [`dynamic_decomposition_service.py`](file:///D:/编程项目/phoenix/backend/services/dynamic_decomposition_service.py)：
+      - **问题根因**：原服务在处理聚合口径（`Group`、`ZhuChengQu`）的总量指标时，无条件执行下属各子口径日计划相加，导致该聚合口径在 `dynamic_month_plan_k` 中配置的专属 $k$ 与 $m$ 缩放系数被架空，用户修改集团 $m$ 值后日分解走势与分布律完全无变化；
+      - **架构升级**：调整聚合口径总量指标处理机制——若当前聚合口径已配置专属 $k$ 参数（`has_k == True`），严格采用该口径的月计划总量与有效系数 $k_{eff} = k \times m$ 直接进行动态度日分解，使当前口径展板中展示的参数矩阵与图表分布律 100% 对应联动；仅在未配置 $k$ 值时，才由各子口径相加聚合。
+
+## 2026-10-28 动态日分解服务：缩放系数注释与文案全面规范为小写 m (Scale Factor Annotation Normalized to Lowercase m)
+
+- **核心服务与代码注释规范说明**：
+  - **服务注释与协议口径统一**：
+    - [`dynamic_decomposition_service.py`](file:///D:/编程项目/phoenix/backend/services/dynamic_decomposition_service.py)：
+      - 将聚合口径与实体口径数据查询及计算逻辑中的“M 缩放系数”内部注释统一调整为“m 缩放系数”，与数据库底层小写字段 `m_value`、ORM 模型属性以及前端展示口径保持严格一致。
+
+## 2026-10-28 动态计划表增加 M 值手动缩放系数与计算引擎联动 (Dynamic Plan K Parameters M-Factor Support)
+
+- **核心服务与数据库演进说明**：
+  - **数据库表结构扩展**：
+    - `public.dynamic_month_plan_k` 表新增 `m_value NUMERIC(16, 6) NOT NULL DEFAULT 1.0` 字段，存量 360 条参数数据自动赋予默认值 `1.000000`；
+    - ORM 映射模型 [`database_daily_report_25_26.py`](file:///D:/编程项目/phoenix/backend/db/database_daily_report_25_26.py) 同步声明 `m_value = Column(Numeric(16, 6), nullable=False, default=1.0)`；
+    - 建表脚本 [`dynamic_month_plan_k.sql`](file:///D:/编程项目/phoenix/backend/sql/dynamic_month_plan_k.sql) 同步增加字段定义。
+  - **动态日分解计算引擎升级**：
+    - [`dynamic_decomposition_service.py`](file:///D:/编程项目/phoenix/backend/services/dynamic_decomposition_service.py)：
+      - 查询 `dynamic_month_plan_k` 时提取 `COALESCE(m_value, 1.0)`；
+      - 引入有效敏感度系数 $k_{eff} = k \times M$，日权重计算公式升级为 $W_d = \max(0, 1 + k_{eff} \times (HDD20_d - \overline{HDD20}))$；
+      - API 响应中为指标补齐 `k_value`、`m_value`、`effective_k` 属性。
+
+## 2026-10-28 项目列表共享配置更新：“动态计划模块”定名为“计划动态分解模块” (Project Config Dynamic Decomposition Rename)
+
+- **核心服务与共享数据配置说明**：
+  - **共享项目字典校准**：
+    - [`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)：
+      - 将 `daily_report_25_26` 项目中 `dynamic_plan` 功能项的 `页面名称` 字段正式变更为 `"计划动态分解模块"`。
+
+## 2026-10-28 项目列表共享配置更新：“动态计划指标”页面名称校准为“动态计划模块” (Project Config Dynamic Plan Rename)
+
+- **核心服务与共享数据配置说明**：
+  - **共享项目字典校准**：
+    - [`backend_data/shared/项目列表.json`](file:///D:/编程项目/phoenix/backend_data/shared/项目列表.json)：
+      - 将 `daily_report_25_26` 项目中 `dynamic_plan` 功能项的 `页面名称` 字段由 `"动态计划指标"` 更新为 `"动态计划模块"`，保持后端接口配置元数据与前端多级视图完全统一。
+
 ## 2026-10-27 动态计划日分解全量指标均摊与非k水平基准线支持 (Non-K Constant Baseline Support)
 
 - **核心服务与计算逻辑说明**：

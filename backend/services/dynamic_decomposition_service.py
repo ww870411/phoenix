@@ -197,17 +197,25 @@ def get_dynamic_daily_decomposition(
             sub_res = _decompose_entity_company(sub_c, month_int, year_month, hdd20_series, avg_hdd20, session)
             sub_decompositions[sub_c] = sub_res
 
-        # 查询该聚合口径自身的建议 k 值表
+        # 查询该聚合口径自身的建议 k 值与 m 缩放系数表
         k_rows = session.execute(
             text("""
-                SELECT item, item_cn, unit, k_value
+                SELECT item, item_cn, unit, k_value, COALESCE(m_value, 1.0) as m_value
                 FROM dynamic_month_plan_k
                 WHERE company = :comp AND month = :m
                 ORDER BY id
             """),
             {"comp": company, "m": month_int},
         ).fetchall()
-        k_map = {kr[0]: (float(kr[3]) if kr[3] is not None else 0.0, kr[1], kr[2]) for kr in k_rows}
+        k_map = {
+            kr[0]: (
+                float(kr[3]) if kr[3] is not None else 0.0,
+                kr[1],
+                kr[2],
+                float(kr[4]) if len(kr) > 4 and kr[4] is not None else 1.0,
+            )
+            for kr in k_rows
+        }
 
         # 查询聚合口径直报的所有指标
         direct_rows = session.execute(
@@ -256,45 +264,73 @@ def get_dynamic_daily_decomposition(
 
             k_info = k_map.get(item_key)
             k_val = k_info[0] if k_info else 0.0
+            m_val = k_info[3] if k_info else 1.0
+            effective_k = k_val * m_val
             has_k = (k_info is not None and abs(k_val) > 1e-9)
 
             is_rate_metric = "单耗" in it_cn
             precision = 4 if is_rate_metric else 2
 
             if not is_rate_metric:
-                # 总量指标：聚合口径当日计划 = 各子口径当日分解计划之和
-                daily_sum = [0.0] * len(dates)
+                # 统计聚合口径下的月计划总量（优先汇总各子口径计划之和；若无子口径则取直报）
                 total_month_plan = 0.0
                 for sub_c in sub_companies:
                     sub_m = sub_decompositions[sub_c].get("metrics_map", {}).get(item_key)
                     if sub_m:
                         total_month_plan += sub_m["month_plan"]
-                        for i, v in enumerate(sub_m["daily_plans"]):
-                            daily_sum[i] += v
 
-                # 若子口径无此指标但直报有值
                 if total_month_plan <= 0 and item_key in direct_map:
                     total_month_plan = direct_map[item_key][0]
-                    daily_sum, _ = decompose_single_series(
-                        total_month_plan, k_val, hdd20_series, avg_hdd20, precision
-                    )
 
-                daily_plans = [round(v, precision) for v in daily_sum]
                 total_month_plan = round(total_month_plan, precision)
-                diff = round(total_month_plan - sum(daily_plans), precision)
-                if abs(diff) > 0 and len(daily_plans) > 0:
-                    daily_plans[-1] = round(daily_plans[-1] + diff, precision)
 
-                daily_weights = []
-                for v in daily_plans:
-                    w = round((v / total_month_plan * len(dates)), 4) if total_month_plan > 0 else 1.0
-                    daily_weights.append(w)
+                if has_k:
+                    # 关键逻辑：当前聚合口径若配置了专属 k 值与 m 缩放系数模型，
+                    # 严格应用该口径自身的有效系数 effective_k = k * m 进行动态度日分解，
+                    # 确保当前口径展板中展示的 k、m 参数与图表走势、分布律 100% 对齐生效！
+                    daily_plans, daily_weights = decompose_single_series(
+                        month_plan=total_month_plan,
+                        k_value=effective_k,
+                        hdd20_series=hdd20_series,
+                        avg_hdd20=avg_hdd20,
+                        precision=precision,
+                    )
+                else:
+                    # 若当前聚合口径未配置 k 模型，则逐日累加各子口径分解结果
+                    daily_sum = [0.0] * len(dates)
+                    for sub_c in sub_companies:
+                        sub_m = sub_decompositions[sub_c].get("metrics_map", {}).get(item_key)
+                        if sub_m:
+                            for i, v in enumerate(sub_m["daily_plans"]):
+                                daily_sum[i] += v
+
+                    if sum(daily_sum) <= 0 and total_month_plan > 0:
+                        # 若子口径也无分解序列，按无k等额均摊
+                        daily_plans, daily_weights = decompose_single_series(
+                            month_plan=total_month_plan,
+                            k_value=0.0,
+                            hdd20_series=hdd20_series,
+                            avg_hdd20=avg_hdd20,
+                            precision=precision,
+                        )
+                    else:
+                        daily_plans = [round(v, precision) for v in daily_sum]
+                        diff = round(total_month_plan - sum(daily_plans), precision)
+                        if abs(diff) > 0 and len(daily_plans) > 0:
+                            daily_plans[-1] = round(daily_plans[-1] + diff, precision)
+
+                        daily_weights = []
+                        for v in daily_plans:
+                            w = round((v / total_month_plan * len(dates)), 4) if total_month_plan > 0 else 1.0
+                            daily_weights.append(w)
 
                 rollup_metrics.append({
                     "item": item_key,
                     "item_cn": it_cn,
                     "unit": unit,
                     "k_value": k_val,
+                    "m_value": m_val,
+                    "effective_k": effective_k,
                     "has_k": has_k,
                     "month_plan": total_month_plan,
                     "daily_plans": daily_plans,
@@ -308,7 +344,7 @@ def get_dynamic_daily_decomposition(
                 month_plan = direct_map.get(item_key, (0.0,))[0]
                 daily_plans, daily_weights = decompose_single_series(
                     month_plan=month_plan,
-                    k_value=k_val,
+                    k_value=effective_k,
                     hdd20_series=hdd20_series,
                     avg_hdd20=avg_hdd20,
                     precision=precision,
@@ -319,6 +355,8 @@ def get_dynamic_daily_decomposition(
                     "item_cn": it_cn,
                     "unit": unit,
                     "k_value": k_val,
+                    "m_value": m_val,
+                    "effective_k": effective_k,
                     "has_k": has_k,
                     "month_plan": month_plan,
                     "daily_plans": daily_plans,
@@ -374,17 +412,25 @@ def _decompose_entity_company(
     session,
 ) -> Dict[str, Any]:
     """计算单个实体单位全量指标的日分解明细（有k值动态波动，无k值水平均摊）。"""
-    # 1. 查询该单位配置的 k 值字典
+    # 1. 查询该单位配置的 k 值与 m 缩放系数字典
     k_rows = session.execute(
         text("""
-            SELECT item, item_cn, unit, k_value
+            SELECT item, item_cn, unit, k_value, COALESCE(m_value, 1.0) as m_value
             FROM dynamic_month_plan_k
             WHERE company = :comp AND month = :m
             ORDER BY id
         """),
         {"comp": company, "m": month_int},
     ).fetchall()
-    k_map = {kr[0]: (float(kr[3]) if kr[3] is not None else 0.0, kr[1], kr[2]) for kr in k_rows}
+    k_map = {
+        kr[0]: (
+            float(kr[3]) if kr[3] is not None else 0.0,
+            kr[1],
+            kr[2],
+            float(kr[4]) if len(kr) > 4 and kr[4] is not None else 1.0,
+        )
+        for kr in k_rows
+    }
 
     # 2. 查询该单位在当月的所有月计划指标
     p_rows = session.execute(
@@ -411,6 +457,8 @@ def _decompose_entity_company(
 
         k_info = k_map.get(item_key)
         k_val = k_info[0] if k_info else 0.0
+        m_val = k_info[3] if k_info else 1.0
+        effective_k = k_val * m_val
         has_k = (k_info is not None and abs(k_val) > 1e-9)
 
         is_rate_metric = "单耗" in item_cn
@@ -418,7 +466,7 @@ def _decompose_entity_company(
 
         daily_plans, daily_weights = decompose_single_series(
             month_plan=month_plan,
-            k_value=k_val,
+            k_value=effective_k,
             hdd20_series=hdd20_series,
             avg_hdd20=avg_hdd20,
             precision=precision,
@@ -429,6 +477,8 @@ def _decompose_entity_company(
             "item_cn": item_cn,
             "unit": unit,
             "k_value": k_val,
+            "m_value": m_val,
+            "effective_k": effective_k,
             "has_k": has_k,
             "month_plan": month_plan,
             "daily_plans": daily_plans,
@@ -445,12 +495,14 @@ def _decompose_entity_company(
         item_key = kr[0]
         if item_key not in seen_items:
             k_val = float(kr[3]) if kr[3] is not None else 0.0
+            m_val = float(kr[4]) if len(kr) > 4 and kr[4] is not None else 1.0
+            effective_k = k_val * m_val
             has_k = abs(k_val) > 1e-9
             is_rate_metric = "单耗" in kr[1]
             precision = 4 if is_rate_metric else 2
             daily_plans, daily_weights = decompose_single_series(
                 month_plan=0.0,
-                k_value=k_val,
+                k_value=effective_k,
                 hdd20_series=hdd20_series,
                 avg_hdd20=avg_hdd20,
                 precision=precision,
@@ -460,6 +512,8 @@ def _decompose_entity_company(
                 "item_cn": kr[1],
                 "unit": kr[2] or "",
                 "k_value": k_val,
+                "m_value": m_val,
+                "effective_k": effective_k,
                 "has_k": has_k,
                 "month_plan": 0.0,
                 "daily_plans": daily_plans,

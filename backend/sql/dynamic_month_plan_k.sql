@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.dynamic_month_plan_k (
     item_cn TEXT,
     unit TEXT,
     k_value NUMERIC(24, 16) NOT NULL,
+    m_value NUMERIC(16, 6) NOT NULL DEFAULT 1.0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

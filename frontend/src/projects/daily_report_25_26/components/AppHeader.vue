@@ -146,12 +146,18 @@ function getGroupLabel(group) {
 }
 
 function getCurrentPageName() {
+  if (route.query?.pageName && typeof route.query.pageName === 'string' && route.query.pageName.trim()) {
+    return route.query.pageName.trim()
+  }
   if (route.meta?.title) return route.meta.title
 
   const path = route.path || ''
   const pageKey = route.params?.pageKey
 
   // 1. 特殊固定业务页面与工具页判定
+  if (path.includes('/pages/global_management') || path.includes('/global_management')) return '全局管理中心'
+  if (path.includes('/pages/dynamic_plan') || path.includes('/dynamic_plan')) return '计划动态分解模块'
+  if (path.includes('/pages/spot_electricity') || path.includes('/spot_electricity')) return '电力现货市场'
   if (path.includes('/spring-dashboard')) return '春节专刊大盘'
   if (path.includes('/import-workspace')) return '月度数据导入'
   if (path.includes('/query-tool')) return '月度数据查询'

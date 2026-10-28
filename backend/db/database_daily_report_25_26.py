@@ -116,6 +116,7 @@ class DynamicMonthPlanK(Base):
     item_cn = Column(Text)
     unit = Column(Text)
     k_value = Column(Numeric(24, 16), nullable=False)
+    m_value = Column(Numeric(16, 6), nullable=False, default=1.0)
     created_at = Column(DateTime, nullable=False)
 
 

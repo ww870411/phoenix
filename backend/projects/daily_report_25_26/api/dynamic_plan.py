@@ -10,11 +10,12 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
-from backend.services.auth_manager import AuthSession, get_current_session
+from backend.services.auth_manager import AuthSession, auth_manager, get_current_session, get_current_session_optional
 
 PROJECT_KEY = "daily_report_25_26"
 router = APIRouter()
@@ -505,5 +506,128 @@ async def get_daily_decomposition_endpoint(
         return {"ok": False, "has_full_month": False, "message": f"计算动态计划日分解异常: {str(exc)}"}
     finally:
         session.close()
+
+
+class UpdateKParameterItem(BaseModel):
+    company: str = Field(..., description="统计口径代号，如 Group, BeiHai")
+    month: int = Field(..., ge=1, le=12, description="目标月份数字，如 11")
+    item: str = Field(..., description="指标英文键名，如 amount_heat_supply")
+    item_cn: Optional[str] = Field(None, description="指标中文名")
+    unit: Optional[str] = Field(None, description="计量单位")
+    k_value: Optional[float] = Field(None, description="基准 k 值敏感度参数")
+    m_value: Optional[float] = Field(None, description="m 缩放系数")
+
+
+class UpdateKParametersPayload(BaseModel):
+    updates: List[UpdateKParameterItem] = Field(default_factory=list, description="待更新参数列表")
+
+
+@public_router.post("/dynamic_plan/update_k_parameters", summary="Global_admin 设定各指标 m 缩放参数")
+async def update_k_parameters_endpoint(
+    payload: UpdateKParametersPayload,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """
+    允许 Global_admin 角色在前台在线设定指定口径与月份下各指标的 m 缩放系数（基准 k 值保持严肃客观，仅允许微调 m 缩放）。
+    """
+    # 软依赖回退尝试解析
+    if session is None and authorization:
+        try:
+            session = auth_manager.require_session_from_header(authorization)
+        except Exception:
+            pass
+
+    if session is None:
+        raise HTTPException(status_code=401, detail="请登录后操作")
+
+    is_admin = (
+        str(session.group or "").strip() == "Global_admin"
+        or str(session.username or "").strip() == "ww870411"
+        or bool(getattr(session.permissions.actions, "can_access_admin_console", False))
+    )
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="权限不足：仅 Global_admin 全局管理员有权设定 m 缩放参数")
+
+    if not payload.updates:
+        return {"ok": True, "message": "无更新项", "updated_count": 0}
+
+    db = SessionLocal()
+    updated_count = 0
+    try:
+        for u in payload.updates:
+            comp = u.company.strip()
+            month = int(u.month)
+            item = u.item.strip()
+
+            row = db.execute(
+                text("""
+                    SELECT id, k_value, m_value FROM public.dynamic_month_plan_k
+                    WHERE company = :company AND month = :month AND item = :item
+                """),
+                {"company": comp, "month": month, "item": item},
+            ).fetchone()
+
+            new_m = u.m_value
+
+            if row:
+                set_clauses = []
+                params: Dict[str, Any] = {"company": comp, "month": month, "item": item}
+                # 基准 k 值保持不可篡改，仅更新 m 缩放系数
+                if new_m is not None:
+                    set_clauses.append("m_value = :m_val")
+                    params["m_val"] = new_m
+                if u.item_cn:
+                    set_clauses.append("item_cn = :item_cn")
+                    params["item_cn"] = u.item_cn
+                if u.unit:
+                    set_clauses.append("unit = :unit")
+                    params["unit"] = u.unit
+
+                if set_clauses:
+                    db.execute(
+                        text(f"""
+                            UPDATE public.dynamic_month_plan_k
+                            SET {', '.join(set_clauses)}
+                            WHERE company = :company AND month = :month AND item = :item
+                        """),
+                        params,
+                    )
+                    updated_count += 1
+            else:
+                final_k = new_k if new_k is not None else 0.0
+                final_m = new_m if new_m is not None else 1.0
+                db.execute(
+                    text("""
+                        INSERT INTO public.dynamic_month_plan_k (company, month, item, item_cn, unit, k_value, m_value)
+                        VALUES (:company, :month, :item, :item_cn, :unit, :k_val, :m_val)
+                        ON CONFLICT (company, month, item) DO UPDATE SET
+                            k_value = EXCLUDED.k_value,
+                            m_value = EXCLUDED.m_value
+                    """),
+                    {
+                        "company": comp,
+                        "month": month,
+                        "item": item,
+                        "item_cn": u.item_cn or item,
+                        "unit": u.unit or "",
+                        "k_val": final_k,
+                        "m_val": final_m,
+                    },
+                )
+                updated_count += 1
+
+        db.commit()
+        return {
+            "ok": True,
+            "message": f"成功保存 {updated_count} 项指标 k/m 参数！",
+            "updated_count": updated_count,
+        }
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"保存参数失败: {str(exc)}")
+    finally:
+        db.close()
+
 
 
