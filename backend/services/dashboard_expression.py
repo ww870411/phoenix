@@ -1043,6 +1043,11 @@ def _extract_group_metric_series(
 
 
 FAST_GROUP_DAILY_METRIC_RULES: Dict[str, Dict[str, Any]] = {
+    "consumption_std_coal": {
+        "default_item": "consumption_std_coal",
+        "default_companies": ["BeiHai", "XiangHai", "GongRe", "JinZhou", "BeiFang", "JinPu", "ZhuangHe"],
+        "extra_pairs": [],
+    },
     "sum_consumption_std_coal_zhangtun": {
         "default_item": "consumption_std_coal",
         "default_companies": ["BeiHai", "XiangHai", "GongRe", "JinZhou", "BeiFang", "JinPu"],
@@ -1530,7 +1535,7 @@ def _fill_cumulative_cards(
     # 其余累计指标根据配置读取 groups 视图，区分字段模式
     metrics = _fetch(session, "groups", "Group", push_date)
     mapping: Dict[str, Tuple[str, str]] = {
-        "集团汇总供暖期标煤耗量": ("sum_consumption_std_coal_zhangtun", "sum_ytd"),
+        "集团汇总供暖期标煤耗量": ("consumption_std_coal", "sum_ytd"),
         "集团汇总供暖期可比煤价边际利润": ("eco_comparable_marginal_profit", "sum_ytd"),
         "集团汇总供暖期省市平台投诉量": ("amount_daily_service_complaints", "sum_ytd"),
         "集团汇总净投诉量": ("sum_season_total_net_complaints", "value"),

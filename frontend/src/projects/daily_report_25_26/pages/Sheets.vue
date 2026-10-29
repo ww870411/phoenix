@@ -65,10 +65,19 @@
                   v-for="sheet in group.items"
                   :key="sheet.sheet_key"
                   class="unit-sheet-pill"
-                  :title="sheet.sheet_name"
+                  :class="getSheetPillClass(sheet.sheet_key)"
+                  :title="getSheetPillTooltip(sheet)"
+                  @click.stop="openSheet(sheet)"
                 >
                   <span class="pill-number" v-if="parseSheetNumber(sheet.sheet_name)">{{ parseSheetNumber(sheet.sheet_name) }}</span>
                   <span class="pill-title">{{ cleanSheetBodyName(sheet.sheet_name, group.groupName) }}</span>
+                  <span
+                    v-if="getSheetStatus(sheet.sheet_key)"
+                    class="pill-ratio"
+                    :class="getSheetRatioClass(sheet.sheet_key)"
+                  >
+                    {{ getSheetStatus(sheet.sheet_key)?.text || '0' }}
+                  </span>
                 </span>
               </div>
             </div>
@@ -238,10 +247,38 @@ function getUnitStatus(unit) {
       partialCount++
     }
   }
+
+  // 单表单位：右上角直接显示填报指标比值（如 "17/17"）
+  if (total === 1) {
+    const singleSheet = unit.items[0]
+    const st = getSheetStatus(singleSheet.sheet_key)
+    const ratioText = st?.text || (completeCount === 1 ? '已提交' : '待填报')
+    if (completeCount === 1) {
+      return {
+        statusClass: 'status-indicator--complete',
+        statusText: ratioText,
+        title: `已填报 ${ratioText} 项指标`
+      }
+    }
+    if (partialCount === 1) {
+      return {
+        statusClass: 'status-indicator--partial',
+        statusText: ratioText,
+        title: `已填报 ${ratioText} 项指标`
+      }
+    }
+    return {
+      statusClass: '',
+      statusText: ratioText || '待填报',
+      title: `待填报（共 ${st?.expected || 0} 项指标）`
+    }
+  }
+
+  // 多表单位：右上角显示已填报表格数比例（如 "已填报 1/3"）
   if (completeCount === total) {
     return {
       statusClass: 'status-indicator--complete',
-      statusText: total > 1 ? `已填报 ${total}/${total}` : '已提交',
+      statusText: `已填报 ${total}/${total}`,
       title: '该单位所有表格均已提交'
     }
   }
@@ -254,9 +291,47 @@ function getUnitStatus(unit) {
   }
   return {
     statusClass: '',
-    statusText: total > 1 ? `共 ${total} 张表` : '待填报',
+    statusText: `共 ${total} 张表`,
     title: '暂未提交数据'
   }
+}
+
+function getSheetStatusClass(sheetKey) {
+  const st = getSheetStatus(sheetKey)
+  if (!st || !st.count) {
+    return 'empty'
+  }
+  if (st.expected > 0 && st.count / st.expected >= 0.85) {
+    return 'complete'
+  }
+  return 'partial'
+}
+
+function getSheetPillClass(sheetKey) {
+  const status = getSheetStatusClass(sheetKey)
+  return {
+    'unit-sheet-pill--complete': status === 'complete',
+    'unit-sheet-pill--partial': status === 'partial',
+    'unit-sheet-pill--empty': status === 'empty',
+  }
+}
+
+function getSheetRatioClass(sheetKey) {
+  const status = getSheetStatusClass(sheetKey)
+  return {
+    'pill-ratio--complete': status === 'complete',
+    'pill-ratio--partial': status === 'partial',
+    'pill-ratio--empty': status === 'empty',
+  }
+}
+
+function getSheetPillTooltip(sheet) {
+  const st = getSheetStatus(sheet.sheet_key)
+  const baseName = sheet.sheet_name || sheet.sheet_key
+  if (st && st.text) {
+    return `${baseName}（填报进度: ${st.text} 项）`
+  }
+  return `${baseName}（暂无填报数据）`
 }
 
 function parseSheetNumber(sheetName) {
@@ -636,5 +711,53 @@ watch(projectKey, () => {
 .unit-card:hover .pill-number {
   background-color: #dbeafe;
   color: #1d4ed8;
+}
+
+.unit-sheet-pill:hover {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.unit-sheet-pill--complete {
+  border-color: #a7f3d0;
+  background-color: #f0fdf4;
+}
+
+.unit-sheet-pill--partial {
+  border-color: #fef08a;
+  background-color: #fefce8;
+}
+
+.pill-ratio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+  background-color: #e2e8f0;
+  color: #64748b;
+  transition: all 0.2s ease;
+}
+
+.pill-ratio--complete {
+  background-color: #10b981;
+  color: #ffffff;
+}
+
+.pill-ratio--partial {
+  background-color: #fef08a;
+  color: #854d0e;
+}
+
+.pill-ratio--empty {
+  background-color: #e2e8f0;
+  color: #64748b;
 }
 </style>

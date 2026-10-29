@@ -659,9 +659,9 @@
           </div>
         </div>
 
-        <!-- 双纵轴对应指引条 (只要分左右轴即呈现对应指标标签名) -->
-        <div v-if="chartAxisMappingInfo.units.length > 2" class="axis-mapping-banner">各计量单位独立刻度：{{ chartAxisMappingInfo.units.join("、") }}（左侧首轴，其余从内到外位于右侧）</div>
+        <!-- 双纵轴/多纵轴对应指引条 (恢复左右轴高质感标签徽标与指标药丸卡片) -->
         <div v-if="chartAxisMappingInfo.showBanner" class="axis-mapping-banner">
+          <!-- 左轴对应指标组 -->
           <div class="axis-indicator-group axis-left-group">
             <span class="axis-badge axis-left-badge">左纵轴 ({{ chartAxisMappingInfo.leftUnit }})</span>
             <div class="axis-metric-tags">
@@ -678,20 +678,39 @@
               </span>
             </div>
           </div>
-          <div class="axis-indicator-group axis-right-group">
-            <span class="axis-badge axis-right-badge">右纵轴 ({{ chartAxisMappingInfo.rightUnit }})</span>
-            <div class="axis-metric-tags">
-              <span
-                v-for="m in chartAxisMappingInfo.rightMetrics"
-                :key="'axis_r_' + m.item"
-                class="axis-metric-pill right-metric"
-                :class="{ 'is-focused': focusedMetricKey === m.item }"
-                title="点击聚焦高亮该指标（对应右纵轴刻度）"
-                @click="focusMetric(m)"
-              >
-                <i class="color-dot" :style="{ backgroundColor: getMetricColor(m.item) }"></i>
-                <span class="metric-text">{{ m.item_cn }}</span>
-              </span>
+
+          <!-- 右轴对应指标组（支持多个右轴单位或气温曲线依次排布） -->
+          <div class="axis-right-wrapper">
+            <div
+              v-for="group in chartAxisMappingInfo.rightGroups"
+              :key="'axis_r_grp_' + group.unit"
+              class="axis-indicator-group axis-right-group"
+            >
+              <span class="axis-badge axis-right-badge">右纵轴 ({{ group.unit }})</span>
+              <div class="axis-metric-tags">
+                <span
+                  v-for="m in group.metrics"
+                  :key="'axis_r_' + m.item"
+                  class="axis-metric-pill right-metric"
+                  :class="{ 'is-focused': focusedMetricKey === m.item }"
+                  title="点击聚焦高亮该指标（对应右纵轴刻度）"
+                  @click="focusMetric(m)"
+                >
+                  <i class="color-dot" :style="{ backgroundColor: getMetricColor(m.item) }"></i>
+                  <span class="metric-text">{{ m.item_cn }}</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- 动态分解模式下包含气温曲线时的右轴指引 -->
+            <div v-if="chartAxisMappingInfo.hasTempRightAxis" class="axis-indicator-group axis-right-group">
+              <span class="axis-badge axis-right-badge axis-temp-badge">右纵轴 (℃)</span>
+              <div class="axis-metric-tags">
+                <span class="axis-metric-pill right-metric axis-temp-pill" title="全月逐日平均气温（对应右纵轴刻度）">
+                  <i class="color-dot" style="background-color: #0284c7;"></i>
+                  <span class="metric-text">平均气温</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1192,7 +1211,6 @@ const chartTabs = [
   { key: 'dynamic_trend', label: '已选指标月度走势 (动态联动)', icon: '📈' },
   { key: 'dynamic_bar', label: '已选指标柱状对比', icon: '📊' },
   { key: 'donut_distribution', label: '已选指标负荷占比 (环形图)', icon: '🥧' },
-  { key: 'trend_heat_coal', label: '供热燃煤基准专题', icon: '🔥' },
 ]
 
 const presetRanges = [
@@ -1264,13 +1282,44 @@ function metricAxes(metrics) {
 const chartAxisMappingInfo = computed(() => {
   const targets = isDynamicDecomposeEnabled.value ? activeDecompositionMetrics.value : chartMetrics.value
   const units = metricUnits(targets)
-  const leftMetrics = targets.filter(m => (m.unit || '数值') === units[0])
-  const rightMetrics = targets.filter(m => (m.unit || '数值') === units[1])
+  const leftUnit = units[0] || ''
+  const leftMetrics = targets.filter(m => (m.unit || '数值') === leftUnit)
+
+  // 右侧单位组：units.slice(1) 每个单位对应的指标列表（支持多右轴单位依次并列）
+  const rightGroups = units.slice(1).map(u => ({
+    unit: u,
+    metrics: targets.filter(m => (m.unit || '数值') === u),
+  }))
+
+  const rightMetrics = targets.filter(m => (m.unit || '数值') !== leftUnit)
+  const rightUnit = units[1] || ''
+
+  // 动态分解模式下是否启用了平均气温曲线
+  const hasTempRightAxis =
+    isDynamicDecomposeEnabled.value &&
+    showDecompTemperature.value &&
+    (dynamicDecompData.value?.temperatures?.length > 0)
+
+  // 支持左右轴对照指引的图表模式
+  const isSupportedTab =
+    isDynamicDecomposeEnabled.value ||
+    ['dynamic_trend', 'dynamic_bar'].includes(activeChartTab.value)
+
+  // 只要涉及 2 个及以上不同计量单位，或开启动态分解且带气温曲线时，均展示左右轴对照指引条
+  const showBanner = isSupportedTab && (units.length >= 2 || hasTempRightAxis)
+
   return {
-    units, showBanner: units.length === 2 && (isDynamicDecomposeEnabled.value || ['dynamic_trend', 'dynamic_bar'].includes(activeChartTab.value)),
-    hasDualAxis: units.length > 1, leftUnit: units[0] || '', rightUnit: units[1] || '',
-    leftMetrics, rightMetrics,
-    leftKeys: new Set(leftMetrics.map(m => m.item)), rightKeys: new Set(rightMetrics.map(m => m.item)),
+    units,
+    showBanner,
+    hasDualAxis: units.length > 1,
+    leftUnit,
+    rightUnit,
+    leftMetrics,
+    rightMetrics,
+    rightGroups,
+    hasTempRightAxis,
+    leftKeys: new Set(leftMetrics.map(m => m.item)),
+    rightKeys: new Set(rightMetrics.map(m => m.item)),
   }
 })
 
@@ -2007,6 +2056,7 @@ function renderChart() {
       return
     }
 
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
     const pieData = months.map((m) => ({
       name: formatMonthCn(m),
       value: target.values[m] || 0,
@@ -2017,23 +2067,26 @@ function renderChart() {
       {
         title: {
           text: `【${target.item_cn}】各月计划负荷分布比例`,
-          subtext: `全月合计 = 100% ｜ 区间总计: ${formatNumber(target.total)} ${target.unit}（在下方表格点击指标行可切换环形图分析对象）`,
+          subtext: `全月合计 = 100% ｜ 区间总计: ${formatNumber(target.total)} ${target.unit}`,
           left: 'center',
-          top: 10,
-          textStyle: { fontSize: 15, fontWeight: 700, color: '#0f172a' },
-          subtextStyle: { fontSize: 12, color: '#64748b' },
+          top: isMobile ? 6 : 10,
+          textStyle: { fontSize: isMobile ? 13 : 15, fontWeight: 700, color: '#0f172a' },
+          subtextStyle: { fontSize: isMobile ? 11 : 12, color: '#64748b' },
         },
         tooltip: {
           trigger: 'item',
+          confine: true,
           formatter: '{b}: <br/><b>{c}</b> ' + (target.unit || '') + ' ({d}%)',
         },
-        legend: { orient: 'vertical', left: 24, top: 'middle' },
+        legend: isMobile
+          ? { orient: 'horizontal', bottom: 4, left: 'center', textStyle: { fontSize: 11 } }
+          : { orient: 'vertical', left: 24, top: 'middle' },
         series: [
           {
             name: `${target.item_cn}分布`,
             type: 'pie',
-            radius: ['44%', '72%'],
-            center: ['56%', '56%'],
+            radius: isMobile ? ['36%', '60%'] : ['44%', '72%'],
+            center: isMobile ? ['50%', '52%'] : ['56%', '56%'],
             avoidLabelOverlap: true,
             itemStyle: {
               borderRadius: 6,
@@ -2054,97 +2107,16 @@ function renderChart() {
     chartInstance.resize()
     return
   }
-
-  // 4. 模式四：供热燃煤基准专题（经典暖通双Y轴曲线）
-  if (activeChartTab.value === 'trend_heat_coal') {
-    const heatItem = metricsList.value.find((m) => m.item === 'amount_heat_supply')
-    const stdCoalItem = metricsList.value.find((m) => m.item === 'consumption_std_coal')
-    const rawCoalItem = metricsList.value.find((m) => m.item === 'consumption_amount_raw_coal')
-
-    const heatVals = months.map((m) => heatItem?.values[m] || 0)
-    const stdCoalVals = months.map((m) => stdCoalItem?.values[m] || 0)
-    const rawCoalVals = months.map((m) => rawCoalItem?.values[m] || 0)
-
-    const series = [
-      {
-        name: '供热量 (GJ)',
-        type: 'bar',
-        barMaxWidth: 38,
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#f97316' },
-            { offset: 1, color: '#ea580c' },
-          ]),
-          borderRadius: [4, 4, 0, 0],
-        },
-        data: heatVals,
-      },
-      {
-        name: '标煤耗量 (吨)',
-        type: 'line',
-        yAxisIndex: 1,
-        smooth: true,
-        symbolSize: 8,
-        lineStyle: { width: 3, color: '#2563eb' },
-        itemStyle: { color: '#2563eb' },
-        data: stdCoalVals,
-      },
-      {
-        name: '原煤耗量 (吨)',
-        type: 'line',
-        yAxisIndex: 1,
-        smooth: true,
-        symbolSize: 8,
-        lineStyle: { width: 2, color: '#059669', type: 'dashed' },
-        itemStyle: { color: '#059669' },
-        data: rawCoalVals,
-      },
-    ]
-
-    chartInstance.setOption(
-      {
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'cross' },
-          formatter: (params) => {
-            let tip = `<div style="font-weight:bold;margin-bottom:6px;">${params[0]?.axisValue}</div>`
-            params.forEach((p) => {
-              tip += `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin:3px 0;">
-                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color};"></span>
-                <span style="flex:1;">${p.seriesName}:</span>
-                <span style="font-weight:bold;">${formatNumber(p.value)}</span>
-              </div>`
-            })
-            return tip
-          },
-        },
-        legend: { top: 10, right: 20 },
-        grid: { left: '3%', right: '4%', bottom: '8%', top: '16%', containLabel: true },
-        xAxis: { type: 'category', data: monthLabels, axisLabel: { interval: 0, rotate: 15 } },
-        yAxis: [
-          {
-            type: 'value',
-            name: '供热量 (GJ)',
-            splitLine: { lineStyle: { color: '#f1f5f9' } },
-          },
-          {
-            type: 'value',
-            name: '煤耗量 (吨)',
-            splitLine: { show: false },
-          },
-        ],
-        series,
-      },
-      true,
-    )
-    chartInstance.resize()
-  }
 }
 
+let resizeTimer = null
 function handleResize() {
-  if (chartInstance) {
-    chartInstance.resize()
-  }
+  clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    if (chartInstance) {
+      renderChart()
+    }
+  }, 100)
 }
 
 // 导出当前表格到 Excel
@@ -2174,9 +2146,12 @@ onMounted(async () => {
   window.addEventListener('click', handleGlobalClick)
   if (chartContainerRef.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
-      if (chartInstance) {
-        chartInstance.resize()
-      }
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        if (chartInstance) {
+          renderChart()
+        }
+      }, 100)
     })
     resizeObserver.observe(chartContainerRef.value)
   }
@@ -2962,6 +2937,13 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.axis-right-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .axis-indicator-group {
   display: flex;
   align-items: center;
@@ -3046,6 +3028,22 @@ onBeforeUnmount(() => {
   background: #fff7ed;
   color: #c2410c;
   box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
+}
+
+.axis-temp-badge {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.25) !important;
+}
+
+.axis-temp-pill {
+  cursor: default !important;
+}
+.axis-temp-pill:hover {
+  transform: none !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: none !important;
 }
 
 .color-dot {
@@ -4202,6 +4200,440 @@ onBeforeUnmount(() => {
 
 .font-mono {
   font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* ---------------- 移动端窄屏手机响应式排版适配 ---------------- */
+@media (max-width: 768px) {
+  .dynamic-plan-main {
+    padding: 10px 12px 36px;
+    gap: 12px;
+  }
+
+  .top-nav-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .header-actions .btn {
+    justify-content: center;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  /* 顶部 Banner 卡片移动端紧凑化 */
+  .banner-card {
+    padding: 12px 14px;
+    border-left-width: 4px;
+  }
+
+  .banner-title-row {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .banner-title-row h2 {
+    font-size: 16px;
+  }
+
+  .banner-desc {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  /* 筛选卡片移动端纵向流式重构 */
+  .filter-card {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .filter-label {
+    min-width: unset;
+    padding-top: 0;
+    font-size: 13px;
+  }
+
+  .unit-pills-wrapper {
+    gap: 6px;
+  }
+
+  .unit-pill {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .month-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .range-selects {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .range-selects .form-select {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .preset-buttons {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .preset-btn {
+    flex: 1;
+    min-width: calc(33.333% - 6px);
+    text-align: center;
+    padding: 5px 6px;
+    font-size: 11px;
+  }
+
+  .btn-import-weather {
+    width: 100%;
+    justify-content: center;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .weather-status-badge {
+    align-self: flex-start;
+    white-space: normal;
+    word-break: break-all;
+  }
+
+  /* 指标下拉多选框移动端满宽适配 */
+  .metric-multiselect-container {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .multiselect-dropdown-panel {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+  }
+
+  .btn-reset-metrics {
+    width: 100%;
+    text-align: center;
+    margin-top: 4px;
+    padding: 6px;
+  }
+
+  /* 核心指标 KPI 统计卡片网格自适应 */
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .kpi-card {
+    padding: 10px 10px;
+    gap: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kpi-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+    border-radius: 8px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+  }
+
+  .kpi-value {
+    font-size: 16px;
+  }
+
+  .kpi-meta {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10px;
+  }
+
+  /* 图表区域移动端紧凑化 */
+  .chart-section {
+    padding: 12px 12px 16px;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .chart-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .chart-tab-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .chart-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .decomp-toggle-pill {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .chart-dropdown-trigger {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .chart-dropdown-panel {
+    right: 0;
+    left: auto;
+    width: 280px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .chart-range-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  .chart-body {
+    min-height: 320px;
+    margin-top: 10px;
+  }
+
+  .echarts-container {
+    height: 320px !important;
+    min-height: 320px !important;
+  }
+
+  /* 双纵轴指引条 */
+  .axis-mapping-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .axis-right-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .axis-indicator-group {
+    width: 100%;
+  }
+
+  /* 动态分解横向二级工具栏 */
+  .decomp-sub-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .decomp-sub-left {
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .decomp-month-select {
+    flex: 1;
+    min-width: 110px;
+  }
+
+  .decomp-info-pill,
+  .decomp-badge-audit {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+
+  .decomp-sub-right {
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .decomp-temp-pill,
+  .btn-toggle-decomp-algorithm,
+  .btn-toggle-decomp-table {
+    flex: 1;
+    min-width: calc(50% - 6px);
+    justify-content: center;
+    text-align: center;
+    padding: 5px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  /* 动态分解算法与模型面板 */
+  .decomp-algorithm-panel {
+    padding: 10px 12px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .panel-title-wrap {
+    gap: 6px;
+  }
+
+  .panel-heading {
+    font-size: 13px;
+  }
+
+  .algo-sub-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .algo-k-header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .k-table-scroll-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: 280px;
+  }
+
+  .k-dictionary-table th,
+  .k-dictionary-table td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .admin-inline-input {
+    width: 65px;
+    font-size: 11px;
+  }
+
+  /* 逐日明细表格 */
+  .decomp-detail-section {
+    margin: 10px 0 0;
+    padding: 10px 12px;
+  }
+
+  .decomp-detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .decomp-detail-meta {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+
+  .decomp-table-wrapper {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 指标矩阵数据表格移动端优化 */
+  .table-section {
+    padding: 12px 12px;
+  }
+
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .table-container {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .matrix-table {
+    font-size: 12px;
+  }
+
+  .col-name {
+    min-width: 120px !important;
+    max-width: 130px !important;
+    padding: 6px 8px !important;
+  }
+
+  .metric-title {
+    font-size: 12px;
+  }
+
+  .matrix-table th,
+  .matrix-table td {
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .kpi-card {
+    padding: 8px 8px;
+  }
+
+  .kpi-value {
+    font-size: 15px;
+  }
+
+  .decomp-temp-pill,
+  .btn-toggle-decomp-algorithm,
+  .btn-toggle-decomp-table {
+    min-width: 100%;
+  }
 }
 
 </style>

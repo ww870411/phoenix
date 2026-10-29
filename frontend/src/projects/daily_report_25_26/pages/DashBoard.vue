@@ -43,49 +43,185 @@
     </div>
 
     <div v-if="temperatureImportDialogVisible" class="temp-import-modal">
-      <div class="temp-import-modal__mask"></div>
+      <div class="temp-import-modal__mask" @click="closeTemperatureImportDialog"></div>
       <div class="temp-import-modal__panel">
         <div class="temp-import-modal__header">
-          <h3>气温导入预览</h3>
-          <button class="temp-import-modal__close" @click="closeTemperatureImportDialog">×</button>
+          <div class="temp-import-modal__title-wrap">
+            <span class="temp-import-modal__icon">🌤️</span>
+            <h3>气温数据导入与核验</h3>
+            <span v-if="temperatureImportStatus.fetchedAt" class="temp-import-modal__time-tag">
+              获取于 {{ temperatureImportStatus.fetchedAt.replace('T', ' ').slice(0, 19) }}
+            </span>
+          </div>
+          <button class="temp-import-modal__close" @click="closeTemperatureImportDialog" title="关闭 (Esc)">×</button>
         </div>
-          <div class="temp-import-modal__content">
-            <p v-if="temperatureImportStatus.message">{{ temperatureImportStatus.message }}</p>
-            <p v-if="temperatureImportStatus.fetchedAt">获取时间：{{ temperatureImportStatus.fetchedAt }}</p>
-            <p v-if="temperatureImportStatus.dates.length">
-              涉及日期：{{ temperatureImportStatus.dates.join('、') }}
-            </p>
-          <p v-if="temperatureImportStatus.overlapHours">
-            重合区间：{{ temperatureImportStatus.overlapRange }}（{{ temperatureImportStatus.overlapHours }} 小时）
-          </p>
-          <div v-if="temperatureImportStatus.overlapRecords.length" class="temp-import-modal__diffs">
-            <div class="temp-import-modal__diffs-title">重合时段明细（红色代表差异，未命中数据库的记录显示为“—”）：</div>
-            <ul>
-              <li
-                v-for="item in temperatureImportStatus.overlapRecords"
-                :key="item.time"
-                :class="['temp-import-modal__diff-item', { 'temp-import-modal__diff-item--different': item.different }]"
-              >
-                {{ item.time }}：接口 {{ item.apiValue }}℃ / 数据库 {{ item.inDb ? (item.dbValue ?? '—') : '—' }}℃
-              </li>
-            </ul>
-          </div>
-          <p class="temp-import-modal__hint">
-            当前已支持手动入库：点击“确认入库”将覆盖重合时间段的历史气温记录；不操作则仅保留预览。
-          </p>
-            <p v-if="temperatureImportStatus.writeMessage" class="temp-import-modal__write">{{ temperatureImportStatus.writeMessage }}</p>
-          </div>
-        <div class="temp-import-modal__actions">
+
+        <!-- A. 入库成功完成态 -->
+        <div v-if="isImportCommitted" class="temp-import-success-panel">
+          <div class="success-icon-badge">🎉</div>
+          <h3 class="success-title">气温数据已成功覆盖入库！</h3>
+          <p class="success-desc">{{ temperatureImportStatus.writeMessage }}</p>
+          <div class="success-hint">看板与标煤动态分解计划已同步刷新，窗口即将自动关闭...</div>
           <button
-            class="temp-import-modal__btn temp-import-modal__btn--primary"
-            :disabled="temperatureImportCommitBusy"
-            @click="handleConfirmTemperatureImport"
+            type="button"
+            class="temp-import-btn temp-import-btn--primary"
+            @click="closeTemperatureImportDialog"
           >
-            {{ temperatureImportCommitBusy ? '写入中…' : '确认入库' }}
+            立即完成并关闭
           </button>
-          <button class="temp-import-modal__btn" :disabled="temperatureImportCommitBusy" @click="closeTemperatureImportDialog">
-            稍后处理
-          </button>
+        </div>
+
+        <!-- B. 预览核验主体 (未入库前) -->
+        <div v-else class="temp-import-modal__content">
+          <!-- 1. 顶部指标概览卡片 (KPI Grid) -->
+          <div class="temp-summary-grid">
+            <div class="temp-summary-card">
+              <div class="temp-summary-card__label">涉及日期跨度</div>
+              <div class="temp-summary-card__value temp-summary-card__value--date">
+                {{ temperatureDateSpan || '—' }}
+              </div>
+            </div>
+            <div class="temp-summary-card">
+              <div class="temp-summary-card__label">接口总时段数</div>
+              <div class="temp-summary-card__value">
+                {{ temperatureImportStatus.totalHours || (temperatureImportStatus.dates.length * 24) }} <span class="temp-summary-card__unit">小时</span>
+              </div>
+            </div>
+            <div class="temp-summary-card">
+              <div class="temp-summary-card__label">库内重合时段</div>
+              <div class="temp-summary-card__value">
+                {{ temperatureImportStatus.overlapHours }} <span class="temp-summary-card__unit">小时</span>
+              </div>
+            </div>
+            <div
+              class="temp-summary-card"
+              :class="temperatureDiffCount > 0 ? 'temp-summary-card--warn' : 'temp-summary-card--success'"
+            >
+              <div class="temp-summary-card__label">气温比对状态</div>
+              <div class="temp-summary-card__value">
+                <template v-if="temperatureDiffCount > 0">
+                  <span class="status-num-warn">差异 {{ temperatureDiffCount }}</span> <span class="temp-summary-card__unit">小时</span>
+                </template>
+                <template v-else>
+                  <span class="status-text-success">完全一致</span>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- 重合区间提示条 -->
+          <div v-if="temperatureImportStatus.overlapRange" class="temp-import-info-bar">
+            <span>⏱️ <strong>重合覆盖区间：</strong>{{ temperatureImportStatus.overlapRange }}</span>
+            <span class="temp-import-info-bar__hint">（确认入库将更新重合时间段历史气温，并同步补全新增时段数据）</span>
+          </div>
+
+          <!-- 2. 明细核验区域（带过滤切换与紧凑滚动表格） -->
+          <div v-if="temperatureImportStatus.overlapRecords.length" class="temp-import-details-box">
+            <div class="temp-import-details-header">
+              <div class="temp-import-details-title">
+                <span>时段逐小时明细</span>
+                <span class="temp-import-details-count">（共 {{ temperatureImportStatus.overlapRecords.length }} 条）</span>
+              </div>
+              <div class="temp-import-filter-tabs">
+                <button
+                  type="button"
+                  class="temp-filter-btn"
+                  :class="{ 'temp-filter-btn--active': tempDiffFilter === 'diff' }"
+                  @click="tempDiffFilter = 'diff'"
+                >
+                  <span class="filter-dot filter-dot--warn"></span>
+                  仅看差异 ({{ temperatureDiffCount }})
+                </button>
+                <button
+                  type="button"
+                  class="temp-filter-btn"
+                  :class="{ 'temp-filter-btn--active': tempDiffFilter === 'all' }"
+                  @click="tempDiffFilter = 'all'"
+                >
+                  <span class="filter-dot filter-dot--all"></span>
+                  全部记录 ({{ temperatureImportStatus.overlapRecords.length }})
+                </button>
+              </div>
+            </div>
+
+            <!-- 空态：若在“仅看差异”模式下且 0 差异 -->
+            <div v-if="tempDiffFilter === 'diff' && temperatureDiffCount === 0" class="temp-import-matched-state">
+              <div class="matched-badge">🎉 全部数据完全一致</div>
+              <p class="matched-desc">重合时段的 {{ temperatureImportStatus.overlapRecords.length }} 条逐小时气温与数据库现有记录完全一致，未发现任何数值差异。</p>
+              <button type="button" class="matched-action-btn" @click="tempDiffFilter = 'all'">
+                查看全部 {{ temperatureImportStatus.overlapRecords.length }} 条时段明细 →
+              </button>
+            </div>
+
+            <!-- 紧凑表格区域（限高内部滚动，固定表头） -->
+            <div v-else class="temp-import-table-wrap">
+              <table class="temp-import-table">
+                <thead>
+                  <tr>
+                    <th style="width: 160px;">时段时间</th>
+                    <th style="width: 120px;">接口最新气温</th>
+                    <th style="width: 120px;">数据库现有气温</th>
+                    <th style="width: 110px;">差值 (接口 - 库)</th>
+                    <th style="width: 100px;">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="item in filteredOverlapRecords"
+                    :key="item.time"
+                    :class="{ 'temp-row--diff': item.different }"
+                  >
+                    <td class="col-time">{{ item.time }}</td>
+                    <td class="col-val">{{ item.apiValue !== null && item.apiValue !== undefined ? item.apiValue + ' ℃' : '—' }}</td>
+                    <td class="col-val">{{ item.inDb ? (item.dbValue !== null && item.dbValue !== undefined ? item.dbValue + ' ℃' : '—') : '未录入' }}</td>
+                    <td class="col-delta">
+                      <template v-if="item.different && item.apiValue !== null && item.dbValue !== null">
+                        <span :class="item.apiValue - item.dbValue > 0 ? 'delta--high' : 'delta--low'">
+                          {{ item.apiValue - item.dbValue > 0 ? '+' : '' }}{{ (item.apiValue - item.dbValue).toFixed(1) }} ℃
+                        </span>
+                      </template>
+                      <template v-else-if="!item.inDb">—</template>
+                      <template v-else><span class="delta--zero">0.0 ℃</span></template>
+                    </td>
+                    <td class="col-status">
+                      <span v-if="item.different" class="status-tag status-tag--diff">存在差异</span>
+                      <span v-else-if="!item.inDb" class="status-tag status-tag--new">新时段</span>
+                      <span v-else class="status-tag status-tag--same">一致</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 3. 入库反馈提示 (若发生错误时) -->
+          <div v-if="temperatureImportStatus.writeMessage && !isImportCommitted" class="temp-import-write-banner temp-import-write-banner--error">
+            <span class="write-icon">⚠️</span>
+            <span>{{ temperatureImportStatus.writeMessage }}</span>
+          </div>
+        </div>
+
+        <!-- 4. 底部操作栏 (仅在未完成时展示) -->
+        <div v-if="!isImportCommitted" class="temp-import-modal__actions">
+          <div class="temp-import-actions__hint">
+            💡 点击“确认覆盖入库”将数据正式持久化至数据库；关闭预览则不产生任何修改。
+          </div>
+          <div class="temp-import-actions__buttons">
+            <button
+              class="temp-import-btn temp-import-btn--secondary"
+              :disabled="temperatureImportCommitBusy"
+              @click="closeTemperatureImportDialog"
+            >
+              稍后处理
+            </button>
+            <button
+              class="temp-import-btn temp-import-btn--primary"
+              :disabled="temperatureImportCommitBusy"
+              @click="handleConfirmTemperatureImport"
+            >
+              {{ temperatureImportCommitBusy ? '正在入库…' : '确认覆盖入库' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -160,27 +296,12 @@
             <span>{{ cacheStatusLabel }}</span>
             <span v-if="cacheStatus.updatedAt">最近：{{ cacheStatus.updatedAt }}</span>
           </div>
-          <div class="dashboard-cache-message" v-if="cacheActionMessage">
-            {{ cacheActionMessage }}
-          </div>
-          <div class="dashboard-temp-import-status" v-if="temperatureImportStatus.message">
-            <div>{{ temperatureImportStatus.message }}</div>
-            <div v-if="temperatureImportStatus.fetchedAt">获取时间：{{ temperatureImportStatus.fetchedAt }}</div>
-            <div v-if="temperatureImportStatus.dates.length">
-              涉及日期：{{ temperatureImportStatus.dates.join('、') }}
+          <transition name="fade">
+            <div class="dashboard-cache-toast" v-if="cacheActionMessage">
+              <span>{{ cacheActionMessage }}</span>
+              <button type="button" class="dashboard-cache-toast__close" @click="cacheActionMessage = ''">×</button>
             </div>
-            <div v-if="temperatureImportStatus.overlapHours">
-              重合区间：{{ temperatureImportStatus.overlapRange }}（{{ temperatureImportStatus.overlapHours }} 小时）
-            </div>
-            <div v-if="temperatureImportStatus.differences.length">
-              值差异（接口 / 数据库）：
-              <ul class="temperature-diff-list">
-                <li v-for="item in temperatureImportStatus.differences" :key="item.time">
-                  {{ item.time }}：{{ item.apiValue }}℃ / {{ item.dbValue }}℃
-                </li>
-              </ul>
-            </div>
-          </div>
+          </transition>
         </div>
       </div>
     </header>
@@ -227,7 +348,7 @@
       <div class="summary-card summary-card--warning">
         <div class="summary-card__icon summary-card__icon--coal" aria-hidden="true"></div>
         <div class="summary-card__meta">
-          <div class="summary-card__label">当日集团标煤消耗（剔除庄河改造锅炉房）</div>
+          <div class="summary-card__label">当日集团标煤消耗</div>
           <div class="summary-card__value">
             <template v-if="primaryCoalHeadline.value !== null">
               {{ formatHeadlineNumber(
@@ -247,6 +368,18 @@
               </span>
             </template>
             <template v-else>—</template>
+          </div>
+          <div v-if="dailyCoalPlanSummary" class="summary-card__sub-compare" :title="dailyCoalPlanSummary.tooltip">
+            <span class="sub-compare__badge">{{ dailyCoalPlanSummary.badgeText }}</span>
+            <span class="sub-compare__val">{{ dailyCoalPlanSummary.planText }}</span>
+            <span
+              v-if="dailyCoalPlanSummary.hasDiff"
+              class="sub-compare__diff"
+              :class="dailyCoalPlanSummary.diffClass"
+            >
+              {{ dailyCoalPlanSummary.diffText }}
+              <span class="sub-compare__rate">({{ dailyCoalPlanSummary.rateText }})</span>
+            </span>
           </div>
         </div>
       </div>
@@ -349,6 +482,18 @@
               </span>
             </template>
             <template v-else>—</template>
+          </div>
+          <div v-if="seasonCoalPlanSummary" class="summary-card__sub-compare summary-card__sub-compare--outline" :title="seasonCoalPlanSummary.tooltip">
+            <span class="sub-compare__badge">{{ seasonCoalPlanSummary.badgeText }}</span>
+            <span class="sub-compare__val">{{ seasonCoalPlanSummary.planText }}</span>
+            <span
+              v-if="seasonCoalPlanSummary.hasDiff"
+              class="sub-compare__diff"
+              :class="seasonCoalPlanSummary.diffClass"
+            >
+              {{ seasonCoalPlanSummary.diffText }}
+              <span class="sub-compare__rate">({{ seasonCoalPlanSummary.rateText }})</span>
+            </span>
           </div>
         </div>
       </div>
@@ -512,6 +657,160 @@
           <div class="dashboard-table-wrapper dashboard-table-wrapper--small">
             <Table :columns="complaintColumns" :data="complaintTableData" font-size="9px" />
           </div>
+        </Card>
+      </section>
+
+      <!-- 业务日电力现货大盘（左栏） -->
+      <section class="dashboard-grid__item dashboard-grid__item--spot-elec">
+        <Card
+          title="辽宁省统一结算点实时电价"
+          extra="单位：元/MWh"
+        >
+          <template #default>
+            <div class="spot-card-container">
+              <!-- 快捷跳转 -->
+              <div class="card-action-bar card-action-bar--end">
+                <button type="button" class="card-action-link" @click="navToSpotElectricity">
+                  查看现货大盘 →
+                </button>
+              </div>
+
+              <!-- 4 宫格 KPI 统计条 -->
+              <div class="spot-kpi-bar">
+                <div class="spot-kpi-item">
+                  <div class="spot-kpi-item__label">实时均价</div>
+                  <div class="spot-kpi-item__value text-orange">
+                    {{ formatSpotNum(spotElecSummary?.avg_real_time_price) }}
+                    <span class="spot-kpi-item__unit">元/MWh</span>
+                  </div>
+                </div>
+                <div class="spot-kpi-item">
+                  <div class="spot-kpi-item__label">最高实时价</div>
+                  <div class="spot-kpi-item__value text-red">
+                    {{ formatSpotNum(spotElecSummary?.max_real_time_price) }}
+                    <span class="spot-kpi-item__unit">元/MWh</span>
+                  </div>
+                </div>
+                <div class="spot-kpi-item">
+                  <div class="spot-kpi-item__label">最低实时价</div>
+                  <div
+                    class="spot-kpi-item__value"
+                    :class="(spotElecSummary?.min_real_time_price || 0) < 0 ? 'text-green' : 'text-blue'"
+                  >
+                    {{ formatSpotNum(spotElecSummary?.min_real_time_price) }}
+                    <span class="spot-kpi-item__unit">元/MWh</span>
+                  </div>
+                </div>
+                <div class="spot-kpi-item">
+                  <div class="spot-kpi-item__label">负电价点数</div>
+                  <div
+                    class="spot-kpi-item__value spot-kpi-item__value--ratio"
+                    :class="(spotElecSummary?.negative_price_points || 0) > 0 ? 'text-purple' : 'text-gray'"
+                  >
+                    <template v-if="spotElecSummary">
+                      <span>{{ spotElecSummary?.negative_price_points ?? 0 }}/96点</span>
+                      <span class="spot-kpi-item__pct">({{ formatNegativePercent(spotElecSummary?.negative_price_points) }}%)</span>
+                    </template>
+                    <template v-else>
+                      <span>—</span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 曲线图 -->
+              <div class="spot-chart-box">
+                <div v-if="spotElecLoading" class="card-loading-mask">
+                  <span class="card-loading-spinner"></span> 加载现货电价数据...
+                </div>
+                <div v-else-if="!hasSpotPoints" class="card-empty-box">
+                  当日暂无电力现货交易曲线数据
+                </div>
+                <EChart v-else :option="spotElecChartOpt" height="340px" />
+              </div>
+            </div>
+          </template>
+        </Card>
+      </section>
+
+      <!-- 业务日生产调度信息（右栏） -->
+      <section class="dashboard-grid__item dashboard-grid__item--dispatch">
+        <Card title="生产调度信息">
+          <template #default>
+            <div class="dispatch-card-container">
+              <!-- 快捷跳转 -->
+              <div class="card-action-bar card-action-bar--end">
+                <button type="button" class="card-action-link" @click="navToDispatchInfo">
+                  查看调度大盘 →
+                </button>
+              </div>
+
+              <!-- 加载中 -->
+              <div v-if="dispatchLoading" class="card-loading-mask">
+                <span class="card-loading-spinner"></span> 加载调度工况数据...
+              </div>
+
+              <!-- 当日无信息时直接显示空态，不展示任何工况与事件 -->
+              <div v-else-if="!dispatchReport" class="card-empty-box">
+                该业务日暂无调度信息
+              </div>
+
+              <!-- 当日有调度信息时才展示 -->
+              <template v-else>
+                <!-- 首站供水工况概览胶囊 -->
+                <div class="dispatch-stations-summary" v-if="keyFirstStations.length">
+                  <div
+                    v-for="(st, idx) in keyFirstStations"
+                    :key="idx"
+                    class="dispatch-station-card"
+                  >
+                    <div class="dispatch-station-card__header">
+                      <span class="dispatch-station-card__tag">{{ st.plant }}</span>
+                      <span class="dispatch-station-card__name">{{ st.station_name }}</span>
+                    </div>
+                    <div class="dispatch-station-card__metrics">
+                      <div class="station-metric-item">
+                        <span class="metric-label">供/回水温</span>
+                        <span class="metric-val">{{ formatTemp(st.supply_temp_c) }} / {{ formatTemp(st.return_temp_c) }} ℃</span>
+                      </div>
+                      <div class="station-metric-item">
+                        <span class="metric-label">温差</span>
+                        <span class="metric-val text-amber">{{ formatTemp(st.temp_diff_c) }} ℃</span>
+                      </div>
+                      <div class="station-metric-item">
+                        <span class="metric-label">循环流量</span>
+                        <span class="metric-val text-cyan">{{ formatFlow(st.flow_rate_th) }} t/h</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 生产调度操作事件（严格剔除抢修工作票） -->
+                <div class="dispatch-events-section">
+                  <div class="dispatch-events-header">
+                    <span class="dispatch-events-title">⚡ 生产运行调度事件</span>
+                    <span class="dispatch-events-count" v-if="pureDispatchEvents.length">
+                      共 {{ pureDispatchEvents.length }} 条记录
+                    </span>
+                  </div>
+                  <div v-if="!pureDispatchEvents.length" class="dispatch-events-empty">
+                    当日无生产运行调度事件
+                  </div>
+                  <div v-else class="dispatch-events-timeline">
+                    <div
+                      v-for="(ev, evIdx) in pureDispatchEvents"
+                      :key="evIdx"
+                      class="dispatch-event-row"
+                    >
+                      <span class="dispatch-event-time">{{ ev.time || ev.time_str || '--:--' }}</span>
+                      <span class="dispatch-event-org" v-if="ev.responsible_org">{{ ev.responsible_org }}</span>
+                      <span class="dispatch-event-content">{{ ev.raw_description || ev.content }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
         </Card>
       </section>
 
@@ -684,7 +983,12 @@ import {
   getDashboardData,
   importTemperatureData,
   commitTemperatureData,
+  getSpotElectricitySummary,
+  getSpotElectricityPoints,
+  fetchCoalPlanComparison,
 } from '../services/api'
+import { useRouter } from 'vue-router'
+import { queryDispatchData } from '../services/dispatchApi'
 import { useAuthStore } from '../store/auth'
 
 // --- 仪表盘局部组件 ---
@@ -1179,12 +1483,27 @@ const { canPublish } = storeToRefs(authStore)
 const canManageCache = computed(() => Boolean(canPublish.value))
 const cacheActionBusy = ref(false)
 const cacheActionMessage = ref('')
+let cacheActionTimer = null
+
+const setCacheActionMessage = (msg, duration = 4000) => {
+  cacheActionMessage.value = msg
+  if (cacheActionTimer) clearTimeout(cacheActionTimer)
+  if (duration > 0 && msg) {
+    cacheActionTimer = setTimeout(() => {
+      cacheActionMessage.value = ''
+      cacheActionTimer = null
+    }, duration)
+  }
+}
+
 const temperatureImportBusy = ref(false)
 const temperatureImportDialogVisible = ref(false)
 const temperatureImportCommitBusy = ref(false)
+const isImportCommitted = ref(false)
 const temperatureImportStatus = reactive({
   message: '',
   fetchedAt: '',
+  totalHours: 0,
   dates: [],
   overlapRange: '',
   overlapHours: 0,
@@ -1192,6 +1511,27 @@ const temperatureImportStatus = reactive({
   overlapRecords: [],
   writeMessage: '',
 })
+const tempDiffFilter = ref('diff') // 'diff' (仅看差异) | 'all' (全部)
+
+const temperatureDiffCount = computed(() => {
+  return (temperatureImportStatus.overlapRecords || []).filter((r) => r.different).length
+})
+
+const temperatureDateSpan = computed(() => {
+  const dates = temperatureImportStatus.dates || []
+  if (!dates.length) return ''
+  if (dates.length === 1) return dates[0]
+  return `${dates[0]} 至 ${dates[dates.length - 1]}（共 ${dates.length} 天）`
+})
+
+const filteredOverlapRecords = computed(() => {
+  const records = temperatureImportStatus.overlapRecords || []
+  if (tempDiffFilter.value === 'diff') {
+    return records.filter((r) => r.different)
+  }
+  return records
+})
+
 const cacheStatus = reactive({
   disabled: false,
   dates: [],
@@ -1202,6 +1542,7 @@ const cacheStatus = reactive({
 const resetTemperatureImportStatus = () => {
   temperatureImportStatus.message = ''
   temperatureImportStatus.fetchedAt = ''
+  temperatureImportStatus.totalHours = 0
   temperatureImportStatus.dates = []
   temperatureImportStatus.overlapRange = ''
   temperatureImportStatus.overlapHours = 0
@@ -1210,6 +1551,8 @@ const resetTemperatureImportStatus = () => {
   temperatureImportStatus.writeMessage = ''
   temperatureImportDialogVisible.value = false
   temperatureImportCommitBusy.value = false
+  isImportCommitted.value = false
+  tempDiffFilter.value = 'diff'
 }
 
 const assignDashboardPayload = (payload, { showDate }) => {
@@ -1433,7 +1776,8 @@ async function handleImportTemperatureData() {
   resetTemperatureImportStatus()
   try {
     const payload = await importTemperatureData(projectKey)
-    const total = Number(payload?.summary?.total_hours ?? 0)
+    const total = Number(payload?.summary?.total_hours ?? (Array.isArray(payload?.dates) ? payload.dates.length * 24 : 0))
+    temperatureImportStatus.totalHours = total
     temperatureImportStatus.message =
       total > 0
         ? `成功获取 ${total} 条逐小时气温数据`
@@ -1465,6 +1809,8 @@ async function handleImportTemperatureData() {
           inDb: Boolean(item?.in_db),
         }))
       : []
+    const diffs = temperatureImportStatus.overlapRecords.filter((r) => r.different).length
+    tempDiffFilter.value = diffs > 0 ? 'diff' : 'all'
     temperatureImportDialogVisible.value = true
   } catch (err) {
     temperatureImportStatus.message = err instanceof Error ? err.message : String(err)
@@ -1481,13 +1827,26 @@ function handleConfirmTemperatureImport() {
     .then((resp) => {
       const inserted = Number(resp?.write_result?.inserted || 0)
       const replaced = Number(resp?.write_result?.replaced || 0)
-      temperatureImportStatus.writeMessage = `已写入 ${inserted} 条，覆盖 ${replaced} 条同时间段记录。`
-      cacheActionMessage.value = '气温数据写库成功'
+      const summaryMsg = `气温入库成功：已写入 ${inserted} 条，覆盖 ${replaced} 条记录`
+      temperatureImportStatus.writeMessage = summaryMsg
+      isImportCommitted.value = true
+      setCacheActionMessage(`✨ ${summaryMsg}`, 4500)
+
+      // 联动静默更新当前看板数据与标煤动态分解计划对比
+      loadDashboardData(selectedShowDate.value, { allowCache: false })
+      if (effectiveBizDate.value) {
+        loadCoalPlanComparison(effectiveBizDate.value)
+      }
+
+      // 1.5 秒后自动平滑关闭弹窗并清理临时状态
+      setTimeout(() => {
+        closeTemperatureImportDialog()
+      }, 1500)
     })
     .catch((err) => {
       const msg = err instanceof Error ? err.message : String(err)
-      temperatureImportStatus.writeMessage = msg
-      cacheActionMessage.value = `气温入库失败：${msg}`
+      temperatureImportStatus.writeMessage = `入库失败：${msg}`
+      setCacheActionMessage(`气温入库失败：${msg}`, 5000)
     })
     .finally(() => {
       temperatureImportCommitBusy.value = false
@@ -1496,6 +1855,8 @@ function handleConfirmTemperatureImport() {
 
 function closeTemperatureImportDialog() {
   temperatureImportDialogVisible.value = false
+  isImportCommitted.value = false
+  resetTemperatureImportStatus()
 }
 
 onMounted(() => {
@@ -2969,7 +3330,7 @@ const dailyTrendSeries = computed(() => {
     current: currentSeries,
     peer: peerSeries,
     units,
-    leftUnit: pickUnitByLabel(units, '标煤耗量汇总(张屯)', '吨'),
+    leftUnit: pickUnitByLabel(units, '标煤耗量', pickUnitByLabel(units, '标煤耗量汇总(张屯)', '吨')),
     rightUnit: pickUnitByLabel(units, '平均气温', '℃'),
   }
 })
@@ -4615,6 +4976,132 @@ const primaryCoalHeadline = computed(() => {
   })
 })
 
+// --- 标煤耗量动态分解计划对比状态与逻辑 ---
+const coalPlanComparisonData = ref(null)
+const isCoalPlanLoading = ref(false)
+
+async function loadCoalPlanComparison(dateStr) {
+  const targetDate = (dateStr || effectiveBizDate.value || '').trim()
+  if (!targetDate) return
+  isCoalPlanLoading.value = true
+  try {
+    const res = await fetchCoalPlanComparison({
+      projectKey,
+      bizDate: targetDate,
+      company: 'Group',
+    })
+    if (res && res.ok) {
+      coalPlanComparisonData.value = res
+    } else {
+      coalPlanComparisonData.value = null
+    }
+  } catch (err) {
+    console.warn('[dashboard] 获取标煤计划对比数据失败', err)
+    coalPlanComparisonData.value = null
+  } finally {
+    isCoalPlanLoading.value = false
+  }
+}
+
+watch(
+  () => effectiveBizDate.value,
+  (newDate) => {
+    if (newDate) {
+      loadCoalPlanComparison(newDate)
+    }
+  },
+  { immediate: true },
+)
+
+const dailyCoalPlanSummary = computed(() => {
+  const comp = coalPlanComparisonData.value?.daily
+  if (!comp || comp.plan_value === null || comp.plan_value === undefined) {
+    return null
+  }
+  const planVal = Number(comp.plan_value)
+  const actVal = Number.isFinite(primaryCoalHeadline.value?.value) ? Number(primaryCoalHeadline.value.value) : null
+  const isDynamic = comp.status === 'dynamic'
+  const isFallback = comp.status === 'fallback'
+
+  const badgeText = isDynamic ? '动态计划' : (isFallback ? '均摊计划*' : '基准计划')
+  const tooltip = isDynamic
+    ? '基于 HDD20 供热度日与建议 k 模型动态分解的当日标煤计划'
+    : (isFallback ? '当月全月气温待录入完整，当前基准为月计划按日均摊' : '当日计划基准')
+
+  const planText = `${formatHeadlineNumber(planVal, 1, { useThousands: true })} 吨`
+
+  let hasDiff = false
+  let diff = null
+  let diffClass = ''
+  let diffText = ''
+  let rateText = ''
+
+  if (actVal !== null && planVal > 0) {
+    hasDiff = true
+    diff = actVal - planVal
+    diffClass = diff > 0 ? 'sub-compare__diff--over' : 'sub-compare__diff--saved'
+    const sign = diff > 0 ? '超 +' : '省 '
+    diffText = `${sign}${formatHeadlineNumber(Math.abs(diff), 1, { useThousands: true })}`
+    rateText = `${((actVal / planVal) * 100).toFixed(1)}%`
+  }
+
+  return {
+    badgeText,
+    tooltip,
+    planText,
+    hasDiff,
+    diff,
+    diffClass,
+    diffText,
+    rateText,
+  }
+})
+
+const seasonCoalPlanSummary = computed(() => {
+  const comp = coalPlanComparisonData.value?.season
+  if (!comp || comp.cumulative_plan_value === null || comp.cumulative_plan_value === undefined) {
+    return null
+  }
+  const planVal = Number(comp.cumulative_plan_value)
+  const totalPlan = Number.isFinite(comp.total_plan_value) ? Number(comp.total_plan_value) : null
+  const actVal = Number.isFinite(cumulativeCoalHeadline.value?.value) ? Number(cumulativeCoalHeadline.value.value) : null
+  const isDynamic = comp.status === 'dynamic'
+
+  const totalPlanStr = totalPlan ? `${formatHeadlineNumber(totalPlan, 0, { useThousands: true })} 吨` : '—'
+  const badgeText = isDynamic ? '动态累计计划' : '累计计划*'
+  const tooltip = isDynamic
+    ? `供暖期各日动态分解计划累计至当日（全期总计划：${totalPlanStr}）`
+    : `供暖期计划累计至当日（含部分未录入全月气温月份均摊，全期总计划：${totalPlanStr}）`
+
+  const planText = `${formatHeadlineNumber(planVal, 0, { useThousands: true })} 吨`
+
+  let hasDiff = false
+  let diff = null
+  let diffClass = ''
+  let diffText = ''
+  let rateText = ''
+
+  if (actVal !== null && planVal > 0) {
+    hasDiff = true
+    diff = actVal - planVal
+    diffClass = diff > 0 ? 'sub-compare__diff--over' : 'sub-compare__diff--saved'
+    const sign = diff > 0 ? '超 +' : '省 '
+    diffText = `${sign}${formatHeadlineNumber(Math.abs(diff), 0, { useThousands: true })}`
+    rateText = `${((actVal / planVal) * 100).toFixed(1)}%`
+  }
+
+  return {
+    badgeText,
+    tooltip,
+    planText,
+    hasDiff,
+    diff,
+    diffClass,
+    diffText,
+    rateText,
+  }
+})
+
 const primaryComplaintHeadline = computed(() => buildComplaintHeadlineByMetric(complaintMetricOrder[0]))
 const primaryNetComplaintHeadline = computed(() => buildComplaintHeadlineByMetric('当日净投诉量'))
 
@@ -4639,6 +5126,324 @@ onMounted(() => {
     chartPalette.value = candidate
   }
 })
+
+// ==================== 电力现货与调度看板数据联动 ====================
+const router = useRouter()
+const spotElecLoading = ref(false)
+const spotElecSummary = ref(null)
+const spotElecPoints = ref([])
+
+const dispatchLoading = ref(false)
+const dispatchReport = ref(null)
+
+const navToSpotElectricity = () => {
+  if (router) {
+    router.push(`/projects/${projectKey}/pages/spot_electricity?pageName=电力现货市场`)
+  }
+}
+
+const navToDispatchInfo = () => {
+  if (router) {
+    router.push(`/projects/${projectKey}/pages/dispatch_info?pageName=调度信息`)
+  }
+}
+
+const formatSpotNum = (val) => {
+  if (val === null || val === undefined || isNaN(val)) return '—'
+  return Number(val).toFixed(2)
+}
+
+const formatTemp = (val) => {
+  if (val === null || val === undefined || isNaN(val)) return '—'
+  return Number(val).toFixed(1)
+}
+
+const formatFlow = (val) => {
+  if (val === null || val === undefined || isNaN(val)) return '—'
+  return Number(val).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+const formatNegativePercent = (val) => {
+  if (val === null || val === undefined || isNaN(val)) return '0.0'
+  const pct = (Number(val) / 96) * 100
+  return pct.toFixed(1)
+}
+
+const spotElecExtraText = computed(() => {
+  if (!spotElecSummary.value) return '单位：元/MWh'
+  const count = spotElecSummary.value.point_count || 0
+  return `96点覆盖率：${count}/96`
+})
+
+const hasSpotPoints = computed(() => {
+  return Array.isArray(spotElecPoints.value) && spotElecPoints.value.length > 0
+})
+
+const spotElecChartOpt = computed(() => {
+  const points = spotElecPoints.value || []
+  if (!points.length) return {}
+
+  const xData = points.map(p => p.time_label || '')
+  const rtData = points.map(p => (p.real_time_price != null ? Number(p.real_time_price) : null))
+  const daData = points.map(p => (p.day_ahead_price != null ? Number(p.day_ahead_price) : null))
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'line', lineStyle: { color: 'rgba(255,255,255,0.25)', type: 'dashed' } },
+      backgroundColor: 'rgba(15, 23, 42, 0.94)',
+      borderColor: '#334155',
+      textStyle: { color: '#f8fafc', fontSize: 13 },
+      formatter: (params) => {
+        if (!params || !params.length) return ''
+        const time = params[0].axisValue
+        let html = `<div style="font-weight:700;margin-bottom:6px;color:#e2e8f0;font-size:13px;">交易时点：${time}</div>`
+        params.forEach(item => {
+          const valStr = item.value != null ? `${Number(item.value).toFixed(2)} 元/MWh` : '—'
+          html += `<div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;margin-top:3px;">
+            <span>${item.marker} ${item.seriesName}</span>
+            <strong style="color:#ffffff;">${valStr}</strong>
+          </div>`
+        })
+        return html
+      }
+    },
+    legend: {
+      top: 4,
+      right: 8,
+      itemWidth: 16,
+      itemHeight: 5,
+      textStyle: { color: '#64748b', fontSize: 12 },
+      data: ['实时电价', '日前电价']
+    },
+    grid: {
+      top: 36,
+      right: 16,
+      bottom: 26,
+      left: 55
+    },
+    xAxis: {
+      type: 'category',
+      data: xData,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#cbd5e1' } },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 12,
+        interval: 15
+      }
+    },
+    yAxis: {
+      type: 'value',
+      name: '元/MWh',
+      nameTextStyle: { color: '#64748b', fontSize: 12, padding: [0, 0, 4, 0] },
+      splitLine: { lineStyle: { color: 'rgba(226, 232, 240, 0.8)' } },
+      axisLabel: { color: '#64748b', fontSize: 12 }
+    },
+    series: [
+      {
+        name: '实时电价',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        itemStyle: { color: '#f97316' },
+        lineStyle: { width: 2, color: '#f97316' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(249, 115, 22, 0.35)' },
+              { offset: 1, color: 'rgba(249, 115, 22, 0.02)' }
+            ]
+          }
+        },
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          data: [
+            {
+              yAxis: 0,
+              lineStyle: { color: '#ef4444', type: 'dashed', width: 1.2 },
+              label: { formatter: '0元分界', position: 'insideEndBottom', color: '#ef4444', fontSize: 10 }
+            }
+          ]
+        },
+        data: rtData
+      },
+      {
+        name: '日前电价',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        itemStyle: { color: '#38bdf8' },
+        lineStyle: { width: 1.5, type: 'dashed', color: '#38bdf8' },
+        data: daData
+      }
+    ]
+  }
+})
+
+// 调度数据衍生计算
+const keyFirstStations = computed(() => {
+  if (!dispatchReport.value || !Array.isArray(dispatchReport.value.first_stations)) return []
+  return dispatchReport.value.first_stations.slice(0, 3)
+})
+
+// 严格校验是否为清晰、有效的生产调度操作事件（彻底过滤无时间、工期施工残片及套话）
+function isValidDispatchOperation(ev) {
+  if (!ev) return false
+  if (ev.is_ticket) return false
+
+  // 1. 严格检查发生时间点：必须存在且具备有效时间格式（禁止缺失、'--:--' 或无时间点）
+  const time = String(ev.time || ev.time_str || '').trim()
+  if (!time || time === '--:--' || time === '-' || time === 'null' || time === 'undefined') {
+    return false
+  }
+  // 必须包含至少一个时分格式或有效时间标记（如 14:15, 8:30, 08点等）
+  if (!/\d{1,2}[:：点时]\d{1,2}|\b\d{1,2}:\d{2}\b/.test(time)) {
+    return false
+  }
+
+  // 2. 检查事件描述内容
+  const desc = String(ev.raw_description || ev.content || '').trim()
+  if (!desc || desc.length < 4) return false
+
+  // 3. 彻底过滤纯工期/抢修施工时间段残片（如“工期29/10.6:00至29/10.24:00”）
+  if (/^工期/i.test(desc) || /^时间[:：]/i.test(desc)) return false
+  if (/工期\s*[\d/.:~ -]+至[\d/.:~ -]+/i.test(desc)) return false
+
+  // 4. 彻底过滤单纯的抢修/检修恢复时间报告（如“21/3 5:00,21日00:28恢复”）
+  if (/^[\d/.:~ -]+(?:恢复|结束|完毕)/.test(desc) || /^(?:已恢复|于[\d/.:~ -]+恢复)/.test(desc)) return false
+
+  // 5. 过滤包含工作票、抢修标签等非调度操作残留
+  if (/工作票|抢修/i.test(desc)) return false
+
+  // 6. 过滤泛化日常例行套话（无具体设备动作的空洞公文描述）
+  if (/^(?:热源厂|管网|系统|设备)?(?:、高温水网|及蒸汽管网)?(?:运行正常|无异常|正常运行)[。.]?$/.test(desc)) {
+    return false
+  }
+
+  return true
+}
+
+// 解析调度事件时间并转为统一的分钟数（用于时间先后升序排序）
+function getDispatchEventMinutes(ev, bizDateStr) {
+  if (!ev) return Infinity
+  const timeStr = String(ev.time || ev.time_str || '').trim()
+  if (!timeStr) return Infinity
+
+  // 1. 匹配显式带“日/号”的跨天格式，例如 "10日1:12"、"3日 02:00"、"15日3:40"
+  const dayMatch = timeStr.match(/(?:^|[^\d])(\d{1,2})\s*[日号]\s*(\d{1,2})[:：点时](\d{1,2})?/)
+  if (dayMatch) {
+    const eventDay = parseInt(dayMatch[1], 10)
+    const h = parseInt(dayMatch[2], 10)
+    const m = parseInt(dayMatch[3] || '0', 10)
+
+    let dayOffset = 0
+    if (bizDateStr) {
+      const parts = bizDateStr.split('-')
+      if (parts.length === 3) {
+        const bizDay = parseInt(parts[2], 10)
+        let diff = eventDay - bizDay
+        // 处理月末跨月（如 31日跨到次月 1日 diff 为 -30；1日回溯到上月末 31日 diff 为 30）
+        if (diff < -20) diff = 1
+        else if (diff > 20) diff = -1
+        dayOffset = diff
+      }
+    }
+    return (dayOffset * 24 + h) * 60 + m
+  }
+
+  // 2. 标准时分匹配，如 "08:30"、"8:00"、"14:15"、"22:17"、"8点30"
+  const hmMatch = timeStr.match(/(\d{1,2})[:：点时](\d{1,2})?/)
+  if (hmMatch) {
+    const h = parseInt(hmMatch[1], 10)
+    const m = parseInt(hmMatch[2] || '0', 10)
+    return h * 60 + m
+  }
+
+  return Infinity
+}
+
+// 纯生产运行调度事件，严格筛选清晰有效的指令与操作，并按发生时间先后升序排列
+const pureDispatchEvents = computed(() => {
+  if (!dispatchReport.value) return []
+  const list = dispatchReport.value.operations_and_tickets || dispatchReport.value.operations || []
+  const filtered = list.filter(isValidDispatchOperation)
+  const currentBizDate = effectiveBizDate.value || dispatchReport.value.biz_date || ''
+
+  return [...filtered]
+    .map((ev, index) => ({ ev, index, mins: getDispatchEventMinutes(ev, currentBizDate) }))
+    .sort((a, b) => (a.mins !== b.mins ? a.mins - b.mins : a.index - b.index))
+    .map(item => item.ev)
+})
+
+// 异步数据获取
+async function fetchSpotElectricityData(date) {
+  if (!date) return
+  spotElecLoading.value = true
+  try {
+    const [summaryRes, pointsRes] = await Promise.all([
+      getSpotElectricitySummary(projectKey, date, date).catch(() => null),
+      getSpotElectricityPoints(projectKey, { date }).catch(() => null)
+    ])
+    if (summaryRes && summaryRes.ok && summaryRes.data) {
+      spotElecSummary.value = summaryRes.data
+    } else {
+      spotElecSummary.value = null
+    }
+    if (pointsRes && pointsRes.ok && Array.isArray(pointsRes.items)) {
+      spotElecPoints.value = pointsRes.items
+    } else {
+      spotElecPoints.value = []
+    }
+  } catch (err) {
+    console.error('[DashBoard] 拉取电力现货数据失败:', err)
+    spotElecSummary.value = null
+    spotElecPoints.value = []
+  } finally {
+    spotElecLoading.value = false
+  }
+}
+
+async function fetchDispatchInfoData(date) {
+  if (!date) {
+    dispatchReport.value = null
+    return
+  }
+  dispatchLoading.value = true
+  try {
+    // 严格按看板设定的业务日期查询该日调度信息，该日无信息则置空，不借用其他日期
+    const res = await queryDispatchData(projectKey, { biz_date: date, limit: 1 })
+    const items = (res && (res.items || res.data)) || []
+    if (items.length > 0) {
+      dispatchReport.value = items[0]
+    } else {
+      dispatchReport.value = null
+    }
+  } catch (err) {
+    console.error('[DashBoard] 拉取调度信息数据失败:', err)
+    dispatchReport.value = null
+  } finally {
+    dispatchLoading.value = false
+  }
+}
+
+watch(
+  () => effectiveBizDate.value,
+  (newDate) => {
+    if (newDate) {
+      fetchSpotElectricityData(newDate)
+      fetchDispatchInfoData(newDate)
+    } else {
+      spotElecSummary.value = null
+      spotElecPoints.value = []
+      dispatchReport.value = null
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -4806,12 +5611,39 @@ onMounted(() => {
   background: #bae6fd;
 }
 
-.dashboard-temp-import-status {
+.dashboard-cache-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  color: #15803d;
   font-size: 12px;
-  color: #0f172a;
-  line-height: 1.5;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.12);
   margin-top: 4px;
 }
+
+.dashboard-cache-toast__close {
+  border: none;
+  background: transparent;
+  color: #15803d;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  opacity: 0.7;
+}
+
+.dashboard-cache-toast__close:hover {
+  opacity: 1;
+}
+/* ==========================================================================
+   气温数据导入与核验弹窗 (现代交互升级)
+   ========================================================================== */
 .temp-import-modal {
   position: fixed;
   z-index: 9999;
@@ -4819,84 +5651,565 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
+  animation: tempModalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+@keyframes tempModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .temp-import-modal__mask {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
 }
+
 .temp-import-modal__panel {
   position: relative;
   z-index: 1;
-  width: min(720px, 94vw);
-  max-height: 80vh;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  width: min(840px, 95vw);
+  max-height: 88vh;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.08);
   display: flex;
   flex-direction: column;
-  padding: 16px 20px 12px;
   overflow: hidden;
 }
+
 .temp-import-modal__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  padding: 16px 22px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
 }
+
+.temp-import-modal__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.temp-import-modal__icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
 .temp-import-modal__header h3 {
   margin: 0;
   font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
 }
+
+.temp-import-modal__time-tag {
+  font-size: 12px;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
 .temp-import-modal__close {
   border: none;
   background: transparent;
-  font-size: 18px;
+  color: #94a3b8;
+  font-size: 24px;
   cursor: pointer;
   line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
+
+.temp-import-modal__close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 .temp-import-modal__content {
-  overflow: auto;
-  flex: 1;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 顶部概览四宫格卡片 */
+.temp-summary-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1.2fr;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .temp-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.temp-summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.temp-summary-card:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.temp-summary-card__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.temp-summary-card__value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.temp-summary-card__value--date {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 2px;
+}
+
+.temp-summary-card__unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.temp-summary-card--warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.temp-summary-card--warn .temp-summary-card__label {
+  color: #b45309;
+}
+
+.status-num-warn {
+  color: #d97706;
+}
+
+.temp-summary-card--success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.temp-summary-card--success .temp-summary-card__label {
+  color: #15803d;
+}
+
+.status-text-success {
+  color: #16a34a;
+  font-size: 17px;
+}
+
+/* 重合时段提示条 */
+.temp-import-info-bar {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: #0369a1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.temp-import-info-bar__hint {
+  color: #0284c7;
+  font-size: 12px;
+  opacity: 0.88;
+}
+
+/* 明细区域 */
+.temp-import-details-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.temp-import-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.temp-import-details-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.temp-import-details-count {
+  font-size: 12px;
+  font-weight: normal;
+  color: #64748b;
+}
+
+.temp-import-filter-tabs {
+  display: flex;
+  background: #e2e8f0;
+  padding: 2px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.temp-filter-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.temp-filter-btn:hover {
+  color: #0f172a;
+}
+
+.temp-filter-btn--active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.filter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.filter-dot--warn {
+  background: #f59e0b;
+}
+
+.filter-dot--all {
+  background: #3b82f6;
+}
+
+/* 全一致卡片 */
+.temp-import-matched-state {
+  padding: 28px 16px;
+  text-align: center;
+  background: #fcfdfd;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.matched-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  color: #065f46;
   font-size: 14px;
-  line-height: 1.5;
-  padding-right: 4px;
+  font-weight: 700;
 }
-.temp-import-modal__diffs ul {
-  margin: 6px 0 0;
-  padding-left: 16px;
+
+.matched-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 460px;
 }
-.temp-import-modal__diff-item--different {
+
+.matched-action-btn {
+  margin-top: 6px;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.matched-action-btn:hover {
+  color: #1d4ed8;
+}
+
+/* 表格容器（限高滚动，固定表头） */
+.temp-import-table-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.temp-import-table-wrap::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.temp-import-table-wrap::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.temp-import-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12.5px;
+}
+
+.temp-import-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.temp-import-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.temp-import-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.temp-row--diff {
+  background: #fff8f8;
+}
+
+.temp-row--diff:hover {
+  background: #fee2e2 !important;
+}
+
+.col-time {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.col-val {
+  font-weight: 500;
+}
+
+.col-delta {
+  font-weight: 700;
+}
+
+.delta--high {
+  color: #dc2626;
+}
+
+.delta--low {
+  color: #2563eb;
+}
+
+.delta--zero {
+  color: #94a3b8;
+  font-weight: normal;
+}
+
+/* 状态标签 */
+.status-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.status-tag--diff {
+  background: #fef2f2;
   color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.status-tag--same {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.status-tag--new {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+/* 入库反馈提示横幅 */
+.temp-import-write-banner {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.temp-import-write-banner--error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+/* 入库成功完成态卡片 */
+.temp-import-success-panel {
+  padding: 42px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.temp-import-success-panel .success-icon-badge {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.temp-import-success-panel .success-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.temp-import-success-panel .success-desc {
+  margin: 0;
+  font-size: 14px;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 8px 18px;
+  border-radius: 999px;
   font-weight: 600;
 }
-.temp-import-modal__hint {
-  margin-top: 8px;
-  color: #888;
+
+.temp-import-success-panel .success-hint {
+  font-size: 12.5px;
+  color: #64748b;
+  margin-top: 4px;
 }
+
+/* 底部操作栏 */
 .temp-import-modal__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 22px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.temp-import-actions__hint {
+  font-size: 12px;
+  color: #64748b;
+  flex: 1 1 240px;
+}
+
+.temp-import-actions__buttons {
+  display: flex;
   gap: 10px;
-  margin-top: 12px;
+  align-items: center;
 }
-.temp-import-modal__write {
-  margin-top: 8px;
-  color: #0f172a;
+
+.temp-import-btn {
+  padding: 8px 18px;
+  font-size: 13.5px;
   font-weight: 600;
-}
-.temp-import-modal__btn {
-  min-width: 120px;
-  padding: 8px 12px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  background: #f6f6f6;
+  border-radius: 8px;
   cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
 }
-.temp-import-modal__btn--primary {
-  background: #1677ff;
-  color: #fff;
-  border-color: #1677ff;
+
+.temp-import-btn--secondary {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.temp-import-btn--secondary:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.temp-import-btn--primary {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.temp-import-btn--primary:hover:not(:disabled) {
+  background: #1d4ed8;
+  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+}
+
+.temp-import-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .log-modal {
@@ -5447,6 +6760,108 @@ onMounted(() => {
   background: linear-gradient(135deg, #f59e0b, #fbbf24);
 }
 
+/* 标煤耗量动态分解计划对比信息条 */
+.summary-card__sub-compare {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+  cursor: help;
+  transition: all 0.2s ease;
+}
+
+.summary-card__sub-compare:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.summary-card__sub-compare .sub-compare__badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+
+.summary-card__sub-compare .sub-compare__val {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.summary-card__sub-compare .sub-compare__diff {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* 在预警/黄橙色卡片（当日集团标煤消耗）下的高对比度表现 */
+.summary-card--warning .sub-compare__diff--over {
+  background: rgba(220, 38, 38, 0.45);
+  color: #ffffff;
+  border: 1px solid rgba(254, 202, 202, 0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.summary-card--warning .sub-compare__diff--saved {
+  background: rgba(16, 185, 129, 0.45);
+  color: #ffffff;
+  border: 1px solid rgba(167, 243, 208, 0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.summary-card__sub-compare .sub-compare__rate {
+  font-size: 10.5px;
+  opacity: 0.92;
+  font-weight: 600;
+}
+
+/* 在 outline/白底浅色卡片（供暖期标煤耗量）下的表现 */
+.summary-card__sub-compare--outline {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.summary-card__sub-compare--outline:hover {
+  background: #f1f5f9;
+}
+
+.summary-card__sub-compare--outline .sub-compare__badge {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.summary-card__sub-compare--outline .sub-compare__val {
+  color: #0f172a;
+}
+
+.summary-card__sub-compare--outline .sub-compare__diff--over {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.summary-card__sub-compare--outline .sub-compare__diff--saved {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
 .summary-card--danger {
   background: linear-gradient(135deg, #ef4444, #fb7185);
 }
@@ -5560,6 +6975,16 @@ onMounted(() => {
   .dashboard-grid__item--complaint {
     grid-column: span 8;
     min-height: 360px;
+  }
+
+  .dashboard-grid__item--spot-elec {
+    grid-column: span 6;
+    min-height: 480px;
+  }
+
+  .dashboard-grid__item--dispatch {
+    grid-column: span 6;
+    min-height: 480px;
   }
 
   .dashboard-grid__item--stock {
@@ -6246,5 +7671,310 @@ onMounted(() => {
   letter-spacing: 0.08em;
   color: #94a3b8;
   text-transform: uppercase;
+}
+
+/* ==================== 看板电力现货与生产调度板块专用样式 ==================== */
+.spot-card-container,
+.dispatch-card-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.card-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.card-action-bar--end {
+  justify-content: flex-end;
+}
+
+.card-action-bar__date {
+  color: #475569;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+}
+
+.card-action-link {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 9999px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.card-action-link:hover {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+.spot-kpi-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 640px) {
+  .spot-kpi-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.spot-kpi-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.2s ease;
+}
+
+.spot-kpi-item:hover {
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+.spot-kpi-item__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.spot-kpi-item__value {
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.spot-kpi-item__value--ratio {
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.spot-kpi-item__pct {
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 3px;
+  opacity: 0.88;
+}
+
+.spot-kpi-item__unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.text-orange { color: #ea580c; }
+.text-red { color: #dc2626; }
+.text-green { color: #16a34a; }
+.text-blue { color: #0284c7; }
+.text-purple { color: #9333ea; }
+.text-gray { color: #64748b; }
+.text-amber { color: #d97706; }
+.text-cyan { color: #0891b2; }
+
+.spot-chart-box {
+  position: relative;
+  flex: 1;
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-loading-mask {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.card-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: card-spin 0.8s linear infinite;
+}
+
+@keyframes card-spin {
+  to { transform: rotate(360deg); }
+}
+
+.card-empty-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.dispatch-stations-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dispatch-station-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: box-shadow 0.2s ease;
+}
+
+.dispatch-station-card:hover {
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+.dispatch-station-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dispatch-station-card__tag {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.dispatch-station-card__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.dispatch-station-card__metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.station-metric-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.metric-label {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.metric-val {
+  font-weight: 700;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.dispatch-events-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+}
+
+.dispatch-events-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.dispatch-events-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.dispatch-events-count {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dispatch-events-timeline {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dispatch-event-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dispatch-event-time {
+  background: #e2e8f0;
+  color: #334155;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.dispatch-event-org {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.dispatch-event-content {
+  color: #334155;
+  font-size: 13px;
+  word-break: break-all;
+  flex: 1;
+}
+
+.dispatch-events-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
 }
 </style>

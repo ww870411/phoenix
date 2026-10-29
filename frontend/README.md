@@ -1,3 +1,203 @@
+## 2026-10-29 生产日报数据看板：气温导入成功态优化与主页面顶栏旧调试残留清理
+
+- **气温导入完成态与顶栏净化 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **拔除顶栏长列表旧残留**：彻底移除顶部控制栏中原有的 `.dashboard-temp-import-status`（长串涉及日期、重合区间及逐小时明细列表），恢复页面顶部清爽结构；
+    2. **弹窗入库成功完成态**：点击“确认覆盖入库”写库成功后，弹窗内立即切换为居中大气的“🎉 气温数据已成功覆盖入库！”成功卡片，停留 1.5 秒后自动关闭；
+    3. **自动淡出 Toast**：主页面以单行胶囊通知（`.dashboard-cache-toast`）反馈写入与覆盖结果，4.5 秒后自动消失；
+    4. **静默自动联动刷新**：入库完成后自动调用 `loadDashboardData` 和 `loadCoalPlanComparison`，看板最新数据瞬时呈现。
+
+## 2026-10-29 生产日报数据看板：气温导入弹窗交互升级（KPI 概览与差异优先紧凑表格）
+
+- **气温导入预览弹窗重构 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **弹窗视口防溢出与限高**：弹窗面板控制在 `max-height: 88vh; width: min(840px, 95vw)`，明细表格独立限高 `max-height: 260px` 搭配细滚动条与固定粘性表头，彻底消除长列表撑满全屏的痛点；
+    2. **顶部四宫格概览卡片 (KPI Grid)**：直观展现涉及日期跨度（友好区间格式）、接口总时段数、库内重合时段及当前比对状态；
+    3. **差异优先切换器 (`tempDiffFilter`)**：
+       - 默认根据差异情况自动预选：存在差异时切入 `⚠️ 仅看差异 (N)`，聚焦关键核验信息；
+       - 若重合时段 0 差异，呈现居中清新勋章卡片 `🎉 全部数据完全一致`，支持按需展开完整时段列表；
+    4. **专业工业级紧凑表格**：规范呈现时间、接口气温、数据库气温、差值正负高亮及胶囊状态标签（差异/一致/新时段）；
+    5. **遮罩层支持点击关闭**。
+
+## 2026-10-29 生产日报数据看板：标煤耗量动态分解计划对比（当日卡片与供暖期累计卡片）
+
+- **数据看板展示层标煤计划对比全链路集成 (`DashBoard.vue` & `api.js`)**：
+  - [`api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js)：
+    - 新增 `fetchCoalPlanComparison({ projectKey, bizDate, company })` API 客户端函数，调用后端轻量化计算接口；
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **当日标煤卡片对比信息条**：
+       - 在“当日集团标煤消耗”卡片数值下方新增动态计划对比条；
+       - 展示动态分解计划值 $P_{\text{daily}}$，计算并直观标注较计划偏差（超/省）与达成率（如 `动态计划 2,557.4 吨 · 超 +120.3 吨 (104.7%)`）；
+       - 结合黄色卡片底色采用玻璃态药丸徽章（`.summary-card__sub-compare`）与超/省高对比色彩；
+    2. **供暖期标煤卡片动态累计计划对比条**：
+       - 在“供暖期标煤耗量”卡片下方新增供暖期累计动态分解计划对比；
+       - 精准呈现供暖期从初期累计至当日的日分解计划总和、累计偏差与完成率；
+       - 鼠标悬停 tooltip 包含全供暖期总计划及全期总进度；
+    3. **自适应降级与异常保护**：
+       - 若当月气温未全部录入，自动回退展示月均摊参考值并标注 `均摊计划*`，保障卡片平稳展示；
+    4. **业务日期自适应联动**：
+       - 监听 `effectiveBizDate`，用户切换日期时全自动异步拉取最新日期的计划与累计分解数据。
+
+## 2026-10-29 生产日报数据看板：集团标煤口径全面回归全口径（取消剔除庄河改造锅炉房）
+
+- **数据看板展示层口径与文案修正 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **核心卡片文案净化**：将顶部卡片标签由“当日集团标煤消耗（剔除庄河改造锅炉房）”调整为“当日集团标煤消耗”；
+    2. **趋势图单位取数自适应**：在板块 10 “标煤耗量与平均气温趋势图”中优先读取通用“标煤耗量”的计量单位（兼顾张屯汇总回退），数据自动随底层后端切换展现真实的集团全口径标煤能耗。
+
+## 2026-10-29 生产日报数据看板：电力现货负电价点数比例与百分比展示优化
+
+- **现货 KPI 指标排版升级 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **指标公式化表现**：引入 [`formatNegativePercent`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue#L4837-L4842)，将负电价统计由单纯的点数优化为 `xx/96点 (yy.y%)` 形式；
+    2. **响应式排版**：增加 `.spot-kpi-item__value--ratio` 与 `.spot-kpi-item__pct` 样式，保证比例与百分比并列排版优雅紧凑、不换行不溢出。
+
+## 2026-10-29 生产日报数据看板：电力现货卡片业务日标签移除与左右对称排版
+
+- **电力现货卡片头部净化 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **文案净化**：彻底移除左侧“辽宁省统一结算点实时电价”卡片内部的“业务日：xxxx”冗余日期标签；
+    2. **栅格与动作栏对称**：动作栏类名统一为 `.card-action-bar--end`，使“查看现货大盘 →”与右侧“查看调度大盘 →”按钮在视觉上严格右对齐，卡片顶部更轻盈整洁。
+
+## 2026-10-29 生产日报数据看板：生产调度事件按时间先后升序排列与跨日容错
+
+- **调度事件时间轴排序引擎 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **时间序数精确折算算法 `getDispatchEventMinutes(ev, bizDateStr)`**：
+       - 将标准时分文本（如 `08:00`、`14:15`、`22:17`）折算为当日绝对分钟数；
+       - 智能解析跨日/次日凌晨时间（如 `10日1:12`、`15日3:40`、`3日2:00` 等），结合业务日期自动计算跨日偏移量（`dayOffset`），兼顾跨月月末月初边界容错，确保次日凌晨操作稳固排列于夜间之后；
+    2. **严格稳定升序呈现**：
+       - [`pureDispatchEvents`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue#L5000-L5012) 在有效性过滤基础上，按时间序数 `mins` 升序排列，并以原始序号稳定防抖；
+       - 彻底解决各厂报送堆叠导致的时间倒流跳跃问题，形成自上而下顺畅展开的专业中控调度时间线。
+
+## 2026-10-29 生产日报数据看板：生产调度事件精准筛选与脏数据净化
+
+- **调度事件有效性筛选引擎 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **引入高精细过滤函数 `isValidDispatchOperation(ev)`**：
+       - **硬性时间点校验**：必须具有时分格式（如 `14:15`、`08:30` 等），彻底拦截无时间、`--:--` 或空白异常条目；
+       - **拦截纯工期施工残片**：通过正则过滤以“工期”开头（如“工期29/10.6:00至29/10.24:00”）或仅记录工期时间段的非调度操作；
+       - **拦截检修恢复时点报送**：过滤仅记录“xx日xx:xx恢复”等抢修结果汇报条目；
+       - **拦截日常泛化套话**：过滤“管网运行正常”等无具体机组/阀门调度动作的例行公文；
+    2. **纯调度操作呈现**：确保右侧卡片仅保留具备具体时间、具体动作（如开阀、关门、并网、上水、启停泵）的高价值真实生产调度事件；无有效事件时优雅展示“当日无生产运行调度事件”。
+
+## 2026-10-29 生产日报数据看板：双栏 6+6 对称布局、纵深拉升与字号排版优化
+
+- **看板栅格与视觉层级升级 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **6+6 黄金对称栅格**：左栏电力现货与右栏生产调度恢复为各占 6 栏（`grid-column: span 6`）；
+    2. **高度纵深拉升**：卡片 `min-height` 提至 480px，ECharts 曲线图由 230px 增至 340px，调度事件时间轴扩展至 220px，彻底摆脱“过于扁平”的局促感；
+    3. **字号层级结合看板风格全面提升**：
+       - KPI 数值跃升至 22px 加粗，标签提升至 13px，单位提升至 12px；
+       - ECharts 坐标轴、图例提升至 12px，Tooltip 提升至 13px；
+       - 首站工况名称提升至 14px，指标项提升至 12-13px；
+       - 调度事件正文与时间标签全面提升至 12-13px，彻底消除阅读吃力问题。
+
+## 2026-10-29 生产日报数据看板：调度信息精确业务日查询与无数据置空
+
+- **调度卡片严格单日精确联动 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **严格单日查询**：废除任何自动跨日回退借调逻辑，只按顶部设定的 `biz_date` 检索调度数据；
+    2. **无数据彻底置空**：所选业务日若数据库中无数据，卡片内部直接展示空态“该业务日暂无调度信息”，首站工况与生产调度事件完全不展示；有数据时才展开首站工况与纯生产调度操作；
+    3. **卡片内栏净化**：移除多余文本，仅保留右对齐的直达大盘链接。
+
+## 2026-10-29 生产日报数据看板：生产调度卡片净化与业务日期严格联动
+
+- **调度卡片精简化与业务日统一 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **文案净化**：彻底移除右侧卡片的副标题“供热首站核心工况与生产调度事件”与头部值班人员信息（`:extra="dispatchDutyText"`）；
+    2. **业务日严格联动**：移除“调度日：xxxx 最新版”字样与“最新期”角标，统一渲染为 `业务日：{{ effectiveBizDate }}`，严格与全局业务日历设定对齐并与左栏样式保持一致；
+    3. **冗余逻辑清理**：删除 `dispatchDutyText` 计算属性，精简组件运行负担。
+
+## 2026-10-29 生产日报数据看板：双栏板块 8:4 比例调优、文案精简与调度自动回退机制
+
+- **看板栅格与数据渲染优化 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **8:4 栅格比例重构**：左栏电力现货调整为 `grid-column: span 8`，右栏生产调度调整为 `grid-column: span 4`，现货 96 点曲线更舒展；
+    2. **文案精简化**：彻底清除左侧现货卡片的冗长副标题与 96 点覆盖率字样，仅保留“单位：元/MWh”；
+    3. **调度数据解析与回退机制增强 (`fetchDispatchInfoData`)**：
+       - 正确对接 `res.items` 数据字段；
+       - 当所选业务日期（如 10-28 当天）尚未生成调度汇总时，自动查 `end_date: date, limit: 1` 获得最近一期已入库调度记录，并展示 `(最新期)` 提示角标；
+       - 兼容 `ev.time || ev.time_str` 与 `ev.raw_description || ev.content` 字段。
+
+## 2026-10-29 生产日报数据看板：收入与投诉下方新增电力现货大盘与生产调度信息双栏板块
+
+- **数据看板核心结构扩展 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **网格排版**：在“收入分类对比（集团）”与“投诉量分项”（占满 12 列栅格）正下方新增一行双栏：
+       - 左栏 `.dashboard-grid__item--spot-elec`：桌面端 `grid-column: span 6`；
+       - 右栏 `.dashboard-grid__item--dispatch`：桌面端 `grid-column: span 6`；
+       - 移动端（`< 1024px`）自适应单列整齐堆叠，最小高度保持统一；
+    2. **左栏：辽宁省统一结算点实时电价**：
+       - 顶部 4 宫格 KPI：实时均价（橙）、最高实时价（红）、最低实时价（带负电价绿色/蓝色提醒）、负电价点数（紫）；
+       - 中间 ECharts 曲线图：展示 96 点 15 分钟级实时电价橙色曲线（渐变面积填充）、日前电价天蓝虚线，配有 0 元分界红虚线与精准 Tooltip；
+       - 右上角直达入口：提供“查看现货大盘 →”路由胶囊跳转链接；
+    3. **右栏：生产调度信息**：
+       - 顶部状态区：调度长/值班员信息、直达路由按钮“查看调度大盘 →”；
+       - 关键工况卡片：展示北海首站、香海首站等供水温度、回水温度、供回温差及循环流量；
+       - 生产运行调度事件时间轴：**严格剔除抢修工作票（`!ev.is_ticket`）**，展示纯调度操作事件（时间标签、机构徽标、操作文字），带滚动条与空态提示；
+    4. **数据驱动联动**：
+       - 接入 `getSpotElectricitySummary`、`getSpotElectricityPoints` 与 `queryDispatchData`；
+       - 随顶部业务日期（`effectiveBizDate`）切换实现自动异步拉取，提供骨架 Loading 与状态兜底。
+
+## 2026-10-29 计划动态分解图表：全面恢复左轴/右轴高质感彩色标签徽标与指标药丸卡片
+
+- **左右轴高质感指引卡片重构升级 (`DynamicPlanMetricsView.vue`)**：
+  - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+    1. **生硬文字彻底移除**：彻底删除“各计量单位独立刻度...”纯文字横幅；
+    2. **多右轴单位分组指引 (`rightGroups`)**：扩展 `chartAxisMappingInfo`，解除过去硬编码双单位（`units.length === 2`）的限制；左侧展示【左纵轴 (主单位)】与对应指标药丸，右侧遍历渲染各【右纵轴 (单位)】徽标与指标药丸，支持动态分解气温右轴；
+    3. **移动端流式排版适配**：移动端纵向堆叠展开，支持触摸点击聚焦。
+
+## 2026-10-29 计划动态分解图表：全面恢复多指标全曲线对应的纵轴刻度显示与坐标轴映射
+
+- **ECharts 多轴与 Grid 完整映射机制恢复 (`DynamicPlanMetricsView.vue`)**：
+  - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+    1. **多轴刻度全面恢复 (`metricAxes`)**：严格依照用户指令调整回来，撤销对多余单位轴的隐藏，确保所有勾选的生产指标（`GJ`、`万kWh`、`吨` 等）及气温曲线（`℃`）均拥有各自真实、可视的 Y 轴刻度线与单位标注；
+    2. **Grid 边距自适应保障**：`grid.right` 恢复动态按 `Math.max(65, (unitList.length - 1 + (includeTemp ? 1 : 0)) * 65)` 计算，留出充足间距保障右侧各个独立 Y 轴清晰呈现，刻度不与折线打架；
+    3. **多图表模式统一**：动态走势折线图、柱状对比图与动态日计划分解图全部保持统一规范的多单位双/多纵轴并列支持。
+
+## 2026-10-29 每日数据填报：每张表格已填报指标比值展示恢复与胶囊状态增强
+
+- **填报列表页单表指标比值恢复与直达交互 (`Sheets.vue`)**：
+  - [`Sheets.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/Sheets.vue)：
+    1. **子表胶囊内置高对比度填报比值 (`.pill-ratio`)**：在两栏等宽单位卡片内的每张表格胶囊中，表名右侧恢复呈现具体填报指标比值（如 `17/17`、`0/13`、`0/8`）；
+    2. **三态语义着色与悬停提示**：已完成（翡翠绿 `#10b981`）、部分填报（金黄色 `#fef08a`）、未填报（浅灰 `#e2e8f0`），悬停提示具体项数进度；
+    3. **单表直达跳转**：点击特定子表胶囊即可精准直达该表编辑页（`@click.stop="openSheet(sheet)"`），点击卡片主体打开第一张表；
+    4. **单表单位协同**：只有 1 张表的单位（如香海热电厂、北方公司等），卡片右上角直接同步显示其指标填报比值（如 `17/17`）。
+
+## 2026-10-29 计划动态分解图表移动端自适应调优：消除多 Y 轴固定偏置与右侧留白
+
+- **ECharts 多轴与 Grid 响应式优化 (`DynamicPlanMetricsView.vue`)**：
+  - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+    1. **多轴阶梯偏置消除 (`metricAxes`)**：在移动端窄屏（`<= 768px`）下限制右侧仅显示 1 个主次轴（`offset = 0`），多余单位轴设为 `show: false, offset: 0`，保留数值比例尺的同时彻底释放右侧占位；
+    2. **Grid 右边距响应式收窄**：将原 `(unitList.length - 1) * 65` 累加边距在手机端优化为固定 `42px`（无右轴仅 `16px`），消除原本由于勾选 4~5 个单位指标导致右侧产生 200px+ 巨大空白、曲线被压缩在左侧 2/3 的问题；
+    3. **图例与中心点自适应**：图例边距收窄至 `8px`，饼图在移动端完全居中；
+    4. **ResizeObserver 动态重算**：窗口与容器变化时自动平滑重算轴配置与 Grid 尺寸。
+
+- **图表展示区选项卡优化 (`DynamicPlanMetricsView.vue`)**：
+  - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+    1. **选项卡精简**：从 `chartTabs` 中移除【🔥 供热燃煤基准专题】按钮，界面聚焦于走势折线、柱状对比与负荷环形占比；
+    2. **冗余渲染清理**：同步精简 `renderChart` 中关于 `trend_heat_coal` 的特定分支与静态配置，提升运行时性能。
+
+- **计划动态分解模块响应式重构 (`DynamicPlanMetricsView.vue`)**：
+  - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)：
+    1. **多断点响应式支持**：引入 `@media (max-width: 768px)` 与 `@media (max-width: 480px)` 全套移动端排版规则；
+    2. **筛选区纵向流式自适应**：解除标签固定宽度，月份区间选择器自适应满宽并支持快捷预设换行流动；
+    3. **指标下拉多选解除硬定宽**：彻底消除 320px/380px 的 min-width 溢出限制，支持手机全屏宽度展开；
+    4. **KPI 核心指标双列网格**：重构为 `repeat(2, minmax(0, 1fr))`，紧凑卡片排布大幅提升首屏信息密度；
+    5. **图表 Tab 手势平滑横滑与高度自适应**：图表 Tab 支持触摸平滑横滑，图表容器高度在手机端优化为 320px；
+    6. **动态分解二级控制横栏与明细表适配**：算法折叠按钮、30天明细查看与气温曲线胶囊自适应整行堆叠，明细表支持横向 touch 滑动；
+    7. **数据矩阵表固定列精简**：移动端将指标名称固定列宽自适应降至 120px~130px，给右侧月份列留出充裕的滑动展示空间。
+
+- **生产调度信息看板响应式重构 (`DispatchInfoView.vue`)**：
+  - [`DispatchInfoView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DispatchInfoView.vue)：
+    1. **页面内边距与 Banner 紧凑化**：解除大桌面左右 2rem 边距浪费，Banner 标题与元标签流式堆叠；
+    2. **上传工作台按钮单列展开**：在 <= 768px 下选择文件与文件夹入口改为单列展示，文本说明完整清晰展示，不再挤瘪折叠；
+    3. **综合过滤工具栏流式重构**：解除检索框 260px 固定限制，设为弹性自适应；日期选择与上一天/下一天对称排列；
+    4. **宏观产耗 KPI 双列紧凑网格**：耗煤、发电、供热、补水在小屏下以双列 2x2 网格整齐排布；
+    5. **解除机炉拓扑 380px 与蒸汽燃煤 400px 破屏限制**：手机窄屏强制以 1fr 单列展示，燃气或左机右炉垂直平铺，消除中间竖线；
+    6. **表格与调度事件时间线适配**：首站工况表与燃煤库存表支持平滑横滑，调度事件卡片改为上下元信息结构，避免工期文字与左侧标签挤压重叠。
+
 ## 2026-10-28 每日数据填报：香海热电厂与供热公司能效报表上传与多表自动回填系统
 
 - **前端能效报表上传入口与跨表回填引擎升级 (`DataEntryView.vue`)**：

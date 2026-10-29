@@ -508,6 +508,26 @@ async def get_daily_decomposition_endpoint(
         session.close()
 
 
+@public_router.get("/dynamic_plan/coal_plan_comparison", summary="看板核心指标卡片：标煤耗量动态分解计划对比")
+async def get_coal_plan_comparison_endpoint(
+    biz_date: str = Query(..., description="业务日期，形如 YYYY-MM-DD"),
+    company: str = Query("Group", description="统计口径代号，默认为 Group"),
+):
+    """
+    为数据看板顶部卡片提供标煤耗量动态分解计划对比数据：
+    1. 当日标煤动态计划值与状态
+    2. 供暖期截至当天的动态累计计划值与全期总计划
+    """
+    from backend.services.dynamic_decomposition_service import get_coal_plan_comparison
+    session = SessionLocal()
+    try:
+        return get_coal_plan_comparison(company=company, biz_date_str=biz_date, session=session)
+    except Exception as exc:
+        return {"ok": False, "message": f"计算标煤计划对比异常: {str(exc)}"}
+    finally:
+        session.close()
+
+
 class UpdateKParameterItem(BaseModel):
     company: str = Field(..., description="统计口径代号，如 Group, BeiHai")
     month: int = Field(..., ge=1, le=12, description="目标月份数字，如 11")

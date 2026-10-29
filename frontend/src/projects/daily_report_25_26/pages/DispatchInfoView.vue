@@ -2569,16 +2569,404 @@ function formatTemp(minT, maxT) {
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 640px) {
+/* ---------------- 移动端窄屏手机响应式排版适配 ---------------- */
+@media (max-width: 768px) {
+  .dispatch-main {
+    padding: 0.65rem 0.75rem 2.5rem;
+    gap: 0.85rem;
+  }
+
+  /* 顶部 Banner 卡片紧凑化 */
+  .banner-card {
+    padding: 0.85rem 1rem;
+    border-radius: 8px;
+  }
+  .banner-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+  .banner-title-row {
+    gap: 0.6rem;
+  }
+  .banner-icon {
+    font-size: 1.6rem;
+  }
+  .banner-title {
+    font-size: 1.15rem;
+  }
+  .banner-meta {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .meta-tag {
+    font-size: 0.78rem;
+    padding: 0.3rem 0.6rem;
+  }
+
+  /* 提取工作台面板紧凑化 */
+  .extract-card {
+    border-radius: 8px;
+  }
+  .section-header {
+    padding: 0.75rem 1rem;
+  }
+  .section-header h3 {
+    font-size: 0.98rem;
+  }
+  .badge-sub {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+  }
+  .extract-body {
+    padding: 0.85rem;
+    gap: 0.85rem;
+  }
+
+  /* 核心：上传按钮在手机下变为单列，展开所有文字说明，不再挤压变形 */
+  .upload-buttons-row {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+    margin-bottom: 0.75rem;
+  }
+  .upload-btn-card {
+    padding: 0.85rem 1rem;
+    gap: 0.75rem;
+  }
+  .btn-card-icon {
+    font-size: 1.6rem;
+  }
+  .btn-card-title {
+    font-size: 0.95rem;
+  }
+  .btn-card-desc {
+    font-size: 0.75rem;
+  }
+
+  .drop-zone {
+    padding: 1rem 0.5rem;
+  }
+  .drop-icon {
+    font-size: 1.6rem;
+  }
+  .drop-title {
+    font-size: 0.85rem;
+  }
+  .drop-hint {
+    font-size: 0.75rem;
+  }
+
+  .file-list-preview {
+    padding: 0.65rem 0.75rem;
+  }
+  .list-title {
+    font-size: 0.8rem;
+  }
+  .chip-name {
+    max-width: 120px;
+  }
+
+  .btn-extract {
+    width: 100%;
+    justify-content: center;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .summary-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+  .summary-title {
+    font-size: 0.95rem;
+  }
+  .summary-stat {
+    font-size: 0.82rem;
+  }
+  .summary-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+  }
+  .summary-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 看板大卡片与查询过滤条 */
+  .dashboard-card {
+    padding: 0.85rem 0.75rem;
+    border-radius: 8px;
+  }
+  .query-toolbar {
+    padding-bottom: 0.85rem;
+    gap: 0.75rem;
+  }
+  .toolbar-left {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    width: 100%;
+  }
+  .filter-item {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+  }
+  .date-select-group {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .date-select {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+  }
+  .search-item {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+  .search-input-group {
+    width: 100%;
+    display: flex;
+    gap: 4px;
+  }
+  .search-input {
+    flex: 1;
+    width: auto !important;
+    min-width: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+  }
+  .toolbar-right {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  /* 报告抬头与天气看板 */
+  .report-meta-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.5rem 0 0.85rem;
+  }
+  .report-title {
+    font-size: 1.15rem;
+  }
+  .meta-tags {
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.78rem;
+  }
+  .weather-box {
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: flex-start;
+    padding: 0.6rem 0.8rem;
+  }
+  .weather-icon {
+    font-size: 1.4rem;
+  }
+  .weather-temp {
+    font-size: 1rem;
+  }
+  .weather-desc {
+    font-size: 0.75rem;
+  }
+
+  /* 宏观产耗 KPI 卡片网格：手机下变为双列网格，紧凑易读 */
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  .kpi-card {
+    padding: 0.75rem 0.8rem;
+  }
+  .kpi-title {
+    font-size: 0.78rem;
+  }
+  .kpi-value {
+    font-size: 1.35rem;
+    margin: 0.2rem 0;
+  }
+  .kpi-sub {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.7rem;
+  }
+
+  /* 平铺数据板块流 */
+  .dashboard-sections-flow {
+    gap: 1rem;
+  }
+  .dashboard-section-block {
+    padding: 0.85rem 0.75rem;
+    border-radius: 8px;
+  }
+  .section-block-header {
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.65rem;
+  }
+  .section-block-title h4 {
+    font-size: 0.95rem;
+  }
+
+  /* 机炉拓扑卡片：解除 minmax(380px, 1fr) 溢出限制，单列全宽适配 */
+  .facilities-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+  .plant-facilities-card {
+    padding: 0.75rem;
+  }
+  .plant-card-header {
+    padding-bottom: 0.45rem;
+    margin-bottom: 0.65rem;
+  }
+  .plant-name {
+    font-size: 0.92rem;
+  }
+  .plant-running-summary {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.4rem;
+  }
+
+  /* 单个电厂内部机炉分栏：单列垂直排列 */
   .plant-split-columns {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 0.65rem;
+  }
+  .plant-split-columns:not(.single-column)::after {
+    display: none;
   }
   .col-right {
-    border-left: none;
-    padding-left: 0;
-    margin-top: 0.75rem;
+    border-left: none !important;
+    padding-left: 0 !important;
+    margin-top: 0.5rem;
     border-top: 1px dashed #e2e8f0;
-    padding-top: 0.75rem;
+    padding-top: 0.5rem;
+  }
+  .fac-badge {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.78rem;
+  }
+  .fac-start-pill {
+    font-size: 0.65rem;
+    padding: 0.1rem 0.35rem;
+  }
+
+  /* 蒸汽与燃煤：解除 minmax(400px, 1fr) 溢出限制 */
+  .sub-split-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+  .inner-card {
+    padding: 0.65rem;
+  }
+
+  /* 首站、通用表格及移动端平滑滚动 */
+  .table-container {
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table {
+    font-size: 0.78rem;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 0.45rem 0.55rem;
+    white-space: nowrap;
+  }
+
+  /* 调度事件流 */
+  .events-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+  .org-filter-pills {
+    gap: 0.35rem;
+    width: 100%;
+  }
+  .filter-pill {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.55rem;
+  }
+  .checkbox-label {
+    font-size: 0.8rem;
+  }
+  .event-card {
+    padding: 0.65rem 0.75rem;
+    gap: 0.35rem;
+  }
+  .event-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .event-meta-left {
+    gap: 0.35rem;
+  }
+  .event-duration {
+    font-size: 0.75rem;
+  }
+  .event-content {
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  /* 模态弹窗 */
+  .modal-card {
+    max-width: calc(100vw - 20px);
+    padding: 1rem 0.85rem;
+    max-height: 90vh;
+  }
+  .modal-header h3 {
+    font-size: 0.95rem;
+  }
+  .modal-footer {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .modal-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .dispatch-main {
+    padding: 0.5rem 0.5rem 2rem;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .kpi-card {
+    padding: 0.6rem 0.65rem;
+  }
+
+  .kpi-value {
+    font-size: 1.25rem;
+  }
+
+  .date-select-group {
+    flex-wrap: wrap;
+  }
+
+  .date-select-group .btn.ghost {
+    width: 100%;
+    margin-top: 2px;
   }
 }
 </style>

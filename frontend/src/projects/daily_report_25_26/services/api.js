@@ -3355,6 +3355,24 @@ export async function fetchDynamicDailyDecomposition({
   return response.json()
 }
 
+export async function fetchCoalPlanComparison({
+  projectKey = 'daily_report_25_26',
+  bizDate = '',
+  company = 'Group',
+} = {}) {
+  const url = `${projectPath(projectKey)}/dynamic_plan/coal_plan_comparison?biz_date=${encodeURIComponent(bizDate)}&company=${encodeURIComponent(company)}`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取标煤计划对比数据失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+
 
 export async function updateDynamicPlanKParameters(projectKey = 'daily_report_25_26', payload) {
   const url = `${projectPath(projectKey)}/dynamic_plan/update_k_parameters`
