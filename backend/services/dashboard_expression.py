@@ -1145,10 +1145,14 @@ def _fill_daily_trend_section(
     except ValueError:
         push_dt = date.today()
     
-    # 优化：默认仅展示/缓存最近10天的数据（含当日），进一步减轻低性能服务器压力
-    # 起始日期 = max(供暖期开始, 10天前)
-    window_start = push_dt - timedelta(days=9)
-    start_dt = max(window_start, parse_date(get_period_settings(get_season_period(push_dt))["start_date"]))
+    # 标煤耗量与平均气温趋势时间序列：
+    # 完整呈现从供暖期开始（若非供暖期则取最近30天）至当前业务日期的连续演变趋势
+    season_settings = get_period_settings(get_season_period(push_dt))
+    season_start_dt = parse_date(season_settings["start_date"]) if season_settings else None
+    if season_start_dt and season_start_dt <= push_dt:
+        start_dt = season_start_dt
+    else:
+        start_dt = push_dt - timedelta(days=29)
     
     if start_dt > push_dt:
         start_dt = push_dt

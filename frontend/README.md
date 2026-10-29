@@ -1,3 +1,76 @@
+## 2026-10-29 生产日报数据看板：标煤耗量与平均气温趋势图（DataZoom 视口死锁根治、双平滑折线走势与视觉重构）
+
+- **趋势图交互与视觉彻底重构 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **DataZoom 索引漂移与视口死锁彻底根治**：
+       - 设立 `DAILY_TREND_DEFAULT_WINDOW = 15` 与 `DAILY_TREND_MIN_WINDOW = 5` 下限保护，杜绝缩放到 1 天的极端异常；
+       - 将 `pushDateValue` 计算属性声明前置至 `dashboardData` 紧跟之后，彻底根治 setup 期间变量暂时性死区（TDZ ReferenceError）导致的白屏；
+       - 新增对业务日期 `[effectiveBizDate, pushDateValue]` 的监听，日期变动时主动重置起始索引，默认将滑动窗口右边界严密锁定在当前业务日（展示最近 15 天时间段）；
+       - DataZoom 改用底层数字索引驱动，彻底根治 category 字符串匹配失败导致回退到随机某天的 Bug；
+    2. **气温经典柱状图与蓝橙配色精准复原**：
+       - 应用户偏好，平均气温复原为半透明柱状图（`bar`，14px，本期带蓝色实线边框，同期带橙色虚线边框）；
+       - 本期统一恢复为经典蓝 `#2563eb`，同期统一恢复为活力橙 `#f97316`；
+       - 折线层级提升为 `z: 5`，气温柱图为 `z: 2`，标煤折线浮在半透明柱子前侧，线条通畅明朗；
+    3. **业务日高光引导与标签净化**：
+       - 彻底剔除全屏堆叠数字标签，仅在当前业务日打出高光发光圆点与“业务日”垂直对齐辅助虚线；
+    4. **结构化卡片 Tooltip**：
+       - 悬浮时清晰分栏输出日期、标煤（本期/同期/超省）与气温（本期/同期/温差）明细对比。
+
+## 2026-10-29 生产日报数据看板：标煤动态计划全月气温齐备约束（无气温月份严禁展示）
+
+- **前端展示严肃性保障 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **拒绝虚假计划展示**：后端严格移除日均摊兜底，对尚未录入气温的未来月份（如 2026年12月及之后）返回 `in_plan_period: false` 与 `plan_value: null`；
+    2. **气温齐备时自动激活**：前端卡片仅在所选月份处于 26-27 供暖期且全月气温真实齐备时，才渲染动态计划对比。
+
+## 2026-10-29 生产日报数据看板：标煤动态计划对比起用日期锁定（2026-11-01 正式起用）
+
+- **动态计划显示起始时间基线 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **历史日期拦截与静默**：
+       - 定义 `DYNAMIC_PLAN_START_DATE = '2026-11-01'`；
+       - 对于早于 2026-11-01 的业务日期（含 25-26 历史供暖期），跳过 API 网络请求，计算属性直接返回 `null`；
+    2. **26-27 供暖期正式展示**：
+       - 自 2026-11-01 起的业务日期，在有计划期间内正常渲染当日动态计划对比条与供暖期累计计划对比条。
+
+## 2026-10-29 生产日报数据看板：标煤动态计划对比期间门禁（非分解期间自动隐藏卡片对比）
+
+- **标煤计划对比安全展示机制 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **期间门禁判定 (`in_plan_period`)**：
+       - `dailyCoalPlanSummary` 与 `seasonCoalPlanSummary` 在渲染前严密校验 `in_plan_period` 标志与 `status === 'out_of_period'`；
+    2. **非分解期间自动隐匿**：
+       - 当业务日期处于夏季非供暖期（5~9月）或当月未配置月度标煤计划时，两个计算属性直接返回 `null`；
+       - 【当日集团标煤消耗】与【供暖期标煤耗量】卡片底部的动态计划对比条自动不显示，界面保持纯粹整洁；
+    3. **供暖期内平滑恢复**：
+       - 当切回供暖期且配置了标煤计划的月份时，自动计算并展示当日动态计划偏差与供暖期累计计划偏差。
+
+## 2026-10-29 生产日报数据看板：跨端统一下载 PDF 规格微调（提升至 1600px 超宽屏标准）
+
+- **PDF 跨端导出尺寸升级 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **虚拟视口宽度扩展**：将 `EXPORT_STANDARD_WIDTH` 从 1440px 提升至 1600px，采样宽度升级至 3200px 物理像素；
+    2. **样式容器锁死**：`.dashboard-page--export-standard` 宽度同步设为 1600px，图表横轴坐标、图例与明细表格排版更为从容舒展；
+    3. **Loading 遮罩文案**：同步显示“正在按标准桌面宽屏版式（1600px）渲染整页数据与图表”。
+
+## 2026-10-29 生产日报数据看板：跨端统一下载 PDF（方案 A：1440px 桌面标准版式锁定 + 无缝长页 PDF）
+
+- **PDF 跨端统一下载与渲染架构 (`DashBoard.vue`)**：
+  - [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    1. **全屏高质感导出遮罩 (`.pdf-export-loading-mask`)**：
+       - 导出触发时唤起毛玻璃 Loading 遮罩（带旋转 Spinner 与宽屏渲染中提示），完全掩盖移动端底层 DOM 临时拓宽重绘的视觉过程；
+    2. **标准 1440px 桌面版式强制锁定 (`.dashboard-page--export-standard`)**：
+       - 无论当前是在手机、平板还是窄屏窗口，导出期间强制将看板容器锁死为 1440px 桌面宽屏规格；
+       - 强制恢复 4 列核心指标卡片横向单排展开、12 列网格双栏并排、32px 规范边距；
+       - 自动隐藏交互与管理控件（`.pdf-download-btn`、`.dashboard-cache-controls`、`.dashboard-cache-toast`、`.collapse-btn` 等）；
+    3. **ECharts 图表高分辨率重绘驱动**：
+       - 拓宽后主动触发 `window.dispatchEvent(new Event('resize'))`，驱动所有 ECharts 实例在 1440px 容器下按高清像素重新计算并渲染矢量 Canvas；
+    4. **无缝长页高保真输出**：
+       - 使用 `html2canvas` 在 1440px 虚拟视口与 2 倍 Scale 视网膜清晰度下抓取渲染图层；
+       - 按标准 A4 宽度（210mm）根据真实宽高比计算高度生成单页无缝长图 PDF，杜绝跨页截断与排版扭曲；
+    5. **优雅清理与平滑还原**：
+       - 无论导出成功或失败，均在 `finally` 中移除锁定样式，关闭遮罩，并再次触发 `resize` 使界面恢复到当前设备的响应式视口。
+
 ## 2026-10-29 生产日报数据看板：气温导入成功态优化与主页面顶栏旧调试残留清理
 
 - **气温导入完成态与顶栏净化 (`DashBoard.vue`)**：

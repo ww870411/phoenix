@@ -503,14 +503,64 @@ def get_coal_plan_comparison(
     target_day = biz_dt.day
     target_ym = f"{target_year:04d}-{target_month:02d}"
 
+    # 动态分解机制自 26-27 供暖期正式加入，限定自 2026-11-01 开始启用展示
+    DYNAMIC_PLAN_START_DATE = date(2026, 11, 1)
+    if biz_dt < DYNAMIC_PLAN_START_DATE:
+        return {
+            "ok": True,
+            "biz_date": biz_date_str,
+            "company": company,
+            "company_cn": COMPANY_CN_MAP.get(company, company),
+            "in_plan_period": False,
+            "reason": f"计划动态分解机制自 2026-11-01（26-27供暖期）正式加入，历史日期（{biz_date_str}）不展示动态计划对比",
+            "daily": {
+                "plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "has_full_month_temp": False,
+            },
+            "season": {
+                "cumulative_plan_value": None,
+                "total_plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "season_months": [],
+            },
+        }
+
+    # 0. 期间合法性快速校验：夏季 5~9 月明确为非供暖期，不存在标煤计划动态分解
+    if 5 <= target_month <= 9:
+        return {
+            "ok": True,
+            "biz_date": biz_date_str,
+            "company": company,
+            "company_cn": COMPANY_CN_MAP.get(company, company),
+            "in_plan_period": False,
+            "reason": f"当前业务日期处于夏季非供暖期（{target_ym}），不在标煤计划动态分解期间内",
+            "daily": {
+                "plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "has_full_month_temp": False,
+            },
+            "season": {
+                "cumulative_plan_value": None,
+                "total_plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "season_months": [],
+            },
+        }
+
     # 1. 确定供暖期周期
-    # 规则：10~12月属于当年开始的供暖期；1~4月属于上年开始的供暖期；其余月份（5~9月）取最近供暖期
+    # 规则：10~12月属于当年开始的供暖期；1~4月属于上年开始的供暖期
     if target_month >= 10:
         heat_start_year = target_year
         heat_end_year = target_year + 1
-    elif target_month <= 4:
-        heat_start_year = target_year - 1
-        heat_end_year = target_year
     else:
         heat_start_year = target_year - 1
         heat_end_year = target_year
@@ -539,34 +589,101 @@ def get_coal_plan_comparison(
     month_plan_map: Dict[str, float] = {}
     for r in rows:
         p_str = r[0].strftime("%Y-%m") if hasattr(r[0], "strftime") else str(r[0])[:7]
-        month_plan_map[p_str] = float(r[1]) if r[1] is not None else 0.0
+        val = float(r[1]) if r[1] is not None else 0.0
+        if val > 0:
+            month_plan_map[p_str] = val
+
+    # 检查当前月份是否属于配置了月度标煤计划的有效期间
+    cur_month_plan = month_plan_map.get(target_ym, 0.0)
+    if cur_month_plan <= 0:
+        return {
+            "ok": True,
+            "biz_date": biz_date_str,
+            "company": company,
+            "company_cn": COMPANY_CN_MAP.get(company, company),
+            "in_plan_period": False,
+            "reason": f"月份 {target_ym} 未配置月度标煤计划，不在标煤计划动态分解期间内",
+            "daily": {
+                "plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "has_full_month_temp": False,
+            },
+            "season": {
+                "cumulative_plan_value": None,
+                "total_plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "season_months": heating_season_months,
+            },
+        }
 
     season_total_plan = sum(month_plan_map.get(m, 0.0) for m in heating_season_months)
 
     # 2. 计算当日动态分解计划
     daily_res = get_dynamic_daily_decomposition(company=company, year_month=target_ym, session=session)
     has_full_month_temp = daily_res.get("has_full_month", False)
-    daily_plan_val = None
-    daily_status = "none"
+
+    # 核心铁律：动态分解计划以全月气温齐备、成功开展度日分解为绝对前提！
+    # 若全月气温未录入齐全（例如尚未到来的未来月份，如 2026-12 及以后），严禁使用均摊兜底，直接判定为不在动态分解期间！
+    if not has_full_month_temp:
+        return {
+            "ok": True,
+            "biz_date": biz_date_str,
+            "company": company,
+            "company_cn": COMPANY_CN_MAP.get(company, company),
+            "in_plan_period": False,
+            "reason": f"月份 {target_ym} 气温数据尚未录入齐备，无法开展标煤计划动态分解",
+            "daily": {
+                "plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "has_full_month_temp": False,
+            },
+            "season": {
+                "cumulative_plan_value": None,
+                "total_plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "season_months": heating_season_months,
+            },
+        }
+
+    coal_metric = next((m for m in daily_res.get("metrics", []) if m["item"] == "consumption_std_coal"), None)
+    dates = daily_res.get("dates", [])
+    if not coal_metric or biz_date_str not in dates:
+        return {
+            "ok": True,
+            "biz_date": biz_date_str,
+            "company": company,
+            "company_cn": COMPANY_CN_MAP.get(company, company),
+            "in_plan_period": False,
+            "reason": f"未找到 {biz_date_str} 的标煤动态计划指标",
+            "daily": {
+                "plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "has_full_month_temp": True,
+            },
+            "season": {
+                "cumulative_plan_value": None,
+                "total_plan_value": None,
+                "unit": "吨",
+                "status": "out_of_period",
+                "label": "非计划动态分解期间",
+                "season_months": heating_season_months,
+            },
+        }
+
+    idx = dates.index(biz_date_str)
+    daily_plan_val = coal_metric["daily_plans"][idx]
+    daily_status = "dynamic"
     daily_label = "动态分解计划"
-
-    if has_full_month_temp:
-        coal_metric = next((m for m in daily_res.get("metrics", []) if m["item"] == "consumption_std_coal"), None)
-        dates = daily_res.get("dates", [])
-        if coal_metric and biz_date_str in dates:
-            idx = dates.index(biz_date_str)
-            daily_plan_val = coal_metric["daily_plans"][idx]
-            daily_status = "dynamic"
-            daily_label = "动态分解计划"
-
-    # 若无法动态分解，降级采用全月均摊作为基准参考
-    if daily_plan_val is None:
-        m_plan = month_plan_map.get(target_ym)
-        if m_plan is not None and m_plan > 0:
-            days_in_m = calendar.monthrange(target_year, target_month)[1]
-            daily_plan_val = round(m_plan / days_in_m, 2)
-            daily_status = "fallback"
-            daily_label = "月均摊计划(气温待补)"
 
     # 3. 计算供暖期累计动态分解计划（从供暖期开始至 biz_date 当日）
     cumulative_plan_val = 0.0
@@ -574,27 +691,12 @@ def get_coal_plan_comparison(
 
     for m in heating_season_months:
         if m < target_ym:
-            # 历史整月：直接累加该月全月计划（动态分解各日之和严格等于月计划）
+            # 历史整月：累加该月全月计划
             cumulative_plan_val += month_plan_map.get(m, 0.0)
         elif m == target_ym:
-            # 当前目标月：累加从1号至当天（包含当天）的计划值
-            if has_full_month_temp:
-                coal_metric = next((it for it in daily_res.get("metrics", []) if it["item"] == "consumption_std_coal"), None)
-                dates = daily_res.get("dates", [])
-                if coal_metric and biz_date_str in dates:
-                    idx = dates.index(biz_date_str)
-                    cur_month_cum = sum(coal_metric["daily_plans"][:idx + 1])
-                    cumulative_plan_val += cur_month_cum
-                else:
-                    days_in_m = calendar.monthrange(target_year, target_month)[1]
-                    m_plan = month_plan_map.get(target_ym, 0.0)
-                    cumulative_plan_val += round((m_plan / days_in_m) * target_day, 2)
-                    season_status = "fallback"
-            else:
-                days_in_m = calendar.monthrange(target_year, target_month)[1]
-                m_plan = month_plan_map.get(target_ym, 0.0)
-                cumulative_plan_val += round((m_plan / days_in_m) * target_day, 2)
-                season_status = "fallback"
+            # 当前目标月：累加从1号至当天的动态分解计划值
+            cur_month_cum = sum(coal_metric["daily_plans"][:idx + 1])
+            cumulative_plan_val += cur_month_cum
             break
         else:
             break
@@ -607,6 +709,7 @@ def get_coal_plan_comparison(
         "biz_date": biz_date_str,
         "company": company,
         "company_cn": COMPANY_CN_MAP.get(company, company),
+        "in_plan_period": True,
         "daily": {
             "plan_value": daily_plan_val,
             "unit": "吨",

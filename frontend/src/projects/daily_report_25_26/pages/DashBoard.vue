@@ -1,5 +1,14 @@
 <template>
   <div class="dashboard-page" :style="pageStyles">
+    <!-- PDF 标准宽屏导出全屏遮罩 -->
+    <div v-if="isExportingPdf" class="pdf-export-loading-mask">
+      <div class="pdf-export-loading-card">
+        <div class="pdf-export-spinner"></div>
+        <div class="pdf-export-loading-title">正在生成标准看板 PDF</div>
+        <div class="pdf-export-loading-desc">正在按标准桌面宽屏版式（1600px）渲染整页数据与图表，请稍候...</div>
+      </div>
+    </div>
+
     <div v-if="cacheLogVisible" class="log-modal">
       <div class="log-modal__mask" @click="cacheLogVisible = false"></div>
       <div class="log-modal__panel">
@@ -1470,6 +1479,7 @@ const dashboardData = reactive({
   },
   sections: {},
 })
+const pushDateValue = computed(() => dashboardData.meta.pushDate || dashboardData.meta.showDate || '')
 const selectedShowDate = computed(() => (effectiveBizDate.value || '').trim())
 const cacheStatusLabel = computed(() => {
   if (cacheStatus.disabled) return '缓存已禁用'
@@ -3294,9 +3304,19 @@ const dailyTrendSection = computed(() => {
   return section && typeof section === 'object' ? section : {}
 })
 
-const DAILY_TREND_DEFAULT_WINDOW = 7
+const DAILY_TREND_DEFAULT_WINDOW = 15
+const DAILY_TREND_MIN_WINDOW = 5
 const dailyTrendStartIndex = ref(null)
 const dailyTrendWindowSize = ref(DAILY_TREND_DEFAULT_WINDOW)
+
+// 深度监听业务日期变化：只要日期切换，立即强制重置滑动窗口和视口，根除脏索引残留
+watch(
+  () => [effectiveBizDate.value, pushDateValue.value],
+  () => {
+    dailyTrendStartIndex.value = null
+    dailyTrendWindowSize.value = DAILY_TREND_DEFAULT_WINDOW
+  },
+)
 
 const normalizeTrendBucket = (bucket, units) => {
   if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) {
@@ -3343,7 +3363,7 @@ watch(
       dailyTrendWindowSize.value = DAILY_TREND_DEFAULT_WINDOW
       return
     }
-    const requested = Math.max(1, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
+    const requested = Math.max(DAILY_TREND_MIN_WINDOW, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
     const size = Math.min(requested, length)
     dailyTrendWindowSize.value = size
     const maxStart = Math.max(length - size, 0)
@@ -3371,7 +3391,7 @@ const dailyTrendWindowMeta = computed(() => {
       endIndex: 0,
     }
   }
-  const requestedSize = Math.max(1, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
+  const requestedSize = Math.max(DAILY_TREND_MIN_WINDOW, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
   const size = Math.min(requestedSize, total)
   const maxStart = Math.max(total - size, 0)
   const rawStart = dailyTrendStartIndex.value
@@ -3399,14 +3419,12 @@ const dailyTrendWindowRangeLabel = computed(() => {
 
 const resetDailyTrendWindow = () => {
   const labels = dailyTrendSeries.value.labels || []
+  dailyTrendWindowSize.value = DAILY_TREND_DEFAULT_WINDOW
   if (!labels.length) {
     dailyTrendStartIndex.value = null
     return
   }
-  const requestedSize = Math.max(1, Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW)
-  const size = Math.min(requestedSize, labels.length)
-  dailyTrendWindowSize.value = size
-  dailyTrendStartIndex.value = Math.max(labels.length - size, 0)
+  dailyTrendStartIndex.value = Math.max(labels.length - DAILY_TREND_DEFAULT_WINDOW, 0)
 }
 
 const dailyTrendDataZoom = computed(() => {
@@ -3414,29 +3432,29 @@ const dailyTrendDataZoom = computed(() => {
   if (!labels.length) return []
   const meta = dailyTrendWindowMeta.value
   if (!meta.size) return []
-  const startLabel = labels[meta.startIndex] ?? labels[0]
-  const endLabel = labels[meta.endIndex] ?? labels[labels.length - 1]
   const span = meta.size
   const showSlider = labels.length > span
   const slider = {
     type: 'slider',
     show: showSlider,
     xAxisIndex: 0,
-    startValue: startLabel,
-    endValue: endLabel,
-    height: 26,
-    bottom: 24,
+    startValue: meta.startIndex,
+    endValue: meta.endIndex,
+    height: 24,
+    bottom: 8,
     brushSelect: false,
     handleSize: 16,
-    handleIcon:
-      'path://M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820.6C307.9 884.6 139.4 716.1 139.4 512S307.9 139.4 512 139.4 884.6 307.9 884.6 512 716.1 884.6 512 884.6z',
+    borderColor: '#cbd5e1',
+    fillerColor: 'rgba(37, 99, 235, 0.12)',
+    textStyle: { color: '#64748b', fontSize: 11 },
   }
   const inside = {
     type: 'inside',
     xAxisIndex: 0,
-    startValue: startLabel,
-    endValue: endLabel,
+    startValue: meta.startIndex,
+    endValue: meta.endIndex,
     zoomLock: false,
+    minSpan: labels.length > 0 ? (DAILY_TREND_MIN_WINDOW / labels.length) * 100 : undefined,
   }
   return [slider, inside]
 })
@@ -3466,7 +3484,7 @@ const handleDailyTrendZoom = (event) => {
   }
 
   const currentSize = Math.max(
-    1,
+    DAILY_TREND_MIN_WINDOW,
     Number(dailyTrendWindowSize.value) || DAILY_TREND_DEFAULT_WINDOW,
   )
   const startIdx = resolveValueIndex(
@@ -3481,7 +3499,7 @@ const handleDailyTrendZoom = (event) => {
   )
   const normalizedStart = Math.min(startIdx, endIdx)
   const normalizedEnd = Math.max(startIdx, endIdx)
-  const size = clamp(normalizedEnd - normalizedStart + 1, 1, total)
+  const size = clamp(normalizedEnd - normalizedStart + 1, DAILY_TREND_MIN_WINDOW, total)
   const maxStart = Math.max(total - size, 0)
   const nextStart = clamp(normalizedStart, 0, maxStart)
   dailyTrendStartIndex.value = nextStart
@@ -3499,7 +3517,6 @@ const coalStockFallbackMatrix = coalStockFallbackStacks.map(() =>
 )
 
 // --- 图表配置构造 ---
-const pushDateValue = computed(() => dashboardData.meta.pushDate || dashboardData.meta.showDate || '')
 
 const cacheJob = reactive({
   status: 'idle',
@@ -4500,35 +4517,33 @@ const useDailyTrendOption = (payload, highlightLabel, dataZoomConfig = []) => {
   const currentSeries = Array.isArray(payload?.current) ? payload.current : []
   const peerSeries = Array.isArray(payload?.peer) ? payload.peer : []
   const legendEntries = []
+
+  // 经典配色：本期使用经典蓝，同期使用活力橙
   const CURRENT_COLOR = '#2563eb'
   const PEER_COLOR = '#f97316'
 
-  const highlightSet = new Set()
-  if (highlightLabel) {
-    const idx = labels.indexOf(highlightLabel)
-    if (idx !== -1) {
-      highlightSet.add(idx)
-      if (idx - 1 >= 0) highlightSet.add(idx - 1)
-      if (idx - 2 >= 0) highlightSet.add(idx - 2)
-    }
-  }
+  const highlightIndex = highlightLabel ? labels.indexOf(highlightLabel) : -1
 
   const buildSeries = (entries, isPeer = false) => {
     return entries.map((entry) => {
+      const isTemperatureSeries = entry.axis === 'right' || (typeof entry.key === 'string' && entry.key.includes('气温'))
       const nameBase = getDisplayLabel(entry.key)
       const legendName = isPeer ? `${nameBase}（同期）` : nameBase
       if (!legendEntries.includes(legendName)) {
         legendEntries.push(legendName)
       }
+
       const color = isPeer ? PEER_COLOR : CURRENT_COLOR
-      const isTemperatureSeries = entry.axis === 'right'
+      const values = Array.isArray(entry.values)
+        ? entry.values.map((v) => (v === null || v === undefined ? null : Number(v)))
+        : []
+
       const seriesConfig = {
         name: legendName,
         type: isTemperatureSeries ? 'bar' : 'line',
         smooth: true,
-        data: Array.isArray(entry.values)
-          ? entry.values.map((value) => (value === null || value === undefined ? null : Number(value)))
-          : [],
+        data: values,
+        barWidth: isTemperatureSeries ? 14 : undefined,
         lineStyle: isTemperatureSeries
           ? undefined
           : {
@@ -4536,7 +4551,6 @@ const useDailyTrendOption = (payload, highlightLabel, dataZoomConfig = []) => {
               type: isPeer ? 'dashed' : 'solid',
               color,
             },
-        barWidth: isTemperatureSeries ? 16 : undefined,
         symbol: 'circle',
         symbolSize: 5,
         itemStyle: isTemperatureSeries
@@ -4545,70 +4559,59 @@ const useDailyTrendOption = (payload, highlightLabel, dataZoomConfig = []) => {
               borderColor: color,
               borderWidth: 1.2,
               borderType: isPeer ? 'dashed' : 'solid',
+              borderRadius: [3, 3, 0, 0],
             }
           : { color },
-        yAxisIndex: entry.axis === 'right' ? 1 : 0,
-        emphasis: { focus: 'series' },
+        yAxisIndex: isTemperatureSeries ? 1 : 0,
+        z: isTemperatureSeries ? 2 : 5, // 折线浮在柱状图之上，层次分明通透
+        emphasis: {
+          focus: 'series',
+        },
       }
-      if (!isPeer && !isTemperatureSeries && highlightSet.size) {
-        const labelData = Array.from(highlightSet)
-          .filter((idx) => labels[idx] !== undefined)
-          .map((idx) => ({
-            coord: [labels[idx], seriesConfig.data[idx]],
-            label: {
-              formatter: (params) =>
-                Number.isFinite(params.value) ? formatWithThousands(params.value, 0) : '',
+
+      // 在当前业务日打上清晰标线与高光指示
+      if (!isPeer && !isTemperatureSeries && highlightIndex !== -1 && values[highlightIndex] != null) {
+        seriesConfig.markPoint = {
+          symbol: 'circle',
+          symbolSize: 8,
+          silent: true,
+          data: [
+            {
+              coord: [labels[highlightIndex], values[highlightIndex]],
+              itemStyle: {
+                color: CURRENT_COLOR,
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                shadowColor: 'rgba(37, 99, 235, 0.6)',
+                shadowBlur: 8,
+              },
             },
-          }))
-        if (labelData.length) {
-          seriesConfig.label = {
-            show: true,
-            position: 'top',
-            color: '#2563eb',
-            fontSize: 13,
-            fontWeight: 600,
-            formatter: (params) =>
-              Number.isFinite(params.value) ? formatWithThousands(params.value, 0) : '',
-            distance: 8,
-          }
-          seriesConfig.labelLayout = { moveOverlap: 'shiftY' }
-          seriesConfig.markPoint = {
-            symbol: 'circle',
-            symbolSize: 0,
-            data: labelData,
-          }
+          ],
+        }
+        seriesConfig.markLine = {
+          symbol: 'none',
+          silent: true,
+          lineStyle: {
+            type: 'dashed',
+            color: '#3b82f6',
+            width: 1.5,
+          },
+          data: [
+            {
+              xAxis: labels[highlightIndex],
+              label: {
+                show: true,
+                position: 'end',
+                formatter: '业务日',
+                color: '#1d4ed8',
+                fontSize: 11,
+                fontWeight: 600,
+              },
+            },
+          ],
         }
       }
-      if (!isPeer && isTemperatureSeries && highlightSet.size) {
-        const labelData = Array.from(highlightSet)
-          .filter((idx) => labels[idx] !== undefined)
-          .map((idx) => ({
-            coord: [labels[idx], seriesConfig.data[idx]],
-            label: {
-              formatter: (params) =>
-                Number.isFinite(params.value) ? params.value.toFixed(1) : '',
-            },
-          }))
-        if (labelData.length) {
-          seriesConfig.label = {
-            show: true,
-            position: 'left',
-            color: '#2563eb',
-            fontSize: 12,
-            fontWeight: 600,
-            formatter: (params) =>
-              Number.isFinite(params.value) ? params.value.toFixed(1) : '',
-            distance: 8,
-            offset: [-12, 0],
-          }
-          seriesConfig.labelLayout = { moveOverlap: 'shiftY' }
-          seriesConfig.markPoint = {
-            symbol: 'rect',
-            symbolSize: 0,
-            data: labelData,
-          }
-        }
-      }
+
       return seriesConfig
     })
   }
@@ -4616,27 +4619,135 @@ const useDailyTrendOption = (payload, highlightLabel, dataZoomConfig = []) => {
   const series = [...buildSeries(currentSeries, false), ...buildSeries(peerSeries, true)]
 
   return {
-    tooltip: { trigger: 'axis' },
-    legend: { data: legendEntries, top: 0, left: 'center' },
-    grid: { left: 40, right: 40, top: 60, bottom: 110 },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255, 255, 255, 0.98)',
+      borderColor: '#cbd5e1',
+      borderWidth: 1,
+      padding: [10, 14],
+      textStyle: { color: '#0f172a', fontSize: 12 },
+      extraCssText: 'box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08); border-radius: 8px;',
+      axisPointer: {
+        type: 'cross',
+        lineStyle: { color: '#94a3b8', type: 'dashed' },
+        crossStyle: { color: '#94a3b8' },
+      },
+      formatter: (params) => {
+        if (!Array.isArray(params) || !params.length) return ''
+        const dateStr = params[0].axisValueLabel || params[0].name || ''
+        let coalCurrent = null
+        let coalPeer = null
+        let tempCurrent = null
+        let tempPeer = null
+
+        params.forEach((p) => {
+          const val = p.value
+          const sName = p.seriesName || ''
+          if (sName.includes('气温')) {
+            if (sName.includes('同期')) tempPeer = val
+            else tempCurrent = val
+          } else {
+            if (sName.includes('同期')) coalPeer = val
+            else coalCurrent = val
+          }
+        })
+
+        let html = `<div style="font-weight: 700; margin-bottom: 6px; font-size: 13px; color: #0f172a; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px;">📅 日期：${dateStr}</div>`
+
+        // 标煤组（折线指标）
+        html += `<div style="margin-bottom: 6px;">`
+        html += `<div style="font-weight: 600; color: #1e3a8a; font-size: 11px; margin-bottom: 3px;">⚡ 标煤耗量 (${payload?.leftUnit || '吨'})</div>`
+        html += `<div style="display: flex; justify-content: space-between; gap: 16px; margin: 2px 0;">`
+        html += `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2563eb;margin-right:6px;"></span>本期标煤</span>`
+        html += `<b style="color: #2563eb;">${Number.isFinite(coalCurrent) ? formatWithThousands(coalCurrent, 1) + ' 吨' : '—'}</b>`
+        html += `</div>`
+        html += `<div style="display: flex; justify-content: space-between; gap: 16px; margin: 2px 0;">`
+        html += `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f97316;margin-right:6px;"></span>同期标煤</span>`
+        html += `<span style="color: #f97316;">${Number.isFinite(coalPeer) ? formatWithThousands(coalPeer, 1) + ' 吨' : '—'}</span>`
+        html += `</div>`
+        if (Number.isFinite(coalCurrent) && Number.isFinite(coalPeer)) {
+          const diff = coalCurrent - coalPeer
+          const diffPct = coalPeer !== 0 ? (diff / coalPeer) * 100 : 0
+          const isSave = diff <= 0
+          const color = isSave ? '#16a34a' : '#dc2626'
+          const tag = isSave ? '节省' : '超耗'
+          html += `<div style="display: flex; justify-content: space-between; gap: 16px; font-size: 11px; color: ${color}; margin-top: 3px; padding-top: 3px; border-top: 1px dashed #f1f5f9;">`
+          html += `<span>同比${tag}</span>`
+          html += `<b>${Math.abs(diff).toFixed(1)} 吨 (${Math.abs(diffPct).toFixed(1)}%)</b>`
+          html += `</div>`
+        }
+        html += `</div>`
+
+        // 气温组（柱状指标）
+        html += `<div>`
+        html += `<div style="font-weight: 600; color: #b45309; font-size: 11px; margin-bottom: 3px;">🌡️ 平均气温 (${payload?.rightUnit || '℃'})</div>`
+        html += `<div style="display: flex; justify-content: space-between; gap: 16px; margin: 2px 0;">`
+        html += `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:rgba(37,99,235,0.4);border:1px solid #2563eb;margin-right:6px;"></span>本期气温</span>`
+        html += `<b style="color: #2563eb;">${Number.isFinite(tempCurrent) ? Number(tempCurrent).toFixed(1) + ' ℃' : '—'}</b>`
+        html += `</div>`
+        html += `<div style="display: flex; justify-content: space-between; gap: 16px; margin: 2px 0;">`
+        html += `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:rgba(249,115,22,0.4);border:1px solid #f97316;margin-right:6px;"></span>同期气温</span>`
+        html += `<span style="color: #f97316;">${Number.isFinite(tempPeer) ? Number(tempPeer).toFixed(1) + ' ℃' : '—'}</span>`
+        html += `</div>`
+        if (Number.isFinite(tempCurrent) && Number.isFinite(tempPeer)) {
+          const diff = tempCurrent - tempPeer
+          const colder = diff < 0
+          html += `<div style="display: flex; justify-content: space-between; gap: 16px; font-size: 11px; color: #0284c7; margin-top: 3px; padding-top: 3px; border-top: 1px dashed #f1f5f9;">`
+          html += `<span>温差 (本期-同期)</span>`
+          html += `<b>${diff > 0 ? '+' : ''}${diff.toFixed(1)} ℃ (${colder ? '偏冷' : '偏暖'})</b>`
+          html += `</div>`
+        }
+        html += `</div>`
+
+        return html
+      },
+    },
+    legend: {
+      data: legendEntries,
+      top: 6,
+      left: 'center',
+      itemGap: 16,
+      textStyle: { color: '#475569', fontSize: 12 },
+    },
+    grid: { left: 55, right: 55, top: 48, bottom: 62 },
     xAxis: {
       type: 'category',
       data: labels,
-      axisLabel: { hideOverlap: true },
+      axisLine: { lineStyle: { color: '#cbd5e1' } },
+      axisTick: { alignWithLabel: true, lineStyle: { color: '#cbd5e1' } },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 11,
+        hideOverlap: true,
+        formatter: (val) => {
+          if (typeof val === 'string' && val.length >= 10) {
+            return val.slice(5)
+          }
+          return val
+        },
+      },
     },
     yAxis: [
       {
         type: 'value',
-        name: payload?.leftUnit || '',
-        axisLine: { lineStyle: { color: '#0f172a' } },
-        splitLine: { lineStyle: { type: 'dashed' } },
+        name: `标煤耗量 (${payload?.leftUnit || '吨'})`,
+        nameTextStyle: { color: '#1e3a8a', fontSize: 12, padding: [0, 0, 4, 0] },
+        axisLine: { show: true, lineStyle: { color: '#2563eb' } },
+        axisLabel: { color: '#334155', fontSize: 11 },
+        splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
         min: 0,
       },
       {
         type: 'value',
-        name: payload?.rightUnit || '',
+        name: `平均气温 (${payload?.rightUnit || '℃'})`,
         position: 'right',
-        axisLine: { lineStyle: { color: '#ef4444' } },
+        nameTextStyle: { color: '#c2410c', fontSize: 12, padding: [0, 0, 4, 0] },
+        axisLine: { show: true, lineStyle: { color: '#f97316' } },
+        axisLabel: {
+          color: '#f97316',
+          fontSize: 11,
+          formatter: (val) => `${val}℃`,
+        },
         splitLine: { show: false },
       },
     ],
@@ -4848,49 +4959,102 @@ const injectPdfSafeSummaryIcons = (clonedDocument) => {
   })
 }
 
+const isExportingPdf = ref(false)
+const EXPORT_STANDARD_WIDTH = 1600
+
 const downloadPDF = async () => {
-  const { jsPDF } = window.jspdf;
-  const dashboard = document.querySelector('.dashboard-page');
+  if (isExportingPdf.value) return
+  const { jsPDF } = window.jspdf || {}
+  if (!jsPDF) {
+    console.error('未找到 jsPDF 实例')
+    return
+  }
+  const dashboard = document.querySelector('.dashboard-page')
   if (!dashboard) {
     console.warn('未找到 dashboard 容器，取消导出。')
     return
   }
-  const releaseFold = await ensureCumulativeTableVisibleForExport()
 
+  isExportingPdf.value = true
+  await nextTick()
+
+  let releaseFold = async () => {}
   try {
+    // 1. 展开累计明细表格，确保数据完整呈现
+    releaseFold = await ensureCumulativeTableVisibleForExport()
+
+    // 2. 锁定 1600px 桌面标准宽屏版式，消除移动端 narrow viewport 响应式折行与变形
+    dashboard.classList.add('dashboard-page--export-standard')
+    document.body.classList.add('body--export-pdf-locked')
+    await nextTick()
+
+    // 3. 驱动页面上所有 ECharts 图表按 1600px 桌面高分辨率像素重新计算与重绘
+    window.dispatchEvent(new Event('resize'))
+    // 留足 ECharts 动画、重新计算与 DOM 渲染时间
+    await delay(480)
+
+    // 4. 使用 html2canvas 执行 2 倍视网膜级别渲染，锁死截屏宽度为 1600px
     const canvas = await html2canvas(dashboard, {
       useCORS: true,
       scale: 2,
+      width: EXPORT_STANDARD_WIDTH,
+      windowWidth: EXPORT_STANDARD_WIDTH,
+      scrollX: 0,
+      scrollY: 0,
       onclone: (clonedDocument) => {
-        const btn = clonedDocument.querySelector('.pdf-download-btn');
-        if (btn) {
-          btn.style.display = 'none';
+        const clonedDashboard = clonedDocument.querySelector('.dashboard-page')
+        if (clonedDashboard) {
+          clonedDashboard.classList.add('dashboard-page--export-standard')
         }
+        // 隐藏下载按钮、缓存发布工具条、折叠按钮等交互控件
+        const hideSelectors = [
+          '.pdf-download-btn',
+          '.dashboard-cache-controls',
+          '.dashboard-cache-toast',
+          '.collapse-btn',
+          '.card-collapse-toolbar',
+          '.pdf-export-loading-mask',
+        ]
+        hideSelectors.forEach((sel) => {
+          clonedDocument.querySelectorAll(sel).forEach((el) => {
+            el.style.display = 'none'
+          })
+        })
         injectPdfSafeSummaryIcons(clonedDocument)
       },
-    });
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    const imgWidth = canvas.width;
-    const imgHeight = canvas.height;
+    })
 
-    // A4 width in mm is 210. Use this as a standard width.
-    const pdfWidth = 210;
-    // Calculate the height based on the image's aspect ratio to create a long page.
-    const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+    // 5. 生成高质量 JPEG 图片数据
+    const imgData = canvas.toDataURL('image/jpeg', 0.95)
+    const imgWidth = canvas.width
+    const imgHeight = canvas.height
+
+    // 6. 按标准 A4 宽度 (210mm) 等比例无缝生成长页 PDF
+    const pdfWidth = 210
+    const pdfHeight = (imgHeight * pdfWidth) / imgWidth
 
     const pdf = new jsPDF({
       orientation: 'p',
       unit: 'mm',
-      format: [pdfWidth, pdfHeight]
-    });
+      format: [pdfWidth, pdfHeight],
+    })
 
-    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-    const formattedDate = (effectiveBizDate.value || bizDateInput.value || '').replace(/-/g, '.');
-    pdf.save(`${formattedDate} 洁净能源集团生产日报数据看板.pdf`);
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight)
+    const formattedDate = (effectiveBizDate.value || bizDateInput.value || '').replace(/-/g, '.')
+    pdf.save(`${formattedDate} 洁净能源集团生产日报数据看板.pdf`)
+  } catch (err) {
+    console.error('导出标准看板 PDF 失败:', err)
   } finally {
+    // 7. 优雅还原状态与视口自适应
+    dashboard.classList.remove('dashboard-page--export-standard')
+    document.body.classList.remove('body--export-pdf-locked')
     await releaseFold()
+    isExportingPdf.value = false
+    await nextTick()
+    // 再次触发 resize，使界面图表平滑恢复适配当前设备的真实屏幕尺寸
+    window.dispatchEvent(new Event('resize'))
   }
-};
+}
 
 // --- 顶部指标展示 ---
 const resolveDailyValues = (bucket, targetDate) => {
@@ -4977,12 +5141,25 @@ const primaryCoalHeadline = computed(() => {
 })
 
 // --- 标煤耗量动态分解计划对比状态与逻辑 ---
+// 动态分解计划自 26-27 供暖期正式加入，从 2026-11-01 开始启用展示
+const DYNAMIC_PLAN_START_DATE = '2026-11-01'
 const coalPlanComparisonData = ref(null)
 const isCoalPlanLoading = ref(false)
 
 async function loadCoalPlanComparison(dateStr) {
   const targetDate = (dateStr || effectiveBizDate.value || '').trim()
   if (!targetDate) return
+
+  // 历史日期（早于 2026-11-01）不发起多余请求，直接设为非期间状态
+  if (targetDate < DYNAMIC_PLAN_START_DATE) {
+    coalPlanComparisonData.value = {
+      in_plan_period: false,
+      daily: { plan_value: null, status: 'out_of_period' },
+      season: { cumulative_plan_value: null, status: 'out_of_period' },
+    }
+    return
+  }
+
   isCoalPlanLoading.value = true
   try {
     const res = await fetchCoalPlanComparison({
@@ -5014,11 +5191,21 @@ watch(
 )
 
 const dailyCoalPlanSummary = computed(() => {
+  const curDate = (effectiveBizDate.value || bizDateInput.value || '').trim()
+  if (!curDate || curDate < DYNAMIC_PLAN_START_DATE) {
+    return null
+  }
+  if (!coalPlanComparisonData.value || coalPlanComparisonData.value.in_plan_period === false) {
+    return null
+  }
   const comp = coalPlanComparisonData.value?.daily
-  if (!comp || comp.plan_value === null || comp.plan_value === undefined) {
+  if (!comp || comp.plan_value === null || comp.plan_value === undefined || comp.status === 'out_of_period' || comp.status === 'none') {
     return null
   }
   const planVal = Number(comp.plan_value)
+  if (!Number.isFinite(planVal) || planVal <= 0) {
+    return null
+  }
   const actVal = Number.isFinite(primaryCoalHeadline.value?.value) ? Number(primaryCoalHeadline.value.value) : null
   const isDynamic = comp.status === 'dynamic'
   const isFallback = comp.status === 'fallback'
@@ -5058,11 +5245,21 @@ const dailyCoalPlanSummary = computed(() => {
 })
 
 const seasonCoalPlanSummary = computed(() => {
+  const curDate = (effectiveBizDate.value || bizDateInput.value || '').trim()
+  if (!curDate || curDate < DYNAMIC_PLAN_START_DATE) {
+    return null
+  }
+  if (!coalPlanComparisonData.value || coalPlanComparisonData.value.in_plan_period === false) {
+    return null
+  }
   const comp = coalPlanComparisonData.value?.season
-  if (!comp || comp.cumulative_plan_value === null || comp.cumulative_plan_value === undefined) {
+  if (!comp || comp.cumulative_plan_value === null || comp.cumulative_plan_value === undefined || comp.status === 'out_of_period' || comp.status === 'none') {
     return null
   }
   const planVal = Number(comp.cumulative_plan_value)
+  if (!Number.isFinite(planVal) || planVal <= 0) {
+    return null
+  }
   const totalPlan = Number.isFinite(comp.total_plan_value) ? Number(comp.total_plan_value) : null
   const actVal = Number.isFinite(cumulativeCoalHeadline.value?.value) ? Number(cumulativeCoalHeadline.value.value) : null
   const isDynamic = comp.status === 'dynamic'
@@ -7976,5 +8173,209 @@ watch(
   text-align: center;
   color: #94a3b8;
   font-size: 13px;
+}
+
+/* ==========================================================================
+   PDF 标准宽屏无缝长页导出专属样式（方案 A：全设备 1600px 桌面版式强制锁定）
+   ========================================================================== */
+
+/* 1. 全屏高质感 Loading 遮罩 */
+.pdf-export-loading-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(15, 23, 42, 0.76);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.pdf-export-loading-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 32px 36px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 440px;
+  width: 100%;
+  animation: pdfModalFadeIn 0.25s ease-out;
+}
+
+.pdf-export-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: pdfSpinnerRotate 0.8s linear infinite;
+  margin-bottom: 20px;
+}
+
+.pdf-export-loading-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.pdf-export-loading-desc {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+@keyframes pdfSpinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pdfModalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 2. 主页面 1600px 宽屏版式强制锁定（无论手机、平板还是小视口，均强制桌面标准展现） */
+.dashboard-page.dashboard-page--export-standard {
+  width: 1600px !important;
+  min-width: 1600px !important;
+  max-width: 1600px !important;
+  padding: 32px !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+  background: #f8fafc !important;
+}
+
+/* 头部横排布局与字号 */
+.dashboard-page--export-standard .dashboard-header {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin-bottom: 24px !important;
+}
+
+.dashboard-page--export-standard .dashboard-header__info {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  gap: 28px !important;
+}
+
+.dashboard-page--export-standard .dashboard-header__title {
+  font-size: 32px !important;
+}
+
+/* 隐藏所有交互性与管理控制台按钮 */
+.dashboard-page--export-standard .pdf-download-btn,
+.dashboard-page--export-standard .dashboard-cache-controls,
+.dashboard-page--export-standard .dashboard-cache-toast,
+.dashboard-page--export-standard .collapse-btn,
+.dashboard-page--export-standard .card-collapse-toolbar,
+.dashboard-page--export-standard .pdf-export-loading-mask {
+  display: none !important;
+}
+
+/* 核心指标 4 宫格卡片：强制 4 列单排横向展开 */
+.dashboard-page--export-standard .dashboard-summary {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 18px !important;
+  margin-bottom: 32px !important;
+}
+
+/* 主看板 12 栅格系统：强制桌面标准并排布局 */
+.dashboard-page--export-standard .dashboard-grid {
+  display: grid !important;
+  grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--temp {
+  grid-column: span 6 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--margin {
+  grid-column: span 6 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--temp .dashboard-card,
+.dashboard-page--export-standard .dashboard-grid__item--margin .dashboard-card {
+  min-height: 320px !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--income {
+  grid-column: span 4 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--unit {
+  grid-column: span 4 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--coal {
+  grid-column: span 6 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--center {
+  grid-column: 1 / -1 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--complaint {
+  grid-column: span 8 !important;
+  min-height: 360px !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--spot-elec {
+  grid-column: span 6 !important;
+  min-height: 480px !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--dispatch {
+  grid-column: span 6 !important;
+  min-height: 480px !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--stock {
+  grid-column: span 6 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--device {
+  grid-column: 1 / -1 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--trend {
+  grid-column: 1 / -1 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--unit-toggle {
+  grid-column: 1 / -1 !important;
+  min-height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.dashboard-page--export-standard .dashboard-card {
+  flex: 1 1 auto !important;
+  min-height: 320px !important;
+}
+</style>
+
+<style>
+/* 全局页面视口防横向滚动条闪烁 */
+body.body--export-pdf-locked {
+  overflow-x: hidden !important;
 }
 </style>
