@@ -405,18 +405,6 @@
             </template>
             <template v-else>—</template>
           </div>
-          <div v-if="dailyCoalPlanSummary" class="summary-card__sub-compare" :title="dailyCoalPlanSummary.tooltip">
-            <span class="sub-compare__badge">{{ dailyCoalPlanSummary.badgeText }}</span>
-            <span class="sub-compare__val">{{ dailyCoalPlanSummary.planText }}</span>
-            <span
-              v-if="dailyCoalPlanSummary.hasDiff"
-              class="sub-compare__diff"
-              :class="dailyCoalPlanSummary.diffClass"
-            >
-              {{ dailyCoalPlanSummary.diffText }}
-              <span class="sub-compare__rate">({{ dailyCoalPlanSummary.rateText }})</span>
-            </span>
-          </div>
         </div>
       </div>
       <div class="summary-card summary-card--danger">
@@ -518,18 +506,6 @@
               </span>
             </template>
             <template v-else>—</template>
-          </div>
-          <div v-if="seasonCoalPlanSummary" class="summary-card__sub-compare summary-card__sub-compare--outline" :title="seasonCoalPlanSummary.tooltip">
-            <span class="sub-compare__badge">{{ seasonCoalPlanSummary.badgeText }}</span>
-            <span class="sub-compare__val">{{ seasonCoalPlanSummary.planText }}</span>
-            <span
-              v-if="seasonCoalPlanSummary.hasDiff"
-              class="sub-compare__diff"
-              :class="seasonCoalPlanSummary.diffClass"
-            >
-              {{ seasonCoalPlanSummary.diffText }}
-              <span class="sub-compare__rate">({{ seasonCoalPlanSummary.rateText }})</span>
-            </span>
           </div>
         </div>
       </div>
