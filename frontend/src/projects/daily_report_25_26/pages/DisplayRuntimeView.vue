@@ -4,16 +4,16 @@
     <div class="container">
       <Breadcrumbs :items="breadcrumbItems" class="breadcrumb-spacing" />
       <header class="topbar">
-        <div style="display:flex;flex-direction:column;gap:6px;">
+        <div class="topbar-heading">
           <h2>{{ unitGroupName ? `${unitGroupName} 数据展示` : '数据展示' }}</h2>
           <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
         </div>
-        <div class="right" style="display:flex;align-items:center;gap:8px;">
-          <label title="开启后返回详细求值轨迹" style="display:inline-flex;align-items:center;gap:6px;">
+        <div class="right">
+          <label class="trace-toggle" title="开启后返回详细求值轨迹">
             <input type="checkbox" v-model="traceEnabled" />
             <span>Trace</span>
           </label>
-          <label class="date-group" title="业务日期" style="display:inline-flex;align-items:center;gap:6px;">
+          <label class="date-group" title="业务日期">
             <span>业务日期：</span>
             <input type="date" v-model="bizDate" />
             <span class="hint" v-if="effectiveBizDate">当前：{{ effectiveBizDate }}</span>
@@ -1364,6 +1364,9 @@ onBeforeUnmount(() => {
 <style scoped>
 .container { padding: 16px; }
 .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; }
+.topbar-heading { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.topbar .right { display:flex; align-items:center; gap:8px; }
+.trace-toggle, .date-group { display:inline-flex; align-items:center; gap:6px; }
 .sub { color: #666; font-size: 13px; }
 .placeholder { color:#888; padding: 20px 0; text-align:center; }
 .error { color: #c00; margin-top: 10px; }
@@ -1531,5 +1534,28 @@ onBeforeUnmount(() => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* 窄屏让工具栏换行，宽表仅在表格内部滚动，不撑宽整个页面。 */
+@media (max-width: 768px) {
+  .container { box-sizing: border-box; width: 100%; min-width: 0; padding: 12px; }
+  .topbar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .topbar-heading h2 { font-size: 20px; line-height: 1.3; overflow-wrap: anywhere; }
+  .sub { margin-top: 0; line-height: 1.5; overflow-wrap: anywhere; }
+  .topbar .right { position: relative; flex-wrap: wrap; align-items: center; min-width: 0; }
+  .date-group { flex: 1 1 100%; flex-wrap: wrap; min-width: 0; }
+  .date-group input[type="date"] { box-sizing: border-box; min-width: 0; max-width: 100%; width: 160px; }
+  .trace-toggle { order: -1; }
+  .topbar .btn { white-space: nowrap; }
+  .unit-tabs-nav-wrapper, .table-wrap, .trace-panel { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+  .unit-tabs-nav-wrapper { -webkit-overflow-scrolling: touch; }
+  .unit-tabs-nav { flex: 0 0 auto; }
+  .table-wrap { padding: 8px; }
+  .table-wrap :deep(revo-grid) { display: block; min-width: 0; max-width: 100%; }
+  .trace-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .breadcrumb-spacing :deep(li) { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .screenshot-btn-group { position: static; }
+  .screenshot-dropdown-menu { left: auto; right: 0; box-sizing: border-box; min-width: 0; width: min(280px, 100%); }
+  .capture-toast { left: 12px; right: 12px; bottom: 16px; box-sizing: border-box; }
 }
 </style>
