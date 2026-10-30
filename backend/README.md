@@ -1,3 +1,15 @@
+## 2026-10-30 截图百分比防换行
+
+展示表截图由前端识别字符串百分比并保持单行，本次未修改后端数据与接口。
+
+## 2026-10-30 截图长数字显示调整
+
+前端截图根据实际数字内容扩宽列和画布，避免内容跨列；继续复用现有批量求值接口。本轮未修改后端或数据库。
+
+## 2026-10-30 展示表截图布局调整
+
+展示表截图的固定宽度和排版由前端 `DisplayRuntimeView.vue` 实现，继续通过现有批量求值接口获取报表数据；本次未修改后端接口或数据库。前端构建和导出参数测试通过，真实手机截图待验收。
+
 ## 2026-10-30 能效报表生产上传链路排查
 
 香海上传接口 `/api/v1/projects/daily_report_25_26/data_entry/xianghai/parse_efficiency_report` 由 `legacy_full.py` 的 `parse_xianghai_efficiency_report_endpoint` 接收 multipart 的 `file` 与 `biz_date`，鉴权后读取 Excel 并调用解析器，以 JSON 返回结果。本轮未修改后端协议或解析逻辑。

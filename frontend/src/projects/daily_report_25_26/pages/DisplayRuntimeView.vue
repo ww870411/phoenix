@@ -911,6 +911,16 @@ function formatCellValue(cell) {
   return String(cell.v)
 }
 
+// 截图使用独立的桌面排版宽度，不随手机视口、缩放或设备像素比改变。
+const SCREENSHOT_WIDTH = 1600
+
+// 百分比经导出格式化后可能是字符串，统一用于测宽和禁止换行。
+function isScreenshotNumericValue(cell, value) {
+  if (cell.t === 'n') return true
+  const text = String(value ?? '').trim().replace(/[\s\u00a0\u202f]/g, '')
+  return /^[+\-−]?[\d,.，．]+[%％]?$/.test(text)
+}
+
 function buildHtmlForWorksheet(ws, sheetTitle, bizDateStr) {
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
   const merges = ws['!merges'] || []
@@ -938,9 +948,34 @@ function buildHtmlForWorksheet(ws, sheetTitle, bizDateStr) {
 
   const colWidths = ws['!cols'] || []
   const rowHeights = ws['!rows'] || []
+  const columnWidths = []
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const width = Number(colWidths[c]?.wch)
+    columnWidths.push(Number.isFinite(width) && width > 0 ? width : 12)
+  }
+  const totalColumnWidth = columnWidths.reduce((sum, width) => sum + width, 0)
+  // 先按模板比例分配宽度，再根据各列实际数字扩宽，避免长数字溢出到相邻单元格。
+  const pixelWidths = columnWidths.map(width => (SCREENSHOT_WIDTH - 60) * width / totalColumnWidth)
+  const measureContext = document.createElement('canvas').getContext?.('2d')
+  for (let r = startRow; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })] || {}
+      const value = String(formatCellValue(cell)).trim()
+      if (!value || !isScreenshotNumericValue(cell, value)) continue
+      const fontSize = cell.s?.font?.sz ? Math.round(cell.s.font.sz * 1.25) : 12
+      if (measureContext) measureContext.font = `${cell.s?.font?.bold ? '700' : '400'} ${fontSize}px sans-serif`
+      const measured = measureContext?.measureText(value).width || 0
+      const required = Math.ceil(Math.max(measured, value.length * fontSize * 0.8) + 22)
+      const span = mergeStart.get(`${r},${c}`)?.colspan || 1
+      const offset = c - range.s.c
+      const available = pixelWidths.slice(offset, offset + span).reduce((sum, width) => sum + width, 0)
+      if (required > available) pixelWidths[offset] += required - available
+    }
+  }
+  const screenshotWidth = Math.ceil(Math.max(SCREENSHOT_WIDTH, pixelWidths.reduce((sum, width) => sum + width, 0) + 60))
 
   let html = `
-    <div class="table-screenshot-card" style="background:#FFFFFF;padding:24px 30px 20px 30px;display:inline-block;box-sizing:border-box;color:#18181B;font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei','PingFang SC','Segoe UI',Roboto,sans-serif;">
+    <div class="table-screenshot-card" style="width:${screenshotWidth}px;min-width:${screenshotWidth}px;max-width:none;background:#FFFFFF;padding:24px 30px 20px 30px;display:block;box-sizing:border-box;color:#18181B;font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei','PingFang SC','Segoe UI',Roboto,sans-serif;-webkit-text-size-adjust:100%;text-size-adjust:100%;">
       <!-- 顶部高规格报表标头与业务元数据栏 -->
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #18181B;">
         <div>
@@ -953,12 +988,12 @@ function buildHtmlForWorksheet(ws, sheetTitle, bizDateStr) {
       </div>
 
       <!-- 表格主体 -->
-      <table style="border-collapse:collapse;border-spacing:0;table-layout:auto;border:1.5px solid #94A3B8;font-size:12px;line-height:1.35;box-sizing:border-box;">
+      <table style="width:100%;max-width:none;border-collapse:collapse;border-spacing:0;table-layout:fixed;border:1.5px solid #94A3B8;font-size:12px;line-height:1.35;box-sizing:border-box;">
         <colgroup>
   `
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const wch = colWidths[c]?.wch || 12
-    html += `<col style="width:${Math.round(wch * 9.2)}px;" />`
+  const totalPixelWidth = pixelWidths.reduce((sum, width) => sum + width, 0)
+  for (const width of pixelWidths) {
+    html += `<col style="width:${(width / totalPixelWidth * 100).toFixed(6)}%;" />`
   }
   html += `</colgroup><tbody>`
 
@@ -986,8 +1021,11 @@ function buildHtmlForWorksheet(ws, sheetTitle, bizDateStr) {
       const bold = cell.s?.font?.bold ? 'font-weight:700;' : 'font-weight:400;'
       const sz = cell.s?.font?.sz ? `font-size:${Math.round(cell.s.font.sz * 1.25)}px;` : 'font-size:12px;'
 
-      const style = `background-color:${bg};color:${color};text-align:${align};${bold}${sz}vertical-align:middle;border:1px solid #CBD5E1;padding:4px 8px;box-sizing:border-box;white-space:pre-line;word-break:break-word;`
-      html += `<td${attr} style="${style}">${escapeHtml(val).replace(/\n/g, '<br/>')}</td>`
+      // 数值保持完整一行；文字和显式换行可按固定列宽增加行高。
+      const wrapping = isScreenshotNumericValue(cell, val) ? 'white-space:nowrap;word-break:normal;' : 'white-space:pre-line;overflow-wrap:break-word;word-break:normal;'
+      const style = `background-color:${bg};color:${color};text-align:${align};${bold}${sz}vertical-align:middle;border:1px solid #CBD5E1;padding:4px 8px;box-sizing:border-box;${wrapping}`
+      const displayValue = isScreenshotNumericValue(cell, val) ? String(val).replace(/[\r\n]+/g, ' ') : val
+      html += `<td${attr} style="${style}">${escapeHtml(displayValue).replace(/\n/g, '<br/>')}</td>`
     }
     html += `</tr>`
   }
@@ -1030,16 +1068,26 @@ async function captureWorksheetToPng(ws, cleanSheetName, bizDateStr, html2canvas
   container.style.pointerEvents = 'none'
   container.style.background = '#FFFFFF'
   container.style.display = 'inline-block'
-
-  container.innerHTML = buildHtmlForWorksheet(ws, cleanSheetName, bizDateStr)
-  document.body.appendChild(container)
+  container.style.width = `${SCREENSHOT_WIDTH}px`
+  container.style.minWidth = `${SCREENSHOT_WIDTH}px`
+  container.style.maxWidth = 'none'
 
   try {
-    await new Promise((r) => setTimeout(r, 80))
+    // 字体加载完成后再度量，避免慢速移动设备使用临时字体计算列高。
+    if (document.fonts?.ready) await document.fonts.ready
+    container.innerHTML = buildHtmlForWorksheet(ws, cleanSheetName, bizDateStr)
+    document.body.appendChild(container)
     const card = container.querySelector('.table-screenshot-card') || container
+    const bounds = card.getBoundingClientRect()
+    const width = Math.ceil(bounds.width)
+    const height = Math.ceil(Math.max(card.scrollHeight, bounds.height))
     const canvas = await html2canvas(card, {
       useCORS: true,
       scale: 2,
+      width,
+      height,
+      windowWidth: width,
+      windowHeight: height,
       backgroundColor: '#FFFFFF',
       scrollX: 0,
       scrollY: 0,
