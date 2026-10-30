@@ -5,7 +5,7 @@
       <Breadcrumbs :items="breadcrumbItems" class="breadcrumb-spacing" />
       <header class="topbar">
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <h2>数据展示</h2>
+          <h2>{{ unitGroupName ? `${unitGroupName} 数据展示` : '数据展示' }}</h2>
           <div class="sub">项目：{{ projectName }} ｜ 表：{{ sheetDisplayName }}</div>
         </div>
         <div class="right" style="display:flex;align-items:center;gap:8px;">
@@ -23,6 +23,24 @@
           <button class="btn" @click="exportToExcel" :disabled="isExporting || loading">{{ isExporting ? '正在导出...' : '导出Excel' }}</button>
         </div>
       </header>
+
+      <!-- 多表格单位现代分段标签栏 (Segmented Tabs) -->
+      <div v-if="unitSheets.length > 1" class="unit-tabs-nav-wrapper">
+        <div class="unit-tabs-nav" role="tablist" aria-label="单位所属展示表切换">
+          <button
+            v-for="s in unitSheets"
+            :key="s.sheet_key"
+            type="button"
+            role="tab"
+            :aria-selected="s.sheet_key === sheetKey"
+            :class="['unit-tab-pill', { 'unit-tab-pill--active': s.sheet_key === sheetKey }]"
+            @click="onSwitchSheetTab(s.sheet_key)"
+          >
+            <span class="tab-index" v-if="parseSheetNumber(s.sheet_name)">{{ parseSheetNumber(s.sheet_name) }}</span>
+            <span class="tab-name">{{ cleanTabTitle(s.sheet_name, unitGroupName) }}</span>
+          </button>
+        </div>
+      </div>
 
       <div class="table-wrap card" v-if="columns.length">
         <RevoGrid
@@ -58,7 +76,7 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { evalSpec, evalSpecsBatch, getTemplate, getWorkflowStatus } from '../services/api'
+import { evalSpec, evalSpecsBatch, getTemplate, getWorkflowStatus, listSheets } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
@@ -79,6 +97,8 @@ const pageDisplayName = computed(() => {
 const projectName = computed(() => getProjectNameById(projectKey.value) ?? projectKey.value)
 const sheetName = ref('')
 const sheetDisplayName = computed(() => sheetName.value || sheetKey.value)
+const unitSheets = ref([])
+const unitGroupName = ref('')
 const columns = ref([])
 const rows = ref([])
 const columnHeaders = ref([])
@@ -119,6 +139,80 @@ function ensureValidRoute() {
     return false
   }
   return true
+}
+
+function parseSheetNumber(name) {
+  if (!name) return ''
+  const m = String(name).match(/^(\d+)[\.、\s]*/)
+  return m ? m[1] : ''
+}
+
+function cleanTabTitle(title, unitNameStr) {
+  if (!title) return ''
+  let s = String(title)
+  s = s.replace(/^\d+[\.、\s]*/, '').trim()
+  if (unitNameStr && s.includes(unitNameStr)) {
+    const trimmed = s.replace(unitNameStr, '').trim()
+    if (trimmed && trimmed !== '表' && trimmed !== '（表）' && trimmed !== '()') {
+      s = trimmed
+    }
+  }
+  s = s.replace(/^[（\(](.*?)[）\)]/, '$1').trim()
+  if (!s.endsWith('表') && !s.includes('简报')) {
+    s += '表'
+  }
+  return s || title
+}
+
+async function loadUnitSheets() {
+  if (!projectKey.value || !pageConfig.value) return
+  try {
+    const res = await listSheets(projectKey.value, pageConfig.value)
+    const catalog = res?.content || res
+    if (!catalog || typeof catalog !== 'object') return
+
+    let targetUnit = ''
+    for (const [k, meta] of Object.entries(catalog)) {
+      if (k === sheetKey.value) {
+        targetUnit = meta?.unit_name ? String(meta.unit_name).trim() : ''
+        break
+      }
+    }
+    unitGroupName.value = targetUnit
+
+    if (targetUnit) {
+      const matched = []
+      for (const [k, meta] of Object.entries(catalog)) {
+        const u = meta?.unit_name ? String(meta.unit_name).trim() : ''
+        if (u === targetUnit) {
+          matched.push({
+            sheet_key: k,
+            sheet_name: meta?.sheet_name || k,
+            unit_name: u,
+          })
+        }
+      }
+      unitSheets.value = matched
+    } else {
+      unitSheets.value = [{
+        sheet_key: sheetKey.value,
+        sheet_name: sheetName.value || sheetKey.value,
+        unit_name: '',
+      }]
+    }
+  } catch (err) {
+    console.warn('[DisplayRuntimeView] 加载单位表格列表失败', err)
+  }
+}
+
+function onSwitchSheetTab(targetKey) {
+  if (!targetKey || targetKey === sheetKey.value || loading.value) {
+    return
+  }
+  router.replace({
+    path: `/projects/${encodeURIComponent(projectKey.value)}/pages/${encodeURIComponent(pageKey.value)}/display/${encodeURIComponent(targetKey)}`,
+    query: route.query,
+  })
 }
 
 const normalizeLabel = (value) => {
@@ -548,7 +642,20 @@ watch(
   },
 )
 
-onMounted(() => {
+watch(
+  sheetKey,
+  async (newKey, oldKey) => {
+    if (newKey && newKey !== oldKey) {
+      if (!unitSheets.value.some((s) => s.sheet_key === newKey)) {
+        await loadUnitSheets()
+      }
+      runEval()
+    }
+  },
+)
+
+onMounted(async () => {
+  await loadUnitSheets()
   runEval()
 })
 
@@ -569,4 +676,84 @@ onBeforeUnmount(() => {
 .trace-pre { max-height: 360px; overflow: auto; background: #0b0b0b; color: #d6d6d6; padding: 12px; border-radius: 6px; }
 :deep(revo-grid .rg-header-cell) { white-space: pre-line; line-height: 1.3; }
 .hint { font-size: 12px; color: #666; }
+
+/* 多表格单位 Tabs 栏样式 */
+.unit-tabs-nav-wrapper {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.unit-tabs-nav-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.unit-tabs-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.unit-tab-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unit-tab-pill:hover:not(.unit-tab-pill--active) {
+  color: #1e293b;
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.unit-tab-pill--active {
+  background-color: #ffffff !important;
+  color: #1d4ed8 !important;
+  font-weight: 600;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+.tab-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background-color: #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.unit-tab-pill--active .tab-index {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.tab-name {
+  line-height: 1.2;
+}
 </style>

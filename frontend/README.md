@@ -1,3 +1,12 @@
+## 2026-10-30 数据展示详情页（DisplayRuntimeView）补齐同单位多报表分段标签栏 (Segmented Tabs)
+
+- **交互体验对齐 (`DisplayRuntimeView.vue`)**：
+  - 针对同一单位包含多张展示表（如“经济运行部”下包含“1.集团全口径汇总表”、“2.分析简报”、“3.主城区汇总表”）的场景，对标数据填报页面（`DataEntryView.vue`）标准交互，补齐分段胶囊标签栏（`.unit-tabs-nav`）；
+  - 页面挂载与路由切换时通过 `listSheets` 自动关联并提取同一 `unit_name` 下的所有报表；
+  - 顶部自动渲染序号徽标（`parseSheetNumber`）与清洗后的报表标题（`cleanTabTitle`），点击 Tab 即通过 `router.replace` 平滑替换 `sheetKey` 并自动触发 `runEval` 重新计算并渲染数据网格；
+  - 顶部标题由固定“数据展示”自适应为“经济运行部 数据展示”等单位专属标题。
+- **构建验证**：前端生产构建 `npm run build` 100% 成功通过。
+
 ## 2026-10-30 数据看板右上方运维管理控制组权限收拢至 Global_admin 独享
 
 - `DashBoard.vue` 中重构 `canManageCache` 判定逻辑：

@@ -1,3 +1,16 @@
+## 2026-10-30 数据展示页面同单位多报表切换联动说明
+
+- **接口与调用规范**：
+  - 前端数据展示详情页 [`DisplayRuntimeView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DisplayRuntimeView.vue) 引入多报表切换标签栏，复用既有 `/api/v1/projects/{project_key}/data_entry/sheets`（`listSheets`）获取报表元数据清单，按 `unit_name` 进行同一核算主体报表聚合；
+  - 切换不同展示表时继续调用现行运行时求值接口 `/api/v1/projects/{project_key}/runtime/eval`（`evalSpec`），后端路由和取数链路保持不变，完全兼容现行数据库视图与计算规范。
+
+## 2026-10-30 2026-2027供暖期常量指标基线数据全量入库
+
+- **数据库常量基线更新 (`public.constant_data`)**：
+  - 基于用户搜集与测算的 26-27 供暖期指标，完成底层表 `constant_data` 中 `period='26-27'` 的 153 条全量指标 UPSERT 写入；
+  - 覆盖北海、香海、供热（含10个分中心）、金州、北方、金普、庄河、研究院等 18 个核算主体、9 张常量表；
+  - 挂网面积、收费面积、供暖收入、标煤单价、外购水电单价、辅材税费折算单价等核心指标 100% 齐备无空值，为 26-27 供暖期各项指标计算服务（`heating_metrics`、`dashboard_expression` 等）提供完整数据基础。
+
 ## 2026-10-30 看板缓存与气温运维接口鉴权收拢至 Global_admin
 
 - `backend/projects/daily_report_25_26/api/dashboard.py`：
