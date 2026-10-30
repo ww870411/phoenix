@@ -1,3 +1,26 @@
+## 2026-10-30 能效报表生产上传链路排查
+
+香海上传接口 `/api/v1/projects/daily_report_25_26/data_entry/xianghai/parse_efficiency_report` 由 `legacy_full.py` 的 `parse_xianghai_efficiency_report_endpoint` 接收 multipart 的 `file` 与 `biz_date`，鉴权后读取 Excel 并调用解析器，以 JSON 返回结果。本轮未修改后端协议或解析逻辑。
+
+已修复 HTTP 版 web 镜像配置缺少上传上限的问题：`deploy/nginx.http-only.conf` 设置 `client_max_body_size 20m`，与 HTTPS 配置一致。本地真实 Nginx 对约 4.14 MiB 匿名 multipart 请求，修复前返回 413 HTML，修复后到达后端并返回预期的 401 JSON。前端同时补齐网关错误提示；此验证未进行真实 Excel 解析或数据库写入。生产根因仍需失败请求状态码确认，发布时需更新 web 镜像并检查外层代理限制，无数据库迁移。
+
+## 2026-10-30 修复项目表单规则在会话合并中丢失
+
+- `AuthManager._build_merged_permissions` 原来将合并后的项目 `sheet_rules` 固定设为 `{}`，导致前端失去本单位表单过滤条件；现在由 `_merge_sheet_rule_maps` 保留并合并各角色规则。
+- 多角色采用授权并集：all 优先，explicit 清单合并，by_unit 与显式清单并存；页面与提交等动作开关不变。单角色账号的所有项目表单规则与配置逐一对照验证。
+- 验证：`python -m unittest backend.projects.daily_report_25_26.tests.test_auth_sheet_rules backend.projects.daily_report_25_26.tests.test_dashboard_cache_ranges` 共21项通过；`node outputs/audit-2026-10-30-dashboard/verify-sheet-scope.cjs`（仓库根目录）对实际前端过滤链路验证20个账号。测试不持久化会话、不写业务数据库。
+- 现有浏览器会话需重新登录更新规则。此次仅修复会话规则和表单列表可见范围，未扩展后端逐表接口授权，无数据库迁移、无远端部署。
+
+## 2026-10-30 开启日报填报用户组提交权限
+
+`backend_data/shared/auth/permissions/daily_report_25_26.json` 将 `Group_admin`、`ZhuChengQu_admin`、`Unit_admin`、`unit_filler`、`shoudian_filler` 的 `actions.can_submit` 全部设为 true。AuthManager 按项目加载并刷新组权限，提交路由沿用既有授权校验；浏览组及其他动作/项目权限不变。已验证20个拥有日报填报入口的账号合并后均允许提交；未执行真实数据提交，无数据库迁移。
+
+## 2026-10-30 数据展示导出 Excel 与高清截图服务说明
+
+- **接口与调用规范**：
+  - 前端数据展示详情页导出 Excel 与【📷 导出截图】均调用既有批量求值接口 `/api/v1/projects/{project_key}/runtime/eval/batch`（`evalSpecsBatch`），后端批量计算逻辑保持稳定与高缓存命中；
+  - 导出格式美化与 2 倍视网膜长图生成由前端全权负责，后端继续专注于纯数值与表达式算力提供，职责边界清晰。
+
 ## 2026-10-30 数据展示页面同单位多报表切换联动说明
 
 - **接口与调用规范**：

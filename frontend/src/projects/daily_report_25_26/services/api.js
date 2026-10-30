@@ -1442,6 +1442,35 @@ export async function getMonthlyDataShowAiReport(projectKey, jobId) {
   return response.json()
 }
 
+// 网关错误可能返回 HTML；保留 HTTP 状态，避免 JSON 解析错误掩盖实际原因。
+async function parseEfficiencyUploadResponse(response, fallbackMessage) {
+  const body = await response.text()
+  let result = null
+  try {
+    result = JSON.parse(body)
+  } catch {
+    // 非 JSON 错误统一在下方按 HTTP 状态提示，不向页面输出 HTML。
+  }
+  const status = `HTTP ${response.status}`
+  if (response.status === 413) {
+    throw new Error(`上传文件超过服务器允许的大小（${status}），请检查各层 Nginx 的 client_max_body_size 配置`)
+  }
+  if (response.status === 502 || response.status === 503) {
+    throw new Error(`报表解析服务暂不可用（${status}），请检查后端服务及反向代理`)
+  }
+  if (response.status === 504) {
+    throw new Error(`报表解析请求超时（${status}），请检查后端解析耗时及代理超时配置`)
+  }
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error(`服务器未返回有效 JSON（${status}），请检查 API 路由、反向代理及服务日志`)
+  }
+  if (!response.ok || !result.ok) {
+    const detail = typeof result.detail === 'string' ? result.detail : ''
+    throw new Error(`${result.message || detail || fallbackMessage}（${status}）`)
+  }
+  return result
+}
+
 export async function uploadBeihaiEfficiencyReport(projectKey, file, bizDate) {
   const formData = new FormData()
   formData.append('file', file)
@@ -1455,11 +1484,7 @@ export async function uploadBeihaiEfficiencyReport(projectKey, file, bizDate) {
       body: formData,
     },
   )
-  const result = await response.json()
-  if (!response.ok || !result.ok) {
-    throw new Error(result?.message || `解析能效报表失败: ${response.status}`)
-  }
-  return result
+  return parseEfficiencyUploadResponse(response, '解析能效报表失败')
 }
 
 export async function uploadXianghaiEfficiencyReport(projectKey, file, bizDate) {
@@ -1475,11 +1500,7 @@ export async function uploadXianghaiEfficiencyReport(projectKey, file, bizDate) 
       body: formData,
     },
   )
-  const result = await response.json()
-  if (!response.ok || !result.ok) {
-    throw new Error(result?.message || `解析香海能效报表失败: ${response.status}`)
-  }
-  return result
+  return parseEfficiencyUploadResponse(response, '解析香海能效报表失败')
 }
 
 export async function uploadGongreEfficiencyReport(projectKey, file, bizDate) {
@@ -1495,11 +1516,7 @@ export async function uploadGongreEfficiencyReport(projectKey, file, bizDate) {
       body: formData,
     },
   )
-  const result = await response.json()
-  if (!response.ok || !result.ok) {
-    throw new Error(result?.message || `解析供热公司能效报表失败: ${response.status}`)
-  }
-  return result
+  return parseEfficiencyUploadResponse(response, '解析供热公司能效报表失败')
 }
 
 export async function listSheets(projectKey, configFile) {

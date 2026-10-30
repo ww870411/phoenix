@@ -20,7 +20,44 @@
             <span class="hint" v-else>当前：regular</span>
           </label>
           <button class="btn ghost" @click="runEval" :disabled="loading">刷新</button>
-          <button class="btn" @click="exportToExcel" :disabled="isExporting || loading">{{ isExporting ? '正在导出...' : '导出Excel' }}</button>
+
+          <!-- 截图导出按钮组 -->
+          <div class="screenshot-btn-group">
+            <button
+              class="btn"
+              type="button"
+              @click="exportAllScreenshots"
+              :disabled="isCapturing || isExporting || loading"
+              title="一键生成并下载3张展示表高清长截图（每表一张，直接用于微信/钉钉工作群汇报）"
+              style="border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 1px solid rgba(255, 255, 255, 0.25);"
+            >
+              {{ isCapturing ? captureProgressText : '📷 导出截图' }}
+            </button>
+            <button
+              class="btn"
+              type="button"
+              @click.stop="toggleScreenshotDropdown"
+              :disabled="isCapturing || isExporting || loading"
+              title="更多截图导出选项"
+              style="border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0 8px; min-width: 28px;"
+            >
+              <span style="font-size: 10px; display: inline-block;">▼</span>
+            </button>
+
+            <!-- 截图下拉菜单 -->
+            <div v-if="showScreenshotMenu" class="screenshot-dropdown-menu">
+              <button type="button" class="screenshot-menu-item" @click="exportAllScreenshots">
+                <div class="menu-item-title">🖼️ 一键导出全部展示表（3张）</div>
+                <div class="menu-item-desc">自动截取并下载3张高清长图，推荐每日发群使用</div>
+              </button>
+              <button type="button" class="screenshot-menu-item" @click="exportCurrentScreenshotOnly">
+                <div class="menu-item-title">📄 仅导出当前表截图（1张）</div>
+                <div class="menu-item-desc">仅截取当前选中的 {{ cleanTabTitle(sheetDisplayName, unitGroupName) }}</div>
+              </button>
+            </div>
+          </div>
+
+          <button class="btn" @click="exportToExcel" :disabled="isExporting || isCapturing || loading">{{ isExporting ? '正在导出...' : '导出Excel' }}</button>
         </div>
       </header>
 
@@ -65,6 +102,12 @@
         </details>
       </div>
       <div v-if="errorMessage" class="error">{{ errorMessage }}</div>
+
+      <!-- 截图生成成功反馈 Toast -->
+      <div v-if="captureToastMessage" class="capture-toast">
+        <span class="toast-icon">✅</span>
+        <span class="toast-text">{{ captureToastMessage }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -72,6 +115,7 @@
 <script setup>
 import '../styles/theme.css'
 import RevoGrid from '@revolist/vue3-datagrid'
+import * as XLSX from 'xlsx-js-style'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -530,78 +574,674 @@ async function evalSpecsForExport(payload) {
   throw new Error(normalizeExportError(lastError))
 }
 
+function downloadBlob(blob, fileName) {
+  if (typeof saveAs === 'function') {
+    saveAs(blob, fileName)
+    return
+  }
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => {
+    if (a.parentNode) {
+      document.body.removeChild(a)
+    }
+    URL.revokeObjectURL(url)
+  }, 2000)
+}
+
+function beautifyWorksheet(ws, opts) {
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
+  const { headerStartRow, headerEndRow, dataStartRow, unitCol, itemCol, measureCol, dataStartCol, bizDateStr } = opts
+
+  // 1. 裁剪右侧完全空白的无效列（如表3原模板带至Q列的空白列，精准收拢至实际有数据的列）
+  let maxEffectiveCol = range.s.c
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })]
+      if (cell && cell.v != null && String(cell.v).trim() !== '') {
+        maxEffectiveCol = Math.max(maxEffectiveCol, c)
+        break
+      }
+    }
+  }
+  range.e.c = maxEffectiveCol
+  ws['!ref'] = XLSX.utils.encode_range(range)
+
+  // 全表统一严整的浅灰细边框体系（100% 消除粗细不一与接缝毛刺）
+  const BORDER_COLOR = 'CBD5E1'
+  const uniformThinBorder = {
+    top: { style: 'thin', color: { rgb: BORDER_COLOR } },
+    bottom: { style: 'thin', color: { rgb: BORDER_COLOR } },
+    left: { style: 'thin', color: { rgb: BORDER_COLOR } },
+    right: { style: 'thin', color: { rgb: BORDER_COLOR } },
+  }
+
+  // 2. 先行测算最佳黄金列宽（考虑多行文本分行测算及项目列保底宽度）
+  const colWidths = []
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    let maxLen = 8
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      if (r === 0) continue // 排除大标题行，避免被长标题撑宽
+      const ref = XLSX.utils.encode_cell({ r, c })
+      const cell = ws[ref]
+      if (!cell || cell.v === undefined || cell.v === null) continue
+      const lines = String(cell.w || cell.v || '').split('\n')
+      for (const line of lines) {
+        let len = 0
+        for (let i = 0; i < line.length; i++) {
+          len += line.charCodeAt(i) > 255 ? 2.1 : 1.1
+        }
+        if (len > maxLen) maxLen = len
+      }
+    }
+    let wch = Math.max(10, Math.min(45, Math.ceil(maxLen) + 3))
+    // 关键列宽裕保底，防止长字段被迫局促换行
+    if (c === itemCol) {
+      wch = Math.max(wch, 28) // 项目列保底28宽度，确保“万平方米省市净投诉量”、“供热标煤单耗（燃煤锅炉房）”等舒展呈现
+    } else if (c === unitCol) {
+      wch = Math.max(wch, 13) // 经营单位列保底13
+    } else if (c === measureCol) {
+      wch = Math.max(wch, 11) // 计量单位列保底11
+    } else if (c >= dataStartCol) {
+      wch = Math.max(wch, 12) // 数值/指标列保底12
+    }
+    colWidths.push({ wch })
+  }
+  ws['!cols'] = colWidths
+
+  // 3. 全量遍历每一个网格（从第 0 行到最后一行、从第 0 列到最后一列），无死角构建闭合边框网格
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    const isTitleRow = R === 0
+    const isHeader = R >= headerStartRow && R <= headerEndRow
+    const isSubHeader = isHeader && R > headerStartRow
+    const rowBg = (R - dataStartRow) % 2 === 0 ? 'FFFFFF' : 'F4F4F5'
+
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
+      if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' }
+      const cell = ws[cellRef]
+      const val = cell.v
+
+      if (isTitleRow) {
+        // 第 0 行：标题栏与日期栏，全单元格注入统一边框
+        if (C === 0) {
+          cell.v = '业务日期：'
+          cell.s = {
+            font: { name: 'Microsoft YaHei', sz: 9.5, bold: true, color: { rgb: '52525B' } },
+            fill: { fgColor: { rgb: 'E4E4E7' } },
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: uniformThinBorder,
+          }
+        } else if (C === 1) {
+          cell.t = 's'
+          cell.v = bizDateStr || ''
+          cell.s = {
+            font: { name: 'Microsoft YaHei', sz: 10, bold: true, color: { rgb: '18181B' } },
+            fill: { fgColor: { rgb: 'FFFFFF' } },
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: uniformThinBorder,
+          }
+        } else {
+          const isMainTitle = val && String(val).trim().length > 0
+          cell.s = {
+            font: {
+              name: 'Microsoft YaHei',
+              sz: isMainTitle ? 13 : 9.5,
+              bold: isMainTitle,
+              color: { rgb: '18181B' },
+            },
+            fill: { fgColor: { rgb: 'F4F4F5' } },
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: uniformThinBorder,
+          }
+        }
+      } else if (isHeader) {
+        // 表头行：统一典雅灰阶底色，深炭黑加粗文字，边框100%统一为 uniformThinBorder 杜绝粗细冲突
+        cell.s = {
+          font: {
+            name: 'Microsoft YaHei',
+            sz: isSubHeader ? 9.5 : 10,
+            bold: true,
+            color: { rgb: isSubHeader ? '27272A' : '18181B' },
+          },
+          fill: { fgColor: { rgb: isSubHeader ? 'E4E4E7' : 'D4D4D8' } },
+          alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+          border: uniformThinBorder,
+        }
+      } else if (R >= dataStartRow) {
+        // 数据行：纯正灰度交替底色与对齐格式化
+        let alignH = 'center'
+        let isBold = false
+        let fontColor = '18181B'
+
+        if (C === unitCol) {
+          alignH = 'center'
+          isBold = true
+          fontColor = '18181B'
+        } else if (C === itemCol) {
+          alignH = 'left'
+          fontColor = '18181B'
+        } else if (C === measureCol) {
+          alignH = 'center'
+          fontColor = '71717A'
+        } else if (C >= dataStartCol) {
+          const sVal = String(val != null ? val : '').trim()
+          if (sVal.endsWith('%')) {
+            alignH = 'right'
+            fontColor = '18181B'
+          } else if (sVal === '-' || sVal === '—' || sVal === '') {
+            alignH = 'center'
+            fontColor = 'A1A1AA'
+          } else {
+            const num = Number(sVal.replace(/,/g, ''))
+            if (!Number.isNaN(num) && Number.isFinite(num)) {
+              cell.t = 'n'
+              cell.v = num
+              cell.z = Number.isInteger(num) ? '#,##0' : '#,##0.00'
+              alignH = 'right'
+              fontColor = '18181B'
+            } else {
+              alignH = 'center'
+            }
+          }
+        }
+
+        cell.s = {
+          font: { name: 'Microsoft YaHei', sz: 9.5, bold: isBold, color: { rgb: fontColor } },
+          fill: { fgColor: { rgb: rowBg } },
+          alignment: { horizontal: alignH, vertical: 'center', wrapText: true },
+          border: uniformThinBorder,
+        }
+      }
+    }
+  }
+
+  // 4. 合并单元格深度穿透修复（消除合并区域断框、缺框与背景撕裂）
+  if (ws['!merges'] && Array.isArray(ws['!merges'])) {
+    ws['!merges'].forEach((m) => {
+      // 避免合并区域超出实际裁剪有效列
+      if (m.e.c > range.e.c) m.e.c = range.e.c
+      const masterRef = XLSX.utils.encode_cell({ r: m.s.r, c: m.s.c })
+      const masterCell = ws[masterRef]
+      const masterFill = masterCell?.s?.fill
+      const masterFont = masterCell?.s?.font
+      const masterAlign = masterCell?.s?.alignment
+
+      for (let r = m.s.r; r <= m.e.r; r++) {
+        for (let c = m.s.c; c <= m.e.c; c++) {
+          const ref = XLSX.utils.encode_cell({ r, c })
+          if (!ws[ref]) ws[ref] = { t: 's', v: '' }
+          if (!ws[ref].s) ws[ref].s = {}
+          if (masterFill) ws[ref].s.fill = masterFill
+          if (masterFont && !ws[ref].s.font) ws[ref].s.font = masterFont
+          if (masterAlign && !ws[ref].s.alignment) ws[ref].s.alignment = masterAlign
+          // 确保合并区域内每个网格均具有完全一致闭合的细边框
+          ws[ref].s.border = uniformThinBorder
+        }
+      }
+    })
+  }
+
+  // 5. 动态智能行高优化（根据换行与字符自动匹配，杜绝文字被行高截断）
+  const rowsHeight = []
+  for (let r = 0; r <= range.e.r; r++) {
+    if (r === 0) {
+      rowsHeight.push({ hpt: 32 })
+      continue
+    }
+
+    // 测算该行内所有单元格的最大折行行数
+    let maxLinesInRow = 1
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })]
+      if (!cell || cell.v == null) continue
+      const str = String(cell.w || cell.v || '')
+      // 显式换行行数
+      const explicitLines = str.split('\n').length
+      // 基于列宽的折行估算
+      const cw = colWidths[c]?.wch || 12
+      let textVisualLen = 0
+      for (let i = 0; i < str.length; i++) {
+        textVisualLen += str.charCodeAt(i) > 255 ? 2.1 : 1.1
+      }
+      const wrappedLines = Math.ceil(textVisualLen / Math.max(8, cw - 2))
+      const cellLines = Math.max(explicitLines, wrappedLines)
+      if (cellLines > maxLinesInRow) {
+        maxLinesInRow = cellLines
+      }
+    }
+
+    const isHeader = r >= headerStartRow && r <= headerEndRow
+    if (isHeader) {
+      // 表头：若包含两行文本（如“25-26供暖期\n累计”等），给予充足的 42pt 行高；单行表头给予 28pt
+      rowsHeight.push({ hpt: maxLinesInRow >= 2 ? 42 : 28 })
+    } else {
+      // 数据行：基础单行高度提升为 24pt（舒适度更佳）；若折行为多行，按行数比例自动放大，永不被挤压
+      if (maxLinesInRow >= 2) {
+        rowsHeight.push({ hpt: maxLinesInRow * 18 + 6 })
+      } else {
+        rowsHeight.push({ hpt: 24 })
+      }
+    }
+  }
+  ws['!rows'] = rowsHeight
+}
+
+const isCapturing = ref(false)
+const captureProgressText = ref('')
+const showScreenshotMenu = ref(false)
+const captureToastMessage = ref('')
+let captureToastTimer = null
+
+function showCaptureToast(msg) {
+  captureToastMessage.value = msg
+  if (captureToastTimer) clearTimeout(captureToastTimer)
+  captureToastTimer = setTimeout(() => {
+    captureToastMessage.value = ''
+    captureToastTimer = null
+  }, 4000)
+}
+
+function toggleScreenshotDropdown(e) {
+  if (e) e.stopPropagation()
+  showScreenshotMenu.value = !showScreenshotMenu.value
+}
+
+function closeScreenshotDropdown() {
+  showScreenshotMenu.value = false
+}
+
+function onDocumentClick() {
+  if (showScreenshotMenu.value) {
+    showScreenshotMenu.value = false
+  }
+}
+
+async function ensureHtml2Canvas() {
+  if (typeof window.html2canvas === 'function') {
+    return window.html2canvas
+  }
+  return new Promise((resolve, reject) => {
+    let script = document.querySelector('script[src*="html2canvas"]')
+    if (!script) {
+      script = document.createElement('script')
+      script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+      document.head.appendChild(script)
+    }
+    const timer = setTimeout(() => {
+      if (typeof window.html2canvas === 'function') {
+        resolve(window.html2canvas)
+      } else {
+        reject(new Error('未检测到截图组件（html2canvas），请检查网络连接或稍后重试'))
+      }
+    }, 8000)
+
+    script.addEventListener('load', () => {
+      clearTimeout(timer)
+      if (typeof window.html2canvas === 'function') {
+        resolve(window.html2canvas)
+      } else {
+        reject(new Error('html2canvas 脚本加载后未找到全局对象'))
+      }
+    })
+  })
+}
+
+function escapeHtml(str) {
+  if (str == null) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function formatCellValue(cell) {
+  if (!cell || cell.v == null) return ''
+  if (cell.w) return cell.w
+  if (cell.t === 'n' && typeof cell.v === 'number') {
+    if (Number.isInteger(cell.v)) return cell.v.toLocaleString('zh-CN')
+    return cell.v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+  return String(cell.v)
+}
+
+function buildHtmlForWorksheet(ws, sheetTitle, bizDateStr) {
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
+  const merges = ws['!merges'] || []
+  const startRow = 1
+
+  const mergeStart = new Map()
+  const mergeCovered = new Set()
+
+  for (const m of merges) {
+    if (m.e.r < startRow) continue
+    const actualSr = Math.max(startRow, m.s.r)
+    const actualEc = Math.min(range.e.c, m.e.c)
+    mergeStart.set(`${actualSr},${m.s.c}`, {
+      rowspan: m.e.r - actualSr + 1,
+      colspan: actualEc - m.s.c + 1,
+    })
+    for (let r = actualSr; r <= m.e.r; r++) {
+      for (let c = m.s.c; c <= actualEc; c++) {
+        if (r !== actualSr || c !== m.s.c) {
+          mergeCovered.add(`${r},${c}`)
+        }
+      }
+    }
+  }
+
+  const colWidths = ws['!cols'] || []
+  const rowHeights = ws['!rows'] || []
+
+  let html = `
+    <div class="table-screenshot-card" style="background:#FFFFFF;padding:24px 30px 20px 30px;display:inline-block;box-sizing:border-box;color:#18181B;font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei','PingFang SC','Segoe UI',Roboto,sans-serif;">
+      <!-- 顶部高规格报表标头与业务元数据栏 -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #18181B;">
+        <div>
+          <div style="font-size:20px;font-weight:700;color:#18181B;letter-spacing:0.5px;line-height:1.2;">${escapeHtml(sheetTitle)}</div>
+          <div style="font-size:12px;color:#71717A;margin-top:4px;">大连洁净能源集团生产经营数据智算平台 · 生产日报</div>
+        </div>
+        <div style="text-align:right;font-size:13px;color:#52525B;line-height:1.6;">
+          <div>业务日期：<strong style="color:#18181B;font-size:14px;">${escapeHtml(bizDateStr || '-')}</strong></div>
+        </div>
+      </div>
+
+      <!-- 表格主体 -->
+      <table style="border-collapse:collapse;border-spacing:0;table-layout:auto;border:1.5px solid #94A3B8;font-size:12px;line-height:1.35;box-sizing:border-box;">
+        <colgroup>
+  `
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const wch = colWidths[c]?.wch || 12
+    html += `<col style="width:${Math.round(wch * 9.2)}px;" />`
+  }
+  html += `</colgroup><tbody>`
+
+  for (let r = startRow; r <= range.e.r; r++) {
+    const hpt = rowHeights[r]?.hpt || 24
+    html += `<tr style="height:${Math.round(hpt * 1.33)}px;">`
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const key = `${r},${c}`
+      if (mergeCovered.has(key)) continue
+
+      const span = mergeStart.get(key)
+      let attr = ''
+      if (span) {
+        if (span.rowspan > 1) attr += ` rowspan="${span.rowspan}"`
+        if (span.colspan > 1) attr += ` colspan="${span.colspan}"`
+      }
+
+      const ref = XLSX.utils.encode_cell({ r, c })
+      const cell = ws[ref] || {}
+      const val = formatCellValue(cell)
+
+      const bg = cell.s?.fill?.fgColor?.rgb ? `#${cell.s.fill.fgColor.rgb}` : (r % 2 === 0 ? '#FFFFFF' : '#F4F4F5')
+      const color = cell.s?.font?.color?.rgb ? `#${cell.s.font.color.rgb}` : '#18181B'
+      const align = cell.s?.alignment?.horizontal || (cell.t === 'n' ? 'right' : 'center')
+      const bold = cell.s?.font?.bold ? 'font-weight:700;' : 'font-weight:400;'
+      const sz = cell.s?.font?.sz ? `font-size:${Math.round(cell.s.font.sz * 1.25)}px;` : 'font-size:12px;'
+
+      const style = `background-color:${bg};color:${color};text-align:${align};${bold}${sz}vertical-align:middle;border:1px solid #CBD5E1;padding:4px 8px;box-sizing:border-box;white-space:pre-line;word-break:break-word;`
+      html += `<td${attr} style="${style}">${escapeHtml(val).replace(/\n/g, '<br/>')}</td>`
+    }
+    html += `</tr>`
+  }
+
+  const exportTime = new Date().toLocaleString('zh-CN', { hour12: false })
+  html += `
+        </tbody>
+      </table>
+
+      <!-- 底部版权与生成时间栏 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:11px;color:#94A3B8;">
+        <span>大连洁净能源集团 生产运行管理专用</span>
+        <span>导出时间：${exportTime}</span>
+      </div>
+    </div>
+  `
+  return html
+}
+
+function downloadCanvasAsPng(canvas, fileName) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('生成图片文件失败'))
+        return
+      }
+      downloadBlob(blob, fileName)
+      resolve()
+    }, 'image/png')
+  })
+}
+
+async function captureWorksheetToPng(ws, cleanSheetName, bizDateStr, html2canvas) {
+  const container = document.createElement('div')
+  container.className = 'export-screenshot-container'
+  container.style.position = 'fixed'
+  container.style.left = '0'
+  container.style.top = '0'
+  container.style.zIndex = '-99999'
+  container.style.pointerEvents = 'none'
+  container.style.background = '#FFFFFF'
+  container.style.display = 'inline-block'
+
+  container.innerHTML = buildHtmlForWorksheet(ws, cleanSheetName, bizDateStr)
+  document.body.appendChild(container)
+
+  try {
+    await new Promise((r) => setTimeout(r, 80))
+    const card = container.querySelector('.table-screenshot-card') || container
+    const canvas = await html2canvas(card, {
+      useCORS: true,
+      scale: 2,
+      backgroundColor: '#FFFFFF',
+      scrollX: 0,
+      scrollY: 0,
+      logging: false,
+    })
+
+    const fileName = `${cleanSheetName}_${bizDateStr || 'export'}.png`
+    await downloadCanvasAsPng(canvas, fileName)
+  } finally {
+    if (container.parentNode) {
+      document.body.removeChild(container)
+    }
+  }
+}
+
+async function prepareExportWorkbook() {
+  const sheetKeys = ['Group_sum_show_Sheet', 'Group_analysis_brief_report_Sheet', 'ZhuChengQu_sum_show_Sheet']
+  const configPath = pageConfig.value
+  const templatePath = '/25-26生产日报标准模板.xlsx'
+  const origins = ['D3', 'C4', 'C3']
+  const slicePoints = [3, 2, 2]
+
+  const templatePromise = fetch(templatePath).then((res) => {
+    if (!res.ok) throw new Error(`无法加载模板文件: ${res.statusText}`)
+    return res.arrayBuffer()
+  })
+  const templateData = await templatePromise
+
+  const jobs = sheetKeys.map((key) => ({
+    sheet_key: key,
+    config: configPath,
+  }))
+
+  const batchRes = await evalSpecsForExport({
+    project_key: 'daily_report_25_26',
+    config: configPath,
+    biz_date: bizDate.value ? bizDate.value : 'regular',
+    trace: false,
+    jobs,
+  })
+  const results = Array.isArray(batchRes?.results) ? batchRes.results : []
+  if (results.length !== sheetKeys.length) {
+    throw new Error(`批量求值返回数量异常：期望 ${sheetKeys.length}，实际 ${results.length}`)
+  }
+
+  const workbook = XLSX.read(templateData, { type: 'array', cellStyles: true })
+  const keepSheetNames = ['展示表1.集团全口径汇总表', '展示表2.分析简报', '展示表3.主城区汇总表']
+  const cleanSheetNames = ['1.集团全口径汇总表', '2.分析简报', '3.主城区汇总表']
+
+  const sheetsMap = {}
+  cleanSheetNames.forEach((cleanName, idx) => {
+    const origName = keepSheetNames[idx] || workbook.SheetNames[idx]
+    if (workbook.Sheets[origName]) {
+      sheetsMap[cleanName] = workbook.Sheets[origName]
+    }
+  })
+  workbook.Sheets = sheetsMap
+  workbook.SheetNames = Object.keys(sheetsMap)
+
+  const beautifyConfigs = [
+    {
+      headerStartRow: 1,
+      headerEndRow: 1,
+      dataStartRow: 2,
+      unitCol: 0,
+      itemCol: 1,
+      measureCol: 2,
+      dataStartCol: 3,
+    },
+    {
+      headerStartRow: 1,
+      headerEndRow: 2,
+      dataStartRow: 3,
+      unitCol: -1,
+      itemCol: 0,
+      measureCol: 1,
+      dataStartCol: 2,
+    },
+    {
+      headerStartRow: 1,
+      headerEndRow: 1,
+      dataStartRow: 2,
+      unitCol: -1,
+      itemCol: 0,
+      measureCol: 1,
+      dataStartCol: 2,
+    },
+  ]
+
+  cleanSheetNames.forEach((targetSheetName, index) => {
+    const res = results[index]
+    if (!res || res.ok === false) {
+      throw new Error(`获取第 ${index + 1} 个工作表的数据失败: ${res?.message || '未知错误'}`)
+    }
+
+    const worksheet = workbook.Sheets[targetSheetName]
+    if (!worksheet) {
+      throw new Error(`在模板中找不到名为 "${targetSheetName}" 的Sheet`)
+    }
+
+    const slicePoint = slicePoints[index]
+    const dataOnly = res.rows.map((row) => row.slice(slicePoint))
+
+    XLSX.utils.sheet_add_aoa(worksheet, dataOnly, { origin: origins[index] })
+
+    beautifyWorksheet(worksheet, {
+      ...beautifyConfigs[index],
+      bizDateStr: effectiveBizDate.value || bizDate.value || '',
+    })
+  })
+
+  return { workbook, cleanSheetNames, results }
+}
+
 async function exportToExcel() {
   isExporting.value = true
   errorMessage.value = ''
   try {
-    // 1. Define configs
-    const sheetKeys = ['Group_sum_show_Sheet', 'Group_analysis_brief_report_Sheet', 'ZhuChengQu_sum_show_Sheet']
-    const configPath = pageConfig.value
-    const templatePath = '/25-26生产日报标准模板.xlsx'
-    const origins = ['D3', 'C4', 'C3']
-    const slicePoints = [3, 2, 2]
-
-    // 2. 批量获取展示表数据，共享后端取数缓存
-    const templatePromise = fetch(templatePath).then(res => {
-      if (!res.ok) throw new Error(`无法加载模板文件: ${res.statusText}`);
-      return res.arrayBuffer();
-    });
-    const templateData = await templatePromise
-
-    const jobs = sheetKeys.map((key) => ({
-      sheet_key: key,
-      config: configPath,
-    }))
-
-    const batchRes = await evalSpecsForExport({
-      project_key: 'daily_report_25_26',
-      config: configPath,
-      biz_date: bizDate.value ? bizDate.value : 'regular',
-      trace: false,
-      jobs,
+    const { workbook } = await prepareExportWorkbook()
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true })
+    const dataBlob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     })
-    const results = Array.isArray(batchRes?.results) ? batchRes.results : []
-    if (results.length !== sheetKeys.length) {
-      throw new Error(`批量求值返回数量异常：期望 ${sheetKeys.length}，实际 ${results.length}`)
-    }
 
-    // 3. Process and fill the workbook
-    const workbook = XLSX.read(templateData, { type: 'array', cellStyles: true });
-    const templateSheetNames = workbook.SheetNames;
-
-    if (templateSheetNames.length < results.length) {
-      throw new Error(`模板中的Sheet数量 (${templateSheetNames.length}) 少于需要导出的数据表数量 (${results.length})`);
-    }
-
-    results.forEach((res, index) => {
-      if (!res || res.ok === false) {
-        throw new Error(`获取第 ${index + 1} 个工作表的数据失败: ${res?.message || '未知错误'}`);
-      }
-
-      const targetSheetName = templateSheetNames[index];
-      const worksheet = workbook.Sheets[targetSheetName];
-      if (!worksheet) {
-        throw new Error(`在模板中找不到名为 "${targetSheetName}" 的Sheet`);
-      }
-
-      const slicePoint = slicePoints[index];
-      const dataOnly = res.rows.map(row => row.slice(slicePoint));
-      
-      XLSX.utils.sheet_add_aoa(worksheet, dataOnly, { origin: origins[index] });
-    });
-
-    // 4. Generate and download the file
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
-    const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
-    
-    const finalFileName = `生产日报-数据展示-${effectiveBizDate.value || 'export'}.xlsx`;
-    saveAs(dataBlob, finalFileName);
-
+    const finalFileName = `生产日报-数据展示-${effectiveBizDate.value || bizDate.value || 'export'}.xlsx`
+    downloadBlob(dataBlob, finalFileName)
   } catch (err) {
-    console.error('导出Excel失败:', err);
-    errorMessage.value = `导出失败: ${normalizeExportError(err)}`;
+    console.error('导出Excel失败:', err)
+    errorMessage.value = `导出失败: ${normalizeExportError(err)}`
   } finally {
-    isExporting.value = false;
+    isExporting.value = false
+  }
+}
+
+async function exportAllScreenshots() {
+  showScreenshotMenu.value = false
+  if (isCapturing.value || isExporting.value || loading.value) return
+  isCapturing.value = true
+  errorMessage.value = ''
+  captureProgressText.value = '准备中...'
+
+  try {
+    const html2canvas = await ensureHtml2Canvas()
+    captureProgressText.value = '计算报表数据...'
+    const { workbook, cleanSheetNames } = await prepareExportWorkbook()
+    const dateStr = effectiveBizDate.value || bizDate.value || 'today'
+
+    for (let i = 0; i < cleanSheetNames.length; i++) {
+      const targetName = cleanSheetNames[i]
+      captureProgressText.value = `生成截图 (${i + 1}/${cleanSheetNames.length})...`
+      const ws = workbook.Sheets[targetName]
+      if (!ws) continue
+
+      await captureWorksheetToPng(ws, targetName, dateStr, html2canvas)
+      if (i < cleanSheetNames.length - 1) {
+        await new Promise((r) => setTimeout(r, 450))
+      }
+    }
+
+    captureProgressText.value = '下载完成！'
+    showCaptureToast('3张展示表高清截图已下载完毕，可直接发送到工作群！')
+    await new Promise((r) => setTimeout(r, 1500))
+  } catch (err) {
+    console.error('导出截图失败:', err)
+    errorMessage.value = `导出截图失败: ${normalizeExportError(err)}`
+  } finally {
+    isCapturing.value = false
+    captureProgressText.value = ''
+  }
+}
+
+async function exportCurrentScreenshotOnly() {
+  showScreenshotMenu.value = false
+  if (isCapturing.value || isExporting.value || loading.value) return
+  isCapturing.value = true
+  errorMessage.value = ''
+  captureProgressText.value = '生成当前截图...'
+
+  try {
+    const html2canvas = await ensureHtml2Canvas()
+    const { workbook, cleanSheetNames } = await prepareExportWorkbook()
+    const dateStr = effectiveBizDate.value || bizDate.value || 'today'
+
+    let targetIndex = 0
+    if (sheetKey.value.includes('brief') || sheetKey.value.includes('analysis')) {
+      targetIndex = 1
+    } else if (sheetKey.value.includes('ZhuChengQu') || sheetKey.value.includes('zhuchengqu')) {
+      targetIndex = 2
+    }
+    const targetName = cleanSheetNames[targetIndex] || cleanSheetNames[0]
+    const ws = workbook.Sheets[targetName]
+
+    if (ws) {
+      await captureWorksheetToPng(ws, targetName, dateStr, html2canvas)
+      showCaptureToast(`已导出「${targetName}」高清长截图！`)
+    }
+  } catch (err) {
+    console.error('导出当前截图失败:', err)
+    errorMessage.value = `导出截图失败: ${normalizeExportError(err)}`
+  } finally {
+    isCapturing.value = false
+    captureProgressText.value = ''
   }
 }
 
@@ -655,14 +1295,20 @@ watch(
 )
 
 onMounted(async () => {
+  window.addEventListener('click', onDocumentClick)
   await loadUnitSheets()
   runEval()
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('click', onDocumentClick)
   if (bizDateAutoRefreshTimer) {
     clearTimeout(bizDateAutoRefreshTimer)
     bizDateAutoRefreshTimer = null
+  }
+  if (captureToastTimer) {
+    clearTimeout(captureToastTimer)
+    captureToastTimer = null
   }
 })
 </script>
@@ -755,5 +1401,87 @@ onBeforeUnmount(() => {
 
 .tab-name {
   line-height: 1.2;
+}
+
+/* 截图导出下拉按钮组 */
+.screenshot-btn-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.screenshot-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1000;
+  min-width: 280px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.screenshot-menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.screenshot-menu-item:hover {
+  background-color: #f1f5f9;
+}
+
+.menu-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.3;
+}
+
+.menu-item-desc {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+/* 截图下载完成 Toast 提示 */
+.capture-toast {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  z-index: 9999;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: toastFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toastFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

@@ -682,8 +682,24 @@ class AuthManager:
 
 
 
+    @staticmethod
+    def _merge_sheet_rule_maps(rule_maps: Iterable[Dict[str, SheetRule]]) -> Dict[str, SheetRule]:
+        """按兼职角色授权并集合并表单规则，不能丢弃项目规则或由角色顺序决定权限。"""
+        merged: Dict[str, SheetRule] = {}
+        for rules in rule_maps:
+            for page_key, rule in rules.items():
+                previous = merged.get(page_key)
+                if previous is None:
+                    merged[page_key] = rule
+                    continue
+                if "all" in (previous.mode, rule.mode):
+                    merged[page_key] = SheetRule(mode="all")
+                else:
+                    mode = "by_unit" if "by_unit" in (previous.mode, rule.mode) else "explicit"
+                    merged[page_key] = SheetRule(mode=mode, sheets=previous.sheets | rule.sheets)
+        return merged
+
     def _build_merged_permissions(self, record: UserRecord) -> GroupPermissions:
-        from dataclasses import replace
         user_groups = []
         for g_name in record.groups:
             g_perm = self._groups.get(g_name)
@@ -710,12 +726,8 @@ class AuthManager:
         for g in user_groups:
             merged_global_pages.update(g.page_access)
             
-        # 合并 sheet_rules
-        merged_sheet_rules = {}
-        for g in user_groups:
-            if g.sheet_rules:
-                for k, v in g.sheet_rules.items():
-                    merged_sheet_rules[k] = v
+        # 全局与项目级表单范围均保留；兼职角色按授权并集处理。
+        merged_sheet_rules = self._merge_sheet_rule_maps(g.sheet_rules for g in user_groups)
             
         # 合并全局动作
         action_keys = [
@@ -745,6 +757,7 @@ class AuthManager:
         for p_key in all_proj_keys:
             p_pages = set()
             p_units = set()
+            project_rule_maps = []
             
             p_actions_kwargs = {}
             for key in action_keys:
@@ -759,6 +772,7 @@ class AuthManager:
                 if p_perm:
                     p_pages.update(p_perm.page_access)
                     p_units.update(p_perm.units_access)
+                    project_rule_maps.append(p_perm.sheet_rules)
                             
             if "*" in p_units:
                 p_units_list = ["*"]
@@ -768,7 +782,7 @@ class AuthManager:
             merged_projects[p_key] = ProjectPermissions(
                 project_key=p_key,
                 page_access=p_pages,
-                sheet_rules={},
+                sheet_rules=self._merge_sheet_rule_maps(project_rule_maps),
                 units_access=p_units_list,
                 actions=p_actions
             )
