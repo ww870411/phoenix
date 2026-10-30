@@ -1,3 +1,30 @@
+## 2026-10-30 看板缓存与气温运维接口鉴权收拢至 Global_admin
+
+- `backend/projects/daily_report_25_26/api/dashboard.py`：
+  - 重构 `_ensure_cache_operator` 鉴权函数，由校验 `can_publish` 调整为强校验 `session.group == "Global_admin"` 或具备 `can_access_admin_console`；
+  - 缓存生成、删除、停用、取消以及逐小时气温拉取和覆盖提交等高危运维 API 仅限超级管理员访问，其他角色（包括 `Group_admin`）调用统一拦截返回 403 Forbidden。
+
+## 2026-10-30 daily_report_25_26 权限配置矩阵更新说明
+
+- 更新 `backend_data/shared/auth/permissions/daily_report_25_26.json`：
+  1. `Unit_admin`、`unit_filler`、`shoudian_filler` 的 `page_access` 增补 `dashboard` 与 `data_show`，并同步设置 `sheet_rules.data_show` 为 `{"mode": "all"}`；
+  2. `Group_admin`、`Group_viewer` 的 `page_access` 移除 `global_management`；
+  3. 保持 `Global_admin` 独享 `global_management`。
+- `auth_manager` 具备自动感知权限 JSON 文件最后修改时间（`mtime`）的热重载机制，无需重启后台服务即可即时生效，同时保证当前在线会话同步刷新。
+
+## 2026-10-30 看板加载占位说明
+
+前端增加初始/切日加载骨架占位，处理等待接口期间的大片空白；本次不改后端接口、计算或缓存。加载耗时本身未通过此项调整缩短。
+
+## 2026-10-30 气温更新与看板缓存一致性
+
+- `weather_importer.persist_hourly_temperatures` 在数据库事务提交成功后换气温版本；事务失败不换版。
+- `dashboard_cache` 将版本保存在项目 runtime 的 `dashboard_temperature_revision.json`，独立于缓存快照目录；旧文件保留，读取时版本不匹配即实时计算。
+- `dashboard_expression.evaluate_dashboard` 与 `dashboard_cache_job._build_base_payload` 在计算开始前捕获版本，响应新增 `temperature_revision`；因此写气温前启动、写入后才完成的旧计算不会成为有效新缓存。
+- 首次升级以 `temperature-v1` 为默认版本，未带版本的历史缓存不再命中；需要重新发布缓存恢复加速，无数据库迁移或快照删除。
+- 验证：`python -m unittest backend.projects.daily_report_25_26.tests.test_dashboard_cache_ranges` 共15项通过（正式缓存/数据库不变）；本地 GET 看板确认返回新版字段。未执行真实气温入库、远端部署或全量缓存生成。
+- 配套前端修复日期切换和请求乱序、当日标煤口径、失败提示与页面缓存清除，见前端 README 和 `configs/progress.md`。
+
 ## 2026-10-29 生产日报数据看板：每日趋势图时间序列全周期恢复（自供暖期首日至当前业务日）
 
 - **核心表达式计算服务优化 (`backend/services/dashboard_expression.py`)**：

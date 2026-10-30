@@ -234,6 +234,10 @@ def persist_hourly_temperatures(
     session.bulk_save_objects(rows)
     session.commit()
 
+    # 每次成功写入气温都换版，所有依赖气温的日期快照均需重算；旧文件保留。
+    from backend.services.dashboard_cache import invalidate_temperature_cache
+    invalidate_temperature_cache("daily_report_25_26")
+
     return {
         "inserted": len(rows),
         "replaced": existing_count,

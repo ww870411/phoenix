@@ -249,7 +249,7 @@
           <span class="dashboard-header__date-hint" v-if="effectiveBizDate">当前：{{ effectiveBizDate }}</span>
           <span class="dashboard-header__date-hint" v-else>当前：regular</span>
         </label>
-        <button class="pdf-download-btn" @click="downloadPDF">下载PDF</button>
+        <button class="pdf-download-btn" :disabled="isLoading || spotElecLoading || dispatchLoading || isCoalPlanLoading || !dashboardData.meta.pushDate || isExportingPdf" @click="downloadPDF">下载PDF</button>
         <div v-if="canManageCache" class="dashboard-cache-controls">
           <div class="dashboard-cache-buttons">
             <DashboardCacheManager :project-key="projectKey" @started="handleCacheManagerStarted" @changed="handleManagedCacheChanged" />
@@ -315,8 +315,35 @@
       </div>
     </header>
 
-    <div v-if="isLoading" class="dashboard-loading-hint">数据载入中，请稍候…</div>
+    <div v-if="isLoading" role="status" aria-live="polite" class="dashboard-loading-hint">正在加载{{ effectiveBizDate ? ` ${effectiveBizDate} ` : '' }}看板数据，请稍候…</div>
 
+    <!-- 保留加载中的卡片轮廓，不用旧日期数据或零值充当当前结果。 -->
+    <section v-if="isLoading && !dashboardData.meta.pushDate" class="dashboard-skeleton" aria-hidden="true">
+      <div class="dashboard-summary">
+        <div v-for="label in ['当日平均气温', '当日集团可比煤价边际利润', '当日集团标煤消耗', '当日投诉量']" :key="label" class="skeleton-summary-card">
+          <div class="skeleton-card-title">{{ label }}</div>
+          <div class="skeleton-bar skeleton-bar--value"></div>
+          <div class="skeleton-bar skeleton-bar--detail"></div>
+        </div>
+      </div>
+      <div class="skeleton-panel-grid">
+        <div v-for="label in ['日均气温', '边际利润', '集团汇总收入明细', '电力现货市场', '生产调度信息', '标煤耗量']" :key="label" class="skeleton-panel">
+          <div class="skeleton-card-title">{{ label }}</div>
+          <div class="skeleton-bar skeleton-bar--chart"></div>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="dashboardError" role="alert" class="dashboard-request-error">
+      {{ dashboardError }}
+      <button type="button" @click="loadDashboardData(selectedShowDate, { allowCache: false })">重试</button>
+    </div>
+    <div v-if="coalPlanError" role="alert" class="dashboard-request-error">
+      标煤计划加载失败：{{ coalPlanError }}
+      <button type="button" @click="loadCoalPlanComparison(effectiveBizDate)">重试</button>
+    </div>
+    <div v-if="!dashboardError && !coalPlanError && !isLoading && !dashboardData.meta.pushDate">请选择业务日期。</div>
+    <template v-if="dashboardData.meta.pushDate">
     <section class="dashboard-summary">
       <div class="summary-card summary-card--primary">
         <div class="summary-card__icon summary-card__icon--sunrise" aria-hidden="true"></div>
@@ -732,6 +759,10 @@
                 <div v-if="spotElecLoading" class="card-loading-mask">
                   <span class="card-loading-spinner"></span> 加载现货电价数据...
                 </div>
+                <div v-else-if="spotElecError" role="alert" class="card-empty-box">
+                  现货电价加载失败：{{ spotElecError }}
+                  <button type="button" @click="fetchSpotElectricityData(effectiveBizDate)">重试</button>
+                </div>
                 <div v-else-if="!hasSpotPoints" class="card-empty-box">
                   当日暂无电力现货交易曲线数据
                 </div>
@@ -760,6 +791,10 @@
               </div>
 
               <!-- 当日无信息时直接显示空态，不展示任何工况与事件 -->
+              <div v-else-if="dispatchError" role="alert" class="card-empty-box">
+                调度信息加载失败：{{ dispatchError }}
+                <button type="button" @click="fetchDispatchInfoData(effectiveBizDate)">重试</button>
+              </div>
               <div v-else-if="!dispatchReport" class="card-empty-box">
                 该业务日暂无调度信息
               </div>
@@ -974,6 +1009,7 @@
       </section>
     </main>
 
+    </template>
     <footer class="dashboard-footer">
       大连洁净能源集团有限公司  生产日报系统
     </footer>
@@ -1408,7 +1444,8 @@ const acquireWatchSuppress = () => {
 const setBizDateInputSilently = (value) => {
   const release = acquireWatchSuppress()
   bizDateInput.value = value
-  nextTick(release)
+  // 日期监听同步执行，只屏蔽本次程序回填，不跨异步周期屏蔽用户输入。
+  release()
 }
 
 const fmt = (date) => date.toISOString().slice(0, 10)
@@ -1450,10 +1487,11 @@ const effectiveBizDate = computed(() => {
 
 const projectKey = 'daily_report_25_26'
 let suppressDashboardWatchDepth = 0
-let activeDashboardRequests = 0
-const isLoading = ref(false)
-let loadingVisibilityTimer = null
-const LOADING_MINIMUM_MS = 180
+// 初始化查询业务日期期间也显示占位，避免先闪出空页面和选日提示。
+const isLoading = ref(true)
+const dashboardError = ref('')
+let dashboardRequestId = 0
+let dashboardDisposed = false
 const dashboardBootstrapState = reactive({
   initialized: false,
   targetDate: '',
@@ -1462,6 +1500,19 @@ const DASHBOARD_DEBOUNCE_MS = 450
 let dashboardLoadTimer = null
 const dashboardCache = new Map()
 let dashboardAbortController = null
+// 切日期时立即作废旧请求，不能等防抖结束后才取消。
+const invalidateDashboardRequest = () => {
+  dashboardRequestId += 1
+  dashboardAbortController?.abort()
+  dashboardAbortController = null
+  return dashboardRequestId
+}
+const clearDashboardData = () => {
+  dashboardData.sections = {}
+  dashboardData.meta.showDate = ''
+  dashboardData.meta.pushDate = ''
+  dashboardData.meta.generatedAt = ''
+}
 const DASHBOARD_DEFAULT_CACHE_KEY = '__latest__'
 const getDashboardCacheKey = (value) => {
   if (typeof value === 'string' && value.trim()) {
@@ -1489,8 +1540,14 @@ const cacheStatusLabel = computed(() => {
 })
 
 const authStore = useAuthStore()
-const { canPublish } = storeToRefs(authStore)
-const canManageCache = computed(() => Boolean(canPublish.value))
+const isGlobalAdmin = computed(() => {
+  const g = String(authStore.user?.group || '').toLowerCase()
+  const groups = Array.isArray(authStore.user?.groups)
+    ? authStore.user.groups.map((item) => String(item).toLowerCase())
+    : []
+  return g === 'global_admin' || groups.includes('global_admin') || Boolean(authStore.canAccessAdminConsole)
+})
+const canManageCache = computed(() => isGlobalAdmin.value)
 const cacheActionBusy = ref(false)
 const cacheActionMessage = ref('')
 let cacheActionTimer = null
@@ -1679,30 +1736,27 @@ const getDisplayLabel = (label) => {
 }
 
 async function loadDashboardData(showDate = '', options = {}) {
+  if (dashboardDisposed) return
+  if (dashboardLoadTimer) {
+    clearTimeout(dashboardLoadTimer)
+    dashboardLoadTimer = null
+  }
+  const requestId = invalidateDashboardRequest()
   const normalizedShowDate = typeof showDate === 'string' ? showDate.trim() : ''
   const cacheKey = getDashboardCacheKey(normalizedShowDate)
   const allowCache = options.allowCache !== false
   const cachedPayload = allowCache ? dashboardCache.get(cacheKey) : undefined
 
-  const releaseWatchSuppress = acquireWatchSuppress()
+  dashboardError.value = ''
 
   if (cachedPayload) {
     assignDashboardPayload(cachedPayload, { showDate: normalizedShowDate })
-    releaseWatchSuppress()
+    isLoading.value = false
     return
   }
 
-  activeDashboardRequests += 1
-  if (!loadingVisibilityTimer) {
-    loadingVisibilityTimer = setTimeout(() => {
-      isLoading.value = true
-      loadingVisibilityTimer = null
-    }, 120)
-  }
-
-  if (dashboardAbortController) {
-    dashboardAbortController.abort()
-  }
+  isLoading.value = true
+  clearDashboardData()
   const controller = new AbortController()
   dashboardAbortController = controller
 
@@ -1711,31 +1765,22 @@ async function loadDashboardData(showDate = '', options = {}) {
       showDate: normalizedShowDate,
       signal: controller.signal,
     })
+    if (dashboardDisposed || requestId !== dashboardRequestId || controller.signal.aborted) return
     dashboardCache.set(cacheKey, payload)
     assignDashboardPayload(payload, { showDate: normalizedShowDate })
-    // TODO: 数据映射逻辑将在接入真实数据时实现
   } catch (err) {
-    if (err?.name === 'AbortError') {
+    if (requestId !== dashboardRequestId || dashboardDisposed || err?.name === 'AbortError') {
       return
     }
     const message = err instanceof Error ? err.message : String(err)
     console.error('[dashboard] 数据加载失败', message)
-    if (!bizDateInput.value) {
-      bizDateInput.value = defaultBizDate
-    }
+    clearDashboardData()
+    dashboardError.value = `业务日 ${normalizedShowDate || '默认日期'} 数据加载失败：${message}`
   } finally {
-    if (dashboardAbortController === controller) {
+    if (requestId === dashboardRequestId) {
       dashboardAbortController = null
-    }
-    activeDashboardRequests = Math.max(activeDashboardRequests - 1, 0)
-    if (activeDashboardRequests === 0) {
-      if (loadingVisibilityTimer) {
-        clearTimeout(loadingVisibilityTimer)
-        loadingVisibilityTimer = null
-      }
       isLoading.value = false
     }
-    releaseWatchSuppress()
   }
 }
 
@@ -1771,6 +1816,7 @@ async function handleDisableDashboardCache() {
   cacheActionMessage.value = ''
   try {
     await disableDashboardCache(projectKey)
+    dashboardCache.clear()
     cacheActionMessage.value = '缓存已禁用'
     await loadDashboardData(selectedShowDate.value, { allowCache: false })
   } catch (err) {
@@ -1824,6 +1870,7 @@ async function handleImportTemperatureData() {
     temperatureImportDialogVisible.value = true
   } catch (err) {
     temperatureImportStatus.message = err instanceof Error ? err.message : String(err)
+    setCacheActionMessage(`气温预览失败：${temperatureImportStatus.message}`, 0)
   } finally {
     temperatureImportBusy.value = false
   }
@@ -1842,7 +1889,8 @@ function handleConfirmTemperatureImport() {
       isImportCommitted.value = true
       setCacheActionMessage(`✨ ${summaryMsg}`, 4500)
 
-      // 联动静默更新当前看板数据与标煤动态分解计划对比
+      // 服务端已更新气温版本，丢弃页面所有旧日期快照后重取。
+      dashboardCache.clear()
       loadDashboardData(selectedShowDate.value, { allowCache: false })
       if (effectiveBizDate.value) {
         loadCoalPlanComparison(effectiveBizDate.value)
@@ -1864,6 +1912,7 @@ function handleConfirmTemperatureImport() {
 }
 
 function closeTemperatureImportDialog() {
+  if (temperatureImportCommitBusy.value) return
   temperatureImportDialogVisible.value = false
   isImportCommitted.value = false
   resetTemperatureImportStatus()
@@ -1883,11 +1932,19 @@ watch(
   (value, oldValue) => {
     if (suppressDashboardWatchDepth > 0) return
     if (value === oldValue) return
-    scheduleDashboardLoad(value || '')
+    invalidateDashboardRequest()
+    clearDashboardData()
+    dashboardError.value = ''
+    isLoading.value = Boolean(value)
+    if (dashboardLoadTimer) clearTimeout(dashboardLoadTimer)
+    if (value) scheduleDashboardLoad(value)
   },
+  { flush: 'sync' },
 )
 
 onBeforeUnmount(() => {
+  dashboardDisposed = true
+  invalidateDashboardRequest()
   if (dashboardLoadTimer) {
     clearTimeout(dashboardLoadTimer)
     dashboardLoadTimer = null
@@ -3638,6 +3695,9 @@ const bootstrapDashboard = async () => {
   dashboardBootstrapState.initialized = true
   try {
     const payload = await getDashboardBizDate(projectKey)
+    if (dashboardDisposed) return
+    // 用户已在初始化请求期间选日时，保留用户选择。
+    if (bizDateInput.value) return loadDashboardData(bizDateInput.value)
     const date =
       typeof payload?.set_biz_date === 'string' ? payload.set_biz_date.trim() : ''
     if (date) {
@@ -4963,7 +5023,7 @@ const isExportingPdf = ref(false)
 const EXPORT_STANDARD_WIDTH = 1600
 
 const downloadPDF = async () => {
-  if (isExportingPdf.value) return
+  if (isExportingPdf.value || isLoading.value || spotElecLoading.value || dispatchLoading.value || isCoalPlanLoading.value || !dashboardData.meta.pushDate) return
   const { jsPDF } = window.jspdf || {}
   if (!jsPDF) {
     console.error('未找到 jsPDF 实例')
@@ -5125,13 +5185,13 @@ const primaryMarginHeadline = computed(() => {
 })
 
 const primaryCoalHeadline = computed(() => {
-  const series = coalStdSeries.value || {}
-  const categories = Array.isArray(series.categories) ? series.categories : []
-  const current = Array.isArray(series.current) ? series.current : []
-  const peer = Array.isArray(series.peer) ? series.peer : []
+  // 顶部当日卡片固定使用日口径，不随下方图表的累计范围切换。
+  const current = getCoalStdBucket('本期')
+  const peer = getCoalStdBucket('同期')
+  const categories = [...new Set([...Object.keys(current), ...Object.keys(peer)])]
   const index = findPreferredIndex(categories)
-  const currentValue = index !== -1 ? normalizeMetricValue(current[index]) : null
-  const peerValue = index !== -1 ? normalizeMetricValue(peer[index]) : null
+  const currentValue = index !== -1 ? normalizeMetricValue(current[categories[index]]) : null
+  const peerValue = index !== -1 ? normalizeMetricValue(peer[categories[index]]) : null
   return buildCumulativeHeadline(currentValue, peerValue, {
     digits: 1,
     deltaDigits: 1,
@@ -5145,9 +5205,15 @@ const primaryCoalHeadline = computed(() => {
 const DYNAMIC_PLAN_START_DATE = '2026-11-01'
 const coalPlanComparisonData = ref(null)
 const isCoalPlanLoading = ref(false)
+const coalPlanError = ref('')
+let coalPlanRequestId = 0
 
 async function loadCoalPlanComparison(dateStr) {
+  const requestId = ++coalPlanRequestId
   const targetDate = (dateStr || effectiveBizDate.value || '').trim()
+  coalPlanComparisonData.value = null
+  coalPlanError.value = ''
+  isCoalPlanLoading.value = false
   if (!targetDate) return
 
   // 历史日期（早于 2026-11-01）不发起多余请求，直接设为非期间状态
@@ -5167,27 +5233,28 @@ async function loadCoalPlanComparison(dateStr) {
       bizDate: targetDate,
       company: 'Group',
     })
+    if (dashboardDisposed || requestId !== coalPlanRequestId) return
     if (res && res.ok) {
       coalPlanComparisonData.value = res
     } else {
-      coalPlanComparisonData.value = null
+      throw new Error(res?.message || '计划数据响应异常')
     }
   } catch (err) {
+    if (dashboardDisposed || requestId !== coalPlanRequestId) return
     console.warn('[dashboard] 获取标煤计划对比数据失败', err)
     coalPlanComparisonData.value = null
+    coalPlanError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    isCoalPlanLoading.value = false
+    if (!dashboardDisposed && requestId === coalPlanRequestId) isCoalPlanLoading.value = false
   }
 }
 
 watch(
   () => effectiveBizDate.value,
   (newDate) => {
-    if (newDate) {
-      loadCoalPlanComparison(newDate)
-    }
+    loadCoalPlanComparison(newDate)
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 )
 
 const dailyCoalPlanSummary = computed(() => {
@@ -5198,6 +5265,7 @@ const dailyCoalPlanSummary = computed(() => {
   if (!coalPlanComparisonData.value || coalPlanComparisonData.value.in_plan_period === false) {
     return null
   }
+  if (dashboardData.meta.pushDate !== curDate) return null
   const comp = coalPlanComparisonData.value?.daily
   if (!comp || comp.plan_value === null || comp.plan_value === undefined || comp.status === 'out_of_period' || comp.status === 'none') {
     return null
@@ -5253,6 +5321,7 @@ const seasonCoalPlanSummary = computed(() => {
     return null
   }
   const comp = coalPlanComparisonData.value?.season
+  if (dashboardData.meta.pushDate !== curDate) return null
   if (!comp || comp.cumulative_plan_value === null || comp.cumulative_plan_value === undefined || comp.status === 'out_of_period' || comp.status === 'none') {
     return null
   }
@@ -5327,10 +5396,14 @@ onMounted(() => {
 // ==================== 电力现货与调度看板数据联动 ====================
 const router = useRouter()
 const spotElecLoading = ref(false)
+const spotElecError = ref('')
+let spotElecRequestId = 0
 const spotElecSummary = ref(null)
 const spotElecPoints = ref([])
 
 const dispatchLoading = ref(false)
+const dispatchError = ref('')
+let dispatchRequestId = 0
 const dispatchReport = ref(null)
 
 const navToSpotElectricity = () => {
@@ -5578,13 +5651,20 @@ const pureDispatchEvents = computed(() => {
 
 // 异步数据获取
 async function fetchSpotElectricityData(date) {
+  const requestId = ++spotElecRequestId
+  spotElecSummary.value = null
+  spotElecPoints.value = []
+  spotElecError.value = ''
+  spotElecLoading.value = false
   if (!date) return
   spotElecLoading.value = true
   try {
     const [summaryRes, pointsRes] = await Promise.all([
-      getSpotElectricitySummary(projectKey, date, date).catch(() => null),
-      getSpotElectricityPoints(projectKey, { date }).catch(() => null)
+      getSpotElectricitySummary(projectKey, date, date),
+      getSpotElectricityPoints(projectKey, { date })
     ])
+    if (dashboardDisposed || requestId !== spotElecRequestId) return
+    if (!summaryRes?.ok || !pointsRes?.ok) throw new Error(summaryRes?.message || pointsRes?.message || '现货接口响应异常')
     if (summaryRes && summaryRes.ok && summaryRes.data) {
       spotElecSummary.value = summaryRes.data
     } else {
@@ -5596,15 +5676,21 @@ async function fetchSpotElectricityData(date) {
       spotElecPoints.value = []
     }
   } catch (err) {
+    if (dashboardDisposed || requestId !== spotElecRequestId) return
     console.error('[DashBoard] 拉取电力现货数据失败:', err)
     spotElecSummary.value = null
     spotElecPoints.value = []
+    spotElecError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    spotElecLoading.value = false
+    if (!dashboardDisposed && requestId === spotElecRequestId) spotElecLoading.value = false
   }
 }
 
 async function fetchDispatchInfoData(date) {
+  const requestId = ++dispatchRequestId
+  dispatchReport.value = null
+  dispatchError.value = ''
+  dispatchLoading.value = false
   if (!date) {
     dispatchReport.value = null
     return
@@ -5613,6 +5699,8 @@ async function fetchDispatchInfoData(date) {
   try {
     // 严格按看板设定的业务日期查询该日调度信息，该日无信息则置空，不借用其他日期
     const res = await queryDispatchData(projectKey, { biz_date: date, limit: 1 })
+    if (dashboardDisposed || requestId !== dispatchRequestId) return
+    if (res?.ok === false) throw new Error(res.message || '调度接口响应异常')
     const items = (res && (res.items || res.data)) || []
     if (items.length > 0) {
       dispatchReport.value = items[0]
@@ -5620,30 +5708,81 @@ async function fetchDispatchInfoData(date) {
       dispatchReport.value = null
     }
   } catch (err) {
+    if (dashboardDisposed || requestId !== dispatchRequestId) return
     console.error('[DashBoard] 拉取调度信息数据失败:', err)
     dispatchReport.value = null
+    dispatchError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    dispatchLoading.value = false
+    if (!dashboardDisposed && requestId === dispatchRequestId) dispatchLoading.value = false
   }
 }
 
 watch(
   () => effectiveBizDate.value,
   (newDate) => {
-    if (newDate) {
-      fetchSpotElectricityData(newDate)
-      fetchDispatchInfoData(newDate)
-    } else {
-      spotElecSummary.value = null
-      spotElecPoints.value = []
-      dispatchReport.value = null
-    }
+    fetchSpotElectricityData(newDate)
+    fetchDispatchInfoData(newDate)
   },
-  { immediate: true }
+  { immediate: true, flush: 'sync' }
 )
 </script>
 
 <style scoped>
+.dashboard-skeleton {
+  width: 100%;
+}
+.skeleton-summary-card,
+.skeleton-panel {
+  padding: 22px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+}
+.skeleton-card-title {
+  margin-bottom: 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+.skeleton-bar {
+  background: #e2e8f0;
+  border-radius: 6px;
+  animation: dashboard-skeleton-pulse 1.6s ease-in-out infinite;
+}
+.skeleton-bar--value {
+  width: 65%;
+  height: 32px;
+  margin-bottom: 14px;
+}
+.skeleton-bar--detail {
+  width: 40%;
+  height: 12px;
+}
+.skeleton-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.skeleton-bar--chart {
+  width: 100%;
+  height: 220px;
+}
+@keyframes dashboard-skeleton-pulse {
+  50% { opacity: 0.45; }
+}
+@media (max-width: 767px) {
+  .skeleton-panel-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar { animation: none; }
+}
+.dashboard-request-error {
+  margin: 12px 0;
+  padding: 12px 16px;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
 .dashboard-page {
   min-height: 100vh;
   background: #f8fafc;

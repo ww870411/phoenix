@@ -27,6 +27,7 @@ class CacheRangeTests(unittest.TestCase):
         cache.update_cache_entry("daily_report_25_26", key or day, {
             "ok": True, "push_date": day, "show_date": day,
             "calculation_signature": get_calculation_signature(),
+            "temperature_revision": cache.get_temperature_revision("daily_report_25_26"),
             "data": {"2.边际利润": {"测试值": value}, "单位字典": {"Group": "集团"}},
         })
 
@@ -103,6 +104,63 @@ class CacheRangeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cache.delete_cache_range("daily_report_25_26", "2025-11-01", "2025-11-02")
         self.assertTrue((self.root / "2025-11-01" / "meta.json").exists())
+
+    def test_temperature_update_skips_old_snapshots_and_late_old_publish(self):
+        """写气温前算出的结果即使延迟发布，也不能命中新气温版本。"""
+        self.put("2026-11-01")
+        old, _ = cache.get_cached_payload("daily_report_25_26", "2026-11-01")
+        before = (self.root / "2026-11-01" / "summary.json").read_bytes()
+        revision = cache.invalidate_temperature_cache("daily_report_25_26")
+        payload, status = cache.get_cached_payload("daily_report_25_26", "2026-11-01")
+        self.assertIsNone(payload)
+        self.assertTrue(status["stale_temperature"])
+        self.assertEqual((self.root / "2026-11-01" / "summary.json").read_bytes(), before)
+        cache.update_cache_entry("daily_report_25_26", "2026-11-01", old)
+        self.assertIsNone(cache.get_cached_payload("daily_report_25_26", "2026-11-01")[0])
+        self.put("2026-11-01", 2)
+        payload, _ = cache.get_cached_payload("daily_report_25_26", "2026-11-01")
+        self.assertEqual(payload["temperature_revision"], revision)
+
+    def test_cache_rebuild_does_not_reset_temperature_revision(self):
+        revision = cache.invalidate_temperature_cache("daily_report_25_26")
+        cache.replace_cache("daily_report_25_26", {})
+        self.assertEqual(cache.get_temperature_revision("daily_report_25_26"), revision)
+
+    def test_unversioned_snapshot_is_skipped_after_upgrade(self):
+        self.put("2026-11-01")
+        meta_file = self.root / "2026-11-01" / "meta.json"
+        meta = cache._load_json_dict(meta_file)
+        meta.pop("temperature_revision")
+        cache._write_json_dict(meta_file, meta)
+        payload, status = cache.get_cached_payload("daily_report_25_26", "2026-11-01")
+        self.assertIsNone(payload)
+        self.assertTrue(status["stale_temperature"])
+
+    def test_parallel_publish_captures_temperature_version_before_computation(self):
+        from backend.services import dashboard_cache_job as job
+        revision = cache.invalidate_temperature_cache("daily_report_25_26")
+        with patch.object(job, "load_dashboard_config", return_value={}):
+            payload = job._build_base_payload("daily_report_25_26", "2026-11-01")
+        cache.invalidate_temperature_cache("daily_report_25_26")
+        self.assertEqual(payload["temperature_revision"], revision)
+
+
+class WeatherCacheRevisionTests(unittest.TestCase):
+    def test_successful_commit_invalidates_cache_but_failed_commit_does_not(self):
+        """不连接数据库，验证正式气温写入函数的事务与换版顺序。"""
+        from datetime import datetime
+        from backend.services import weather_importer as weather
+        moment = datetime(2026, 11, 1, 12, tzinfo=weather.EAST_8)
+        session = MagicMock()
+        with patch.object(weather, "_parse_hourly_for_compare", return_value=[1]), patch.object(weather, "_dedupe_by_hour", return_value={moment: 10.0}), patch.object(cache, "invalidate_temperature_cache") as invalidate:
+            invalidate.side_effect = lambda *_: self.assertTrue(session.commit.called)
+            weather.persist_hourly_temperatures(session, [{}])
+            invalidate.assert_called_once_with("daily_report_25_26")
+            invalidate.reset_mock()
+            session.commit.side_effect = RuntimeError("模拟事务失败")
+            with self.assertRaises(RuntimeError):
+                weather.persist_hourly_temperatures(session, [{}])
+            invalidate.assert_not_called()
 
 
 class CacheRangeApiTests(unittest.TestCase):

@@ -1,5 +1,52 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-10-30 [数据看板右上方运维管理控制组权限收拢至仅限 Global_admin]
+
+- **用户指令与背景**：
+  - 数据看板全量开放后，针对页面右上方运维管理控制组（包含【缓存管理】、【禁用缓存】、【停止发布】、【导入气温】、【📜 日志】及缓存进度状态），用户明确要求：原由 `Global_admin` 与 `Group_admin` 共同拥有的权限，**全部收拢改为仅 `Global_admin`（超级管理员）独享**。
+- **改动范围与具体实现**：
+  1. **前端 [`DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)**：
+     - 重构 `canManageCache` 计算属性判定逻辑，由原先依赖 `canPublish`（集团管理员亦具备）调整为强校验超级管理员身份 `isGlobalAdmin`（基于用户所属组 `Global_admin` 及全局后台权限 `can_access_admin_console`）；
+     - 非超管账号进入看板后，右上方管理控制组（`.dashboard-cache-controls`）彻底不渲染；
+  2. **后端 [`backend/projects/daily_report_25_26/api/dashboard.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py)**：
+     - 重构 `_ensure_cache_operator` 鉴权函数，仅放行 `session.group == "Global_admin"` 或具备 `can_access_admin_console` 动作权限的超管会话，其余账号调用缓存生成/清除/停用/停止或气温导入等接口时直接抛出 `403 Forbidden`。
+- **验证结果**：
+  - 通过专用鉴权单元测试验证，`ww870411`（Global_admin）顺利通过，`group_admin`、`zhuchengqu_admin`、`beihai_admin` 等其余所有角色调用时均被精准 403 拦截；
+  - 既有看板 15 项单元测试全量通过；前端打包构建顺利完成。
+
+## 2026-10-30 [daily_report_25_26 模块页面可见性权限矩阵调整]
+
+- **用户需求与变更背景**：
+  - 针对 `daily_report_25_26` 项目的二级功能页面可见性（限本项目账号，不包含 tube 或其他项目人员），进行三项精细化权限调整：
+    1. **数据看板（`dashboard`）对所有用户可见**；
+    2. **数据展示页面（`data_show`）对所有人可见**；
+    3. **全局管理中心（`global_management`）仅对 `Global_admin` 可见**。
+- **改动范围与具体配置变更 (`backend_data/shared/auth/permissions/daily_report_25_26.json`)**：
+  1. `Unit_admin`、`unit_filler`、`shoudian_filler` 的 `page_access` 中补齐 `"dashboard"` 与 `"data_show"`，并在其 `sheet_rules` 中显式配置 `"data_show": { "mode": "all" }`，确保基层单位主管与填报人员均可查看全景展示表；
+  2. `Group_admin` 与 `Group_viewer` 的 `page_access` 中彻底剔除 `"global_management"`；
+  3. 仅 `Global_admin` 保留 `"global_management"`，配合前端路由守卫实现非超管人员严格拦截并重定向 `/forbidden`。
+- **验证结果**：
+  - 通过 `backend.services.auth_manager` 仿真验证所有 7 类日报业务角色的卡片清单，`dashboard` 与 `data_show` 均已 100% 覆盖全员，`global_management` 仅归属于 `Global_admin`，其他项目账号依旧被安全隔离拦截。
+
+
+## 2026-10-30 看板初始加载空白体验修正
+
+- 用户反馈进入看板时仅显示“数据载入中”和大片空白。原因是上一轮为避免跨日期误读，在主数据未返回时隐藏了整个内容区。
+- `DashBoard.vue` 保留该日期隔离规则，增加四张摘要卡片及六个内容区的骨架占位；初始化读取业务日期时即进入 loading，切日等待也显示占位，移动端单列。加载文案明确当前查询日期，返回成功后替换为真实内容，失败后展示错误与重试。
+- 前端 README 和后端 README 同步说明；不改接口、计算、缓存或数据库，无迁移。回滚仅撤回本轮骨架模板、样式与初始 loading 改动。
+- 继续沿用前述工具降级：Serena 不可用，知识登记暂以仓库记录代替。验证通过前端构建和既有 Vue 回归脚本，包含初始模板确实输出骨架、未闪出选日提示的断言；真实浏览器视觉验收仍未完成。
+
+## 2026-10-30 数据看板五类隐患修复
+
+- 前置说明：Serena 与原生文件读取工具当前不可用，使用只读 Python 检索及 apply_patch 修改；操作范围为看板、气温缓存链路、测试和本节及前后端 README。Serena 知识登记未完成，先在仓库留痕；数据库运行文件和现有其他配置变动全部保留。
+- `DashBoard.vue`：顶部 `primaryCoalHeadline` 固定读取日口径；日期监听仅屏蔽程序回填，用户切日立即作废旧请求，再防抖查询；缓存命中也作废旧请求；清空日期/卸载不回填旧数据。
+- `loadCoalPlanComparison`、`fetchSpotElectricityData`、`fetchDispatchInfoData`：各自按请求序号核对响应和 loading 归属；新查询先清空旧值；计划与实际日期一致才展示对比。
+- 错误反馈：主看板、现货、调度、计划提供失败提示及重试；气温预览失败展示持续提示；主数据未就绪时隐藏旧内容，数据仍加载时禁止 PDF 导出。气温提交中禁止关闭弹窗重置提交状态。
+- `dashboard_cache.py`、`dashboard_expression.py`、`dashboard_cache_job.py`、`weather_importer.py`：气温事务成功后更新独立版本；计算开始时捕获版本；读取缓存时核对，旧文件保留但不命中，计算中途换版也不能把旧结果当成新缓存。首次升级跳过未带气温版本的历史快照。页面在气温提交或禁用缓存后清空所有内存日期。
+- 验证：后端缓存与气温事务回归 15 项通过；前端实际 Vue 源码回归覆盖日期变更、缓存命中、三个独立请求链的乱序/清空/loading、标煤日口径和错误分支；前端生产构建通过（存在原有大包体积提示）。本地 GET 看板返回 `temperature_revision=temperature-v1`，确认本地后端已使用新代码。
+- 验证边界：Chrome 工具初始化后浏览器列表为空，未完成真实点击、移动端和 PDF 成品验收；未执行真实气温覆盖、缓存发布或禁用操作，未部署远端。
+- 无数据库迁移，直接替换代码。旧缓存需要重新生成才能恢复命中，未生成时走实时计算；本次读取约8秒，不能视为性能基准。回滚仅撤回本轮代码改动，保留数据库及已有快照；审查报告和回归脚本位于 `outputs/audit-2026-10-30-dashboard/`。
+
 ## 2026-10-29 [数据看板标煤耗量与平均气温趋势图重构：全周期时间序列恢复、DataZoom 视口死锁根治与双指标平滑走势视觉焕新]
 - **用户指令与现象反馈**：
   - 用户精准指出最下方“标煤耗量与平均气温趋势图”两大致命异常：

@@ -14,6 +14,7 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
+from uuid import uuid4
 from typing import Any, Dict, List, Tuple
 
 from backend.config import DATA_DIRECTORY
@@ -146,6 +147,26 @@ def _resolve_index_file(project_key: str) -> Path:
 
 def _resolve_shared_file(project_key: str) -> Path:
     return _resolve_cache_root(project_key) / "shared.json"
+
+
+def get_temperature_revision(project_key: str) -> str:
+    """气温版本独立于缓存目录，保留旧快照但禁止继续命中。"""
+    path = _resolve_cache_root(project_key).parent / "dashboard_temperature_revision.json"
+    # 未带版本的历史快照统一视为旧版，首次升级即不再命中。
+    return str(_load_json_dict(path).get("revision") or "temperature-v1")
+
+
+def invalidate_temperature_cache(project_key: str) -> str:
+    """气温提交后换版；已在计算中的旧版本结果也不能重新成为有效缓存。"""
+    revision = uuid4().hex
+    path = _resolve_cache_root(project_key).parent / "dashboard_temperature_revision.json"
+    with CACHE_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # 独立临时文件避免不同进程并发提交时争用同一个 .tmp。
+        temp_path = path.with_name(f"{path.name}.{revision}.tmp")
+        temp_path.write_text(json.dumps({"revision": revision, "updated_at": _now_iso()}), encoding="utf-8")
+        temp_path.replace(path)
+    return revision
 
 
 def _entry_dirname(cache_key: str) -> str:
@@ -494,6 +515,9 @@ def get_cached_payload(project_key: str, cache_key: str) -> Tuple[Dict[str, Any]
 
     payload = deepcopy(meta)
     payload["data"] = _compose_data(summary, detail, trend, shared)
+    if payload.get("temperature_revision", "") != get_temperature_revision(project_key):
+        status["stale_temperature"] = True
+        return None, status
     if project_key == DEFAULT_PROJECT_KEY:
         from backend.services.heating_season_service import get_calculation_signature
         # 历史期也受分摊公式与各期日期设置影响，旧快照保留但不再命中。
@@ -603,6 +627,8 @@ __all__ = [
     "disable_cache",
     "get_cache_status",
     "get_cached_payload",
+    "get_temperature_revision",
+    "invalidate_temperature_cache",
     "replace_cache",
     "resolve_cache_key",
     "resolve_publish_schedule",

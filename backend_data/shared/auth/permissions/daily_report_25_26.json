@@ -54,7 +54,6 @@
         "constant_data",
         "data_analysis",
         "dynamic_plan",
-        "global_management",
         "dispatch_info",
         "placeholder"
       ],
@@ -149,12 +148,17 @@
     },
     "Unit_admin": {
       "page_access": [
+        "dashboard",
+        "data_show",
         "data_approval",
         "data_entry",
         "dynamic_plan",
         "dispatch_info"
       ],
       "sheet_rules": {
+        "data_show": {
+          "mode": "all"
+        },
         "data_approval": {
           "mode": "by_unit"
         },
@@ -181,11 +185,16 @@
     },
     "unit_filler": {
       "page_access": [
+        "dashboard",
+        "data_show",
         "data_entry",
         "dynamic_plan",
         "dispatch_info"
       ],
       "sheet_rules": {
+        "data_show": {
+          "mode": "all"
+        },
         "data_entry": {
           "mode": "by_unit"
         }
@@ -209,11 +218,16 @@
     },
     "shoudian_filler": {
       "page_access": [
+        "dashboard",
+        "data_show",
         "data_entry",
         "dynamic_plan",
         "dispatch_info"
       ],
       "sheet_rules": {
+        "data_show": {
+          "mode": "all"
+        },
         "data_entry": {
           "mode": "by_unit",
           "sheets": [
@@ -243,7 +257,6 @@
         "dashboard",
         "data_show",
         "dynamic_plan",
-        "global_management",
         "dispatch_info",
         "placeholder"
       ],

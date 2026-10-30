@@ -57,6 +57,7 @@ class DashboardResult:
     generated_at: str
     source: str
     data: Dict[str, Any]
+    temperature_revision: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -66,7 +67,7 @@ class DashboardResult:
             "generated_at": self.generated_at,
             "source": self.source,
             "calculation_signature": get_calculation_signature(self.project_key),
-            "calculation_signature": __import__("backend.services.heating_season_service", fromlist=["get_calculation_signature"]).get_calculation_signature(self.project_key),
+            "temperature_revision": self.temperature_revision,
             "data": self.data,
         }
 
@@ -566,6 +567,9 @@ def evaluate_dashboard(
     only_section_indexes: Optional[Iterable[str]] = None,
 ) -> DashboardResult:
     """核心入口：组装数据看板结果。目前直接返回配置，后续可在此进行数据库查询。"""
+    from backend.services.dashboard_cache import get_temperature_revision
+    # 必须在查询开始前取版本；计算期间更新气温后，旧计算结果会自然失效。
+    temperature_revision = get_temperature_revision(project_key)
     normalized_show_date = normalize_show_date(show_date)
     push_date = normalized_show_date or load_default_push_date(project_key)
     payload = load_dashboard_config(project_key)
@@ -772,6 +776,7 @@ def evaluate_dashboard(
         generated_at=generated_at,
         source=source,
         data=data,
+        temperature_revision=temperature_revision,
     )
 
 def _fill_coal_inventory(

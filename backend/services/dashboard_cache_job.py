@@ -393,6 +393,8 @@ def _mark_stale_if_needed(project_key: str) -> CachePublishState:
 
 
 def _build_base_payload(project_key: str, show_date: str) -> Dict[str, Any]:
+    from backend.services.dashboard_cache import get_temperature_revision
+    temperature_revision = get_temperature_revision(project_key)
     normalized_show_date = normalize_show_date(show_date)
     push_date = normalized_show_date or load_default_push_date(project_key)
     data = dict(load_dashboard_config(project_key))
@@ -404,6 +406,7 @@ def _build_base_payload(project_key: str, show_date: str) -> Dict[str, Any]:
         "push_date": push_date,
         "generated_at": _now(),
         "source": "config/dashboard_expression_parallel",
+        "temperature_revision": temperature_revision,
         "data": data,
     }
 
