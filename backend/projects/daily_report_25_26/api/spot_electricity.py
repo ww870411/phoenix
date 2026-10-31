@@ -20,6 +20,14 @@ from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.services.auth_manager import AuthSession, get_current_session_optional
 
+
+# 合计和价差按查询计算，任一机组缺失时合计保持空白。
+POINTS_SOURCE = """(SELECT s.*, real_time_price-day_ahead_price AS price_spread,
+CASE WHEN beihai_unit1_sales IS NOT NULL AND beihai_unit2_sales IS NOT NULL AND beihai_unit3_sales IS NOT NULL THEN beihai_unit1_sales+beihai_unit2_sales+beihai_unit3_sales END AS beihai_total_sales,
+CASE WHEN xianghai_unit1_sales IS NOT NULL AND xianghai_unit2_sales IS NOT NULL AND xianghai_unit3_sales IS NOT NULL AND xianghai_unit4_sales IS NOT NULL THEN xianghai_unit1_sales+xianghai_unit2_sales+xianghai_unit3_sales+xianghai_unit4_sales END AS xianghai_total_sales,
+CASE WHEN beihai_unit1_sales IS NOT NULL AND beihai_unit2_sales IS NOT NULL AND beihai_unit3_sales IS NOT NULL AND xianghai_unit1_sales IS NOT NULL AND xianghai_unit2_sales IS NOT NULL AND xianghai_unit3_sales IS NOT NULL AND xianghai_unit4_sales IS NOT NULL THEN beihai_unit1_sales+beihai_unit2_sales+beihai_unit3_sales+xianghai_unit1_sales+xianghai_unit2_sales+xianghai_unit3_sales+xianghai_unit4_sales END AS total_power_sales
+FROM public.spot_electricity_15min_data s) AS points"""
+
 PROJECT_KEY = "daily_report_25_26"
 router = APIRouter()
 public_router = APIRouter()
@@ -50,16 +58,33 @@ def _to_float(val: Any) -> Optional[float]:
         return None
 
 
+def _bill_fee_summary_columns() -> str:
+    """按账单量价逐点乘积求和；完整覆盖查询日期的96点且量价非空才报告电费。"""
+    columns = []
+    for plant, unit_count in (("beihai", 3), ("xianghai", 4)):
+        expressions = {
+            "spot": f"{plant}_total_sales * bill_real_time_price",
+            "contract": " + ".join(f"{plant}_unit{n}_contract_quantity * {plant}_unit{n}_contract_price"
+                                    for n in range(1, unit_count + 1)),
+        }
+        # 先合并未舍入的两项电费，金额仅由前端在展示时四舍五入。
+        expressions["revenue"] = f"({expressions['spot']}) + ({expressions['contract']})"
+        for kind, expression in expressions.items():
+            columns.append(f"CASE WHEN COUNT(*)=:expected_points AND COUNT({expression})=COUNT(*) "
+                           f"THEN SUM({expression}) END AS sum_{plant}_{kind}_fee")
+    return ",\n".join(columns)
+
+
 @public_router.get("/spot_electricity/meta", summary="获取电力现货数据元信息")
 def get_spot_electricity_meta(session: Optional[AuthSession] = Depends(get_current_session_optional)) -> Dict[str, Any]:
     _ensure_access(session)
-    query = text("""
+    query = text(f"""
         SELECT 
             MIN(trade_date) as min_date,
             MAX(trade_date) as max_date,
             COUNT(DISTINCT trade_date) as total_days,
             COUNT(*) as total_points
-        FROM public.spot_electricity_15min_data;
+        FROM {POINTS_SOURCE};
     """)
     with SessionLocal() as db:
         row = db.execute(query).fetchone()
@@ -92,14 +117,23 @@ def get_spot_electricity_summary(
     with SessionLocal() as db:
         # 若未指定起止日期，则默认取最新一天
         if not start_date or not end_date:
-            latest_date_row = db.execute(text("SELECT MAX(trade_date) FROM public.spot_electricity_15min_data;")).fetchone()
+            latest_date_row = db.execute(text(f"SELECT MAX(trade_date) FROM {POINTS_SOURCE};")).fetchone()
             latest = str(latest_date_row[0]) if latest_date_row and latest_date_row[0] else "2026-10-12"
             start_date = start_date or latest
             end_date = end_date or latest
 
-        summary_sql = text("""
+        try:
+            expected_points = ((date.fromisoformat(end_date) - date.fromisoformat(start_date)).days + 1) * 96
+            if expected_points <= 0:
+                raise ValueError
+        except ValueError as error:
+            raise HTTPException(422, "请提供有效的起止日期，结束日期不能早于起始日期") from error
+
+        summary_sql = text(f"""
             SELECT 
                 COUNT(*) as point_count,
+                COUNT(*) FILTER (WHERE beihai_unit1_sales IS NOT NULL OR beihai_unit2_sales IS NOT NULL OR beihai_unit3_sales IS NOT NULL
+                    OR xianghai_unit1_sales IS NOT NULL OR xianghai_unit2_sales IS NOT NULL OR xianghai_unit3_sales IS NOT NULL OR xianghai_unit4_sales IS NOT NULL) AS plant_sales_points,
                 COUNT(DISTINCT trade_date) as day_count,
                 AVG(day_ahead_price) as avg_da,
                 MAX(day_ahead_price) as max_da,
@@ -112,18 +146,27 @@ def get_spot_electricity_summary(
                 MIN(price_spread) as min_spread,
                 COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_price_points,
                 COUNT(DISTINCT trade_date) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_price_days,
-                SUM(beihai_total_sales) as sum_beihai_sales,
-                SUM(xianghai_total_sales) as sum_xianghai_sales,
-                SUM(province_total_sales) as sum_province_sales,
-                SUM(total_power_sales) as sum_total_sales,
-                SUM(estimated_revenue) as sum_revenue
-            FROM public.spot_electricity_15min_data
+                CASE WHEN COUNT(beihai_total_sales)=COUNT(*) THEN SUM(beihai_total_sales) END as sum_beihai_sales,
+                CASE WHEN COUNT(xianghai_total_sales)=COUNT(*) THEN SUM(xianghai_total_sales) END as sum_xianghai_sales,
+                CASE WHEN COUNT(total_power_sales)=COUNT(*) THEN SUM(total_power_sales) END as sum_total_sales,
+                {_bill_fee_summary_columns()}
+            FROM {POINTS_SOURCE}
             WHERE trade_date BETWEEN :start_date AND :end_date;
         """)
 
-        row = db.execute(summary_sql, {"start_date": start_date, "end_date": end_date}).fetchone()
+        row = db.execute(summary_sql, {"start_date": start_date, "end_date": end_date, "expected_points": expected_points}).fetchone()
         if not row or row.point_count == 0:
             return {"ok": True, "data": None, "start_date": start_date, "end_date": end_date}
+
+        # 使用未舍入电费和电量计算加权均价；参考价采用同查询范围的实时价算术均值。
+        plant_prices = {}
+        for plant in ("beihai", "xianghai"):
+            fee = getattr(row, f"sum_{plant}_spot_fee")
+            sales = getattr(row, f"sum_{plant}_sales")
+            average = fee / sales if fee is not None and sales is not None and sales != 0 else None
+            rate = (average - row.avg_rt) / row.avg_rt * 100 if average is not None and row.avg_rt is not None and row.avg_rt != 0 else None
+            plant_prices[f"avg_{plant}_spot_price"] = _to_float(average)
+            plant_prices[f"{plant}_spot_price_diff_rate"] = _to_float(rate)
 
         return {
             "ok": True,
@@ -131,6 +174,7 @@ def get_spot_electricity_summary(
             "end_date": end_date,
             "data": {
                 "point_count": int(row.point_count),
+                "has_plant_sales_data": bool(row.plant_sales_points),
                 "day_count": int(row.day_count),
                 "avg_day_ahead_price": _to_float(row.avg_da),
                 "max_day_ahead_price": _to_float(row.max_da),
@@ -145,9 +189,14 @@ def get_spot_electricity_summary(
                 "negative_price_days": int(row.negative_price_days or 0),
                 "sum_beihai_sales": _to_float(row.sum_beihai_sales),
                 "sum_xianghai_sales": _to_float(row.sum_xianghai_sales),
-                "sum_province_sales": _to_float(row.sum_province_sales),
                 "sum_total_sales": _to_float(row.sum_total_sales),
-                "sum_estimated_revenue": _to_float(row.sum_revenue),
+                "sum_beihai_spot_fee": _to_float(row.sum_beihai_spot_fee),
+                "sum_beihai_contract_fee": _to_float(row.sum_beihai_contract_fee),
+                "sum_beihai_revenue_fee": _to_float(row.sum_beihai_revenue_fee),
+                "sum_xianghai_spot_fee": _to_float(row.sum_xianghai_spot_fee),
+                "sum_xianghai_contract_fee": _to_float(row.sum_xianghai_contract_fee),
+                "sum_xianghai_revenue_fee": _to_float(row.sum_xianghai_revenue_fee),
+                **plant_prices,
             },
         }
 
@@ -170,7 +219,7 @@ def get_spot_electricity_points(
             s_date = start_date
             e_date = end_date
         else:
-            latest_date_row = db.execute(text("SELECT MAX(trade_date) FROM public.spot_electricity_15min_data;")).fetchone()
+            latest_date_row = db.execute(text(f"SELECT MAX(trade_date) FROM {POINTS_SOURCE};")).fetchone()
             latest = str(latest_date_row[0]) if latest_date_row and latest_date_row[0] else "2026-10-12"
             s_date = latest
             e_date = latest
@@ -209,12 +258,10 @@ def get_spot_electricity_points(
                 xianghai_unit3_sales,
                 xianghai_unit4_sales,
                 xianghai_total_sales,
-                province_total_sales,
                 total_power_sales,
-                estimated_revenue,
                 status,
                 remarks
-            FROM public.spot_electricity_15min_data
+            FROM {POINTS_SOURCE}
             WHERE {' AND '.join(where_clauses)}
             ORDER BY trade_date ASC, point_index ASC
             {limit_clause};
@@ -243,9 +290,7 @@ def get_spot_electricity_points(
                 "xianghai_unit3_sales": _to_float(r.xianghai_unit3_sales),
                 "xianghai_unit4_sales": _to_float(r.xianghai_unit4_sales),
                 "xianghai_total_sales": _to_float(r.xianghai_total_sales),
-                "province_total_sales": _to_float(r.province_total_sales),
                 "total_power_sales": _to_float(r.total_power_sales),
-                "estimated_revenue": _to_float(r.estimated_revenue),
                 "status": r.status,
                 "remarks": r.remarks,
             })
@@ -266,7 +311,7 @@ def get_spot_electricity_daily_trends(
     session: Optional[AuthSession] = Depends(get_current_session_optional),
 ) -> Dict[str, Any]:
     _ensure_access(session)
-    trends_sql = text("""
+    trends_sql = text(f"""
         SELECT 
             trade_date,
             ROUND(AVG(day_ahead_price)::numeric, 2) as avg_da,
@@ -277,11 +322,10 @@ def get_spot_electricity_daily_trends(
             ROUND(MIN(real_time_price)::numeric, 2) as min_rt,
             ROUND(AVG(price_spread)::numeric, 2) as avg_spread,
             COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_count,
-            ROUND(COALESCE(SUM(beihai_total_sales), 0)::numeric, 2) as beihai_sales,
-            ROUND(COALESCE(SUM(xianghai_total_sales), 0)::numeric, 2) as xianghai_sales,
-            ROUND(COALESCE(SUM(province_total_sales), 0)::numeric, 2) as province_sales,
-            ROUND(COALESCE(SUM(total_power_sales), 0)::numeric, 2) as total_sales
-        FROM public.spot_electricity_15min_data
+            ROUND(CASE WHEN COUNT(beihai_total_sales)=COUNT(*) THEN SUM(beihai_total_sales) END::numeric, 2) as beihai_sales,
+            ROUND(CASE WHEN COUNT(xianghai_total_sales)=COUNT(*) THEN SUM(xianghai_total_sales) END::numeric, 2) as xianghai_sales,
+            ROUND(CASE WHEN COUNT(total_power_sales)=COUNT(*) THEN SUM(total_power_sales) END::numeric, 2) as total_sales
+        FROM {POINTS_SOURCE}
         WHERE trade_date BETWEEN :start_date AND :end_date
         GROUP BY trade_date
         ORDER BY trade_date ASC;
@@ -303,7 +347,6 @@ def get_spot_electricity_daily_trends(
                 "negative_count": int(r.negative_count or 0),
                 "beihai_sales": _to_float(r.beihai_sales),
                 "xianghai_sales": _to_float(r.xianghai_sales),
-                "province_sales": _to_float(r.province_sales),
                 "total_sales": _to_float(r.total_sales),
             })
         return {
@@ -322,7 +365,7 @@ def get_spot_electricity_period_trends(
     session: Optional[AuthSession] = Depends(get_current_session_optional),
 ) -> Dict[str, Any]:
     _ensure_access(session)
-    trends_sql = text("""
+    trends_sql = text(f"""
         SELECT 
             point_index,
             time_label,
@@ -336,11 +379,10 @@ def get_spot_electricity_period_trends(
             ROUND(MIN(real_time_price)::numeric, 2) as min_rt,
             ROUND(AVG(price_spread)::numeric, 2) as avg_spread,
             COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_days_count,
-            ROUND(COALESCE(AVG(beihai_total_sales), 0)::numeric, 2) as avg_beihai_sales,
-            ROUND(COALESCE(AVG(xianghai_total_sales), 0)::numeric, 2) as avg_xianghai_sales,
-            ROUND(COALESCE(AVG(province_total_sales), 0)::numeric, 2) as avg_province_sales,
-            ROUND(COALESCE(AVG(total_power_sales), 0)::numeric, 2) as avg_total_sales
-        FROM public.spot_electricity_15min_data
+            ROUND(CASE WHEN COUNT(beihai_total_sales)=COUNT(*) THEN AVG(beihai_total_sales) END::numeric, 2) as avg_beihai_sales,
+            ROUND(CASE WHEN COUNT(xianghai_total_sales)=COUNT(*) THEN AVG(xianghai_total_sales) END::numeric, 2) as avg_xianghai_sales,
+            ROUND(CASE WHEN COUNT(total_power_sales)=COUNT(*) THEN AVG(total_power_sales) END::numeric, 2) as avg_total_sales
+        FROM {POINTS_SOURCE}
         WHERE trade_date BETWEEN :start_date AND :end_date
         GROUP BY point_index, time_label, period_start_time, period_end_time
         ORDER BY point_index ASC;
@@ -365,7 +407,6 @@ def get_spot_electricity_period_trends(
                 "negative_days_count": int(r.negative_days_count or 0),
                 "avg_beihai_sales": _to_float(r.avg_beihai_sales),
                 "avg_xianghai_sales": _to_float(r.avg_xianghai_sales),
-                "avg_province_sales": _to_float(r.avg_province_sales),
                 "avg_total_sales": _to_float(r.avg_total_sales),
             })
         return {
@@ -384,7 +425,7 @@ def get_spot_electricity_monthly_trends(
     session: Optional[AuthSession] = Depends(get_current_session_optional),
 ) -> Dict[str, Any]:
     _ensure_access(session)
-    trends_sql = text("""
+    trends_sql = text(f"""
         SELECT 
             TO_CHAR(trade_date, 'YYYY-MM') as month_label,
             ROUND(AVG(day_ahead_price)::numeric, 2) as avg_da,
@@ -397,11 +438,10 @@ def get_spot_electricity_monthly_trends(
             COUNT(*) FILTER (WHERE real_time_price < 0 OR day_ahead_price < 0) as negative_count,
             COUNT(DISTINCT trade_date) as day_count,
             COUNT(*) as point_count,
-            ROUND(COALESCE(SUM(beihai_total_sales), 0)::numeric, 2) as beihai_sales,
-            ROUND(COALESCE(SUM(xianghai_total_sales), 0)::numeric, 2) as xianghai_sales,
-            ROUND(COALESCE(SUM(province_total_sales), 0)::numeric, 2) as province_sales,
-            ROUND(COALESCE(SUM(total_power_sales), 0)::numeric, 2) as total_sales
-        FROM public.spot_electricity_15min_data
+            ROUND(CASE WHEN COUNT(beihai_total_sales)=COUNT(*) THEN SUM(beihai_total_sales) END::numeric, 2) as beihai_sales,
+            ROUND(CASE WHEN COUNT(xianghai_total_sales)=COUNT(*) THEN SUM(xianghai_total_sales) END::numeric, 2) as xianghai_sales,
+            ROUND(CASE WHEN COUNT(total_power_sales)=COUNT(*) THEN SUM(total_power_sales) END::numeric, 2) as total_sales
+        FROM {POINTS_SOURCE}
         WHERE trade_date BETWEEN :start_date AND :end_date
         GROUP BY TO_CHAR(trade_date, 'YYYY-MM')
         ORDER BY month_label ASC;
@@ -425,7 +465,6 @@ def get_spot_electricity_monthly_trends(
                 "negative_count": int(r.negative_count or 0),
                 "beihai_sales": _to_float(r.beihai_sales),
                 "xianghai_sales": _to_float(r.xianghai_sales),
-                "province_sales": _to_float(r.province_sales),
                 "total_sales": _to_float(r.total_sales),
             })
         return {

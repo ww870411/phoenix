@@ -28,6 +28,8 @@
         </div>
       </section>
 
+      <SpotSettlementImport v-if="canImportBills" :project-key="projectKey" @imported="fetchData" />
+
       <!-- 错误警告提示 -->
       <section v-if="loadError" class="card elevated error-banner">
         <div class="error-msg">⚠️ {{ loadError }}</div>
@@ -139,6 +141,11 @@
           </div>
 
           <div class="toolbar-right">
+            <label class="checkbox-filter plant-sales-toggle" :class="{ 'is-disabled': !canShowPlantSales }"
+              :title="hasPlantSalesData ? '显示两厂上网电量曲线，缺失数据的时段断开' : '所选日期范围暂无电厂上网电量数据'">
+              <input v-model="showPlantSales" type="checkbox" :disabled="!canShowPlantSales" />
+              <span class="checkbox-label">显示两厂上网电量</span>
+            </label>
             <!-- 负电价高亮过滤 -->
             <label class="checkbox-filter" title="仅展示出现负电价的时段区间（保持横轴全天刻度不变）">
               <input v-model="onlyNegative" type="checkbox" @change="onNegativeFilterChange" />
@@ -260,48 +267,38 @@
           </div>
         </div>
 
-        <!-- 售电量填报大盘指标网格 -->
+        <!-- 两厂量价并排展示，缺失值弱化，电费按整数元显示。 -->
         <div class="kpi-grid kpi-grid-sales">
-          <div class="kpi-card">
-            <div class="kpi-title">
-              <span>北海热电厂售电量</span>
-              <span class="kpi-unit">MWh</span>
+          <div v-for="plant in plantCards" :key="plant.key" class="kpi-card plant-card">
+            <div class="plant-heading">
+              <strong>{{ plant.name }}</strong>
+              <span>{{ plant.units }}</span>
             </div>
-            <div class="kpi-value">
-              {{ summary?.sum_beihai_sales != null ? formatNum(summary.sum_beihai_sales) : '—' }}
-            </div>
-            <div class="kpi-sub">
-              <span>1-3号机组合计</span>
-              <span class="sub-status">{{ summary?.sum_beihai_sales != null ? '已填报' : '待填报' }}</span>
-            </div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-title">
-              <span>香海热电厂售电量</span>
-              <span class="kpi-unit">MWh</span>
-            </div>
-            <div class="kpi-value">
-              {{ summary?.sum_xianghai_sales != null ? formatNum(summary.sum_xianghai_sales) : '—' }}
-            </div>
-            <div class="kpi-sub">
-              <span>1-4号机组合计</span>
-              <span class="sub-status">{{ summary?.sum_xianghai_sales != null ? '已填报' : '待填报' }}</span>
-            </div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-title">
-              <span>全省该时段售电量</span>
-              <span class="kpi-unit">MWh</span>
-            </div>
-            <div class="kpi-value text-province">
-              {{ summary?.sum_province_sales != null ? formatNum(summary.sum_province_sales) : '—' }}
-            </div>
-            <div class="kpi-sub">
-              <span>辽宁全省现货负荷售电</span>
-              <span class="sub-status">{{ summary?.sum_province_sales != null ? '已录入' : '待录入' }}</span>
-            </div>
+            <dl class="plant-metrics">
+              <div>
+                <dt>售电量</dt>
+                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_sales`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_sales`], 'MWh') }}</dd>
+              </div>
+              <div title="逐15分钟汇总全部机组上网电量 × 该时段账单实时电价">
+                <dt>{{ viewMode === 'single' ? '当日' : '区间' }}现货电费</dt>
+                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_spot_fee`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_spot_fee`], '元') }}</dd>
+              </div>
+              <div title="逐机组、逐15分钟计算合约差价电量 × 合约差价电价，再求和">
+                <dt>{{ viewMode === 'single' ? '当日' : '区间' }}合约差价电费</dt>
+                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_contract_fee`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_contract_fee`], '元') }}</dd>
+              </div>
+              <div title="现货电费与合约差价电费之和，先求和再四舍五入">
+                <dt>{{ viewMode === 'single' ? '当日' : '区间' }}电量电费收入</dt>
+                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_revenue_fee`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_revenue_fee`], '元') }}</dd>
+              </div>
+              <div title="平均现货电价=该厂未舍入现货电费÷上网电量；差异率=(该厂均价−实时价算术均值)÷实时价算术均值。电量为0时均价不可计算，基准均价为0时差异率显示—。">
+                <dt>平均现货电价</dt>
+                <dd :class="{ 'metric-empty': summary?.[`avg_${plant.key}_spot_price`] == null }">
+                  {{ formatPlantMetric(summary?.[`avg_${plant.key}_spot_price`], '元/MWh') }}
+                  <span v-if="summary?.[`avg_${plant.key}_spot_price`] != null" class="plant-price-difference">({{ formatSpotPriceRate(summary?.[`${plant.key}_spot_price_diff_rate`]) }})</span>
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
       </section>
@@ -596,7 +593,6 @@
               <div class="card-bottom-info">
                 <span>负电价: {{ item.negative_days_count }} 天</span>
                 <span>北海均值: {{ item.avg_beihai_sales != null ? `${item.avg_beihai_sales} MWh` : '—' }}</span>
-                <span>全省均值: {{ item.avg_province_sales != null ? `${item.avg_province_sales} MWh` : '—' }}</span>
               </div>
             </div>
           </template>
@@ -647,7 +643,6 @@
               <div class="card-bottom-info">
                 <span>负电价: {{ item.negative_count }} 时点</span>
                 <span>北海售电: {{ item.beihai_sales != null ? `${formatNum(item.beihai_sales)} MWh` : '—' }}</span>
-                <span>全省售电: {{ item.province_sales != null ? `${formatNum(item.province_sales)} MWh` : '—' }}</span>
               </div>
             </div>
           </template>
@@ -697,7 +692,6 @@
               <div class="card-bottom-info">
                 <span>北海售电: {{ item.beihai_sales != null ? `${formatNum(item.beihai_sales)} MWh` : '—' }}</span>
                 <span>香海售电: {{ item.xianghai_sales != null ? `${formatNum(item.xianghai_sales)} MWh` : '—' }}</span>
-                <span>全省售电: {{ item.province_sales != null ? `${formatNum(item.province_sales)} MWh` : '—' }}</span>
               </div>
             </div>
           </template>
@@ -747,9 +741,8 @@
 
               <!-- 售电量展开折叠预览 -->
               <div class="card-bottom-info">
-                <span>北海售电: {{ item.beihai_total_sales != null ? `${item.beihai_total_sales} MWh` : '待填报' }}</span>
-                <span>香海售电: {{ item.xianghai_total_sales != null ? `${item.xianghai_total_sales} MWh` : '待填报' }}</span>
-                <span>全省: {{ item.province_total_sales != null ? `${item.province_total_sales} MWh` : '待填报' }}</span>
+                <span>北海售电: {{ item.beihai_total_sales != null ? `${item.beihai_total_sales} MWh` : '暂无数据' }}</span>
+                <span>香海售电: {{ item.xianghai_total_sales != null ? `${item.xianghai_total_sales} MWh` : '暂无数据' }}</span>
               </div>
             </div>
           </template>
@@ -770,7 +763,6 @@
                 <th class="col-right">负电价天数</th>
                 <th class="col-right">北海平均 (MWh)</th>
                 <th class="col-right">香海平均 (MWh)</th>
-                <th class="col-right">全省平均 (MWh)</th>
               </tr>
             </thead>
             <tbody>
@@ -813,9 +805,6 @@
                 <td class="col-right mono text-muted">
                   {{ item.avg_xianghai_sales != null ? formatNum(item.avg_xianghai_sales) : '—' }}
                 </td>
-                <td class="col-right mono text-muted">
-                  {{ item.avg_province_sales != null ? formatNum(item.avg_province_sales) : '—' }}
-                </td>
               </tr>
             </tbody>
           </table>
@@ -833,7 +822,6 @@
                 <th class="col-right">负电价时点数</th>
                 <th class="col-right">北海总售电 (MWh)</th>
                 <th class="col-right">香海总售电 (MWh)</th>
-                <th class="col-right">全省总售电 (MWh)</th>
               </tr>
             </thead>
             <tbody>
@@ -876,9 +864,6 @@
                 <td class="col-right mono text-muted">
                   {{ item.xianghai_sales != null ? formatNum(item.xianghai_sales) : '—' }}
                 </td>
-                <td class="col-right mono text-muted">
-                  {{ item.province_sales != null ? formatNum(item.province_sales) : '—' }}
-                </td>
               </tr>
             </tbody>
           </table>
@@ -895,7 +880,6 @@
                 <th class="col-right">负电价时点数</th>
                 <th class="col-right">北海总售电 (MWh)</th>
                 <th class="col-right">香海总售电 (MWh)</th>
-                <th class="col-right">全省总售电 (MWh)</th>
                 <th class="col-right">两厂总售电 (MWh)</th>
               </tr>
             </thead>
@@ -940,9 +924,6 @@
                   {{ item.xianghai_sales != null ? formatNum(item.xianghai_sales) : '—' }}
                 </td>
                 <td class="col-right mono text-muted">
-                  {{ item.province_sales != null ? formatNum(item.province_sales) : '—' }}
-                </td>
-                <td class="col-right mono text-muted">
                   {{ item.total_sales != null ? formatNum(item.total_sales) : '—' }}
                 </td>
               </tr>
@@ -962,7 +943,6 @@
                 <th class="col-right">价差（实时-日前） (元/MWh)</th>
                 <th class="col-right">北海合计 (MWh)</th>
                 <th class="col-right">香海合计 (MWh)</th>
-                <th class="col-right">全省售电 (MWh)</th>
               </tr>
             </thead>
             <tbody>
@@ -1002,9 +982,6 @@
                 </td>
                 <td class="col-right mono text-muted">
                   {{ item.xianghai_total_sales != null ? formatNum(item.xianghai_total_sales) : '—' }}
-                </td>
-                <td class="col-right mono text-muted">
-                  {{ item.province_total_sales != null ? formatNum(item.province_total_sales) : '—' }}
                 </td>
               </tr>
             </tbody>
@@ -1300,6 +1277,8 @@ import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import SpotSettlementImport from '../components/SpotSettlementImport.vue'
+import { addPlantSalesToOption } from '../utils/spotPlantSalesChart'
 import { getProjectNameById } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 import {
@@ -1376,6 +1355,11 @@ const meta = ref({
 })
 
 const summary = ref(null)
+const showPlantSales = ref(false)
+const hasPlantSalesData = computed(() => summary.value?.has_plant_sales_data === true)
+const canShowPlantSales = computed(() => hasPlantSalesData.value && !loading.value && !loadError.value)
+watch(showPlantSales, () => { if (!loading.value) renderChart() })
+watch(hasPlantSalesData, available => { if (!available) showPlantSales.value = false })
 // 纯展示批量时序数据使用 shallowRef，避免 Vue 深度递归对 10,000+ 个对象进行 Proxy 包装，大幅节省内存与消除 GC 卡顿
 const points = shallowRef([])
 const dailyTrends = shallowRef([])
@@ -1513,9 +1497,23 @@ const metaRangeText = computed(() => {
 })
 
 // 工具函数
+const plantCards = [
+  { key: 'beihai', name: '北海热电厂', units: '1–3号机组合计' },
+  { key: 'xianghai', name: '香海热电厂', units: '1–4号机组合计' },
+]
+const feeNumberFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0, useGrouping: true })
+function formatPlantMetric(value, unit) {
+  if (value == null) return '暂无数据'
+  const amount = unit === '元' ? feeNumberFormatter.format(value).replace(/^-0$/, '0') : formatNum(value)
+  return `${amount} ${unit}`
+}
 function formatNum(val) {
   if (val === null || val === undefined || isNaN(val)) return '—'
   return Number(val).toFixed(2)
+}
+const spotPriceRateFormatter = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' })
+function formatSpotPriceRate(value) {
+  return value == null ? '—' : `${spotPriceRateFormatter.format(value)}%`
 }
 
 // 价差文本色彩辅助函数（国内统一红涨绿跌规范：正数显红，负数显绿，零为中性灰）
@@ -1782,7 +1780,9 @@ async function fetchMeta() {
 }
 
 // 主数据加载
+let dataRequest = 0
 async function fetchData() {
+  const request = ++dataRequest
   loading.value = true
   loadError.value = ''
   try {
@@ -1801,6 +1801,7 @@ async function fetchData() {
 
     // 1. 获取汇总 Summary
     const sumData = await getSpotElectricitySummary(projectKey, sDate, eDate)
+    if (request !== dataRequest) return
     if (sumData && sumData.ok) {
       summary.value = sumData.data
     }
@@ -1812,6 +1813,7 @@ async function fetchData() {
       onlyNegative: viewMode.value === 'range' ? onlyNegative.value : false,
       limit: null,
     })
+    if (request !== dataRequest) return
     if (pData && pData.ok) {
       points.value = pData.items || []
     }
@@ -1823,6 +1825,7 @@ async function fetchData() {
         getSpotElectricityPeriodTrends(projectKey, sDate, eDate),
         getSpotElectricityMonthlyTrends(projectKey, sDate, eDate),
       ])
+      if (request !== dataRequest) return
       if (tData && tData.ok) {
         dailyTrends.value = tData.days || []
       }
@@ -1836,17 +1839,23 @@ async function fetchData() {
 
     // 数据加载完毕后在 finally 中进行渲染
   } catch (err) {
+    if (request !== dataRequest) return
     console.error('加载电力现货数据失败:', err)
     loadError.value = err instanceof Error ? err.message : '获取电力现货数据失败，请检查网络或刷新重试'
+    summary.value = null
+    points.value = []; dailyTrends.value = []; monthlyTrends.value = []; periodTrends.value = []
+    showPlantSales.value = false
   } finally {
-    loading.value = false
-    await nextTick()
-    renderChart()
-    setTimeout(() => {
-      if (chartInstance && chartRef.value && chartRef.value.clientWidth > 0) {
-        chartInstance.resize()
-      }
-    }, 60)
+    if (request === dataRequest) {
+      loading.value = false
+      await nextTick()
+      if (request === dataRequest) renderChart()
+      setTimeout(() => {
+        if (request === dataRequest && chartInstance && chartRef.value && chartRef.value.clientWidth > 0) {
+          chartInstance.resize()
+        }
+      }, 60)
+    }
   }
 }
 
@@ -1972,15 +1981,6 @@ function renderChart() {
           if (visibleSeries.value.spread) {
             tip += `<div style="color: ${(item.price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 价差（实时-日前）: <strong>${(item.price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.price_spread)}</strong> 元/MWh</div>`
           }
-          if (item.beihai_total_sales != null) {
-            tip += `<div style="color: #64748b;">● 北海售电: ${formatNum(item.beihai_total_sales)} MWh</div>`
-          }
-          if (item.xianghai_total_sales != null) {
-            tip += `<div style="color: #64748b;">● 香海售电: ${formatNum(item.xianghai_total_sales)} MWh</div>`
-          }
-          if (item.province_total_sales != null) {
-            tip += `<div style="color: #64748b;">● 全省售电: ${formatNum(item.province_total_sales)} MWh</div>`
-          }
           return tip
         },
       },
@@ -2028,7 +2028,10 @@ function renderChart() {
       ],
       series,
     }
-    chartInstance.setOption(option, true)
+    chartInstance.setOption(addPlantSalesToOption(option, points.value, {
+      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['beihai_total_sales', 'xianghai_total_sales'], suffix: '',
+      include: item => !onlyNegative.value || isItemNegativeBySelection(item),
+    }), true)
   } else if (rangeSubMode.value === 'daily') {
     // 1. 区间走势：按每日平均值
     const dates = dailyTrends.value.map(d => d.trade_date)
@@ -2119,7 +2122,9 @@ function renderChart() {
       ],
       series,
     }
-    chartInstance.setOption(option, true)
+    chartInstance.setOption(addPlantSalesToOption(option, dailyTrends.value, {
+      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['beihai_sales', 'xianghai_sales'], suffix: '（日合计）',
+    }), true)
   } else if (rangeSubMode.value === 'monthly') {
     // 2. 区间走势：按每月平均值
     if (!monthlyTrends.value.length) {
@@ -2251,15 +2256,6 @@ function renderChart() {
           if (visibleMonthlySeries.value.negativeCount) {
             tip += `<div style="color: #ef4444;">● 负电价时点数: <strong>${item.negative_count}</strong> 次</div>`
           }
-          if (item.beihai_sales != null) {
-            tip += `<div style="color: #64748b;">● 北海总售电量: ${formatNum(item.beihai_sales)} MWh</div>`
-          }
-          if (item.xianghai_sales != null) {
-            tip += `<div style="color: #64748b;">● 香海总售电量: ${formatNum(item.xianghai_sales)} MWh</div>`
-          }
-          if (item.province_sales != null) {
-            tip += `<div style="color: #64748b;">● 全省总售电量: ${formatNum(item.province_sales)} MWh</div>`
-          }
           return tip
         },
       },
@@ -2300,7 +2296,10 @@ function renderChart() {
       ],
       series,
     }
-    chartInstance.setOption(option, true)
+    chartInstance.setOption(addPlantSalesToOption(option, monthlyTrends.value, {
+      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['beihai_sales', 'xianghai_sales'], suffix: '（月合计）',
+      include: item => !onlyNegative.value || isMonthlyItemNegativeBySelection(item),
+    }), true)
   } else {
     // 3. 区间走势：按每个时段的平均值显示从 00:15 到 24:00 的曲线 (96 时段)
     if (!periodTrends.value.length) {
@@ -2433,15 +2432,6 @@ function renderChart() {
           if (visiblePeriodSeries.value.negativeDays) {
             tip += `<div style="color: #ef4444;">● 负电价天数: <strong>${item.negative_days_count}</strong> 天</div>`
           }
-          if (item.avg_beihai_sales != null) {
-            tip += `<div style="color: #64748b;">● 北海平均售电: ${formatNum(item.avg_beihai_sales)} MWh</div>`
-          }
-          if (item.avg_xianghai_sales != null) {
-            tip += `<div style="color: #64748b;">● 香海平均售电: ${formatNum(item.avg_xianghai_sales)} MWh</div>`
-          }
-          if (item.avg_province_sales != null) {
-            tip += `<div style="color: #64748b;">● 全省平均售电: ${formatNum(item.avg_province_sales)} MWh</div>`
-          }
           return tip
         },
       },
@@ -2486,7 +2476,10 @@ function renderChart() {
       ],
       series,
     }
-    chartInstance.setOption(option, true)
+    chartInstance.setOption(addPlantSalesToOption(option, periodTrends.value, {
+      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['avg_beihai_sales', 'avg_xianghai_sales'], suffix: '（时段均值）',
+      include: item => !onlyNegative.value || isPeriodItemNegativeBySelection(item),
+    }), true)
   }
 
   // 统一显式触发自适应重排
@@ -2510,7 +2503,6 @@ function exportCurrentData() {
       '负电价时点数（次）': p.negative_count,
       '北海月度总售电量(MWh)': p.beihai_sales,
       '香海月度总售电量(MWh)': p.xianghai_sales,
-      '全省月度总售电量(MWh)': p.province_sales,
       '两厂月度总售电量(MWh)': p.total_sales,
     }))
 
@@ -2542,7 +2534,6 @@ function exportCurrentData() {
       '负电价发生天数（天）': p.negative_days_count,
       '北海时段平均售电量(MWh)': p.avg_beihai_sales,
       '香海时段平均售电量(MWh)': p.avg_xianghai_sales,
-      '全省时段平均售电量(MWh)': p.avg_province_sales,
       '两厂时段平均总售电量(MWh)': p.avg_total_sales,
     }))
 
@@ -2568,7 +2559,6 @@ function exportCurrentData() {
       '负电价时点数（次）': p.negative_count,
       '北海日总售电量(MWh)': p.beihai_sales,
       '香海日总售电量(MWh)': p.xianghai_sales,
-      '全省日总售电量(MWh)': p.province_sales,
       '两厂日总售电量(MWh)': p.total_sales,
     }))
 
@@ -2602,9 +2592,7 @@ function exportCurrentData() {
     '香海#3机组售电量(MWh)': p.xianghai_unit3_sales,
     '香海#4机组售电量(MWh)': p.xianghai_unit4_sales,
     '香海售电量合计(MWh)': p.xianghai_total_sales,
-    '全省该时段售电量(MWh)': p.province_total_sales,
     '两厂总售电量(MWh)': p.total_power_sales,
-    '预估现货收益(元)': p.estimated_revenue,
     '备注': p.remarks || '',
   }))
 
@@ -2644,6 +2632,7 @@ function initResizeObserver() {
 // Global_admin 现货数据自动获取与系统控制管理
 // ==============================================================================
 const auth = useAuthStore()
+const canImportBills = computed(() => String(auth.user?.group || '').trim().toLowerCase() === 'global_admin')
 const isGlobalAdmin = computed(() => {
   return auth.user?.group === 'Global_admin' || Boolean(auth.canAccessAdminConsole)
 })
@@ -3253,7 +3242,8 @@ onBeforeUnmount(() => {
 }
 
 .kpi-grid-sales {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .kpi-card {
@@ -3286,6 +3276,25 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: #0f172a;
+}
+
+.plant-card { min-width: 0; gap: 14px; border-top: 3px solid #0891b2; }
+.plant-card + .plant-card { border-top-color: #8b5cf6; }
+.plant-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; }
+.plant-heading strong { font-size: 14px; color: #334155; }
+.plant-heading span { font-size: 11px; color: #94a3b8; }
+.plant-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.plant-metrics > div { min-width: 0; }
+.plant-metrics > div + div { border-left: 1px solid #f1f5f9; padding-left: 10px; }
+.plant-sales-toggle.is-disabled { color: #94a3b8; cursor: not-allowed; }
+.plant-sales-toggle input:disabled { cursor: not-allowed; }
+.plant-metrics dt { font-size: 11.5px; line-height: 1.5; color: #64748b; margin-bottom: 4px; }
+.plant-metrics dd { margin: 0; font-size: 14px; line-height: 1.6; font-weight: 600; color: #0f172a; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.plant-price-difference { font-size: 11px; font-weight: 400; color: #64748b; white-space: nowrap; }
+.plant-metrics dd.metric-empty { font-size: 12px; font-weight: 400; color: #94a3b8; }
+@media (max-width: 480px) {
+  .plant-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+  .plant-metrics > div:nth-child(odd) { border-left: 0; padding-left: 0; }
 }
 
 .kpi-sub {
@@ -3327,13 +3336,6 @@ onBeforeUnmount(() => {
   color: #94a3b8;
   font-size: 10.5px;
   font-weight: normal;
-}
-
-.sub-status {
-  background: #f1f5f9;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10.5px;
 }
 
 .text-blue { color: #2563eb !important; }
@@ -4011,12 +4013,8 @@ onBeforeUnmount(() => {
     gap: 8px;
   }
   .kpi-grid-sales {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
-  }
-  /* 让售电量的大盘指标横跨两列居底，布局整齐平衡 */
-  .kpi-grid-sales .kpi-card:nth-child(3) {
-    grid-column: span 2;
   }
   .kpi-card {
     padding: 10px 10px;

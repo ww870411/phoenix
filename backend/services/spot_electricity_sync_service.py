@@ -82,7 +82,6 @@ INSERT INTO public.spot_electricity_15min_data (
     period_end_time,
     day_ahead_price,
     real_time_price,
-    price_spread,
     status,
     updated_at
 ) VALUES (
@@ -93,7 +92,6 @@ INSERT INTO public.spot_electricity_15min_data (
     :period_end_time,
     :day_ahead_price,
     :real_time_price,
-    :price_spread,
     'published',
     CURRENT_TIMESTAMP
 )
@@ -104,7 +102,6 @@ DO UPDATE SET
     period_end_time = EXCLUDED.period_end_time,
     day_ahead_price = EXCLUDED.day_ahead_price,
     real_time_price = EXCLUDED.real_time_price,
-    price_spread = EXCLUDED.price_spread,
     status = 'published',
     updated_at = CURRENT_TIMESTAMP;
 """)
@@ -254,7 +251,7 @@ class SpotElectricitySyncService:
             SELECT 
                 COUNT(*) as total_points,
                 COUNT(*) FILTER (WHERE day_ahead_price IS NOT NULL OR real_time_price IS NOT NULL) as price_points,
-                COUNT(*) FILTER (WHERE beihai_total_sales IS NOT NULL OR xianghai_total_sales IS NOT NULL) as sales_points
+                COUNT(*) FILTER (WHERE beihai_unit1_sales IS NOT NULL OR beihai_unit2_sales IS NOT NULL OR beihai_unit3_sales IS NOT NULL OR xianghai_unit1_sales IS NOT NULL OR xianghai_unit2_sales IS NOT NULL OR xianghai_unit3_sales IS NOT NULL OR xianghai_unit4_sales IS NOT NULL) as sales_points
             FROM public.spot_electricity_15min_data
             WHERE trade_date = :trade_date;
         """)
@@ -421,7 +418,6 @@ class SpotElectricitySyncService:
                 except Exception:
                     rt_price = None
 
-            price_spread = (rt_price - da_price) if (rt_price is not None and da_price is not None) else None
 
             parsed_records.append({
                 "trade_date": parsed_date,
@@ -431,7 +427,6 @@ class SpotElectricitySyncService:
                 "period_end_time": p_end,
                 "day_ahead_price": da_price,
                 "real_time_price": rt_price,
-                "price_spread": price_spread,
             })
 
         # 执行数据库原子批量幂等入库

@@ -3199,6 +3199,34 @@ export async function saveOcrToolConfig(projectKey = 'insulation_pipe_supply_202
   return response.json()
 }
 
+async function spotBillRequest(projectKey, path, options = {}) {
+  const response = await authAwareFetch(normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/bills/${path}`), {
+    ...options, headers: attachAuthHeaders(options.body instanceof FormData ? {} : JSON_HEADERS),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '账单操作失败'))
+  const result = await response.json()
+  if (result?.ok !== true && result?.needs_overwrite !== true) throw new Error(result?.message || '账单响应无效')
+  return result
+}
+
+export function previewSpotBills(projectKey, files) {
+  const form = new FormData()
+  for (const file of files) form.append('files', file)
+  return spotBillRequest(projectKey, 'preview', { method: 'POST', body: form })
+}
+
+export function confirmSpotBills(projectKey, token, overwrite = false) {
+  return spotBillRequest(projectKey, 'confirm', { method: 'POST', body: JSON.stringify({ token, overwrite }) })
+}
+
+export function listSpotBillImports(projectKey) {
+  return spotBillRequest(projectKey, 'imports')
+}
+
+export function listSpotBillRecords(projectKey, { importId, offset = 0 }) {
+  return spotBillRequest(projectKey, `records?${new URLSearchParams({ import_id: importId, offset, limit: 100 })}`)
+}
+
 export async function getSpotElectricityMeta(projectKey = 'daily_report_25_26') {
   const url = normalized(`/projects/${encodeURIComponent(projectKey)}/spot_electricity/meta`)
   const response = await authAwareFetch(url, { headers: attachAuthHeaders() })

@@ -1,3 +1,29 @@
+## 2026-10-31 日账单迁移至现货15分钟表
+
+卡片顺序更新：前端将平均现货电价放在两厂信息框最后一项；本次仅移动模板，后端计算、接口和数据库无变更。
+
+平均现货电价：summary新增avg_beihai_spot_price/avg_xianghai_spot_price及beihai_spot_price_diff_rate/xianghai_spot_price_diff_rate。用NUMERIC未舍入现货电费÷上网电量，再与同范围AVG(real_time_price)比较：(电厂均价−参考均价)÷参考均价×100，参考均价为既有非NULL实时价算术平均；不使用账单实时价均值替代。电量为0或缺数据则均价NULL，参考均价为0或NULL则差异率NULL；不改数据库结构。
+
+电量曲线开关：summary增加布尔字段has_plant_sales_data，按查询日期范围统计七台机组sales字段是否存在任一非NULL值（包含0）；独立于合约字段、日合计完整性和负价筛选。前端以此禁用完全没有电量数据范围的曲线开关。复用既有points及日/月/时段趋势中的电厂合计，无数据库迁移。
+
+电费收入更新：summary增加 `sum_beihai_revenue_fee`、`sum_xianghai_revenue_fee`，按NUMERIC将两项未舍入电费相加后求和；任一必要量价缺失则NULL。不新增数据库列；前端在最终显示时统一四舍五入为整数元。真实数据库回滚专项5项通过，新增0.4+0.4=0.8验证先求和再舍入。
+
+前端卡片排版更新：两厂卡片收窄、三项指标横排，缺失提示改为“暂无数据”并移除填报状态；后端NULL语义、计算公式、接口和数据库保持不变。
+
+电费展示：`api/spot_electricity.py` 的summary增加两厂各自 `sum_*_spot_fee`、`sum_*_contract_fee`。现货电费为各15分钟全部机组sales之和乘该点bill_real_time_price，再逐点求和；合约差价电费为各机组各15分钟contract_quantity乘contract_price的总和。contract_price已作为差价电价使用，不再减实时价；不乘0.25，不使用参考实时价，不读取原表费用。SQL用NUMERIC先精确求和后返回，单位元，不新增数据库列。每厂、每项独立检查查询区间完整96点/天及所有必要量价，缺失则返回NULL，完整零值返回0。真实数据库回滚专项4项通过，覆盖停机合约、负值、零值、缺量价和缺时段/日期。
+
+前端展示精简：上传区已移除生效账单来源列表及入库量价明细，不再自动请求imports/records；后端接口、导入事务、来源清单、归档原件及数据库保持不变，无迁移。
+
+权限更新：账单preview、confirm、imports、records四个接口统一由 `_importer` 限制为 `Global_admin`，项目提交权限或管理控制台权限不能替代角色。移除每批20份文件上限，仅要求至少一份xlsx；每份25MB及格式校验保持有效。专项接口测试验证普通提交者四个接口均403、超级管理员一次上传25份可进入解析。无需数据库迁移。
+
+上传目标为 `public.spot_electricity_15min_data`，以日期和时点唯一。`spot_settlement_import.map_bill` 将科目100600电量映射七台机组的 `*_sales`、电价映射共用 `bill_real_time_price`；100401电量/电价映射 `*_contract_quantity/price`。零和NULL分别保存，保留全部机组，不计算电费。计量电量超出既有NUMERIC(12,4)范围或精度时拒绝，避免静默舍入。
+
+每厂账单必须覆盖全部机组及完整96点。`persist_upload` 按日期加事务锁，整批事务UPSERT，只更新本次电厂字段及账单实时价，不覆盖另一厂或自动同步参考价。共用价格在厂内、两份文件之间、与另一厂生效账单之间均须一致。同文件且当前值一致时跳过；已有同厂数据时返回 `needs_overwrite`，明确确认 `overwrite:true` 后替换。
+
+私有 `/spot_electricity/bills/preview`、`confirm`、`imports`、`records` 仅允许Global_admin访问。imports只列当前生效来源，records从宽表返回当前量价并附原单元格坐标；不再提供科目全量/日合计/电费查询。原xlsx完整归档于 `DATA_DIRECTORY/projects/daily_report_25_26/imports/spot_settlement/originals/`，批次来源清单在 `batches/`；归档目录必须随数据库一起备份。其他科目、费用和日合计仅保留在原件中。
+
+现货查询按机组计算合计、按实时减日前计算价差；缺任一机组保持NULL，聚合缺值不报零。同步SQL及ORM已适配36列结构，前端全省电量/预估收益已移除。执行 `backend/sql/extend_spot_electricity_15min_settlement.sql` 完成扩展、冗余列清理和旧空表退役；旧表非空则脚本停止删除。本地旧表原为0行，已删除，目标表仍29088行，样表未正式入库。12项后端回归、六个查询接口及前端构建通过。回退不能直接使用依赖旧表/旧列的代码，需先恢复匹配结构；删除的空旧表没有待恢复业务数据。最后验证日期：2026-10-31。
+
 ## 2026-10-31 填报客户端完整性保护
 
 前端新增全表预检、逐表提交结果核对和日期/表格加载上下文保护，复用原单表提交及镜像查询接口；单表成功需返回 `ok:true` 和正数 `inserted`。本轮未修改服务端或业务数据库，后端单表事务及 UPSERT 不变，跨表原子事务仍不具备。
