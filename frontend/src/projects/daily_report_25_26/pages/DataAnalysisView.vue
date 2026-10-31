@@ -19,16 +19,17 @@
         <template v-else>
           <div class="form-layout">
             <div class="form-grid form-grid--top">
-              <div class="form-panel form-panel--compact">
+              <div class="form-panel form-panel--compact unit-selection-panel">
                 <div class="panel-header">
                   <h3>单位选择（多选）</h3>
                   <span class="panel-hint">已选 {{ selectedUnits.length }} / {{ unitOptions.length }}</span>
                 </div>
-                <div class="chip-group">
+                <div class="unit-option-grid">
                   <label
                     v-for="unit in unitOptions"
                     :key="unit.value"
                     class="chip checkbox"
+                    :class="{ 'is-selected': selectedUnits.includes(unit.value) }"
                   >
                     <input
                       type="checkbox"
@@ -45,16 +46,15 @@
                 </div>
               </div>
 
-              <div class="form-panel form-panel--compact">
-                <div class="panel-header">
+              <div class="form-panel form-panel--compact analysis-period-panel">
+                <div class="panel-header period-header">
                   <h3>分析模式</h3>
-                  <span class="panel-hint">切换单日或区间累计</span>
-                </div>
-                <div class="chip-group compact">
+                <div class="query-mode-options">
                   <label
                     v-for="mode in analysisModes"
                     :key="mode.value"
                     class="chip radio"
+                    :class="{ 'is-selected': analysisMode === mode.value }"
                   >
                     <input
                       type="radio"
@@ -65,23 +65,20 @@
                     <span>{{ mode.label }}</span>
                   </label>
                 </div>
+                </div>
                 <div class="date-subsection">
-                  <div class="panel-header">
-                    <h4>日期范围</h4>
-                    <span class="panel-hint">与分析模式联动</span>
-                  </div>
-                  <div class="date-grid">
+                  <div class="date-grid" :class="{ 'date-grid--daily': analysisMode === 'daily' }">
                     <label class="date-field">
-                      <span>起始日期</span>
+                      <span>{{ analysisMode === 'daily' ? '业务日期' : '起始日期' }}</span>
                       <input type="date" v-model="startDate" />
                     </label>
-                    <label class="date-field">
+                    <label v-if="analysisMode !== 'daily'" class="date-field">
                       <span>结束日期</span>
-                      <input type="date" v-model="endDate" :disabled="analysisMode === 'daily'" />
+                      <input type="date" v-model="endDate" />
                     </label>
                   </div>
                   <p class="panel-hint">
-                    {{ analysisMode === 'daily' ? '单日模式会自动将结束日期同步为起始日期。' : '累计模式支持跨日期区间。' }}
+                    {{ analysisMode === 'daily' ? '查看所选日期的生产数据。' : '按起止日期汇总区间数据。' }}
                   </p>
                 </div>
               </div>
@@ -90,6 +87,7 @@
             <div class="form-panel form-panel--metrics">
               <div class="panel-header">
                 <h3>指标选择（多选）</h3>
+                <span class="panel-hint">已选 {{ selectedMetrics.size }} 项</span>
                 <div class="panel-actions">
                   <button class="btn ghost xs" type="button" @click="selectAllMetrics">
                     全选
@@ -99,15 +97,13 @@
                   </button>
                 </div>
               </div>
-              <p class="panel-hint">
-                已选择 {{ selectedMetrics.size }} 项
-              </p>
               <div class="metrics-panel-body">
                 <div v-if="resolvedMetricGroups.length" class="metrics-groups">
                   <div
-                    v-for="group in resolvedMetricGroups"
+                    v-for="group in classifiedMetricGroups"
                     :key="group.key"
                     class="metrics-group"
+                    :class="{ 'metrics-group--single': group.subgroups.length === 1 }"
                   >
                     <div class="metrics-group-header">
                       <div class="metrics-group-title">
@@ -115,6 +111,9 @@
                         <span class="panel-hint">共 {{ group.options.length }} 项</span>
                       </div>
                       <div class="metrics-group-actions">
+                        <button class="btn ghost xs" type="button" :disabled="queryLoading" @click="toggleCategory(group.options)">
+                          {{ isCategorySelected(group.options) ? '取消全类' : '全选本类' }}
+                        </button>
                         <span v-if="group.key === 'constant'" class="group-badge">常量</span>
                         <span
                           v-else-if="group.key === 'adjustment'"
@@ -130,26 +129,36 @@
                         </span>
                       </div>
                     </div>
-                    <div class="metrics-grid">
-                      <label
-                        v-for="metric in group.options"
-                        :key="`${group.key}-${metric.value}`"
-                        class="chip checkbox"
-                      >
-                        <input
-                          type="checkbox"
-                          :value="metric.value"
-                          :checked="selectedMetrics.has(metric.value)"
-                          :disabled="queryLoading"
-                          @change="toggleMetric(metric.value)"
-                        />
-                        <span class="chip-label">
-                          <span v-if="getMetricSelectionOrder(metric.value)" class="chip-order">
-                            {{ getMetricSelectionOrder(metric.value) }}
+                    <div v-for="category in group.subgroups" :key="category.key" class="metric-category">
+                      <div class="metric-category-header">
+                        <h5>{{ category.label }}</h5>
+                        <span class="panel-hint">已选 {{ countCategorySelected(category.options) }} / {{ category.options.length }}</span>
+                        <button class="btn ghost xs" type="button" :disabled="queryLoading" @click="toggleCategory(category.options)">
+                          {{ isCategorySelected(category.options) ? '取消' : '全选' }}
+                        </button>
+                      </div>
+                      <div class="metrics-grid">
+                        <label
+                          v-for="metric in category.options"
+                          :key="`${group.key}-${metric.value}`"
+                          class="chip checkbox"
+                          :class="{ 'is-selected': selectedMetrics.has(metric.value) }"
+                        >
+                          <input
+                            type="checkbox"
+                            :value="metric.value"
+                            :checked="selectedMetrics.has(metric.value)"
+                            :disabled="queryLoading"
+                            @change="toggleMetric(metric.value)"
+                          />
+                          <span class="chip-label">
+                            <span v-if="getMetricSelectionOrder(metric.value)" class="chip-order">
+                              {{ getMetricSelectionOrder(metric.value) }}
+                            </span>
+                            <span>{{ metric.label }}</span>
                           </span>
-                          <span>{{ metric.label }}</span>
-                        </span>
-                      </label>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -385,8 +394,8 @@
               <thead>
                 <tr>
                   <th>指标</th>
-                  <th>本期累计</th>
-                  <th>同期累计</th>
+                  <th>{{ resultComparisonLabels.current }}</th>
+                  <th>{{ resultComparisonLabels.peer }}</th>
                   <th>同比</th>
                 </tr>
               </thead>
@@ -406,13 +415,13 @@
                   </td>
                   <td>
                     <div class="value-cell">
-                      <span class="value-number">{{ formatNumber(resolveValue(row, 'current'), row.decimals || 2) }}</span>
+                      <span class="value-number">{{ formatNumber(resolveValue(row, 'current'), row.decimals ?? 2) }}</span>
                       <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
                     </div>
                   </td>
                   <td>
                     <div class="value-cell">
-                      <span class="value-number">{{ formatNumber(resolveValue(row, 'peer'), row.decimals || 2) }}</span>
+                      <span class="value-number">{{ formatNumber(resolveValue(row, 'peer'), row.decimals ?? 2) }}</span>
                       <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
                     </div>
                   </td>
@@ -437,8 +446,8 @@
               <thead>
                 <tr>
                   <th>指标</th>
-                  <th>本期累计</th>
-                  <th>上期累计</th>
+                  <th>{{ resultComparisonLabels.current }}</th>
+                  <th>{{ resultComparisonLabels.previous }}</th>
                   <th>环比</th>
                 </tr>
               </thead>
@@ -446,11 +455,11 @@
                 <tr v-for="entry in ringComparisonEntries" :key="`ring-${entry.key}`">
                   <td>{{ entry.label }}</td>
                   <td>
-                    <span class="value-number">{{ formatNumber(entry.current, entry.decimals || 2) }}</span>
+                    <span class="value-number">{{ formatNumber(entry.current, entry.decimals ?? 2) }}</span>
                     <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
                   </td>
                   <td>
-                    <span class="value-number">{{ formatNumber(entry.prev, entry.decimals || 2) }}</span>
+                    <span class="value-number">{{ formatNumber(entry.prev, entry.decimals ?? 2) }}</span>
                     <span v-if="entry.unit" class="value-unit">{{ entry.unit }}</span>
                   </td>
                   <td
@@ -614,6 +623,8 @@ import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
 import AiChatWorkspace from '../components/AiChatWorkspace.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
+import { comparisonLabels } from '../composables/analysisPresentation'
+import { classifyAnalysisMetrics, isMetricCategorySelected, toggleMetricCategory } from '../constants/analysisMetricCategories'
 import {
   getDataAnalysisSchema,
   getDashboardBizDate,
@@ -930,6 +941,7 @@ const infoBanner = ref('')
 const formError = ref('')
 const queryWarnings = ref([])
 const lastQueryMeta = ref(null)
+const resultComparisonLabels = computed(() => comparisonLabels(lastQueryMeta.value, analysisMode.value))
 
 function buildDataAnalysisChatContext() {
   if (!hasDataAnalysisChatContext.value) return null
@@ -1623,7 +1635,7 @@ const ringSummaryLines = computed(() => {
   const rangeNote = ringPreviousRangeLabel.value ? `（上期：${ringPreviousRangeLabel.value}）` : ''
   const phrases = ringComparisonEntries.value.slice(0, 3).map((entry) => {
     const unitText = entry.unit ? entry.unit : ''
-    const prevText = formatNumber(entry.prev, entry.decimals || 2)
+    const prevText = formatNumber(entry.prev, entry.decimals ?? 2)
     const rateText = entry.rate === null ? '—' : formatDelta(entry.rate)
     return `${entry.label} 上期 ${prevText}${unitText}，环比 ${rateText}`
   })
@@ -1916,6 +1928,20 @@ const aiReportDownloadButtonDisabled = computed(() => {
 })
 
 const resolvedMetricGroups = computed(() => metricGroups.value)
+const classifiedMetricGroups = computed(() => classifyAnalysisMetrics(resolvedMetricGroups.value))
+
+function isCategorySelected(options) {
+  return isMetricCategorySelected(selectedMetrics.value, options)
+}
+
+function countCategorySelected(options) {
+  return options.filter(option => selectedMetrics.value.has(option.value)).length
+}
+
+function toggleCategory(options) {
+  if (queryLoading.value) return
+  selectedMetrics.value = toggleMetricCategory(selectedMetrics.value, options)
+}
 
 const availableMetricKeys = computed(() => {
   const bucket = new Set()
@@ -2328,6 +2354,7 @@ async function runAnalysis() {
       const meta = {
         unit_key: unitKey,
         unit_label: response.unit_label || resolveUnitLabel(unitKey),
+        analysis_mode: response.analysis_mode || requestBase.analysis_mode,
         analysis_mode_label: response.analysis_mode_label || analysisModeLabel.value,
         view: response.view || resolveViewNameForUnit(unitKey),
         start_date: response.start_date || startDate.value,
@@ -2726,13 +2753,14 @@ function formatExportNumber(value, decimals = 2) {
   return Number(num.toFixed(decimals))
 }
 
-function buildSummarySheetData(rows) {
-  const header = ['指标', '本期', '同期', '同比', '计量单位']
+function buildSummarySheetData(rows, meta) {
+  const labels = comparisonLabels(meta, analysisMode.value)
+  const header = ['指标', labels.current, labels.peer, '同比', '计量单位']
   const source = Array.isArray(rows) ? rows : []
   const mapped = source.map((row) => [
     row.label,
-    formatExportNumber(resolveValue(row, 'current'), row.decimals || 2),
-    formatExportNumber(resolveValue(row, 'peer'), row.decimals || 2),
+    formatExportNumber(resolveValue(row, 'current'), row.decimals ?? 2),
+    formatExportNumber(resolveValue(row, 'peer'), row.decimals ?? 2),
     formatPercentValue(resolveDelta(row)) || '',
     row.unit || '',
   ])
@@ -2744,7 +2772,8 @@ function buildRingSheetData(result) {
   const range = result?.ringCompare?.range
   if (!prevTotals || !range) return null
   const rows = Array.isArray(result?.rows) ? result.rows : []
-  const header = ['指标', '上期累计', '本期累计', '环比', '单位']
+  const labels = comparisonLabels(result?.meta, analysisMode.value)
+  const header = ['指标', labels.previous, labels.current, '环比', '单位']
   const mapped = rows.map((row) => {
     const current = resolveTotalCurrentFromRow(row)
     const prev = prevTotals[row.key]
@@ -2754,8 +2783,8 @@ function buildRingSheetData(result) {
         : null
     return [
       row.label,
-      formatExportNumber(prev, row.decimals || 2),
-      formatExportNumber(current, row.decimals || 2),
+      formatExportNumber(prev, row.decimals ?? 2),
+      formatExportNumber(current, row.decimals ?? 2),
       formatPercentValue(rate) || '',
       row.unit || '',
     ]
@@ -2810,7 +2839,7 @@ function buildMetaSheetData(meta) {
 
 function buildUnitSheetData(result) {
   const sheetData = []
-  const summary = buildSummarySheetData(result?.rows)
+  const summary = buildSummarySheetData(result?.rows, result?.meta)
   summary.forEach((row) => sheetData.push(row))
   const ringData = buildRingSheetData(result)
   if (ringData && ringData.length) {
@@ -3119,8 +3148,9 @@ onBeforeUnmount(() => {
 }
 
 .form-grid--top {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
 }
 
 .form-panel {
@@ -3134,10 +3164,49 @@ onBeforeUnmount(() => {
 
 .form-panel--metrics {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 12px;
+  gap: 8px;
 }
 
+.form-panel--metrics > .panel-header { justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
+.form-panel--metrics > .panel-header h3 { margin: 0; font-size: 14px; }
+.form-panel--metrics .panel-actions { margin-left: auto; }
+.form-panel--metrics .panel-hint { font-size: 12px; margin: 0; }
+.form-panel--metrics .btn.xs { padding: 3px 7px; font-size: 12px; min-height: 26px; }
+
 .form-panel--compact {
-  min-height: 220px;
+  min-width: 0;
+  padding: 12px;
+  gap: 10px;
+}
+
+.form-panel--compact .panel-header { flex-wrap: wrap; }
+.form-panel--compact .panel-header h3 { margin: 0; font-size: 14px; }
+.form-panel--compact .panel-hint { margin: 0; font-size: 12px; }
+.unit-option-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 6px; }
+.unit-option-grid .chip { min-width: 0; padding: 6px 8px; min-height: 32px; box-sizing: border-box; font-size: 13px; }
+.unit-option-grid .chip-label { min-width: 0; gap: 4px; overflow-wrap: anywhere; }
+.unit-option-grid .chip-order { width: 16px; height: 16px; flex-shrink: 0; font-size: 10px; }
+.unit-option-grid input { margin: 0; flex-shrink: 0; }
+.form-panel--compact .chip.is-selected { border-color: var(--primary-400, #60a5fa); background: var(--primary-50, #eff6ff); color: var(--primary-700, #1d4ed8); }
+.form-panel--compact .chip:focus-within { outline: 2px solid var(--primary-400, #60a5fa); outline-offset: 2px; }
+.query-mode-options { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: #f1f5f9; border-radius: 8px; }
+.query-mode-options .chip { padding: 4px 8px; border-radius: 5px; font-size: 12px; }
+.query-mode-options input { margin: 0; }
+.analysis-period-panel .date-subsection { margin: 0; padding: 0; border: 0; gap: 8px; }
+.analysis-period-panel .date-subsection .date-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.analysis-period-panel .date-subsection .date-grid--daily { grid-template-columns: minmax(0, 1fr); }
+.analysis-period-panel .date-field { min-width: 0; gap: 4px; font-size: 12px; }
+.analysis-period-panel .date-field input { width: 100%; min-width: 0; box-sizing: border-box; padding: 6px 8px; font-size: 13px; }
+
+@media (max-width: 900px) {
+  .form-grid--top { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 420px) {
+  .analysis-period-panel .date-subsection .date-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .panel-header {
@@ -3232,16 +3301,18 @@ onBeforeUnmount(() => {
 .metrics-groups {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .metrics-group {
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* 同排分类卡片等高，内部指标仍按自然行高从顶部排列。 */
+  align-items: stretch;
+  gap: 6px;
 }
 
 .correlation-matrix-panel {
@@ -3361,10 +3432,11 @@ onBeforeUnmount(() => {
 }
 
 .metrics-group-header {
+  grid-column: 1 / -1;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -3407,11 +3479,24 @@ onBeforeUnmount(() => {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  max-height: 280px;
-  overflow-y: auto;
-  padding-right: 4px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  gap: 4px;
+}
+
+.metric-category { border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fbff; padding: 6px; min-width: 0; }
+.metrics-group--single .metric-category { grid-column: 1 / -1; }
+.metric-category-header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.metric-category-header h5 { margin: 0; color: #1e3a8a; font-size: 0.85rem; font-weight: 700; }
+.metric-category-header button { margin-left: auto; }
+.metric-category .chip-label { min-width: 0; overflow-wrap: anywhere; }
+.metric-category .chip { min-width: 0; box-sizing: border-box; padding: 4px 6px; min-height: 30px; font-size: 12px; gap: 4px; background: #fff; }
+.metric-category .chip input { margin: 0; flex-shrink: 0; }
+.metric-category .chip-order { width: 16px; height: 16px; font-size: 10px; flex-shrink: 0; }
+.metric-category .chip.is-selected { border-color: var(--primary-400, #60a5fa); background: var(--primary-50, #eff6ff); color: var(--primary-700, #1d4ed8); }
+.metric-category .chip:focus-within { outline: 2px solid var(--primary-400, #60a5fa); outline-offset: 1px; }
+
+@media (max-width: 800px) {
+  .metrics-group { grid-template-columns: minmax(0, 1fr); }
 }
 
 .date-subsection {

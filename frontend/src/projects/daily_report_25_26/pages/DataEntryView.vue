@@ -53,15 +53,15 @@
         <div class="topbar__action-row">
           <label v-if="isDailyPage" class="date-group topbar__date" title="业务日期">
             <span>业务日期：</span>
-            <input type="date" v-model="bizDate" />
+            <input type="date" :value="bizDate" :disabled="isPreparingSubmission || isSubmitting || efficiencyUploading" @change="onBizDateChanged" />
           </label>
           <div class="topbar__buttons">
-            <button class="btn ghost" type="button" @click="reloadTemplate()">重载模板</button>
+            <button class="btn ghost" type="button" :disabled="isPreparingSubmission || isSubmitting || efficiencyUploading" @click="reloadTemplate().catch(() => {})">重载模板</button>
             <button
               v-if="canUploadEfficiency"
               class="btn secondary efficiency-upload-btn"
               type="button"
-              :disabled="efficiencyUploading"
+              :disabled="entryLocked"
               :title="efficiencyUploadTitle"
               @click="triggerEfficiencyUpload"
             >
@@ -119,6 +119,7 @@
           type="button"
           role="tab"
           :aria-selected="s.sheet_key === activeSheetKey"
+          :disabled="isPreparingSubmission || isSubmitting || efficiencyUploading"
           :class="['unit-tab-pill', { 'unit-tab-pill--active': s.sheet_key === activeSheetKey }]"
           @click="onSwitchSheetTab(s.sheet_key)"
         >
@@ -157,7 +158,7 @@
       </ul>
     </section>
 
-    <div class="table-wrap card" v-if="columns.length">
+    <div class="table-wrap card" v-if="columns.length" v-show="entryDataReady">
       <RevoGrid
         ref="gridRef"
         :row-headers="true"
@@ -170,12 +171,16 @@
         :apply-on-close="true"
         :columns="gridColumns"
         :source="gridSource"
+        :readonly="entryLocked"
         style="height: 70vh; width: 100%;"
         @afteredit="handleAfterEdit"
         @afterEdit="handleAfterEdit"
       />
     </div>
-    <div v-else class="placeholder">无模板数据</div>
+    <div v-if="!entryDataReady" class="placeholder" role="status">
+      {{ isLoadingTemplate ? `正在读取 ${bizDate} 的报表数据…` : entryLoadError || '报表尚未加载完成，暂不能提交。' }}
+      <button v-if="entryLoadError && !isLoadingTemplate" class="btn ghost" type="button" :disabled="isPreparingSubmission || isSubmitting" @click="reloadTemplate().catch(() => {})">重试加载</button>
+    </div>
 
     <UnitAnalysisLite
       v-if="isUnitAnalysisEnabled"
@@ -216,6 +221,7 @@ import {
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
 import { useAuthStore } from '../store/auth'
+import { entryContextKey, requireEntryQuery, requireSubmissionSuccess } from '../composables/entrySubmissionGuard'
 
 // --- 基本路由和状态 --- 
 const route = useRoute()
@@ -229,6 +235,7 @@ const sheetKey = computed(() => activeSheetKey.value)
 
 // --- 单位多表格 Tabs 支持 ---
 const unitSheets = ref([])
+const unitSheetsReady = ref(false)
 const unitGroupName = ref('')
 const currentEfficiencyUnitType = computed(() => {
   const gName = (unitGroupName.value || unitName.value || '').trim()
@@ -250,6 +257,7 @@ const efficiencyUploadTitle = computed(() => {
 const efficiencyUploading = ref(false)
 const efficiencyFileInputRef = ref(null)
 const sheetCache = new Map() // sheet_key -> 完整表格状态缓存
+const dirtySheets = new Set() // 当前日期未提交的表格，切日期前提醒
 const pageConfig = computed(() => {
   const raw = route.query.config;
   return typeof raw === 'string' ? raw : '';
@@ -329,6 +337,14 @@ const latestRequestId = ref('');
 function newRequestId() { return `${Date.now()}_${Math.random().toString(36).slice(2,8)}` }
 // 在模板加载过程中，抑制由程序性设置 bizDate 引发的 watch 重入
 const isLoadingTemplate = ref(false);
+const entryLoadError = ref('');
+const loadedEntryContext = ref(null);
+const isPreparingSubmission = ref(false);
+let loadGeneration = 0;
+let internalDateChange = false;
+const currentEntryContext = computed(() => entryContextKey(activeSheetKey.value, bizDate.value, pageConfig.value));
+const entryDataReady = computed(() => !isLoadingTemplate.value && !entryLoadError.value && loadedEntryContext.value === currentEntryContext.value);
+const entryLocked = computed(() => !entryDataReady.value || isPreparingSubmission.value || isSubmitting.value || efficiencyUploading.value);
 
 // --- 本单位分析启用开关 ---
 const UNIT_ANALYSIS_DEFAULT_ENABLED = new Set([
@@ -556,10 +572,10 @@ const sheetValidationToggleDisabled = computed(
 const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(projectKey));
 const submitDisabled = computed(() => !canSubmitCurrentProject.value || isReadOnlyForDate.value);
-const submitButtonDisabled = computed(() => submitDisabled.value || isSubmitting.value || hasBlockingValidation.value);
+const submitButtonDisabled = computed(() => submitDisabled.value || entryLocked.value || hasBlockingValidation.value);
 
 watch(
-  () => isReadOnlyForDate.value,
+  () => [isReadOnlyForDate.value, entryLocked.value],
   () => applyReadonlyToColumns()
 );
 
@@ -614,6 +630,10 @@ function startRefreshCountdown(seconds) {
       return;
     }
     clearRefreshCountdown();
+    if (dirtySheets.size) {
+      showSubmitFeedback('success', '提交已完成；检测到新的未提交修改，已保留内容并取消自动刷新。', { autoHide: false });
+      return;
+    }
     showSubmitFeedback('success', '正在刷新数据，请稍候…', { autoHide: false });
     reloadTemplate()
       .then(() => {
@@ -1495,9 +1515,9 @@ function isPeerColumnIndex(index, colName = null) {
 
 function applyReadonlyToColumns() {
   if (!Array.isArray(gridColumns.value)) return;
-  const shouldLockAll = isReadOnlyForDate.value;
+  const shouldLockAll = isReadOnlyForDate.value || entryLocked.value;
   gridColumns.value = gridColumns.value.map((def, index) => {
-    let locked = Boolean(def.__locked) || (shouldLockAll && (templateType.value === 'standard' || templateType.value === 'crosstab'));
+    let locked = Boolean(def.__locked) || shouldLockAll;
     // 同期值字段权限控制：除 Global_admin 之外，全量强制设为只读不可修改
     if (!isGlobalAdmin.value && isPeerColumnIndex(index, def.name)) {
       locked = true;
@@ -1660,169 +1680,194 @@ async function setupCrosstabGrid(tpl) {
 }
 
 // --- 主数据加载逻辑 ---
-async function loadTemplate(targetKey = null) {
+async function loadTemplate(targetKey = null, { preserveDate = false } = {}) {
   const currentKey = targetKey || activeSheetKey.value;
+  const generation = ++loadGeneration;
+  const expectedConfig = pageConfig.value;
+  let expectedDate = bizDate.value;
+  const isCurrent = () => generation === loadGeneration && currentKey === activeSheetKey.value && expectedConfig === pageConfig.value && expectedDate === bizDate.value;
+  loadedEntryContext.value = null;
+  entryLoadError.value = '';
+  clearRefreshCountdown();
   isLoadingTemplate.value = true;
-  linkageMap.value = new Map();
-  const rawTemplate = await getTemplate(projectKey, currentKey, { config: pageConfig.value });
-  // 强制首次查询已移除，统一在下方“初次加载后的镜像查询”中处理
-  // 应用日期占位到列头（仅每日数据填报页面）
-  if (isDailyPage.value && Array.isArray(rawTemplate?.columns)) {
-    // 缓存原始列头以便后续根据日历重算
-    baseColumns.value = Array.isArray(rawTemplate.columns) ? [...rawTemplate.columns] : []
-    rawTemplate.columns = replaceDatePlaceholdersInColumns(baseColumns.value)
-  }
-  const { template: tpl } = applyTemplatePlaceholders(rawTemplate);
-  // 若模板给出权威业务日期，优先设置并等待一帧，确保首次查询使用正确日期
-  if (tpl.biz_date) {
-    canonicalBizDate.value = tpl.biz_date;
-    bizDate.value = tpl.biz_date;
-    await nextTick();
-  }
-  
-  // 存储基础信息
-  sheetName.value = tpl.sheet_name || '';
-  unitName.value = tpl.unit_name || '';
-  unitId.value = tpl.unit_id || '';
-  columns.value = tpl.columns || [];
-  // 提前确定模板类型与行数据，避免初始化顺序导致回填被覆盖
-  rows.value = tpl.rows || [];
-  templateType.value = tpl.template_type || 'standard';
-  validationEnabled.value = resolveValidationEnabledFlag(tpl);
-  validationExplanationMap.value = normalizeExplanationMapping(
-    tpl.validation_explanation_map || tpl['校验说明映射']
-  );
-  if (templateType.value === 'standard') {
-    templateValidationRaw.value = tpl.validation_rules || tpl['校验规则'] || null;
-  } else {
-    templateValidationRaw.value = null;
-  }
-  rebuildValidationRulesFromRows(rows.value);
-  // 交叉表需先搭好列与占位行，再执行镜像查询，避免后续初始化覆盖查询结果
-  if (templateType.value === 'crosstab') {
-    await setupCrosstabGrid(tpl);
-  } else {
-    // 标准模板也需要预先搭好骨架，再查询填充
-    await setupStandardGrid(tpl);
-    if (validationEnabled.value) {
-      runFullValidation();
-    } else {
-      clearAllValidationIssues();
-    }
-  }
-  // 初次加载后进行一次镜像查询（按当前 bizDate 或模板类型）；便于刷新后直接看到已填数据
   try {
+    linkageMap.value = new Map();
+    const rawTemplate = await getTemplate(projectKey, currentKey, { config: pageConfig.value });
+    if (!isCurrent()) return false;
+    if (!rawTemplate || rawTemplate.ok === false || !Array.isArray(rawTemplate.columns) || !rawTemplate.columns.length || !Array.isArray(rawTemplate.rows)) {
+      throw new Error(rawTemplate?.message || '报表模板不完整');
+    }
+    // 强制首次查询已移除，统一在下方“初次加载后的镜像查询”中处理
+    // 应用日期占位到列头（仅每日数据填报页面）
+    if (isDailyPage.value && Array.isArray(rawTemplate?.columns)) {
+      // 缓存原始列头以便后续根据日历重算
+      baseColumns.value = Array.isArray(rawTemplate.columns) ? [...rawTemplate.columns] : []
+      rawTemplate.columns = replaceDatePlaceholdersInColumns(baseColumns.value)
+    }
+    const { template: tpl } = applyTemplatePlaceholders(rawTemplate);
+    // 若模板给出权威业务日期，优先设置并等待一帧，确保首次查询使用正确日期
+    if (tpl.biz_date) {
+      canonicalBizDate.value = tpl.biz_date;
+      if (!preserveDate) {
+        expectedDate = tpl.biz_date;
+        internalDateChange = true;
+        try { bizDate.value = expectedDate; } finally { internalDateChange = false; }
+      }
+      await nextTick();
+      if (!isCurrent()) return false;
+    }
+    if (isDailyPage.value) tpl.columns = replaceDatePlaceholdersInColumns(baseColumns.value)
+  
+    // 存储基础信息
+    sheetName.value = tpl.sheet_name || '';
+    unitName.value = tpl.unit_name || '';
+    unitId.value = tpl.unit_id || '';
+    columns.value = tpl.columns || [];
+    // 提前确定模板类型与行数据，避免初始化顺序导致回填被覆盖
+    rows.value = tpl.rows || [];
+    templateType.value = tpl.template_type || 'standard';
+    if (!['standard', 'constant', 'crosstab'].includes(templateType.value)) throw new Error('不支持的报表类型，请重新加载');
+    validationEnabled.value = resolveValidationEnabledFlag(tpl);
+    validationExplanationMap.value = normalizeExplanationMapping(
+      tpl.validation_explanation_map || tpl['校验说明映射']
+    );
     if (templateType.value === 'standard') {
-      const __rid1 = newRequestId(); latestRequestId.value = __rid1;
-      const q = await queryData(
-        projectKey,
-        currentKey,
-        { project_key: projectKey, sheet_key: currentKey, biz_date: bizDate.value, request_id: __rid1 },
-        { config: pageConfig.value }
-      );
-      if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        return
+      templateValidationRaw.value = tpl.validation_rules || tpl['校验规则'] || null;
+    } else {
+      templateValidationRaw.value = null;
+    }
+    rebuildValidationRulesFromRows(rows.value);
+    // 交叉表需先搭好列与占位行，再执行镜像查询，避免后续初始化覆盖查询结果
+    if (templateType.value === 'crosstab') {
+      await setupCrosstabGrid(tpl);
+    } else {
+      // 标准模板也需要预先搭好骨架，再查询填充
+      await setupStandardGrid(tpl);
+      if (!isCurrent()) return false;
+      if (validationEnabled.value) {
+        runFullValidation();
+      } else {
+        clearAllValidationIssues();
       }
-      await applyStandardQueryResult(q);
-    } else if (templateType.value === 'constant') {
-      // 常量指标：无需 biz_date；按模板 columns 的 period 标签由后端映射回填
-      const __ridc = newRequestId(); latestRequestId.value = __ridc;
-      const q = await queryData(
-        projectKey,
-        currentKey,
-        { project_key: projectKey, sheet_key: currentKey, request_id: __ridc },
-        { config: pageConfig.value }
-      );
-      if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        return
-      }
-      await applyStandardQueryResult(q);
-    } else if (templateType.value === 'crosstab') {
-      const __rid2 = newRequestId(); latestRequestId.value = __rid2;
-      const q = await queryData(
-        projectKey,
-        currentKey,
-        { project_key: projectKey, sheet_key: currentKey, biz_date: bizDate.value, request_id: __rid2 },
-        { config: pageConfig.value }
-      );
-      if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        return
-      }
-      // 更新列头（若由后端基于日期生成），并对齐 gridColumns
-      if (q && Array.isArray(q.columns)) {
-        columns.value = q.columns;
-        if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
-          gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
-          applyReadonlyToColumns();
-        } else {
-          const colDefs = q.columns.map((name, index) => ({
-            name: String(name ?? ''),
-            prop: `c${index}`,
-            size: index === 0 ? 180 : undefined,
-            minSize: index === 0 ? 160 : 100,
-            __locked: index <= readOnlyThreshold.value,
-            readonly: index <= readOnlyThreshold.value || isReadOnlyForDate.value,
-          }));
-          gridColumns.value = colDefs;
-          applyReadonlyToColumns();
+    }
+    if (!isCurrent()) return false;
+    // 初次加载后进行一次镜像查询（按当前 bizDate 或模板类型）；便于刷新后直接看到已填数据
+    try {
+      if (templateType.value === 'standard') {
+        const __rid1 = newRequestId(); latestRequestId.value = __rid1;
+        const q = await queryData(
+          projectKey,
+          currentKey,
+          { project_key: projectKey, sheet_key: currentKey, biz_date: bizDate.value, request_id: __rid1 },
+          { config: pageConfig.value }
+        );
+        if (!isCurrent()) return false;
+        requireEntryQuery(q);
+        await applyStandardQueryResult(q, isCurrent);
+      } else if (templateType.value === 'constant') {
+        // 常量指标：无需 biz_date；按模板 columns 的 period 标签由后端映射回填
+        const __ridc = newRequestId(); latestRequestId.value = __ridc;
+        const q = await queryData(
+          projectKey,
+          currentKey,
+          { project_key: projectKey, sheet_key: currentKey, request_id: __ridc },
+          { config: pageConfig.value }
+        );
+        if (!isCurrent()) return false;
+        requireEntryQuery(q);
+        await applyStandardQueryResult(q, isCurrent);
+      } else if (templateType.value === 'crosstab') {
+        const __rid2 = newRequestId(); latestRequestId.value = __rid2;
+        const q = await queryData(
+          projectKey,
+          currentKey,
+          { project_key: projectKey, sheet_key: currentKey, biz_date: bizDate.value, request_id: __rid2 },
+          { config: pageConfig.value }
+        );
+        if (!isCurrent()) return false;
+        requireEntryQuery(q);
+        // 更新列头（若由后端基于日期生成），并对齐 gridColumns
+        if (q && Array.isArray(q.columns)) {
+          columns.value = q.columns;
+          if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
+            gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
+            applyReadonlyToColumns();
+          } else {
+            const colDefs = q.columns.map((name, index) => ({
+              name: String(name ?? ''),
+              prop: `c${index}`,
+              size: index === 0 ? 180 : undefined,
+              minSize: index === 0 ? 160 : 100,
+              __locked: index <= readOnlyThreshold.value,
+              readonly: index <= readOnlyThreshold.value || isReadOnlyForDate.value,
+            }));
+            gridColumns.value = colDefs;
+            applyReadonlyToColumns();
+          }
+        }
+        if (q && Array.isArray(q.rows)) {
+          gridSource.value = q.rows.map(r => Array.isArray(r)
+            ? r.reduce((acc, val, idx) => {
+                acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
+                return acc;
+              }, {})
+            : r
+          );
+          rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
         }
       }
-      if (q && Array.isArray(q.rows)) {
-        gridSource.value = q.rows.map(r => Array.isArray(r)
-          ? r.reduce((acc, val, idx) => {
-              acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
-              return acc;
-            }, {})
-          : r
-        );
-        rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
+    } catch (err) {
+      throw new Error('读取报表失败：' + (err?.message || String(err)));
+    }
+
+    if (!isCurrent()) return false;
+
+    // 存储字典
+    const dictSnapshot = {};
+    let itemPrimary = null;
+    let companyPrimary = null;
+    Object.entries(tpl).forEach(([key, rawValue]) => {
+      if (typeof key !== 'string' || !key.endsWith('_dict')) return;
+      const normalizedDict = normalizeDictPayload(rawValue);
+      if (!normalizedDict) return;
+      dictSnapshot[key] = normalizedDict;
+      if (!itemPrimary && key === 'item_dict') itemPrimary = normalizedDict;
+      if (!companyPrimary && key === 'company_dict') companyPrimary = normalizedDict;
+    });
+    if (!dictSnapshot.item_dict) {
+      const normalized = normalizeDictPayload(tpl.item_dict);
+      if (normalized) {
+        dictSnapshot.item_dict = normalized;
+        if (!itemPrimary) itemPrimary = normalized;
       }
     }
-  } catch (err) {
-    // console.error('initial query failed:', err);
-  }
+    if (!dictSnapshot.company_dict) {
+      const normalized = normalizeDictPayload(tpl.company_dict);
+      if (normalized) {
+        dictSnapshot.company_dict = normalized;
+        if (!companyPrimary) companyPrimary = normalized;
+      }
+    }
+    templateDicts.value = { entries: dictSnapshot, itemPrimary, companyPrimary };
+    const linkagePayload = {
+      entries: dictSnapshot,
+      linkage_dict: tpl.linkage_dict,
+      ['指标联动']: tpl['指标联动'],
+    };
+    rebuildLinkageMapFromPayload(rows.value, linkagePayload);
 
-  // 如果后端下发了权威的业务日期，则使用它
-  if (tpl.biz_date) {
-    canonicalBizDate.value = tpl.biz_date;
-    bizDate.value = tpl.biz_date;
-  }
-
-  // 存储字典
-  const dictSnapshot = {};
-  let itemPrimary = null;
-  let companyPrimary = null;
-  Object.entries(tpl).forEach(([key, rawValue]) => {
-    if (typeof key !== 'string' || !key.endsWith('_dict')) return;
-    const normalizedDict = normalizeDictPayload(rawValue);
-    if (!normalizedDict) return;
-    dictSnapshot[key] = normalizedDict;
-    if (!itemPrimary && key === 'item_dict') itemPrimary = normalizedDict;
-    if (!companyPrimary && key === 'company_dict') companyPrimary = normalizedDict;
-  });
-  if (!dictSnapshot.item_dict) {
-    const normalized = normalizeDictPayload(tpl.item_dict);
-    if (normalized) {
-      dictSnapshot.item_dict = normalized;
-      if (!itemPrimary) itemPrimary = normalized;
+    loadedEntryContext.value = entryContextKey(currentKey, expectedDate, expectedConfig);
+    return true;
+  } catch (error) {
+    if (!isCurrent()) return false;
+    entryLoadError.value = error?.message || '报表加载失败，请重试';
+    throw error;
+  } finally {
+    if (generation === loadGeneration) {
+      isLoadingTemplate.value = false;
+      applyReadonlyToColumns();
     }
   }
-  if (!dictSnapshot.company_dict) {
-    const normalized = normalizeDictPayload(tpl.company_dict);
-    if (normalized) {
-      dictSnapshot.company_dict = normalized;
-      if (!companyPrimary) companyPrimary = normalized;
-    }
-  }
-  templateDicts.value = { entries: dictSnapshot, itemPrimary, companyPrimary };
-  const linkagePayload = {
-    entries: dictSnapshot,
-    linkage_dict: tpl.linkage_dict,
-    ['指标联动']: tpl['指标联动'],
-  };
-  rebuildLinkageMapFromPayload(rows.value, linkagePayload);
-
-  isLoadingTemplate.value = false;
 }
 
 async function loadExisting() {
@@ -1856,7 +1901,13 @@ async function loadExisting() {
 }
 
 async function reloadTemplate() {
-  await loadTemplate();
+  try {
+    if (!unitSheetsReady.value) await loadUnitSheets();
+    if (await loadTemplate(null, { preserveDate: true })) saveCurrentSheetToCache();
+  } catch (error) {
+    showSubmitFeedback('error', error.message, { autoHide: false });
+    throw error;
+  }
 }
 
 // --- 提交逻辑 ---
@@ -1890,6 +1941,10 @@ function handleSubmitCrosstab() {
 }
 
 async function onSubmit() {
+  if (entryLocked.value) {
+    showSubmitFeedback('error', '请等待当前表格和日期的数据完整加载后再提交。');
+    return;
+  }
   if (!canSubmitCurrentProject.value) {
     window.alert('当前账号未获授权提交该项目日报数据。');
     return;
@@ -1947,7 +2002,8 @@ async function onSubmit() {
 
   isSubmitting.value = true;
   try {
-    await submitData(projectKey, activeSheetKey.value, payload, { config: pageConfig.value });
+    requireSubmissionSuccess(await submitData(projectKey, activeSheetKey.value, payload, { config: pageConfig.value }));
+    dirtySheets.delete(activeSheetKey.value);
     submitTime.value = currentSubmitTime;
     saveCurrentSheetToCache(activeSheetKey.value);
     startRefreshCountdown(3);
@@ -2004,11 +2060,12 @@ function getSheetTabBadge(targetKey) {
 }
 
 async function loadUnitSheets() {
+  unitSheetsReady.value = false
   if (!projectKey || !pageConfig.value) return
   try {
     const res = await listSheets(projectKey, pageConfig.value)
     const catalog = res?.content || res
-    if (!catalog || typeof catalog !== 'object') return
+    if (!catalog || typeof catalog !== 'object' || res?.ok === false) throw new Error('报表清单无效')
     
     let targetUnit = ''
     for (const [k, meta] of Object.entries(catalog)) {
@@ -2039,15 +2096,20 @@ async function loadUnitSheets() {
         unit_name: unitName.value || ''
       }]
     }
+    unitSheetsReady.value = unitSheets.value.length > 0
   } catch (err) {
     console.warn('[DataEntryView] 加载单位表格列表失败', err)
+    showSubmitFeedback('error', '单位报表清单加载失败，一并提交暂不可用，请重试加载。', { autoHide: false })
   }
 }
 
 function saveCurrentSheetToCache(key = null) {
   const targetKey = key || activeSheetKey.value
   if (!targetKey) return
+  if (targetKey !== activeSheetKey.value || !entryDataReady.value) return
   sheetCache.set(targetKey, {
+    contextKey: currentEntryContext.value,
+    validationEnabled: validationEnabled.value,
     columns: [...columns.value],
     baseColumns: [...baseColumns.value],
     rows: JSON.parse(JSON.stringify(rows.value || [])),
@@ -2076,7 +2138,10 @@ function saveCurrentSheetToCache(key = null) {
 
 function restoreSheetFromCache(targetKey) {
   const cached = sheetCache.get(targetKey)
-  if (!cached) return
+  if (!cached || cached.contextKey !== entryContextKey(targetKey, bizDate.value, pageConfig.value)) return false
+  loadGeneration += 1
+  isLoadingTemplate.value = false
+  entryLoadError.value = ''
   columns.value = [...cached.columns]
   baseColumns.value = [...cached.baseColumns]
   rows.value = JSON.parse(JSON.stringify(cached.rows))
@@ -2099,55 +2164,65 @@ function restoreSheetFromCache(targetKey) {
   validationExplanationMap.value = new Map(cached.validationExplanationMap)
   sheetValidationEnabled.value = cached.sheetValidationEnabled
   sheetAiReportEnabled.value = cached.sheetAiReportEnabled
+  validationEnabled.value = cached.validationEnabled
+  loadedEntryContext.value = cached.contextKey
+  return true
 }
 
-async function onSwitchSheetTab(targetKey) {
-  if (!targetKey || targetKey === activeSheetKey.value || isSubmitting.value) {
-    return
+async function onSwitchSheetTab(targetKey, { preparing = false } = {}) {
+  if (!targetKey || isSubmitting.value || efficiencyUploading.value || (isPreparingSubmission.value && !preparing)) {
+    return false
   }
-  // 1. 保存当前 sheet 的状态到缓存
-  saveCurrentSheetToCache(activeSheetKey.value)
-
-  // 2. 切换当前活跃 sheetKey
-  activeSheetKey.value = targetKey
-
-  // 3. 尝试从缓存恢复
-  if (sheetCache.has(targetKey)) {
-    restoreSheetFromCache(targetKey)
-    if (templateType.value === 'standard') {
-      rebuildValidationRulesFromRows(rows.value)
-      const linkagePayload = {
-        entries: (templateDicts.value && templateDicts.value.entries) ? templateDicts.value.entries : {},
-        linkage_dict: templateDicts.value ? templateDicts.value.linkage_dict : undefined,
-        ['指标联动']: templateDicts.value ? templateDicts.value['指标联动'] : undefined,
-      }
-      rebuildLinkageMapFromPayload(rows.value, linkagePayload, { syncGrid: false })
-      if (validationEnabled.value) {
-        runFullValidation()
-      } else {
-        clearAllValidationIssues()
-      }
-    }
-    applyReadonlyToColumns()
-  } else {
-    // 4. 首次加载该 sheet
-    await loadTemplate(targetKey)
-    saveCurrentSheetToCache(targetKey)
-  }
-
-  // 5. 替换 URL 路由，保持当前 Tab 状态
+  if (targetKey === activeSheetKey.value && entryDataReady.value) return true
   try {
-    router.replace({
-      params: { ...route.params, sheetKey: targetKey },
-      query: route.query,
-    })
-  } catch (err) {
-    // 忽略导航相同路由报错
-  }
+    // 1. 保存当前 sheet 的状态到缓存
+    saveCurrentSheetToCache(activeSheetKey.value)
 
-  // 6. 重新检查校验状态与分析开关
-  loadSheetValidationSwitch()
-  loadSheetAiSwitch()
+    // 2. 切换当前活跃 sheetKey
+    activeSheetKey.value = targetKey
+
+    // 3. 尝试从缓存恢复
+    if (restoreSheetFromCache(targetKey)) {
+      if (templateType.value === 'standard') {
+        rebuildValidationRulesFromRows(rows.value)
+        const linkagePayload = {
+          entries: (templateDicts.value && templateDicts.value.entries) ? templateDicts.value.entries : {},
+          linkage_dict: templateDicts.value ? templateDicts.value.linkage_dict : undefined,
+          ['指标联动']: templateDicts.value ? templateDicts.value['指标联动'] : undefined,
+        }
+        rebuildLinkageMapFromPayload(rows.value, linkagePayload, { syncGrid: false })
+        if (validationEnabled.value) {
+          runFullValidation()
+        } else {
+          clearAllValidationIssues()
+        }
+      }
+      applyReadonlyToColumns()
+    } else {
+      // 4. 首次加载该 sheet
+      if (!await loadTemplate(targetKey, { preserveDate: true })) return false
+      saveCurrentSheetToCache(targetKey)
+    }
+
+    // 5. 替换 URL 路由，保持当前 Tab 状态
+    try {
+      router.replace({
+        params: { ...route.params, sheetKey: targetKey },
+        query: route.query,
+      })
+    } catch (err) {
+      // 忽略导航相同路由报错
+    }
+
+    // 6. 重新检查校验状态与分析开关
+    loadSheetValidationSwitch()
+    loadSheetAiSwitch()
+    return true
+  } catch (error) {
+    showSubmitFeedback('error', error.message || '切换表格失败，请重试', { autoHide: false })
+    if (preparing) throw error
+    return false
+  }
 }
 
 function buildPayloadForCachedState(targetSheetKey, cached, currentSubmitTime) {
@@ -2204,78 +2279,73 @@ function buildPayloadForCachedState(targetSheetKey, cached, currentSubmitTime) {
 }
 
 async function onSubmitAll() {
-  if (!canSubmitCurrentProject.value) {
-    window.alert('当前账号未获授权提交该项目日报数据。')
-    return
-  }
-  if (submitDisabled.value) {
-    window.alert('所选日期仅支持查看，不能提交修改。')
-    return
-  }
-  if (isSubmitting.value) {
-    return
-  }
-
-  // 1. 保存当前活跃表格状态
-  saveCurrentSheetToCache(activeSheetKey.value)
-
-  // 2. 补齐尚未加载过的其他表格
-  for (const s of unitSheets.value) {
-    if (!sheetCache.has(s.sheet_key)) {
-      try {
-        await onSwitchSheetTab(s.sheet_key)
-        saveCurrentSheetToCache(s.sheet_key)
-      } catch (e) {
-        console.error(`补齐加载表格 ${s.sheet_key} 失败`, e)
-      }
-    }
-  }
-
-  // 3. 统一全局校验：检查每一张表格是否有阻断性错误
-  if (validationEnabled.value) {
-    for (const s of unitSheets.value) {
-      const cached = sheetCache.get(s.sheet_key)
-      if (!cached) continue
-      const issues = Array.from(cached.cellValidationMap?.values() || [])
-      const blocking = issues.filter(issue => issue.level === 'error')
-      if (blocking.length > 0) {
-        await onSwitchSheetTab(s.sheet_key)
-        showSubmitFeedback('error', `【${cleanTabTitle(s.sheet_name, unitGroupName.value)}】存在未通过的校验项，已为您自动切换到该表，请修正后再提交。`, { autoHide: false })
-        return
-      }
-    }
-  }
-
-  // 4. 并发向后端提交全部表格
-  isSubmitting.value = true
-  const now = new Date()
-  const pad = n => String(n).padStart(2, '0')
-  const currentSubmitTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-
+  if (!canSubmitCurrentProject.value || submitDisabled.value || entryLocked.value) return
+  const originalKey = activeSheetKey.value
+  const expectedDate = bizDate.value
+  const expectedConfig = pageConfig.value
+  const sheets = unitSheets.value.map(sheet => ({ ...sheet }))
+  const sameContext = () => bizDate.value === expectedDate && pageConfig.value === expectedConfig
+  let networkStarted = false
+  isPreparingSubmission.value = true
+  clearRefreshCountdown()
   try {
-    const submitTasks = unitSheets.value.map(async (s) => {
-      const cached = sheetCache.get(s.sheet_key)
-      if (!cached) return { ok: true }
-      const payload = buildPayloadForCachedState(s.sheet_key, cached, currentSubmitTime)
-      return submitData(projectKey, s.sheet_key, payload, { config: pageConfig.value })
-    })
-
-    await Promise.all(submitTasks)
-    submitTime.value = currentSubmitTime
-    for (const s of unitSheets.value) {
-      const cached = sheetCache.get(s.sheet_key)
-      if (cached) cached.submitTime = currentSubmitTime
+    if (!unitSheetsReady.value || !sheets.length || new Set(sheets.map(sheet => sheet.sheet_key)).size !== sheets.length) {
+      throw new Error('报表清单为空或重复，请重新加载')
     }
-
-    showSubmitFeedback('success', `【${unitGroupName.value || unitName.value}】全部报表（共 ${unitSheets.value.length} 张）数据已成功一并提交入库！`)
-    startRefreshCountdown(3)
+    saveCurrentSheetToCache(originalKey)
+    const now = new Date()
+    const pad = n => String(n).padStart(2, '0')
+    const currentSubmitTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+    const prepared = []
+    // 全部加载及校验完成前不发送任何提交；缺表、旧日期缓存均不得跳过。
+    for (const sheet of sheets) {
+      if (!sameContext()) throw new Error('日期或配置已变化，请重新加载后提交')
+      const loaded = await onSwitchSheetTab(sheet.sheet_key, { preparing: true })
+      if (!loaded || !sameContext() || !entryDataReady.value) throw new Error(`【${sheet.sheet_name || sheet.sheet_key}】尚未完整加载`)
+      if (validationEnabled.value) {
+        runFullValidation()
+        if (hasBlockingValidation.value) throw new Error(`【${sheet.sheet_name || sheet.sheet_key}】存在未通过的校验项，请修正后提交`)
+      }
+      saveCurrentSheetToCache(sheet.sheet_key)
+      const cached = sheetCache.get(sheet.sheet_key)
+      if (!cached?.isLoaded || cached.contextKey !== entryContextKey(sheet.sheet_key, expectedDate, expectedConfig)) {
+        throw new Error(`【${sheet.sheet_name || sheet.sheet_key}】缺少当前日期的完整数据`)
+      }
+      prepared.push({ sheet, payload: buildPayloadForCachedState(sheet.sheet_key, cached, currentSubmitTime) })
+    }
+    if (!sameContext()) throw new Error('日期或配置已变化，本次未提交')
+    if (originalKey !== activeSheetKey.value) await onSwitchSheetTab(originalKey, { preparing: true })
+    if (!sameContext() || !entryDataReady.value) throw new Error('当前报表已变化，请重新加载')
+    isSubmitting.value = true
+    networkStarted = true
+    // 独立接口无法保证跨表事务，等待每一项完成并如实显示部分成功。
+    const results = await Promise.allSettled(prepared.map(async ({ sheet, payload }) =>
+      requireSubmissionSuccess(await submitData(projectKey, sheet.sheet_key, payload, { config: expectedConfig }))
+    ))
+    const failed = []
+    results.forEach((result, index) => {
+      const sheet = prepared[index].sheet
+      if (result.status === 'fulfilled') {
+        dirtySheets.delete(sheet.sheet_key)
+        const cached = sheetCache.get(sheet.sheet_key)
+        if (cached) cached.submitTime = currentSubmitTime
+        if (sheet.sheet_key === activeSheetKey.value) submitTime.value = currentSubmitTime
+      } else {
+        failed.push(`${sheet.sheet_name || sheet.sheet_key}：${result.reason?.message || '提交失败'}`)
+      }
+    })
+    if (failed.length) {
+      showSubmitFeedback('error', `提交完成：成功 ${results.length - failed.length}/${results.length} 张。失败：${failed.join('；')}。成功表已入库，失败表内容已保留，请核对后重试。`, { autoHide: false })
+    } else {
+      startRefreshCountdown(3)
+    }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error('[data-entry] 一并提交失败', message)
-    clearRefreshCountdown()
-    showSubmitFeedback('error', `一并提交失败：${message || '请稍后重试'}`)
+    const message = networkStarted ? '提交结果确认异常，部分报表可能已入库，请核对后重试' : '提交准备失败，本次未提交任何报表'
+    showSubmitFeedback('error', `${message}：${error?.message || String(error)}`, { autoHide: false })
   } finally {
     isSubmitting.value = false
+    isPreparingSubmission.value = false
+    applyReadonlyToColumns()
   }
 }
 
@@ -2377,6 +2447,7 @@ async function applyEfficiencyDataToSheets(sheetsData) {
   for (const [sheetKey, sheetPayload] of Object.entries(sheetsData)) {
     const cells = sheetPayload?.cells || []
     if (!cells.length) continue
+    dirtySheets.add(sheetKey)
 
     if (sheetKey === activeSheetKey.value) {
       // 当前活动表格
@@ -2463,11 +2534,10 @@ async function applyEfficiencyDataToSheets(sheetsData) {
                 { project_key: projectKey, sheet_key: sheetKey, biz_date: bizDate.value },
                 { config: pageConfig.value }
               )
-              if (q && Array.isArray(q.rows)) {
-                tplRows = q.rows
-              }
+              requireEntryQuery(q)
+              tplRows = q.rows
             } catch (qErr) {
-              console.warn('[DataEntryView] 预加载子表格 queryData 失败', sheetKey, qErr)
+              throw new Error(`【${sheetKey}】读取已存数据失败，未生成可提交缓存：${qErr.message}`)
             }
 
             const readonlyLimit = resolveReadonlyLimit(tpl.columns)
@@ -2494,6 +2564,8 @@ async function applyEfficiencyDataToSheets(sheetsData) {
             })
 
             sheetCache.set(sheetKey, {
+              contextKey: entryContextKey(sheetKey, bizDate.value, pageConfig.value),
+              validationEnabled: resolveValidationEnabledFlag(tpl),
               columns: tpl.columns || [],
               baseColumns: baseCols,
               rows: JSON.parse(JSON.stringify(tplRows)),
@@ -2503,17 +2575,21 @@ async function applyEfficiencyDataToSheets(sheetsData) {
               unitName: tpl.unit_name || unitGroupName.value || '',
               unitId: tpl.unit_id || '',
               templateType: tpl.template_type || 'standard',
-              templateDicts: tpl.dicts || {},
+              templateDicts: {
+                entries: Object.fromEntries(Object.entries(tpl).filter(([key]) => key.endsWith('_dict')).map(([key, value]) => [key, normalizeDictPayload(value)]).filter(([, value]) => value)),
+                itemPrimary: normalizeDictPayload(tpl.item_dict),
+                companyPrimary: normalizeDictPayload(tpl.company_dict),
+              },
               submitTime: '',
               readOnlyThreshold: readonlyLimit,
               linkageMap: new Map(),
               rowLabelIndex: new Map(),
-              templateValidationRaw: tpl.validation || null,
+              templateValidationRaw: tpl.validation_rules || tpl['校验规则'] || null,
               validationRuleMap: new Map(),
               validationDependents: new Map(),
               cellValidationMap: new Map(),
               virtualValidationRules: [],
-              validationExplanationMap: new Map(),
+              validationExplanationMap: normalizeExplanationMapping(tpl.validation_explanation_map || tpl['校验说明映射']),
               sheetValidationEnabled: true,
               sheetAiReportEnabled: false,
               isLoaded: true,
@@ -2521,7 +2597,7 @@ async function applyEfficiencyDataToSheets(sheetsData) {
             cached = sheetCache.get(sheetKey)
           }
         } catch (e) {
-          console.warn('[DataEntryView] 预加载子表格失败', sheetKey, e)
+          throw new Error(`能效数据回填中止：${e.message}`)
         }
       }
 
@@ -2563,6 +2639,8 @@ async function applyEfficiencyDataToSheets(sheetsData) {
 
 // --- RevoGrid 事件处理 ---
 function handleAfterEdit(evt) {
+  if (entryLocked.value) return;
+  dirtySheets.add(activeSheetKey.value);
   if (isReadOnlyForDate.value) {
     return;
   }
@@ -2624,8 +2702,11 @@ onMounted(async () => {
   await loadUnitSheets();
   await loadSheetValidationSwitch();
   await loadSheetAiSwitch();
-  await loadTemplate();
-  saveCurrentSheetToCache(activeSheetKey.value);
+  try {
+    if (await loadTemplate()) saveCurrentSheetToCache(activeSheetKey.value);
+  } catch (error) {
+    showSubmitFeedback('error', error.message, { autoHide: false });
+  }
 });
 
 // --- 遗留功能：仅用于标准模板 ---
@@ -2666,7 +2747,8 @@ function measureTextWidth(content, font) {
   return ctx.measureText(text).width;
 }
 
-async function applyStandardQueryResult(payload) {
+async function applyStandardQueryResult(payload, isCurrent = () => true) {
+  if (!isCurrent()) return;
   if (!payload || typeof payload !== 'object') return;
   const q = payload;
   if (Array.isArray(q.columns)) {
@@ -2698,6 +2780,7 @@ async function applyStandardQueryResult(payload) {
     );
     rows.value = q.rows;
     await autoSizeFirstColumn();
+    if (!isCurrent()) return;
     applyReadonlyToColumns();
   }
   const linkagePayload = {
@@ -2715,93 +2798,41 @@ async function applyStandardQueryResult(payload) {
     }
   }
 }
-// 监听业务日期变更，标准表需用新日期重算列头与网格列定义
+function onBizDateChanged(event) {
+  const input = event.target
+  const nextDate = input.value
+  if (nextDate === bizDate.value) return
+  if (!nextDate || isPreparingSubmission.value || isSubmitting.value || efficiencyUploading.value) {
+    input.value = bizDate.value
+    return
+  }
+  if (dirtySheets.size && !window.confirm('当前日期有未提交的修改，切换日期将放弃这些修改。是否继续？')) {
+    input.value = bizDate.value
+    return
+  }
+  dirtySheets.clear()
+  bizDate.value = nextDate
+}
+
+// 同步失效旧日期；统一加载标准/常量/交叉表，避免两个日期 watcher 相互覆盖。
 const stop = watch(
   () => bizDate.value,
-  async () => {
-    if (isLoadingTemplate.value) return;
-    // 日期变更时清空多表旧日期缓存
-    sheetCache.clear();
-    if (templateType.value === 'standard') {
-      if (!Array.isArray(baseColumns.value) || !baseColumns.value.length) return;
-      const recalculated = replaceDatePlaceholdersInColumns(baseColumns.value);
-      columns.value = recalculated;
-      if (Array.isArray(gridColumns.value) && gridColumns.value.length === recalculated.length) {
-        gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: recalculated[i] }));
-        applyReadonlyToColumns();
-      }
+  () => {
+    clearRefreshCountdown()
+    sheetCache.clear()
+    loadedEntryContext.value = null
+    if (internalDateChange) return
+    if (isPreparingSubmission.value || isSubmitting.value) {
+      loadGeneration += 1
+      isLoadingTemplate.value = false
+      entryLoadError.value = '提交过程中日期发生变化，请重新加载'
+      return
     }
-    // 日历变更后，触发一次镜像查询，回填当日数据与备注
-    try {
-      await nextTick();
-      const __rid4 = newRequestId(); latestRequestId.value = __rid4;
-      const q = await queryData(
-        projectKey,
-        activeSheetKey.value,
-        { project_key: projectKey, sheet_key: activeSheetKey.value, biz_date: bizDate.value, request_id: __rid4 },
-        { config: pageConfig.value }
-      );
-      if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        return
-      }
-      await applyStandardQueryResult(q);
-      saveCurrentSheetToCache(activeSheetKey.value);
-    } catch (err) {
-      // console.error('query on bizDate change failed:', err);
-    }
-  }
-)
-
-// crosstab：业务日期变化时重新查询并渲染 rows
-watch(
-  () => bizDate.value,
-  async () => {
-    if (isLoadingTemplate.value) return;
-    if (templateType.value !== 'crosstab') return;
-    sheetCache.clear();
-    try {
-      const __rid5 = newRequestId(); latestRequestId.value = __rid5;
-      const q = await queryData(
-        projectKey,
-        activeSheetKey.value,
-        { project_key: projectKey, sheet_key: activeSheetKey.value, biz_date: bizDate.value, request_id: __rid5 },
-        { config: pageConfig.value }
-      );
-      if (q && q.__request_id && q.__request_id !== latestRequestId.value) {
-        return
-      }
-      if (q && Array.isArray(q.columns)) {
-        columns.value = q.columns;
-        if (Array.isArray(gridColumns.value) && gridColumns.value.length === q.columns.length) {
-          gridColumns.value = gridColumns.value.map((def, i) => ({ ...def, name: q.columns[i] }));
-          applyReadonlyToColumns();
-        } else {
-          const colDefs = q.columns.map((name, index) => ({
-            name: String(name ?? ''),
-            prop: `c${index}`,
-            size: index === 0 ? 180 : undefined,
-            minSize: index === 0 ? 160 : 100,
-            __locked: index <= readOnlyThreshold.value,
-            readonly: index <= readOnlyThreshold.value || isReadOnlyForDate.value,
-          }));
-          gridColumns.value = colDefs;
-          applyReadonlyToColumns();
-        }
-      }
-      if (q && Array.isArray(q.rows)) {
-        gridSource.value = q.rows.map(r => Array.isArray(r)
-          ? r.reduce((acc, val, idx) => {
-              acc[`c${idx}`] = (val === null || val === undefined) ? '' : String(val);
-              return acc;
-            }, {})
-          : r
-        );
-        rows.value = Array.isArray(q.rows) ? q.rows : rows.value;
-      }
-    } catch (err) {
-      // console.error('crosstab query on bizDate change failed:', err);
-    }
-  }
+    loadTemplate(null, { preserveDate: true }).then(loaded => {
+      if (loaded) saveCurrentSheetToCache()
+    }).catch(() => {})
+  },
+  { flush: 'sync' },
 )
 
 watch(
@@ -2839,6 +2870,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  loadGeneration += 1;
   if (submitFeedbackTimer !== null) {
     clearTimeout(submitFeedbackTimer);
     submitFeedbackTimer = null;
