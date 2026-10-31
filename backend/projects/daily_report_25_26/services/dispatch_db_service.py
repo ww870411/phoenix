@@ -13,6 +13,7 @@ from datetime import datetime, date
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 import re
+from .dispatch_reconciliation import reconcile_report
 
 logger = logging.getLogger(__name__)
 
@@ -181,13 +182,19 @@ def save_dispatch_reports(
     """
     保存/入库调度日报全要素大宽表数据 (100+ 物理列)
     """
-    ensure_dispatch_table_exists()
     if not reports:
         return {"ok": True, "inserted": 0, "updated": 0, "message": "无待保存数据"}
 
     valid_reports = [r for r in reports if r.get("biz_date")]
     if not valid_reports:
         return {"ok": False, "message": "待保存数据中未包含有效业务日期 (biz_date)"}
+
+    valid_reports = [reconcile_report(r) for r in valid_reports]
+    unresolved = [c for r in valid_reports for c in r.get('status_conflicts', []) if not c.get('resolution')]
+    if unresolved:
+        return {"ok": False, "has_status_conflict": True, "status_conflicts": unresolved,
+                "message": "请逐项确认机炉状态冲突后入库"}
+    ensure_dispatch_table_exists()
 
     biz_dates = [r["biz_date"] for r in valid_reports]
     existing_dates = check_existing_dates(biz_dates, project_key)
@@ -457,7 +464,7 @@ def query_dispatch_reports(
                     "substations_filled": item.get("substations_filled")
                 }
 
-                formatted_items.append(item)
+                formatted_items.append(reconcile_report(item))
 
             return {
                 "ok": True,

@@ -13,6 +13,7 @@ import os
 import re
 import json
 import logging
+from .dispatch_reconciliation import reconcile_report
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
@@ -329,10 +330,12 @@ class UnifiedDispatchExtractor:
                     weather_lines.append(p_clean)
                     break
 
-        weather_text = " ".join(weather_lines).strip()
+        # PDF 把“相对湿度”和风级拆到多行；气象字段内空白无业务含义。
+        weather_raw_text = " ".join(weather_lines).strip()
+        weather_text = re.sub(r'\s+', '', weather_raw_text)
 
         res = {
-            "raw_text": weather_text,
+            "raw_text": weather_raw_text,
             "forecast_date": None,
             "weekday": "",
             "weather_desc": "",
@@ -378,11 +381,11 @@ class UnifiedDispatchExtractor:
             res["humidity_max"] = max(h1, h2)
             res["humidity"] = f"{min(h1, h2)}%~{max(h1, h2)}%"
 
-        desc_m = re.search(r"℃\s*([^\d相对湿度风]+?)(?:相对湿度|(?:东|西|南|北|偏|微)+[\s\u00a0]*风|$)", weather_text)
+        desc_m = re.search(r"℃([^\d℃~]+?)(?=相对湿度|(?:东|西|南|北|偏|微)+风|$)", weather_text)
         if desc_m:
             res["weather_desc"] = desc_m.group(1).strip()
 
-        wind_m = re.search(r"((?:东|西|南|北|偏|微)+[\s\u00a0]*风)\s*([\d~～级阵风转\-]+(?:级)?)", weather_text)
+        wind_m = re.search(r"((?:东|西|南|北|偏|微)+风)([\d~～级阵风转偏东西南北微\-]+)", weather_text)
         if wind_m:
             clean_dir = re.sub(r"[\s\u00a0]+", "", wind_m.group(1))
             res["wind_direction"] = clean_dir
@@ -467,7 +470,10 @@ class UnifiedDispatchExtractor:
                         "raw_name": f"{dev}机",
                         "standard_name": f"{dev}汽机",
                         "unit_or_plant": std_unit,
-                        "status": status_name
+                        "status": "启动中" if re.search(
+                            rf"(?<!\d)#?{dev.lstrip('#')}\s*(?:汽机|机组|机)?\s*[（(][^）)]*启动中", content
+                        ) else status_name,
+                        "table_text": content,
                     })
 
                 for dev in b_list:
@@ -480,7 +486,10 @@ class UnifiedDispatchExtractor:
                         "raw_name": f"{dev}炉",
                         "standard_name": b_std_name,
                         "unit_or_plant": sub_u,
-                        "status": status_name
+                        "status": "启动中" if re.search(
+                            rf"(?<!\d)#?{dev.lstrip('#')}\s*(?:汽炉|水炉|燃气炉|炉)?\s*[（(][^）)]*启动中", content
+                        ) else status_name,
+                        "table_text": content,
                     })
 
         return {
@@ -1329,7 +1338,7 @@ class UnifiedDispatchExtractor:
         doc_data["operations_and_tickets"] = events_list
         doc_data["log_items_json"] = events_list
 
-        return doc_data
+        return reconcile_report(doc_data)
 
 
 def extract_docx_file(file_path: str, project_key: str = "daily_report_25_26") -> Dict[str, Any]:

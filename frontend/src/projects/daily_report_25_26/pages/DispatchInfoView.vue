@@ -164,6 +164,26 @@
               </div>
             </div>
 
+            <div v-if="importStatusConflicts.length" class="status-review">
+              <h4>机炉状态需确认（{{ importStatusConflicts.length }} 项）</h4>
+              <p>表格与当日最后一条有效主设备事件不一致。事件可能与表格统计时点不同，请逐项选择；辅机投运不参与主机状态推断。</p>
+              <div v-for="conflict in importStatusConflicts" :key="conflict.id" class="status-review-item">
+                <strong>{{ conflict.bizDate }} · {{ conflict.device }}</strong>
+                <p>原表格：{{ conflict.table_status }} <span v-if="conflict.table_text">（{{ conflict.table_text }}）</span></p>
+                <p v-for="(event, index) in conflict.events" :key="index">{{ event.time }} · {{ event.raw_description }}</p>
+                <label>入库依据：
+                  <select v-model="statusResolutions[conflict.id]" class="form-select">
+                    <option value="">请选择</option>
+                    <option value="table">以原表格为准：{{ conflict.table_status }}</option>
+                    <option value="events">以最后一条主设备事件为准：{{ conflict.event_status }}</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div v-for="item in extractSummary.items" :key="item.file_name + item.biz_date">
+              <p v-for="warning in item.extraction_warnings" :key="warning" class="alert">{{ item.biz_date }} · {{ warning }}</p>
+            </div>
+
             <!-- 操作按钮组合：下载 JSON、清理残留、一键入库 -->
             <div class="summary-actions">
               <button class="btn secondary" type="button" @click="downloadResultJson">
@@ -172,7 +192,7 @@
               <button
                 class="btn primary btn-save-db"
                 type="button"
-                :disabled="isSavingDb"
+                :disabled="isSavingDb || hasUnresolvedStatusConflicts"
                 @click="triggerSaveToDb"
               >
                 <span v-if="isSavingDb" class="spinner"></span>
@@ -303,21 +323,30 @@
             </div>
             <!-- 天气看板 -->
             <div class="weather-box">
-              <div class="weather-icon">🌤️</div>
+              <div class="weather-icon">🌡️</div>
               <div class="weather-details">
+                <div class="weather-desc">天气日期：{{ currentReport.weather?.forecast_date || '未提供' }}（文档预报）</div>
                 <div class="weather-temp">
                   {{ formatTemp(currentReport.weather?.temp_min, currentReport.weather?.temp_max) }}
                 </div>
                 <div class="weather-desc">
-                  {{ currentReport.weather?.weather_desc || '天气良好' }} ｜
-                  {{ currentReport.weather?.wind || '微风' }} ｜
-                  相对湿度：{{ currentReport.weather?.humidity || '—' }}
+                  {{ currentReport.weather?.weather_desc || '天气未提供' }} ｜
+                  {{ currentReport.weather?.wind || '风况未提供' }} ｜
+                  相对湿度：{{ currentReport.weather?.humidity === 0 ? 0 : currentReport.weather?.humidity || '未提供' }}
                 </div>
               </div>
             </div>
           </div>
 
+          <div v-if="currentReport.status_conflicts?.length" class="status-review">
+            <strong>机炉表格与事件存在差异</strong>
+            <p v-for="conflict in currentReport.status_conflicts" :key="conflict.id">
+              {{ conflict.device }}：原表 {{ conflict.table_status }}，事件推断 {{ conflict.event_status }}；
+              {{ conflict.resolution ? `导入时选择以${conflict.resolution === 'events' ? '事件' : '表格'}为准` : '历史记录尚未确认，暂按原表格展示，请重新上传核对' }}。
+            </p>
+          </div>
           <!-- 宏观核心产耗指标卡片网格 -->
+          <p v-for="warning in currentReport.extraction_warnings" :key="warning" class="status-review">{{ warning }}</p>
           <div class="kpi-grid">
             <div class="kpi-card coal-card">
               <div class="kpi-title">
@@ -413,16 +442,16 @@
                           <div
                             v-for="(fac, fIdx) in group.boilersLeft"
                             :key="fIdx"
-                            :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                            :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : fac.status === '启动中' ? 'status-starting' : 'status-repair']"
                           >
-                            <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                            <span class="fac-name" :title="fac.standard_name || fac.raw_name">{{ fac.standard_name || fac.raw_name }}</span>
                             <div class="fac-meta">
                               <span
                                 v-if="fac.startTime"
                                 class="fac-start-pill"
-                                :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                                :title="`【${fac.startTime} 主设备事件】\n${fac.startDesc}`"
                               >
-                                🚀 {{ fac.startTime }} 启动
+                                {{ fac.startTime }} {{ fac.eventAction }}
                               </span>
                               <span class="fac-status-tag">{{ fac.status }}</span>
                             </div>
@@ -436,16 +465,16 @@
                           <div
                             v-for="(fac, fIdx) in group.boilersRight"
                             :key="fIdx"
-                            :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                            :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : fac.status === '启动中' ? 'status-starting' : 'status-repair']"
                           >
-                            <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                            <span class="fac-name" :title="fac.standard_name || fac.raw_name">{{ fac.standard_name || fac.raw_name }}</span>
                             <div class="fac-meta">
                               <span
                                 v-if="fac.startTime"
                                 class="fac-start-pill"
-                                :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                                :title="`【${fac.startTime} 主设备事件】\n${fac.startDesc}`"
                               >
-                                🚀 {{ fac.startTime }} 启动
+                                {{ fac.startTime }} {{ fac.eventAction }}
                               </span>
                               <span class="fac-status-tag">{{ fac.status }}</span>
                             </div>
@@ -468,16 +497,16 @@
                         <div
                           v-for="(fac, fIdx) in group.turbines"
                           :key="fIdx"
-                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : fac.status === '启动中' ? 'status-starting' : 'status-repair']"
                         >
-                          <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                          <span class="fac-name" :title="fac.standard_name || fac.raw_name">{{ fac.standard_name || fac.raw_name }}</span>
                           <div class="fac-meta">
                             <span
                               v-if="fac.startTime"
                               class="fac-start-pill"
-                              :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                              :title="`【${fac.startTime} 主设备事件】\n${fac.startDesc}`"
                             >
-                              🚀 {{ fac.startTime }} 启动
+                              {{ fac.startTime }} {{ fac.eventAction }}
                             </span>
                             <span class="fac-status-tag">{{ fac.status }}</span>
                           </div>
@@ -496,16 +525,16 @@
                         <div
                           v-for="(fac, fIdx) in group.boilers"
                           :key="fIdx"
-                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : fac.status === '启动中' ? 'status-starting' : 'status-repair']"
                         >
-                          <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                          <span class="fac-name" :title="fac.standard_name || fac.raw_name">{{ fac.standard_name || fac.raw_name }}</span>
                           <div class="fac-meta">
                             <span
                               v-if="fac.startTime"
                               class="fac-start-pill"
-                              :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                              :title="`【${fac.startTime} 主设备事件】\n${fac.startDesc}`"
                             >
-                              🚀 {{ fac.startTime }} 启动
+                              {{ fac.startTime }} {{ fac.eventAction }}
                             </span>
                             <span class="fac-status-tag">{{ fac.status }}</span>
                           </div>
@@ -524,16 +553,16 @@
                         <div
                           v-for="(fac, fIdx) in group.others"
                           :key="fIdx"
-                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : 'status-repair']"
+                          :class="['fac-badge', fac.status === '运行' ? 'status-run' : fac.status === '备用' ? 'status-standby' : fac.status === '启动中' ? 'status-starting' : 'status-repair']"
                         >
-                          <span class="fac-name">{{ fac.standard_name || fac.raw_name }}</span>
+                          <span class="fac-name" :title="fac.standard_name || fac.raw_name">{{ fac.standard_name || fac.raw_name }}</span>
                           <div class="fac-meta">
                             <span
                               v-if="fac.startTime"
                               class="fac-start-pill"
-                              :title="`【${fac.startTime} 当日启动/并列】\n${fac.startDesc}`"
+                              :title="`【${fac.startTime} 主设备事件】\n${fac.startDesc}`"
                             >
-                              🚀 {{ fac.startTime }} 启动
+                              {{ fac.startTime }} {{ fac.eventAction }}
                             </span>
                             <span class="fac-status-tag">{{ fac.status }}</span>
                           </div>
@@ -783,6 +812,13 @@ import {
 } from '../services/dispatchApi'
 
 const auth = useAuthStore()
+const statusResolutions = ref({})
+const importStatusConflicts = computed(() => (extractSummary.value?.items || []).flatMap(item =>
+  (item.status_conflicts || []).map(conflict => ({ ...conflict, bizDate: item.biz_date }))
+))
+const hasUnresolvedStatusConflicts = computed(() => importStatusConflicts.value.some(
+  conflict => !['table', 'events'].includes(statusResolutions.value[conflict.id])
+))
 const route = useRoute()
 const projectKey = computed(() => route.params.projectKey || 'daily_report_25_26')
 const projectName = computed(() => getProjectNameById(projectKey.value) || '2026-2027供暖期生产日报')
@@ -862,103 +898,8 @@ const hasNextDate = computed(() => {
   return idx > 0
 })
 
-/**
- * 根据调度事件判断某设备是否当日启动，返回启动时刻与原文说明
- */
-function getFacilityStartTime(fac, events) {
-  if (!events || !events.length) return null
-  const fName = fac.standard_name || fac.raw_name || ''
-  const fType = fac.facility_type || ''
-  const fPlant = fac.unit_or_plant || ''
-
-  // 提取数字编号
-  const m = fName.match(/#?(\d+)#?/)
-  if (!m) return null
-  const num = m[1]
-
-  const isBoiler = fType === '锅炉' || fName.includes('炉')
-  const isTurbine = fType === '汽机' || fName.includes('机')
-
-  const startKeywords = ['点火', '启动', '投运', '并汽', '并网', '并列', '冲转', '恢复加热', '并热网', '投']
-  const stopKeywords = ['停运', '停炉', '停机', '灭火', '解列', '退出', '跳闸']
-
-  for (const e of events) {
-    const org = e.responsible_org || ''
-    const desc = e.raw_description || ''
-    const timeStr = e.time || ''
-    const action = e.action || ''
-
-    // 1. 机构匹配过滤
-    if (fPlant.includes('北海')) {
-      if (org && !org.includes('北海')) continue
-    } else if (fPlant.includes('香海')) {
-      if (org && !org.includes('香海')) continue
-    } else if (fPlant.includes('金州')) {
-      if (org && !org.includes('金州')) continue
-    } else if (fPlant.includes('北方')) {
-      if (org && !org.includes('北方')) continue
-    } else if (fPlant.includes('燃气')) {
-      if (org && !org.includes('北海') && !org.includes('燃气')) continue
-    } else if (org) {
-      if (!fPlant.includes(org) && !org.includes(fPlant)) continue
-    }
-
-    // 2. 设备排他匹配
-    let devStr = ''
-    if (isBoiler) {
-      const pattern = new RegExp(`(?<!\\d)#?${num}#?(汽炉|水炉|蒸汽炉|燃气炉|炉)`)
-      const mDev = desc.match(pattern)
-      if (!mDev) continue
-      devStr = mDev[0]
-
-      if (fPlant.includes('水炉') || fName.includes('水炉')) {
-        if (devStr.includes('汽炉') || devStr.includes('蒸汽炉') || devStr.includes('燃气')) continue
-        if (!devStr.includes('水炉') && !desc.includes('水炉')) continue
-      } else if (fPlant.includes('燃气') || fName.includes('燃气')) {
-        if (!devStr.includes('燃气') && !desc.includes('燃气')) continue
-      } else {
-        // 主厂汽炉，排除明确为水炉或燃气炉
-        if (devStr.includes('水炉') || devStr.includes('燃气')) continue
-      }
-    } else if (isTurbine) {
-      const pattern = new RegExp(`(?<!\\d)#?${num}#?(汽机|机组|机)`)
-      const mDev = desc.match(pattern)
-      if (!mDev) continue
-      devStr = mDev[0]
-    } else {
-      continue
-    }
-
-    // 3. 动作判断
-    const hasStart = startKeywords.some((k) => desc.includes(k) || action.includes(k))
-    const hasStop = stopKeywords.some((k) => desc.includes(k) || action.includes(k))
-
-    if (!hasStart) continue
-    if (hasStop && !['并汽', '并列', '并热网', '恢复', '冲转', '点火', '并网'].some((k) => desc.includes(k))) {
-      continue
-    }
-
-    // 4. 提取时间
-    let finalTime = ''
-    if (timeStr) {
-      finalTime = timeStr.split('/')[0].trim()
-    } else {
-      const tm = desc.match(/(\d{1,2}:\d{2})/)
-      if (tm) finalTime = tm[1]
-    }
-
-    if (finalTime) {
-      return {
-        time: finalTime,
-        desc: desc
-      }
-    }
-  }
-
-  return null
-}
-
 const STATUS_PRIORITY = {
+  '启动中': 1.5,
   '运行': 1,
   '备用': 2,
   '检修': 3
@@ -971,7 +912,7 @@ function getStatusWeight(status) {
 
 /**
  * 设备多级排序：
- * 1. 优先按运行状态：运行 > 备用 > 检修 > 其他
+ * 1. 优先按运行状态：运行 > 启动中 > 备用 > 检修 > 其他
  * 2. 同状态下按设备序号自然数字升序：#1, #2, #3 ... #10
  */
 function sortFacilitiesByStatusAndNumber(facList) {
@@ -999,18 +940,19 @@ function sortFacilitiesByStatusAndNumber(facList) {
 
 const groupedFacilities = computed(() => {
   if (!currentReport.value || !Array.isArray(currentReport.value.boiler_turbine_status)) return []
-  const events = currentReport.value.operations_and_tickets || []
   const map = {}
   for (const rawFac of currentReport.value.boiler_turbine_status) {
     const plant = rawFac.unit_or_plant || '其他'
     if (!map[plant]) {
       map[plant] = []
     }
-    const startInfo = getFacilityStartTime(rawFac, events)
+    // 后端只提供直接作用于主设备的事件，辅机投运不会生成主机标签。
+    const startInfo = rawFac.main_events?.at(-1)
     map[plant].push({
       ...rawFac,
       startTime: startInfo ? startInfo.time : null,
-      startDesc: startInfo ? startInfo.desc : ''
+      startDesc: startInfo?.raw_description || '',
+      eventAction: startInfo?.action || ''
     })
   }
 
@@ -1071,6 +1013,8 @@ const groupedFacilities = computed(() => {
       runningSummary = `运行：${runningCount}台`
     }
 
+    const startingCount = allItems.filter(f => f.status === '启动中').length
+    if (startingCount) runningSummary += ` · 启动中 ${startingCount} 台`
     return {
       plant: k,
       items: allItems,
@@ -1259,6 +1203,7 @@ async function startExtraction() {
   isExtracting.value = true
   extractError.value = ''
   extractSummary.value = null
+  statusResolutions.value = {}
 
   try {
     const formData = new FormData()
@@ -1269,6 +1214,7 @@ async function startExtraction() {
     const res = await extractDispatchFiles(projectKey.value, formData, auth.token)
     if (res?.ok) {
       extractSummary.value = res
+      statusResolutions.value = Object.fromEntries(importStatusConflicts.value.map(c => [c.id, '']))
     } else {
       throw new Error(res?.message || '提取失败')
     }
@@ -1301,12 +1247,14 @@ async function cleanupTemp() {
 
 async function triggerSaveToDb() {
   if (!extractSummary.value) return
+  if (hasUnresolvedStatusConflicts.value) return
   isSavingDb.value = true
   try {
     const payload = {
       token: extractSummary.value.token,
       reports: extractSummary.value.items,
-      overwrite: false
+      overwrite: false,
+      status_resolutions: statusResolutions.value
     }
     const res = await saveDispatchData(projectKey.value, payload)
     if (res.has_conflict) {
@@ -1319,6 +1267,8 @@ async function triggerSaveToDb() {
         currentBizDate.value = res.items[0].biz_date
       }
       await fetchCurrentData()
+    } else {
+      throw new Error(res.message || '请确认全部状态冲突后重试')
     }
   } catch (err) {
     alert('入库失败：' + err.message)
@@ -1328,19 +1278,23 @@ async function triggerSaveToDb() {
 }
 
 async function confirmOverwriteSave() {
+  if (hasUnresolvedStatusConflicts.value) return
   showOverwriteModal.value = false
   isSavingDb.value = true
   try {
     const payload = {
       token: extractSummary.value.token,
       reports: extractSummary.value.items,
-      overwrite: true
+      overwrite: true,
+      status_resolutions: statusResolutions.value
     }
     const res = await saveDispatchData(projectKey.value, payload)
     if (res.ok) {
       alert(`覆盖入库完成！新增 ${res.inserted} 条，更新覆盖 ${res.updated} 条。`)
       await loadAvailableDates()
       await fetchCurrentData()
+    } else {
+      throw new Error(res.message || '覆盖保存失败，请重新核对')
     }
   } catch (err) {
     alert('覆盖保存失败：' + err.message)
@@ -2172,9 +2126,11 @@ function formatTemp(minT, maxT) {
   gap: 0.45rem;
 }
 .fac-badge {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  /* 名称和元信息各占一行，所有设备预留相同高度，启动标签不再挤压名称。 */
+  display: grid;
+  grid-template-rows: 1.3rem 1.5rem;
+  gap: 0.2rem;
+  min-width: 0;
   padding: 0.38rem 0.65rem;
   border-radius: 6px;
   font-size: 0.82rem;
@@ -2184,11 +2140,23 @@ function formatTemp(minT, maxT) {
 .fac-name {
   font-weight: 700;
   color: #1e293b;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .fac-meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.4rem;
+  min-width: 0;
+}
+.fac-meta .fac-start-pill {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 .status-run {
   background: #dcfce7;
@@ -2200,6 +2168,10 @@ function formatTemp(minT, maxT) {
   color: #a16207;
   border-color: #fde047;
 }
+.status-starting { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+.status-review { margin: 1rem 0; padding: 1rem; border: 1px solid #fdba74; background: #fff7ed; border-radius: 8px; overflow-wrap: anywhere; }
+.status-review-item { padding: 0.8rem 0; border-top: 1px solid #fed7aa; }
+.status-review select { max-width: 100%; }
 .status-repair {
   background: #fee2e2;
   color: #b91c1c;
@@ -2207,6 +2179,9 @@ function formatTemp(minT, maxT) {
 }
 .fac-status-tag {
   font-size: 0.75rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* 首站与通用数据表格 */

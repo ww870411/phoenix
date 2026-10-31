@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, UploadFile, Query, HTTPException, Body
 from fastapi.responses import FileResponse, JSONResponse
+from backend.projects.daily_report_25_26.services.dispatch_reconciliation import reconcile_report
 
 from backend.projects.daily_report_25_26.services.dispatch_extractor import (
     extract_single_file,
@@ -185,6 +186,15 @@ def save_dispatch_data(
     if not reports:
         raise HTTPException(status_code=400, detail="未提供有效入库数据")
 
+    # 新记录和覆盖记录共用确认门槛，不能跳过状态冲突直接入库。
+    choices = payload.get('status_resolutions') or {}
+    if not isinstance(choices, dict) or any(v not in ('table', 'events') for v in choices.values()):
+        raise HTTPException(status_code=400, detail='状态冲突选择无效')
+    reports = [reconcile_report(r, choices) for r in reports]
+    unresolved = [c for r in reports for c in r.get('status_conflicts', []) if not c.get('resolution')]
+    if unresolved:
+        return {'ok': False, 'has_status_conflict': True, 'status_conflicts': unresolved,
+                'message': '请逐项选择以原表格或主设备事件为准后再入库'}
     result = save_dispatch_reports(reports, overwrite=overwrite, project_key=project_key)
     return result
 
