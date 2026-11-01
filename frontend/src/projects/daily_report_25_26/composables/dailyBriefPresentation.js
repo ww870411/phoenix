@@ -9,6 +9,23 @@ export function withDailyBriefPage(pages, projectKey, user) {
   return [{ page_key: 'daily_brief', page_name: '每日简报', page_url: '/projects/daily_report_25_26/pages/daily_brief' }, ...existing]
 }
 
+// 主版与专刊分别按指标键排布，不依赖接口数组的位置，也不改变每日摘要顺序。
+export function selectBriefMetricPanels(metrics) {
+  const byKey = new Map((Array.isArray(metrics) ? metrics : []).map(metric => [metric.key, metric]))
+  const select = keys => keys.map(key => byKey.get(key)).filter(Boolean)
+  return {
+    primary: select([
+      'eco_comparable_marginal_profit', 'amount_power_generation', 'consumption_std_coal',
+      'rate_heat_per_10k_m2', 'amount_daily_service_complaints', 'amount_daily_net_complaints',
+    ]),
+    supplement: select([
+      'eco_marginal_profit', 'amount_heat_supply', 'amount_hot_water_sales', 'amount_steam_sales',
+      'amount_power_sales', 'amount_daily_net_complaints_per_10k_m2',
+      'rate_water_per_10k_m2', 'rate_power_per_10k_m2',
+    ]),
+  }
+}
+
 export function formatBriefNumber(value, digits = 2) {
   if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '—'
   return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })

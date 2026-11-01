@@ -1,16 +1,16 @@
 <template>
   <div class="subject-content">
-    <!-- 主版面呈现的核心前 5 项生产经营指标 -->
+    <!-- 主版面按指标键呈现六项生产经营指标 -->
     <div class="subject-metrics">
       <BriefMetricCard
-        v-for="metric in subject.metrics.slice(0, 5)"
+        v-for="metric in metricPanels.primary"
         :key="metric.key"
         :metric="metric"
       />
     </div>
 
     <!-- 弹窗触发专栏条 (替换原本的 details 折叠) -->
-    <div v-if="subject.metrics.length > 5" class="more-metrics-banner">
+    <div v-if="metricPanels.supplement.length" class="more-metrics-banner">
       <button
         type="button"
         class="more-metrics-trigger"
@@ -18,7 +18,7 @@
       >
         <span class="banner-badge">专栏副刊</span>
         <span class="banner-text">
-          查阅其余 {{ subject.metrics.length - 5 }} 项重点指标（实际利润、供热量、售电量及各厂单耗等）
+          查阅其余 {{ metricPanels.supplement.length }} 项重点指标（实际利润、供热与销售量、水电单耗等）
         </span>
         <span class="banner-arrow">››</span>
       </button>
@@ -59,7 +59,7 @@
           <div class="modal-lead-note">
             <span class="lead-tag">编印说明</span>
             <p>
-              本专刊收录了全集团实际边际利润、直属电厂供热量与售电实物量、以及耗热耗电单耗指标。点击任一指标卡片底部的明细链接，可进一步穿透查阅近七日走势图与逐日对比数据。
+              本专刊收录了全集团实际边际利润、供热量、高温水销售量、售汽量、售电量、万平方米净投诉量及供暖水电单耗。点击任一指标卡片底部的明细链接，可进一步查阅近七日走势图与逐日对比数据。
             </p>
           </div>
 
@@ -67,7 +67,7 @@
           <div class="modal-body">
             <div class="dialog-metrics-grid">
               <BriefMetricCard
-                v-for="metric in subject.metrics.slice(5)"
+                v-for="metric in metricPanels.supplement"
                 :key="metric.key"
                 :metric="metric"
               />
@@ -86,12 +86,14 @@
 </template>
 
 <script setup>
-import { inject, onBeforeUnmount, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, ref } from 'vue'
 import BriefMetricCard from './BriefMetricCard.vue'
+import { selectBriefMetricPanels } from '../composables/dailyBriefPresentation'
 
-defineProps({
+const props = defineProps({
   subject: { type: Object, required: true },
 })
+const metricPanels = computed(() => selectBriefMetricPanels(props.subject.metrics))
 
 const briefTheme = inject('briefTheme', ref('broadsheet'))
 const modalVisible = ref(false)

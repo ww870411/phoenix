@@ -112,6 +112,19 @@ class EvidenceTests(TestCase):
         missing = self.evidence(rows, expected).check('JinZhou', 'consumption_station_heat', self.day)
         self.assertTrue(any('amount_hot_water_sales' in line for line in missing))
 
+    def test_water_and_power_intensity_require_reported_inputs_and_heating_area(self):
+        for metric, inputs in [
+            ('rate_power_per_10k_m2', ['consumption_station_purchased_power']),
+            ('rate_water_per_10k_m2', ['consumption_network_fill_water', 'consumption_station_fill_water', 'consumption_network_water']),
+        ]:
+            with self.subTest(metric=metric):
+                expected = [{'company': 'JinZhou', 'item': item, 'period': '25-26'} for item in inputs]
+                raw = [{'company': 'JinZhou', 'item': item, 'date': self.day, 'value': 0} for item in inputs]
+                area = [{'company': 'JinZhou', 'item': 'amount_heating_fee_area', 'period': '25-26', 'value': 100}]
+                self.assertEqual(self.evidence(raw, expected, area).check('JinZhou', metric, self.day), [])
+                self.assertTrue(self.evidence(raw[:-1], expected, area).check('JinZhou', metric, self.day))
+                self.assertTrue(any('供暖面积' in issue for issue in self.evidence(raw, expected).check('JinZhou', metric, self.day)))
+
     def test_whole_company_missing_never_gets_manufactured_profit(self):
         self.assertFalse(self.evidence().has_profit_source('Group', self.day))
         rows = [{'company': c, 'item': 'consumption_std_coal', 'date': self.day, 'value': 0} for c in GROUP_COMPANIES]

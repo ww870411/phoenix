@@ -33,6 +33,11 @@ METRICS = (
     ("rate_std_coal_per_heat", "供热标煤单耗", "吨/万㎡", 3),
     ("rate_heat_per_10k_m2", "供暖热单耗", "GJ/万㎡", 2),
     ("amount_daily_net_complaints_per_10k_m2", "万平方米净投诉量", "件/万㎡", 4),
+    ("amount_power_generation", "发电量", "万kWh", 2),
+    ("amount_hot_water_sales", "高温水销售量", "GJ", 2),
+    ("amount_steam_sales", "售汽量", "吨", 2),
+    ("rate_water_per_10k_m2", "供暖水单耗", "吨/万㎡", 2),
+    ("rate_power_per_10k_m2", "供暖电单耗", "kWh/万㎡", 2),
 )
 PRICE_INPUTS = {
     "amount_power_sales": "price_power_sales", "amount_heat_supply": "price_inner_heat_sales",
@@ -160,12 +165,16 @@ class BriefEvidence:
                                 if self.constants.get((leaf, key, period)) is None)
             else:
                 base = {"rate_std_coal_per_heat": "consumption_std_coal", "rate_heat_per_10k_m2": "consumption_station_heat",
+                        "rate_power_per_10k_m2": "consumption_station_purchased_power",
                         "amount_daily_net_complaints_per_10k_m2": "amount_daily_net_complaints"}.get(metric, metric)
                 dependencies = {base}
+                if metric == "rate_water_per_10k_m2":
+                    dependencies = {"consumption_network_fill_water", "consumption_station_fill_water", "consumption_network_water"}
                 if base == "consumption_station_heat" and leaf in SPECIAL_STATION_HEAT_PLANTS:
                     dependencies = {"amount_heat_supply", "amount_hot_water_sales"}
                 dependencies &= known
-                if metric in {"rate_std_coal_per_heat", "rate_heat_per_10k_m2", "amount_daily_net_complaints_per_10k_m2"}:
+                if metric in {"rate_std_coal_per_heat", "rate_heat_per_10k_m2", "amount_daily_net_complaints_per_10k_m2",
+                              "rate_water_per_10k_m2", "rate_power_per_10k_m2"}:
                     area = self.constants.get((leaf, "amount_heating_fee_area", period))
                     # 纯热源厂没有终端供暖面积；集团面积由供热侧构成，不能要求热源厂也有面积。
                     if leaf not in {"BeiHai", "XiangHai"} and (area is None or area <= 0):

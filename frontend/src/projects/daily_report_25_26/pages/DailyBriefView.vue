@@ -125,7 +125,7 @@
                 class="headline-story"
               >
                 <div class="story-lead">
-                  <span class="story-num">§ {{ String(index + 1).padStart(2, '0') }}</span>
+                  <span class="story-num">§{{ String(index + 1).padStart(2, '0') }}</span>
                   <p class="story-title"><BriefComparisonText :text="item.text" /></p>
                 </div>
                 <p v-if="item.detail" class="story-detail">
@@ -976,10 +976,13 @@ onBeforeUnmount(() => {
 }
 
 .story-num {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--accent-color);
   font-family: var(--heading-font);
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  line-height: 1.4;
 }
 
 .story-title {
