@@ -233,7 +233,7 @@ def read_spot(session, day):
 
 
 def read_dispatch(session, day):
-    from .dispatch_reconciliation import reconcile_report
+    from .dispatch_reconciliation import device_key, reconcile_report
     row = session.execute(text("""
         SELECT biz_date, file_name, boiler_turbine_status, eqp_status_json, operations_and_tickets, log_items_json
         FROM dispatch_daily_reports WHERE project_key = :project AND biz_date = :day
@@ -254,8 +254,23 @@ def read_dispatch(session, day):
         summary += f"另有 {len(events) - len(current)} 条跨日记录，未计入当日。"
     if unresolved:
         summary += f"设备状态有 {len(unresolved)} 项待核对。"
+    pending_keys = {item.get("device") for item in unresolved}
+    equipment = []
+    for facility in report.get("boiler_turbine_status", []):
+        if not facility.get("unit_or_plant") or not (facility.get("standard_name") or facility.get("raw_name")):
+            continue
+        kind = "汽机" if facility.get("facility_type") == "汽机" else facility.get("boiler_type") or facility.get("facility_type")
+        equipment.append({"key": device_key(facility), "kind": kind,
+                          "status": facility.get("status"), "pending": device_key(facility) in pending_keys})
+    overview_evidence = {"date": day.isoformat(), "equipment": equipment, "pending_count": len(unresolved),
+                         "operations": [{"date": event.get("event_date") or day.isoformat(),
+                                         "time": event.get("event_clock") or event.get("time") or "",
+                                         "plant": event.get("responsible_org") or "",
+                                         "description": event.get("raw_description") or event.get("main_description") or "",
+                                         "is_ticket": bool(event.get("is_ticket"))}
+                                        for event in current]}
     return {"title": "生产调度", "status": "partial" if unresolved else "ready", "summary": summary, "facts": facts,
-            "source": row["file_name"]}
+            "source": row["file_name"], "overview_evidence": overview_evidence}
 
 
 def read_inventory(session, day):
@@ -352,14 +367,17 @@ def build_daily_brief(session, day):
         highlights.append({"key": metric["key"], "text": "，".join(clauses) + "。", "detail": ""})
     temp = _optional(session, "气温背景", lambda: _temperature(engine, day, get_peer_date(day)))
     plan = _optional(session, "标煤计划", lambda: _plans(session, day))
+    supplements = [_optional(session, "电力现货", lambda: read_spot(session, day)),
+                   _optional(session, "生产调度", lambda: read_dispatch(session, day)),
+                   _optional(session, "煤炭库存", lambda: read_inventory(session, day))]
+    from .daily_brief_overview import build_brief_overview
+    overview = build_brief_overview(day, subjects["Group"]["metrics"], temp, supplements[1])
     return {"ok": True, "date": day.isoformat(), "peer_date": get_peer_date(day).isoformat(),
-            "generated_at": datetime.now(EAST_8).isoformat(), "highlights": highlights, "weather": temp,
+            "generated_at": datetime.now(EAST_8).isoformat(), "highlights": highlights, "overview": overview, "weather": temp,
             "group": subjects["Group"], "main_city": subjects["ZhuChengQu"],
             "other_units": [subjects[c] for c in GROUP_COMPANIES if c not in ZHUCHENGQU_COMPANIES],
             "main_city_units": [subjects[c] for c in ZHUCHENGQU_COMPANIES], "plan": plan,
-            "supplements": [_optional(session, "电力现货", lambda: read_spot(session, day)),
-                            _optional(session, "生产调度", lambda: read_dispatch(session, day)),
-                            _optional(session, "煤炭库存", lambda: read_inventory(session, day))]}
+            "supplements": supplements}
 
 
 def _temperature(engine, day, peer):

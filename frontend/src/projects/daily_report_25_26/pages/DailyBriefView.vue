@@ -110,26 +110,21 @@
 
         <!-- 报纸内容正文 -->
         <template v-else>
-          <!-- 头版通栏：今日要闻速览 (Headline Story) -->
-          <section class="newspaper-section headline-section" aria-labelledby="digest-title">
+          <!-- 头版通栏：每日生产与经营运行态势综述 (Executive Editorial) -->
+          <section class="newspaper-section headline-editorial-section" aria-labelledby="digest-title">
             <div class="editorial-heading">
-              <div class="heading-badge">头版头条</div>
-              <h2 id="digest-title">今日要闻摘要 · EXECUTIVE DIGEST</h2>
+              <div class="heading-badge">运行综述</div>
+              <h2 id="digest-title">今日运行态势综述 · EXECUTIVE EDITORIAL</h2>
               <div class="heading-line"></div>
+              <span class="editorial-stamp-tag">{{ formattedChineseDate }}</span>
             </div>
 
-            <div class="headline-body">
-              <div
-                v-for="(item, index) in brief.highlights"
-                :key="item.key"
-                class="headline-story"
-              >
-                <div class="story-lead">
-                  <span class="story-num">§{{ String(index + 1).padStart(2, '0') }}</span>
-                  <p class="story-title"><BriefComparisonText :text="item.text" /></p>
-                </div>
-                <p v-if="item.detail" class="story-detail">
-                  <BriefComparisonText :text="item.detail" />
+            <div class="editorial-lead-content">
+              <!-- 由后端当日指标与设备调度证据生成，不在前端拼接固定运行结论 -->
+              <div class="editorial-article">
+                <p v-for="(paragraph, index) in brief.overview?.paragraphs || []" :key="paragraph.key" class="editorial-para">
+                  <template v-if="index === 0 && paragraph.text"><span class="drop-cap">{{ paragraph.text[0] }}</span><BriefComparisonText :text="paragraph.text.slice(1)" /></template>
+                  <BriefComparisonText v-else :text="paragraph.text" />
                 </p>
               </div>
             </div>
@@ -948,56 +943,59 @@ onBeforeUnmount(() => {
 }
 
 /* ==========================================================================
-   6. 头版通栏：今日要闻 (Headline Banner)
+   6. 头版通栏：社论态势综述 (Headline Editorial)
    ========================================================================== */
-.headline-section {
+.headline-editorial-section {
   background-color: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
-  padding: 18px 20px;
+  padding: 20px 24px;
   margin-bottom: 24px;
+  border-left: 4px solid var(--accent-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
-.headline-body {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px 24px;
-}
-
-.headline-story {
-  padding-bottom: 10px;
-  border-bottom: 1px dotted var(--paper-rule);
-}
-
-.story-lead {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.story-num {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--accent-color);
-  font-family: var(--heading-font);
+.editorial-stamp-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--paper-muted);
+  letter-spacing: 0.5px;
   white-space: nowrap !important;
   flex-shrink: 0 !important;
-  line-height: 1.4;
 }
 
-.story-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.6;
+.editorial-lead-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editorial-article {
+  font-size: 14.5px;
+  line-height: 1.85;
   color: var(--paper-ink);
+  letter-spacing: 0.3px;
 }
 
-.story-detail {
-  margin: 4px 0 0 24px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--paper-muted);
+.editorial-para {
+  margin: 0 0 10px;
+}
+
+.editorial-para:last-child {
+  margin-bottom: 0;
+}
+
+/* 首字下沉 (Drop Cap) */
+.drop-cap {
+  float: left;
+  font-size: 38px;
+  line-height: 0.85;
+  padding-top: 4px;
+  padding-right: 8px;
+  padding-bottom: 2px;
+  font-family: var(--heading-font);
+  font-weight: 800;
+  color: var(--accent-color);
 }
 
 /* ==========================================================================

@@ -376,7 +376,8 @@ class SupplementTests(TestCase):
         report = {'operations_and_tickets': [
             {'event_date': '2026-03-25', 'event_clock': '08:00', 'responsible_org': '北海', 'raw_description': '1号炉点火'},
             {'event_date': '2026-03-26', 'event_clock': '01:00', 'raw_description': '1号炉并网'},
-        ], 'status_conflicts': [{'resolution': None}]}
+        ], 'status_conflicts': [{'device': '北海|#1汽机', 'resolution': None}],
+            'boiler_turbine_status': [{'unit_or_plant': '北海', 'standard_name': '#1汽机', 'facility_type': '汽机', 'status': '运行'}]}
         with patch('backend.projects.daily_report_25_26.services.dispatch_reconciliation.reconcile_report', return_value=report):
             result = read_dispatch(session, date(2026, 3, 25))
         self.assertEqual(result['status'], 'partial')
@@ -384,6 +385,9 @@ class SupplementTests(TestCase):
         self.assertIn('跨日', result['summary'])
         self.assertIn('待核对', result['summary'])
         self.assertIn('北海', result['facts'][0])
+        self.assertEqual(len(result['overview_evidence']['operations']), 1)
+        self.assertEqual(result['overview_evidence']['date'], '2026-03-25')
+        self.assertTrue(result['overview_evidence']['equipment'][0]['pending'])
 
     def test_temperature_missing_peer_keeps_current_and_does_not_claim_cause(self):
         engine = MagicMock()
