@@ -25,6 +25,8 @@
         </div>
       </section>
 
+      <DispatchLifecycleDialog :project-key="projectKey" :latest-date="latestDate" :available-dates="availableDates" :refresh-key="lifecycleRefreshKey" />
+
       <!-- 1. 顶部：信息提取与入库工作台 (仅 Global_admin 可见，默认折叠收回) -->
       <section v-if="isGlobalAdmin" class="card elevated extract-card">
         <header class="section-header" @click="isExtractPanelExpanded = !isExtractPanelExpanded">
@@ -166,18 +168,21 @@
 
             <div v-if="importStatusConflicts.length" class="status-review">
               <h4>机炉状态需确认（{{ importStatusConflicts.length }} 项）</h4>
-              <p>表格与当日最后一条有效主设备事件不一致。事件可能与表格统计时点不同，请逐项选择；辅机投运不参与主机状态推断。</p>
+              <p>发现表格与操作状态差异，或操作时间、设备归属不明确。事件可能与表格统计时点不同，请逐项选择显示状态；辅机投运不参与主机状态推断。</p>
               <div v-for="conflict in importStatusConflicts" :key="conflict.id" class="status-review-item">
                 <strong>{{ conflict.bizDate }} · {{ conflict.device }}</strong>
                 <p>原表格：{{ conflict.table_status }} <span v-if="conflict.table_text">（{{ conflict.table_text }}）</span></p>
                 <p v-for="(event, index) in conflict.events" :key="index">{{ event.time }} · {{ event.raw_description }}</p>
+                <p v-if="conflict.reason">{{ conflict.reason }}</p>
                 <label>入库依据：
                   <select v-model="statusResolutions[conflict.id]" class="form-select">
                     <option value="">请选择</option>
                     <option value="table">以原表格为准：{{ conflict.table_status }}</option>
-                    <option value="events">以最后一条主设备事件为准：{{ conflict.event_status }}</option>
+                    <option v-if="conflict.event_status" value="events">以最后一条主设备事件为准：{{ conflict.event_status }}</option>
+                    <option v-for="state in displayStates" :key="state" :value="'status:' + state">手动指定：{{ state }}</option>
                   </select>
                 </label>
+                <p v-if="statusResolutions[conflict.id]">入库后显示：{{ selectedDisplayStatus(statusResolutions[conflict.id], conflict) }}</p>
               </div>
             </div>
             <div v-for="item in extractSummary.items" :key="item.file_name + item.biz_date">
@@ -338,13 +343,33 @@
             </div>
           </div>
 
-          <div v-if="currentReport.status_conflicts?.length" class="status-review">
-            <strong>机炉表格与事件存在差异</strong>
+          <details v-if="currentReport.status_conflicts?.length" :key="currentBizDate" class="status-review">
+            <summary>机炉表格与事件存在差异（{{ currentReport.status_conflicts.length }} 项，点击展开核对）</summary>
             <p v-for="conflict in currentReport.status_conflicts" :key="conflict.id">
               {{ conflict.device }}：原表 {{ conflict.table_status }}，事件推断 {{ conflict.event_status }}；
-              {{ conflict.resolution ? `导入时选择以${conflict.resolution === 'events' ? '事件' : '表格'}为准` : '历史记录尚未确认，暂按原表格展示，请重新上传核对' }}。
+              <span v-if="conflict.resolution" class="resolution-tag">
+                已确认{{ conflict.resolution === 'events' ? '以事件为准' : conflict.resolution === 'table' ? '以表格为准' : '手动指定' }}，显示状态：{{ conflict.display_status || (conflict.resolution === 'events' ? conflict.event_status : conflict.table_status) }}。
+              </span>
+              <span v-else class="unresolved-tag">
+                历史记录尚未确认，暂按原表格展示。
+              </span>
             </p>
-          </div>
+            <template v-if="isGlobalAdmin">
+              <div v-for="conflict in currentReport.status_conflicts" :key="'resolve-' + conflict.id" class="status-review-item">
+                <label>{{ conflict.device }} · 选择显示状态：
+                  <select v-model="historyStatusResolutions[conflict.id]" class="form-select">
+                    <option value="">请选择</option>
+                    <option value="table">原表格：{{ conflict.table_status }}</option>
+                    <option v-if="conflict.event_status" value="events">末次主设备事件：{{ conflict.event_status }}</option>
+                    <option v-for="state in displayStates" :key="state" :value="'status:' + state">手动指定：{{ state }}</option>
+                  </select>
+                </label>
+                <p v-if="conflict.reason">{{ conflict.reason }}</p>
+                <p v-for="(event, index) in conflict.events" :key="index">{{ event.time }} · {{ event.raw_description }}</p>
+              </div>
+              <button class="btn primary btn-sm" :disabled="isResolvingHistory || hasUnresolvedHistory" @click="saveHistoryStatuses">{{ isResolvingHistory ? '保存中…' : '保存显示状态' }}</button>
+            </template>
+          </details>
           <!-- 宏观核心产耗指标卡片网格 -->
           <p v-for="warning in currentReport.extraction_warnings" :key="warning" class="status-review">{{ warning }}</p>
           <div class="kpi-grid">
@@ -735,7 +760,7 @@
                 >
                   <div class="event-header">
                     <div class="event-meta-left">
-                      <span v-if="ev.time" class="event-time">⏰ {{ ev.time }}</span>
+                      <span v-if="ev.time" class="event-time">⏰ {{ ev.event_date && ev.event_date !== currentReport.biz_date ? ev.event_date + ' ' : '' }}{{ ev.event_clock || ev.time }}</span>
                       <span class="event-org">{{ ev.responsible_org }}</span>
                       <span v-if="ev.is_ticket" class="badge-ticket">🎫 抢修工作票</span>
                       <span v-else class="badge-op">🔧 运行操作</span>
@@ -748,7 +773,8 @@
                     </span>
                   </div>
                   <div class="event-content">
-                    {{ ev.raw_description }}
+                    <span :title="ev.source_description || ev.raw_description">{{ ev.raw_description }}</span>
+                    <small v-if="ev.subject_inferred" :title="ev.subject_inference_basis">（承接前文主体；原句：{{ ev.operation_fragment }}）</small>
                   </div>
                 </div>
               </div>
@@ -799,6 +825,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import DispatchLifecycleDialog from '../components/DispatchLifecycleDialog.vue'
 import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 import {
@@ -808,16 +835,27 @@ import {
   cleanupDispatchTemp,
   saveDispatchData,
   queryDispatchData,
-  fetchDispatchDates
+  fetchDispatchDates,
+  resolveDispatchStatus
 } from '../services/dispatchApi'
 
 const auth = useAuthStore()
 const statusResolutions = ref({})
+const displayStates = ['运行', '备用', '检修', '启动中', '停运']
+const historyStatusResolutions = ref({})
+const isResolvingHistory = ref(false)
+const hasUnresolvedHistory = computed(() => (currentReport.value?.status_conflicts || []).some(c => !validStatusResolution(historyStatusResolutions.value[c.id], c)))
+function validStatusResolution(value, conflict) {
+  return value === 'table' || (value === 'events' && conflict.event_status !== null) || displayStates.some(state => value === 'status:' + state)
+}
+function selectedDisplayStatus(value, conflict) {
+  return value === 'table' ? conflict.table_status : value === 'events' ? conflict.event_status : value?.slice(7)
+}
 const importStatusConflicts = computed(() => (extractSummary.value?.items || []).flatMap(item =>
   (item.status_conflicts || []).map(conflict => ({ ...conflict, bizDate: item.biz_date }))
 ))
 const hasUnresolvedStatusConflicts = computed(() => importStatusConflicts.value.some(
-  conflict => !['table', 'events'].includes(statusResolutions.value[conflict.id])
+  conflict => !validStatusResolution(statusResolutions.value[conflict.id], conflict)
 ))
 const route = useRoute()
 const projectKey = computed(() => route.params.projectKey || 'daily_report_25_26')
@@ -872,6 +910,7 @@ const currentBizDate = ref('')
 const searchKeyword = ref('')
 const isLoadingData = ref(false)
 const currentReport = ref(null)
+const lifecycleRefreshKey = ref(0)
 
 // 事件过滤状态
 const eventOrgFilter = ref('ALL')
@@ -1262,6 +1301,7 @@ async function triggerSaveToDb() {
       showOverwriteModal.value = true
     } else if (res.ok) {
       alert(`保存成功！新增 ${res.inserted} 条，更新 ${res.updated} 条。`)
+      lifecycleRefreshKey.value++
       await loadAvailableDates()
       if (res.items?.[0]?.biz_date) {
         currentBizDate.value = res.items[0].biz_date
@@ -1291,6 +1331,7 @@ async function confirmOverwriteSave() {
     const res = await saveDispatchData(projectKey.value, payload)
     if (res.ok) {
       alert(`覆盖入库完成！新增 ${res.inserted} 条，更新覆盖 ${res.updated} 条。`)
+      lifecycleRefreshKey.value++
       await loadAvailableDates()
       await fetchCurrentData()
     } else {
@@ -1303,22 +1344,47 @@ async function confirmOverwriteSave() {
   }
 }
 
+async function saveHistoryStatuses() {
+  if (hasUnresolvedHistory.value || !currentReport.value || isResolvingHistory.value) return
+  const bizDate = currentBizDate.value
+  isResolvingHistory.value = true
+  try {
+    const res = await resolveDispatchStatus(projectKey.value, {
+      biz_date: bizDate,
+      status_resolutions: { ...historyStatusResolutions.value },
+      status_evidence: Object.fromEntries(currentReport.value.status_conflicts.map(c => [c.id, c.evidence])),
+    })
+    if (!res.ok) throw new Error(res.message || '状态保存失败，请刷新后重新核对')
+    lifecycleRefreshKey.value++
+    if (currentBizDate.value === bizDate) await fetchCurrentData()
+  } catch (err) {
+    alert(err.message || '状态保存失败')
+  } finally {
+    isResolvingHistory.value = false
+  }
+}
+
+let dispatchRequestId = 0
 async function fetchCurrentData() {
   if (!currentBizDate.value) return
+  const requestId = ++dispatchRequestId
   isLoadingData.value = true
+  historyStatusResolutions.value = {}
   try {
     const res = await queryDispatchData(projectKey.value, {
       biz_date: currentBizDate.value
     })
+    if (requestId !== dispatchRequestId) return
     if (res?.items && res.items.length > 0) {
       currentReport.value = res.items[0]
+      historyStatusResolutions.value = Object.fromEntries((currentReport.value.status_conflicts || []).map(c => [c.id, c.resolution || '']))
     } else {
       currentReport.value = null
     }
   } catch (err) {
     console.error('Fetch dispatch data failed:', err)
   } finally {
-    isLoadingData.value = false
+    if (requestId === dispatchRequestId) isLoadingData.value = false
   }
 }
 
@@ -2171,7 +2237,10 @@ function formatTemp(minT, maxT) {
 .status-starting { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
 .status-review { margin: 1rem 0; padding: 1rem; border: 1px solid #fdba74; background: #fff7ed; border-radius: 8px; overflow-wrap: anywhere; }
 .status-review-item { padding: 0.8rem 0; border-top: 1px solid #fed7aa; }
+.status-review > summary { cursor: pointer; font-weight: 600; }
 .status-review select { max-width: 100%; }
+.resolution-tag { font-weight: 600; color: #15803d; background: #dcfce7; padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid #86efac; display: inline-block; margin-top: 0.2rem; }
+.unresolved-tag { color: #b45309; }
 .status-repair {
   background: #fee2e2;
   color: #b91c1c;

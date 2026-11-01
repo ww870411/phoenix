@@ -249,7 +249,7 @@
           <span class="dashboard-header__date-hint" v-if="effectiveBizDate">当前：{{ effectiveBizDate }}</span>
           <span class="dashboard-header__date-hint" v-else>当前：regular</span>
         </label>
-        <button class="pdf-download-btn" :disabled="isLoading || spotElecLoading || dispatchLoading || isCoalPlanLoading || !dashboardData.meta.pushDate || isExportingPdf" @click="downloadPDF">下载PDF</button>
+        <button class="pdf-download-btn" :disabled="isLoading || spotElecLoading || dispatchLoading || isCoalPlanLoading || isStaticCoalPlanLoading || !dashboardData.meta.pushDate || isExportingPdf" @click="downloadPDF">下载PDF</button>
         <div v-if="canManageCache" class="dashboard-cache-controls">
           <div class="dashboard-cache-buttons">
             <DashboardCacheManager :project-key="projectKey" @started="handleCacheManagerStarted" @changed="handleManagedCacheChanged" />
@@ -621,6 +621,7 @@
       </div>
     </section>
 
+
     <main class="dashboard-grid">
       <section class="dashboard-grid__item dashboard-grid__item--temp">
         <Card title="气温变化情况（向后预测3日，含同期）" subtitle="平均气温" extra="单位：℃">
@@ -925,7 +926,15 @@
               {{ option.badge || option.label }}
             </button>
           </div>
-          <EChart :option="coalStdOpt" height="340px" />
+          <MonthlyCoalProgressCard
+            :project-key="projectKey"
+            :biz-date="dashboardData.meta.pushDate"
+            :phase="coalStdPhaseMode"
+            :comparison-rows="coalStdTableData"
+            @loading="isStaticCoalPlanLoading = $event"
+          >
+            <EChart :option="coalStdOpt" height="340px" />
+          </MonthlyCoalProgressCard>
           <div class="dashboard-table-wrapper">
             <Table :columns="coalStdColumns" :data="coalStdTableData" />
           </div>
@@ -996,6 +1005,7 @@
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import DashboardCacheManager from '../components/DashboardCacheManager.vue'
+import MonthlyCoalProgressCard from '../components/MonthlyCoalProgressCard.vue'
 import {
   cancelCachePublishJob,
   disableDashboardCache,
@@ -4999,7 +5009,7 @@ const isExportingPdf = ref(false)
 const EXPORT_STANDARD_WIDTH = 1600
 
 const downloadPDF = async () => {
-  if (isExportingPdf.value || isLoading.value || spotElecLoading.value || dispatchLoading.value || isCoalPlanLoading.value || !dashboardData.meta.pushDate) return
+  if (isExportingPdf.value || isLoading.value || spotElecLoading.value || dispatchLoading.value || isCoalPlanLoading.value || isStaticCoalPlanLoading.value || !dashboardData.meta.pushDate) return
   const { jsPDF } = window.jspdf || {}
   if (!jsPDF) {
     console.error('未找到 jsPDF 实例')
@@ -5180,6 +5190,7 @@ const primaryCoalHeadline = computed(() => {
 // 动态分解计划自 26-27 供暖期正式加入，从 2026-11-01 开始启用展示
 const DYNAMIC_PLAN_START_DATE = '2026-11-01'
 const coalPlanComparisonData = ref(null)
+const isStaticCoalPlanLoading = ref(false)
 const isCoalPlanLoading = ref(false)
 const coalPlanError = ref('')
 let coalPlanRequestId = 0

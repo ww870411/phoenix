@@ -23,6 +23,43 @@ DEFAULT_LONGITUDE = 121.625
 ENSEMBLE_API_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
 
 
+def ensure_temperature_table_ready(cur):
+    """确保 public.temperature_data 存在 (date_time) 唯一约束以支持 ON CONFLICT 幂等写入。"""
+    cur.execute("""
+        SELECT 1 FROM pg_indexes 
+        WHERE tablename = 'temperature_data' AND indexdef LIKE '%(date_time)%';
+    """)
+    if not cur.fetchone():
+        # 若存在历史重复数据，按最新 operation_time 清洗
+        cur.execute("""
+            DELETE FROM public.temperature_data
+            WHERE ctid IN (
+                SELECT ctid FROM (
+                    SELECT ctid, row_number() OVER (PARTITION BY date_time ORDER BY operation_time DESC, ctid DESC) as rn
+                    FROM public.temperature_data
+                ) t
+                WHERE t.rn > 1
+            );
+        """)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_temperature_data_date_time 
+            ON public.temperature_data (date_time);
+        """)
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'uq_temperature_data_date_time'
+                ) THEN
+                    ALTER TABLE public.temperature_data 
+                    ADD CONSTRAINT uq_temperature_data_date_time 
+                    UNIQUE USING INDEX uq_temperature_data_date_time;
+                END IF;
+            END $$;
+        """)
+
+
 def fetch_and_import_ensemble_weather(
     latitude: float = DEFAULT_LATITUDE,
     longitude: float = DEFAULT_LONGITUDE,
@@ -121,6 +158,7 @@ def fetch_and_import_ensemble_weather(
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cur:
+            ensure_temperature_table_ready(cur)
             written = execute_values(cur, upsert_sql, records_to_upsert,
                                      template="(%s, %s, 'far', CURRENT_TIMESTAMP)",
                                      page_size=200, fetch=True)

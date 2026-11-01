@@ -13,7 +13,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, UploadFile, Query, HTTPException, Body
 from fastapi.responses import FileResponse, JSONResponse
-from backend.projects.daily_report_25_26.services.dispatch_reconciliation import reconcile_report
+from backend.projects.daily_report_25_26.services.dispatch_reconciliation import reconcile_report, RESOLUTIONS
 
 from backend.projects.daily_report_25_26.services.dispatch_extractor import (
     extract_single_file,
@@ -23,6 +23,7 @@ from backend.projects.daily_report_25_26.services.dispatch_db_service import (
     save_dispatch_reports,
     query_dispatch_reports,
     get_available_dispatch_dates,
+    update_dispatch_statuses,
     check_existing_dates
 )
 
@@ -188,7 +189,7 @@ def save_dispatch_data(
 
     # 新记录和覆盖记录共用确认门槛，不能跳过状态冲突直接入库。
     choices = payload.get('status_resolutions') or {}
-    if not isinstance(choices, dict) or any(v not in ('table', 'events') for v in choices.values()):
+    if not isinstance(choices, dict) or any(v not in RESOLUTIONS for v in choices.values()):
         raise HTTPException(status_code=400, detail='状态冲突选择无效')
     reports = [reconcile_report(r, choices) for r in reports]
     unresolved = [c for r in reports for c in r.get('status_conflicts', []) if not c.get('resolution')]
@@ -197,6 +198,25 @@ def save_dispatch_data(
                 'message': '请逐项选择以原表格或主设备事件为准后再入库'}
     result = save_dispatch_reports(reports, overwrite=overwrite, project_key=project_key)
     return result
+
+
+@router.post('/resolve_status', summary='确认历史调度日报的设备显示状态')
+@public_router.post('/resolve_status', summary='确认历史调度日报的设备显示状态')
+def resolve_dispatch_status(payload: Dict[str, Any] = Body(...), project_key: str = 'daily_report_25_26'):
+    """与上传入库共用状态校验；仅写入指定日期的操作和设备状态字段。"""
+    choices = payload.get('status_resolutions')
+    biz_date = payload.get('biz_date')
+    if not isinstance(choices, dict) or not choices or any(v not in RESOLUTIONS for v in choices.values()):
+        raise HTTPException(status_code=400, detail='请提供有效状态选择')
+    from datetime import date
+    try:
+        date.fromisoformat(biz_date)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail='业务日期无效')
+    evidence = payload.get('status_evidence')
+    if evidence is not None and not isinstance(evidence, dict):
+        raise HTTPException(status_code=400, detail='状态依据格式无效')
+    return update_dispatch_statuses(biz_date, choices, project_key, evidence)
 
 
 @router.get("/query", summary="多维综合查询已入库调度信息")

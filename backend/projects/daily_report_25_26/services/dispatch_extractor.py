@@ -14,6 +14,7 @@ import re
 import json
 import logging
 from .dispatch_reconciliation import reconcile_report
+from .dispatch_operations import split_timed_clauses
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
@@ -1013,44 +1014,7 @@ class UnifiedDispatchExtractor:
         智能拆分包含多个明确时刻的复合操作事件（如: 10:10 投运... 22:17 跳闸倒泵）
         注意：工作票工期严禁拆分
         """
-        if "工作票" in desc or "工期" in desc:
-            return [(time_str, desc)]
-
-        pattern = re.compile(r"([。；;\n!！,，]|\s+)(\d{1,2}:\d{2})")
-        matches = list(pattern.finditer(desc))
-        if not matches:
-            return [(time_str, desc)]
-
-        sub_events = []
-        split_indices = []
-        for m in matches:
-            t_val = m.group(2)
-            start_pos = m.start(2)
-            split_indices.append((start_pos, t_val))
-
-        current_time = time_str
-        last_end = 0
-
-        for idx, (pos, t_val) in enumerate(split_indices):
-            if pos <= 2 and desc[:pos].strip() in ["", "，", ",", ":", "："]:
-                current_time = t_val
-                last_end = pos + len(t_val)
-                continue
-
-            part_desc = desc[last_end:pos].strip(" 。；;,，\n")
-            if part_desc:
-                sub_events.append((current_time, part_desc))
-
-            current_time = t_val
-            last_end = pos + len(t_val)
-            while last_end < len(desc) and desc[last_end] in [" ", ":", "：", "、"]:
-                last_end += 1
-
-        final_desc = desc[last_end:].strip(" 。；;,，\n")
-        if final_desc:
-            sub_events.append((current_time, final_desc))
-
-        return sub_events if sub_events else [(time_str, desc)]
+        return split_timed_clauses(time_str, desc)
 
     def extract_operations_and_tickets(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
@@ -1119,7 +1083,7 @@ class UnifiedDispatchExtractor:
             normalized_rows.append((time_str, desc, None))
 
         # 2. 逐行解析与复合事件拆分
-        for time_str, desc, org in normalized_rows:
+        for source_index, (time_str, desc, org) in enumerate(normalized_rows):
             if org:
                 current_org = org
                 continue
@@ -1219,6 +1183,9 @@ class UnifiedDispatchExtractor:
                     action = "启动投运"
 
                 events.append({
+                    "source_description": desc,
+                    "source_time": time_str,
+                    "source_group": f"{current_org}:{source_index}",
                     "time": sub_t,
                     "responsible_org": current_org,
                     "is_ticket": is_ticket,

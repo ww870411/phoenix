@@ -508,6 +508,14 @@ async def get_daily_decomposition_endpoint(
         session.close()
 
 
+@public_router.get('/dynamic_plan/monthly_coal_progress', summary='静态月度及供暖期标煤计划完成情况')
+def get_monthly_coal_progress_endpoint(biz_date: date = Query(...)):
+    """增量返回供暖期：分母为全月/全期静态计划，实际截止业务日，不用动态分解。"""
+    from backend.projects.daily_report_25_26.services.monthly_coal_progress import get_monthly_coal_progress
+    with SessionLocal() as session:
+        return get_monthly_coal_progress(session, biz_date.isoformat(), STANDARD_UNITS, ROLLUP_HIERARCHY, include_season=True)
+
+
 @public_router.get("/dynamic_plan/coal_plan_comparison", summary="看板核心指标卡片：标煤耗量动态分解计划对比")
 async def get_coal_plan_comparison_endpoint(
     biz_date: str = Query(..., description="业务日期，形如 YYYY-MM-DD"),

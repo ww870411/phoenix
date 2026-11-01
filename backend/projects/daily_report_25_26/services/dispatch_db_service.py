@@ -275,6 +275,38 @@ def save_dispatch_reports(
         conn.close()
 
 
+def update_dispatch_statuses(biz_date, choices, project_key='daily_report_25_26', evidence=None):
+    """锁定一份历史日报，仅更新状态与操作字段，避免覆盖其他生产指标。"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute('SELECT * FROM public.dispatch_daily_reports WHERE project_key=%s AND biz_date=%s FOR UPDATE', (project_key, biz_date))
+            row = cur.fetchone()
+            if not row:
+                return {'ok': False, 'message': '未找到该日期的调度日报'}
+            current = reconcile_report(dict(row))
+            conflicts = {c['id']: c for c in current['status_conflicts']}
+            if any(key not in conflicts for key in choices):
+                return {'ok': False, 'message': '状态差异已变化，请刷新后重新核对'}
+            if evidence is not None and any(evidence.get(key) != conflicts[key]['evidence'] for key in choices):
+                return {'ok': False, 'message': '操作依据已变化，请刷新后重新确认'}
+            report = reconcile_report(dict(row), choices)
+            unresolved = [c for c in report['status_conflicts'] if not c['resolution']]
+            if unresolved:
+                return {'ok': False, 'has_status_conflict': True, 'status_conflicts': unresolved, 'message': '请确认全部状态差异后保存'}
+            cur.execute('''UPDATE public.dispatch_daily_reports SET
+                boiler_turbine_status=%s, eqp_status_json=%s, operations_and_tickets=%s,
+                log_items_json=%s, updated_at=NOW() WHERE project_key=%s AND biz_date=%s''',
+                tuple(Json(report[k]) for k in ('boiler_turbine_status', 'eqp_status_json', 'operations_and_tickets', 'log_items_json')) + (project_key, biz_date))
+        conn.commit()
+        return {'ok': True, 'message': '状态选择已保存'}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def query_dispatch_reports(
     project_key: str = "daily_report_25_26",
     biz_date: Optional[str] = None,
