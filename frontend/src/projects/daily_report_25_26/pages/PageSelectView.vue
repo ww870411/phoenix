@@ -121,6 +121,7 @@ import { listPages } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 import ScaleBalanceIcon from '../../insulation_pipe_supply_2026/components/ScaleBalanceIcon.vue'
+import { withDailyBriefPage } from '../composables/dailyBriefPresentation'
 
 const route = useRoute()
 const router = useRouter()
@@ -145,6 +146,7 @@ const auth = useAuthStore()
 const PAGE_DESCRIPTION_MAP = Object.freeze({
   big_screen: '深色科技大屏、数字孪生飞线调度与实时发运战报',
   dashboard: '查看整体数据仪表盘',
+  daily_brief: '经营与生产每日速览、同比数据与近期趋势',
   data_show: '浏览固定数据展示表',
   data_approval: '处理审批流程进度',
   data_entry: '填写并提交日报数据',
@@ -187,7 +189,7 @@ async function loadPages() {
     await ensureProjectsLoaded()
     const response = await listPages(projectKey)
     rawPages.value = Array.isArray(response?.pages) ? response.pages : []
-    pages.value = filterVisiblePages(auth.filterPages(projectKey, rawPages.value))
+    pages.value = withDailyBriefPage(filterVisiblePages(auth.filterPages(projectKey, rawPages.value)), projectKey, auth.user)
     if (!pages.value.length) {
       errorMessage.value = '暂无可访问的页面，请联系管理员确认权限。'
     }

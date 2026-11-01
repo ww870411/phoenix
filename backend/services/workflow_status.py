@@ -100,6 +100,16 @@ class WorkflowStatusManager:
         )
         return clone
 
+    def list_published_dates(self, project_key: str) -> list[str]:
+        """只读返回已发布业务日期，不创建状态，也不以底表最新日期代替发布日。"""
+        with self._lock:
+            self._ensure_loaded_locked()
+            return sorted({
+                business_date.date().isoformat()
+                for (project, business_date), snapshot in self._storage.items()
+                if project == project_key and snapshot.publish.status == "published"
+            }, reverse=True)
+
     def mark_approved(
         self,
         project_key: str,

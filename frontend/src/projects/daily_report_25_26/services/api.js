@@ -118,6 +118,15 @@ const normalized = (path) => `${API_BASE}${path}`
 
 const projectPath = (projectKey) => normalized(`/projects/${encodeURIComponent(projectKey)}`)
 
+export async function fetchDailyBrief(showDate = '', { signal } = {}) {
+  const query = showDate ? `?${new URLSearchParams({ show_date: showDate })}` : ''
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/daily-brief${query}`, {
+    headers: attachAuthHeaders(), signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '读取每日简报失败'))
+  return response.json()
+}
+
 function buildDev8001FallbackUrl(url) {
   const rawUrl = String(url || '')
   if (!rawUrl) return ''

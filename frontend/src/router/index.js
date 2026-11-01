@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../projects/daily_report_25_26/store/auth'
+import { canAccessDailyBrief } from '../projects/daily_report_25_26/composables/dailyBriefPresentation'
 
 const routes = [
   {
@@ -37,6 +38,11 @@ const routes = [
   {
     path: '/projects/:projectKey/pages',
     component: () => import('../projects/daily_report_25_26/pages/PageSelectView.vue'),
+  },
+  {
+    path: '/projects/daily_report_25_26/pages/daily_brief',
+    component: () => import('../projects/daily_report_25_26/pages/DailyBriefView.vue'),
+    meta: { title: '每日简报' },
   },
   {
     path: '/projects/insulation_pipe_supply_2026/pages/:pageKey',
@@ -140,6 +146,12 @@ router.beforeEach(async (to) => {
   }
   if (to.path === '/projects' || to.path === '/login' || to.path === '/forbidden') {
     return true
+  }
+
+  // 每日简报独立校验，防止绕过入口直接输入地址。
+  if (to.path === '/projects/daily_report_25_26/pages/daily_brief') {
+    return canAccessDailyBrief('daily_report_25_26', auth.user)
+      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'daily_brief')
   }
 
   // 2. 全局管理后台权限校验
