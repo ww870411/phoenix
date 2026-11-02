@@ -1542,6 +1542,17 @@ export async function optimizeComplaintWorkbook(projectKey, file) {
   return response.json()
 }
 
+export async function calculateComplaintStatistics(projectKey, file, bizDate) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('biz_date', bizDate)
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/complaints/statistics`, {
+    method: 'POST', headers: attachAuthHeaders(), body: formData,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, `投诉统计失败 (${response.status})`))
+  return response.json()
+}
+
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
   const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {

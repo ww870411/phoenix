@@ -129,11 +129,28 @@
       </div>
     </header>
 
-    <section v-if="canUploadComplaint && (complaintUploading || complaintResult || complaintError)" class="complaint-result card" aria-live="polite" :aria-busy="complaintUploading">
-      <h3>投诉报表去冗余</h3>
-      <p v-if="complaintUploading">正在分析工作表、公式与引用关系，并校验生成文件，请稍候…</p>
+    <section v-if="canUploadComplaint && (complaintUploading || complaintResult || complaintError || complaintStats)" class="complaint-result card" aria-live="polite" :aria-busy="complaintUploading">
+      <h3>投诉明细统计</h3>
+      <p v-if="complaintUploading">正在读取投诉明细并整理工作簿，请稍候…</p>
       <p v-if="complaintError" role="alert">{{ complaintError }}</p>
+      <template v-if="complaintStats && !complaintUploading">
+        <p>业务日期：{{ complaintStats.business_date }}；本月：{{ complaintStats.month_start }} 至 {{ complaintStats.business_date }}；供暖期：{{ complaintStats.season_start }} 至 {{ complaintStats.business_date }}。按明细日期和当前办理状态统计。</p>
+        <p v-if="!complaintStats.complete" role="alert">有 {{ complaintStats.issues.length }} 条疑似明细缺少有效日期或编号，未计入统计；结果不完整，请核对原文件。</p>
+        <ul v-if="!complaintStats.complete"><li v-for="issue in complaintStats.issues" :key="`${issue.sheet}-${issue.row}`">{{ issue.sheet }} 第 {{ issue.row }} 行：{{ issue.reason }}</li></ul>
+        <div class="complaint-table-wrap"><table class="complaint-table"><thead><tr><th>单位</th><th v-for="metric in complaintMetrics" :key="metric.key">{{ metric.label }}</th></tr></thead><tbody>
+          <tr v-for="item in complaintSummaryRows" :key="item.name"><th>{{ item.name }}</th><td v-for="metric in complaintMetrics" :key="metric.key"><button type="button" class="complaint-number" @click="selectComplaintDetails(item.name, metric.key)">{{ item.metrics[metric.key] }}</button></td></tr>
+        </tbody></table></div>
+        <p>未归属：{{ complaintStats.unmatched.count }} 条（全部日期）；名称及数量：{{ Object.entries(complaintStats.unmatched.names).map(([name, count]) => `${name} ${count} 条`).join('、') || '无' }}。集团按全部有效记录独立统计。</p>
+        <div class="complaint-result__actions"><button class="btn primary" type="button" :disabled="complaintFilling || entryLocked || !entryDataReady || !complaintStats.complete || complaintStats.business_date !== bizDate" @click="fillComplaintData">{{ complaintFilling ? '正在填入…' : '一键填入供热公司两张表' }}</button><button class="btn primary" type="button" @click="downloadComplaintCsv">下载统计及明细 CSV</button><button class="btn ghost" type="button" @click="copyComplaintSummary">复制统计表</button></div>
+        <p class="complaint-result__note">填入总表及分中心明细的投诉量、净投诉量与累计净投诉量，只填本期；完成后请核对并自行提交。</p>
+        <h4>明细核对</h4>
+        <label>单位 <select v-model="complaintDetailCenter"><option>集团总量</option><option v-for="item in complaintStats.centers" :key="item.name">{{ item.name }}</option><option>未归属</option></select></label>
+        <label>指标 <select v-model="complaintDetailMetric"><option v-for="metric in complaintMetrics" :key="metric.key" :value="metric.key">{{ metric.label }}</option></select></label>
+        <p>共 {{ complaintDetailRows.length }} 条；点击上方数字也可查看对应明细。</p>
+        <div class="complaint-table-wrap"><table class="complaint-table"><thead><tr><th>来源工作表/行</th><th>日期</th><th>编号</th><th>类型</th><th>投诉类别</th><th>服务中心</th><th>办理情况</th></tr></thead><tbody><tr v-for="record in complaintDetailRows" :key="`${record.sheet}-${record.row}`"><td>{{ record.sheet }} / {{ record.row }}</td><td>{{ record.date }}</td><td>{{ record.identifier }}</td><td>{{ record.type }}</td><td>{{ record.category }}</td><td>{{ record.center_original || '未填写' }}</td><td>{{ record.status }}</td></tr></tbody></table></div>
+      </template>
       <template v-if="complaintResult && !complaintUploading">
+        <h3>报表去冗余</h3>
         <p>{{ complaintResult.filename }}：{{ formatComplaintSize(complaintResult.report.input_bytes) }} → {{ formatComplaintSize(complaintResult.report.output_bytes) }}；公式 {{ complaintResult.report.formulas_before.toLocaleString() }} → {{ complaintResult.report.formulas_after.toLocaleString() }}；缩减 {{ complaintResult.report.references_optimized }} 处引用。</p>
         <p>已逐格校验 {{ complaintResult.report.constants_verified.toLocaleString() }} 个原始数据单元格、{{ complaintResult.report.cached_results_verified.toLocaleString() }} 个保留公式及缓存。处理耗时 {{ complaintResult.report.elapsed_seconds }} 秒。</p>
         <div class="complaint-result__actions">
@@ -141,11 +158,11 @@
           <button class="btn ghost" type="button" @click="downloadComplaintReport">下载处理报告</button>
         </div>
         <ul>
-          <li v-for="sheet in complaintResult.report.sheets" :key="sheet.name">{{ sheet.name }}：移除 {{ sheet.formulas_removed.toLocaleString() }} 个空记录公式、{{ sheet.blank_cells_removed.toLocaleString() }} 个尾部空白格式单元格；范围 {{ sheet.range_before }} → {{ sheet.range_after }}</li>
+          <li v-for="sheet in complaintResult.report.sheets" :key="sheet.name">{{ sheet.name }}：移除 {{ sheet.formulas_removed.toLocaleString() }} 个空记录公式、{{ sheet.blank_cells_removed.toLocaleString() }} 个空白格式单元格、{{ (sheet.empty_rows_removed || 0).toLocaleString() }} 个空行记录；范围 {{ sheet.range_before }} → {{ sheet.range_after }}</li>
           <li v-for="table in complaintResult.report.tables" :key="`${table.sheet}-${table.name}`">表格 {{ table.name }}：{{ table.before }} → {{ table.after }}</li>
         </ul>
         <p v-for="warning in complaintResult.report.warnings" :key="warning" class="complaint-result__note">{{ warning }}</p>
-        <p class="complaint-result__note">原文件保留，处理结果为独立副本。此工具仅整理 Excel，不向填报表回填或提交数据。支持 .xlsx，每次按上传文件重新分析。</p>
+        <p class="complaint-result__note">原文件保留，处理结果为独立副本；统计结果不自动回填或提交。支持 .xlsx，每次按上传文件重新分析。</p>
       </template>
     </section>
 
@@ -257,11 +274,13 @@ import {
   uploadXianghaiEfficiencyReport,
   uploadGongreEfficiencyReport,
   optimizeComplaintWorkbook,
+  calculateComplaintStatistics,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
 import { useAuthStore } from '../store/auth'
 import { entryContextKey, requireEntryQuery, requireSubmissionSuccess } from '../composables/entrySubmissionGuard'
+import { prepareComplaintFill } from '../composables/complaintFill'
 
 // --- 基本路由和状态 --- 
 const route = useRoute()
@@ -308,6 +327,34 @@ const complaintUploading = ref(false)
 const complaintFileInputRef = ref(null)
 const complaintResult = ref(null)
 const complaintError = ref('')
+const complaintStats = ref(null)
+const complaintFilling = ref(false)
+const complaintDetailCenter = ref('集团总量')
+const complaintDetailMetric = ref('daily_total')
+const complaintMetrics = [
+  { key: 'daily_city', label: '当日市投诉量' }, { key: 'daily_province', label: '当日省投诉量' },
+  { key: 'daily_total', label: '当日省市平台服务投诉量' }, { key: 'daily_net', label: '当日净投诉量' },
+  { key: 'daily_province_net', label: '其中：省平台净投诉量' }, { key: 'daily_city_net', label: '其中：市平台净投诉量' },
+  { key: 'monthly_net', label: '本月累计净投诉量' }, { key: 'season_net', label: '本供暖期累计净投诉量' },
+]
+const complaintSummaryRows = computed(() => complaintStats.value ? [{ name: '集团总量', metrics: complaintStats.value.group }, ...complaintStats.value.centers, { name: '未归属', metrics: complaintStats.value.unmatched.metrics }] : [])
+const complaintDetailRows = computed(() => {
+  const data = complaintStats.value
+  if (!data) return []
+  const metric = complaintDetailMetric.value
+  return data.records.filter(record => {
+    if (complaintDetailCenter.value === '未归属' ? record.center : complaintDetailCenter.value !== '集团总量' && record.center !== complaintDetailCenter.value) return false
+    const net = record.source === '转办' && record.status === '已办结'
+    if (metric === 'daily_province_net') return false
+    if (metric === 'monthly_net') return net && record.date >= data.month_start && record.date <= data.business_date
+    if (metric === 'season_net') return net && record.date >= data.season_start && record.date <= data.business_date
+    if (record.date !== data.business_date) return false
+    if (metric === 'daily_city') return record.source !== '省办'
+    if (metric === 'daily_province') return record.source === '省办'
+    if (metric === 'daily_net' || metric === 'daily_city_net') return net
+    return true
+  })
+})
 const sheetCache = new Map() // sheet_key -> 完整表格状态缓存
 const dirtySheets = new Set() // 当前日期未提交的表格，切日期前提醒
 const pageConfig = computed(() => {
@@ -2415,6 +2462,7 @@ async function onComplaintFileSelected(event) {
   if (!files || !files.length) return
   const file = files[0]
   complaintResult.value = null
+  complaintStats.value = null
   complaintError.value = ''
   if (!/\.xlsx$/i.test(file.name)) {
     complaintError.value = '请选择 .xlsx 工作簿；旧版 .xls 请先另存为 .xlsx。'
@@ -2436,10 +2484,106 @@ async function onComplaintFileSelected(event) {
 
 async function handleComplaintFileProcess(file) {
   if (file.size > 30 * 1024 * 1024) throw new Error('单个工作簿请勿超过 30 MB。')
-  const result = await optimizeComplaintWorkbook(projectKey, file)
-  if (!result?.ok || !result.file_base64 || !result.report) throw new Error('未收到完整的优化结果，请重新上传。')
-  complaintResult.value = result
-  showSubmitFeedback('success', '投诉报表处理完成，请查看处理结果并下载去冗余表格。', { autoHide: true, duration: 4000 })
+  const selectedDate = bizDate.value
+  const [stats, optimized] = await Promise.allSettled([calculateComplaintStatistics(projectKey, file, selectedDate), optimizeComplaintWorkbook(projectKey, file)])
+  if (selectedDate !== bizDate.value) throw new Error('处理期间业务日期已变化，请重新上传。')
+  if (stats.status === 'fulfilled' && stats.value?.ok) complaintStats.value = stats.value.data
+  if (optimized.status === 'fulfilled' && optimized.value?.ok) complaintResult.value = optimized.value
+  const errors = []
+  if (!complaintStats.value) errors.push(`统计失败：${stats.reason?.message || '未收到完整结果'}`)
+  if (!complaintResult.value) errors.push(`去冗余失败：${optimized.reason?.message || '未收到完整结果'}`)
+  if (errors.length) complaintError.value = errors.join('；')
+  showSubmitFeedback(errors.length ? 'error' : 'success', errors.join('；') || '投诉统计完成，请核对结果与明细。', { autoHide: !errors.length, duration: 4000 })
+}
+
+function selectComplaintDetails(center, metric) { complaintDetailCenter.value = center; complaintDetailMetric.value = metric }
+
+async function loadComplaintTargetState(targetKey, expectedDate, expectedConfig) {
+  const cached = sheetCache.get(targetKey)
+  if (cached?.isLoaded && cached.contextKey === entryContextKey(targetKey, expectedDate, expectedConfig)) return cached
+  const rawTpl = await getTemplate(projectKey, targetKey, { config: expectedConfig })
+  if (!rawTpl || !Array.isArray(rawTpl.rows) || !Array.isArray(rawTpl.columns)) throw new Error(`无法读取 ${targetKey} 模板。`)
+  const baseCols = [...rawTpl.columns]
+  rawTpl.columns = isDailyPage.value ? replaceDatePlaceholdersInColumns(baseCols) : baseCols
+  const { template: tpl } = applyTemplatePlaceholders(rawTpl)
+  const query = await queryData(projectKey, targetKey, { project_key: projectKey, sheet_key: targetKey, biz_date: expectedDate }, { config: expectedConfig })
+  requireEntryQuery(query)
+  if (!Array.isArray(query.rows)) throw new Error(`无法读取 ${targetKey} 的已填数据。`)
+  const readonlyLimit = resolveReadonlyLimit(tpl.columns)
+  const isConstant = (tpl.template_type || 'standard') === 'constant'
+  const gridCols = (tpl.columns || []).map((name, index) => {
+    const isConstantPeer = isConstant && index === tpl.columns.length - 1 && index > readonlyLimit
+    const isPeer = isPeerColumnForTable(index, tpl.columns, baseCols)
+    const locked = index <= readonlyLimit || isConstantPeer || (!isGlobalAdmin.value && isPeer)
+    return { prop: `c${index}`, name: String(name ?? '') + (!isGlobalAdmin.value && isPeer ? ' 🔒' : ''), size: index === 0 ? 220 : 120, __locked: locked, readonly: locked || isReadOnlyForDate.value }
+  })
+  const loadedRows = JSON.parse(JSON.stringify(query.rows))
+  const src = loadedRows.map(row => Object.fromEntries((tpl.columns || []).map((_, index) => [`c${index}`, row?.[index] == null ? '' : String(row[index])])))
+  return {
+    contextKey: entryContextKey(targetKey, expectedDate, expectedConfig), validationEnabled: resolveValidationEnabledFlag(tpl),
+    columns: tpl.columns, baseColumns: baseCols, rows: loadedRows, gridColumns: gridCols, gridSource: src,
+    sheetName: tpl.sheet_name || targetKey, unitName: tpl.unit_name || unitGroupName.value || '', unitId: tpl.unit_id || '',
+    templateType: tpl.template_type || 'standard',
+    templateDicts: { entries: Object.fromEntries(Object.entries(tpl).filter(([key]) => key.endsWith('_dict')).map(([key, value]) => [key, normalizeDictPayload(value)]).filter(([, value]) => value)), itemPrimary: normalizeDictPayload(tpl.item_dict), companyPrimary: normalizeDictPayload(tpl.company_dict) },
+    submitTime: '', readOnlyThreshold: readonlyLimit, linkageMap: new Map(), rowLabelIndex: new Map(),
+    templateValidationRaw: tpl.validation_rules || tpl['校验规则'] || null, validationRuleMap: new Map(), validationDependents: new Map(),
+    cellValidationMap: new Map(), virtualValidationRules: [], validationExplanationMap: normalizeExplanationMapping(tpl.validation_explanation_map || tpl['校验说明映射']),
+    sheetValidationEnabled: true, sheetAiReportEnabled: false, isLoaded: true,
+  }
+}
+
+async function fillComplaintData() {
+  if (complaintFilling.value || entryLocked.value || !entryDataReady.value || !complaintStats.value) return
+  const expectedDate = bizDate.value
+  const expectedConfig = pageConfig.value
+  const expectedSheet = activeSheetKey.value
+  const statistics = complaintStats.value
+  complaintFilling.value = true
+  try {
+    const targetKeys = ['GongRe_Sheet', 'GongRe_branches_detail_Sheet']
+    if (!targetKeys.includes(expectedSheet) || targetKeys.some(key => !unitSheets.value.some(sheet => sheet.sheet_key === key))) throw new Error('未找到供热公司两张填报表，请等待表格清单加载完成。')
+    saveCurrentSheetToCache(expectedSheet)
+    const states = {}
+    for (const key of targetKeys) states[key] = await loadComplaintTargetState(key, expectedDate, expectedConfig)
+    if (bizDate.value !== expectedDate || pageConfig.value !== expectedConfig || activeSheetKey.value !== expectedSheet || complaintStats.value !== statistics || entryLocked.value) throw new Error('日期、页面或统计结果已变化，请重新操作。')
+    // 查询另一张表期间可能发生手工编辑，以当前表最新状态为准。
+    saveCurrentSheetToCache(expectedSheet)
+    states[expectedSheet] = sheetCache.get(expectedSheet)
+    const plan = prepareComplaintFill(statistics, states, expectedDate)
+    for (const item of plan) {
+      const state = states[item.sheetKey]
+      if (!state.gridSource[item.rowIndex] || !state.rows[item.rowIndex] || isPeerColumnForTable(item.colIndex, state.columns, state.baseColumns) || state.gridColumns?.[item.colIndex]?.readonly) throw new Error('目标单元格不可写或无法确认本期列，未填入。')
+    }
+    for (const item of plan) {
+      const state = states[item.sheetKey]
+      state.rows[item.rowIndex][item.colIndex] = item.value
+      state.gridSource[item.rowIndex][`c${item.colIndex}`] = item.value
+    }
+    for (const key of targetKeys) {
+      sheetCache.set(key, states[key])
+      dirtySheets.add(key)
+    }
+    restoreSheetFromCache(expectedSheet)
+    if (validationEnabled.value && templateType.value === 'standard') runFullValidation()
+    saveCurrentSheetToCache(expectedSheet)
+    showSubmitFeedback('success', `已填入两张表的 ${plan.length} 个本期指标，请核对后自行提交。`, { autoHide: false })
+  } catch (err) {
+    showSubmitFeedback('error', `投诉数据填入失败：${err.message || String(err)}`, { autoHide: false })
+  } finally {
+    complaintFilling.value = false
+  }
+}
+function complaintSummaryText(separator = '\t') {
+  return [['单位', ...complaintMetrics.map(m => m.label)], ...complaintSummaryRows.value.map(row => [row.name, ...complaintMetrics.map(m => row.metrics[m.key])])].map(row => row.join(separator)).join('\n')
+}
+async function copyComplaintSummary() {
+  try { await navigator.clipboard.writeText(complaintSummaryText()); showSubmitFeedback('success', '统计表已复制。', { autoHide: true, duration: 3000 }) }
+  catch { showSubmitFeedback('error', '复制失败，请使用下载功能。', { autoHide: false }) }
+}
+function downloadComplaintCsv() {
+  const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`
+  const rows = [['业务日期', complaintStats.value.business_date], ['本月开始', complaintStats.value.month_start], ['供暖期开始', complaintStats.value.season_start], ['结果完整', complaintStats.value.complete ? '是' : '否'], ['未归属名称及数量', Object.entries(complaintStats.value.unmatched.names).map(([name, count]) => `${name}: ${count}`).join('；')], ...complaintStats.value.issues.map(issue => ['未计入记录', issue.sheet, issue.row, issue.reason]), [], ['单位', ...complaintMetrics.map(m => m.label)], ...complaintSummaryRows.value.map(row => [row.name, ...complaintMetrics.map(m => row.metrics[m.key])]), [], ['工作表', '行号', '来源', '日期', '编号', '类型', '投诉类别', '服务中心', '办理情况'], ...complaintStats.value.records.map(r => [r.sheet, r.row, r.source, r.date, r.identifier, r.type, r.category, r.center_original, r.status])]
+  downloadComplaintBlob(new Blob(['\ufeff', rows.map(row => row.map(quote).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `投诉统计_${complaintStats.value.business_date}.csv`)
 }
 
 function formatComplaintSize(bytes) {
@@ -2939,6 +3083,7 @@ function onBizDateChanged(event) {
 const stop = watch(
   () => bizDate.value,
   () => {
+    complaintStats.value = null
     clearRefreshCountdown()
     sheetCache.clear()
     loadedEntryContext.value = null
@@ -3316,6 +3461,11 @@ onBeforeUnmount(() => {
 .complaint-result__actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .complaint-result li { margin: 6px 0; }
 .complaint-result__note { font-size: 13px; color: #6b4d27; }
+.complaint-table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; margin: 12px 0; }
+.complaint-table { border-collapse: collapse; width: 100%; white-space: nowrap; font-size: 13px; }
+.complaint-table th, .complaint-table td { border: 1px solid #ddd; padding: 6px 10px; text-align: center; }
+.complaint-table thead { background: #fff7ed; }
+.complaint-number { border: 0; background: none; color: #9a3412; text-decoration: underline; cursor: pointer; }
 
 .complaint-upload-btn:hover {
   background: #ffedd5 !important;

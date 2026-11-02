@@ -7,7 +7,9 @@
       "range_before": "A1:U8000",
       "range_after": "A1:U36",
       "formulas_removed": 15925,
-      "blank_cells_removed": 151497,
+      "blank_cells_removed": 151481,
+      "whitespace_cells_removed": 0,
+      "empty_rows_removed": 7964,
       "formula_changes": [
         {
           "cell": "N2",
@@ -256,9 +258,11 @@
     {
       "name": "11.1-4.5（转办）",
       "range_before": "A1:AB8012",
-      "range_after": "A1:AB8012",
+      "range_after": "A1:AB97",
       "formulas_removed": 15890,
-      "blank_cells_removed": 29884,
+      "blank_cells_removed": 30325,
+      "whitespace_cells_removed": 1,
+      "empty_rows_removed": 7904,
       "formula_changes": [
         {
           "cell": "N2",
@@ -467,9 +471,89 @@
       ],
       "range_changes": [
         {
+          "type": "autoFilter",
+          "before": "A1:M7999",
+          "after": "A1:M54"
+        },
+        {
           "type": "conditionalFormatting",
           "before": "A8001",
           "after": "移除空区域"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "C$1:C$1048576",
+          "after": "C1:C54"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "M1:M7999",
+          "after": "M1:M52"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "E1:E1592 E1593:F1593 E1594:E8000",
+          "after": "E1:E53"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "F1:F1592 F1594:F7999",
+          "after": "F1:F54"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "A2:B7999",
+          "after": "A2:B54"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "D2:D8001 D8004:D1048576",
+          "after": "D2:D53"
+        },
+        {
+          "type": "dataValidation",
+          "before": "D1 J1 M1",
+          "after": "D1:D1 J1:J1 M1:M1"
+        },
+        {
+          "type": "dataValidation",
+          "before": "K3:L3 K124:L124 L125 L206 L8004 K4:K6 K8:K11 K36:K76 K80:K123 K125:K815 K1447:K1601 K1604:K1887 K1889:K2821 K3080:K3161 K3164:K3193 K3195:K8000 K8008:K8009 L4:L11 L36:L60 L62:L76 L80:L107 L109:L123 L127:L162 L164:L203 L209:L221 L223:L232 L234:L235 L237:L239 L241:L429 L431:L508 L510:L630 L632:L815 L1447:L2471 L2478:L2479 L2481:L2821 L3080:L8000 K12:L34 K77:L79 K816:L1203 K1205:L1306 K1308:L1321 K1323:L1445 K2823:L3079",
+          "after": "K3:L3 K4:K6 K8:K11 K36:K53 L4:L11 L36:L53 K12:L34"
+        },
+        {
+          "type": "dataValidation",
+          "before": "K7 K1888 L2480 K3162 K3194 K1602:K1603 L2472:L2477",
+          "after": "K7:K7"
+        },
+        {
+          "type": "dataValidation",
+          "before": "C675 E944 D2:D565 D567:D1048576",
+          "after": "D2:D53"
+        },
+        {
+          "type": "dataValidation",
+          "before": "L2822",
+          "after": "移除空区域"
+        },
+        {
+          "type": "dataValidation",
+          "before": "K3163",
+          "after": "移除空区域"
+        },
+        {
+          "type": "dataValidation",
+          "before": "I2:I1048576",
+          "after": "I2:I53"
+        },
+        {
+          "type": "dataValidation",
+          "before": "J2:J34 J36:J1048576",
+          "after": "J2:J34 J36:J53"
+        },
+        {
+          "type": "dataValidation",
+          "before": "M2:M1048576",
+          "after": "M2:M52"
         }
       ],
       "dependency_preservation": []
@@ -477,9 +561,11 @@
     {
       "name": "11.1-4.5（省办）",
       "range_before": "A1:AJ8000",
-      "range_after": "A1:AJ247",
+      "range_after": "A1:AJ92",
       "formulas_removed": 15995,
-      "blank_cells_removed": 32551,
+      "blank_cells_removed": 32549,
+      "whitespace_cells_removed": 1,
+      "empty_rows_removed": 7908,
       "formula_changes": [
         {
           "cell": "N2",
@@ -780,6 +866,41 @@
           "type": "dataValidation",
           "before": "K34",
           "after": "移除空区域"
+        },
+        {
+          "type": "dataValidation",
+          "before": "K35",
+          "after": "移除空区域"
+        },
+        {
+          "type": "dataValidation",
+          "before": "D1:D233 D235:D1048576",
+          "after": "D1:D2"
+        },
+        {
+          "type": "dataValidation",
+          "before": "I2:I1047839",
+          "after": "I2:I2"
+        },
+        {
+          "type": "dataValidation",
+          "before": "J1:J34 J36:J1048576",
+          "after": "J1:J2"
+        },
+        {
+          "type": "dataValidation",
+          "before": "K2:K33 K36:K76 K78:K114 K116:K233 K235:K11520",
+          "after": "K2:K2"
+        },
+        {
+          "type": "dataValidation",
+          "before": "L1:L76 L78:L114 L116:L233 L235:L1048576",
+          "after": "L1:L2"
+        },
+        {
+          "type": "dataValidation",
+          "before": "M$1:M$1048576",
+          "after": "M1:M1"
         }
       ],
       "dependency_preservation": [
@@ -802,6 +923,8 @@
       "range_after": "A1:Z242",
       "formulas_removed": 0,
       "blank_cells_removed": 3252,
+      "whitespace_cells_removed": 0,
+      "empty_rows_removed": 0,
       "formula_changes": [],
       "range_changes": [],
       "dependency_preservation": []
@@ -812,6 +935,8 @@
       "range_after": "A1:J157",
       "formulas_removed": 0,
       "blank_cells_removed": 801,
+      "whitespace_cells_removed": 0,
+      "empty_rows_removed": 1,
       "formula_changes": [],
       "range_changes": [],
       "dependency_preservation": []
@@ -829,11 +954,11 @@
     "统计公式与原有缓存保留；未执行 Excel/WPS 原生重算，不能将缓存一致视为重算结果一致。"
   ],
   "references_optimized": 522,
-  "output_bytes": 129559,
+  "output_bytes": 104247,
   "formulas_after": 921,
-  "constants_verified": 3490,
+  "constants_verified": 3488,
   "cached_results_verified": 921,
-  "elapsed_seconds": 15.848,
+  "elapsed_seconds": 23.33,
   "recalculated": false,
   "formulas_removed": 47810
 }

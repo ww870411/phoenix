@@ -2,12 +2,26 @@
 import base64
 from pathlib import PurePath
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from backend.services.auth_manager import get_current_session
 from backend.services.excel_optimizer import optimize_workbook
+from backend.projects.daily_report_25_26.services.complaint_statistics import calculate
 
 router = APIRouter(dependencies=[Depends(get_current_session)])
+
+
+@router.post('/data_entry/complaints/statistics', summary='按业务日期直接统计投诉明细')
+def complaint_statistics(file: UploadFile = File(...), biz_date: str = Form(...)):
+    if not (file.filename or '').lower().endswith('.xlsx'):
+        raise HTTPException(400, '请选择 .xlsx 工作簿。')
+    data = file.file.read(30 * 1024 * 1024 + 1)
+    if len(data) > 30 * 1024 * 1024:
+        raise HTTPException(400, '单个工作簿请勿超过 30 MB。')
+    try:
+        return {'ok': True, 'data': calculate(data, biz_date)}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.post('/data_entry/complaints/optimize', summary='分析并下载去冗余的 Excel 投诉报表')

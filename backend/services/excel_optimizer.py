@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
 from bisect import bisect_left, bisect_right
+from copy import deepcopy
 from dataclasses import dataclass, field
 from io import BytesIO
 import posixpath
@@ -380,6 +381,53 @@ def optimize_workbook(data: bytes):
         book, sheets = load_sheets(parts)
     except (BadZipFile, KeyError, ET.XMLSyntaxError, ValueError) as exc:
         raise ValueError(f'无法处理此 Excel 工作簿：{exc}') from exc
+    # 共享字符串中的纯空格并非业务内容；仅当整行没有其他内容时移除。
+    shared = parse(parts['xl/sharedStrings.xml']).findall('s:si', NS) if 'xl/sharedStrings.xml' in parts else []
+    whitespace_counts = {}
+    whitespace_candidates = {}
+    for sheet in sheets.values():
+        whitespace = set()
+        content_rows = set()
+        for address, cell in sheet.cells.items():
+            v = cell.find(tag('v'))
+            inline = cell.find(tag('is'))
+            blank_text = cell.find(tag('f')) is None and (
+                (cell.get('t') == 's' and v is not None and v.text is not None and int(v.text) < len(shared) and not ''.join(shared[int(v.text)].itertext()).strip())
+                or (cell.get('t') == 'inlineStr' and inline is not None and not ''.join(inline.itertext()).strip())
+                or (cell.get('t') == 'str' and v is not None and not (v.text or '').strip())
+            )
+            if blank_text:
+                whitespace.add(address)
+            elif has_content(cell) and address not in sheet.formulas:
+                content_rows.add(range_boundaries(address)[1])
+        whitespace_candidates[sheet.name] = {address for address in whitespace if range_boundaries(address)[1] not in content_rows}
+    # 空格与空单元格在部分 Excel 公式中含义不同；被引用时保留原值。
+    for sheet in sheets.values():
+        for formula in sheet.formulas.values():
+            tokens = formula_tokens(formula)
+            if tokens is None or re.search(r'\b(INDIRECT|OFFSET)\s*\(', formula, re.I):
+                for candidates in whitespace_candidates.values():
+                    candidates.clear()
+                break
+            for token in tokens:
+                if token.type != 'OPERAND' or token.subtype != 'RANGE':
+                    continue
+                ref = split_reference(token.value, sheet.name)
+                if not ref or ref[0] not in whitespace_candidates:
+                    continue
+                a, b, c, d = ref[2]
+                whitespace_candidates[ref[0]] = {address for address in whitespace_candidates[ref[0]] if not (a <= range_boundaries(address)[0] <= c and b <= range_boundaries(address)[1] <= d)}
+    for name in book.findall('s:definedNames/s:definedName', NS):
+        ref = split_reference(name.text or '', '')
+        if ref and ref[0] in whitespace_candidates:
+            a, b, c, d = ref[2]
+            whitespace_candidates[ref[0]] = {address for address in whitespace_candidates[ref[0]] if not (a <= range_boundaries(address)[0] <= c and b <= range_boundaries(address)[1] <= d)}
+    for sheet in sheets.values():
+        removable = whitespace_candidates[sheet.name]
+        for address in removable:
+            cell = sheet.cells.pop(address)
+            cell.getparent().remove(cell)
+        whitespace_counts[sheet.name] = len(removable)
     before_constants = constant_snapshot(sheets)
     warnings = ['统计公式与原有缓存保留；未执行 Excel/WPS 原生重算，不能将缓存一致视为重算结果一致。']
     for sheet in sheets.values():
@@ -388,10 +436,39 @@ def optimize_workbook(data: bytes):
     limits = {s.name: content_limits(s) for s in sheets.values()}
     report = {'input_bytes': len(data), 'formulas_before': sum(len(s.formulas) for s in sheets.values()), 'sheets': [], 'tables': [], 'warnings': warnings, 'references_optimized': 0}
     expected_formulas = {}
+    styles = parse(parts['xl/styles.xml']) if 'xl/styles.xml' in parts else None
+    xfs = styles.find(tag('cellXfs')) if styles is not None else None
+    borderless_styles = {}
     for sheet in sheets.values():
         actions = []
         removed_blank = 0
+        removed_empty_rows = 0
         sheet_limits = limits[sheet.name]
+        # 合并区域内的空白单元格承担边框等显示作用，需要保留。
+        merged_bounds = [range_boundaries(m.get('ref')) for m in sheet.root.findall('s:mergeCells/s:mergeCell', NS)]
+        occupied_rows = {range_boundaries(address)[1] for address, cell in sheet.cells.items() if address not in sheet.candidates and has_content(cell)}
+        columns = sheet.root.findall('s:cols/s:col', NS)
+        for column in columns:
+            style_id = column.get('style')
+            if style_id is None or xfs is None or int(style_id) >= len(xfs):
+                continue
+            old_id = int(style_id)
+            original_xf = xfs[old_id]
+            if original_xf.get('borderId', '0') == '0':
+                continue
+            if old_id not in borderless_styles:
+                new_xf = deepcopy(original_xf)
+                new_xf.set('borderId', '0')
+                new_xf.set('applyBorder', '1')
+                borderless_styles[old_id] = len(xfs)
+                xfs.append(new_xf)
+            # 对原本继承列样式的已存在单元格显式赋予旧样式，保留有效区域边框。
+            first, last = int(column.get('min')), int(column.get('max'))
+            for address, cell in sheet.cells.items():
+                col, _, _, _ = range_boundaries(address)
+                if first <= col <= last and cell.get('s') is None and address not in sheet.candidates:
+                    cell.set('s', style_id)
+            column.set('style', str(borderless_styles[old_id]))
         for address, c in list(sheet.cells.items()):
             if address in sheet.candidates:
                 c.getparent().remove(c)
@@ -410,21 +487,24 @@ def optimize_workbook(data: bytes):
                     actions.append({'cell': address, 'before': original, 'after': optimized, 'references': count})
             elif not has_content(c) and not any(c.find(tag(t)) is not None for t in ('extLst',)):
                 col, row, _, _ = range_boundaries(address)
-                if row > sheet_limits.get(col, 0):
+                in_merge = any(a <= col <= c and b <= row <= d for a, b, c, d in merged_bounds)
+                if not in_merge and (row not in occupied_rows or row > sheet_limits.get(col, 0)):
                     c.getparent().remove(c)
                     removed_blank += 1
         for row in sheet.root.findall('s:sheetData/s:row', NS):
-            if len(row) == 0 and int(row.get('r')) > max(sheet_limits.values(), default=1):
+            row_number = int(row.get('r'))
+            if len(row) == 0 and row_number not in occupied_rows and not any(b <= row_number <= d for _, b, _, d in merged_bounds):
                 row.getparent().remove(row)
+                removed_empty_rows += 1
             else:
                 row.attrib.pop('spans', None)
         ranges = []
-        for obj in sheet.root.iter():
+        for obj in list(sheet.root.iter()):
             if not isinstance(obj.tag, str):
                 continue
             local = ET.QName(obj).localname
             attribute = 'sqref' if local in {'conditionalFormatting', 'dataValidation'} else 'ref' if local == 'autoFilter' else None
-            if attribute and obj.get(attribute):
+            if attribute and obj.get(attribute) and obj.getparent() is not None:
                 old = obj.get(attribute)
                 new = clip_ranges(old, sheet_limits)
                 if new != old:
@@ -450,7 +530,7 @@ def optimize_workbook(data: bytes):
         if dimension is not None:
             dimension.set('ref', f'A1:{get_column_letter(max_col)}{max_row}')
         parts[sheet.path] = serialize(sheet.root)
-        report['sheets'].append({'name': sheet.name, 'range_before': old_dimension, 'range_after': f'A1:{get_column_letter(max_col)}{max_row}', 'formulas_removed': len(sheet.candidates), 'blank_cells_removed': removed_blank, 'formula_changes': actions, 'range_changes': ranges, 'dependency_preservation': sheet.protected})
+        report['sheets'].append({'name': sheet.name, 'range_before': old_dimension, 'range_after': f'A1:{get_column_letter(max_col)}{max_row}', 'formulas_removed': len(sheet.candidates), 'blank_cells_removed': removed_blank, 'whitespace_cells_removed': whitespace_counts[sheet.name], 'empty_rows_removed': removed_empty_rows, 'formula_changes': actions, 'range_changes': ranges, 'dependency_preservation': sheet.protected})
         rel_path = posixpath.join(posixpath.dirname(sheet.path), '_rels', posixpath.basename(sheet.path) + '.rels')
         if rel_path in parts:
             for rel in parse(parts[rel_path]):
@@ -479,6 +559,9 @@ def optimize_workbook(data: bytes):
             if new:
                 name.text = "'" + ref[0].replace("'", "''") + "'!" + new
     parts['xl/workbook.xml'] = serialize(book)
+    if borderless_styles:
+        xfs.set('count', str(len(xfs)))
+        parts['xl/styles.xml'] = serialize(styles)
     # 删除已过时的计算顺序缓存与对应关系；保留原 calcPr（尤其迭代/精度设置）。
     for path in list(parts):
         if path == 'xl/calcChain.xml':

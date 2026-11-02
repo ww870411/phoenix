@@ -86,6 +86,30 @@ def test_cleanup_preserves_values_formulas_objects_and_cache():
         assert z.read('customXml/item1.xml') == b'<kept>opaque</kept>'
 
 
+def test_empty_formatted_rows_are_removed_without_shifting_later_content():
+    def extra(book):
+        sheet = book.active
+        sheet['C500'].number_format = '0.00'
+        sheet.row_dimensions[500].height = 25
+        sheet['G1500'] = '后方独立内容'
+    result, report = optimize_workbook(fixture_bytes(extra))
+    with ZipFile(BytesIO(result)) as archive:
+        _, sheets = load_sheets({name: archive.read(name) for name in archive.namelist()})
+    sheet = sheets['明细']
+    assert 'C500' not in sheet.cells
+    assert sheet.root.find("s:sheetData/s:row[@r='500']", NS) is None
+    assert 'G1500' in sheet.cells
+    assert report['sheets'][0]['empty_rows_removed'] > 0
+
+
+def test_referenced_whitespace_is_preserved():
+    def extra(book):
+        book.active['C500'] = '  '
+        book.active['J1'] = '=C500'
+    result, _ = optimize_workbook(fixture_bytes(extra))
+    assert load_workbook(BytesIO(result)).active['C500'].value == '  '
+
+
 @pytest.mark.parametrize('consumer', ['=ISBLANK(B41)', '=COUNTA(B1:B41)', '=B41'])
 def test_blank_sensitive_references_protect_formula(consumer):
     result, _ = optimize_workbook(fixture_bytes(lambda b: b.active.__setitem__('L1', consumer)))
@@ -186,7 +210,15 @@ def test_real_sample():
     with ZipFile(BytesIO(optimized)) as archive:
         _, sheets = load_sheets({name: archive.read(name) for name in archive.namelist()})
         items = list(sheets.values())
-        assert items[1].cells['L8012'].find(tag('v')) is not None
+        assert 'L8012' not in items[1].cells
+        assert items[1].root.find("s:sheetData/s:row[@r='500']", NS) is None
+        xfs = parse(archive.read('xl/styles.xml')).find(tag('cellXfs'))
+        for sheet in items[1:3]:
+            for col in sheet.root.findall('s:cols/s:col', NS):
+                if col.get('style') is not None:
+                    assert xfs[int(col.get('style'))].get('borderId', '0') == '0'
+            for cf in sheet.root.findall('s:conditionalFormatting', NS):
+                assert '1048576' not in cf.get('sqref', '')
         assert parse(archive.read('xl/tables/table1.xml')).get('ref') == 'A1:M16'
         assert 'R16' in items[2].formulas
     assert all(s['formulas_removed'] == 0 for s in report['sheets'][3:])
