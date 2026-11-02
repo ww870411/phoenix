@@ -1,0 +1,13 @@
+{
+  "engine": "Microsoft Excel",
+  "version": "16.0",
+  "recalculated": false,
+  "opening_seconds": {
+    "source": 2.64,
+    "output": 1.022
+  },
+  "value_differences": [],
+  "compared_cells": 921,
+  "source_error_cells": [],
+  "output_error_cells": []
+}

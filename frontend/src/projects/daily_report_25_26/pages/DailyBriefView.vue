@@ -9,7 +9,7 @@
 
         <!-- 报刊版式切换标签 -->
         <div class="theme-switcher">
-          <span class="switcher-hint">报刊版式试用：</span>
+          <span class="switcher-hint">报刊版式：</span>
           <div class="switcher-tabs">
             <button
               v-for="item in themes"

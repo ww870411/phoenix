@@ -1528,6 +1528,20 @@ export async function uploadGongreEfficiencyReport(projectKey, file, bizDate) {
   return parseEfficiencyUploadResponse(response, '解析供热公司能效报表失败')
 }
 
+export async function optimizeComplaintWorkbook(projectKey, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/complaints/optimize`, {
+    method: 'POST',
+    headers: attachAuthHeaders(),
+    body: formData,
+  })
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response, `投诉报表处理失败 (${response.status})`))
+  }
+  return response.json()
+}
+
 export async function listSheets(projectKey, configFile) {
   const search = configFile ? `?config=${encodeURIComponent(configFile)}` : ''
   const response = await authAwareFetch(`${projectPath(projectKey)}/data_entry/sheets${search}`, {

@@ -25,6 +25,7 @@ from .dispatch_info import public_router as dispatch_info_public_router
 from .dispatch_info import router as dispatch_info_router
 from .spot_settlement import router as spot_settlement_router
 from .daily_brief import router as daily_brief_router
+from .complaint_optimizer import router as complaint_optimizer_router
 
 router = APIRouter()
 router.include_router(legacy_router)
@@ -34,6 +35,7 @@ router.include_router(dynamic_plan_router)
 router.include_router(dispatch_info_router)
 router.include_router(spot_settlement_router)
 router.include_router(daily_brief_router)
+router.include_router(complaint_optimizer_router)
 
 public_router = APIRouter()
 public_router.include_router(legacy_public_router)

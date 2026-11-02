@@ -1,5 +1,33 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-02 投诉报表去冗余
+
+- 需求：为供热填报页面提供独立 Excel 快照优化和下载，保留有内容记录中的公式。
+- 实现：`backend/services/excel_optimizer.py` 分析空值守卫和引用，局部修改 OOXML；`complaint_optimizer.py` 提供项目鉴权接口；`DataEntryView.vue` 展示结果并下载文件和报告。
+- 样本：5 张表；保留第 8012 行的独立内容；原始数据和保留公式缓存逐格校验。Excel 16 只读打开两份文件，921 个保留公式当前值一致、无公式错误；原表完整重算耗时过长，已终止，重算等价性尚未验证。浏览器控制服务不可用，未完成交互验收。
+- 工具留痕：本会话未提供 Serena、Sequential Thinking、Context7 或计划工具，无法初始化或写入 Serena；使用 `rg` 检索、`apply_patch` 编辑、仓库内生成样本副本。回滚本轮代码和文档变更即可，原工作簿未修改。用户已有未提交改动未覆盖。外部参考：Microsoft Excel 性能优化文档，访问日期 2026-11-02，https://learn.microsoft.com/en-us/office/vba/excel/concepts/excel-performance/excel-tips-for-optimizing-performance-obstructions 。
+
+## 2026-11-02 供热填报页面新增“上传投诉报表”小工具
+
+- **需求背景**：用户要求在每日数据填报页面的 `GongRe_Sheet`（供热公司表）中，在“上传能效分析表”右侧新增“上传投诉报表”小工具，让用户能够点击按钮上传投诉文件，并预留后续具体处理逻辑。
+- **改动范围**：
+  - `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`：
+    - 在顶部操作栏“上传能效分析表”右侧增加 `<button class="btn secondary complaint-upload-btn">📁 上传投诉报表</button>`；
+    - 绑定隐藏式文件输入控件 `<input type="file" accept=".xlsx, .xls, .csv, .docx, .pdf">`；
+    - 增加 `canUploadComplaint` 权限与单位判断（适用于供热公司表格），支持加载状态与操作提示；
+    - 实现 `triggerComplaintUpload` 与 `onComplaintFileSelected` 处理管线，提供 `handleComplaintFileProcess(file)` 独立处理挂载点，选取文件后弹出包含文件名与业务日期的确认提示，为后续注入具体业务解析与回填规则做好完备准备；
+    - 添加专属琥珀暖橙风格样式 `.complaint-upload-btn`，与能效分析表的淡蓝风格自然呼应且清晰辨识。
+- **验证结果**：前端生产打包 `npm run build` 成功完成（21.91s，0 错误）。
+
+
+## 2026-11-02 每日简报页面顶部工具条版式切换文案精简
+
+- **需求背景**：用户反馈每日简报页面（`/projects/daily_report_25_26/pages/daily_brief`）顶部工具条的文案调整，将“报刊版式试用：”精炼修改为“报刊版式：”。
+- **改动范围**：
+  - `frontend/src/projects/daily_report_25_26/pages/DailyBriefView.vue`：将顶部工具条中 `.switcher-hint` 标签的显示文案从“报刊版式试用：”修改为“报刊版式：”。
+- **验证结果**：前端生产打包 `npm run build` 成功完成（22.27s，0 错误）。
+
+
 ## 2026-11-02 每日简报设备段落行文精简
 
 - 按用户最新示例，将设备段落调整为“集团四类设备台数与同比 → 当日调度具体记录”；连接语统一为“当日调度记录显示：”。

@@ -1,0 +1,839 @@
+{
+  "input_bytes": 1167656,
+  "formulas_before": 48731,
+  "sheets": [
+    {
+      "name": "11.1-4.5（直办）",
+      "range_before": "A1:U8000",
+      "range_after": "A1:U36",
+      "formulas_removed": 15925,
+      "blank_cells_removed": 151497,
+      "formula_changes": [
+        {
+          "cell": "N2",
+          "before": "SUM(COUNTIFS(B:B,\">=\"&TODAY(),B:B,\"<\"&TODAY()+1,M:M,{\"已办结\",\"撤件\"}))",
+          "after": "SUM(COUNTIFS(B$1:B$36,\">=\"&TODAY(),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,{\"已办结\",\"撤件\"}))",
+          "references": 3
+        },
+        {
+          "cell": "O2",
+          "before": "COUNTIFS(B:B,\"<=\"&NOW(),M:M,\"已办结\")",
+          "after": "COUNTIFS(B$1:B$36,\"<=\"&NOW(),M$1:M$36,\"已办结\")",
+          "references": 2
+        },
+        {
+          "cell": "P2",
+          "before": "COUNTIFS(B:B,\">=\"&TODAY(),B:B,\"<\"&(TODAY()+1),M:M,\"撤件\")",
+          "after": "COUNTIFS(B$1:B$36,\">=\"&TODAY(),B$1:B$36,\"<\"&(TODAY()+1),M$1:M$36,\"撤件\")",
+          "references": 3
+        },
+        {
+          "cell": "Q2",
+          "before": "COUNTIFS(B:B,\"<=\"&NOW(),M:M,\"撤件\")",
+          "after": "COUNTIFS(B$1:B$36,\"<=\"&NOW(),M$1:M$36,\"撤件\")",
+          "references": 2
+        },
+        {
+          "cell": "R2",
+          "before": "COUNTIFS(B:B,\">=\"&TODAY(),F:F,\"<>\")",
+          "after": "COUNTIFS(B$1:B$36,\">=\"&TODAY(),F$1:F$36,\"<>\")",
+          "references": 2
+        },
+        {
+          "cell": "O4",
+          "before": "IF(INT((ROW(N1)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q4",
+          "before": "IF(INT((ROW(N1)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*4)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(20,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*4),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*4)+4,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S4",
+          "before": "IF(INT((ROW(N1)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*6)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(18,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*6),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*6)+6,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "U4",
+          "before": "IF(INT((ROW(N1)-1)*12)=12,COUNTIFS(B:B,\">=\"&TODAY()+TIME(12,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*12),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*12)+12,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*12)=12,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(12,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*12),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*12)+12,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O5",
+          "before": "IF(INT((ROW(N2)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O6",
+          "before": "IF(INT((ROW(N3)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N3)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q6",
+          "before": "IF(INT((ROW(N2)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*4)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(20,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*4),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*4)+4,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O7",
+          "before": "IF(INT((ROW(N4)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N4)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S7",
+          "before": "IF(INT((ROW(N2)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*6)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(18,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*6),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*6)+6,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O8",
+          "before": "IF(INT((ROW(N5)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N5)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q8",
+          "before": "IF(INT((ROW(N3)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N3)-1)*4)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(20,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*4),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*4)+4,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O9",
+          "before": "IF(INT((ROW(N6)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N6)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N6)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N6)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N6)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N6)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O10",
+          "before": "IF(INT((ROW(N7)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N7)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q10",
+          "before": "IF(INT((ROW(N4)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N4)-1)*4)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(20,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*4),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*4)+4,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S10",
+          "before": "IF(INT((ROW(N3)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N3)-1)*6)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(18,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*6),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*6)+6,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "U10",
+          "before": "IF(INT((ROW(N2)-1)*12)=12,COUNTIFS(B:B,\">=\"&TODAY()+TIME(12,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*12),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*12)+12,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*12)=12,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(12,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*12),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*12)+12,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O11",
+          "before": "IF(INT((ROW(N8)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N8)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N8)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N8)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N8)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N8)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O12",
+          "before": "IF(INT((ROW(N9)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N9)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N9)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N9)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N9)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N9)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q12",
+          "before": "IF(INT((ROW(N5)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N5)-1)*4)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(20,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*4),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*4)+4,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O13",
+          "before": "IF(INT((ROW(N10)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N10)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N10)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N10)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N10)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N10)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S13",
+          "before": "IF(INT((ROW(N5)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N5)-1)*6)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(18,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*6),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*6)+6,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O14",
+          "before": "IF(INT((ROW(N11)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N11)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q14",
+          "before": "IF(INT((ROW(N7)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N7)-1)*4)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(20,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*4),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*4)+4,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O15",
+          "before": "IF(INT((ROW(N13)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N13)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N13)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N13)-1)*2)=24,COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(22,0,0),B$1:B$36,\"<\"&TODAY()+1,M$1:M$36,\"<>退件\"),COUNTIFS(B$1:B$36,\">=\"&TODAY()+TIME(INT((ROW(N13)-1)*2),0,0),B$1:B$36,\"<\"&TODAY()+TIME(INT((ROW(N13)-1)*2)+2,0,0),M$1:M$36,\"<>退件\"))",
+          "references": 6
+        }
+      ],
+      "range_changes": [
+        {
+          "type": "autoFilter",
+          "before": "A1:M7999",
+          "after": "A1:M36"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "D2:D8001",
+          "after": "D2:D36"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "E1:E7999",
+          "after": "E1:E36"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "G2:G8000",
+          "after": "G2:G29"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "M1:M7999",
+          "after": "M1:M29"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "C1:C820 C829:C7999",
+          "after": "C1:C36"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "F1:F820 F829:F7999",
+          "after": "F1:F36"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "A2:B7999",
+          "after": "A2:B36"
+        },
+        {
+          "type": "dataValidation",
+          "before": "D1:D193 D195:D1451 D1455:D1048576",
+          "after": "D1:D36"
+        },
+        {
+          "type": "dataValidation",
+          "before": "I20:I1048576",
+          "after": "I20:I36"
+        },
+        {
+          "type": "dataValidation",
+          "before": "J$1:J$1048576",
+          "after": "J1:J36"
+        },
+        {
+          "type": "dataValidation",
+          "before": "M1:M1451 M1455:M1048576",
+          "after": "M1:M29"
+        },
+        {
+          "type": "dataValidation",
+          "before": "K2:L193 K195:L1451 K1453:L7999",
+          "after": "K2:L36"
+        }
+      ],
+      "dependency_preservation": []
+    },
+    {
+      "name": "11.1-4.5（转办）",
+      "range_before": "A1:AB8012",
+      "range_after": "A1:AB8012",
+      "formulas_removed": 15890,
+      "blank_cells_removed": 29884,
+      "formula_changes": [
+        {
+          "cell": "N2",
+          "before": "COUNTIFS(B:B,\">=\"&TODAY(),B:B,\"<\"&(TODAY()+1),M:M,\"已办结\")+COUNTIFS(B:B,\">=\"&TODAY(),B:B,\"<\"&(TODAY()+1),M:M,\"不合理诉求\")",
+          "after": "COUNTIFS(B$1:B$54,\">=\"&TODAY(),B$1:B$54,\"<\"&(TODAY()+1),M$1:M$54,\"已办结\")+COUNTIFS(B$1:B$54,\">=\"&TODAY(),B$1:B$54,\"<\"&(TODAY()+1),M$1:M$54,\"不合理诉求\")",
+          "references": 6
+        },
+        {
+          "cell": "O2",
+          "before": "COUNTIFS(B:B,\"<=\"&NOW(),M:M,\"已办结\")",
+          "after": "COUNTIFS(B$1:B$54,\"<=\"&NOW(),M$1:M$54,\"已办结\")",
+          "references": 2
+        },
+        {
+          "cell": "P2",
+          "before": "COUNTIFS(B:B,\">=\"&TODAY(),B:B,\"<\"&(TODAY()+1),M:M,\"撤件\")",
+          "after": "COUNTIFS(B$1:B$54,\">=\"&TODAY(),B$1:B$54,\"<\"&(TODAY()+1),M$1:M$54,\"撤件\")",
+          "references": 3
+        },
+        {
+          "cell": "Q2",
+          "before": "COUNTIFS(B:B,\"<=\"&NOW(),M:M,\"撤件\")",
+          "after": "COUNTIFS(B$1:B$54,\"<=\"&NOW(),M$1:M$54,\"撤件\")",
+          "references": 2
+        },
+        {
+          "cell": "S2",
+          "before": "SUM(COUNTIFS(B:B,\">=\"&TODAY(),B:B,\"<\"&TODAY()+1,M:M,{\"已办结\",\"不合理诉求通过\",\"撤件\",\"未办结\"}))+'11.1-4.5（直办）'!N2",
+          "after": "SUM(COUNTIFS(B$1:B$54,\">=\"&TODAY(),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,{\"已办结\",\"不合理诉求通过\",\"撤件\",\"未办结\"}))+'11.1-4.5（直办）'!N2",
+          "references": 3
+        },
+        {
+          "cell": "O4",
+          "before": "IF(INT((ROW(N1)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q4",
+          "before": "IF(INT((ROW(N1)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*4)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(20,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*4),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*4)+4,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S4",
+          "before": "IF(INT((ROW(N1)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*6)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(18,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*6),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*6)+6,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "U4",
+          "before": "IF(INT((ROW(N1)-1)*12)=12,COUNTIFS(B:B,\">=\"&TODAY()+TIME(12,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*12),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*12)+12,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N1)-1)*12)=12,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(12,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*12),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*12)+12,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O5",
+          "before": "IF(INT((ROW(N2)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O6",
+          "before": "IF(INT((ROW(N3)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N3)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q6",
+          "before": "IF(INT((ROW(N2)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*4)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(20,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*4),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*4)+4,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O7",
+          "before": "IF(INT((ROW(N4)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N4)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S7",
+          "before": "IF(INT((ROW(N2)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*6)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(18,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*6),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*6)+6,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O8",
+          "before": "IF(INT((ROW(N5)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N5)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q8",
+          "before": "IF(INT((ROW(N3)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N3)-1)*4)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(20,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*4),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*4)+4,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O9",
+          "before": "IF(INT((ROW(N6)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N6)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N6)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N6)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N6)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N6)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O10",
+          "before": "IF(INT((ROW(N7)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N7)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q10",
+          "before": "IF(INT((ROW(N4)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N4)-1)*4)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(20,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*4),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*4)+4,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S10",
+          "before": "IF(INT((ROW(N3)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N3)-1)*6)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(18,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*6),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*6)+6,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "U10",
+          "before": "IF(INT((ROW(N2)-1)*12)=12,COUNTIFS(B:B,\">=\"&TODAY()+TIME(12,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*12),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*12)+12,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N2)-1)*12)=12,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(12,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*12),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*12)+12,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O11",
+          "before": "IF(INT((ROW(N8)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N8)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N8)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N8)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N8)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N8)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O12",
+          "before": "IF(INT((ROW(N9)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N9)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N9)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N9)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N9)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N9)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q12",
+          "before": "IF(INT((ROW(N5)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N5)-1)*4)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(20,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*4),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*4)+4,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O13",
+          "before": "IF(INT((ROW(N10)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N10)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N10)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N10)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N10)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N10)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "S13",
+          "before": "IF(INT((ROW(N5)-1)*6)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*6)+6,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N5)-1)*6)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(18,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*6),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*6)+6,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O14",
+          "before": "IF(INT((ROW(N11)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N11)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "Q14",
+          "before": "IF(INT((ROW(N7)-1)*4)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*4)+4,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N7)-1)*4)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(20,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*4),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*4)+4,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "O15",
+          "before": "IF(INT((ROW(N13)-1)*2)=24,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1,M:M,\"<>退件\"),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N13)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N13)-1)*2)+2,0,0),M:M,\"<>退件\"))",
+          "after": "IF(INT((ROW(N13)-1)*2)=24,COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(22,0,0),B$1:B$54,\"<\"&TODAY()+1,M$1:M$54,\"<>退件\"),COUNTIFS(B$1:B$54,\">=\"&TODAY()+TIME(INT((ROW(N13)-1)*2),0,0),B$1:B$54,\"<\"&TODAY()+TIME(INT((ROW(N13)-1)*2)+2,0,0),M$1:M$54,\"<>退件\"))",
+          "references": 6
+        },
+        {
+          "cell": "N19",
+          "before": "COUNTIF('11.1-4.5（转办）'!I:I,\"不热\")",
+          "after": "COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"不热\")",
+          "references": 1
+        },
+        {
+          "cell": "P19",
+          "before": "COUNTIF('11.1-4.5（转办）'!I:I,\"缴费\")",
+          "after": "COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"缴费\")",
+          "references": 1
+        },
+        {
+          "cell": "Q19",
+          "before": "COUNTIF('11.1-4.5（转办）'!I:I,\"异味\")",
+          "after": "COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"异味\")",
+          "references": 1
+        },
+        {
+          "cell": "R19",
+          "before": "COUNTIF('11.1-4.5（转办）'!I:I,\"施工\")",
+          "after": "COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"施工\")",
+          "references": 1
+        },
+        {
+          "cell": "S19",
+          "before": "COUNTIF('11.1-4.5（转办）'!I:I,\"漏水\")",
+          "after": "COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"漏水\")",
+          "references": 1
+        }
+      ],
+      "range_changes": [
+        {
+          "type": "conditionalFormatting",
+          "before": "A8001",
+          "after": "移除空区域"
+        }
+      ],
+      "dependency_preservation": []
+    },
+    {
+      "name": "11.1-4.5（省办）",
+      "range_before": "A1:AJ8000",
+      "range_after": "A1:AJ247",
+      "formulas_removed": 15995,
+      "blank_cells_removed": 32551,
+      "formula_changes": [
+        {
+          "cell": "N2",
+          "before": "COUNTIFS(B:B,\">=\"&TODAY(),B:B,\"<\"&(TODAY()+1),M:M,\"已办结\")",
+          "after": "COUNTIFS(B$1:B$16,\">=\"&TODAY(),B$1:B$16,\"<\"&(TODAY()+1),M$1:M$16,\"已办结\")",
+          "references": 3
+        },
+        {
+          "cell": "O2",
+          "before": "COUNTIFS(B:B,\"<=\"&NOW(),M:M,\"已办结\")",
+          "after": "COUNTIFS(B$1:B$16,\"<=\"&NOW(),M$1:M$16,\"已办结\")",
+          "references": 2
+        },
+        {
+          "cell": "S2",
+          "before": "COUNTIFS(B:B,\">=\"&TODAY(),F:F,\"<>\")",
+          "after": "COUNTIFS(B$1:B$16,\">=\"&TODAY(),F$1:F$16,\"<>\")",
+          "references": 2
+        },
+        {
+          "cell": "O4",
+          "before": "IF(INT((ROW(N1)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N1)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "Q4",
+          "before": "IF(INT((ROW(N1)-1)*2)=20,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*4)+4,0,0)))",
+          "after": "IF(INT((ROW(N1)-1)*2)=20,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(20,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*4),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*4)+4,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "S4",
+          "before": "IF(INT((ROW(N1)-1)*6)=18,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*6)+6,0,0)))",
+          "after": "IF(INT((ROW(N1)-1)*6)=18,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(18,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*6),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*6)+6,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "U4",
+          "before": "IF(INT((ROW(N1)-1)*12)=12,COUNTIFS(B:B,\">=\"&TODAY()+TIME(12,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*12),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*12)+12,0,0)))",
+          "after": "IF(INT((ROW(N1)-1)*12)=12,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(12,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N1)-1)*12),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N1)-1)*12)+12,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O5",
+          "before": "IF(INT((ROW(N2)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N2)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O6",
+          "before": "IF(INT((ROW(N3)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N3)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "Q6",
+          "before": "IF(INT((ROW(N2)-1)*2)=20,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*4)+4,0,0)))",
+          "after": "IF(INT((ROW(N2)-1)*2)=20,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(20,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*4),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*4)+4,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O7",
+          "before": "IF(INT((ROW(N4)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N4)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "S7",
+          "before": "IF(INT((ROW(N2)-1)*6)=18,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*6)+6,0,0)))",
+          "after": "IF(INT((ROW(N2)-1)*6)=18,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(18,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*6),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*6)+6,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O8",
+          "before": "IF(INT((ROW(N5)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N5)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "Q8",
+          "before": "IF(INT((ROW(N3)-1)*2)=20,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*4)+4,0,0)))",
+          "after": "IF(INT((ROW(N3)-1)*2)=20,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(20,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*4),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*4)+4,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O9",
+          "before": "IF(INT((ROW(N6)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N6)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N6)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N6)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N6)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N6)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O10",
+          "before": "IF(INT((ROW(N7)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N7)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N7)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N7)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "Q10",
+          "before": "IF(INT((ROW(N4)-1)*2)=20,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*4)+4,0,0)))",
+          "after": "IF(INT((ROW(N4)-1)*2)=20,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(20,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*4),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*4)+4,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "S10",
+          "before": "IF(INT((ROW(N3)-1)*6)=18,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*6)+6,0,0)))",
+          "after": "IF(INT((ROW(N3)-1)*6)=18,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(18,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N3)-1)*6),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N3)-1)*6)+6,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "U10",
+          "before": "IF(INT((ROW(N2)-1)*12)=12,COUNTIFS(B:B,\">=\"&TODAY()+TIME(12,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*12),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*12)+12,0,0)))",
+          "after": "IF(INT((ROW(N2)-1)*12)=12,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(12,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N2)-1)*12),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N2)-1)*12)+12,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O11",
+          "before": "IF(INT((ROW(N8)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N8)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N8)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N8)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N8)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N8)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O12",
+          "before": "IF(INT((ROW(N9)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N9)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N9)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N9)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N9)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N9)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "Q12",
+          "before": "IF(INT((ROW(N5)-1)*2)=20,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*4)+4,0,0)))",
+          "after": "IF(INT((ROW(N5)-1)*2)=20,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(20,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N5)-1)*4),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N5)-1)*4)+4,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O13",
+          "before": "IF(INT((ROW(N10)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N10)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N10)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N10)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N10)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N10)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "S13",
+          "before": "IF(INT((ROW(N4)-1)*6)=18,COUNTIFS(B:B,\">=\"&TODAY()+TIME(18,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*6),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*6)+6,0,0)))",
+          "after": "IF(INT((ROW(N4)-1)*6)=18,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(18,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N4)-1)*6),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N4)-1)*6)+6,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O14",
+          "before": "IF(INT((ROW(N11)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N11)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "Q14",
+          "before": "IF(INT((ROW(N11)-1)*2)=20,COUNTIFS(B:B,\">=\"&TODAY()+TIME(20,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*4),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*4)+4,0,0)))",
+          "after": "IF(INT((ROW(N11)-1)*2)=20,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(20,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N11)-1)*4),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N11)-1)*4)+4,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "O15",
+          "before": "IF(INT((ROW(N12)-1)*2)=22,COUNTIFS(B:B,\">=\"&TODAY()+TIME(22,0,0),B:B,\"<\"&TODAY()+1),COUNTIFS(B:B,\">=\"&TODAY()+TIME(INT((ROW(N12)-1)*2),0,0),B:B,\"<\"&TODAY()+TIME(INT((ROW(N12)-1)*2)+2,0,0)))",
+          "after": "IF(INT((ROW(N12)-1)*2)=22,COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(22,0,0),B$1:B$16,\"<\"&TODAY()+1),COUNTIFS(B$1:B$16,\">=\"&TODAY()+TIME(INT((ROW(N12)-1)*2),0,0),B$1:B$16,\"<\"&TODAY()+TIME(INT((ROW(N12)-1)*2)+2,0,0)))",
+          "references": 4
+        },
+        {
+          "cell": "N29",
+          "before": "COUNTIF('11.1-4.5（直办）'!I:I,\"不热\")+COUNTIF('11.1-4.5（转办）'!I:I,\"不热\")+COUNTIF(表1[投诉类别],\"不热\")",
+          "after": "COUNTIF('11.1-4.5（直办）'!I$1:I$36,\"不热\")+COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"不热\")+COUNTIF(表1[投诉类别],\"不热\")",
+          "references": 2
+        },
+        {
+          "cell": "P29",
+          "before": "COUNTIF('11.1-4.5（直办）'!K:K,\"缴费\")+COUNTIF('11.1-4.5（转办）'!K:K,\"缴费\")+COUNTIF(表1[投诉类别],\"缴费\")",
+          "after": "COUNTIF('11.1-4.5（直办）'!K$1:K$36,\"缴费\")+COUNTIF('11.1-4.5（转办）'!K$1:K$53,\"缴费\")+COUNTIF(表1[投诉类别],\"缴费\")",
+          "references": 2
+        },
+        {
+          "cell": "Q29",
+          "before": "COUNTIF('11.1-4.5（直办）'!I:I,\"异味\")+COUNTIF('11.1-4.5（转办）'!I:I,\"异味\")+COUNTIF(表1[投诉类别],\"异味\")",
+          "after": "COUNTIF('11.1-4.5（直办）'!I$1:I$36,\"异味\")+COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"异味\")+COUNTIF(表1[投诉类别],\"异味\")",
+          "references": 2
+        },
+        {
+          "cell": "R29",
+          "before": "COUNTIF('11.1-4.5（直办）'!I:I,\"施工\")+COUNTIF('11.1-4.5（转办）'!I:I,\"施工\")+COUNTIF(表1[投诉类别],\"施工\")",
+          "after": "COUNTIF('11.1-4.5（直办）'!I$1:I$36,\"施工\")+COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"施工\")+COUNTIF(表1[投诉类别],\"施工\")",
+          "references": 2
+        },
+        {
+          "cell": "S29",
+          "before": "COUNTIF('11.1-4.5（直办）'!I:I,\"漏水\")+COUNTIF('11.1-4.5（转办）'!I:I,\"漏水\")+COUNTIF(表1[投诉类别],\"漏水\")",
+          "after": "COUNTIF('11.1-4.5（直办）'!I$1:I$36,\"漏水\")+COUNTIF('11.1-4.5（转办）'!I$1:I$53,\"漏水\")+COUNTIF(表1[投诉类别],\"漏水\")",
+          "references": 2
+        },
+        {
+          "cell": "R34",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"春海服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"春海服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"春海服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"春海服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R35",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"香炉礁服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"香炉礁服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"香炉礁服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"香炉礁服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R36",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"东港服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"东港服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"东港服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"东港服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R37",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"中山服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"中山服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"中山服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"中山服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R38",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"兴工服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"兴工服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"兴工服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"兴工服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R39",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"北岗服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"北岗服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"北岗服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"北岗服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R40",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"华乐服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"华乐服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"华乐服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"华乐服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R41",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"双兴服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"双兴服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"双兴服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"双兴服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R42",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"大纺服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"大纺服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"大纺服务中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"大纺服务中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R43",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"规划发展\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"规划发展\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"规划发展\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"规划发展\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        },
+        {
+          "cell": "R44",
+          "before": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J:$J=\"管网中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M:$M,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B:$B,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J:$J=\"管网中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M:$M,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "after": "SUMPRODUCT(--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（直办）'!$B$1:$B$36,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（直办）'!$J$1:$J$36=\"管网中心\"),--ISNUMBER(MATCH('11.1-4.5（直办）'!$M$1:$M$36,{\"已办结\",\"撤件\"},0)))+SUMPRODUCT(--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")>=TEXT($P$46,\"yyyy-mm-dd\")),--(TEXT('11.1-4.5（转办）'!$B$1:$B$54,\"yyyy-mm-dd\")<=TEXT($R$46,\"yyyy-mm-dd\")),--('11.1-4.5（转办）'!$J$1:$J$54=\"管网中心\"),--ISNUMBER(MATCH('11.1-4.5（转办）'!$M$1:$M$54,{\"已办结\",\"撤件\",\"不合理诉求通过\",\"未办结\"},0)))",
+          "references": 8
+        }
+      ],
+      "range_changes": [
+        {
+          "type": "conditionalFormatting",
+          "before": "A2:A8000",
+          "after": "A2:A2"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "B2:B8000",
+          "after": "B2:B16"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "C$1:C$1048576",
+          "after": "C1:C2"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "D$1:D$1048576",
+          "after": "D1:D2"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "E1:E11520",
+          "after": "E1:E2"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "F1:F8000",
+          "after": "F1:F2"
+        },
+        {
+          "type": "conditionalFormatting",
+          "before": "M$1:M$1048576",
+          "after": "M1:M1"
+        },
+        {
+          "type": "dataValidation",
+          "before": "K34",
+          "after": "移除空区域"
+        }
+      ],
+      "dependency_preservation": [
+        {
+          "source_sheet": "11.1-4.5（省办）",
+          "source_cell": "R16",
+          "target_range": [
+            2,
+            16,
+            2,
+            16
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "数据",
+      "range_before": "A1:Z242",
+      "range_after": "A1:Z242",
+      "formulas_removed": 0,
+      "blank_cells_removed": 3252,
+      "formula_changes": [],
+      "range_changes": [],
+      "dependency_preservation": []
+    },
+    {
+      "name": "同期数据",
+      "range_before": "A1:K158",
+      "range_after": "A1:J157",
+      "formulas_removed": 0,
+      "blank_cells_removed": 801,
+      "formula_changes": [],
+      "range_changes": [],
+      "dependency_preservation": []
+    }
+  ],
+  "tables": [
+    {
+      "sheet": "11.1-4.5（省办）",
+      "name": "表1",
+      "before": "A1:M1047839",
+      "after": "A1:M16"
+    }
+  ],
+  "warnings": [
+    "统计公式与原有缓存保留；未执行 Excel/WPS 原生重算，不能将缓存一致视为重算结果一致。"
+  ],
+  "references_optimized": 522,
+  "output_bytes": 129559,
+  "formulas_after": 921,
+  "constants_verified": 3490,
+  "cached_results_verified": 921,
+  "elapsed_seconds": 15.848,
+  "recalculated": false,
+  "formulas_removed": 47810
+}

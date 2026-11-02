@@ -77,6 +77,25 @@
               @change="onEfficiencyFileSelected"
             />
             <button
+              v-if="canUploadComplaint"
+              class="btn secondary complaint-upload-btn"
+              type="button"
+              :disabled="entryLocked || complaintUploading"
+              :title="complaintUploadTitle"
+              @click="triggerComplaintUpload"
+            >
+              <span v-if="complaintUploading">⏳ 处理中…</span>
+              <span v-else>📁 上传投诉报表</span>
+            </button>
+            <input
+              v-if="canUploadComplaint"
+              ref="complaintFileInputRef"
+              type="file"
+              accept=".xlsx"
+              style="display: none"
+              @change="onComplaintFileSelected"
+            />
+            <button
               v-if="unitSheets.length > 1"
               class="btn primary submit-all-btn"
               type="button"
@@ -109,6 +128,26 @@
         </div>
       </div>
     </header>
+
+    <section v-if="canUploadComplaint && (complaintUploading || complaintResult || complaintError)" class="complaint-result card" aria-live="polite" :aria-busy="complaintUploading">
+      <h3>投诉报表去冗余</h3>
+      <p v-if="complaintUploading">正在分析工作表、公式与引用关系，并校验生成文件，请稍候…</p>
+      <p v-if="complaintError" role="alert">{{ complaintError }}</p>
+      <template v-if="complaintResult && !complaintUploading">
+        <p>{{ complaintResult.filename }}：{{ formatComplaintSize(complaintResult.report.input_bytes) }} → {{ formatComplaintSize(complaintResult.report.output_bytes) }}；公式 {{ complaintResult.report.formulas_before.toLocaleString() }} → {{ complaintResult.report.formulas_after.toLocaleString() }}；缩减 {{ complaintResult.report.references_optimized }} 处引用。</p>
+        <p>已逐格校验 {{ complaintResult.report.constants_verified.toLocaleString() }} 个原始数据单元格、{{ complaintResult.report.cached_results_verified.toLocaleString() }} 个保留公式及缓存。处理耗时 {{ complaintResult.report.elapsed_seconds }} 秒。</p>
+        <div class="complaint-result__actions">
+          <button class="btn primary" type="button" @click="downloadComplaintWorkbook">下载去冗余表格</button>
+          <button class="btn ghost" type="button" @click="downloadComplaintReport">下载处理报告</button>
+        </div>
+        <ul>
+          <li v-for="sheet in complaintResult.report.sheets" :key="sheet.name">{{ sheet.name }}：移除 {{ sheet.formulas_removed.toLocaleString() }} 个空记录公式、{{ sheet.blank_cells_removed.toLocaleString() }} 个尾部空白格式单元格；范围 {{ sheet.range_before }} → {{ sheet.range_after }}</li>
+          <li v-for="table in complaintResult.report.tables" :key="`${table.sheet}-${table.name}`">表格 {{ table.name }}：{{ table.before }} → {{ table.after }}</li>
+        </ul>
+        <p v-for="warning in complaintResult.report.warnings" :key="warning" class="complaint-result__note">{{ warning }}</p>
+        <p class="complaint-result__note">原文件保留，处理结果为独立副本。此工具仅整理 Excel，不向填报表回填或提交数据。支持 .xlsx，每次按上传文件重新分析。</p>
+      </template>
+    </section>
 
     <!-- 多表格单位现代分段标签栏 (Segmented Tabs) -->
     <div v-if="unitSheets.length > 1" class="unit-tabs-nav-wrapper">
@@ -217,6 +256,7 @@ import {
   uploadBeihaiEfficiencyReport,
   uploadXianghaiEfficiencyReport,
   uploadGongreEfficiencyReport,
+  optimizeComplaintWorkbook,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
@@ -256,6 +296,18 @@ const efficiencyUploadTitle = computed(() => {
 })
 const efficiencyUploading = ref(false)
 const efficiencyFileInputRef = ref(null)
+
+// --- 供热公司投诉报表上传小工具 ---
+const canUploadComplaint = computed(() => {
+  const gName = (unitGroupName.value || unitName.value || '').trim()
+  const sKey = (activeSheetKey.value || '').toLowerCase()
+  return gName.includes('供热') || sKey.includes('gongre')
+})
+const complaintUploadTitle = computed(() => '上传 .xlsx，清理空记录预填公式及异常范围，生成可下载的独立副本')
+const complaintUploading = ref(false)
+const complaintFileInputRef = ref(null)
+const complaintResult = ref(null)
+const complaintError = ref('')
 const sheetCache = new Map() // sheet_key -> 完整表格状态缓存
 const dirtySheets = new Set() // 当前日期未提交的表格，切日期前提醒
 const pageConfig = computed(() => {
@@ -2349,6 +2401,75 @@ async function onSubmitAll() {
   }
 }
 
+// --- 投诉报表上传小工具 ---
+function triggerComplaintUpload() {
+  if (complaintUploading.value) return
+  if (complaintFileInputRef.value) {
+    complaintFileInputRef.value.value = ''
+    complaintFileInputRef.value.click()
+  }
+}
+
+async function onComplaintFileSelected(event) {
+  const files = event?.target?.files
+  if (!files || !files.length) return
+  const file = files[0]
+  complaintResult.value = null
+  complaintError.value = ''
+  if (!/\.xlsx$/i.test(file.name)) {
+    complaintError.value = '请选择 .xlsx 工作簿；旧版 .xls 请先另存为 .xlsx。'
+    return
+  }
+  complaintUploading.value = true
+  showSubmitFeedback('info', `已选取投诉报表【${file.name}】（${(file.size / 1024).toFixed(1)} KB），正在处理…`, { autoHide: false })
+  try {
+    await handleComplaintFileProcess(file)
+  } catch (err) {
+    console.error('Complaint file process failed:', err)
+    complaintError.value = err.message || String(err)
+    showSubmitFeedback('error', `投诉报表处理失败: ${err.message || err}`)
+  } finally {
+    complaintUploading.value = false
+    if (event?.target) event.target.value = ''
+  }
+}
+
+async function handleComplaintFileProcess(file) {
+  if (file.size > 30 * 1024 * 1024) throw new Error('单个工作簿请勿超过 30 MB。')
+  const result = await optimizeComplaintWorkbook(projectKey, file)
+  if (!result?.ok || !result.file_base64 || !result.report) throw new Error('未收到完整的优化结果，请重新上传。')
+  complaintResult.value = result
+  showSubmitFeedback('success', '投诉报表处理完成，请查看处理结果并下载去冗余表格。', { autoHide: true, duration: 4000 })
+}
+
+function formatComplaintSize(bytes) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`
+}
+
+function downloadComplaintBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function downloadComplaintWorkbook() {
+  const result = complaintResult.value
+  if (!result) return
+  const bytes = Uint8Array.from(atob(result.file_base64), c => c.charCodeAt(0))
+  downloadComplaintBlob(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), result.filename)
+}
+
+function downloadComplaintReport() {
+  const result = complaintResult.value
+  if (!result) return
+  downloadComplaintBlob(new Blob([JSON.stringify(result.report, null, 2)], { type: 'application/json;charset=utf-8' }), result.filename.replace(/\.xlsx$/i, '_处理报告.json'))
+}
+
 // --- 能效报表上传与回填（支持北海、香海、供热公司） ---
 function triggerEfficiencyUpload() {
   if (efficiencyUploading.value) return
@@ -3175,6 +3296,33 @@ onBeforeUnmount(() => {
   color: #0284c7 !important;
   transform: translateY(-1px);
   box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.15);
+}
+
+.complaint-upload-btn {
+  font-weight: 600 !important;
+  color: #9a3412 !important;
+  background: #fff7ed !important;
+  border: 1px solid #fed7aa !important;
+  border-radius: 8px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(194, 65, 12, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.complaint-result { margin: 16px 0; padding: 18px; overflow-wrap: anywhere; }
+.complaint-result h3 { margin: 0 0 12px; }
+.complaint-result__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.complaint-result li { margin: 6px 0; }
+.complaint-result__note { font-size: 13px; color: #6b4d27; }
+
+.complaint-upload-btn:hover {
+  background: #ffedd5 !important;
+  border-color: #fdba74 !important;
+  color: #c2410c !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(194, 65, 12, 0.15);
 }
 
 .submit-all-btn {
