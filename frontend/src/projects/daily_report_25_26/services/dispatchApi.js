@@ -148,10 +148,10 @@ export async function saveDispatchData(projectKey = 'daily_report_25_26', payloa
 /**
  * 多维综合查询已入库调度信息
  */
-export async function resolveDispatchStatus(projectKey, payload) {
+export async function resolveDispatchStatus(projectKey, payload, customToken = '') {
   const response = await fetch(projectUrl(projectKey, '/resolve_status'), {
     method: 'POST',
-    headers: { ...JSON_HEADERS, ...getAuthHeader() },
+    headers: { ...JSON_HEADERS, ...getAuthHeader(customToken) },
     body: JSON.stringify(payload),
   })
   if (!response.ok) throw new Error(await parseErrorDetail(response, '状态确认失败'))

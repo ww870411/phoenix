@@ -1,4 +1,44 @@
-## 2026-11-01 每日简报证据综述
+## 2026-11-02 “电力现货市场数据”页面描述同步更新
+
+- 在 `backend_data/shared/项目列表.json` 中同步更新 `daily_report_25_26` 项目的 `spot_electricity` 页面描述：
+  - 由“15分钟日前/实时电价、实时与日前价差走势”精简更新为“15分钟日前/实时电价与走势”。
+- 接口 `GET /api/v1/projects/daily_report_25_26/pages` 返回的对应 `page_description` 自动保持一致。
+
+## 2026-11-02 项目页面描述同步更新
+
+- 在 `backend_data/shared/项目列表.json` 中同步更新 `daily_report_25_26` 项目的四项功能页面描述：
+  - `data_show`：由“浏览固定数据展示表”更新为“浏览数据展示表”；
+  - `data_approval`：由“处理审批流程进度”更新为“每日数据审核批准”；
+  - `global_management`：由“生产指标与算法体系字典、实时验算沙盒与核心运行参数”更新为“核心运行参数设定”；
+  - `dispatch_info`：由“主城区生产调度信息解析提取、综合入库与全景工况监控”更新为“主城区生产调度全景工况监控”。
+- 接口 `GET /api/v1/projects/daily_report_25_26/pages` 返回的 `page_description` 字段自动随配置即时更新。
+
+## 2026-11-02 调度历史设备状态核对保存权限严格限定 Global_admin
+
+- **权限安全加固**：
+  - `projects/daily_report_25_26/api/dispatch_info.py`：`/resolve_status` 接口移出免鉴权 `public_router`，仅挂载于带鉴权依赖的 `router` 上，并通过 `Depends(get_current_session)` 严格校验调用者的 `session.group == 'Global_admin'`，非超级管理员请求统一抛出 403 权限拒绝；
+  - `projects/daily_report_25_26/tests/test_dispatch_reconciliation.py`：单测补充非 Global_admin 拦截 403 测试。
+- 验证：24 项调度提取与冲突核对单元测试全部通过。
+
+## 2026-11-02 调度历史设备状态核对保存逻辑修复与日期标准化
+
+- **问题修复**：修复历史调度日报设备状态核对（`/api/v1/projects/{project_key}/dispatch/status-resolution`）保存失败的缺陷。
+  - `services/dispatch_reconciliation.py`：在 `reconcile_report` 入口处统一将 `biz_date` 标准化为 ISO 字符串，防止数据库驱动返回 `datetime.date` 对象时与事件字符串日期 `event_date` 使用 `!=` 比对导致误判为跨日事件，确保证据哈希指纹（SHA256）与前端比对一致；
+  - `services/dispatch_db_service.py`：在 `update_dispatch_statuses` 中对数据库读取的 `row` 统一将日期与时间字段格式化为 ISO 字符串再调用核对推断；
+  - `tests/test_dispatch_reconciliation.py`：新增针对 `datetime.date` 对象 `biz_date` 的回归单元测试，保证无论传入字符串还是日期对象，证据指纹与事件拆分结果完全一致。
+- 验证：24 项后端调度提取与冲突核对单元测试全部通过；针对真实数据库 2026-10-25 冲突记录完成端到端保存与状态回填验证。
+
+## 2026-11-02 项目配置同步：“数据分析页面”更名为“数据查询与分析”
+
+- 在 `backend_data/shared/项目列表.json` 中将 `daily_report_25_26` 项目的 `data_analysis` 页面名称由“数据分析页面”修改为“数据查询与分析”。
+- 接口 `GET /api/v1/projects/daily_report_25_26/pages` 返回的 `page_name` 自动同步为“数据查询与分析”，业务数据源及其他元数据保持不变。
+
+## 2026-11-02 功能选择页卡片分类与视觉强化同步说明
+
+- 前端在 `PageSelectView.vue`（`/projects/daily_report_25_26/pages`）重构了卡片分组展示逻辑，将页面按“报表填报与审批”、“生产监控与看板”、“分析与系统管理”三组排布，并对第一组及每日数据填报入口增加渐变蓝视觉强化。
+- 后端页面列表接口 `GET /api/v1/projects/{project_id}/pages` 及相关鉴权逻辑完全保持原有接口契约与数据结构，无后端变更。
+
+
 
 - 新增`services/daily_brief_overview.py`的`build_brief_overview()`，由现有集团指标、日均气温和当日调度证据生成生产、经营、设备三段综述，返回`overview.paragraphs`；附带所用指标键和被摘录的原操作记录，便于核对，不调用外部生成服务。
 - 生产段合并同向指标并分开反向指标，经营段反映可比/实际利润口径差异及投诉变化；不将气温、设备操作与经营变动拼成未经验证的原因，也不据缺失记录认定运行平稳。

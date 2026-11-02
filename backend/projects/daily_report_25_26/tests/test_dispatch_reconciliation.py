@@ -226,10 +226,18 @@ class DispatchReconciliationTests(unittest.TestCase):
     def test_history_resolution_api_validates_date_and_choices(self):
         from backend.projects.daily_report_25_26.api.dispatch_info import resolve_dispatch_status
         from fastapi import HTTPException
+        admin_session = MagicMock(group='Global_admin')
         for payload in ({'biz_date': '错误', 'status_resolutions': {'a': 'table'}},
                         {'biz_date': '2026-03-23', 'status_resolutions': {'a': 'status:未知'}}):
             with self.assertRaises(HTTPException):
-                resolve_dispatch_status(payload)
+                resolve_dispatch_status(payload, session=admin_session)
+
+        # 验证仅限 Global_admin 操作
+        user_session = MagicMock(group='normal_user')
+        with self.assertRaises(HTTPException) as ctx:
+            resolve_dispatch_status({'biz_date': '2026-03-23', 'status_resolutions': {'a': 'table'}}, session=user_session)
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertIn('Global_admin', ctx.exception.detail)
 
     def test_consecutive_actions_in_compound_sentence(self):
         # 针对复合句中主语省略的连动行为（如“#4汽炉并汽,17:30 粉仓烧空停炉”）
@@ -250,6 +258,20 @@ class DispatchReconciliationTests(unittest.TestCase):
         self.assertEqual((fac['main_events'][0]['time'], fac['main_events'][0]['action']), ('10:30', '并汽'))
         self.assertEqual((fac['main_events'][1]['time'], fac['main_events'][1]['action']), ('17:30', '停炉'))
         self.assertEqual(fac['main_events'][-1]['status'], '停运')
+
+
+    def test_reconcile_report_supports_date_object_biz_date(self):
+        from datetime import date
+        report_str = sample([{'time': '08:00', 'raw_description': '#1汽机启动'}], status='备用')
+        report_str['biz_date'] = '2026-10-30'
+        res_str = reconcile_report(report_str)
+
+        report_date = copy.deepcopy(report_str)
+        report_date['biz_date'] = date(2026, 10, 30)
+        res_date = reconcile_report(report_date)
+
+        self.assertEqual(res_str['status_conflicts'][0]['evidence'], res_date['status_conflicts'][0]['evidence'])
+        self.assertEqual(res_str['boiler_turbine_status'][0]['main_events'], res_date['boiler_turbine_status'][0]['main_events'])
 
 
 if __name__ == '__main__':

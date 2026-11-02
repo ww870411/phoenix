@@ -10,25 +10,52 @@
         </header>
         <div v-if="loading" class="page-state">页面加载中，请稍候…</div>
         <div v-else-if="errorMessage" class="page-state error">{{ errorMessage }}</div>
-        <div v-else class="card-grid">
-          <component
-            :is="isClickable ? 'button' : 'div'"
-            v-for="page in pages"
-            :key="page.page_key"
-            :type="isClickable ? 'button' : undefined"
-            :class="['card elevated page-card', { 'is-static': !isClickable }]"
-            @click="isClickable ? openPage(page) : undefined"
+        <div v-else class="groups-container">
+          <div
+            v-for="group in categorizedGroups"
+            :key="group.key"
+            class="page-group-section"
+            :class="`group-${group.key}`"
           >
-            <div class="page-card-title">
-              <ScaleBalanceIcon
-                v-if="isReviewHallPage(page)"
-                :size="20"
-                class="page-card-title-icon"
-              />
-              <span class="page-card-title-text">{{ formatCardTitle(page) }}</span>
+            <div class="group-header">
+              <div class="group-title-row">
+                <span class="group-indicator" :class="`indicator-${group.key}`"></span>
+                <h3 class="group-title">{{ group.title }}</h3>
+              </div>
+              <p v-if="group.description" class="group-desc">{{ group.description }}</p>
             </div>
-            <div class="page-card-desc">{{ pageDescription(page) }}</div>
-          </component>
+
+            <div class="card-grid">
+              <component
+                :is="isClickable ? 'button' : 'div'"
+                v-for="page in group.pages"
+                :key="page.page_key"
+                :type="isClickable ? 'button' : undefined"
+                :class="[
+                  'card elevated page-card',
+                  { 'is-static': !isClickable },
+                  getCardCustomClass(group.key, page)
+                ]"
+                @click="isClickable ? openPage(page) : undefined"
+              >
+                <div class="page-card-title">
+                  <ScaleBalanceIcon
+                    v-if="isReviewHallPage(page)"
+                    :size="20"
+                    class="page-card-title-icon"
+                  />
+                  <span class="page-card-title-text">{{ formatCardTitle(page) }}</span>
+                  <span
+                    v-if="isPrimaryEntryCard(page)"
+                    class="primary-entry-tag"
+                  >
+                    核心填报
+                  </span>
+                </div>
+                <div class="page-card-desc">{{ pageDescription(page) }}</div>
+              </component>
+            </div>
+          </div>
         </div>
       </section>
       <section v-if="showWorkflowCardForProject" class="card elevated status-block">
@@ -146,16 +173,16 @@ const auth = useAuthStore()
 const PAGE_DESCRIPTION_MAP = Object.freeze({
   big_screen: '深色科技大屏、数字孪生飞线调度与实时发运战报',
   dashboard: '查看整体数据仪表盘',
-  daily_brief: '经营与生产每日速览、同比数据与近期趋势',
-  data_show: '浏览固定数据展示表',
-  data_approval: '处理审批流程进度',
+  daily_brief: '每日生产状况内参',
+  data_show: '浏览数据展示表',
+  data_approval: '每日数据审核批准',
   data_entry: '填写并提交日报数据',
   constant_data: '维护常量指标数据',
   data_analysis: '数据自由组合提取',
   dynamic_plan: '供暖期各单位月度计划指标图谱与多维趋势分析',
-  spot_electricity: '15分钟日前/实时电价、实时与日前价差走势',
-  global_management: '生产指标与算法体系字典、实时验算沙盒与核心运行参数',
-  dispatch_info: '主城区生产调度信息解析提取、综合入库与全景工况监控',
+  spot_electricity: '15分钟日前/实时电价与走势',
+  global_management: '核心运行参数设定',
+  dispatch_info: '主城区生产调度全景工况监控',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
 function filterVisiblePages(list) {
@@ -218,7 +245,11 @@ async function refreshWorkflow() {
 watch(
   () => auth.permissions,
   () => {
-    pages.value = filterVisiblePages(auth.filterPages(projectKey, rawPages.value))
+    pages.value = withDailyBriefPage(
+      filterVisiblePages(auth.filterPages(projectKey, rawPages.value)),
+      projectKey,
+      auth.user,
+    )
     if (!pages.value.length && rawPages.value.length) {
       errorMessage.value = '当前账号无可访问页面，请联系管理员。'
     } else if (pages.value.length) {
@@ -227,6 +258,102 @@ watch(
   },
   { deep: true },
 )
+
+const GROUP_DEFINITIONS = [
+  {
+    key: 'entry_approval',
+    title: '报表填报与审批',
+    description: '日常数据上报、分级审核与指标基准维护',
+    pageKeys: ['data_entry', 'data_approval', 'constant_data'],
+  },
+  {
+    key: 'monitoring_dashboard',
+    title: '生产监控与看板',
+    description: '全景数据看板、报表展示与调度电价监控',
+    pageKeys: ['dashboard', 'data_show', 'dispatch_info', 'spot_electricity'],
+  },
+  {
+    key: 'analysis_management',
+    title: '分析与系统管理',
+    description: '每日简报、多维计划图谱、自由分析与算法字典',
+    pageKeys: ['daily_brief', 'dynamic_plan', 'data_analysis', 'global_management'],
+  },
+]
+
+function isPrimaryEntryCard(page) {
+  const key = String(page?.page_key || page?.page_url || '').trim().toLowerCase()
+  return key === 'data_entry'
+}
+
+function getCardCustomClass(groupKey, page) {
+  const key = String(page?.page_key || page?.page_url || '').trim().toLowerCase()
+  if (key === 'dashboard') {
+    return 'card-primary-dashboard'
+  }
+  if (groupKey === 'entry_approval') {
+    if (key === 'data_entry') {
+      return 'card-primary-entry'
+    }
+    return 'card-blue-group'
+  }
+  return ''
+}
+
+const categorizedGroups = computed(() => {
+  const currentPages = Array.isArray(pages.value) ? pages.value : []
+  if (!currentPages.length) return []
+
+  if (projectKey !== 'daily_report_25_26') {
+    return [
+      {
+        key: 'all',
+        title: '全部功能页面',
+        description: '',
+        pages: currentPages,
+      },
+    ]
+  }
+
+  const pageMap = new Map()
+  currentPages.forEach((p) => {
+    const k = String(p?.page_key || p?.page_url || '').trim().toLowerCase()
+    pageMap.set(k, p)
+  })
+
+  const usedKeys = new Set()
+  const result = []
+
+  for (const def of GROUP_DEFINITIONS) {
+    const groupPages = []
+    for (const key of def.pageKeys) {
+      if (pageMap.has(key)) {
+        groupPages.push(pageMap.get(key))
+        usedKeys.add(key)
+      }
+    }
+    if (groupPages.length > 0) {
+      result.push({
+        ...def,
+        pages: groupPages,
+      })
+    }
+  }
+
+  const remainingPages = currentPages.filter((p) => {
+    const k = String(p?.page_key || p?.page_url || '').trim().toLowerCase()
+    return !usedKeys.has(k)
+  })
+  if (remainingPages.length > 0) {
+    result.push({
+      key: 'other',
+      title: '其他功能',
+      description: '其他功能与辅助页面',
+      pages: remainingPages,
+    })
+  }
+
+  return result
+})
 
 const projectName = computed(() => getProjectNameById(projectKey) ?? projectKey)
 const isWorkflowExempt = computed(() => {
@@ -495,8 +622,12 @@ function openPage(page) {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: transform 0.2s ease;
+  gap: 5px;
+  height: 88px; /* 紧凑统一高度 */
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .page-card:hover {
@@ -511,12 +642,14 @@ function openPage(page) {
 }
 
 .page-card-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--primary-700);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  line-height: 1.3;
+  flex-shrink: 0;
 }
 
 .page-card-title-icon {
@@ -528,11 +661,21 @@ function openPage(page) {
 .page-card-title-text {
   flex: 1;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .page-card-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: #666;
+  line-height: 1.4;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-block {
@@ -622,5 +765,146 @@ function openPage(page) {
 
 .btn.ghost:hover {
   background: rgba(59, 130, 246, 0.1);
+}
+
+/* 分组布局与标题样式 */
+.groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.page-group-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.group-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-indicator {
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--neutral-400);
+}
+
+.indicator-entry_approval {
+  background: linear-gradient(180deg, #60a5fa, #3b82f6);
+}
+
+.indicator-monitoring_dashboard {
+  background: linear-gradient(180deg, #fb923c, #f97316);
+}
+
+.indicator-analysis_management {
+  background: linear-gradient(180deg, #a78bfa, #8b5cf6);
+}
+
+.group-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.group-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  padding-left: 12px;
+}
+
+/* 第一组普通卡片：柔和清雅浅蓝渐变 */
+.page-card.card-blue-group {
+  background: linear-gradient(135deg, #f8fbff 0%, #eff6ff 100%);
+  border: 1px solid #dbeafe;
+}
+
+.page-card.card-blue-group:hover {
+  background: linear-gradient(135deg, #f0f7ff 0%, #e0effe 100%);
+  border-color: #bfdbfe;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  transform: translateY(-2px);
+}
+
+.page-card.card-blue-group .page-card-title {
+  color: #1d4ed8;
+}
+
+.page-card.card-blue-group .page-card-desc {
+  color: #3b82f6;
+  opacity: 0.9;
+}
+
+/* 第一组核心卡片：每日数据填报（轻快通透渐变蓝） */
+.page-card.card-primary-entry {
+  background: linear-gradient(135deg, #3b82f6 0%, #4f8ff7 45%, #60a5fa 100%);
+  border: 1px solid #60a5fa;
+  box-shadow: 0 3px 12px rgba(59, 130, 246, 0.18);
+  position: relative;
+}
+
+.page-card.card-primary-entry:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #60a5fa 100%);
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.28);
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+}
+
+.page-card.card-primary-entry .page-card-title {
+  color: #ffffff;
+}
+
+.page-card.card-primary-entry .page-card-desc {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.primary-entry-tag {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 第二组核心卡片：数据看板（轻快温润渐变橙） */
+.page-card.card-primary-dashboard {
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fba053 100%);
+  border: 1px solid #fb923c;
+  box-shadow: 0 3px 12px rgba(249, 115, 22, 0.18);
+  position: relative;
+}
+
+.page-card.card-primary-dashboard:hover {
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%);
+  box-shadow: 0 6px 18px rgba(249, 115, 22, 0.28);
+  transform: translateY(-2px);
+  border-color: #fdba74;
+}
+
+.page-card.card-primary-dashboard .page-card-title {
+  color: #ffffff;
+}
+
+.page-card.card-primary-dashboard .page-card-desc {
+  color: rgba(255, 255, 255, 0.94);
 }
 </style>

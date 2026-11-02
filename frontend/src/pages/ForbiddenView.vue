@@ -69,7 +69,7 @@ const PAGE_NAME_MAP = {
   data_approval: '数据审批页面',
   data_show: '数据展示页面',
   constant_data: '常量指标页面',
-  data_analysis: '数据分析页面',
+  data_analysis: '数据查询与分析',
   debug_runtime_eval: '运行时表达式调试工具',
   mini_entry: '（春节期间）数据看板生成页面',
   projects_monthly_data_show_import_workspace: '月报导入工作台',

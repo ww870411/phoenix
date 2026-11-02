@@ -354,21 +354,31 @@
                 历史记录尚未确认，暂按原表格展示。
               </span>
             </p>
-            <template v-if="isGlobalAdmin">
-              <div v-for="conflict in currentReport.status_conflicts" :key="'resolve-' + conflict.id" class="status-review-item">
-                <label>{{ conflict.device }} · 选择显示状态：
-                  <select v-model="historyStatusResolutions[conflict.id]" class="form-select">
-                    <option value="">请选择</option>
-                    <option value="table">原表格：{{ conflict.table_status }}</option>
-                    <option v-if="conflict.event_status" value="events">末次主设备事件：{{ conflict.event_status }}</option>
-                    <option v-for="state in displayStates" :key="state" :value="'status:' + state">手动指定：{{ state }}</option>
-                  </select>
-                </label>
-                <p v-if="conflict.reason">{{ conflict.reason }}</p>
-                <p v-for="(event, index) in conflict.events" :key="index">{{ event.time }} · {{ event.raw_description }}</p>
-              </div>
-              <button class="btn primary btn-sm" :disabled="isResolvingHistory || hasUnresolvedHistory" @click="saveHistoryStatuses">{{ isResolvingHistory ? '保存中…' : '保存显示状态' }}</button>
-            </template>
+            <div v-for="conflict in currentReport.status_conflicts" :key="'resolve-' + conflict.id" class="status-review-item">
+              <label>{{ conflict.device }} · 选择显示状态：
+                <select v-model="historyStatusResolutions[conflict.id]" :disabled="!isGlobalAdmin" class="form-select">
+                  <option value="">请选择</option>
+                  <option value="table">原表格：{{ conflict.table_status }}</option>
+                  <option v-if="conflict.event_status" value="events">末次主设备事件：{{ conflict.event_status }}</option>
+                  <option v-for="state in displayStates" :key="state" :value="'status:' + state">手动指定：{{ state }}</option>
+                </select>
+              </label>
+              <p v-if="conflict.reason">{{ conflict.reason }}</p>
+              <p v-for="(event, index) in conflict.events" :key="index">{{ event.time }} · {{ event.raw_description }}</p>
+            </div>
+            <div class="status-action-row" style="margin-top: 8px; display: flex; align-items: center; gap: 10px;">
+              <button
+                class="btn primary btn-sm"
+                :disabled="isResolvingHistory || hasUnresolvedHistory || !isGlobalAdmin"
+                :title="isGlobalAdmin ? '保存显示状态' : '权限受限：此处的保存功能仅限 Global_admin 点击'"
+                @click="saveHistoryStatuses"
+              >
+                {{ isResolvingHistory ? '保存中…' : (isGlobalAdmin ? '保存显示状态' : '保存显示状态 (仅限 Global_admin)') }}
+              </button>
+              <span v-if="!isGlobalAdmin" class="text-admin-only-hint" style="font-size: 12px; color: #94a3b8;">
+                🔒 此处的设备显示状态保存功能仅限 Global_admin 操作
+              </span>
+            </div>
           </details>
           <!-- 宏观核心产耗指标卡片网格 -->
           <p v-for="warning in currentReport.extraction_warnings" :key="warning" class="status-review">{{ warning }}</p>
@@ -875,10 +885,10 @@ const breadcrumbItems = computed(() => [
   { label: pageDisplayName.value, to: null },
 ])
 
-// 权限判定：仅 Global_admin 可见提取工作台
+// 权限判定：严格限定 Global_admin 超级管理员
 const isGlobalAdmin = computed(() => {
   const grp = String(auth.user?.group || auth.user?.role || '').trim()
-  return grp === 'Global_admin' || grp.toLowerCase() === 'global_admin' || Boolean(auth.canAccessAdminConsole)
+  return grp === 'Global_admin' || grp.toLowerCase() === 'global_admin'
 })
 
 // 提取工作台状态 (默认收回)
@@ -1345,6 +1355,10 @@ async function confirmOverwriteSave() {
 }
 
 async function saveHistoryStatuses() {
+  if (!isGlobalAdmin.value) {
+    alert('权限受限：此处的保存功能仅限 Global_admin 点击')
+    return
+  }
   if (hasUnresolvedHistory.value || !currentReport.value || isResolvingHistory.value) return
   const bizDate = currentBizDate.value
   isResolvingHistory.value = true
@@ -1353,8 +1367,9 @@ async function saveHistoryStatuses() {
       biz_date: bizDate,
       status_resolutions: { ...historyStatusResolutions.value },
       status_evidence: Object.fromEntries(currentReport.value.status_conflicts.map(c => [c.id, c.evidence])),
-    })
+    }, auth.token)
     if (!res.ok) throw new Error(res.message || '状态保存失败，请刷新后重新核对')
+    alert(res.message || '显示状态保存成功！')
     lifecycleRefreshKey.value++
     if (currentBizDate.value === bizDate) await fetchCurrentData()
   } catch (err) {

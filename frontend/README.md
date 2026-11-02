@@ -1,4 +1,88 @@
-## 2026-11-01 运行综述按指标与调度记录生成
+## 2026-11-02 “电力现货市场数据”卡片副标题描述文案更新
+
+- `projects/daily_report_25_26/pages/PageSelectView.vue`：
+  - 更新 `PAGE_DESCRIPTION_MAP.spot_electricity` 常数：
+    - 由“15分钟日前/实时电价、实时与日前价差走势”更新为“15分钟日前/实时电价与走势”。
+- 验证：前端生产打包 `npm run build`（18.32s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页五项核心卡片副标题描述文案更新
+
+- `projects/daily_report_25_26/pages/PageSelectView.vue`：
+  - 更新 `PAGE_DESCRIPTION_MAP` 字典，精准呈现精简后的副标题：
+    - 调度信息：由“主城区生产调度信息解析提取、综合入库与全景工况监控”精简为“主城区生产调度全景工况监控”；
+    - 每日简报：由“经营与生产每日速览、同比数据与近期趋势”更名为“每日生产状况内参”；
+    - 全局管理中心：由“生产指标与算法体系字典、实时验算沙盒与核心运行参数”精简为“核心运行参数设定”；
+    - 数据审批页面：由“处理审批流程进度”更新为“每日数据审核批准”；
+    - 数据展示页面：由“浏览固定数据展示表”简化为“浏览数据展示表”。
+- `projects/daily_report_25_26/composables/dailyBriefPresentation.js`：
+  - `withDailyBriefPage` 注入的 `daily_brief` 对象带齐 `page_description: '每日生产状况内参'`。
+- 验证：前端生产打包 `npm run build`（16.52s，0 错误）顺利通过。
+
+## 2026-11-02 调度历史设备状态核对保存权限严格限定 Global_admin
+
+- **权限控制与交互加固**：
+  - `projects/daily_report_25_26/pages/DispatchInfoView.vue`：
+    - `isGlobalAdmin` 严格锁定 `group === 'Global_admin'`；
+    - 历史数据“机炉表格与事件存在差异”折叠栏中，非 Global_admin 账号允许查阅设备冲突与原始依据事件，但下拉选择框与“保存显示状态”按钮均置灰禁用；
+    - 保存按钮针对非超管标明“保存显示状态 (仅限 Global_admin)”，并呈现“🔒 此处的设备显示状态保存功能仅限 Global_admin 操作”明确提示；
+    - `saveHistoryStatuses` 函数入口加入前置角色阻断，并在请求中带入 `auth.token`；
+  - `projects/daily_report_25_26/services/dispatchApi.js`：
+    - `resolveDispatchStatus` 支持透传用户 Token。
+- 验证：前端生产打包 `npm run build`（15.88s，0 错误）顺利通过。
+
+## 2026-11-02 调度信息设备冲突核对保存交互反馈与状态刷新完善
+
+- **交互体验完善**：
+  - `DispatchInfoView.vue`（调度信息页面）：在历史数据机炉状态核对的 `saveHistoryStatuses` 函数中增加明确的保存成功弹窗提示（`alert(res.message || '显示状态保存成功！')`）；
+  - 配合后端修复的证据指纹日期类型一致性问题，确保保存后即刻触发 `fetchCurrentData()` 重新加载当前报告，页面机炉运行拓扑矩阵、状态标签及核对折叠栏内的“已确认”徽章与“显示状态”同步即时响应。
+- 验证：前端生产打包 `npm run build`（17.04s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页核心卡片渐变蓝与渐变橙轻盈化调优
+
+- `PageSelectView.vue`渐变色彩调轻：
+  - “每日数据填报”卡片由深暗科技蓝调整为通透晴空蓝渐变（`#3b82f6` ~ `#60a5fa`），微调边框和轻微投影，消除厚重感；
+  - “数据看板”卡片由深暗焦橙调整为温润明快的珊瑚暖橙渐变（`#f97316` ~ `#fba053`），视觉更舒适雅致；
+  - 第一组普通卡片背景调整为更淡雅的极浅冰蓝（`#f8fbff` ~ `#eff6ff`），整体界面色调更加通透轻盈。
+- 验证：前端生产构建 `npm run build`（15.62s，0 错误）顺利通过。
+
+## 2026-11-02 页面命名同步：“数据分析页面”更名为“数据查询与分析”
+
+- 在 `DataAnalysisView.vue`（默认页面名与面包屑）及 `ForbiddenView.vue` 中将页面名称由“数据分析页面”同步更名为“数据查询与分析”，与后端项目列表配置保持一致。
+- 验证：前端生产构建 `npm run build`（14.65s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页“数据看板”卡片渐变橙色主题
+
+- `PageSelectView.vue`视觉增强：
+  - 针对“数据看板”卡片应用渐变橙色专属样式（`.card-primary-dashboard`），采用 `linear-gradient(135deg, #ea580c, #f97316, #fb923c)` 高质感橙色渐变，配纯白标题与柔和暖白描述，与第一组核心填报蓝卡片形成蓝橙双核心视觉焦点。
+- 验证：前端生产构建 `npm run build`（15.01s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页卡片紧凑度收紧（88px 高度微调）
+
+- `PageSelectView.vue`卡片紧凑度优化：
+  - 针对卡片高度过高空旷的问题，将统一高度由 `116px` 收紧为 `88px`，内边距调整为 `12px 14px`，圆角设为 `10px`。
+  - 标题调整为 15px，描述文字调整为 12px，两行截断自然居中；分组容器间距由 28px 收紧至 20px，页面紧凑利落。
+- 验证：前端生产构建 `npm run build`（16.16s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页卡片统一高度与排版规整
+
+- `PageSelectView.vue`卡片样式规整：
+  - 针对卡片文字长度不一导致高矮参差的问题，为 `.page-card` 设置统一高度 `height: 116px; box-sizing: border-box; padding: 16px;`。
+  - 标题行添加 `white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`，徽标添加 `flex-shrink: 0;`，防止异常折行。
+  - 描述行限制最多展示 2 行（`-webkit-line-clamp: 2;`），保证各组与各行卡片轮廓严格对齐、外观高度一致。
+- 验证：前端生产构建 `npm run build`（13.35s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页卡片分类与填报入口渐变蓝强化
+
+- `PageSelectView.vue`结构重构：
+  - 将原无序平铺的所有功能卡片划分为三大业务板块：
+    1. **报表填报与审批**：包含每日数据填报（`data_entry`）、数据审批（`data_approval`）、常量指标（`constant_data`）；
+    2. **生产监控与看板**：包含数据看板（`dashboard`）、数据展示（`data_show`）、调度信息（`dispatch_info`）、电力现货（`spot_electricity`）；
+    3. **分析与系统管理**：包含每日简报（`daily_brief`）、计划动态分解（`dynamic_plan`）、数据分析（`data_analysis`）、全局管理中心（`global_management`）。
+  - 权限判定保持不变，依赖 `auth.filterPages` 与 `withDailyBriefPage`，角色无权卡片与空分组自动隐藏。
+  - 视觉样式提升：第一组卡片采用浅渐变蓝背景；“每日数据填报”卡片采用高对比深色科技渐变蓝背景，配备纯白文字与“核心填报”标签，悬浮发光增强引导。
+- 验证：前端生产构建 `npm run build`（13.52s，789 个模块，0 报错）顺利通过。
+
+
 
 - `DailyBriefView.vue`头版展示后端`overview.paragraphs`三段综述，保留报纸主题与首字下沉。删除“态势要点速览”及对应样式，不再把旧highlights重复拼成两段和索引列表。
 - 生产/经营段描述同向、反向变化及利润口径差异；设备段引用所选日期状态表、设备操作和系统操作记录。去掉前端写死的运行稳定、出力均衡、安全平稳等无证据判断，开头不再固定为“昨日”。

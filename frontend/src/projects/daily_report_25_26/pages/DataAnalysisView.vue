@@ -718,7 +718,7 @@ const pageKey = computed(() => String(route.params.pageKey ?? ''))
 const pageConfig = computed(() => (typeof route.query.config === 'string' ? route.query.config : ''))
 const pageDisplayName = computed(() => {
   const raw = typeof route.query.pageName === 'string' ? route.query.pageName.trim() : ''
-  return raw || '数据分析页面'
+  return raw || '数据查询与分析'
 })
 const projectName = computed(() => getProjectNameById(projectKey.value) ?? projectKey.value)
 const breadcrumbItems = computed(() => [

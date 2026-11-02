@@ -6,7 +6,7 @@ export function canAccessDailyBrief(projectKey, user) {
 export function withDailyBriefPage(pages, projectKey, user) {
   const existing = (Array.isArray(pages) ? pages : []).filter(page => page.page_key !== 'daily_brief')
   if (!canAccessDailyBrief(projectKey, user)) return existing
-  return [{ page_key: 'daily_brief', page_name: '每日简报', page_url: '/projects/daily_report_25_26/pages/daily_brief' }, ...existing]
+  return [{ page_key: 'daily_brief', page_name: '每日简报', page_description: '每日生产状况内参', page_url: '/projects/daily_report_25_26/pages/daily_brief' }, ...existing]
 }
 
 // 主版与专刊分别按指标键排布，不依赖接口数组的位置，也不改变每日摘要顺序。

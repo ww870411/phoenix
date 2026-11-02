@@ -11,8 +11,9 @@ import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, UploadFile, Query, HTTPException, Body
+from fastapi import APIRouter, File, Form, UploadFile, Query, HTTPException, Body, Depends
 from fastapi.responses import FileResponse, JSONResponse
+from backend.services.auth_manager import AuthSession, get_current_session
 from backend.projects.daily_report_25_26.services.dispatch_reconciliation import reconcile_report, RESOLUTIONS
 
 from backend.projects.daily_report_25_26.services.dispatch_extractor import (
@@ -201,9 +202,14 @@ def save_dispatch_data(
 
 
 @router.post('/resolve_status', summary='确认历史调度日报的设备显示状态')
-@public_router.post('/resolve_status', summary='确认历史调度日报的设备显示状态')
-def resolve_dispatch_status(payload: Dict[str, Any] = Body(...), project_key: str = 'daily_report_25_26'):
-    """与上传入库共用状态校验；仅写入指定日期的操作和设备状态字段。"""
+def resolve_dispatch_status(
+    payload: Dict[str, Any] = Body(...),
+    project_key: str = 'daily_report_25_26',
+    session: AuthSession = Depends(get_current_session)
+):
+    """与上传入库共用状态校验；仅限 Global_admin 写入指定日期的操作和设备状态字段。"""
+    if getattr(session, 'group', None) != 'Global_admin':
+        raise HTTPException(status_code=403, detail='此处的保存功能仅限 Global_admin 操作')
     choices = payload.get('status_resolutions')
     biz_date = payload.get('biz_date')
     if not isinstance(choices, dict) or not choices or any(v not in RESOLUTIONS for v in choices.values()):

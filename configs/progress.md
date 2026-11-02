@@ -1,5 +1,134 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-02 “电力现货市场数据”卡片副标题描述文案精简
+
+- **需求背景**：按用户要求将功能选择页（`/projects/daily_report_25_26/pages`）中的“电力现货市场数据”卡片副标题由“15分钟日前/实时电价、实时与日前价差走势”精简为“15分钟日前/实时电价与走势”。
+- **改动范围**：
+  1. `backend_data/shared/项目列表.json`：更新 `daily_report_25_26.pages.spot_electricity.页面描述` 字段为“15分钟日前/实时电价与走势”；
+  2. `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`：更新 `PAGE_DESCRIPTION_MAP.spot_electricity` 映射常数，确保前端兜底一致。
+- **验证结果**：前端生产构建 `npm run build` 成功完成（18.32s，0 错误），后端 24 项单测全部通过。
+
+
+## 2026-11-02 功能选择页五项核心卡片副标题描述文案精简与优化
+
+- **需求背景**：按用户明确要求精简调整功能选择页（`/projects/daily_report_25_26/pages`）五项功能卡片的副标题描述文字：
+  1. **调度信息**：由“主城区生产调度信息解析提取、综合入库与全景工况监控”精简为“主城区生产调度全景工况监控”；
+  2. **每日简报**：由“经营与生产每日速览、同比数据与近期趋势”更名为“每日生产状况内参”；
+  3. **全局管理中心**：由“生产指标与算法体系字典、实时验算沙盒与核心运行参数”精简为“核心运行参数设定”；
+  4. **数据审批页面**：由“处理审批流程进度”调整为“每日数据审核批准”；
+  5. **数据展示页面**：由“浏览固定数据展示表”简化为“浏览数据展示表”。
+- **改动范围**：
+  1. `backend_data/shared/项目列表.json`：同步更新后端各页面在 `daily_report_25_26.pages` 下的 `页面描述` 字段，使 API 响应保持一致；
+  2. `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`：更新 `PAGE_DESCRIPTION_MAP` 映射常数，确保前端兜底与静态渲染完全匹配；
+  3. `frontend/src/projects/daily_report_25_26/composables/dailyBriefPresentation.js`：在 `withDailyBriefPage` 生成的 `daily_brief` 对象中同步添加 `page_description: '每日生产状况内参'`。
+- **验证结果**：前端生产构建 `npm run build` 成功完成（16.52s，0 错误）。
+
+
+## 2026-11-02 调度历史设备状态核对保存权限严格限定为 Global_admin
+
+- **需求背景**：用户明确要求“此处的保存功能，仅限Global_admin点击”，防止非超级管理员误操作或擅自覆盖生产调度的设备展示状态。
+- **改动点**：
+  1. **后端路由安全防线强化**（`backend/projects/daily_report_25_26/api/dispatch_info.py`）：
+     - 移除 `@public_router.post('/resolve_status')` 挂载，防止未鉴权直接调用；
+     - 在 `@router.post('/resolve_status')` 接口中注入 `session: AuthSession = Depends(get_current_session)` 依赖；
+     - 强校验 `session.group == 'Global_admin'`，非超级管理员直接阻断并返回 `403 Forbidden: 此处的保存功能仅限 Global_admin 操作`；
+  2. **后端单测完善**（`test_dispatch_reconciliation.py`）：
+     - 增加普通用户调用接口时返回 403 权限异常的单元测试；
+  3. **前端 API 透传凭证**（`dispatchApi.js`）：
+     - `resolveDispatchStatus` 支持透传用户 Token，在 Header 中规范携带 `Authorization: Bearer <token>`；
+  4. **前端交互与按权禁用**（`DispatchInfoView.vue`）：
+     - 修正 `isGlobalAdmin` 计算属性，严格匹配 `group === 'Global_admin'`，剥离非超管的 `canAccessAdminConsole` 权限干扰；
+     - 展开差异核对时，非 Global_admin 用户可查看冲突设备与客观事件依据，但下拉选择框处于禁用（disabled）状态；
+     - 保存按钮对非 Global_admin 用户禁用，文案显示为“保存显示状态 (仅限 Global_admin)”，并提示“🔒 此处的设备显示状态保存功能仅限 Global_admin 操作”；
+     - 在 `saveHistoryStatuses` 执行函数开头设置前置权限检查，非 Global_admin 点击直接弹窗拦截。
+- **验证结果**：
+  - 后端 24 项单元测试全部通过（包含权限 403 测试）；
+  - 前端生产构建 `npm run build` 成功完成（15.88s，0 错误）。
+
+
+## 2026-11-02 调度信息入库后设备冲突状态选择保存无效问题修复
+
+- **问题现象与定位**：
+  - 用户在 `http://localhost:5173/projects/daily_report_25_26/pages/dispatch_info` 页面中，上传 PDF 调度文件入库时选择冲突设备显示状态有效；但入库后在主页面“机炉表格与事件存在差异”折叠栏中，选择“原表格”、“末次主设备事件”或“手动指定”并点击“保存显示状态”后页面无反应且状态未生效。
+  - **根本原因**：
+    1. 在 `backend/projects/daily_report_25_26/services/dispatch_db_service.py` 的 `update_dispatch_statuses` 中，从 PostgreSQL 查询出单行记录后，驱动返回的 `row['biz_date']` 为 Python `datetime.date` 对象；
+    2. 在 `backend/projects/daily_report_25_26/services/dispatch_reconciliation.py` 的 `reconcile_report` 算法中，比较事件日期 `event.get('event_date') and event['event_date'] != result.get('biz_date')` 时，因为 `event['event_date']` 是字符串（如 `'2026-10-25'`），而在 Python 中 `str != date` 恒为 `True`；
+    3. 这导致当日事件被误判定为跨日事件，在提取主设备事件时塞入了跨日格式与字段，导致后端计算出的证据指纹（SHA256 哈希值）与前端查询时计算出的指纹不一致；
+    4. 进而触发后端的防并发/防篡改校验 `if evidence is not None and any(evidence.get(key) != conflicts[key]['evidence'] for key in choices)`，直接返回操作依据已变化报错，拒绝入库持久化；
+    5. 前端在调用保存接口时缺失显式的成功弹窗提示。
+- **修复方案与代码改动**：
+  1. **后端防御与标准化**（`dispatch_reconciliation.py` & `dispatch_db_service.py`）：
+     - 在 `reconcile_report` 入口处，无论输入为 `datetime.date` 还是 `str`，统一将 `result['biz_date']` 标准化为 ISO 字符串（`raw.isoformat() if hasattr(raw, 'isoformat') else str(raw)`），确保后续所有日期比对均为统一类型字符串比较；
+     - 在 `update_dispatch_statuses` 中，对从 DB 读出的 `row` 统一将日期与时间字段格式化为 ISO 字符串后再传入 `reconcile_report`；
+     - 在 `test_dispatch_reconciliation.py` 中补充针对 `datetime.date` 类型 `biz_date` 的回归单元测试，确保证据指纹严格一致；
+  2. **前端交互与反馈增强**（`DispatchInfoView.vue`）：
+     - 在 `saveHistoryStatuses` 成功回调中加入 `alert(res.message || '显示状态保存成功！')` 明确反馈，并在保存后自动重新拉取当前日期数据实时刷新展示状态。
+- **验证结果**：
+  1. 后端 24 项调度核对与提取单元测试全部通过（`python -m unittest backend.projects.daily_report_25_26.tests.test_dispatch_reconciliation`）；
+  2. 真实数据库端到端测试（2026-10-25 北海水炉样本）：选择 `events` 成功保存并转换为“启动中”，选择 `table` 成功保存并转换为“运行”，证据指纹严格匹配；
+  3. 前端生产打包 `npm --prefix frontend run build` 成功完成（17.04s，0 错误）。
+
+
+## 2026-11-02 功能选择页核心卡片渐变蓝与渐变橙轻盈化调优
+
+- 用户反馈卡片的橙色和蓝色过于浓重深沉，要求略微调轻。
+- 在 `PageSelectView.vue` 实施轻量、通透的渐变明度与饱和度调优：
+  1. **每日数据填报卡片（渐变蓝调轻）**：由原来的深暗科技蓝（`#1d4ed8` ~ `#3b82f6`）调轻为通透清爽的蔚蓝/晴空蓝渐变（`linear-gradient(135deg, #3b82f6 0%, #4f8ff7 45%, #60a5fa 100%)`），边框与投影由深蓝压制转为轻盈浅蓝（`border: #60a5fa; box-shadow: rgba(59, 130, 246, 0.18)`）；
+  2. **第一组普通卡片（浅冰蓝微调）**：背景调淡为更加清雅的极浅冰蓝（`#f8fbff` ~ `#eff6ff`），减弱视觉压迫感；
+  3. **数据看板卡片（渐变橙调轻）**：由原来的浓郁深焦橙（`#ea580c` ~ `#fb923c`）调轻为温润明快的珊瑚暖橙渐变（`linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fba053 100%)`），边框采用柔和暖橙（`border: #fb923c; box-shadow: rgba(249, 115, 22, 0.18)`）；
+  4. 分组指示条与文字对比度保持和谐，消除厚重块感，视觉更轻快现代。
+- 验证：前端生产构建 `npm run build` 顺利通过。
+
+## 2026-11-02 “数据分析页面”更名为“数据查询与分析”
+
+- 按用户要求将“数据分析页面”正式更名为“数据查询与分析”：
+  1. **配置源头变更**：在 `backend_data/shared/项目列表.json` 中将 `daily_report_25_26` 项目下的 `data_analysis` 页面名称由“数据分析页面”变更为“数据查询与分析”；
+  2. **前端组件与兜底同步**：在 `DataAnalysisView.vue`（页面标题与面包屑兜底）及 `ForbiddenView.vue`（403 页面名称映射）中同步更新为“数据查询与分析”；
+  3. **功能选择页即刻生效**：`/projects/daily_report_25_26/pages` 读取项目配置后，第三组（分析与系统管理）中的该卡片名称即刻显示为“数据查询与分析”，并带参跳转。
+- 验证：前端生产构建 `npm run build`（14.65s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页“数据看板”卡片升级为渐变橙色主题
+
+- 用户要求将第二组（生产监控与看板）中的“数据看板”卡片改为渐变橙色。
+- 在 `PageSelectView.vue` 落实微调：
+  1. `getCardCustomClass` 增加 `key === 'dashboard'` 返回 `card-primary-dashboard` 逻辑；
+  2. 样式新增 `.page-card.card-primary-dashboard`，采用高饱和活力渐变橙色背景（`linear-gradient(135deg, #ea580c, #f97316, #fb923c)`）与同色调投影（`rgba(249, 115, 22, 0.28)`）；
+  3. 卡片内标题统一为高对比纯白，描述文字为温暖白橙色（`#fff7ed`），hover 时微升加深，与第一组的深渐变蓝“每日数据填报”卡片形成鲜明的双核心业务引导视觉。
+- 验证：前端生产构建 `npm run build`（15.01s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页卡片紧凑度优化（由 116px 收紧至 88px）
+
+- 用户反馈卡片虽已统一高度，但 116px 显得过高空旷。
+- 在 `PageSelectView.vue` 实施轻量精致紧凑化微调：
+  1. **高度收紧**：`.page-card` 统一高度由 `116px` 大幅收紧至 **`88px`**，内边距由 `16px` 调整为 `12px 14px`，圆角设为 `10px`；
+  2. **文字间距紧凑化**：标题字号微调为 `15px`（行高 1.3），描述字号微调为 `12px`（行高 1.4），卡片内间距 `gap: 5px`；
+  3. **分组容器间距收窄**：`.groups-container` 间距由 `28px` 优化为 `20px`，整体页面布局更加紧凑干练，减少单屏滚动负荷。
+- 验证：前端生产构建 `npm run build` 顺利通过。
+
+## 2026-11-02 功能选择页卡片高度统一与标题防折行规整
+
+- 用户反馈各组卡片因标题长度及描述文本多寡导致高矮不一、参差不齐。
+- 在 `PageSelectView.vue` 样式层对 `.page-card` 实施统一高度与排版规整：
+  1. **高度严格锁定**：为 `.page-card` 注入 `height: 116px; box-sizing: border-box; padding: 16px;`，不论卡片处于哪一组或哪一行，卡片外轮廓尺寸 100% 齐平一致；
+  2. **标题与徽标单行抗挤压**：`.page-card-title-text` 与 `.primary-entry-tag` 统一增加 `white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;`，确保标题行垂直居中且绝不产生意外换行撑高；
+  3. **描述文本两行截断对齐**：`.page-card-desc` 统一配置 `-webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;`，保证短文本不塌陷、长文本不溢出，留白呼吸感高度一致。
+- 验证：前端生产构建 `npm run build`（13.35s，0 错误）顺利通过。
+
+## 2026-11-02 功能选择页卡片分类整顿与填报入口渐变蓝视觉强化
+
+- 用户反馈功能选择页面（`/projects/daily_report_25_26/pages`）平铺卡片较多且杂乱，选定方案 A 微调落地：
+  1. **卡片结构清晰划分为三大板块**：
+     - **第一组【报表填报与审批】**：整合日常生产业务流，包含“每日数据填报页面 (`data_entry`)”、“数据审批页面 (`data_approval`)”与“常量指标页面 (`constant_data`)”；
+     - **第二组【生产监控与看板】**：整合全局态势感知，包含“数据看板 (`dashboard`)”、“数据展示页面 (`data_show`)”、“调度信息 (`dispatch_info`)”与“电力现货市场数据 (`spot_electricity`)”；
+     - **第三组【分析与系统管理】**：按用户要求将“每日简报 (`daily_brief`)”移入本组，并聚合“计划动态分解模块 (`dynamic_plan`)”、“数据分析页面 (`data_analysis`)”与“全局管理中心 (`global_management`)”。
+  2. **权限与安全隔离 100% 保持不变**：
+     - 严格复用现有 `auth.filterPages` 及 `withDailyBriefPage` 鉴权过滤链条，各角色（超管、集团管理员、主城区、各基层单位、填报员、只读员）仅能看到已授权的卡片；
+     - 无权限的卡片自动剔除；若某角色对某个分组全无权限，该分组整体自动隐藏；兜底支持非日报项目或其他未分组页面平铺，无破坏性影响。
+  3. **视觉引导重构（渐变蓝）**：
+     - 第一组卡片整体统一为柔和优雅的浅渐变蓝背景（`linear-gradient(135deg, #f0f7ff, #dbeafe)`）与淡蓝高亮边框；
+     - 其中的核心高频入口“每日数据填报”卡片改用饱满深邃的主色科技渐变蓝（`linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6)`），配备纯白字体、高亮投影与“核心填报”徽标，第一时间为基层填报人员形成强烈的视觉聚焦与入口指引。
+- 验证：前端生产构建 `npm run build`（789 个模块，耗时 13.52s，0 错误）顺利通过。
+
 ## 2026-11-01 运行综述改为指标与设备调度证据生成
 
 - 用户要求优化agy的新综述、避免编造、参考设备调度记录，并删除“【态势要点速览】”。保留已有报纸主题、首字下沉和主/副刊窗格，不覆盖用户和agy本轮未提交的其他改动。

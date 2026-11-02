@@ -284,13 +284,17 @@ def update_dispatch_statuses(biz_date, choices, project_key='daily_report_25_26'
             row = cur.fetchone()
             if not row:
                 return {'ok': False, 'message': '未找到该日期的调度日报'}
-            current = reconcile_report(dict(row))
+            row_dict = dict(row)
+            for k, v in row_dict.items():
+                if isinstance(v, (datetime, date)):
+                    row_dict[k] = v.isoformat()
+            current = reconcile_report(row_dict)
             conflicts = {c['id']: c for c in current['status_conflicts']}
             if any(key not in conflicts for key in choices):
                 return {'ok': False, 'message': '状态差异已变化，请刷新后重新核对'}
             if evidence is not None and any(evidence.get(key) != conflicts[key]['evidence'] for key in choices):
                 return {'ok': False, 'message': '操作依据已变化，请刷新后重新确认'}
-            report = reconcile_report(dict(row), choices)
+            report = reconcile_report(row_dict, choices)
             unresolved = [c for c in report['status_conflicts'] if not c['resolution']]
             if unresolved:
                 return {'ok': False, 'has_status_conflict': True, 'status_conflicts': unresolved, 'message': '请确认全部状态差异后保存'}

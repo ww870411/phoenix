@@ -33,6 +33,8 @@ def _time_minutes(event):
 def reconcile_report(report, choices=None):
     """拆分操作、推断末次状态；无有效确认时保留表格，证据变更后重新确认。"""
     result = copy.deepcopy(report)
+    raw_biz_date = result.get('biz_date')
+    result['biz_date'] = raw_biz_date.isoformat() if hasattr(raw_biz_date, 'isoformat') else (str(raw_biz_date) if raw_biz_date else '')
     stored = result.get('eqp_status_json')
     stored = stored if isinstance(stored, dict) else {}
     facilities = result.get('boiler_turbine_status')
