@@ -3,7 +3,36 @@ from __future__ import annotations
 
 import math
 import re
-from collections import Counter
+
+EQUIPMENT_KEYS = ("amount_turbine_running", "amount_boiler_steam_running",
+                  "amount_boiler_water_running", "amount_boiler_room_running")
+
+
+def _valid_count(value):
+    """真实台数为非负整数，不能用四舍五入掩盖异常申报。"""
+    return _finite(value) and value >= 0 and float(value).is_integer()
+
+
+def _equipment_sentences(metrics):
+    """使用日报集团汇总及完整性校验结果，不拿主城区调度设备清单替代全口径。"""
+    clauses, used = [], []
+    labels = ("汽轮机", "蒸汽锅炉", "水炉", "锅炉房锅炉")
+    for key, label in zip(EQUIPMENT_KEYS, labels):
+        metric = metrics.get(key, {})
+        current, peer = metric.get("value"), metric.get("peer")
+        if not _valid_count(current):
+            clauses.append(f"{label}台数待补齐")
+            continue
+        used.append(key)
+        clause = f"{label}{current:.0f}台"
+        if _valid_count(peer):
+            delta = current - peer
+            clause += "（同比持平）" if delta == 0 else f"（同比{'增加' if delta > 0 else '减少'}{abs(delta):.0f}台）"
+        else:
+            clause += "（同期数据不足）"
+        clauses.append(clause)
+    sentences = ["当日集团全口径运行设备中，" + "、".join(clauses) + "。"]
+    return sentences, used
 
 
 def _finite(value):
@@ -62,10 +91,12 @@ def _profit_clause(metric):
     return text
 
 
-def _dispatch_paragraph(day, dispatch):
+def _dispatch_paragraph(day, dispatch, metrics):
+    sentences, used = _equipment_sentences(metrics)
     evidence = dispatch.get("overview_evidence", {})
     if evidence.get("date") != day.isoformat():
-        return {"key": "dispatch", "text": "当日暂无设备调度记录。", "metric_keys": [], "operations": []}
+        sentences.append("当日暂无设备调度记录。")
+        return {"key": "dispatch", "text": "".join(sentences), "metric_keys": used, "operations": []}
 
     equipment = {}
     ambiguous = set()
@@ -78,20 +109,6 @@ def _dispatch_paragraph(day, dispatch):
         equipment[key] = item
     pending = {key for key, item in equipment.items() if item.get("pending")} | ambiguous
     pending_count = max(int(evidence.get("pending_count") or 0), len(pending))
-    sentences = []
-    # 存在状态争议时不汇总运行台数，以免将尚待确认的状态写成结论。
-    if equipment and not pending_count:
-        for state, label in (("运行", "运行"), ("检修", "检修")):
-            counts = Counter(item.get("kind") for item in equipment.values()
-                             if item.get("status") == state and item.get("kind"))
-            if counts:
-                kinds = [kind for kind in ("汽机", "汽炉", "水炉", "燃气炉", "锅炉") if kind in counts]
-                kinds += sorted(set(counts) - set(kinds))
-                sentences.append("调度状态表列示" + label + "设备：" + "、".join(f"{kind}{counts[kind]}台" for kind in kinds) + "。")
-        if not sentences:
-            standby = sum(item.get("status") == "备用" for item in equipment.values())
-            if standby:
-                sentences.append(f"调度状态表列示备用设备{standby}台。")
 
     operations = []
     seen = set()
@@ -114,12 +131,13 @@ def _dispatch_paragraph(day, dispatch):
         attribution = " ".join(str(value) for value in (record.get("plant"), record.get("time")) if value)
         excerpts.append(attribution + "“" + record["description"].strip().rstrip("。；") + "”")
     if excerpts:
-        sentences.append("操作日志记载：" + "；".join(excerpts) + "。")
+        # 台数及同比后直接承接调度事实，不重复概括增减、行为分类或运行意义。
+        sentences.append("当日调度记录显示：" + "；".join(excerpts) + "。")
     if pending_count:
-        sentences.append(f"有{pending_count}项设备状态待核对。")
-    if not sentences:
-        sentences.append("当日调度日报已记录。")
-    return {"key": "dispatch", "text": "".join(sentences), "metric_keys": [],
+        sentences.append(f"另有{pending_count}项设备状态待核对。")
+    if not operations:
+        sentences.append("当日暂无设备操作记录。")
+    return {"key": "dispatch", "text": "".join(sentences), "metric_keys": used,
             "operations": [record for _, record in selected]}
 
 
@@ -153,5 +171,5 @@ def build_brief_overview(day, metric_rows, weather, dispatch):
     return {"paragraphs": [
         {"key": "production", "text": "".join(production) or "当日生产指标暂无记录。", "metric_keys": production_keys},
         {"key": "economics", "text": "".join(economics) or "当日经营与投诉指标暂无记录。", "metric_keys": economics_keys},
-        _dispatch_paragraph(day, dispatch),
+        _dispatch_paragraph(day, dispatch, metrics),
     ]}

@@ -17,6 +17,7 @@
               type="button"
               :class="['tab-btn', { active: currentTheme === item.id }]"
               :title="item.desc"
+              :disabled="exporting"
               @click="switchTheme(item.id)"
             >
               <span class="tab-icon">{{ item.icon }}</span>
@@ -25,13 +26,19 @@
           </div>
         </div>
 
+        <button type="button" class="newspaper-export-btn"
+          :disabled="loading || exporting || !!error || !brief?.date"
+          @click="exportPdf">
+          {{ exporting ? '正在生成 PDF…' : '导出 PDF' }}
+        </button>
         <div class="user-badge">
           <span class="badge-dot"></span> 管理员专阅
         </div>
       </header>
+      <p v-if="exportError" class="pdf-export-error" role="alert">{{ exportError }}</p>
 
       <!-- 报纸实体页面 -->
-      <main class="newspaper-sheet">
+      <main ref="newspaperSheet" class="newspaper-sheet">
         <!-- 报头 (Masthead) -->
         <header class="newspaper-masthead">
           <!-- 报眉元信息栏 -->
@@ -66,7 +73,7 @@
               <select
                 id="brief-date"
                 :value="selectedDate"
-                :disabled="loading || !dates.length"
+                :disabled="loading || exporting || !dates.length"
                 class="newspaper-select"
                 @change="selectDate($event.target.value)"
               >
@@ -78,7 +85,8 @@
               <button
                 type="button"
                 class="newspaper-refresh-btn"
-                :disabled="loading"
+                :disabled="loading || exporting"
+                data-pdf-ignore
                 @click="load()"
               >
                 {{ loading ? '排版中…' : '校订重载' }}
@@ -393,6 +401,7 @@ import { fetchDailyBrief } from '../services/api'
 import BriefSubjectSection from '../components/BriefSubjectSection.vue'
 import BriefComparisonText from '../components/BriefComparisonText.vue'
 import { formatBriefNumber as fmt } from '../composables/dailyBriefPresentation'
+import { exportDailyBriefPdf } from '../composables/dailyBriefPdf'
 
 const route = useRoute()
 const router = useRouter()
@@ -421,6 +430,27 @@ const loading = ref(false)
 const error = ref('')
 const dates = ref([])
 const latest = ref('')
+const newspaperSheet = ref(null)
+const exporting = ref(false)
+const exportError = ref('')
+
+async function exportPdf() {
+  if (loading.value || exporting.value || error.value || !brief.value?.date || !newspaperSheet.value) return
+  exporting.value = true
+  exportError.value = ''
+  const id = requestId
+  const date = brief.value.date
+  const theme = currentTheme.value
+  try {
+    await exportDailyBriefPdf(newspaperSheet.value, {
+      date, theme, isCurrent: () => id === requestId && !loading.value && currentTheme.value === theme,
+    })
+  } catch (cause) {
+    exportError.value = `PDF 导出失败：${cause.message || '请稍后重试。'}`
+  } finally {
+    exporting.value = false
+  }
+}
 
 // 计划台账弹窗显隐状态
 const planModalVisible = ref(false)
@@ -628,6 +658,19 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
 }
+
+.newspaper-export-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--paper-rule-dark);
+  background: var(--paper-bg);
+  color: var(--paper-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.newspaper-export-btn:disabled { opacity: 0.55; cursor: wait; }
+.pdf-export-error { color: #9e2a2b; font-size: 13px; }
 
 .back-link {
   display: inline-flex;

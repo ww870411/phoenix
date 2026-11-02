@@ -82,18 +82,30 @@ class OverviewTests(TestCase):
                 self.assertIn(expected, result)
                 self.assertNotIn('方向不同', result)
 
-    def test_dispatch_counts_recorded_equipment_and_quotes_actual_auxiliary_operations(self):
+    def test_dispatch_uses_group_metrics_not_partial_status_table(self):
         device = {'key': '北海|#1机', 'kind': '汽机', 'status': '运行'}
         equipment = [device, device.copy(), {'key': '北海|#1炉', 'kind': '汽炉', 'status': '运行'},
                      {'key': '北海|#2炉', 'kind': '汽炉', 'status': '检修'}]
         records = [operation('关闭南北网联络门，南网停运。', '10:15'), operation('#2高减停运。', '14:30')]
-        result = self.overview(record=dispatch(equipment, records))[2]
-        self.assertIn('运行设备：汽机1台、汽炉1台', result['text'])
-        self.assertIn('检修设备：汽炉1台', result['text'])
+        rows = [metric('amount_turbine_running', '汽轮机', 6, 5),
+                metric('amount_boiler_steam_running', '蒸汽锅炉', 6, 6),
+                metric('amount_boiler_water_running', '水炉', 0, 0),
+                metric('amount_boiler_room_running', '锅炉房锅炉', 11, 18)]
+        result = self.overview(rows, record=dispatch(equipment, records))[2]
+        self.assertIn('汽轮机6台（同比增加1台）', result['text'])
+        self.assertIn('蒸汽锅炉6台（同比持平）', result['text'])
+        self.assertIn('水炉0台（同比持平）', result['text'])
+        self.assertIn('锅炉房锅炉11台（同比减少7台）', result['text'])
+        self.assertEqual(result['text'],
+                         '当日集团全口径运行设备中，汽轮机6台（同比增加1台）、蒸汽锅炉6台（同比持平）、'
+                         '水炉0台（同比持平）、锅炉房锅炉11台（同比减少7台）。'
+                         '当日调度记录显示：北海电厂 10:15“关闭南北网联络门，南网停运”；'
+                         '北海电厂 14:30“#2高减停运”。')
         self.assertIn('北海电厂 10:15“关闭南北网联络门，南网停运”', result['text'])
         self.assertIn('#2高减停运', result['text'])
         self.assertEqual(result['operations'], records)
-        self.assertNotIn('全集团', result['text'])
+        self.assertEqual(result['metric_keys'], [row['key'] for row in rows])
+        self.assertNotIn('汽机1台', result['text'])
 
     def test_cross_day_events_tickets_and_duplicate_operations_do_not_enter_excerpts(self):
         actual = operation('#1炉并汽。')
@@ -109,6 +121,8 @@ class OverviewTests(TestCase):
         result = self.overview(record=dispatch(operations=[record]))[2]['text']
         self.assertIn('“计划明日启动#1机，尚未并网”', result)
         self.assertNotIn('已并网', result)
+        self.assertNotIn('启动与投运', result)
+        self.assertNotIn('这些操作涉及', result)
 
     def test_pending_or_conflicting_statuses_do_not_become_running_counts(self):
         scenarios = [dispatch([{'key': '北海|#1机', 'kind': '汽机', 'status': '运行', 'pending': True}], pending=1),
@@ -117,11 +131,12 @@ class OverviewTests(TestCase):
         for record in scenarios:
             result = self.overview(record=record)[2]['text']
             self.assertIn('1项设备状态待核对', result)
-            self.assertNotIn('运行设备', result)
+            self.assertNotIn('汽轮机1台', result)
 
     def test_a_different_dispatch_day_is_never_reused_as_current(self):
         result = self.overview(record=dispatch(operations=[operation('#1机并网')], day='2026-03-24'))[2]
-        self.assertEqual(result['text'], '当日暂无设备调度记录。')
+        self.assertIn('当日暂无设备调度记录', result['text'])
+        self.assertNotIn('#1机并网', result['text'])
         self.assertEqual(result['operations'], [])
 
     def test_excerpts_include_fault_record_and_remain_in_source_order(self):
@@ -131,13 +146,48 @@ class OverviewTests(TestCase):
         self.assertEqual([record['time'] for record in result['operations']], ['09:00', '10:00', '11:00'])
         self.assertIn('正在处理中', result['text'])
         self.assertNotIn('已修复', result['text'])
+        pump_only = self.overview(record=dispatch(operations=[operation('#2首站启动#1热网循环泵')]))[2]['text']
+        self.assertNotIn('热网联络方式', pump_only)
+        unchanged = self.overview(record=dispatch(operations=[operation('联络门位置正常，准备启动循环泵')]))[2]['text']
+        self.assertNotIn('系统切换', unchanged)
+        self.assertNotIn('启动与投运', unchanged)
 
     def test_standby_is_described_as_recorded_not_as_running(self):
         record = dispatch([{'key': '北海|#1机', 'kind': '汽机', 'status': '备用'}])
         result = self.overview(record=record)[2]['text']
-        self.assertEqual(result, '调度状态表列示备用设备1台。')
+        self.assertNotIn('汽轮机1台', result)
+        self.assertIn('汽轮机台数待补齐', result)
 
     def test_empty_or_unnamed_status_records_do_not_invent_device_counts(self):
         record = dispatch([{'key': '', 'kind': '汽机', 'status': '运行'}, {'key': '北海|#1机', 'status': None}])
         result = self.overview(record=record)[2]['text']
-        self.assertEqual(result, '当日调度日报已记录。')
+        self.assertIn('当日暂无设备操作记录', result)
+        self.assertNotIn('汽轮机0台', result)
+
+    def test_equipment_missing_peer_and_invalid_count_do_not_invent_yoy(self):
+        rows = [metric('amount_turbine_running', '汽轮机', 0, None),
+                metric('amount_boiler_steam_running', '蒸汽锅炉', None, 3),
+                metric('amount_boiler_water_running', '水炉', -1, 1),
+                metric('amount_boiler_room_running', '锅炉房锅炉', 1.5, 2)]
+        result = self.overview(rows)[2]
+        self.assertIn('汽轮机0台（同期数据不足）', result['text'])
+        for label in ['蒸汽锅炉', '水炉', '锅炉房锅炉']:
+            self.assertIn(label + '台数待补齐', result['text'])
+        self.assertNotIn('同比', result['text'])
+        self.assertEqual(result['metric_keys'], ['amount_turbine_running'])
+
+    def test_group_counts_remain_available_without_dispatch_or_with_pending_status(self):
+        rows = [metric('amount_turbine_running', '汽轮机', 6, 5)]
+        for record in [{}, dispatch(pending=2)]:
+            result = self.overview(rows, record=record)[2]['text']
+            self.assertIn('汽轮机6台（同比增加1台）', result)
+
+    def test_equipment_changes_are_not_repeated_in_generic_analysis(self):
+        keys = ['amount_turbine_running', 'amount_boiler_steam_running',
+                'amount_boiler_water_running', 'amount_boiler_room_running']
+        for current, peer, expected in [(2, 2, '同比持平'),
+                                        (3, 2, '同比增加1台'), (1, 2, '同比减少1台')]:
+            result = self.overview([metric(key, key, current, peer) for key in keys])[2]['text']
+            self.assertIn(expected, result)
+            for redundant in ['运行配置', '设备投入', '四类设备运行台数均', '这些操作涉及', '日内调度则涉及']:
+                self.assertNotIn(redundant, result)

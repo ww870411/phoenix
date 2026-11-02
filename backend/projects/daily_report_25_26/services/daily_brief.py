@@ -38,6 +38,10 @@ METRICS = (
     ("amount_steam_sales", "售汽量", "吨", 2),
     ("rate_water_per_10k_m2", "供暖水单耗", "吨/万㎡", 2),
     ("rate_power_per_10k_m2", "供暖电单耗", "kWh/万㎡", 2),
+    ("amount_turbine_running", "汽轮机", "台", 0),
+    ("amount_boiler_steam_running", "蒸汽锅炉", "台", 0),
+    ("amount_boiler_water_running", "水炉", "台", 0),
+    ("amount_boiler_room_running", "锅炉房锅炉", "台", 0),
 )
 PRICE_INPUTS = {
     "amount_power_sales": "price_power_sales", "amount_heat_supply": "price_inner_heat_sales",
