@@ -138,6 +138,23 @@
             </div>
           </section>
 
+          <section class="newspaper-section drivers-section" aria-labelledby="drivers-title">
+            <div class="editorial-heading">
+              <div class="heading-badge">经营透视</div>
+              <h2 id="drivers-title">数字背后 · 收支变化追踪</h2>
+              <div class="heading-line"></div>
+            </div>
+            <div v-if="brief.drivers?.stories?.length" class="drivers-list">
+              <article v-for="group in driverStoryGroups" :key="group.key" class="driver-story">
+                <div v-for="story in group.stories" :key="story.key" class="driver-story__item">
+                  <p><strong class="driver-story__title">{{ story.label }}</strong>本期 {{ fmt(story.current) }} 万元，同比<BriefComparisonText :text="`${story.delta >= 0 ? '增加' : '减少'} ${fmt(Math.abs(story.delta))} 万元${story.percent != null ? `（${fmt(Math.abs(story.percent), 1)}%）` : ''}`" :delta="story.delta" />。</p>
+                  <p v-for="driver in story.drivers" :key="`${driver.company}-${driver.factor}`" class="driver-story__unit">{{ driver.name }}{{ driver.factor }}由 {{ fmt(driver.peer) }} 变为 <BriefComparisonText :text="`${fmt(driver.current)} ${driver.unit}`" :delta="driver.current - driver.peer" /><template v-if="driver.quantity_effect == null">，同比<BriefComparisonText :text="`${driver.delta >= 0 ? '增加' : '减少'} ${fmt(Math.abs(driver.delta))} 万元`" :delta="driver.delta" /></template><template v-for="effect in driverEffects(driver)" :key="effect.label">，{{ effect.label }}使金额<BriefComparisonText :text="`${effect.value >= 0 ? '增加' : '减少'} ${fmt(Math.abs(effect.value))} 万元`" :delta="effect.value" /></template>。</p>
+                </div>
+              </article>
+            </div>
+            <p v-else class="drivers-empty">当前没有达到筛选条件且数据完整、可核对的收支差异。</p>
+          </section>
+
           <!-- 报纸双栏排版大展区 (Broadsheet Two-column Spread) -->
           <div class="newspaper-columns-spread">
             <!-- 左版 (Left Column): 集团总览与核心生产指标走势 -->
@@ -472,6 +489,18 @@ function closePlanModal() {
 }
 
 const selectedDate = computed(() => brief.value?.date || String(route.query.date || ''))
+const driverStoryGroups = computed(() => {
+  const stories = brief.value?.drivers?.stories || []
+  const combinedKeys = new Set(['eco_hot_water_supply_income', 'eco_steam_supply_income'])
+  const combined = stories.filter(story => combinedKeys.has(story.key))
+  let inserted = false
+  return stories.flatMap(story => {
+    if (!combinedKeys.has(story.key)) return [{ key: story.key, stories: [story] }]
+    if (inserted) return []
+    inserted = true
+    return [{ key: 'heat-water-and-steam-income', stories: combined }]
+  })
+})
 const groupPlan = computed(() => brief.value?.plan?.monthly?.items?.find(row => row.company === 'Group'))
 const dailyPlanDelta = computed(() => {
   const value = brief.value?.group?.metrics.find(m => m.key === 'consumption_std_coal')?.value
@@ -541,6 +570,12 @@ function recover() {
 
 function signed(value) {
   return value == null ? '—' : `${value > 0 ? '+' : ''}${fmt(value)}`
+}
+
+function driverEffects(driver) {
+  if (driver.quantity_effect == null) return []
+  return [{ label: '数量变化', value: driver.quantity_effect }, { label: '单价变化', value: driver.price_effect }]
+    .filter(effect => Math.abs(effect.value) >= 0.005)
 }
 
 function statusLabel(status) {
@@ -1027,6 +1062,23 @@ onBeforeUnmount(() => {
 .editorial-para:last-child {
   margin-bottom: 0;
 }
+
+.drivers-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  padding: 18px 24px;
+  margin-bottom: 24px;
+}
+.drivers-empty { color: var(--paper-muted); font-size: 13px; line-height: 1.6; }
+.drivers-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; }
+.driver-story { min-width: 0; border-top: 1px solid var(--paper-rule); padding-top: 9px; }
+.driver-story p { margin: 0; color: var(--paper-ink); font-size: 13px; line-height: 1.8; }
+.driver-story__item + .driver-story__item { margin-top: 8px; }
+.driver-story__unit { position: relative; padding-left: 14px; }
+.driver-story__unit::before { content: '•'; position: absolute; left: 3px; color: var(--accent-color); }
+.driver-story__title { color: var(--accent-color); margin-right: 8px; }
+.driver-story__title::before { content: '■'; font-size: 8px; margin-right: 6px; vertical-align: 2px; }
 
 /* 首字下沉 (Drop Cap) */
 .drop-cap {
@@ -1688,6 +1740,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .drivers-section { padding: 16px; }
+  .drivers-list { grid-template-columns: minmax(0, 1fr); }
   .newspaper-sheet {
     padding: 16px 14px 24px;
   }

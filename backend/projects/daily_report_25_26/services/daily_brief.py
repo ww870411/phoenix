@@ -375,9 +375,11 @@ def build_daily_brief(session, day):
                    _optional(session, "生产调度", lambda: read_dispatch(session, day)),
                    _optional(session, "煤炭库存", lambda: read_inventory(session, day))]
     from .daily_brief_overview import build_brief_overview
+    from .daily_brief_drivers import build_cost_drivers
     overview = build_brief_overview(day, subjects["Group"]["metrics"], temp, supplements[1])
+    drivers = build_cost_drivers(day, metrics_by_day[day], evidence, GROUP_COMPANIES, COMPANIES)
     return {"ok": True, "date": day.isoformat(), "peer_date": get_peer_date(day).isoformat(),
-            "generated_at": datetime.now(EAST_8).isoformat(), "highlights": highlights, "overview": overview, "weather": temp,
+            "generated_at": datetime.now(EAST_8).isoformat(), "highlights": highlights, "overview": overview, "drivers": drivers, "weather": temp,
             "group": subjects["Group"], "main_city": subjects["ZhuChengQu"],
             "other_units": [subjects[c] for c in GROUP_COMPANIES if c not in ZHUCHENGQU_COMPANIES],
             "main_city_units": [subjects[c] for c in ZHUCHENGQU_COMPANIES], "plan": plan,

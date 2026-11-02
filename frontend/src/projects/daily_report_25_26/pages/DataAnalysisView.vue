@@ -4073,8 +4073,9 @@ onBeforeUnmount(() => {
   .result-table-wrapper,
   .correlation-matrix__table-wrapper,
   .timeline-grid-wrapper {
-    margin: 0 -10px;
-    padding: 0 10px;
+    max-width: 100%;
+    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
   }
 
   .result-table th,
@@ -4091,6 +4092,72 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .analysis-main {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .analysis-block,
+  .result-block {
+    min-width: 0;
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .analysis-block > .card-header,
+  .result-block > .card-header {
+    min-width: 0;
+  }
+
+  .result-header-actions {
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 10px;
+  }
+
+  .result-header-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .form-layout,
+  .metrics-panel-body,
+  .comparison-section,
+  .correlation-matrix-panel,
+  .timeline-chart-panel {
+    min-width: 0;
+  }
+
+  .metrics-panel-body {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .form-actions > .btn {
+    flex: 1 1 120px;
+  }
+
+  .ai-report-controls {
+    margin-left: 0;
+  }
+
+  .ai-user-prompt-field textarea {
+    box-sizing: border-box;
+  }
+
+  .unit-switch,
+  .timeline-axis-hint {
+    flex-wrap: wrap;
+  }
+
+  .unit-switch--grid {
+    margin: 0 0 8px;
+  }
+
+  .timeline-chart-panel {
+    padding: 10px;
+  }
+
   .result-table {
     min-width: 460px;
   }
