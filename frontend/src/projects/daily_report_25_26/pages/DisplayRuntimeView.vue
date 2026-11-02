@@ -1103,12 +1103,65 @@ async function captureWorksheetToPng(ws, cleanSheetName, bizDateStr, html2canvas
   }
 }
 
+// 裁掉模板尾部的多余行，供 Excel 和截图共用同一份工作表。
+function trimExportWorksheet(worksheet, lastRow) {
+  const range = XLSX.utils.decode_range(worksheet['!ref'])
+  for (let r = lastRow; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      delete worksheet[XLSX.utils.encode_cell({ r, c })]
+    }
+  }
+  range.e.r = Math.min(range.e.r, lastRow - 1)
+  worksheet['!ref'] = XLSX.utils.encode_range(range)
+  if (worksheet['!rows']) worksheet['!rows'] = worksheet['!rows'].slice(0, lastRow)
+  if (worksheet['!merges']) {
+    worksheet['!merges'] = worksheet['!merges']
+      .filter(merge => merge.s.r < lastRow)
+      .map(merge => ({ ...merge, e: { ...merge.e, r: Math.min(merge.e.r, lastRow - 1) } }))
+  }
+}
+
+// 供暖期与页面一样采用本次求值返回的列名，保留模板原有表头样式。
+function syncExportSeasonHeaders(worksheet, columns, headerColumns) {
+  for (const column of headerColumns) {
+    const label = columns?.[column]
+    if (typeof label !== 'string' || !/^\d{2}-\d{2}$/.test(label)) {
+      throw new Error('无法获取导出表的供暖期列名，请刷新页面后重试')
+    }
+    const cell = worksheet[XLSX.utils.encode_cell({ r: 1, c: column })]
+    if (!cell || typeof cell.v !== 'string' || !/\d{2}-\d{2}(?=供暖期)/.test(cell.v)) {
+      throw new Error('导出模板中的供暖期表头不符合预期')
+    }
+    cell.v = cell.v.replace(/\d{2}-\d{2}(?=供暖期)/, label)
+    delete cell.w
+  }
+}
+
+// 同步项目名称与单位，避免模板标签过期后与求值数据错位。
+function syncExportRowLabels(worksheet, rows, startRow, labelColumns, lastRow) {
+  rows.forEach((row, index) => {
+    const rowIndex = startRow + index - 1
+    if (rowIndex >= lastRow) return
+    for (const column of labelColumns) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: column })
+      const cell = worksheet[address] || {}
+      cell.t = 's'
+      cell.v = String(row[column] ?? '')
+      delete cell.w
+      worksheet[address] = cell
+    }
+  })
+}
+
 async function prepareExportWorkbook() {
   const sheetKeys = ['Group_sum_show_Sheet', 'Group_analysis_brief_report_Sheet', 'ZhuChengQu_sum_show_Sheet']
   const configPath = pageConfig.value
   const templatePath = '/25-26生产日报标准模板.xlsx'
   const origins = ['D3', 'C4', 'C3']
   const slicePoints = [3, 2, 2]
+  const lastRows = [71, 36, 42]
+  const dataStartRows = [3, 4, 3]
+  const labelColumns = [[1, 2], [0, 1], [0, 1]]
 
   const templatePromise = fetch(templatePath).then((res) => {
     if (!res.ok) throw new Error(`无法加载模板文件: ${res.statusText}`)
@@ -1192,6 +1245,10 @@ async function prepareExportWorkbook() {
     const dataOnly = res.rows.map((row) => row.slice(slicePoint))
 
     XLSX.utils.sheet_add_aoa(worksheet, dataOnly, { origin: origins[index] })
+    trimExportWorksheet(worksheet, lastRows[index])
+    syncExportRowLabels(worksheet, res.rows, dataStartRows[index], labelColumns[index], lastRows[index])
+    if (index === 0) syncExportSeasonHeaders(worksheet, res.columns, [9, 10])
+    if (index === 2) syncExportSeasonHeaders(worksheet, res.columns, [8, 9])
 
     beautifyWorksheet(worksheet, {
       ...beautifyConfigs[index],
