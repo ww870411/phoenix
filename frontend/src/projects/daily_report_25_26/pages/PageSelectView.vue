@@ -183,6 +183,7 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   spot_electricity: '15分钟日前/实时电价与走势',
   global_management: '核心运行参数设定',
   dispatch_info: '主城区生产调度全景工况监控',
+  smart_heating: '首站环路、电厂机组与换热站一次网实时监测',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
 function filterVisiblePages(list) {
@@ -190,6 +191,21 @@ function filterVisiblePages(list) {
     const key = String(page?.page_key || '').trim().toLowerCase()
     return key
   })
+}
+
+function withAdminExclusivePages(pageList, pKey, user) {
+  let list = withDailyBriefPage(pageList, pKey, user)
+  const isGlobalAdmin = pKey === 'daily_report_25_26' && user?.group === 'Global_admin'
+  list = (Array.isArray(list) ? list : []).filter((p) => p.page_key !== 'smart_heating')
+  if (isGlobalAdmin) {
+    list.push({
+      page_key: 'smart_heating',
+      page_name: '智慧供热实时工况',
+      page_description: '首站环路、电厂机组与换热站一次网实时监测',
+      page_url: `/projects/${pKey}/pages/smart_heating`,
+    })
+  }
+  return list
 }
 const canApproveUnit = (unit) => auth.canApproveUnit(unit, projectKey)
 const canRevokeUnit = (unit) => auth.canRevokeUnit(unit, projectKey)
@@ -216,7 +232,7 @@ async function loadPages() {
     await ensureProjectsLoaded()
     const response = await listPages(projectKey)
     rawPages.value = Array.isArray(response?.pages) ? response.pages : []
-    pages.value = withDailyBriefPage(filterVisiblePages(auth.filterPages(projectKey, rawPages.value)), projectKey, auth.user)
+    pages.value = withAdminExclusivePages(filterVisiblePages(auth.filterPages(projectKey, rawPages.value)), projectKey, auth.user)
     if (!pages.value.length) {
       errorMessage.value = '暂无可访问的页面，请联系管理员确认权限。'
     }
@@ -245,7 +261,7 @@ async function refreshWorkflow() {
 watch(
   () => auth.permissions,
   () => {
-    pages.value = withDailyBriefPage(
+    pages.value = withAdminExclusivePages(
       filterVisiblePages(auth.filterPages(projectKey, rawPages.value)),
       projectKey,
       auth.user,
@@ -270,7 +286,7 @@ const GROUP_DEFINITIONS = [
     key: 'monitoring_dashboard',
     title: '生产监控与看板',
     description: '全景数据看板、报表展示与调度电价监控',
-    pageKeys: ['dashboard', 'data_show', 'dispatch_info', 'spot_electricity'],
+    pageKeys: ['dashboard', 'data_show', 'dispatch_info', 'spot_electricity', 'smart_heating'],
   },
   {
     key: 'analysis_management',
@@ -562,6 +578,14 @@ function openPage(page) {
     router.push({
       path: `${base}`,
       query: { pageName: page.page_name || '调度信息' },
+    })
+    return
+  }
+  const isSmartHeating = normalizedKey === 'smart_heating'
+  if (isSmartHeating) {
+    router.push({
+      path: `${base}`,
+      query: { pageName: page.page_name || '智慧供热实时工况' },
     })
     return
   }

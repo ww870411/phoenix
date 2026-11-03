@@ -1,0 +1,245 @@
+# -*- coding: utf-8 -*-
+"""
+智慧供热平台内网数据接入与实时工况查询 API
+提供：
+1. /push: 供办公电脑中继 Agent 推送实时采集数据 (首站 sz_data, 电厂 dc_data, 换热站 yw_data)
+2. /latest: 供前端看板查询最新工况数据 (严格限定 Global_admin 权限)
+3. /status: 查询中继 Agent 推送连通状态与更新时效
+"""
+
+import json
+import logging
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+
+from backend.config import DATA_DIRECTORY
+from backend.services.auth_manager import AuthSession, get_current_session
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/smart-heating", tags=["smart_heating"])
+public_router = APIRouter(prefix="/smart-heating", tags=["smart_heating"])
+
+DATA_DIR = (Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26" / "smart_heating").resolve()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+LATEST_FILE = DATA_DIR / "latest.json"
+HISTORY_LOG = DATA_DIR / "history.jsonl"
+
+DEFAULT_PUSH_TOKEN = "phoenix_smart_heating_secret_2026"
+
+
+class SmartHeatingPushPayload(BaseModel):
+    push_token: Optional[str] = Field(None, description="推送凭证密钥")
+    timestamp: Optional[str] = Field(None, description="中继采集时间")
+    source: Optional[str] = Field("192.168.1.206:6688", description="数据源标识")
+    sz_data: List[Dict[str, Any]] = Field(default_factory=list, description="首站与管网环路数据")
+    dc_data: List[Dict[str, Any]] = Field(default_factory=list, description="电厂与热源机组数据")
+    yw_data: List[Dict[str, Any]] = Field(default_factory=list, description="换热站一次网实时数据")
+
+
+def _read_latest_data() -> Dict[str, Any]:
+    if not LATEST_FILE.exists():
+        return {
+            "ok": True,
+            "timestamp": None,
+            "received_at": None,
+            "source": None,
+            "sz_data": [],
+            "dc_data": [],
+            "yw_data": [],
+        }
+    try:
+        with open(LATEST_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error("读取智慧供热最新数据失败: %s", e)
+        return {
+            "ok": False,
+            "error": str(e),
+            "sz_data": [],
+            "dc_data": [],
+            "yw_data": [],
+        }
+
+
+def _save_latest_data(payload_dict: Dict[str, Any]):
+    temp_file = DATA_DIR / f"latest_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(payload_dict, f, ensure_ascii=False, indent=2)
+    temp_file.replace(LATEST_FILE)
+
+
+@public_router.post("/push", summary="接收办公电脑中继推送的实时工况数据")
+async def push_smart_heating_data(
+    payload: SmartHeatingPushPayload = Body(...),
+    x_push_token: Optional[str] = Header(None, alias="X-Push-Token"),
+):
+    """
+    接收 Win7 办公电脑中继 Agent 定时抓取并推送的 JSON 数据包。
+    支持 Header 或 Body 中的 token 验证。
+    """
+    token = x_push_token or payload.push_token
+    # 若配置了非空 token，校验是否匹配
+    if DEFAULT_PUSH_TOKEN and token != DEFAULT_PUSH_TOKEN:
+        raise HTTPException(status_code=401, detail="推送鉴权密钥无效，拒绝接收")
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_epoch = time.time()
+    data_record = {
+        "ok": True,
+        "timestamp": payload.timestamp or now_str,
+        "received_at": now_str,
+        "received_epoch": now_epoch,
+        "is_live_push": True,
+        "source": payload.source or "192.168.1.206:6688",
+        "sz_data": payload.sz_data,
+        "dc_data": payload.dc_data,
+        "yw_data": payload.yw_data,
+    }
+
+    try:
+        _save_latest_data(data_record)
+        # 追加轻量摘要至历史日志 (单行 JSON)
+        try:
+            with open(HISTORY_LOG, "a", encoding="utf-8") as log_f:
+                summary_line = {
+                    "time": now_str,
+                    "sz_count": len(payload.sz_data),
+                    "dc_count": len(payload.dc_data),
+                    "yw_count": len(payload.yw_data),
+                }
+                log_f.write(json.dumps(summary_line, ensure_ascii=False) + "\n")
+        except Exception as log_err:
+            logger.warning("追加历史简报失败: %s", log_err)
+
+        return {
+            "ok": True,
+            "message": "智慧供热实时数据接收成功",
+            "received_at": now_str,
+            "counts": {
+                "sz_data": len(payload.sz_data),
+                "dc_data": len(payload.dc_data),
+                "yw_data": len(payload.yw_data),
+            },
+        }
+    except Exception as e:
+        logger.exception("保存实时供热数据异常: %s", e)
+        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+
+
+@router.get("/latest", summary="获取最新智慧供热实时工况")
+async def get_latest_smart_heating_data(
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    获取智慧供热最新工况数据。
+    严格仅限 Global_admin 查看。
+    若数据链路未连接（或超过 90 秒无有效推流），严格不返回任何历史数据，遵循“无连接即无数据”原则。
+    """
+    if session.group != "Global_admin":
+        raise HTTPException(status_code=403, detail="智慧供热工况数据仅限 Global_admin 访问")
+
+    data = _read_latest_data()
+    is_live_push = bool(data.get("is_live_push"))
+    received_epoch = data.get("received_epoch")
+    is_online = False
+    if is_live_push and received_epoch:
+        try:
+            diff = time.time() - float(received_epoch)
+            is_online = 0 <= diff <= 90
+        except Exception:
+            pass
+
+    # 严格遵循“没有连接就应该没有数据”原则：未在线时不下发任何测点数据
+    if not is_online:
+        return {
+            "ok": True,
+            "is_online": False,
+            "data": {
+                "ok": True,
+                "is_live_push": False,
+                "timestamp": None,
+                "received_at": None,
+                "source": None,
+                "sz_data": [],
+                "dc_data": [],
+                "yw_data": [],
+            },
+            "query_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+    return {
+        "ok": True,
+        "is_online": True,
+        "data": data,
+        "query_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+@router.get("/status", summary="查询中继 Agent 连通状态")
+async def get_smart_heating_status(
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    查询中继客户端的心跳与时效状态。
+    严格仅限 Global_admin 访问。
+    """
+    if session.group != "Global_admin":
+        raise HTTPException(status_code=403, detail="仅限 Global_admin 访问")
+
+    data = _read_latest_data()
+    is_live_push = bool(data.get("is_live_push"))
+    received_epoch = data.get("received_epoch")
+    received_at = data.get("received_at")
+    is_online = False
+    seconds_ago = None
+
+    if is_live_push and received_epoch:
+        try:
+            diff = time.time() - float(received_epoch)
+            seconds_ago = int(diff)
+            # 必须在 0 到 90 秒内接收过真实的同步推送才视为在线
+            is_online = 0 <= diff <= 90
+        except Exception:
+            pass
+
+    return {
+        "ok": True,
+        "is_online": is_online,
+        "is_live_push": is_live_push,
+        "seconds_ago": seconds_ago if is_online else None,
+        "last_received_at": received_at if is_online else None,
+        "counts": {
+            "sz_data": len(data.get("sz_data", [])) if is_online else 0,
+            "dc_data": len(data.get("dc_data", [])) if is_online else 0,
+            "yw_data": len(data.get("yw_data", [])) if is_online else 0,
+        },
+    }
+
+
+@router.get("/client-script", summary="下载智慧供热数据同步客户端脚本")
+async def download_client_script(
+    session: AuthSession = Depends(get_current_session),
+):
+    """
+    下载最新的 Win7 / Python 3.8 智慧供热数据同步客户端脚本。
+    严格仅限 Global_admin 访问下载。
+    """
+    if session.group != "Global_admin":
+        raise HTTPException(status_code=403, detail="仅限 Global_admin 下载客户端脚本")
+
+    script_path = Path("configs/smart_heating_relay_win7.py").resolve()
+    if not script_path.exists():
+        raise HTTPException(status_code=404, detail="脚本文件不存在")
+
+    return FileResponse(
+        path=str(script_path),
+        filename="smart_heating_sync.py",
+        media_type="text/x-python",
+    )

@@ -1,6 +1,47 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
-## 2026-11-03 用户最终确认香海 #3 炉当日备用、次日点火
+## 2026-11-03 智慧供热内网平台实时工况看板、中继采集脚本与数据接收接口上线
+
+- **需求背景**：用户计划将运行于公司内网（`http://192.168.1.206:6688`）的“智慧供热平台”实时数据接入 Phoenix 系统进行展示。因当前开发环境无法直连内网，需借助能连通内网的办公电脑（Win7 + Python 3.8 环境）进行中继抓取并推送；新功能放入“生产监控与看板”分组，且严格仅限 `Global_admin` 查看。
+- **接口逆向分析与破译**：
+  - 基于用户提供的 HAR 归档（`configs/192.168.1.206.har`），通过逆向脚本扫描定位 48 组高频请求，解析出目标平台基于 Python Flask 架构，使用 Signed Session Cookie 鉴权，轮询周期为 30 秒。
+  - 成功破译 3 大核心业务接口：
+    1. 首站与主管网工况 (`POST /get_sz_data/2`)：包含东环、南环、北网供回补水、板换供回温、热泵吸收热量等 16 组核心测点；
+    2. 电厂与热源机组运行参数 (`POST /get_dc_data/2`)：包含北海 #1~#3 汽机、#1~#4 锅炉主汽、燃气炉群等 23 组机组测点；
+    3. 换热站一次网实时监测 (`POST /get_yw_data/60`)：覆盖金广、海港、东港印象等 20 座具体换热站，并完成物理口径破译（`f3` 一次供温、`f5` 一次回温、`f1` 一次供压、`f4` 一次回压、`f2` 瞬时流量、`f222` 瞬时热量）。
+- **Win7/Python 3.8 中继脚本交付与交互增强**：
+  - 创建 `configs/smart_heating_relay_win7.py`，采用 Python 3.8 纯标准库开发（`urllib.request` + `json`），零额外第三方依赖，可在 Windows 7 环境双击或命令行直接运行；
+  - 针对老旧办公电脑进行易用性增强：启动时打印交互式配置面板，用户直接按【回车键】即可按当前参数启动；输入编号（1~5）即可快速修改目标服务器 IP、轮询间隔或 Session Cookie；
+  - 修改后的参数自动记忆保存至同目录下的 `smart_heating_config.json`，用户下次启动无需重复输入，更无需在记事本中翻找修改代码。
+  - 脚本每隔 30 秒定时轮询内网接口，抓取最新数据并格式化推送到 Phoenix 后端接收端点，带时间戳打印运行日志与异常重试。
+- **后端接口与数据存储**：
+  - 新增 `backend/projects/daily_report_25_26/api/smart_heating.py` 并在主路由中挂载；
+  - `POST /api/v1/projects/daily_report_25_26/smart-heating/push`：公开接收端点，带 Token 鉴权，原子写入 `backend_data/projects/daily_report_25_26/smart_heating/latest.json`，并追加历史日志；
+  - `GET /api/v1/projects/daily_report_25_26/smart-heating/latest` 及 `/status`：查询端点，严格仅限 `Global_admin` 角色访问，其它组返回 403 Forbidden；
+  - `GET /api/v1/projects/daily_report_25_26/smart-heating/client-script`：提供最新免安装数据同步客户端脚本（`smart_heating_sync.py`）的安全下载接口（仅限 `Global_admin`）；
+  - 从 HAR 自动提取初始化快照种子，确保开箱即有数据。
+- **前端页面脱敏瘦身与客户端一键下载**：
+  - 深度重构 `SmartHeatingView.vue`，彻底剔除抓取感与调试信息：删除了全部内网 IP 地址及“中继抓取”字样，将状态提示升格为“实时数据传输中 / 等待数据链路接入”；换热站表头彻底移除开发口径符号（如 `f1`~`f222`），统一采用规范中文表头；
+  - 剥离原暴露技术细节的“中继配置指引”Tab，收敛为聚焦于“换热站一次网工况”、“主管网与首站测点”、“电厂与热源机组”三大生产大屏核心面板；
+  - 顶部操作栏新增“📥 下载同步客户端”按钮，直接通过前端 API 鉴权调用下载预配置好的 `smart_heating_sync.py`，方便用户直接拷贝至办公电脑运行；
+  - `PageSelectView.vue`：在“生产监控与看板”分组（`monitoring_dashboard`）下注册 `smart_heating` 卡片，通过 `withAdminExclusivePages` 控制仅 `Global_admin` 登录时注入展示；
+  - `frontend/src/router/index.js`：注册路由 `/projects/:projectKey/pages/smart_heating`，路由守卫校验 `auth.user?.group === 'Global_admin'`，非管理员拦截至 `/forbidden`；
+  - `frontend/src/projects/daily_report_25_26/services/api.js`：封装 `getSmartHeatingLatest`、`getSmartHeatingStatus` 及 `downloadSmartHeatingClientScript` API。
+- **落实“无连接即无数据”原则与移除历史快照**：
+  - 响应用户明确指示（“也不要什么历史快照，没有连接就应该没有数据”）：
+    1. **清空预置种子数据**：重置 `backend_data/projects/daily_report_25_26/smart_heating/latest.json`，彻底移除初始生成的 HAR 静态快照（`sz_data: []`, `dc_data: []`, `yw_data: []`）；
+    2. **后端接口严谨拦截**：在 `GET /smart-heating/latest` 和 `/status` 接口中，若链路未连接（或超过 90 秒无推流），强制返回空数据列表与 `is_online: false`，杜绝任何历史残留数据漏出；
+    3. **前端全面空态化**：`SmartHeatingView.vue` 中测点列表计算属性 `szDataList`、`dcDataList`、`ywDataList` 严格绑定 `isRelayOnline`；未连接时：
+       - 顶部状态显示为 `● 数据链路未连接 (等待客户端启动推流)`，灰点静止；
+       - KPI 摘要条流量、温度、温差等全部显示为破折号 `—`，在线站数显示 `0 / 0 座`；
+       - 插入离线引导横幅（提示运行 `smart_heating_sync.py` 开启实时推流）；
+       - 表格内空行明确提示 `数据链路未连接，暂无实时数据`。
+- **验证结果**：
+  - 后端接口测试（鉴权、数据推送、脚本下载响应、状态心跳判定、离线空数据拦截）100% 通过；
+  - 离线状态下最新数据接口返回测点数全部为 0，在线推送测试通过并可正常切换点亮；
+  - 前端通过 `npm run build` 生产构建成功，打包产物 `SmartHeatingView-CYumPW8A.css` / `SmartHeatingView-Ds6xXqQk.js` 正常生成。
+- **最后验证日期**：2026-11-03。
+
 
 - 用户进一步核实：原表虽有 #3 炉启动中说明，但日报业务日为 11 月 2 日，实际点火为 11 月 3 日 06:10，要求本条显示备用并附 `11.3 6:10` 标签。本节覆盖此前该炉显示运行的结论。
 - `dispatch_reconciliation.py` 增加业务日边界显示规则：本设备有启动说明、存在未来启动事件且没有当日主设备操作时显示备用，来源为 date_boundary；原表 table_status、table_text 与次日事件完整保留，人工选择仍优先。规则由提取、查询共同复用，重新提取不再显示本条为运行或启动中。

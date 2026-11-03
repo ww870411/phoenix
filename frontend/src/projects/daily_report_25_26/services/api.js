@@ -3497,3 +3497,50 @@ export async function checkSpotElectricityExists(projectKey = 'daily_report_25_2
 
 
 
+
+export async function getSmartHeatingLatest(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating/latest`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '获取智慧供热实时数据失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+export async function getSmartHeatingStatus(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating/status`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '获取智慧供热连通状态失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+export async function downloadSmartHeatingClientScript(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating/client-script`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '下载数据同步客户端失败')
+    throw new Error(errorMsg)
+  }
+  const blob = await response.blob()
+  const blobUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = 'smart_heating_sync.py'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(blobUrl)
+}
