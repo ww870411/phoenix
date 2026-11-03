@@ -95,6 +95,14 @@ def reconcile_report(report, choices=None):
         timeline = assigned[key]
         timeline.sort(key=lambda e: (e.get('event_date') or str(result.get('biz_date', '')), _time_minutes(e) if _time_minutes(e) is not None else -1))
         current_day = [e for e in timeline if not e.get('event_date') or e['event_date'] == str(result.get('biz_date', ''))]
+        # 日报中的次日启动说明不代表当日已经启动；保留表格原值和事件证据。
+        number = re.search(r'\d+', fac.get('standard_name') or fac.get('raw_name', ''))
+        kind = r'(?:汽机|机组|机)' if fac.get('facility_type') == '汽机' else r'(?:汽炉|蒸汽炉|水炉|燃气炉|锅炉|炉)'
+        starting_note = bool(number and re.search(
+            rf"(?<!\d)#?{number[0]}\s*{kind}\s*[（(]?\s*启动中", fac.get('table_text', '')))
+        future_starts = [e for e in timeline if e.get('event_date', '') > result.get('biz_date', '')
+                         and e['action'] in ('点火', '点炉', '启动', '冲转')]
+        pending_start = starting_note and bool(future_starts) and not current_day
         inferred = current_day[-1]['status'] if current_day and all(_time_minutes(e) is not None for e in current_day) else None
         if inferred and len({e['status'] for e in current_day if _time_minutes(e) == _time_minutes(current_day[-1])}) > 1:
             inferred = None
@@ -127,8 +135,12 @@ def reconcile_report(report, choices=None):
                 'events': timeline + uncertain[key], 'reason': reason, 'resolution': choice,
                 'evidence': fingerprint,
             })
-        fac['status'] = choice[7:] if choice and choice.startswith('status:') else inferred if choice == 'events' else table_status
-        fac['status_source'] = choice or 'table'
+        fac['status'] = choice[7:] if choice and choice.startswith('status:') else inferred if choice == 'events' else '备用' if pending_start else table_status
+        fac['status_source'] = choice or ('date_boundary' if pending_start else 'table')
+        if pending_start and not choice:
+            fac['status_basis'] = '启动发生于业务日之后，当日按备用显示；原表格状态和跨日操作另行保留'
+        else:
+            fac.pop('status_basis', None)
         fac['status_confirmed'] = bool(choice)
         if choice:
             fac['status_decision_evidence'] = fingerprint

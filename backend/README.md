@@ -1,3 +1,38 @@
+## 2026-11-03 次日启动设备按当日报表显示备用
+
+- 用户确认香海 #3 炉原表有“启动中”说明，但点火发生于 11 月 3 日 06:10，11 月 2 日应显示备用。`dispatch_reconciliation.py` 在原文针对本设备有启动说明、仅有未来启动事件而无当日主设备事件时，按 `date_boundary` 来源显示备用；保留原表格状态和次日事件，已有人工确认优先。
+- 11 月 2 日数据库记录已更新，原提取 JSON 同步该规则；香海 #3 机及其他指标、事件不变。快照：`backend_data/projects/daily_report_25_26/runtime/dispatch-standby-20261103.json`，仅两个状态 JSON 字段。
+- 回滚预览：`docker exec phoenix_backend python -m backend.scripts.revise_dispatch_display_20261102 --restore /app/data/projects/daily_report_25_26/runtime/dispatch-standby-20261103.json`，追加 `--apply` 执行。后端相关测试 43 项通过，数据库与同一查询服务均确认备用及次日点火证据；无结构迁移。本节替代此前关于该炉应显示运行的说明。
+
+## 2026-11-03 调度信息按用户反馈收敛修正
+
+- 撤回上一轮新增的无括号“启动中”状态覆盖规则；香海 #3 汽炉恢复运行列的“运行”，#3 汽机一直为运行。点火等操作及跨日证据继续保留，不因操作描述自动改写表格状态。先前已有的括号注释处理本轮不扩改。
+- `total_water_replenished` 明确仅为高温水补水量；累计仍保留在 `water_sup_accum`，不再作为卡片替代值。对 10 月 24、25、26、27、31 日五条旧累计替代值置空，原累计字段不变；11 月 2 日高温水补水 4147 吨保留。
+- 历史只读核查：169 天中，上轮修复前仅 5 天显示过累计替代量；至少 37 天有原文/归档证据却漏提高温水补水。日期、数值、来源见 `configs/dispatch-water-audit-20261103.md`，本轮不批量补填历史数值。
+- `revise_dispatch_display_20261102.py` 默认预览；本轮已应用单日状态恢复与五条旧补水替代值清理。快照：`backend_data/projects/daily_report_25_26/runtime/dispatch-display-revision-20261103.json`。回滚预览：`docker exec phoenix_backend python -m backend.scripts.revise_dispatch_display_20261102 --restore /app/data/projects/daily_report_25_26/runtime/dispatch-display-revision-20261103.json`，追加 `--apply` 执行；有后续字段改动时拒绝覆盖。
+- 供热公司 8:40 原本即归 2026-11-02，不继承上一条 3 日 6:10 的日期；已增加独立合成及原 PDF 回归。后端相关测试 42 项通过，数据库查询与回滚预览校验通过。原提取 JSON 制品已同步新口径，无数据库结构迁移。
+
+## 2026-11-03 调度 PDF 提取纠错与单日修复（首轮记录，状态与补水口径已由上节更正）
+
+- `dispatch_extractor.py` 的 `extract_boiler_turbine_status` 支持无括号的“#3炉启动中”，按设备类型定位，不误改同号汽机或相邻锅炉；次日点火仍保留真实发生日期。
+- `extract_production_and_network_heat` 从数值区域读取末个有效值，兼容 PDF 合并单元格尾部空列，区分空白与 0；`extract_operations_and_tickets` 合并“至03/11.08:00”工作票续行，保留点号、至字与完整工期。
+- “高温水补水量”写入现有 `total_water_replenished`，不伪造累计或首站分项；旧模板累计口径优先，现有字段无需迁移。
+- 已对页面后端 phoenix 库的 `daily_report_25_26 / 2026-11-02` 记录定向修正 6 个指标及 4 个结构字段，其他生产指标不变。修复脚本：`backend/scripts/repair_dispatch_20261102.py`，默认预览，显式 `--apply` 才写入；修复前快照：`backend_data/projects/daily_report_25_26/runtime/dispatch-repair-20261102.json`。
+- 回滚预览：`docker exec phoenix_backend python -m backend.scripts.repair_dispatch_20261102 --restore /app/data/projects/daily_report_25_26/runtime/dispatch-repair-20261102.json`；追加 `--apply` 执行回滚。字段已有后续修改时拒绝覆盖。快照只恢复本次字段，不恢复 `updated_at`。
+- 验证：后端调度相关 unittest 40 项通过（含原始 PDF），页面查询服务断言及回滚预览通过。原文存煤合计 230994 吨与单位明细合计 250166 吨不一致，保留原数，待业务核实。
+
+## 2026-11-03 供热公司投诉明细统计新增“截至该日未办结投诉量”
+
+- `complaint_statistics.py` 统计算法扩展 `unresolved_complaints` 指标：基于《转办》明细自动统计状态为“未办结”且发生时间截至当前业务日期的诉求件数量，支持按中心与供热公司汇总。
+- 数据结构配置 `数据结构_基本指标表.json` 中为 `GongRe_Sheet` 新增英文标识 `amount_unresolved_complaints_to_date`。
+- 测试覆盖率保持 100%，4 项单元测试通过。
+
+## 2026-11-03 供热公司及10个分中心投诉量新口径历史同期值归档与补齐
+
+- 配合 26-27 供暖期投诉量新口径（转办已办结为净投诉、市平台等于净投诉、省平台净投诉恒为 0），完成 25-26 供暖期 156 天（2025-11-01 至 2026-04-05）历史数据的平滑归档（旧指标追加 `25-26_raw_` 前缀）与新核定同期数据入库。
+- 交付生产环境执行 SQL 脚本（`migrate_25_26_all_complaints_production.sql` 等），支持生产数据库无损迁移与自动补齐。
+- 后端统计服务 `complaint_statistics.py` 及单测保持完整支持。
+
 ## 2026-11-02 收支短评单位标记
 
 仅调整简报单位归因的前端样式，后端接口及数据不变，无需迁移。

@@ -10,7 +10,7 @@ from backend.services.excel_optimizer import load_sheets, parse, tag
 
 CENTERS = ('华乐中心', '东港中心', '春海中心', '中山中心', '北岗中心', '双兴中心', '香炉礁中心', '兴工中心', '大纺中心', '管网中心')
 SOURCES = ('直办', '转办', '省办')
-METRICS = ('daily_city', 'daily_province', 'daily_total', 'daily_net', 'daily_province_net', 'daily_city_net', 'monthly_net', 'season_net')
+METRICS = ('daily_city', 'daily_province', 'daily_total', 'daily_net', 'daily_province_net', 'daily_city_net', 'monthly_net', 'season_net', 'unresolved_complaints')
 
 
 def normalize(value):
@@ -48,6 +48,7 @@ def metrics(records, day, month, season):
     for row in records:
         current = date.fromisoformat(row['date'])
         source, done = row['source'], row['status'] == '已办结'
+        unresolved = row['status'] == '未办结'
         if current == day:
             counts['daily_city'] += source in ('直办', '转办')
             counts['daily_province'] += source == '省办'
@@ -57,6 +58,8 @@ def metrics(records, day, month, season):
         if source == '转办' and done:
             counts['monthly_net'] += month <= current <= day
             counts['season_net'] += season <= current <= day
+        if source == '转办' and unresolved:
+            counts['unresolved_complaints'] += current <= day
     return counts
 
 

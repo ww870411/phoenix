@@ -1044,6 +1044,13 @@
         ""
       ],
       [
+        "截至该日未办结投诉量",
+        "件",
+        "",
+        "",
+        ""
+      ],
+      [
         "突发情况说明",
         "-",
         "（若有请填右侧）",
@@ -1078,6 +1085,7 @@
       "amount_daily_net_complaints_per_10k_m2": "万平方米省市净投诉量",
       "sum_month_total_net_complaints": "本月累计净投诉量",
       "sum_season_total_net_complaints": "本供暖期累计净投诉量",
+      "amount_unresolved_complaints_to_date": "截至该日未办结投诉量",
       "rate_heat_per_10k_m2": "供暖热单耗",
       "rate_power_per_10k_m2": "供暖电单耗",
       "rate_water_per_10k_m2": "供暖水单耗",

@@ -84,8 +84,17 @@
               :title="complaintUploadTitle"
               @click="triggerComplaintUpload"
             >
-              <span v-if="complaintUploading">⏳ 处理中…</span>
+              <span v-if="complaintUploading">⏳ 统计中…</span>
               <span v-else>📁 上传投诉报表</span>
+            </button>
+            <button
+              v-if="canUploadComplaint && complaintStats"
+              class="btn secondary complaint-view-btn"
+              type="button"
+              title="查看已上传的投诉统计与核验明细"
+              @click="isComplaintModalOpen = true"
+            >
+              📊 查看统计结果
             </button>
             <input
               v-if="canUploadComplaint"
@@ -129,42 +138,164 @@
       </div>
     </header>
 
-    <section v-if="canUploadComplaint && (complaintUploading || complaintResult || complaintError || complaintStats)" class="complaint-result card" aria-live="polite" :aria-busy="complaintUploading">
-      <h3>投诉明细统计</h3>
-      <p v-if="complaintUploading">正在读取投诉明细并整理工作簿，请稍候…</p>
-      <p v-if="complaintError" role="alert">{{ complaintError }}</p>
-      <template v-if="complaintStats && !complaintUploading">
-        <p>业务日期：{{ complaintStats.business_date }}；本月：{{ complaintStats.month_start }} 至 {{ complaintStats.business_date }}；供暖期：{{ complaintStats.season_start }} 至 {{ complaintStats.business_date }}。按明细日期和当前办理状态统计。</p>
-        <p v-if="!complaintStats.complete" role="alert">有 {{ complaintStats.issues.length }} 条疑似明细缺少有效日期或编号，未计入统计；结果不完整，请核对原文件。</p>
-        <ul v-if="!complaintStats.complete"><li v-for="issue in complaintStats.issues" :key="`${issue.sheet}-${issue.row}`">{{ issue.sheet }} 第 {{ issue.row }} 行：{{ issue.reason }}</li></ul>
-        <div class="complaint-table-wrap"><table class="complaint-table"><thead><tr><th>单位</th><th v-for="metric in complaintMetrics" :key="metric.key">{{ metric.label }}</th></tr></thead><tbody>
-          <tr v-for="item in complaintSummaryRows" :key="item.name"><th>{{ item.name }}</th><td v-for="metric in complaintMetrics" :key="metric.key"><button type="button" class="complaint-number" @click="selectComplaintDetails(item.name, metric.key)">{{ item.metrics[metric.key] }}</button></td></tr>
-        </tbody></table></div>
-        <p>未归属：{{ complaintStats.unmatched.count }} 条（全部日期）；名称及数量：{{ Object.entries(complaintStats.unmatched.names).map(([name, count]) => `${name} ${count} 条`).join('、') || '无' }}。集团按全部有效记录独立统计。</p>
-        <div class="complaint-result__actions"><button class="btn primary" type="button" :disabled="complaintFilling || entryLocked || !entryDataReady || !complaintStats.complete || complaintStats.business_date !== bizDate" @click="fillComplaintData">{{ complaintFilling ? '正在填入…' : '一键填入供热公司两张表' }}</button><button class="btn primary" type="button" @click="downloadComplaintCsv">下载统计及明细 CSV</button><button class="btn ghost" type="button" @click="copyComplaintSummary">复制统计表</button></div>
-        <p class="complaint-result__note">填入总表及分中心明细的投诉量、净投诉量与累计净投诉量，只填本期；完成后请核对并自行提交。</p>
-        <h4>明细核对</h4>
-        <label>单位 <select v-model="complaintDetailCenter"><option>集团总量</option><option v-for="item in complaintStats.centers" :key="item.name">{{ item.name }}</option><option>未归属</option></select></label>
-        <label>指标 <select v-model="complaintDetailMetric"><option v-for="metric in complaintMetrics" :key="metric.key" :value="metric.key">{{ metric.label }}</option></select></label>
-        <p>共 {{ complaintDetailRows.length }} 条；点击上方数字也可查看对应明细。</p>
-        <div class="complaint-table-wrap"><table class="complaint-table"><thead><tr><th>来源工作表/行</th><th>日期</th><th>编号</th><th>类型</th><th>投诉类别</th><th>服务中心</th><th>办理情况</th></tr></thead><tbody><tr v-for="record in complaintDetailRows" :key="`${record.sheet}-${record.row}`"><td>{{ record.sheet }} / {{ record.row }}</td><td>{{ record.date }}</td><td>{{ record.identifier }}</td><td>{{ record.type }}</td><td>{{ record.category }}</td><td>{{ record.center_original || '未填写' }}</td><td>{{ record.status }}</td></tr></tbody></table></div>
-      </template>
-      <template v-if="complaintResult && !complaintUploading">
-        <h3>报表去冗余</h3>
-        <p>{{ complaintResult.filename }}：{{ formatComplaintSize(complaintResult.report.input_bytes) }} → {{ formatComplaintSize(complaintResult.report.output_bytes) }}；公式 {{ complaintResult.report.formulas_before.toLocaleString() }} → {{ complaintResult.report.formulas_after.toLocaleString() }}；缩减 {{ complaintResult.report.references_optimized }} 处引用。</p>
-        <p>已逐格校验 {{ complaintResult.report.constants_verified.toLocaleString() }} 个原始数据单元格、{{ complaintResult.report.cached_results_verified.toLocaleString() }} 个保留公式及缓存。处理耗时 {{ complaintResult.report.elapsed_seconds }} 秒。</p>
-        <div class="complaint-result__actions">
-          <button class="btn primary" type="button" @click="downloadComplaintWorkbook">下载去冗余表格</button>
-          <button class="btn ghost" type="button" @click="downloadComplaintReport">下载处理报告</button>
-        </div>
-        <ul>
-          <li v-for="sheet in complaintResult.report.sheets" :key="sheet.name">{{ sheet.name }}：移除 {{ sheet.formulas_removed.toLocaleString() }} 个空记录公式、{{ sheet.blank_cells_removed.toLocaleString() }} 个空白格式单元格、{{ (sheet.empty_rows_removed || 0).toLocaleString() }} 个空行记录；范围 {{ sheet.range_before }} → {{ sheet.range_after }}</li>
-          <li v-for="table in complaintResult.report.tables" :key="`${table.sheet}-${table.name}`">表格 {{ table.name }}：{{ table.before }} → {{ table.after }}</li>
-        </ul>
-        <p v-for="warning in complaintResult.report.warnings" :key="warning" class="complaint-result__note">{{ warning }}</p>
-        <p class="complaint-result__note">原文件保留，处理结果为独立副本；统计结果不自动回填或提交。支持 .xlsx，每次按上传文件重新分析。</p>
-      </template>
-    </section>
+    <!-- 投诉报表智能统计与核验弹窗 (Modal) -->
+    <div
+      v-if="isComplaintModalOpen && complaintStats"
+      class="complaint-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="complaint-modal-title"
+      @click.self="isComplaintModalOpen = false"
+    >
+      <div class="complaint-modal-card">
+        <header class="complaint-modal-header">
+          <div class="complaint-modal-title-group">
+            <h3 id="complaint-modal-title">📊 投诉报表智能统计与核验</h3>
+            <span class="complaint-modal-subtitle">覆盖直办、转办与省办明细；基于新口径自动计算</span>
+          </div>
+          <button
+            class="complaint-modal-close-btn"
+            type="button"
+            title="关闭弹窗"
+            aria-label="关闭"
+            @click="isComplaintModalOpen = false"
+          >
+            ✕
+          </button>
+        </header>
+
+        <main class="complaint-modal-body">
+          <!-- 统计时段标签卡 -->
+          <div class="complaint-meta-bar">
+            <span class="complaint-badge">业务日期：<strong>{{ complaintStats.business_date }}</strong></span>
+            <span class="complaint-badge">本月区间：<strong>{{ complaintStats.month_start }} 至 {{ complaintStats.business_date }}</strong></span>
+            <span class="complaint-badge">供暖期区间：<strong>{{ complaintStats.season_start }} 至 {{ complaintStats.business_date }}</strong></span>
+          </div>
+
+          <!-- 疑似异常提醒（如有） -->
+          <div v-if="!complaintStats.complete" class="complaint-alert-box" role="alert">
+            <div class="complaint-alert-title">⚠️ 发现 {{ complaintStats.issues.length }} 条疑似明细缺少有效日期或编号，未计入统计（请核对原文件）：</div>
+            <ul class="complaint-alert-list">
+              <li v-for="issue in complaintStats.issues" :key="`${issue.sheet}-${issue.row}`">
+                【{{ issue.sheet }}】第 {{ issue.row }} 行：{{ issue.reason }}
+              </li>
+            </ul>
+          </div>
+
+          <!-- 核心统计汇总表 -->
+          <div class="complaint-section-header">
+            <h4>单位统计汇总（点击数字可穿透查看对应明细）</h4>
+            <span class="complaint-section-hint">新口径：净投诉量为转办已办结；省平台净投诉为 0；市平台等于净投诉量</span>
+          </div>
+          <div class="complaint-table-wrap">
+            <table class="complaint-table">
+              <thead>
+                <tr>
+                  <th>单位</th>
+                  <th v-for="metric in complaintMetrics" :key="metric.key">{{ metric.label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in complaintSummaryRows" :key="item.name">
+                  <th class="unit-th">{{ item.name }}</th>
+                  <td v-for="metric in complaintMetrics" :key="metric.key">
+                    <button
+                      type="button"
+                      class="complaint-number-btn"
+                      :title="`查看 ${item.name} - ${metric.label} 明细`"
+                      @click="selectComplaintDetails(item.name, metric.key)"
+                    >
+                      {{ item.metrics[metric.key] }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 未归属说明 -->
+          <p class="complaint-unmatched-note">
+            未归属记录：共 {{ complaintStats.unmatched.count }} 条（涉及全部日期）；归属名称明细：{{ Object.entries(complaintStats.unmatched.names).map(([name, count]) => `${name} ${count} 条`).join('、') || '无' }}。供热公司总量已包含全部有效记录。
+          </p>
+
+          <!-- 明细穿透核对区域 -->
+          <div class="complaint-detail-section">
+            <div class="complaint-detail-header">
+              <div class="complaint-detail-selectors">
+                <label>
+                  <span>筛选单位：</span>
+                  <select v-model="complaintDetailCenter" class="complaint-select">
+                    <option>供热公司</option>
+                    <option v-for="item in complaintStats.centers" :key="item.name">{{ item.name }}</option>
+                    <option>未归属</option>
+                  </select>
+                </label>
+                <label>
+                  <span>筛选指标：</span>
+                  <select v-model="complaintDetailMetric" class="complaint-select">
+                    <option v-for="metric in complaintMetrics" :key="metric.key" :value="metric.key">{{ metric.label }}</option>
+                  </select>
+                </label>
+              </div>
+              <span class="complaint-detail-count">共 <strong>{{ complaintDetailRows.length }}</strong> 条明细记录</span>
+            </div>
+
+            <div class="complaint-table-wrap complaint-detail-table-wrap">
+              <table class="complaint-table complaint-detail-table">
+                <thead>
+                  <tr>
+                    <th>来源表/行</th>
+                    <th>日期</th>
+                    <th>受理编号</th>
+                    <th>类型</th>
+                    <th>投诉类别</th>
+                    <th>服务中心</th>
+                    <th>办理情况</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!complaintDetailRows.length">
+                    <td colspan="7" class="empty-cell">当前筛选条件下无明细记录</td>
+                  </tr>
+                  <tr v-for="record in complaintDetailRows" :key="`${record.sheet}-${record.row}`">
+                    <td>{{ record.sheet }} / 第 {{ record.row }} 行</td>
+                    <td>{{ record.date }}</td>
+                    <td class="font-mono">{{ record.identifier }}</td>
+                    <td>{{ record.type }}</td>
+                    <td>{{ record.category }}</td>
+                    <td>{{ record.center_original || '未填写' }}</td>
+                    <td>
+                      <span :class="['status-tag', record.status === '已办结' ? 'status-done' : 'status-pending']">
+                        {{ record.status }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+
+        <footer class="complaint-modal-footer">
+          <div class="complaint-modal-footer-left">
+            <button class="btn secondary" type="button" @click="copyComplaintSummary">📋 复制统计表</button>
+            <button class="btn secondary" type="button" @click="downloadComplaintCsv">📥 导出明细 CSV</button>
+          </div>
+          <div class="complaint-modal-footer-right">
+            <button class="btn ghost" type="button" @click="isComplaintModalOpen = false">稍后核对</button>
+            <button
+              class="btn primary complaint-modal-fill-btn"
+              type="button"
+              :disabled="complaintFilling || entryLocked || !entryDataReady || !complaintStats.complete || complaintStats.business_date !== bizDate"
+              @click="fillComplaintData"
+            >
+              <span v-if="complaintFilling">⏳ 正在填入…</span>
+              <span v-else>✨ 一键填入供热公司两张表（67项）</span>
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
 
     <!-- 多表格单位现代分段标签栏 (Segmented Tabs) -->
     <div v-if="unitSheets.length > 1" class="unit-tabs-nav-wrapper">
@@ -273,7 +404,6 @@ import {
   uploadBeihaiEfficiencyReport,
   uploadXianghaiEfficiencyReport,
   uploadGongreEfficiencyReport,
-  optimizeComplaintWorkbook,
   calculateComplaintStatistics,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
@@ -322,29 +452,47 @@ const canUploadComplaint = computed(() => {
   const sKey = (activeSheetKey.value || '').toLowerCase()
   return gName.includes('供热') || sKey.includes('gongre')
 })
-const complaintUploadTitle = computed(() => '上传 .xlsx，清理空记录预填公式及异常范围，生成可下载的独立副本')
+const complaintUploadTitle = computed(() => '上传投诉报表 .xlsx，智能统计集团及各中心投诉量并支持一键填入')
 const complaintUploading = ref(false)
 const complaintFileInputRef = ref(null)
-const complaintResult = ref(null)
+const isComplaintModalOpen = ref(false)
+const complaintAutofilledCells = ref(new Set())
 const complaintError = ref('')
 const complaintStats = ref(null)
 const complaintFilling = ref(false)
-const complaintDetailCenter = ref('集团总量')
+const complaintDetailCenter = ref('供热公司')
 const complaintDetailMetric = ref('daily_total')
+
+function makeComplaintCellProperties(colIdx) {
+  return (props) => {
+    const sKey = activeSheetKey.value
+    const rIdx = props.rowIndex
+    if (complaintAutofilledCells.value.has(`${sKey}:${rIdx}:${colIdx}`)) {
+      return {
+        class: {
+          'complaint-autofill-highlight': true,
+        },
+      }
+    }
+    return undefined
+  }
+}
 const complaintMetrics = [
   { key: 'daily_city', label: '当日市投诉量' }, { key: 'daily_province', label: '当日省投诉量' },
   { key: 'daily_total', label: '当日省市平台服务投诉量' }, { key: 'daily_net', label: '当日净投诉量' },
   { key: 'daily_province_net', label: '其中：省平台净投诉量' }, { key: 'daily_city_net', label: '其中：市平台净投诉量' },
   { key: 'monthly_net', label: '本月累计净投诉量' }, { key: 'season_net', label: '本供暖期累计净投诉量' },
+  { key: 'unresolved_complaints', label: '截至该日未办结投诉量' },
 ]
-const complaintSummaryRows = computed(() => complaintStats.value ? [{ name: '集团总量', metrics: complaintStats.value.group }, ...complaintStats.value.centers, { name: '未归属', metrics: complaintStats.value.unmatched.metrics }] : [])
+const complaintSummaryRows = computed(() => complaintStats.value ? [{ name: '供热公司', metrics: complaintStats.value.group }, ...complaintStats.value.centers, { name: '未归属', metrics: complaintStats.value.unmatched.metrics }] : [])
 const complaintDetailRows = computed(() => {
   const data = complaintStats.value
   if (!data) return []
   const metric = complaintDetailMetric.value
   return data.records.filter(record => {
-    if (complaintDetailCenter.value === '未归属' ? record.center : complaintDetailCenter.value !== '集团总量' && record.center !== complaintDetailCenter.value) return false
+    if (complaintDetailCenter.value === '未归属' ? record.center : complaintDetailCenter.value !== '供热公司' && record.center !== complaintDetailCenter.value) return false
     const net = record.source === '转办' && record.status === '已办结'
+    if (metric === 'unresolved_complaints') return record.source === '转办' && record.status === '未办结' && record.date <= data.business_date
     if (metric === 'daily_province_net') return false
     if (metric === 'monthly_net') return net && record.date >= data.month_start && record.date <= data.business_date
     if (metric === 'season_net') return net && record.date >= data.season_start && record.date <= data.business_date
@@ -1740,6 +1888,7 @@ async function setupStandardGrid(tpl) {
       minSize: index === 0 ? 160 : 120,
       __locked: locked,
       readonly: locked || isReadOnlyForDate.value,
+      cellProperties: makeComplaintCellProperties(index),
     };
   });
   applyReadonlyToColumns();
@@ -2001,6 +2150,7 @@ async function loadExisting() {
 
 async function reloadTemplate() {
   try {
+    complaintAutofilledCells.value.clear()
     if (!unitSheetsReady.value) await loadUnitSheets();
     if (await loadTemplate(null, { preserveDate: true })) saveCurrentSheetToCache();
   } catch (error) {
@@ -2461,21 +2611,21 @@ async function onComplaintFileSelected(event) {
   const files = event?.target?.files
   if (!files || !files.length) return
   const file = files[0]
-  complaintResult.value = null
   complaintStats.value = null
   complaintError.value = ''
   if (!/\.xlsx$/i.test(file.name)) {
     complaintError.value = '请选择 .xlsx 工作簿；旧版 .xls 请先另存为 .xlsx。'
+    showSubmitFeedback('error', complaintError.value)
     return
   }
   complaintUploading.value = true
-  showSubmitFeedback('info', `已选取投诉报表【${file.name}】（${(file.size / 1024).toFixed(1)} KB），正在处理…`, { autoHide: false })
+  showSubmitFeedback('info', `已选取投诉报表【${file.name}】（${(file.size / 1024).toFixed(1)} KB），正在智能统计…`, { autoHide: false })
   try {
     await handleComplaintFileProcess(file)
   } catch (err) {
     console.error('Complaint file process failed:', err)
     complaintError.value = err.message || String(err)
-    showSubmitFeedback('error', `投诉报表处理失败: ${err.message || err}`)
+    showSubmitFeedback('error', `投诉报表统计失败: ${err.message || err}`, { autoHide: false })
   } finally {
     complaintUploading.value = false
     if (event?.target) event.target.value = ''
@@ -2483,17 +2633,16 @@ async function onComplaintFileSelected(event) {
 }
 
 async function handleComplaintFileProcess(file) {
-  if (file.size > 30 * 1024 * 1024) throw new Error('单个工作簿请勿超过 30 MB。')
+  if (file.size > 50 * 1024 * 1024) throw new Error('工作簿文件过大，请勿超过 50 MB。')
   const selectedDate = bizDate.value
-  const [stats, optimized] = await Promise.allSettled([calculateComplaintStatistics(projectKey, file, selectedDate), optimizeComplaintWorkbook(projectKey, file)])
+  const res = await calculateComplaintStatistics(projectKey, file, selectedDate)
   if (selectedDate !== bizDate.value) throw new Error('处理期间业务日期已变化，请重新上传。')
-  if (stats.status === 'fulfilled' && stats.value?.ok) complaintStats.value = stats.value.data
-  if (optimized.status === 'fulfilled' && optimized.value?.ok) complaintResult.value = optimized.value
-  const errors = []
-  if (!complaintStats.value) errors.push(`统计失败：${stats.reason?.message || '未收到完整结果'}`)
-  if (!complaintResult.value) errors.push(`去冗余失败：${optimized.reason?.message || '未收到完整结果'}`)
-  if (errors.length) complaintError.value = errors.join('；')
-  showSubmitFeedback(errors.length ? 'error' : 'success', errors.join('；') || '投诉统计完成，请核对结果与明细。', { autoHide: !errors.length, duration: 4000 })
+  if (!res || !res.ok || !res.data) {
+    throw new Error(res?.message || '未收到有效的统计结果')
+  }
+  complaintStats.value = res.data
+  isComplaintModalOpen.value = true
+  showSubmitFeedback('success', '🎉 投诉明细统计完成！已为您弹出核验窗口，请确认各单位数值。', { autoHide: true, duration: 3500 })
 }
 
 function selectComplaintDetails(center, metric) { complaintDetailCenter.value = center; complaintDetailMetric.value = metric }
@@ -2515,7 +2664,14 @@ async function loadComplaintTargetState(targetKey, expectedDate, expectedConfig)
     const isConstantPeer = isConstant && index === tpl.columns.length - 1 && index > readonlyLimit
     const isPeer = isPeerColumnForTable(index, tpl.columns, baseCols)
     const locked = index <= readonlyLimit || isConstantPeer || (!isGlobalAdmin.value && isPeer)
-    return { prop: `c${index}`, name: String(name ?? '') + (!isGlobalAdmin.value && isPeer ? ' 🔒' : ''), size: index === 0 ? 220 : 120, __locked: locked, readonly: locked || isReadOnlyForDate.value }
+    return {
+      prop: `c${index}`,
+      name: String(name ?? '') + (!isGlobalAdmin.value && isPeer ? ' 🔒' : ''),
+      size: index === 0 ? 220 : 120,
+      __locked: locked,
+      readonly: locked || isReadOnlyForDate.value,
+      cellProperties: makeComplaintCellProperties(index),
+    }
   })
   const loadedRows = JSON.parse(JSON.stringify(query.rows))
   const src = loadedRows.map(row => Object.fromEntries((tpl.columns || []).map((_, index) => [`c${index}`, row?.[index] == null ? '' : String(row[index])])))
@@ -2554,19 +2710,24 @@ async function fillComplaintData() {
       const state = states[item.sheetKey]
       if (!state.gridSource[item.rowIndex] || !state.rows[item.rowIndex] || isPeerColumnForTable(item.colIndex, state.columns, state.baseColumns) || state.gridColumns?.[item.colIndex]?.readonly) throw new Error('目标单元格不可写或无法确认本期列，未填入。')
     }
+    const newHighlightSet = new Set()
     for (const item of plan) {
       const state = states[item.sheetKey]
       state.rows[item.rowIndex][item.colIndex] = item.value
       state.gridSource[item.rowIndex][`c${item.colIndex}`] = item.value
+      newHighlightSet.add(`${item.sheetKey}:${item.rowIndex}:${item.colIndex}`)
     }
+    complaintAutofilledCells.value = newHighlightSet
     for (const key of targetKeys) {
       sheetCache.set(key, states[key])
       dirtySheets.add(key)
     }
     restoreSheetFromCache(expectedSheet)
+    gridSource.value = [...gridSource.value]
     if (validationEnabled.value && templateType.value === 'standard') runFullValidation()
     saveCurrentSheetToCache(expectedSheet)
-    showSubmitFeedback('success', `已填入两张表的 ${plan.length} 个本期指标，请核对后自行提交。`, { autoHide: false })
+    isComplaintModalOpen.value = false
+    showSubmitFeedback('success', `🎉 已成功填入供热公司两张表的 ${plan.length} 个本期指标！已为您激活暖金高亮标记，请核对各行数值后自行提交。`, { autoHide: false })
   } catch (err) {
     showSubmitFeedback('error', `投诉数据填入失败：${err.message || String(err)}`, { autoHide: false })
   } finally {
@@ -2577,17 +2738,13 @@ function complaintSummaryText(separator = '\t') {
   return [['单位', ...complaintMetrics.map(m => m.label)], ...complaintSummaryRows.value.map(row => [row.name, ...complaintMetrics.map(m => row.metrics[m.key])])].map(row => row.join(separator)).join('\n')
 }
 async function copyComplaintSummary() {
-  try { await navigator.clipboard.writeText(complaintSummaryText()); showSubmitFeedback('success', '统计表已复制。', { autoHide: true, duration: 3000 }) }
-  catch { showSubmitFeedback('error', '复制失败，请使用下载功能。', { autoHide: false }) }
+  try { await navigator.clipboard.writeText(complaintSummaryText()); showSubmitFeedback('success', '统计表已复制到剪贴板！', { autoHide: true, duration: 3000 }) }
+  catch { showSubmitFeedback('error', '复制失败，请使用导出功能。', { autoHide: false }) }
 }
 function downloadComplaintCsv() {
   const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`
   const rows = [['业务日期', complaintStats.value.business_date], ['本月开始', complaintStats.value.month_start], ['供暖期开始', complaintStats.value.season_start], ['结果完整', complaintStats.value.complete ? '是' : '否'], ['未归属名称及数量', Object.entries(complaintStats.value.unmatched.names).map(([name, count]) => `${name}: ${count}`).join('；')], ...complaintStats.value.issues.map(issue => ['未计入记录', issue.sheet, issue.row, issue.reason]), [], ['单位', ...complaintMetrics.map(m => m.label)], ...complaintSummaryRows.value.map(row => [row.name, ...complaintMetrics.map(m => row.metrics[m.key])]), [], ['工作表', '行号', '来源', '日期', '编号', '类型', '投诉类别', '服务中心', '办理情况'], ...complaintStats.value.records.map(r => [r.sheet, r.row, r.source, r.date, r.identifier, r.type, r.category, r.center_original, r.status])]
   downloadComplaintBlob(new Blob(['\ufeff', rows.map(row => row.map(quote).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `投诉统计_${complaintStats.value.business_date}.csv`)
-}
-
-function formatComplaintSize(bytes) {
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`
 }
 
 function downloadComplaintBlob(blob, filename) {
@@ -2599,19 +2756,6 @@ function downloadComplaintBlob(blob, filename) {
   link.click()
   link.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
-function downloadComplaintWorkbook() {
-  const result = complaintResult.value
-  if (!result) return
-  const bytes = Uint8Array.from(atob(result.file_base64), c => c.charCodeAt(0))
-  downloadComplaintBlob(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), result.filename)
-}
-
-function downloadComplaintReport() {
-  const result = complaintResult.value
-  if (!result) return
-  downloadComplaintBlob(new Blob([JSON.stringify(result.report, null, 2)], { type: 'application/json;charset=utf-8' }), result.filename.replace(/\.xlsx$/i, '_处理报告.json'))
 }
 
 // --- 能效报表上传与回填（支持北海、香海、供热公司） ---
@@ -3084,6 +3228,8 @@ const stop = watch(
   () => bizDate.value,
   () => {
     complaintStats.value = null
+    complaintAutofilledCells.value.clear()
+    isComplaintModalOpen.value = false
     clearRefreshCountdown()
     sheetCache.clear()
     loadedEntryContext.value = null
@@ -3455,24 +3601,352 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
 }
-
-.complaint-result { margin: 16px 0; padding: 18px; overflow-wrap: anywhere; }
-.complaint-result h3 { margin: 0 0 12px; }
-.complaint-result__actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.complaint-result li { margin: 6px 0; }
-.complaint-result__note { font-size: 13px; color: #6b4d27; }
-.complaint-table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; margin: 12px 0; }
-.complaint-table { border-collapse: collapse; width: 100%; white-space: nowrap; font-size: 13px; }
-.complaint-table th, .complaint-table td { border: 1px solid #ddd; padding: 6px 10px; text-align: center; }
-.complaint-table thead { background: #fff7ed; }
-.complaint-number { border: 0; background: none; color: #9a3412; text-decoration: underline; cursor: pointer; }
-
 .complaint-upload-btn:hover {
   background: #ffedd5 !important;
   border-color: #fdba74 !important;
   color: #c2410c !important;
   transform: translateY(-1px);
   box-shadow: 0 4px 6px -1px rgba(194, 65, 12, 0.15);
+}
+
+.complaint-view-btn {
+  font-weight: 600 !important;
+  color: #b45309 !important;
+  background: #fef3c7 !important;
+  border: 1px solid #fde68a !important;
+  border-radius: 8px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(180, 83, 9, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.complaint-view-btn:hover {
+  background: #fde68a !important;
+  border-color: #fcd34d !important;
+  color: #92400e !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(180, 83, 9, 0.15);
+}
+
+/* 模态弹窗遮罩 */
+.complaint-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* 模态框主体卡片 */
+.complaint-modal-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 95%;
+  max-width: 1100px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+/* 弹窗头部 */
+.complaint-modal-header {
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border-bottom: 1px solid #fed7aa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.complaint-modal-title-group h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #9a3412;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.complaint-modal-subtitle {
+  font-size: 12px;
+  color: #c2410c;
+  margin-top: 2px;
+  display: block;
+}
+.complaint-modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: #9a3412;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.complaint-modal-close-btn:hover {
+  background: #fed7aa;
+  color: #7c2d12;
+}
+
+/* 弹窗内容区 */
+.complaint-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 时段标签栏 */
+.complaint-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #f8fafc;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.complaint-badge {
+  font-size: 13px;
+  color: #475569;
+}
+.complaint-badge strong {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* 警告提示框 */
+.complaint-alert-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #991b1b;
+}
+.complaint-alert-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.complaint-alert-list {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  font-size: 12px;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+/* 表格区块标题 */
+.complaint-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.complaint-section-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+.complaint-section-hint {
+  font-size: 12px;
+  color: #d97706;
+}
+
+/* 统计表格 */
+.complaint-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: auto;
+  max-height: 280px;
+  background: #fff;
+}
+.complaint-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: right;
+}
+.complaint-table th,
+.complaint-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.complaint-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 600;
+  border-bottom: 2px solid #fed7aa;
+  z-index: 1;
+}
+.complaint-table tbody tr:hover {
+  background-color: #fffbeb;
+}
+.complaint-table .unit-th {
+  text-align: left;
+  font-weight: 600;
+  color: #1e293b;
+  background: inherit;
+}
+.complaint-number-btn {
+  background: transparent;
+  border: none;
+  color: #c2410c;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: all 0.15s ease;
+}
+.complaint-number-btn:hover {
+  background: #fed7aa;
+  color: #7c2d12;
+}
+
+.complaint-unmatched-note {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* 明细穿透核对区域 */
+.complaint-detail-section {
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 14px;
+}
+.complaint-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.complaint-detail-selectors {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #475569;
+}
+.complaint-select {
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 13px;
+}
+.complaint-detail-count {
+  font-size: 13px;
+  color: #64748b;
+}
+.complaint-detail-count strong {
+  color: #9a3412;
+}
+.complaint-detail-table-wrap {
+  max-height: 200px;
+}
+.complaint-detail-table {
+  text-align: left;
+}
+.complaint-detail-table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+}
+.complaint-detail-table .font-mono {
+  font-family: monospace;
+  font-size: 12px;
+  color: #334155;
+}
+.complaint-detail-table .empty-cell {
+  text-align: center;
+  color: #94a3b8;
+  padding: 24px;
+}
+.status-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.status-done {
+  background: #dcfce7;
+  color: #15803d;
+}
+.status-pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+/* 弹窗底部操作栏 */
+.complaint-modal-footer {
+  padding: 14px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.complaint-modal-footer-left {
+  display: flex;
+  gap: 10px;
+}
+.complaint-modal-footer-right {
+  display: flex;
+  gap: 12px;
+}
+.complaint-modal-fill-btn {
+  font-weight: 600 !important;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  border-color: #b45309 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(217, 119, 6, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+.complaint-modal-fill-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+  box-shadow: 0 4px 8px rgba(217, 119, 6, 0.35) !important;
+  transform: translateY(-1px);
+}
+
+/* 人性化暖金高亮：一键填入后单元格呼吸发光提醒 */
+:deep(.complaint-autofill-highlight) {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  font-weight: 700 !important;
+  position: relative;
+  box-shadow: inset 0 0 0 1.5px #f59e0b !important;
+  animation: complaintHighlightPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes complaintHighlightPulse {
+  0% {
+    background-color: #fef3c7;
+    box-shadow: inset 0 0 0 1.5px #f59e0b;
+  }
+  100% {
+    background-color: #fde68a;
+    box-shadow: inset 0 0 0 2px #d97706, 0 0 8px rgba(245, 158, 11, 0.45);
+  }
 }
 
 .submit-all-btn {

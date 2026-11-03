@@ -29,6 +29,7 @@ def sample():
     add('转办', datetime(2026, 11, 1), 'T4', '东港中心', '已办结')
     add('转办', datetime(2026, 10, 31), 'T5', '东港中心', '已办结')
     add('转办', datetime(2027, 2, 11), 'T6', '东港中心', '已办结')
+    add('转办', datetime(2027, 2, 10, 10), 'T7', '华乐中心', '未办结')
     add('省办', datetime(2027, 2, 10), 'P1', '华乐中心', '已办结')
     data = BytesIO()
     book.save(data)
@@ -39,9 +40,10 @@ def test_metrics_and_reconciliation():
     result = calculate(sample(), '2027-02-10')
     assert result['month_start'] == '2027-02-01'
     assert result['season_start'] == '2026-11-01'
-    assert result['group'] == {'daily_city': 3, 'daily_province': 1, 'daily_total': 4, 'daily_net': 1, 'daily_province_net': 0, 'daily_city_net': 1, 'monthly_net': 2, 'season_net': 3}
+    assert result['group'] == {'daily_city': 4, 'daily_province': 1, 'daily_total': 5, 'daily_net': 1, 'daily_province_net': 0, 'daily_city_net': 1, 'monthly_net': 2, 'season_net': 3, 'unresolved_complaints': 1}
     assert [c['name'] for c in result['centers']] == list(CENTERS)
-    assert result['centers'][0]['metrics']['daily_total'] == 3
+    assert result['centers'][0]['metrics']['daily_total'] == 4
+    assert result['centers'][0]['metrics']['unresolved_complaints'] == 1
     assert result['unmatched']['metrics']['daily_total'] == 1
     for key, value in result['group'].items():
         assert sum(c['metrics'][key] for c in result['centers']) + result['unmatched']['metrics'][key] == value

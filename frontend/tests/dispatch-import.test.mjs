@@ -8,11 +8,11 @@ const source = readFileSync(new URL('../src/projects/daily_report_25_26/pages/Di
 const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1]
   .replace(/import[\s\S]*?from\s+['"][^'"]+['"]/g, '')
 
-function page(responses = [{ ok: true, inserted: 1, updated: 0 }]) {
+function page(responses = [{ ok: true, inserted: 1, updated: 0 }], group = 'Global_admin') {
   const calls = []
   const deps = {
     ref, computed, onMounted() {},
-    useAuthStore: () => ({ user: {}, token: '' }),
+    useAuthStore: () => ({ user: { group }, token: '' }),
     useRoute: () => ({ params: {}, query: {} }),
     getProjectNameById: () => '测试项目',
     alert() {},
@@ -21,7 +21,7 @@ function page(responses = [{ ok: true, inserted: 1, updated: 0 }]) {
     fetchDispatchDates: async () => ({ ok: true, dates: [] }),
     queryDispatchData: async () => ({ items: [] }),
   }
-  const factory = new Function('deps', `const { ${Object.keys(deps).join(', ')} } = deps;\n${script}\nreturn { extractSummary, statusResolutions, hasUnresolvedStatusConflicts, triggerSaveToDb, confirmOverwriteSave, showOverwriteModal, currentReport, currentBizDate, historyStatusResolutions, saveHistoryStatuses };`)
+  const factory = new Function('deps', `const { ${Object.keys(deps).join(', ')} } = deps;\n${script}\nreturn { extractSummary, statusResolutions, hasUnresolvedStatusConflicts, triggerSaveToDb, confirmOverwriteSave, showOverwriteModal, currentReport, currentBizDate, historyStatusResolutions, saveHistoryStatuses, groupedFacilities };`)
   const view = factory(deps)
   view.extractSummary.value = { token: '测试', items: [{ biz_date: '2026-10-30', status_conflicts: [{ id: '设备A' }, { id: '设备B' }] }] }
   return { view, calls }
@@ -81,4 +81,29 @@ test('历史确认逐项完成后发送业务日期、显示选择及原依据�
     type: 'history', project: 'daily_report_25_26',
     payload: { biz_date: '2026-03-23', status_resolutions: { 设备A: 'table' }, status_evidence: { 设备A: '原依据' } },
   })
+})
+
+test('普通用户即使完成状态选择也不能保存历史确认', async () => {
+  const { view, calls } = page(undefined, '普通用户')
+  view.currentBizDate.value = '2026-11-02'
+  view.currentReport.value = { status_conflicts: [{ id: '设备A', evidence: '原依据' }] }
+  view.historyStatusResolutions.value = { 设备A: 'table' }
+  await view.saveHistoryStatuses()
+  assert.equal(calls.length, 0)
+})
+
+test('备用锅炉保留次日点火标签，标签含月日且不影响同号汽机', () => {
+  const { view } = page()
+  view.currentReport.value = { biz_date: '2026-11-02', boiler_turbine_status: [
+    { unit_or_plant: '香海电厂', standard_name: '#3汽炉', facility_type: '锅炉', status: '备用',
+      main_events: [{ event_date: '2026-11-03', time: '06:10', action: '点火', raw_description: '#3炉点火' }] },
+    { unit_or_plant: '香海电厂', standard_name: '#3汽机', facility_type: '汽机', status: '运行',
+      main_events: [{ time: '18:28', action: '并列' }] },
+  ] }
+  const group = view.groupedFacilities.value[0]
+  assert.equal(group.boilers[0].status, '备用')
+  assert.equal(group.boilers[0].startTime, '11.3 6:10')
+  assert.equal(group.boilers[0].eventAction, '点火')
+  assert.equal(group.turbines[0].status, '运行')
+  assert.equal(group.turbines[0].startTime, '18:28')
 })

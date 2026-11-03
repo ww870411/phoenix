@@ -427,13 +427,13 @@
 
             <div class="kpi-card water-card">
               <div class="kpi-title">
-                <span>累计补水量</span>
+                <span>高温水补水量</span>
                 <span class="kpi-unit">吨</span>
               </div>
               <div class="kpi-value text-water">
                 {{ formatNum(currentReport.total_water_replenished) }}
               </div>
-              <div class="kpi-sub">
+              <div v-if="currentReport.water_sup_bh_s1 != null || currentReport.water_sup_bh_s2 != null" class="kpi-sub">
                 <span>#1首站: {{ formatNum(currentReport.water_replenishment?.first_station_1_water_tons) }} t</span>
                 <span>#2首站: {{ formatNum(currentReport.water_replenishment?.first_station_2_water_tons) }} t</span>
               </div>
@@ -698,6 +698,20 @@
                   </table>
                 </div>
 
+                <div class="card elevated inner-card">
+                  <h4 class="card-title">网口热量与供汽量</h4>
+                  <table class="data-table">
+                    <thead><tr><th>网口 / 口径</th><th>数值</th><th>单位</th></tr></thead>
+                    <tbody>
+                      <tr v-for="metric in networkHeatMetrics" :key="metric.key">
+                        <td>{{ metric.label }}</td>
+                        <td class="text-num">{{ formatNum(currentReport[metric.key]) }}</td>
+                        <td>{{ metric.unit }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
                 <!-- 燃煤库存表 -->
                 <div class="card elevated inner-card">
                   <h4 class="card-title">🪨 燃煤进耗存统计</h4>
@@ -754,7 +768,7 @@
 
                 <label class="checkbox-label">
                   <input v-model="onlyWorkTickets" type="checkbox" />
-                  仅看抢修工作票
+                  仅看抢修类
                 </label>
               </div>
 
@@ -770,9 +784,9 @@
                 >
                   <div class="event-header">
                     <div class="event-meta-left">
-                      <span v-if="ev.time" class="event-time">⏰ {{ ev.event_date && ev.event_date !== currentReport.biz_date ? ev.event_date + ' ' : '' }}{{ ev.event_clock || ev.time }}</span>
+                      <span v-if="ev.time" class="event-time">⏰ {{ ev.event_date || currentReport.biz_date }} {{ ev.event_clock || ev.time }}</span>
                       <span class="event-org">{{ ev.responsible_org }}</span>
-                      <span v-if="ev.is_ticket" class="badge-ticket">🎫 抢修工作票</span>
+                      <span v-if="ev.is_ticket" class="badge-ticket">🔧 抢修类</span>
                       <span v-else class="badge-op">🔧 运行操作</span>
                       <span v-if="ev.pipe_size" class="badge-pipe">
                         管径: {{ ev.pipe_size }}
@@ -852,6 +866,16 @@ import {
 const auth = useAuthStore()
 const statusResolutions = ref({})
 const displayStates = ['运行', '备用', '检修', '启动中', '停运']
+
+// 热量与供汽量分别保留原文口径及单位，空白值不显示为零。
+const networkHeatMetrics = [
+  { key: 'gw_high_temp_water', label: '高温水', unit: 'GJ' },
+  { key: 'gw_lv1_heat', label: '#1低真空', unit: 'GJ' },
+  { key: 'gw_lv3_heat', label: '#3低真空', unit: 'GJ' },
+  { key: 'gw_bh_south_steam', label: '北海南网供汽量', unit: '吨' },
+  { key: 'gw_xh_ew_steam', label: '香海东西网供汽量', unit: '吨' },
+  { key: 'gw_xb_link_steam', label: '香北联络供汽量', unit: '吨' },
+]
 const historyStatusResolutions = ref({})
 const isResolvingHistory = ref(false)
 const hasUnresolvedHistory = computed(() => (currentReport.value?.status_conflicts || []).some(c => !validStatusResolution(historyStatusResolutions.value[c.id], c)))
@@ -999,7 +1023,10 @@ const groupedFacilities = computed(() => {
     const startInfo = rawFac.main_events?.at(-1)
     map[plant].push({
       ...rawFac,
-      startTime: startInfo ? startInfo.time : null,
+      // 次日操作必须带日号，避免把次日点火误读为当日已经启动。
+      startTime: startInfo ? (startInfo.event_date && startInfo.event_date !== currentReport.value.biz_date
+        ? `${Number(startInfo.event_date.slice(5, 7))}.${Number(startInfo.event_date.slice(8, 10))} ${startInfo.time.replace(/^0(?=\d:)/, '')}`
+        : startInfo.time) : null,
       startDesc: startInfo?.raw_description || '',
       eventAction: startInfo?.action || ''
     })

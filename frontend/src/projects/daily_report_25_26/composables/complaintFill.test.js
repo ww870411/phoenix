@@ -7,19 +7,21 @@ const config = JSON.parse(readFileSync(new URL('../../../../../backend_data/proj
 const keys = ['GongRe_Sheet', 'GongRe_branches_detail_Sheet']
 function fixture() {
   const metrics = Object.fromEntries(complaintFillMetrics.map(([, key], index) => [key, index]))
+  metrics.unresolved_complaints = 45
   const stats = { complete: true, business_date: '2026-11-02', group: metrics, centers: complaintFillCenters.map((name, index) => ({ name, metrics: Object.fromEntries(Object.keys(metrics).map(key => [key, index])) })) }
   const sheets = Object.fromEntries(keys.map(key => [key, { columns: config[key]['列名'], baseColumns: config[key]['列名'], rows: structuredClone(config[key]['数据']) }]))
   return { stats, sheets }
 }
 
-test('真实模板严格匹配两张表的 66 个本期指标', () => {
+test('真实模板严格匹配两张表的 67 个本期指标', () => {
   const { stats, sheets } = fixture()
   const before = structuredClone(sheets)
   const plan = prepareComplaintFill(stats, sheets, stats.business_date)
-  assert.equal(plan.length, 66)
-  assert.equal(plan.filter(item => item.sheetKey === keys[0] && item.colIndex === 2).length, 6)
+  assert.equal(plan.length, 67)
+  assert.equal(plan.filter(item => item.sheetKey === keys[0] && item.colIndex === 2).length, 7)
   assert.equal(plan.filter(item => item.sheetKey === keys[1] && item.colIndex === 3).length, 60)
   assert.equal(plan.find(item => item.sheetKey === keys[0] && sheets[keys[0]].rows[item.rowIndex][0] === '当日省市平台投诉量').value, '0')
+  assert.equal(plan.find(item => item.sheetKey === keys[0] && sheets[keys[0]].rows[item.rowIndex][0] === '截至该日未办结投诉量').value, '45')
   assert.equal(plan.find(item => item.sheetKey === keys[1] && sheets[keys[1]].rows[item.rowIndex][0] === '当日净投诉量' && sheets[keys[1]].rows[item.rowIndex][1] === '管网中心').value, '9')
   assert.deepEqual(sheets, before)
 })

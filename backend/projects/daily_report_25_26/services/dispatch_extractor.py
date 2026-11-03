@@ -861,6 +861,10 @@ class UnifiedDispatchExtractor:
 
                 first_col = cells[0].replace(" ", "")
 
+                # PDF 合并单元格可能在数值后保留空列，不能固定取最后一列。
+                row_value = next((self.parse_float(c) for c in reversed(cells[1:])
+                                  if self.parse_float(c) is not None), None)
+
                 if "汽炉耗煤" in first_col:
                     if len(cells) > 2:
                         p_b = self.parse_float(cells[1])
@@ -943,27 +947,27 @@ class UnifiedDispatchExtractor:
                     flat_metrics["prod_main_heat_act"] = a_ht
 
                 elif "高温水" in first_col:
-                    v = self.parse_float(cells[-1])
+                    v = row_value
                     heat_res["gw_high_temp_water"] = v
                     flat_metrics["gw_high_temp_water"] = v
                 elif "#1低真空" in first_col or "#1 低真空" in first_col:
-                    v = self.parse_float(cells[-1])
+                    v = row_value
                     heat_res["gw_lv1_heat"] = v
                     flat_metrics["gw_lv1_heat"] = v
                 elif "#3低真空" in first_col or "#3 低真空" in first_col:
-                    v = self.parse_float(cells[-1])
+                    v = row_value
                     heat_res["gw_lv3_heat"] = v
                     flat_metrics["gw_lv3_heat"] = v
                 elif "北海南网供汽量" in first_col:
-                    v = self.parse_float(cells[-1])
+                    v = row_value
                     heat_res["gw_bh_south_steam"] = v
                     flat_metrics["gw_bh_south_steam"] = v
                 elif "香海东西网供汽量" in first_col or "香海东、西网" in first_col:
-                    v = self.parse_float(cells[-1])
+                    v = row_value
                     heat_res["gw_xh_ew_steam"] = v
                     flat_metrics["gw_xh_ew_steam"] = v
                 elif "香北联络" in first_col:
-                    v = self.parse_float(cells[-1])
+                    v = row_value
                     heat_res["gw_xb_link_steam"] = v
                     flat_metrics["gw_xb_link_steam"] = v
 
@@ -1023,6 +1027,7 @@ class UnifiedDispatchExtractor:
         """
         result: Dict[str, Any] = {
             "events": [],
+            "high_temp_water_tons": None,
             "water_replenish": {
                 "first_station_1_water_tons": None,
                 "first_station_2_water_tons": None,
@@ -1076,7 +1081,7 @@ class UnifiedDispatchExtractor:
                     prev_d.endswith("工期") or 
                     prev_d.endswith("工期:") or 
                     prev_d.endswith("工期：") or
-                    (re.match(r"^\d{1,2}/\d{1,2}", desc) and ("工作票" in prev_d or "工期" in prev_d))):
+                    (re.match(r"^(?:至|到|~)?\s*\d{1,2}/\d{1,2}", desc) and ("工作票" in prev_d or "工期" in prev_d))):
                     normalized_rows[-1] = (prev_t, prev_d + desc, None)
                     continue
 
@@ -1100,6 +1105,10 @@ class UnifiedDispatchExtractor:
             combined = (time_str + " " + desc).strip()
             # 补水指标行探测（含换行产生的 "去年同期:22069吨"）
             if "补水量" in combined or "上水换热站" in combined or re.search(r"去年同期\s*[:：]?\s*\d+\s*吨?", combined):
+                # 高温水补水为独立口径，不能写入累计或首站分项字段。
+                high_temp = re.search(r"高温水补水量\s*[:：]\s*(\d+(?:\.\d+)?)\s*吨?", combined)
+                if high_temp:
+                    result["high_temp_water_tons"] = float(high_temp.group(1))
                 s1_m = re.search(r"#1\s*首站补水量\s*[:：]\s*(\d+(?:\.\d+)?)\s*吨?", combined)
                 if s1_m:
                     val = float(s1_m.group(1))
@@ -1158,7 +1167,7 @@ class UnifiedDispatchExtractor:
                     # 剥离动词前缀（开启/关闭/签发）与水网介质前缀（高温水/低温水）
                     location = re.sub(r"^(?:开启|关闭|签发|恢复|开|关|高温水|低温水|蒸汽网)+", "", location).strip()
 
-                time_range_m = re.search(r"工期\s*([0-9/:\s~～-]+)", sub_d)
+                time_range_m = re.search(r"工期\s*[:：]?\s*([0-9/.:\s~～至到-]+)", sub_d)
                 time_range = time_range_m.group(1).strip() if time_range_m else ""
                 if time_range:
                     # 规范化工期内的时间格式与空格
@@ -1239,7 +1248,8 @@ class UnifiedDispatchExtractor:
             if bh_h is not None or xh_h is not None:
                 total_heat = round((bh_h or 0.0) + (xh_h or 0.0), 2)
 
-        total_water = flat_waters.get("water_sup_accum")
+        # 补水卡片只展示原文的高温水补水量，累计仍保留在独立历史字段中。
+        total_water = ops_and_tickets.get("high_temp_water_tons")
 
         # 组装扁平化大宽表结果对象
         doc_data: Dict[str, Any] = {
