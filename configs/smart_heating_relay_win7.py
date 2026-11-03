@@ -1,18 +1,31 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-🦅 Phoenix 智慧供热数据同步客户端 (Windows 7 + Python 3.8 增强版)
+🦅 Phoenix 智慧供热数据同步客户端 (Windows 7 + Python 3.8 全网全量版)
 ================================================================================
 适用场景：
-运行于能够同时访问供热数据源网络与 Phoenix 系统的电脑。
-本脚本使用 Python 3.8 标准库编写，零额外第三方依赖，可在 Windows 7 环境直接运行。
+运行于能够同时访问供热内网 (192.168.1.206) 与 Phoenix 系统的 Win7 办公电脑。
+本脚本使用 Python 3.8 纯标准库编写，零额外第三方依赖，开箱即用。
 
-功能特色：
-1. 【直连生产服务器】：支持直接推送到云端线上服务器 (platform.smartview.top) 或本地开发机；
-2. 【Win7 SSL 自动容错】：内置 Windows 7 系统 HTTPS 证书自动兼容机制；
-3. 【启动交互提示】：启动时清晰展示当前 API 与参数，按回车直接启动，输入编号可快速切换；
-4. 【本地记忆保存】：修改后的参数自动保存到同目录下的 smart_heating_config.json，下次免重复输入；
-5. 【极低资源占用】：轻量级标准库轮询，针对办公电脑极致优化，内存占用低于 15MB。
+全网监控范围：
+1. 【电厂侧】全覆盖：
+   - 北海电厂 (ID 2): 23 组机组测点 (汽机进抽汽、主汽、燃气炉群等)
+   - 香海电厂 (ID 3): 35 组机组测点 (锅炉主汽、汽机进抽汽、低真空循环水等)
+2. 【首站侧】全覆盖：
+   - #1 首站 (ID 2): 16 组回路 (东环、南环、北网供回补水、板换、热泵等)
+   - #2 首站 (ID 3): 8 组回路 (北2首高温水供回补水、循环泵、蒸汽等)
+   - #3 首站 (ID 4): 20 组回路 (北首3#水炉出口、厂界供水、循环泵等)
+   - 香海首站 (ID 5): 10 组回路 (香首高温水供回补水、一期/二期蒸汽等)
+3. 【换热站】9 大运营中心全覆盖 (242 座换热站)：
+   - ID 60: 华乐中心 (20 座)
+   - ID 61: 胜利中心 (35 座)
+   - ID 62: 双兴中心 (21 座)
+   - ID 63: 香炉礁中心 (18 座)
+   - ID 64: 兴工中心 (28 座)
+   - ID 65: 春海中心 (29 座)
+   - ID 66: 大纺中心 (17 座)
+   - ID 67: 友好中心 (37 座)
+   - ID 68: 东港中心 (37 座)
 ================================================================================
 """
 
@@ -34,32 +47,49 @@ CONFIG_FILE = os.path.join(SCRIPT_DIR, "smart_heating_config.json")
 PRESET_URL_PROD = "https://platform.smartview.top/api/v1/projects/daily_report_25_26/smart-heating/push"
 PRESET_URL_LOCAL = "http://127.0.0.1:8000/api/v1/projects/daily_report_25_26/smart-heating/push"
 
-# 默认出厂内置配置 (默认指向云端线上服务器)
+# 分区中文名称映射
+DC_MAP = {
+    2: "北海电厂",
+    3: "香海电厂",
+}
+
+SZ_MAP = {
+    2: "#1首站",
+    3: "#2首站",
+    4: "#3首站",
+    5: "香海首站",
+}
+
+YW_MAP = {
+    60: "华乐中心",
+    61: "胜利中心",
+    62: "双兴中心",
+    63: "香炉礁中心",
+    64: "兴工中心",
+    65: "春海中心",
+    66: "大纺中心",
+    67: "友好中心",
+    68: "东港中心",
+}
+
+# 默认内置出厂配置
 DEFAULT_CONFIG = {
     "phoenix_push_url": PRESET_URL_PROD,
     "push_token": "phoenix_smart_heating_secret_2026",
     "intranet_base_url": "http://192.168.1.206:6688",
-    "sz_param": "2",
-    "dc_param": "2",
-    "yw_param": "60",
+    "dc_list": [2, 3],
+    "sz_list": [2, 3, 4, 5],
+    "yw_list": [60, 61, 62, 63, 64, 65, 66, 67, 68],
     "poll_interval_seconds": 30,
     "timeout_seconds": 15,
     "intranet_cookie": (
-        "session=.eJx9lF2PojAUhv9Lr71APtTxbgoL3eKalZLwEZOG1Y5DsqBByF5s9r9vAcdpS5kbIs_TU89pff0L0vi"
-        "QUohpsKM45I_cizHYGgtREBjn1DtEAYFaFeA01QoU5WC7nPIoyPQ7EaRdnyC8067P0hmR7zW9Jn2b8va5ByHdIwi1"
-        "gpBIZ_hDT30U9f3MGZpNxhvkboe1nCQuPswbmvALU4ccdL6PsS8VYne8DENCh1S5OM6ibMoIUthPjtMQSewQ0-A7"
-        "oS7OIdaJIIXymA_O-9ILghQeh_zpEmlzzvg3KufAYX8OUnGW8HGJ3BlnKebnleIomRPZp-jvMaGhLx7GyIjKMjcUTn"
-        "unKRxZlE8ZUdfNRVBQcgQFIUVQ4HIEBSFGUMKPFGrcrJDjKQg5nqPQRFEQBEUzQs7oh5EzKlAlo6qRMipIKaMCVzIq"
-        "GCWE3PAkYTfOpMH7xPkocycwE_-sRjbGUGRErpvEkrNHaNR7neZmhD6KQ5WhJA_VYpIoPXOWIjgtzqIf_Aet0mc8"
-        "6Y01VVGzugXbtunYArDb9fRO27JifMH6xVptbGNpLkB5p8W5KmuwBcduczKsY-ewYnXsbGae-ee3kwUW4Pf1Uta0"
-        "rN-ufN3zvS763cCludxpd2fN58rbnzMXS9OyndUTNqxi1S_WDB2O6N4WLRve-3padO07r3M2K2e5tjzDhI79Ajev"
-        "nmf77tp6NTzn9Zvtg8fyM7sVTVvxKWl5Huo05tHkF8MNFeXYsP3xri1bO-bm2K1Ma22Bf_8BFRpRBw.aulyOg."
-        "hB2PVNHHY1CpZ2DfCZ_GpwrrMKc"
+        "session=.eJx9lF2PojAUhv8L114giF93Agvd4pqVkvARk4bVjkOyoEHIXmz2v-8BHKctZW6IPM859bT19a-WRMeE2pj6e4oDeGRuhLWtPuMFsaOMusfQJ7ZS-ThJlAKFmbadj3nop-qVCFLWxwjvlfVpMiGyg2LWuBtTXD5zbZsekG0rBSGhysBDTT0UdvNMGZqOttfL_R4rOYkdfJw2NIYLkzfZ6-wQYU9oxM5wGbqAjol0ccDCdMwIkthPwEmABHaMqP-dUAdnNlYJP7HFbT45zKUWBEk8CuDpEGFxYPCN0jkA7M5BaE5j2C4RJwOWYDivBIfxlEg_RXePMQ08_jAGRmSWOgF32ntF48DCbMyIXDcVQU6JEeSEEEGOixHkBB9BAT9TqHCTQownJ8R4DkIRRU4QFE4IMaMfRswoR6WMykbIKCeFjHJcyihnpBCCgSRhJ0qFjXeJ81DqjGDK_1kNbIghz4jYN4olsGdo5Hsd52aAHooCmaE4C-RmEkszA0uQPW5Owx_wg5bpK570zuoyr1jVaNumbtlMY_fb-Z02RcmgYLUxlxvdMqCyeND8UhaVttVO7fqsm6fWYvny1C6YcYHPb2dTm2m_b9eiokX1doO613uVd6tp1_r6oO2D1Z-V9z8XEHPDXFjLF6xZycpfrO4nHNCjyRvWv3f9NG-bd-iz1ktrvjJd3bCtxcZe71x34Tkrc6e71u7bwtOe5Rd2z-umhF3S4tL3KcxzyC8213cUw8CLj3dl28oy1qd2aZgrU_v3HxeXUQk.aumL-A.LAW_yxLpOahZZybbx5cMHyDxDXs"
     ),
 }
 
-# Win7 友好 SSL Context (防止老旧系统证书库未更新报错)
+
 def get_ssl_context():
+    """Win7 友好 SSL Context (防止老旧系统根证书过期报错)"""
     try:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
@@ -95,25 +125,25 @@ def save_config(config: dict):
 
 def interactive_config_menu(cfg: dict) -> dict:
     """启动时的交互配置菜单"""
-    print("\n" + "=" * 72)
-    print("  🦅 Phoenix 智慧供热内网数据中继采集服务 (Win7 / Python 3.8)")
-    print("=" * 72)
-    print("[当前生效目标]")
-    target_tag = "【线上生产服务器】" if "platform.smartview.top" in cfg['phoenix_push_url'] else "【本地/自定义服务器】"
-    print(f"  [1] Phoenix 接收地址: {cfg['phoenix_push_url']} {target_tag}")
+    print("\n" + "=" * 74)
+    print("  🦅 Phoenix 智慧供热内网数据全网同步服务 (Win7 / Python 3.8)")
+    print("=" * 74)
+    target_tag = "【线上生产服务器】" if "platform.smartview.top" in cfg['phoenix_push_url'] else "【测试/自定义服务器】"
+    print(f"  [1] Phoenix 接收端点: {cfg['phoenix_push_url']} {target_tag}")
     print(f"  [2] 轮询采集周期:     {cfg['poll_interval_seconds']} 秒")
     print(f"  [3] 内网平台地址:     {cfg['intranet_base_url']}")
-    print(f"  [4] 推送鉴权密钥:     {cfg['push_token']}")
+    print(f"  [4] 采集覆盖范围:     电厂 {len(cfg.get('dc_list', []))} 座 | 首站 {len(cfg.get('sz_list', []))} 座 | 换热站 {len(cfg.get('yw_list', []))} 个中心 (全网)")
+    print(f"  [5] 推送鉴权密钥:     {cfg['push_token']}")
     cookie_preview = cfg['intranet_cookie'][:45] + "..." if len(cfg.get('intranet_cookie', '')) > 45 else cfg.get('intranet_cookie', '')
-    print(f"  [5] 内网 Session:     {cookie_preview}")
-    print("-" * 72)
+    print(f"  [6] 内网 Session:     {cookie_preview}")
+    print("-" * 74)
     print("【快捷操作】")
-    print("  直接按 [回车键 Enter]  -> 立即以当前配置启动中继")
+    print("  直接按 [回车键 Enter]  -> 立即以当前配置启动同步服务")
     print("  输入 [ 1 ]             -> 切换/修改 Phoenix 服务器地址 (支持一键切线上/本地/自定义)")
     print("  输入 [ 2 ]             -> 修改轮询采集间隔 (秒)")
     print("  输入 [ 3 ]             -> 修改内网平台 Session Cookie (更新会话凭据)")
     print("  输入 [ 4 ]             -> 逐项修改全部参数")
-    print("=" * 72)
+    print("=" * 74)
 
     try:
         choice = input("请选择操作 (直接回车启动): ").strip()
@@ -215,7 +245,7 @@ def push_to_phoenix(payload: dict, cfg: dict) -> dict:
     json_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {
         "Content-Type": "application/json; charset=utf-8",
-        "User-Agent": "Phoenix-Win7-SmartHeating-Relay/1.0",
+        "User-Agent": "Phoenix-Win7-SmartHeating-Relay/2.0",
         "X-Push-Token": cfg["push_token"],
     }
     req = urllib.request.Request(
@@ -238,40 +268,68 @@ def push_to_phoenix(payload: dict, cfg: dict) -> dict:
 
 
 def run_single_cycle(cfg: dict):
-    """执行单次完整的工况数据同步周期"""
-    log("▶ 开始同步各测点实时工况数据...")
+    """执行单次完整的全网各分区数据同步周期"""
+    log("▶ 开始采集内网各分区实时工况数据...")
 
-    # 1. 获取首站与管网环路数据
-    sz_url = f"{cfg['intranet_base_url']}/get_sz_data/{cfg['sz_param']}"
-    sz_data = []
-    try:
-        sz_data = fetch_intranet_post(sz_url, {"sz_selected": cfg['sz_param']}, cfg)
-    except Exception as e:
-        log(f"⚠️ 首站工况同步异常: {e}")
+    # 1. 采集电厂机组数据 (北海电厂、香海电厂)
+    dc_list = cfg.get("dc_list", [2, 3])
+    all_dc_data = []
+    for dc_id in dc_list:
+        dc_url = f"{cfg['intranet_base_url']}/get_dc_data/{dc_id}"
+        category = DC_MAP.get(int(dc_id), f"电厂_{dc_id}")
+        try:
+            items = fetch_intranet_post(dc_url, None, cfg)
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        item["dc_id"] = dc_id
+                        item["category"] = category
+                        all_dc_data.append(item)
+        except Exception as e:
+            log(f"⚠️ {category}机组数据同步异常: {e}")
 
-    # 2. 获取电厂机组数据
-    dc_url = f"{cfg['intranet_base_url']}/get_dc_data/{cfg['dc_param']}"
-    dc_data = []
-    try:
-        dc_data = fetch_intranet_post(dc_url, None, cfg)
-    except Exception as e:
-        log(f"⚠️ 电厂机组数据同步异常: {e}")
+    # 2. 采集首站与主管网数据 (#1首站、#2首站、#3首站、香海首站)
+    sz_list = cfg.get("sz_list", [2, 3, 4, 5])
+    all_sz_data = []
+    for sz_id in sz_list:
+        sz_url = f"{cfg['intranet_base_url']}/get_sz_data/{sz_id}"
+        category = SZ_MAP.get(int(sz_id), f"首站_{sz_id}")
+        try:
+            items = fetch_intranet_post(sz_url, {"sz_selected": str(sz_id)}, cfg)
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        item["sz_id"] = sz_id
+                        item["category"] = category
+                        all_sz_data.append(item)
+        except Exception as e:
+            log(f"⚠️ {category}工况同步异常: {e}")
 
-    # 3. 获取换热站一次网数据
-    yw_url = f"{cfg['intranet_base_url']}/get_yw_data/{cfg['yw_param']}"
-    yw_data = []
-    try:
-        yw_data = fetch_intranet_post(yw_url, {"yw_selected": cfg['yw_param']}, cfg)
-    except Exception as e:
-        log(f"⚠️ 换热站一次网数据同步异常: {e}")
+    # 3. 采集换热站一次网数据 (9 大运营中心全覆盖)
+    yw_list = cfg.get("yw_list", [60, 61, 62, 63, 64, 65, 66, 67, 68])
+    all_yw_data = []
+    for yw_id in yw_list:
+        yw_url = f"{cfg['intranet_base_url']}/get_yw_data/{yw_id}"
+        center_name = YW_MAP.get(int(yw_id), f"中心_{yw_id}")
+        try:
+            items = fetch_intranet_post(yw_url, {"yw_selected": str(yw_id)}, cfg)
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        item["center_id"] = yw_id
+                        item["center_name"] = center_name
+                        all_yw_data.append(item)
+        except Exception as e:
+            log(f"⚠️ {center_name}换热站数据同步异常: {e}")
 
-    if not sz_data and not dc_data and not yw_data:
+    if not all_sz_data and not all_dc_data and not all_yw_data:
         log("❌ 本轮未能接收到有效工况数据，请检查网络连接或 Session 是否过期。")
         return
 
     log(
-        f"✔ 工况数据采集完成: 首站管网 {len(sz_data)} 组测点, "
-        f"电厂机组 {len(dc_data)} 组测点, 换热站 {len(yw_data)} 座"
+        f"✔ 全量采集完成: 电厂机组 {len(all_dc_data)} 项 ({len(dc_list)}座电厂), "
+        f"首站测点 {len(all_sz_data)} 组 ({len(sz_list)}座首站), "
+        f"换热站 {len(all_yw_data)} 座 ({len(yw_list)}个中心)"
     )
 
     # 4. 打包并推送到 Phoenix
@@ -280,9 +338,9 @@ def run_single_cycle(cfg: dict):
         "push_token": cfg["push_token"],
         "timestamp": now_str,
         "source": "192.168.1.206:6688",
-        "sz_data": sz_data,
-        "dc_data": dc_data,
-        "yw_data": yw_data,
+        "sz_data": all_sz_data,
+        "dc_data": all_dc_data,
+        "yw_data": all_yw_data,
     }
 
     try:
@@ -300,6 +358,7 @@ def main():
     cfg = interactive_config_menu(cfg)
 
     log(f"服务已启动 | 目标内网: {cfg['intranet_base_url']} | 目标 Phoenix: {cfg['phoenix_push_url']}")
+    log(f"采集范围: 电厂 {cfg.get('dc_list')} | 首站 {cfg.get('sz_list')} | 换热站 {cfg.get('yw_list')}")
     log(f"轮询周期: {cfg['poll_interval_seconds']} 秒 | 按 Ctrl + C 可终止运行\n")
 
     while True:

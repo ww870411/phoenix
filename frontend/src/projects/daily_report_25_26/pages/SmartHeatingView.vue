@@ -152,6 +152,15 @@
             class="input-search"
             placeholder="搜索换热站名称 (如: 金广, 海港, 东港)..."
           />
+          <div class="center-selector">
+            <span>运营中心:</span>
+            <select v-model="selectedCenter" class="select-sort">
+              <option value="all">全部中心 ({{ ywDataList.length }}座)</option>
+              <option v-for="c in availableCenters" :key="c.name" :value="c.name">
+                {{ c.name }} ({{ c.count }}座)
+              </option>
+            </select>
+          </div>
           <div class="sort-selector">
             <span>排序:</span>
             <select v-model="sortBy" class="select-sort">
@@ -160,6 +169,42 @@
               <option value="f3_asc">供水温度 (从低到高)</option>
               <option value="f2_desc">瞬时流量 (从大到小)</option>
               <option value="diff_desc">供回温差 (从大到小)</option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="currentTab === 'sz'" class="yw-filter-row">
+          <input
+            v-model="szSearchKeyword"
+            type="text"
+            class="input-search"
+            placeholder="搜索首站回路或测点名称 (如: 东环, 南环, 循环泵, 板换)..."
+          />
+          <div class="center-selector">
+            <span>首站分区:</span>
+            <select v-model="selectedSzCategory" class="select-sort">
+              <option value="all">全部首站 ({{ szDataList.length }}组)</option>
+              <option v-for="cat in availableSzCategories" :key="cat.name" :value="cat.name">
+                {{ cat.name }} ({{ cat.count }}组)
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="currentTab === 'dc'" class="yw-filter-row">
+          <input
+            v-model="dcSearchKeyword"
+            type="text"
+            class="input-search"
+            placeholder="搜索机组或测点名称 (如: 汽机, 锅炉, 燃气炉, 联络管)..."
+          />
+          <div class="center-selector">
+            <span>电厂分类:</span>
+            <select v-model="selectedDcCategory" class="select-sort">
+              <option value="all">全部电厂 ({{ dcDataList.length }}组)</option>
+              <option v-for="cat in availableDcCategories" :key="cat.name" :value="cat.name">
+                {{ cat.name }} ({{ cat.count }}组)
+              </option>
             </select>
           </div>
         </div>
@@ -172,7 +217,7 @@
             <h3>换热站一次网实时监测矩阵</h3>
             <span class="badge-count">共 {{ filteredYwList.length }} 座站</span>
           </div>
-          <span class="header-tip">采集频率：30秒/次 ｜ 覆盖主城区核心直供换热站</span>
+          <span class="header-tip">采集频率：30秒/次 ｜ 覆盖 9 大供热中心全网 242 座换热站</span>
         </header>
 
         <div class="table-responsive">
@@ -181,6 +226,7 @@
               <tr>
                 <th style="width: 50px;">#</th>
                 <th style="width: 140px;">换热站名称</th>
+                <th style="width: 100px;">所属中心</th>
                 <th>供水温度</th>
                 <th>回水温度</th>
                 <th>供回温差 (ΔT)</th>
@@ -196,6 +242,9 @@
               <tr v-for="(station, idx) in filteredYwList" :key="station.name || idx">
                 <td class="col-center text-muted">{{ idx + 1 }}</td>
                 <td class="col-station font-bold">{{ station.name || '—' }}</td>
+                <td class="col-center">
+                  <span class="badge-center">{{ station.center_name || '主城区' }}</span>
+                </td>
                 <td class="col-num text-warm font-mono font-bold">
                   {{ formatVal(station.f3, '℃') }}
                 </td>
@@ -230,7 +279,7 @@
                 </td>
               </tr>
               <tr v-if="filteredYwList.length === 0">
-                <td colspan="11" class="empty-cell">
+                <td colspan="12" class="empty-cell">
                   {{ isRelayOnline ? '未查询到符合条件的换热站数据' : '数据链路未连接，暂无实时数据' }}
                 </td>
               </tr>
@@ -244,9 +293,9 @@
         <header class="section-header">
           <div class="header-left">
             <h3>主管网各环路与首站实时测点</h3>
-            <span class="badge-count">{{ isRelayOnline ? szDataList.length : 0 }} 组测点</span>
+            <span class="badge-count">{{ isRelayOnline ? filteredSzList.length : 0 }} 组测点</span>
           </div>
-          <span class="header-tip">含东环、南环、北网供回补水、板换一次二次及热泵运行工况</span>
+          <span class="header-tip">含 #1首站、#2首站、#3首站、香海首站及环网循环泵运行工况</span>
         </header>
 
         <div class="table-responsive">
@@ -254,6 +303,7 @@
             <thead>
               <tr>
                 <th style="width: 50px;">#</th>
+                <th style="width: 100px;">所属首站</th>
                 <th>测点 / 回路名称</th>
                 <th>瞬时温度</th>
                 <th>瞬时压力</th>
@@ -265,8 +315,11 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in szDataList" :key="item.name || idx">
+              <tr v-for="(item, idx) in filteredSzList" :key="item.name || idx">
                 <td class="col-center text-muted">{{ idx + 1 }}</td>
+                <td class="col-center">
+                  <span class="badge-sz-category">{{ item.category || getSzCategoryFromName(item.name) }}</span>
+                </td>
                 <td class="col-station font-bold">
                   <span class="circuit-tag" :class="getCircuitTagClass(item.name)">{{ getCircuitType(item.name) }}</span>
                   {{ item.name }}
@@ -293,9 +346,9 @@
                   {{ item.SHIJIAN || '—' }}
                 </td>
               </tr>
-              <tr v-if="szDataList.length === 0">
-                <td colspan="9" class="empty-cell">
-                  {{ isRelayOnline ? '暂无首站与管网测点数据' : '数据链路未连接，暂无实时数据' }}
+              <tr v-if="filteredSzList.length === 0">
+                <td colspan="10" class="empty-cell">
+                  {{ isRelayOnline ? '暂无符合条件的首站测点数据' : '数据链路未连接，暂无实时数据' }}
                 </td>
               </tr>
             </tbody>
@@ -308,9 +361,9 @@
         <header class="section-header">
           <div class="header-left">
             <h3>热电厂机组与热源供网监测</h3>
-            <span class="badge-count">{{ isRelayOnline ? dcDataList.length : 0 }} 组测点</span>
+            <span class="badge-count">{{ isRelayOnline ? filteredDcList.length : 0 }} 组测点</span>
           </div>
-          <span class="header-tip">覆盖北海 #1~#3 汽轮机进抽汽、#1~#4 锅炉主汽、燃气炉群及管网进气</span>
+          <span class="header-tip">覆盖北海热电厂、香海热电厂全套锅炉、汽机、燃气炉群及管网蒸汽</span>
         </header>
 
         <div class="table-responsive">
@@ -318,6 +371,7 @@
             <thead>
               <tr>
                 <th style="width: 50px;">#</th>
+                <th style="width: 100px;">所属电厂</th>
                 <th>机组 / 测点名称</th>
                 <th>运行温度</th>
                 <th>主汽压力</th>
@@ -327,8 +381,16 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in dcDataList" :key="item.name || idx">
+              <tr v-for="(item, idx) in filteredDcList" :key="item.name || idx">
                 <td class="col-center text-muted">{{ idx + 1 }}</td>
+                <td class="col-center">
+                  <span
+                    class="badge-dc-category"
+                    :class="item.category === '香海电厂' || String(item.name).includes('香海') ? 'tag-xianghai' : 'tag-beihai'"
+                  >
+                    {{ item.category || (String(item.name).includes('香海') ? '香海电厂' : '北海电厂') }}
+                  </span>
+                </td>
                 <td class="col-station font-bold">
                   <span class="plant-tag" :class="getPlantTagClass(item.name)">{{ getPlantType(item.name) }}</span>
                   {{ item.name }}
@@ -349,9 +411,9 @@
                   {{ item.SHIJIAN || '—' }}
                 </td>
               </tr>
-              <tr v-if="dcDataList.length === 0">
-                <td colspan="7" class="empty-cell">
-                  {{ isRelayOnline ? '暂无电厂与热源数据' : '数据链路未连接，暂无实时数据' }}
+              <tr v-if="filteredDcList.length === 0">
+                <td colspan="8" class="empty-cell">
+                  {{ isRelayOnline ? '暂无符合条件的电厂机组数据' : '数据链路未连接，暂无实时数据' }}
                 </td>
               </tr>
             </tbody>
@@ -387,6 +449,11 @@ const loading = ref(false)
 const downloading = ref(false)
 const autoRefresh = ref(true)
 const searchKeyword = ref('')
+const szSearchKeyword = ref('')
+const dcSearchKeyword = ref('')
+const selectedCenter = ref('all')
+const selectedSzCategory = ref('all')
+const selectedDcCategory = ref('all')
 const sortBy = ref('default')
 
 const latestPayload = ref({
@@ -425,9 +492,50 @@ const formattedTimeAgo = computed(() => {
   return '等待客户端启动推流'
 })
 
+function getSzCategoryFromName(name = '') {
+  if (name.includes('香首') || name.includes('一期蒸汽') || name.includes('二期蒸汽')) return '香海首站'
+  if (name.includes('北首3') || name.includes('水炉') || name.includes('厂界')) return '#3首站'
+  if (name.includes('北2首') || name.includes('燃气锅炉蒸汽')) return '#2首站'
+  return '#1首站'
+}
+
+// 动态提取换热站中出现的全部运营中心及各中心站数
+const availableCenters = computed(() => {
+  const map = new Map()
+  ywDataList.value.forEach((item) => {
+    const cName = item.center_name || '主城区'
+    map.set(cName, (map.get(cName) || 0) + 1)
+  })
+  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
+})
+
+// 动态提取首站分区及各首站测点数
+const availableSzCategories = computed(() => {
+  const map = new Map()
+  szDataList.value.forEach((item) => {
+    const cat = item.category || getSzCategoryFromName(item.name)
+    map.set(cat, (map.get(cat) || 0) + 1)
+  })
+  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
+})
+
+// 动态提取电厂类别及机组数
+const availableDcCategories = computed(() => {
+  const map = new Map()
+  dcDataList.value.forEach((item) => {
+    const cat = item.category || (String(item.name).includes('香海') ? '香海电厂' : '北海电厂')
+    map.set(cat, (map.get(cat) || 0) + 1)
+  })
+  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
+})
+
 // 过滤与排序后的换热站数据
 const filteredYwList = computed(() => {
+  if (!isRelayOnline.value) return []
   let list = [...ywDataList.value]
+  if (selectedCenter.value !== 'all') {
+    list = list.filter((item) => (item.center_name || '主城区') === selectedCenter.value)
+  }
   const kw = searchKeyword.value.trim().toLowerCase()
   if (kw) {
     list = list.filter((item) => String(item.name || '').toLowerCase().includes(kw))
@@ -447,6 +555,37 @@ const filteredYwList = computed(() => {
     })
   }
 
+  return list
+})
+
+// 过滤后的首站与管网测点数据
+const filteredSzList = computed(() => {
+  if (!isRelayOnline.value) return []
+  let list = [...szDataList.value]
+  if (selectedSzCategory.value !== 'all') {
+    list = list.filter((item) => (item.category || getSzCategoryFromName(item.name)) === selectedSzCategory.value)
+  }
+  const kw = szSearchKeyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter((item) => String(item.name || '').toLowerCase().includes(kw))
+  }
+  return list
+})
+
+// 过滤后的电厂与热源机组数据
+const filteredDcList = computed(() => {
+  if (!isRelayOnline.value) return []
+  let list = [...dcDataList.value]
+  if (selectedDcCategory.value !== 'all') {
+    list = list.filter((item) => {
+      const cat = item.category || (String(item.name).includes('香海') ? '香海电厂' : '北海电厂')
+      return cat === selectedDcCategory.value
+    })
+  }
+  const kw = dcSearchKeyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter((item) => String(item.name || '').toLowerCase().includes(kw))
+  }
   return list
 })
 
@@ -942,6 +1081,52 @@ onUnmounted(() => {
   gap: 6px;
   font-size: 12px;
   color: #64748b;
+}
+
+.center-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.badge-center {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.badge-sz-category {
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.badge-dc-category {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.badge-dc-category.tag-beihai {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.badge-dc-category.tag-xianghai {
+  background: #fff7ed;
+  color: #c2410c;
 }
 
 .select-sort {

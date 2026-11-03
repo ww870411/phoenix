@@ -4,9 +4,11 @@
   1. `POST /api/v1/projects/daily_report_25_26/smart-heating/push`：公开接收端点（挂载至 `public_router`），校验请求 Header `X-Push-Token` 或请求体 `push_token`（默认 `phoenix_smart_heating_secret_2026`），原子写入 `backend_data/projects/daily_report_25_26/smart_heating/latest.json` 并追加单行历史日志 `history.jsonl`；
   2. `GET /api/v1/projects/daily_report_25_26/smart-heating/latest`：工况查询端点，严格限定 `Global_admin` 角色。贯彻“无连接即无数据”原则，若链路未在线，直接返回空测点列表，杜绝过期历史数据残留；
   3. `GET /api/v1/projects/daily_report_25_26/smart-heating/status`：中继 Agent 连通性探测端点。基于绝对 Unix 时间戳（Epoch）与 `is_live_push` 标志精确计算时效（0~90s 内有真实推流才判定为 online，未在线时计数与时效均置空）；
-  4. `GET /api/v1/projects/daily_report_25_26/smart-heating/client-script`：数据同步脚本下载接口，返回预置好的 `smart_heating_sync.py`，限定 `Global_admin` 权限。
-- **Win7 中继脚本交付与交互增强**：
-  - `configs/smart_heating_relay_win7.py`：基于 Python 3.8 纯标准库开发，免安装任何第三方包，用于在办公电脑上定时（30s）抓取内网 `192.168.1.206:6688` 的首站（`sz_data`）、电厂机组（`dc_data`）和换热站（`yw_data`）数据并推送到 Phoenix 后端；
+  4. `GET /api/v1/projects/daily_report_25_26/smart-heating/client-script`：数据同步脚本下载接口，优先从业务数据路径 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py`（容器内对应 `/app/data/projects/daily_report_25_26/smart_heating_relay_win7.py`）读取并下发，严格保持与服务器一致，限定 `Global_admin` 权限。
+- **Win7 中继脚本全网全量版交付与存放位置**：
+  - 同步脚本按照用户指定路径放置于 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py`（并在 `configs/` 及 `backend/` 保留同步镜像）；
+  - 基于 Python 3.8 纯标准库开发，免安装任何第三方包，可在 Windows 7 环境直接运行；
+  - 采集范围全网覆盖：2 座电厂（北海/香海共 58 项）、4 座首站（#1~#3/香海共 54 组）、9 大换热中心（60~68 全网 242 座换热站）；
   - 启动时提供人性化参数确认菜单：按回车直接启动，输入编号可交互修改 Phoenix 目标 IP、轮询间隔或 Cookie，修改后自动记忆保存至 `smart_heating_config.json`，无需手动改写 Python 代码。
 - **验证**：TestClient 接口覆盖推送、Token 鉴权、Global_admin 访问与非管理员 403 阻断；未在线拦截与空态响应校验通过。
 

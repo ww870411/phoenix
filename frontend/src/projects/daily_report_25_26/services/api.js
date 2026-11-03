@@ -3538,7 +3538,7 @@ export async function downloadSmartHeatingClientScript(projectKey = 'daily_repor
   const blobUrl = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = blobUrl
-  a.download = 'smart_heating_sync.py'
+  a.download = 'smart_heating_relay_win7.py'
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

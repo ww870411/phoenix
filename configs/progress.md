@@ -18,8 +18,7 @@
   - 新增 `backend/projects/daily_report_25_26/api/smart_heating.py` 并在主路由中挂载；
   - `POST /api/v1/projects/daily_report_25_26/smart-heating/push`：公开接收端点，带 Token 鉴权，原子写入 `backend_data/projects/daily_report_25_26/smart_heating/latest.json`，并追加历史日志；
   - `GET /api/v1/projects/daily_report_25_26/smart-heating/latest` 及 `/status`：查询端点，严格仅限 `Global_admin` 角色访问，其它组返回 403 Forbidden；
-  - `GET /api/v1/projects/daily_report_25_26/smart-heating/client-script`：提供最新免安装数据同步客户端脚本（`smart_heating_sync.py`）的安全下载接口（仅限 `Global_admin`）；
-  - 从 HAR 自动提取初始化快照种子，确保开箱即有数据。
+  - `GET /api/v1/projects/daily_report_25_26/smart-heating/client-script`：提供最新免安装数据同步客户端脚本（`smart_heating_sync.py`）的安全下载接口（仅限 `Global_admin`），服务端优先读取放置在 `backend/projects/daily_report_25_26/smart_heating_sync.py` 的源码，确保 Docker 挂载热更新始终能准确响应下载。
 - **前端页面脱敏瘦身与客户端一键下载**：
   - 深度重构 `SmartHeatingView.vue`，彻底剔除抓取感与调试信息：删除了全部内网 IP 地址及“中继抓取”字样，将状态提示升格为“实时数据传输中 / 等待数据链路接入”；换热站表头彻底移除开发口径符号（如 `f1`~`f222`），统一采用规范中文表头；
   - 剥离原暴露技术细节的“中继配置指引”Tab，收敛为聚焦于“换热站一次网工况”、“主管网与首站测点”、“电厂与热源机组”三大生产大屏核心面板；
@@ -36,10 +35,24 @@
        - KPI 摘要条流量、温度、温差等全部显示为破折号 `—`，在线站数显示 `0 / 0 座`；
        - 插入离线引导横幅（提示运行 `smart_heating_sync.py` 开启实时推流）；
        - 表格内空行明确提示 `数据链路未连接，暂无实时数据`。
+- **全网多电厂、多首站及 9 大换热中心全量接入与下载路径定向**：
+  - 基于用户二次提供的完整 HAR 归档（`configs/192.168.1.206(1).har`），全面破译并接入全部供热分区：
+    1. **电厂侧全覆盖 (58 项)**：北海电厂 (ID 2, 23 组)、香海电厂 (ID 3, 35 组)；
+    2. **首站侧全覆盖 (54 组)**：#1首站 (ID 2, 16 组)、#2首站 (ID 3, 8 组)、#3首站 (ID 4, 20 组)、香海首站 (ID 5, 10 组)；
+    3. **换热站 9 大中心全覆盖 (242 座)**：ID 60 华乐 (20 座)、ID 61 胜利 (35 座)、ID 62 双兴 (21 座)、ID 63 香炉礁 (18 座)、ID 64 兴工 (28 座)、ID 65 春海 (29 座)、ID 66 大纺 (17 座)、ID 67 友好 (37 座)、ID 68 东港 (37 座)。
+  - **中继脚本全量采集升级与用户指定路径落位**：
+    1. 遵照用户指示，中继脚本规范存放于 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py`；
+    2. 后端下载端点 `_get_client_script_path()` 优先从该业务数据路径提供下载，无论开发环境还是生产 Docker 容器均严格统一路径，下载文件名统一为 `smart_heating_relay_win7.py`；
+    3. 脚本更新内置出厂 Cookie，并在单轮采集中自动循环 15 个内网端点，为各测点和换热站打上所属中心和首站/电厂中文标签并统一打包推送。
+  - **前端交互升级与多维分区筛选**：
+    1. 换热站 Tab 增加“运营中心”下拉筛选（支持全部中心及 9 大中心独立筛选）及“所属中心”彩色徽章；
+    2. 首站 Tab 增加“首站分区”下拉筛选（#1首站、#2首站、#3首站、香海首站）及关键字检索；
+    3. 电厂 Tab 增加“电厂分类”下拉筛选（北海电厂、香海电厂）及对应电厂徽章；
+    4. 离线状态保持全空态，在线推送后自动点亮全网 242 座换热站及全部首站机组。
 - **验证结果**：
-  - 后端接口测试（鉴权、数据推送、脚本下载响应、状态心跳判定、离线空数据拦截）100% 通过；
-  - 离线状态下最新数据接口返回测点数全部为 0，在线推送测试通过并可正常切换点亮；
-  - 前端通过 `npm run build` 生产构建成功，打包产物 `SmartHeatingView-CYumPW8A.css` / `SmartHeatingView-Ds6xXqQk.js` 正常生成。
+  - 后端脚本定位测试通过，优先指向 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py`；
+  - 中继脚本 Python 3 语法编译 100% 通过；
+  - 前端通过 `npm run build` 生产构建成功，打包产物 `SmartHeatingView-COhLmIGS.css` / `SmartHeatingView-DOdsfcRY.js` 正常生成。
 - **最后验证日期**：2026-11-03。
 
 

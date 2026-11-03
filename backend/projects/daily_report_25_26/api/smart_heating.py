@@ -223,6 +223,29 @@ async def get_smart_heating_status(
     }
 
 
+def _get_client_script_path() -> Optional[Path]:
+    """
+    多路径探测同步客户端脚本位置，优先读取运行数据目录下的客户端脚本：
+    phoenix/backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py
+    确保与服务器和用户指定的修改路径完全一致。
+    """
+    candidates = [
+        # 1. 优先读取用户显式指定的运行数据目录 (DATA_DIRECTORY 挂载: /app/data 或 backend_data)
+        Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26" / "smart_heating_relay_win7.py",
+        # 2. 备选：当前 daily_report_25_26 项目根目录下获取
+        Path(__file__).resolve().parent.parent / "smart_heating_sync.py",
+        Path(__file__).resolve().parent / "smart_heating_sync.py",
+        # 3. 宿主机或项目根目录 configs/
+        Path(__file__).resolve().parents[4] / "configs" / "smart_heating_relay_win7.py",
+        Path("configs/smart_heating_relay_win7.py").resolve(),
+        Path("/app/configs/smart_heating_relay_win7.py"),
+    ]
+    for p in candidates:
+        if p.exists() and p.is_file():
+            return p
+    return None
+
+
 @router.get("/client-script", summary="下载智慧供热数据同步客户端脚本")
 async def download_client_script(
     session: AuthSession = Depends(get_current_session),
@@ -234,12 +257,12 @@ async def download_client_script(
     if session.group != "Global_admin":
         raise HTTPException(status_code=403, detail="仅限 Global_admin 下载客户端脚本")
 
-    script_path = Path("configs/smart_heating_relay_win7.py").resolve()
-    if not script_path.exists():
+    script_path = _get_client_script_path()
+    if not script_path:
         raise HTTPException(status_code=404, detail="脚本文件不存在")
 
     return FileResponse(
         path=str(script_path),
-        filename="smart_heating_sync.py",
+        filename="smart_heating_relay_win7.py",
         media_type="text/x-python",
     )
