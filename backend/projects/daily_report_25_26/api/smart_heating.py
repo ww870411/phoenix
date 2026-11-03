@@ -33,6 +33,62 @@ HISTORY_LOG = DATA_DIR / "history.jsonl"
 
 DEFAULT_PUSH_TOKEN = "phoenix_smart_heating_secret_2026"
 
+# 错别字与历史别名标准化字典 (严格修正“xxx机进气”为“xxx机进汽”等)
+TYPO_CORRECTIONS = {
+    "北海#1机进气": "北海#1机进汽",
+    "北海#2机进气": "北海#2机进汽",
+    "北海#3机抽气": "北海#3机抽汽",
+    "北海首站进气参数": "北海首站进汽参数",
+    "磐海": "碧海",
+    "喜临门": "壹临门",
+    "鸿霖大厦": "鸿源大厦",
+    "桥北": "振北",
+    "黑嘴子(融创)": "黑狮子(融创)",
+    "德政西": "德源西",
+    "春和雲树里": "春和爱邻里",
+    "机车西山村区": "机车西山小区",
+    "保利天禧I01": "保利天禧01",
+    "保利天禧I04": "保利天禧04",
+    "保利禧岸": "保利璟岸",
+    "海涵庄园": "海珀庄园",
+}
+
+SZ_CATEGORY_CORRECTIONS = {
+    "#1首站": "北海#1首站",
+    "#2首站": "北海#2首站",
+    "#3首站": "北海水炉",
+    "香海首站": "香海首站",
+}
+
+
+def _clean_point_records(records: List[Dict[str, Any]], default_level1: str) -> List[Dict[str, Any]]:
+    """清洗测点名称（修正错别字）并自动补齐规范分类"""
+    cleaned_list = []
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        row = dict(item)
+        raw_name = str(row.get("name") or "").strip()
+        standard_name = TYPO_CORRECTIONS.get(raw_name, raw_name)
+        row["name"] = standard_name
+        row["level1"] = row.get("level1") or default_level1
+        
+        # 补齐或校准二级分类
+        if default_level1 == "首站":
+            cat = row.get("category") or ""
+            row["level2"] = SZ_CATEGORY_CORRECTIONS.get(cat, cat or "北海#1首站")
+            row["category"] = row["level2"]
+        elif default_level1 == "电厂":
+            row["level2"] = row.get("category") or ("香海电厂" if "香海" in standard_name else "北海电厂")
+            row["category"] = row["level2"]
+        elif default_level1 in ("一次网", "一网"):
+            row["level1"] = "一次网"
+            row["level2"] = row.get("center_name") or "华乐中心"
+            row["center_name"] = row["level2"]
+            
+        cleaned_list.append(row)
+    return cleaned_list
+
 
 class SmartHeatingPushPayload(BaseModel):
     push_token: Optional[str] = Field(None, description="推送凭证密钥")
@@ -98,9 +154,9 @@ async def push_smart_heating_data(
         "received_epoch": now_epoch,
         "is_live_push": True,
         "source": payload.source or "192.168.1.206:6688",
-        "sz_data": payload.sz_data,
-        "dc_data": payload.dc_data,
-        "yw_data": payload.yw_data,
+        "sz_data": _clean_point_records(payload.sz_data, "首站"),
+        "dc_data": _clean_point_records(payload.dc_data, "电厂"),
+        "yw_data": _clean_point_records(payload.yw_data, "一次网"),
     }
 
     try:

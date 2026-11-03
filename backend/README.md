@@ -1,3 +1,23 @@
+## 2026-11-03 智慧供热一级分类打标规范化为“一次网”
+
+- **服务清洗管道升级**：
+  - `backend/projects/daily_report_25_26/api/smart_heating.py`：`_clean_point_records` 将换热站测点的一级分类统一标记为 `'一次网'`，并向下兼容旧客户端传输的 `'一网'`，自动升级对齐规范。
+- **中继脚本同步**：
+  - `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py`（及对应镜像）：换热站采集循环注入的 `level1` 字段更新为 `'一次网'`。
+- **验证**：Python 编译与单元测试校验通过。
+
+## 2026-11-03 智慧供热数据接入错别字校正与一二级分类元数据对齐
+
+- **数据清洗与安全入库**：
+  - `backend/projects/daily_report_25_26/api/smart_heating.py`：
+    - 新增 `_clean_point_records(records, default_level1)` 清洗管道，在 `POST /smart-heating/push` 接收数据时自动对首站、电厂、一网测点进行错字更正（将“xxx机进气”统一修正为“xxx机进汽”等）并自动注入规范的 `level1` 与 `level2`。
+    - 规范化二级分类映射：校正首站二级分类为 `北海#1首站`、`北海#2首站`、`北海水炉`、`香海首站`；一网中心二级分类为 9 大运营中心标准中文名。
+- **中继同步脚本全量更新**：
+  - 更新 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py`（及 `configs/`、`backend/` 镜像副本）：
+    - 升级 `SZ_MAP`、`YW_MAP` 与 `TYPO_CORRECTIONS`；
+    - 在抓取循环中对各端点返回的测点名称即时执行去错和分类打标。
+- **验证**：Python 语法编译与单元测试脚本通过，接口与清洗管道断言全部通过。
+
 ## 2026-11-03 智慧供热实时数据接收与工况查询接口上线
 
 - **新增业务路由**：`backend/projects/daily_report_25_26/api/smart_heating.py`，并在 `backend/projects/daily_report_25_26/api/router.py` 中挂载：

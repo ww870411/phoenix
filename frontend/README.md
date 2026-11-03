@@ -1,3 +1,24 @@
+## 2026-11-03 智慧供热一级分类与看板界面更名为“一次网”
+
+- **常量规范升级**：
+  - `frontend/src/projects/daily_report_25_26/constants/smartHeatingTaxonomy.js`：将一级分类次序 `LEVEL1_ORDER` 中的 `'一网'` 及 `LEVEL2_BY_LEVEL1` 字典 Key 全部统一规范更名为 `'一次网'`，242 项换热站元数据采集点同步映射为 `'一次网'`。
+- **页面展现更名**：
+  - `SmartHeatingView.vue`：Tab 切换栏显示为 `🏢 一次网 (242)`，表头、筛选联动及分类徽章（`.badge-yw`）同步更新为“一次网”。
+- **构建验证**：`npm run build` 成功通过，生成打包产物 `SmartHeatingView-DtDlK3bN.js`。
+
+## 2026-11-03 智慧供热主体分类与测点元数据规范化重构
+
+- **新增/更新常量**：
+  - `frontend/src/projects/daily_report_25_26/constants/smartHeatingTaxonomy.js`：定义 344 个标准采集点顺序元数据（`TAXONOMY_LIST`）、一级分类次序（`LEVEL1_ORDER`）、二级分类映射（`LEVEL2_BY_LEVEL1`）及错字映射字典（`POINT_ALIAS_MAP`），提供 `normalizePoint()` 归一化解析工具。
+  - `frontend/src/projects/daily_report_25_26/constants/index.js`：向外导出智慧供热元数据规范。
+- **页面视图升级**：
+  - `SmartHeatingView.vue`（`/projects/:projectKey/pages/smart_heating`）：
+    1. **分类导航与筛选栏重构**：统一使用“一级分类”、“二级分类”、“采集点”专业称谓；一级分类支持 `首站 (54)` / `电厂 (48)` / `一网 (242)` / `全网总览 (344)`，与 Excel 表次序严格一致；二级分类下拉框根据一级分类智能联动。
+    2. **严格保持 Excel 顺序**：默认排序依据 Excel 行序号（`order` 1~344）升序排列，支持切换温度、瞬时流量、供回温差临时排序。
+    3. **表头规范化**：表格列头统一定义 `#`、`一级分类`、`二级分类`、`采集点`、工况数据列及采集时间。
+    4. **错别字全面修正**：将“xxx机进气”修正为“xxx机进汽”（包括进汽、抽汽、进汽参数等），换热站别名规范为标准采集点名称（如“碧海”、“壹临门”、“鸿源大厦”等）。
+- **构建验证**：`npm run build` 成功通过无报错，打包输出 `SmartHeatingView-A_zznTTt.js`。
+
 ## 2026-11-03 智慧供热实时工况看板与权限集成
 
 - **新增页面**：`SmartHeatingView.vue`（`/projects/:projectKey/pages/smart_heating`），以高精细工业大屏风格展示实时生产数据。

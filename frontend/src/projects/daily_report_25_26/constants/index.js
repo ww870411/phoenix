@@ -6,3 +6,7 @@ export const PROJECT_KEY = 'daily_report_25_26';
 
 // 建议的路由基路径（后续接入全局路由时使用）
 export const ROUTE_BASE = '/daily_report_25_26';
+
+// 智慧供热主体分类与测点元数据
+export * from './smartHeatingTaxonomy';
+

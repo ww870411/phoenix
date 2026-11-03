@@ -47,29 +47,49 @@ CONFIG_FILE = os.path.join(SCRIPT_DIR, "smart_heating_config.json")
 PRESET_URL_PROD = "https://platform.smartview.top/api/v1/projects/daily_report_25_26/smart-heating/push"
 PRESET_URL_LOCAL = "http://127.0.0.1:8000/api/v1/projects/daily_report_25_26/smart-heating/push"
 
-# 分区中文名称映射
+# 智慧供热平台主体分组与错别字校正映射 (依据 11.3 智慧供热平台主体分组表.xlsx)
 DC_MAP = {
     2: "北海电厂",
     3: "香海电厂",
 }
 
 SZ_MAP = {
-    2: "#1首站",
-    3: "#2首站",
-    4: "#3首站",
+    2: "北海#1首站",
+    3: "北海#2首站",
+    4: "北海水炉",
     5: "香海首站",
 }
 
 YW_MAP = {
     60: "华乐中心",
-    61: "胜利中心",
+    61: "北岗中心",
     62: "双兴中心",
     63: "香炉礁中心",
     64: "兴工中心",
     65: "春海中心",
     66: "大纺中心",
-    67: "友好中心",
+    67: "中山中心",
     68: "东港中心",
+}
+
+# 错别字与历史别名标准化字典 (严格修正“xxx机进气”为“xxx机进汽”等)
+TYPO_CORRECTIONS = {
+    "北海#1机进气": "北海#1机进汽",
+    "北海#2机进气": "北海#2机进汽",
+    "北海#3机抽气": "北海#3机抽汽",
+    "北海首站进气参数": "北海首站进汽参数",
+    "磐海": "碧海",
+    "喜临门": "壹临门",
+    "鸿霖大厦": "鸿源大厦",
+    "桥北": "振北",
+    "黑嘴子(融创)": "黑狮子(融创)",
+    "德政西": "德源西",
+    "春和雲树里": "春和爱邻里",
+    "机车西山村区": "机车西山小区",
+    "保利天禧I01": "保利天禧01",
+    "保利天禧I04": "保利天禧04",
+    "保利禧岸": "保利璟岸",
+    "海涵庄园": "海珀庄园",
 }
 
 # 默认内置出厂配置
@@ -282,13 +302,18 @@ def run_single_cycle(cfg: dict):
             if isinstance(items, list):
                 for item in items:
                     if isinstance(item, dict):
+                        raw_name = str(item.get("name") or "").strip()
+                        cleaned_name = TYPO_CORRECTIONS.get(raw_name, raw_name)
+                        item["name"] = cleaned_name
                         item["dc_id"] = dc_id
                         item["category"] = category
+                        item["level1"] = "电厂"
+                        item["level2"] = category
                         all_dc_data.append(item)
         except Exception as e:
             log(f"⚠️ {category}机组数据同步异常: {e}")
 
-    # 2. 采集首站与主管网数据 (#1首站、#2首站、#3首站、香海首站)
+    # 2. 采集首站与主管网数据 (#1首站、#2首站、北海水炉、香海首站)
     sz_list = cfg.get("sz_list", [2, 3, 4, 5])
     all_sz_data = []
     for sz_id in sz_list:
@@ -299,8 +324,13 @@ def run_single_cycle(cfg: dict):
             if isinstance(items, list):
                 for item in items:
                     if isinstance(item, dict):
+                        raw_name = str(item.get("name") or "").strip()
+                        cleaned_name = TYPO_CORRECTIONS.get(raw_name, raw_name)
+                        item["name"] = cleaned_name
                         item["sz_id"] = sz_id
                         item["category"] = category
+                        item["level1"] = "首站"
+                        item["level2"] = category
                         all_sz_data.append(item)
         except Exception as e:
             log(f"⚠️ {category}工况同步异常: {e}")
@@ -316,8 +346,13 @@ def run_single_cycle(cfg: dict):
             if isinstance(items, list):
                 for item in items:
                     if isinstance(item, dict):
+                        raw_name = str(item.get("name") or "").strip()
+                        cleaned_name = TYPO_CORRECTIONS.get(raw_name, raw_name)
+                        item["name"] = cleaned_name
                         item["center_id"] = yw_id
                         item["center_name"] = center_name
+                        item["level1"] = "一次网"
+                        item["level2"] = center_name
                         all_yw_data.append(item)
         except Exception as e:
             log(f"⚠️ {center_name}换热站数据同步异常: {e}")

@@ -15,7 +15,7 @@
                 <span class="badge-role">生产实时大屏</span>
               </div>
               <p class="banner-subtitle">
-                热网首站环路 · 电厂热源机组 · 换热站一次网生产运行全景实时监控
+                按全网统一分类标准实时采集 · 涵盖首站、电厂、一次网三大层级 344 个标准采集点
                 <span v-if="!isRelayOnline" class="offline-note">（数据链路未连接 · 暂无实时数据）</span>
               </p>
             </div>
@@ -68,7 +68,7 @@
               <span class="metric-value text-warm">{{ isRelayOnline && avgStationSupplyTemp ? formatNum(avgStationSupplyTemp, 1) : '—' }}</span>
               <span class="metric-unit">℃</span>
             </div>
-            <span class="metric-hint">一次网供水平均</span>
+            <span class="metric-hint">一次网供水加权平均</span>
           </div>
 
           <div class="metric-item">
@@ -90,12 +90,12 @@
           </div>
 
           <div class="metric-item">
-            <span class="metric-label">在线换热站数</span>
+            <span class="metric-label">标准采集点在线数</span>
             <div class="metric-val-row">
-              <span class="metric-value text-success">{{ isRelayOnline ? activeStationCount : 0 }}</span>
-              <span class="metric-unit">/ {{ isRelayOnline ? ywDataList.length : 0 }} 座</span>
+              <span class="metric-value text-success">{{ isRelayOnline ? totalOnlinePointCount : 0 }}</span>
+              <span class="metric-unit">/ 344 个</span>
             </div>
-            <span class="metric-hint">正常接入运行</span>
+            <span class="metric-hint">按主体分组表规范入库</span>
           </div>
         </div>
       </section>
@@ -106,7 +106,7 @@
         <div class="offline-body">
           <div class="offline-title">数据链路未连接 · 暂无实时数据</div>
           <div class="offline-desc">
-            系统严格遵循实时数据规范，在未接收到客户端推流前不呈现任何数据。请在办公电脑上运行数据同步客户端（smart_heating_sync.py）以开启实时推流。
+            系统严格遵循实时数据规范，在未接收到客户端推流前不呈现任何数据。请在办公电脑上运行数据同步客户端（smart_heating_relay_win7.py）以开启实时推流。
           </div>
         </div>
         <button
@@ -119,105 +119,91 @@
         </button>
       </section>
 
-      <!-- 选项卡导航与检索工具栏 -->
+      <!-- 分类与筛选工具栏 -->
       <div class="nav-and-filter-card card elevated">
-        <div class="tabs-container">
-          <button
-            class="tab-btn"
-            :class="{ active: currentTab === 'yw' }"
-            @click="currentTab = 'yw'"
-          >
-            🏢 换热站一次网工况 ({{ ywDataList.length }})
-          </button>
-          <button
-            class="tab-btn"
-            :class="{ active: currentTab === 'sz' }"
-            @click="currentTab = 'sz'"
-          >
-            🔄 主管网与首站测点 ({{ szDataList.length }})
-          </button>
-          <button
-            class="tab-btn"
-            :class="{ active: currentTab === 'dc' }"
-            @click="currentTab = 'dc'"
-          >
-            ⚡ 电厂与热源机组 ({{ dcDataList.length }})
-          </button>
-        </div>
-
-        <div v-if="currentTab === 'yw'" class="yw-filter-row">
-          <input
-            v-model="searchKeyword"
-            type="text"
-            class="input-search"
-            placeholder="搜索换热站名称 (如: 金广, 海港, 东港)..."
-          />
-          <div class="center-selector">
-            <span>运营中心:</span>
-            <select v-model="selectedCenter" class="select-sort">
-              <option value="all">全部中心 ({{ ywDataList.length }}座)</option>
-              <option v-for="c in availableCenters" :key="c.name" :value="c.name">
-                {{ c.name }} ({{ c.count }}座)
-              </option>
-            </select>
-          </div>
-          <div class="sort-selector">
-            <span>排序:</span>
-            <select v-model="sortBy" class="select-sort">
-              <option value="default">默认顺序</option>
-              <option value="f3_desc">供水温度 (从高到低)</option>
-              <option value="f3_asc">供水温度 (从低到高)</option>
-              <option value="f2_desc">瞬时流量 (从大到小)</option>
-              <option value="diff_desc">供回温差 (从大到小)</option>
-            </select>
+        <div class="category-tabs-wrapper">
+          <span class="filter-label-prefix">一级分类:</span>
+          <div class="tabs-container">
+            <button
+              class="tab-btn"
+              :class="{ active: currentLevel1 === '首站' }"
+              @click="handleLevel1Change('首站')"
+            >
+              🔄 首站 ({{ countByLevel1['首站'] || 54 }})
+            </button>
+            <button
+              class="tab-btn"
+              :class="{ active: currentLevel1 === '电厂' }"
+              @click="handleLevel1Change('电厂')"
+            >
+              ⚡ 电厂 ({{ countByLevel1['电厂'] || 48 }})
+            </button>
+            <button
+              class="tab-btn"
+              :class="{ active: currentLevel1 === '一次网' }"
+              @click="handleLevel1Change('一次网')"
+            >
+              🏢 一次网 ({{ countByLevel1['一次网'] || 242 }})
+            </button>
+            <button
+              class="tab-btn"
+              :class="{ active: currentLevel1 === 'all' }"
+              @click="handleLevel1Change('all')"
+            >
+              🌐 全网总览 ({{ totalTaxonomyCount }})
+            </button>
           </div>
         </div>
 
-        <div v-if="currentTab === 'sz'" class="yw-filter-row">
-          <input
-            v-model="szSearchKeyword"
-            type="text"
-            class="input-search"
-            placeholder="搜索首站回路或测点名称 (如: 东环, 南环, 循环泵, 板换)..."
-          />
-          <div class="center-selector">
-            <span>首站分区:</span>
-            <select v-model="selectedSzCategory" class="select-sort">
-              <option value="all">全部首站 ({{ szDataList.length }}组)</option>
-              <option v-for="cat in availableSzCategories" :key="cat.name" :value="cat.name">
-                {{ cat.name }} ({{ cat.count }}组)
+        <div class="filter-controls-wrapper">
+          <!-- 二级分类下拉 -->
+          <div class="selector-group">
+            <span class="filter-label">二级分类:</span>
+            <select v-model="selectedLevel2" class="select-box">
+              <option value="all">
+                {{ currentLevel1 === 'all' ? '全部二级分类 (15个)' : `全部${currentLevel1} (${currentLevel2Options.length}个)` }}
+              </option>
+              <option v-for="opt in currentLevel2Options" :key="opt.name" :value="opt.name">
+                {{ opt.name }} ({{ opt.count }}个采集点)
               </option>
             </select>
           </div>
-        </div>
 
-        <div v-if="currentTab === 'dc'" class="yw-filter-row">
-          <input
-            v-model="dcSearchKeyword"
-            type="text"
-            class="input-search"
-            placeholder="搜索机组或测点名称 (如: 汽机, 锅炉, 燃气炉, 联络管)..."
-          />
-          <div class="center-selector">
-            <span>电厂分类:</span>
-            <select v-model="selectedDcCategory" class="select-sort">
-              <option value="all">全部电厂 ({{ dcDataList.length }}组)</option>
-              <option v-for="cat in availableDcCategories" :key="cat.name" :value="cat.name">
-                {{ cat.name }} ({{ cat.count }}组)
-              </option>
+          <!-- 采集点搜索框 -->
+          <div class="search-group">
+            <span class="filter-label">采集点:</span>
+            <input
+              v-model="searchKeyword"
+              type="text"
+              class="input-search"
+              placeholder="搜索采集点名称 (如: 进汽, 锅炉, 碧海)..."
+            />
+          </div>
+
+          <!-- 排序选择 -->
+          <div class="selector-group">
+            <span class="filter-label">排序:</span>
+            <select v-model="sortBy" class="select-box">
+              <option value="default">默认顺序 (按表严格排序)</option>
+              <option value="temp_desc">温度从高到低</option>
+              <option value="temp_asc">温度从低到高</option>
+              <option value="flow_desc">瞬时流量从大到小</option>
+              <option v-if="currentLevel1 === '一次网'" value="diff_desc">供回温差从大到小</option>
             </select>
           </div>
         </div>
       </div>
 
-      <!-- 选项卡 1: 换热站一次网实时监测 -->
-      <section v-if="currentTab === 'yw'" class="card elevated data-section">
+      <!-- 数据内容展示区域 -->
+
+      <!-- 视图 1: 首站采集点矩阵 -->
+      <section v-if="currentLevel1 === '首站'" class="card elevated data-section">
         <header class="section-header">
           <div class="header-left">
-            <h3>换热站一次网实时监测矩阵</h3>
-            <span class="badge-count">共 {{ filteredYwList.length }} 座站</span>
+            <h3>首站工况实时监测矩阵</h3>
+            <span class="badge-count">{{ isRelayOnline ? displayList.length : 0 }} 个采集点</span>
           </div>
-          <span class="header-tip">采集频率：30秒/次 ｜ 覆盖 9 大供热中心全网 242 座换热站</span>
+          <span class="header-tip">覆盖北海#1首站、北海#2首站、北海水炉、香海首站等全部回路与泵组</span>
         </header>
 
         <div class="table-responsive">
@@ -225,86 +211,9 @@
             <thead>
               <tr>
                 <th style="width: 50px;">#</th>
-                <th style="width: 140px;">换热站名称</th>
-                <th style="width: 100px;">所属中心</th>
-                <th>供水温度</th>
-                <th>回水温度</th>
-                <th>供回温差 (ΔT)</th>
-                <th>供水压力</th>
-                <th>回水压力</th>
-                <th>供回压差 (ΔP)</th>
-                <th>瞬时流量</th>
-                <th>瞬时热量</th>
-                <th>采集时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(station, idx) in filteredYwList" :key="station.name || idx">
-                <td class="col-center text-muted">{{ idx + 1 }}</td>
-                <td class="col-station font-bold">{{ station.name || '—' }}</td>
-                <td class="col-center">
-                  <span class="badge-center">{{ station.center_name || '主城区' }}</span>
-                </td>
-                <td class="col-num text-warm font-mono font-bold">
-                  {{ formatVal(station.f3, '℃') }}
-                </td>
-                <td class="col-num text-cool font-mono">
-                  {{ formatVal(station.f5, '℃') }}
-                </td>
-                <td class="col-num font-mono">
-                  <span
-                    class="diff-badge"
-                    :class="getTempDiffBadgeClass(station.f3, station.f5)"
-                  >
-                    {{ calcDiff(station.f3, station.f5, '℃') }}
-                  </span>
-                </td>
-                <td class="col-num font-mono">
-                  {{ formatVal(station.f1, 'MPa', 3) }}
-                </td>
-                <td class="col-num font-mono">
-                  {{ formatVal(station.f4, 'MPa', 3) }}
-                </td>
-                <td class="col-num font-mono">
-                  {{ calcDiff(station.f1, station.f4, 'MPa', 3) }}
-                </td>
-                <td class="col-num font-mono font-bold">
-                  {{ formatVal(station.f2, 'm³/h', 1) }}
-                </td>
-                <td class="col-num font-mono">
-                  {{ formatVal(station.f222, 'GJ/h', 1) }}
-                </td>
-                <td class="col-center font-mono text-muted text-sm">
-                  {{ station.update_time || '—' }}
-                </td>
-              </tr>
-              <tr v-if="filteredYwList.length === 0">
-                <td colspan="12" class="empty-cell">
-                  {{ isRelayOnline ? '未查询到符合条件的换热站数据' : '数据链路未连接，暂无实时数据' }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- 选项卡 2: 主管网与首站工况 -->
-      <section v-if="currentTab === 'sz'" class="card elevated data-section">
-        <header class="section-header">
-          <div class="header-left">
-            <h3>主管网各环路与首站实时测点</h3>
-            <span class="badge-count">{{ isRelayOnline ? filteredSzList.length : 0 }} 组测点</span>
-          </div>
-          <span class="header-tip">含 #1首站、#2首站、#3首站、香海首站及环网循环泵运行工况</span>
-        </header>
-
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="width: 50px;">#</th>
-                <th style="width: 100px;">所属首站</th>
-                <th>测点 / 回路名称</th>
+                <th style="width: 90px;">一级分类</th>
+                <th style="width: 120px;">二级分类</th>
+                <th style="width: 220px;">采集点</th>
                 <th>瞬时温度</th>
                 <th>瞬时压力</th>
                 <th>瞬时流量</th>
@@ -315,14 +224,17 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in filteredSzList" :key="item.name || idx">
-                <td class="col-center text-muted">{{ idx + 1 }}</td>
+              <tr v-for="(item, idx) in displayList" :key="item.pointName || idx">
+                <td class="col-center text-muted font-mono font-bold">{{ item.order || idx + 1 }}</td>
                 <td class="col-center">
-                  <span class="badge-sz-category">{{ item.category || getSzCategoryFromName(item.name) }}</span>
+                  <span class="badge-level1 badge-sz">首站</span>
+                </td>
+                <td class="col-center">
+                  <span class="badge-level2">{{ item.level2 }}</span>
                 </td>
                 <td class="col-station font-bold">
-                  <span class="circuit-tag" :class="getCircuitTagClass(item.name)">{{ getCircuitType(item.name) }}</span>
-                  {{ item.name }}
+                  <span class="circuit-tag" :class="getCircuitTagClass(item.pointName)">{{ getCircuitType(item.pointName) }}</span>
+                  {{ item.pointName }}
                 </td>
                 <td class="col-num font-mono font-bold" :class="item.WENDU > 35 ? 'text-warm' : 'text-cool'">
                   {{ formatVal(item.WENDU, '℃', 1) }}
@@ -346,9 +258,9 @@
                   {{ item.SHIJIAN || '—' }}
                 </td>
               </tr>
-              <tr v-if="filteredSzList.length === 0">
-                <td colspan="10" class="empty-cell">
-                  {{ isRelayOnline ? '暂无符合条件的首站测点数据' : '数据链路未连接，暂无实时数据' }}
+              <tr v-if="displayList.length === 0">
+                <td colspan="11" class="empty-cell">
+                  {{ isRelayOnline ? '未检索到符合条件的首站采集点' : '数据链路未连接，暂无实时数据' }}
                 </td>
               </tr>
             </tbody>
@@ -356,14 +268,14 @@
         </div>
       </section>
 
-      <!-- 选项卡 3: 电厂与热源机组运行参数 -->
-      <section v-if="currentTab === 'dc'" class="card elevated data-section">
+      <!-- 视图 2: 电厂采集点矩阵 -->
+      <section v-if="currentLevel1 === '电厂'" class="card elevated data-section">
         <header class="section-header">
           <div class="header-left">
-            <h3>热电厂机组与热源供网监测</h3>
-            <span class="badge-count">{{ isRelayOnline ? filteredDcList.length : 0 }} 组测点</span>
+            <h3>热电厂机组与热源监测矩阵</h3>
+            <span class="badge-count">{{ isRelayOnline ? displayList.length : 0 }} 个采集点</span>
           </div>
-          <span class="header-tip">覆盖北海热电厂、香海热电厂全套锅炉、汽机、燃气炉群及管网蒸汽</span>
+          <span class="header-tip">按分组规范收录北海电厂 (23项)、香海电厂 (25项) 全部锅炉、机组进汽与联络管</span>
         </header>
 
         <div class="table-responsive">
@@ -371,8 +283,9 @@
             <thead>
               <tr>
                 <th style="width: 50px;">#</th>
-                <th style="width: 100px;">所属电厂</th>
-                <th>机组 / 测点名称</th>
+                <th style="width: 90px;">一级分类</th>
+                <th style="width: 120px;">二级分类</th>
+                <th style="width: 220px;">采集点</th>
                 <th>运行温度</th>
                 <th>主汽压力</th>
                 <th>瞬时流量</th>
@@ -381,19 +294,22 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in filteredDcList" :key="item.name || idx">
-                <td class="col-center text-muted">{{ idx + 1 }}</td>
+              <tr v-for="(item, idx) in displayList" :key="item.pointName || idx">
+                <td class="col-center text-muted font-mono font-bold">{{ item.order || idx + 1 }}</td>
+                <td class="col-center">
+                  <span class="badge-level1 badge-dc">电厂</span>
+                </td>
                 <td class="col-center">
                   <span
-                    class="badge-dc-category"
-                    :class="item.category === '香海电厂' || String(item.name).includes('香海') ? 'tag-xianghai' : 'tag-beihai'"
+                    class="badge-level2"
+                    :class="item.level2 === '香海电厂' ? 'tag-xianghai' : 'tag-beihai'"
                   >
-                    {{ item.category || (String(item.name).includes('香海') ? '香海电厂' : '北海电厂') }}
+                    {{ item.level2 }}
                   </span>
                 </td>
                 <td class="col-station font-bold">
-                  <span class="plant-tag" :class="getPlantTagClass(item.name)">{{ getPlantType(item.name) }}</span>
-                  {{ item.name }}
+                  <span class="plant-tag" :class="getPlantTagClass(item.pointName)">{{ getPlantType(item.pointName) }}</span>
+                  {{ item.pointName }}
                 </td>
                 <td class="col-num font-mono font-bold" :class="item.WENDU > 50 ? 'text-warm' : ''">
                   {{ formatVal(item.WENDU, '℃', 1) }}
@@ -411,9 +327,187 @@
                   {{ item.SHIJIAN || '—' }}
                 </td>
               </tr>
-              <tr v-if="filteredDcList.length === 0">
-                <td colspan="8" class="empty-cell">
-                  {{ isRelayOnline ? '暂无符合条件的电厂机组数据' : '数据链路未连接，暂无实时数据' }}
+              <tr v-if="displayList.length === 0">
+                <td colspan="9" class="empty-cell">
+                  {{ isRelayOnline ? '未检索到符合条件的电厂采集点' : '数据链路未连接，暂无实时数据' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 视图 3: 一次网换热站采集点矩阵 -->
+      <section v-if="currentLevel1 === '一次网'" class="card elevated data-section">
+        <header class="section-header">
+          <div class="header-left">
+            <h3>换热站一次网实时监测矩阵</h3>
+            <span class="badge-count">{{ isRelayOnline ? displayList.length : 0 }} 个采集点</span>
+          </div>
+          <span class="header-tip">按分组规范覆盖 9 大供热中心全网 242 座换热站</span>
+        </header>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">#</th>
+                <th style="width: 90px;">一级分类</th>
+                <th style="width: 120px;">二级分类</th>
+                <th style="width: 180px;">采集点</th>
+                <th>供水温度</th>
+                <th>回水温度</th>
+                <th>供回温差 (ΔT)</th>
+                <th>供水压力</th>
+                <th>回水压力</th>
+                <th>供回压差 (ΔP)</th>
+                <th>瞬时流量</th>
+                <th>瞬时热量</th>
+                <th>采集时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in displayList" :key="item.pointName || idx">
+                <td class="col-center text-muted font-mono font-bold">{{ item.order || idx + 1 }}</td>
+                <td class="col-center">
+                  <span class="badge-level1 badge-yw">一次网</span>
+                </td>
+                <td class="col-center">
+                  <span class="badge-level2">{{ item.level2 }}</span>
+                </td>
+                <td class="col-station font-bold">{{ item.pointName }}</td>
+                <td class="col-num text-warm font-mono font-bold">
+                  {{ formatVal(item.f3, '℃') }}
+                </td>
+                <td class="col-num text-cool font-mono">
+                  {{ formatVal(item.f5, '℃') }}
+                </td>
+                <td class="col-num font-mono">
+                  <span class="diff-badge" :class="getTempDiffBadgeClass(item.f3, item.f5)">
+                    {{ calcDiff(item.f3, item.f5, '℃') }}
+                  </span>
+                </td>
+                <td class="col-num font-mono">
+                  {{ formatVal(item.f1, 'MPa', 3) }}
+                </td>
+                <td class="col-num font-mono">
+                  {{ formatVal(item.f4, 'MPa', 3) }}
+                </td>
+                <td class="col-num font-mono">
+                  {{ calcDiff(item.f1, item.f4, 'MPa', 3) }}
+                </td>
+                <td class="col-num font-mono font-bold">
+                  {{ formatVal(item.f2, 'm³/h', 1) }}
+                </td>
+                <td class="col-num font-mono">
+                  {{ formatVal(item.f222, 'GJ/h', 1) }}
+                </td>
+                <td class="col-center font-mono text-muted text-sm">
+                  {{ item.update_time || item.SHIJIAN || '—' }}
+                </td>
+              </tr>
+              <tr v-if="displayList.length === 0">
+                <td colspan="13" class="empty-cell">
+                  {{ isRelayOnline ? '未检索到符合条件的一次网换热站采集点' : '数据链路未连接，暂无实时数据' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 视图 4: 全网采集点总览 (344 个标准采集点，严格按 Excel 顺序) -->
+      <section v-if="currentLevel1 === 'all'" class="card elevated data-section">
+        <header class="section-header">
+          <div class="header-left">
+            <h3>全网标准采集点总览矩阵</h3>
+            <span class="badge-count">{{ isRelayOnline ? displayList.length : 0 }} 个采集点</span>
+          </div>
+          <span class="header-tip">严格按《11.3 智慧供热平台主体分组表》顺序展示全网 344 项标准采集点工况</span>
+        </header>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 60px;">序号</th>
+                <th style="width: 100px;">一级分类</th>
+                <th style="width: 130px;">二级分类</th>
+                <th style="width: 220px;">采集点</th>
+                <th>核心温度</th>
+                <th>核心压力</th>
+                <th>瞬时流量</th>
+                <th>瞬时热量</th>
+                <th>工况分类参数</th>
+                <th>采集时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in displayList" :key="item.pointName || idx">
+                <td class="col-center text-muted font-mono font-bold">{{ item.order || idx + 1 }}</td>
+                <td class="col-center">
+                  <span
+                    class="badge-level1"
+                    :class="{
+                      'badge-sz': item.level1 === '首站',
+                      'badge-dc': item.level1 === '电厂',
+                      'badge-yw': item.level1 === '一次网'
+                    }"
+                  >
+                    {{ item.level1 }}
+                  </span>
+                </td>
+                <td class="col-center">
+                  <span class="badge-level2">{{ item.level2 }}</span>
+                </td>
+                <td class="col-station font-bold">
+                  {{ item.pointName }}
+                </td>
+
+                <!-- 核心温度 -->
+                <td class="col-num font-mono font-bold">
+                  <span v-if="item.level1 === '一次网'" class="text-warm">{{ formatVal(item.f3, '℃') }}</span>
+                  <span v-else-if="item.WENDU" :class="Number(item.WENDU) > 35 ? 'text-warm' : ''">{{ formatVal(item.WENDU, '℃', 1) }}</span>
+                  <span v-else class="text-muted">—</span>
+                </td>
+
+                <!-- 核心压力 -->
+                <td class="col-num font-mono">
+                  <span v-if="item.level1 === '一次网'">{{ formatVal(item.f1, 'MPa', 3) }}</span>
+                  <span v-else-if="item.YALI">{{ formatVal(item.YALI, 'MPa', 3) }}</span>
+                  <span v-else class="text-muted">—</span>
+                </td>
+
+                <!-- 瞬时流量 -->
+                <td class="col-num font-mono font-bold">
+                  <span v-if="item.level1 === '一次网'">{{ formatVal(item.f2, 'm³/h', 1) }}</span>
+                  <span v-else-if="item.level1 === '电厂'">{{ formatVal(item.LIULIANG, 't/h', 1) }}</span>
+                  <span v-else-if="item.LIULIANG">{{ formatVal(item.LIULIANG, 'm³/h', 1) }}</span>
+                  <span v-else class="text-muted">—</span>
+                </td>
+
+                <!-- 瞬时热量 -->
+                <td class="col-num font-mono">
+                  <span v-if="item.level1 === '一次网'">{{ formatVal(item.f222, 'GJ/h', 1) }}</span>
+                  <span v-else-if="item.RELIANG">{{ formatVal(item.RELIANG, 'GJ', 1) }}</span>
+                  <span v-else class="text-muted">—</span>
+                </td>
+
+                <!-- 工况说明 -->
+                <td class="col-center font-mono text-sm">
+                  <span v-if="item.level1 === '一次网'" class="text-cool">回温 {{ formatVal(item.f5, '℃') }}</span>
+                  <span v-else-if="item.level1 === '首站' && item.FUHE" class="text-accent">负荷 {{ formatVal(item.FUHE, 'MW', 1) }}</span>
+                  <span v-else-if="item.level1 === '首站' && item.PINLV" class="text-muted">频率 {{ formatVal(item.PINLV, 'Hz', 1) }}</span>
+                  <span v-else class="text-muted">常规监控</span>
+                </td>
+
+                <td class="col-center font-mono text-muted text-sm">
+                  {{ item.update_time || item.SHIJIAN || '—' }}
+                </td>
+              </tr>
+              <tr v-if="displayList.length === 0">
+                <td colspan="10" class="empty-cell">
+                  {{ isRelayOnline ? '未检索到符合条件的采集点数据' : '数据链路未连接，暂无实时数据' }}
                 </td>
               </tr>
             </tbody>
@@ -434,6 +528,13 @@ import {
   getSmartHeatingStatus,
   downloadSmartHeatingClientScript,
 } from '../services/api'
+import {
+  LEVEL1_ORDER,
+  LEVEL2_BY_LEVEL1,
+  TAXONOMY_LIST,
+  TAXONOMY_MAP,
+  normalizePoint,
+} from '../constants/smartHeatingTaxonomy'
 
 const route = useRoute()
 const projectKey = String(route.params.projectKey || 'daily_report_25_26')
@@ -444,17 +545,18 @@ const breadcrumbItems = computed(() => [
   { label: '智慧供热实时工况', to: null },
 ])
 
-const currentTab = ref('yw')
+// 选中的一级分类（默认首站，与 Excel 表顺序一致）
+const currentLevel1 = ref('首站')
+// 选中的二级分类（默认全部）
+const selectedLevel2 = ref('all')
+// 采集点关键词搜索
+const searchKeyword = ref('')
+// 排序方式（默认严格依据 Excel 次序）
+const sortBy = ref('default')
+
 const loading = ref(false)
 const downloading = ref(false)
 const autoRefresh = ref(true)
-const searchKeyword = ref('')
-const szSearchKeyword = ref('')
-const dcSearchKeyword = ref('')
-const selectedCenter = ref('all')
-const selectedSzCategory = ref('all')
-const selectedDcCategory = ref('all')
-const sortBy = ref('default')
 
 const latestPayload = ref({
   timestamp: '',
@@ -473,16 +575,12 @@ const relayStatus = ref({
 
 let timer = null
 
-// 严格依据后端真实心跳状态判定链路是否在线，杜绝根据快照时间伪造“在线”
+// 严格依据后端真实状态判定是否在线
 const isRelayOnline = computed(() => Boolean(relayStatus.value?.is_online))
 
 const szDataList = computed(() => (isRelayOnline.value ? latestPayload.value?.sz_data || [] : []))
 const dcDataList = computed(() => (isRelayOnline.value ? latestPayload.value?.dc_data || [] : []))
 const ywDataList = computed(() => (isRelayOnline.value ? latestPayload.value?.yw_data || [] : []))
-
-const lastUpdateTime = computed(() =>
-  isRelayOnline.value ? latestPayload.value?.received_at || latestPayload.value?.timestamp || '' : ''
-)
 
 const formattedTimeAgo = computed(() => {
   if (isRelayOnline.value && relayStatus.value?.seconds_ago !== null) {
@@ -492,62 +590,164 @@ const formattedTimeAgo = computed(() => {
   return '等待客户端启动推流'
 })
 
-function getSzCategoryFromName(name = '') {
-  if (name.includes('香首') || name.includes('一期蒸汽') || name.includes('二期蒸汽')) return '香海首站'
-  if (name.includes('北首3') || name.includes('水炉') || name.includes('厂界')) return '#3首站'
-  if (name.includes('北2首') || name.includes('燃气锅炉蒸汽')) return '#2首站'
-  return '#1首站'
+// 一级分类切换处理
+function handleLevel1Change(level1) {
+  currentLevel1.value = level1
+  selectedLevel2.value = 'all'
 }
 
-// 动态提取换热站中出现的全部运营中心及各中心站数
-const availableCenters = computed(() => {
-  const map = new Map()
-  ywDataList.value.forEach((item) => {
-    const cName = item.center_name || '主城区'
-    map.set(cName, (map.get(cName) || 0) + 1)
-  })
-  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
-})
-
-// 动态提取首站分区及各首站测点数
-const availableSzCategories = computed(() => {
-  const map = new Map()
-  szDataList.value.forEach((item) => {
-    const cat = item.category || getSzCategoryFromName(item.name)
-    map.set(cat, (map.get(cat) || 0) + 1)
-  })
-  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
-})
-
-// 动态提取电厂类别及机组数
-const availableDcCategories = computed(() => {
-  const map = new Map()
-  dcDataList.value.forEach((item) => {
-    const cat = item.category || (String(item.name).includes('香海') ? '香海电厂' : '北海电厂')
-    map.set(cat, (map.get(cat) || 0) + 1)
-  })
-  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
-})
-
-// 过滤与排序后的换热站数据
-const filteredYwList = computed(() => {
+// 归一化并排序首站采集点列表
+const normalizedSzList = computed(() => {
   if (!isRelayOnline.value) return []
-  let list = [...ywDataList.value]
-  if (selectedCenter.value !== 'all') {
-    list = list.filter((item) => (item.center_name || '主城区') === selectedCenter.value)
+  return szDataList.value.map((item) => {
+    const norm = normalizePoint(item.name)
+    return {
+      ...item,
+      order: norm.order,
+      level1: norm.level1,
+      level2: norm.level2,
+      pointName: norm.pointName,
+    }
+  }).sort((a, b) => a.order - b.order)
+})
+
+// 归一化并排序电厂采集点列表（严格依据 Excel 规范，过滤未收录项）
+const normalizedDcList = computed(() => {
+  if (!isRelayOnline.value) return []
+  return dcDataList.value.map((item) => {
+    const norm = normalizePoint(item.name)
+    return {
+      ...item,
+      order: norm.order,
+      level1: norm.level1,
+      level2: norm.level2,
+      pointName: norm.pointName,
+    }
+  })
+  .filter((item) => item.order <= 344 && item.level1 === '电厂')
+  .sort((a, b) => a.order - b.order)
+})
+
+// 归一化并排序一次网换热站采集点列表
+const normalizedYwList = computed(() => {
+  if (!isRelayOnline.value) return []
+  return ywDataList.value.map((item) => {
+    const norm = normalizePoint(item.name)
+    return {
+      ...item,
+      order: norm.order,
+      level1: norm.level1,
+      level2: norm.level2,
+      pointName: norm.pointName,
+    }
+  }).sort((a, b) => a.order - b.order)
+})
+
+// 全网 344 个标准采集点合并集合
+const allNormalizedPoints = computed(() => {
+  if (!isRelayOnline.value) return []
+  return [...normalizedSzList.value, ...normalizedDcList.value, ...normalizedYwList.value]
+    .sort((a, b) => a.order - b.order)
+})
+
+// 统计各一级分类下的采集点总数
+const countByLevel1 = computed(() => {
+  return {
+    首站: normalizedSzList.value.length,
+    电厂: normalizedDcList.value.length,
+    一次网: normalizedYwList.value.length,
   }
+})
+
+const totalTaxonomyCount = computed(() => {
+  return allNormalizedPoints.value.length
+})
+
+const totalOnlinePointCount = computed(() => {
+  return allNormalizedPoints.value.length
+})
+
+// 当前一级分类下的二级分类下拉选项
+const currentLevel2Options = computed(() => {
+  const result = []
+  if (currentLevel1.value === 'all') {
+    // 聚合全部 15 个二级分类
+    LEVEL1_ORDER.forEach((l1) => {
+      const l2List = LEVEL2_BY_LEVEL1[l1] || []
+      l2List.forEach((l2) => {
+        const count = allNormalizedPoints.value.filter((p) => p.level2 === l2).length
+        result.push({ name: l2, count })
+      })
+    })
+  } else {
+    const l2List = LEVEL2_BY_LEVEL1[currentLevel1.value] || []
+    const sourceList =
+      currentLevel1.value === '首站'
+        ? normalizedSzList.value
+        : currentLevel1.value === '电厂'
+        ? normalizedDcList.value
+        : normalizedYwList.value
+
+    l2List.forEach((l2) => {
+      const count = sourceList.filter((p) => p.level2 === l2).length
+      result.push({ name: l2, count })
+    })
+  }
+  return result
+})
+
+// 最终呈现的数据列表（经一级分类、二级分类、搜索关键字及排序规则过滤）
+const displayList = computed(() => {
+  if (!isRelayOnline.value) return []
+
+  let list = []
+  if (currentLevel1.value === '首站') {
+    list = [...normalizedSzList.value]
+  } else if (currentLevel1.value === '电厂') {
+    list = [...normalizedDcList.value]
+  } else if (currentLevel1.value === '一次网') {
+    list = [...normalizedYwList.value]
+  } else {
+    list = [...allNormalizedPoints.value]
+  }
+
+  // 1. 二级分类过滤
+  if (selectedLevel2.value !== 'all') {
+    list = list.filter((item) => item.level2 === selectedLevel2.value)
+  }
+
+  // 2. 采集点搜索过滤
   const kw = searchKeyword.value.trim().toLowerCase()
   if (kw) {
-    list = list.filter((item) => String(item.name || '').toLowerCase().includes(kw))
+    list = list.filter((item) => {
+      const pName = String(item.pointName || '').toLowerCase()
+      const l2 = String(item.level2 || '').toLowerCase()
+      return pName.includes(kw) || l2.includes(kw)
+    })
   }
 
-  if (sortBy.value === 'f3_desc') {
-    list.sort((a, b) => (Number(b.f3) || 0) - (Number(a.f3) || 0))
-  } else if (sortBy.value === 'f3_asc') {
-    list.sort((a, b) => (Number(a.f3) || 0) - (Number(b.f3) || 0))
-  } else if (sortBy.value === 'f2_desc') {
-    list.sort((a, b) => (Number(b.f2) || 0) - (Number(a.f2) || 0))
-  } else if (sortBy.value === 'diff_desc') {
+  // 3. 排序规则应用
+  if (sortBy.value === 'default') {
+    list.sort((a, b) => (a.order || 9999) - (b.order || 9999))
+  } else if (sortBy.value === 'temp_desc') {
+    list.sort((a, b) => {
+      const vB = Number(b.f3 !== undefined ? b.f3 : b.WENDU) || 0
+      const vA = Number(a.f3 !== undefined ? a.f3 : a.WENDU) || 0
+      return vB - vA
+    })
+  } else if (sortBy.value === 'temp_asc') {
+    list.sort((a, b) => {
+      const vB = Number(b.f3 !== undefined ? b.f3 : b.WENDU) || 0
+      const vA = Number(a.f3 !== undefined ? a.f3 : a.WENDU) || 0
+      return vA - vB
+    })
+  } else if (sortBy.value === 'flow_desc') {
+    list.sort((a, b) => {
+      const vB = Number(b.f2 !== undefined ? b.f2 : b.LIULIANG) || 0
+      const vA = Number(a.f2 !== undefined ? a.f2 : a.LIULIANG) || 0
+      return vB - vA
+    })
+  } else if (sortBy.value === 'diff_desc' && currentLevel1.value === '一次网') {
     list.sort((a, b) => {
       const diffB = (Number(b.f3) || 0) - (Number(b.f5) || 0)
       const diffA = (Number(a.f3) || 0) - (Number(a.f5) || 0)
@@ -555,37 +755,6 @@ const filteredYwList = computed(() => {
     })
   }
 
-  return list
-})
-
-// 过滤后的首站与管网测点数据
-const filteredSzList = computed(() => {
-  if (!isRelayOnline.value) return []
-  let list = [...szDataList.value]
-  if (selectedSzCategory.value !== 'all') {
-    list = list.filter((item) => (item.category || getSzCategoryFromName(item.name)) === selectedSzCategory.value)
-  }
-  const kw = szSearchKeyword.value.trim().toLowerCase()
-  if (kw) {
-    list = list.filter((item) => String(item.name || '').toLowerCase().includes(kw))
-  }
-  return list
-})
-
-// 过滤后的电厂与热源机组数据
-const filteredDcList = computed(() => {
-  if (!isRelayOnline.value) return []
-  let list = [...dcDataList.value]
-  if (selectedDcCategory.value !== 'all') {
-    list = list.filter((item) => {
-      const cat = item.category || (String(item.name).includes('香海') ? '香海电厂' : '北海电厂')
-      return cat === selectedDcCategory.value
-    })
-  }
-  const kw = dcSearchKeyword.value.trim().toLowerCase()
-  if (kw) {
-    list = list.filter((item) => String(item.name || '').toLowerCase().includes(kw))
-  }
   return list
 })
 
@@ -619,10 +788,6 @@ const avgStationReturnTemp = computed(() => {
 const avgStationTempDiff = computed(() => {
   const diff = avgStationSupplyTemp.value - avgStationReturnTemp.value
   return diff > 0 ? diff : 0
-})
-
-const activeStationCount = computed(() => {
-  return ywDataList.value.filter((i) => i.f3 !== null && i.f3 !== undefined && i.f3 !== '').length
 })
 
 function formatNum(val, digits = 1) {
@@ -660,6 +825,7 @@ function getCircuitType(name = '') {
   if (name.includes('北网')) return '北网'
   if (name.includes('板换')) return '板换'
   if (name.includes('热泵')) return '热泵'
+  if (name.includes('炉')) return '水炉'
   return '管网'
 }
 
@@ -1015,9 +1181,9 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
-/* 选项卡栏 */
+/* 分类与筛选工具栏 */
 .nav-and-filter-card {
-  padding: 8px 16px;
+  padding: 12px 18px;
   border-radius: 10px;
   background: #ffffff;
   margin-bottom: 16px;
@@ -1025,7 +1191,21 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
+}
+
+.category-tabs-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-label-prefix {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
 }
 
 .tabs-container {
@@ -1035,12 +1215,12 @@ onUnmounted(() => {
 }
 
 .tab-btn {
-  border: none;
-  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
   color: #475569;
   font-size: 13px;
   font-weight: 600;
-  padding: 8px 16px;
+  padding: 7px 14px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1053,20 +1233,51 @@ onUnmounted(() => {
 
 .tab-btn.active {
   background: #0284c7;
+  border-color: #0284c7;
   color: #ffffff;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2);
 }
 
-.yw-filter-row {
+.filter-controls-wrapper {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.selector-group, .search-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.select-box {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 12px;
+  background: #fff;
+  color: #1e293b;
+  outline: none;
+  min-width: 140px;
+}
+
+.select-box:focus {
+  border-color: #0284c7;
 }
 
 .input-search {
   padding: 6px 12px;
   border-radius: 6px;
   border: 1px solid #cbd5e1;
-  font-size: 13px;
+  font-size: 12px;
   width: 220px;
   outline: none;
 }
@@ -1075,67 +1286,52 @@ onUnmounted(() => {
   border-color: #0284c7;
 }
 
-.sort-selector {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.center-selector {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.badge-center {
-  background: #e0f2fe;
-  color: #0369a1;
+/* 分类徽章样式 */
+.badge-level1 {
   font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
+  font-weight: 700;
+  padding: 3px 8px;
   border-radius: 4px;
   white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
-.badge-sz-category {
+.badge-level1.badge-sz {
   background: #ede9fe;
   color: #6d28d9;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 4px;
-  white-space: nowrap;
 }
 
-.badge-dc-category {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-.badge-dc-category.tag-beihai {
-  background: #ecfdf5;
-  color: #047857;
-}
-
-.badge-dc-category.tag-xianghai {
-  background: #fff7ed;
+.badge-level1.badge-dc {
+  background: #ffedd5;
   color: #c2410c;
 }
 
-.select-sort {
-  padding: 5px 8px;
-  border-radius: 6px;
-  border: 1px solid #cbd5e1;
-  font-size: 12px;
-  background: #fff;
-  outline: none;
+.badge-level1.badge-yw {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.badge-level2 {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+  white-space: nowrap;
+  border: 1px solid #e2e8f0;
+}
+
+.badge-level2.tag-beihai {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.badge-level2.tag-xianghai {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
 }
 
 /* 数据部分卡片 */
