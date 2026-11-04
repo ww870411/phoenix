@@ -1760,6 +1760,24 @@ export async function getDashboardTemperatureTrend(projectKey, params = {}) {
   return response.json()
 }
 
+export async function getDashboardNetworkWaterDumbbell(projectKey, params = {}) {
+  const showDate = typeof params.showDate === 'string' ? params.showDate : (params.show_date || '')
+  const search = new URLSearchParams()
+  if (showDate) {
+    search.set('show_date', showDate)
+  }
+  const queryStr = search.toString() ? `?${search.toString()}` : ''
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/network_water_dumbbell${queryStr}`, {
+    headers: attachAuthHeaders(),
+    signal: params.signal,
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `获取热网耗水量哑铃图失败: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function getDashboardBizDate(projectKey) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/date`, {
     headers: attachAuthHeaders(),

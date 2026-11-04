@@ -74,6 +74,9 @@ def pull_and_sync(remote_base: str, local_receive_url: str, token: str) -> bool:
             "sz_data": feed_payload.get("sz_data", []),
             "dc_data": feed_payload.get("dc_data", []),
             "yw_data": feed_payload.get("yw_data", []),
+            "gk_data": feed_payload.get("gk_data"),
+            "gk_collected_epoch": feed_payload.get("gk_collected_epoch"),
+            "received_epoch": feed_payload.get("received_epoch", 0),
         }
 
         req_local = urllib.request.Request(

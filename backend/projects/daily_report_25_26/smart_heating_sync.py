@@ -241,8 +241,8 @@ def log(msg: str):
     print(f"[{now}] {msg}")
 
 
-def fetch_intranet_post(url: str, form_data: dict, cfg: dict) -> list:
-    """使用标准库发起向内网平台的 POST 请求并解析返回的 JSON 列表"""
+def fetch_intranet_post(url: str, form_data: dict, cfg: dict) -> object:
+    """使用标准库发起内网 POST 请求，返回热源列表或工况一览字典。"""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
         "Cookie": cfg["intranet_cookie"],
@@ -357,7 +357,25 @@ def run_single_cycle(cfg: dict):
         except Exception as e:
             log(f"⚠️ {center_name}换热站数据同步异常: {e}")
 
-    if not all_sz_data and not all_dc_data and not all_yw_data:
+    # 工况一览是独立接口，原始字典键用于与上游页面测点精确对应，不做别名替换。
+    gk_data = None
+    gk_collected_epoch = None
+    try:
+        overview = fetch_intranet_post(f"{cfg['intranet_base_url'].rstrip('/')}/gk_get_data/", None, cfg)
+        groups = ("dc_dict", "sz_dict", "yw_dict", "yw2_dict", "sh_dict")
+        if not isinstance(overview, dict) or not all(isinstance(overview.get(key), dict) for key in groups):
+            raise ValueError("工况一览返回结构不完整，预期五类测点字典")
+        if not any(overview[key] for key in groups):
+            raise ValueError("工况一览未返回任何测点")
+        if not all(isinstance(row, dict) for key in groups for row in overview[key].values()):
+            raise ValueError("工况一览测点格式错误")
+        gk_data = {key: overview[key] for key in groups}
+        gk_collected_epoch = time.time()
+        log(f"✔ 工况一览采集完成: {sum(len(rows) for rows in gk_data.values())} 项")
+    except Exception as exc:
+        log(f"⚠️ 工况一览采集失败，其他采集仍继续: {exc}")
+
+    if not all_sz_data and not all_dc_data and not all_yw_data and gk_data is None:
         log("❌ 本轮未能接收到有效工况数据，请检查网络连接或 Session 是否过期。")
         return
 
@@ -376,6 +394,8 @@ def run_single_cycle(cfg: dict):
         "sz_data": all_sz_data,
         "dc_data": all_dc_data,
         "yw_data": all_yw_data,
+        "gk_data": gk_data,
+        "gk_collected_epoch": gk_collected_epoch,
     }
 
     try:

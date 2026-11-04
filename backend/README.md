@@ -1,3 +1,12 @@
+## 2026-11-04 数据看板新增各单位热网耗水量哑铃图统计服务与API
+
+- **新增热网耗水统计服务** (`backend/projects/daily_report_25_26/services/network_water_service.py`)：
+  - **业务主体与指标口径**：统一覆盖六大业务主体（主城区、金州热电、北方热电、金普公司、庄河环海、研究院）；其中主城区自动聚合供热公司 `consumption_network_fill_water`（电厂一次网补水）与 `consumption_station_fill_water`（换热站补水），其他主体统一提取 `consumption_network_water`（热网补水量）；
+  - **三维度动态窗口与同比聚合**：复用 `get_season_windows(biz_date)` 动态生成当日、本月累计（MTD）、供暖期累计（YTD）及其对应的去年同期日期窗口，高效查询 `DailyBasicData` 聚合吨数、差额及增减百分比，并汇总计算全网热网耗水量指标。
+- **接口扩展** (`backend/projects/daily_report_25_26/api/dashboard.py`)：
+  - 新增 `GET /api/v1/projects/:projectKey/dashboard/network_water_dumbbell` 端点，支持 `show_date` 查询入参（缺省时自动回退至全局基准日期）。
+- **验证**：通过 Python 脚本实测业务日期与同期查询成功，计算响应平稳（< 10ms），语法静态编译通过。
+
 ## 2026-11-04 12345诉求底表金山文档(KDocs)免登录自动抓取服务、配置API与文件直下接口
 
 - **新增金山文档自动拉取与配置服务** (`backend/projects/daily_report_25_26/services/kdocs_complaint_service.py`)：
@@ -11975,3 +11984,58 @@ get_season_coal_progress复用get_season_windows供暖期起止边界，查询�
 ## 2026-11-02 投诉明细统计接口
 
 `POST /api/v1/projects/daily_report_25_26/data_entry/complaints/statistics` 接收 `file`、`biz_date`。`complaint_statistics.py` 使用保存的日期缓存和三类明细计算当日、当月及供暖期指标；转办已办结计入净投诉，集团含未归属记录，缺失日期/编号时返回不完整提示。结果含来源工作表及行号，未修改原文件；无数据库迁移。日期公式无缓存时须先在 Excel 中正常保存源表。
+## 2026-11-04 智慧供热工况一览采集与中继
+
+- 数据源：用户 `configs/192.168.1.206(工况一览).har` 中的独立 `POST /gk_get_data/`，无请求体，沿用内网 Session；返回 `dc_dict / sz_dict / yw_dict / yw2_dict / sh_dict` 五类字典，共 137 项，其中页面选取 82 项。原有三个列表接口继续采集。
+- 客户端：`projects/daily_report_25_26/smart_heating_sync.py` 与实际下载文件 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py` 每轮额外采集新接口，校验结构后提交 `gk_data`、`gk_collected_epoch`；保留原始测点键。新接口失败提交空工况，其他源继续推送。仍兼容 Python 3.8，无新增依赖。
+- 平台：`api/smart_heating.py` 的模型、push、后台转发、receive-relay、relay-feed、sync-from-remote、latest/status 与 `dev_relay_pull_sync.py` 均携带新数据。工况时效独立按 180 秒判断，过期快照不向页面下发。中继保留上级 `received_epoch`，防止历史数据被重新标记在线；节点系统时钟需一致。
+- 验证（2026-11-04）：`python -m unittest backend.projects.daily_report_25_26.tests.test_smart_heating_overview -v`，5 项通过，覆盖两个客户端、失败隔离、push/转发/接收/feed、主动拉取与 CLI 字段保真、旧客户端及过期隐藏。两个客户端通过 Python 3.8 AST 校验。测试隔离文件及网络，不写正式快照或日志；办公电脑内网连通和生产推流尚待运行新版客户端验证。
+- 迁移与回滚：无需数据库迁移；部署平台代码后下载并替换办公电脑客户端、重启脚本，保留同目录配置 JSON。旧版推送仍兼容。回滚仅恢复本次中继相关文件及测试中的改动，配套恢复旧客户端，不改运行数据或其他并行任务文件。
+
+## 2026-11-04 智慧供热双标签页窄屏布局配套说明
+
+- 本轮只调整前端 `SmartHeatingView.vue`、`SmartHeatingOverview.vue` 并新增 `SmartHeatingPointCards.vue`，手机以测点卡片展示现有参数，桌面保留表格；未修改后端 API、数据文件、180 秒时效或 Python 中继协议。
+- 前端直接复用现有 `displayList` 和工况原始字典，仍使用既有查询接口；无需数据库迁移、后端重启或办公电脑客户端升级。
+- 最后验证日期：2026-11-04。前端构建、82 项 HAR 渲染回归及三类手机卡片共 18 项参数 SSR 检查通过；实际截图检查因桌面工具无法识别 Chrome URL 而停止。
+- 回滚范围仅为本轮前端组件、样式与测试断言，保留已完成的工况采集和平台中继代码。
+
+## 2026-11-04 热网耗水量前端文案调整
+
+- 本轮仅精简 `NetworkWaterDumbbellCard.vue` 的区域标题和标尺副标题，后端接口、数据与计算均无变化，无需迁移或后端操作；回滚范围仅为前端四处文案。
+
+## 2026-11-04 工况一览统一采集时间说明
+
+- 前端从现有 `gk_data` 测点的 `SHIJIAN` / `update_time` 选取最常见的源时间集中展示，不使用 `gk_collected_epoch` 作为页面采集时间；后者继续仅用于中继采集时效判断。本轮未修改后端或客户端协议，无需迁移或重启，回滚仅涉及前端显示。
+
+## 2026-11-04 工况一览前端刷新间隔调整
+
+- 工况一览页面查询间隔调整为 2 分钟，热源信息仍为 1 分钟。本轮仅修改前端定时器，后端接口、数据时效和 Python 客户端采集周期不变，无需迁移或重启中继；回滚范围仅为前端刷新设置。
+
+## 2026-11-04 工况一览恢复 1m（当前生效）
+
+- 工况一览前端查询间隔恢复为 1 分钟，与热源信息一致；本轮未改后端或客户端，无需迁移或重启中继，回滚仅涉及前端刷新周期。
+
+## 2026-11-04 页面刷新设置与中继周期区分
+
+- 页面允许在当前打开期间独立设置两个标签的查询间隔，默认均 1m，不更新后端配置或采集频率。本轮无后端代码变更，无需迁移或重启。
+- 当前实际供下载的 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py` 默认 `poll_interval_seconds=60`，备用 `projects/daily_report_25_26/smart_heating_sync.py` 默认 30；同目录 `smart_heating_config.json` 可覆盖。循环在本轮采集及推送结束后休眠，实际轮次开始间隔包含执行耗时；办公电脑配置及运行值未在本仓库核实。回滚仅涉及前端页面刷新设置。
+
+## 2026-11-04 工况一览区块对齐说明
+
+- 本轮仅修改前端 `SmartHeatingOverview.vue` 的区块尺寸、列宽和表格滚动布局，后端接口、数据、采集及刷新规则不变，无需迁移或更新中继；回滚仅涉及本轮前端布局。
+
+## 2026-11-04 工况一览三列完整展示说明
+
+- 本轮前端采用左电厂、中首站/一网、右换热站及商户的三列自然展开布局，移除内部滚动并添加九处指定分隔；后端接口、数据和采集周期不变，无需迁移或中继更新。回滚仅涉及本轮前端布局及渲染断言。
+
+## 2026-11-04 热网耗水图前端日期残留修复
+
+- 本轮仅修复前端切换日期失败后显示旧结果的问题并隔离乱序请求。按用户确认，未填仍按 0 统计；后端取数、累计、同比及数据库未改，无需迁移或重启。回滚仅涉及前端请求逻辑和新增测试。
+
+## 2026-11-04 热网耗水图前端显示调整
+
+- 前端移除板块刷新按钮并修复万单位刻度文字精度，后端取数、汇总和未填按 0 口径均未改，无需迁移或后端操作；回滚仅涉及本轮前端按钮和格式化逻辑。
+
+## 2026-11-04 热网耗水图标尺整千说明
+
+- 本轮前端上下标尺上限统一向上取整至整千，万单位刻度文字最多一位小数；不修改后端数据、未填按 0 统计口径或数据库，无需迁移或重启。回滚仅涉及本轮前端标尺取整及测试。

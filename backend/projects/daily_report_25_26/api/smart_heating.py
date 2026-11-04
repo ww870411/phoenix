@@ -161,6 +161,18 @@ class SmartHeatingPushPayload(BaseModel):
     sz_data: List[Dict[str, Any]] = Field(default_factory=list, description="首站与管网环路数据")
     dc_data: List[Dict[str, Any]] = Field(default_factory=list, description="电厂与热源机组数据")
     yw_data: List[Dict[str, Any]] = Field(default_factory=list, description="换热站一次网实时数据")
+    gk_data: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = Field(None, description="工况一览五类原始测点字典")
+    gk_collected_epoch: Optional[float] = Field(None, description="工况一览独立采集时间戳，中继须原样传递")
+    received_epoch: Optional[float] = Field(None, description="上级首次接收时间，中继不得刷新数据时效")
+
+
+def _overview_is_online(data: Dict[str, Any]) -> bool:
+    """工况一览独立判定时效，热源信息的心跳不能续期工况数据。"""
+    try:
+        age = time.time() - float(data.get("gk_collected_epoch"))
+        return bool(data.get("gk_data")) and 0 <= age <= 180
+    except (TypeError, ValueError):
+        return False
 
 
 def _read_latest_data() -> Dict[str, Any]:
@@ -173,6 +185,8 @@ def _read_latest_data() -> Dict[str, Any]:
             "sz_data": [],
             "dc_data": [],
             "yw_data": [],
+            "gk_data": None,
+            "gk_collected_epoch": None,
         }
     try:
         with open(LATEST_FILE, "r", encoding="utf-8") as f:
@@ -182,6 +196,8 @@ def _read_latest_data() -> Dict[str, Any]:
         return {
             "ok": False,
             "error": str(e),
+            "gk_data": None,
+            "gk_collected_epoch": None,
             "sz_data": [],
             "dc_data": [],
             "yw_data": [],
@@ -223,6 +239,8 @@ async def push_smart_heating_data(
         "sz_data": _clean_point_records(payload.sz_data, "首站"),
         "dc_data": _clean_point_records(payload.dc_data, "电厂"),
         "yw_data": _clean_point_records(payload.yw_data, "一次网"),
+        "gk_data": payload.gk_data,
+        "gk_collected_epoch": payload.gk_collected_epoch,
     }
 
     try:
@@ -235,6 +253,7 @@ async def push_smart_heating_data(
                     "sz_count": len(payload.sz_data),
                     "dc_count": len(payload.dc_data),
                     "yw_count": len(payload.yw_data),
+                    "gk_count": sum(len(rows) for rows in (payload.gk_data or {}).values()),
                 }
                 log_f.write(json.dumps(summary_line, ensure_ascii=False) + "\n")
         except Exception as log_err:
@@ -261,6 +280,7 @@ async def push_smart_heating_data(
                 "sz_data": len(payload.sz_data),
                 "dc_data": len(payload.dc_data),
                 "yw_data": len(payload.yw_data),
+                "gk_data": sum(len(rows) for rows in (payload.gk_data or {}).values()),
             },
         }
     except Exception as e:
@@ -289,12 +309,14 @@ async def receive_relay_data(
         "ok": True,
         "timestamp": payload.timestamp or now_str,
         "received_at": now_str,
-        "received_epoch": now_epoch,
+        "received_epoch": payload.received_epoch if payload.received_epoch is not None else now_epoch,
         "is_live_push": True,
         "source": payload.source or "server-relay",
         "sz_data": _clean_point_records(payload.sz_data, "首站"),
         "dc_data": _clean_point_records(payload.dc_data, "电厂"),
         "yw_data": _clean_point_records(payload.yw_data, "一次网"),
+        "gk_data": payload.gk_data,
+        "gk_collected_epoch": payload.gk_collected_epoch,
     }
 
     try:
@@ -307,6 +329,7 @@ async def receive_relay_data(
                 "sz_data": len(payload.sz_data),
                 "dc_data": len(payload.dc_data),
                 "yw_data": len(payload.yw_data),
+                "gk_data": sum(len(rows) for rows in (payload.gk_data or {}).values()),
             },
         }
     except Exception as e:
@@ -321,7 +344,7 @@ async def get_latest_smart_heating_data(
     """
     获取智慧供热最新工况数据。
     严格仅限 Global_admin 查看。
-    若数据链路未连接（或超过 90 秒无有效推流），严格不返回任何历史数据，遵循“无连接即无数据”原则。
+    若数据链路未连接（或超过 180 秒无有效推流），严格不返回任何历史数据，遵循“无连接即无数据”原则。
     """
     if session.group != "Global_admin":
         raise HTTPException(status_code=403, detail="智慧供热工况数据仅限 Global_admin 访问")
@@ -351,14 +374,20 @@ async def get_latest_smart_heating_data(
                 "sz_data": [],
                 "dc_data": [],
                 "yw_data": [],
+                "gk_data": None,
+                "gk_collected_epoch": None,
             },
             "query_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
+    # 原始数据仍用于中继；页面查询隐藏已经过期的独立工况快照。
+    visible_data = dict(data)
+    if not _overview_is_online(data):
+        visible_data["gk_data"] = None
     return {
         "ok": True,
         "is_online": True,
-        "data": data,
+        "data": visible_data,
         "query_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -400,6 +429,8 @@ async def get_smart_heating_status(
             "sz_data": len(data.get("sz_data", [])) if is_online else 0,
             "dc_data": len(data.get("dc_data", [])) if is_online else 0,
             "yw_data": len(data.get("yw_data", [])) if is_online else 0,
+            "gk_data": sum(len(rows) for rows in (data.get("gk_data") or {}).values())
+            if is_online and _overview_is_online(data) else 0,
         },
     }
 
@@ -539,12 +570,14 @@ async def sync_from_remote_server(
                 "ok": True,
                 "timestamp": feed_data.get("timestamp") or now_str,
                 "received_at": now_str,
-                "received_epoch": now_epoch,
+                "received_epoch": feed_data.get("received_epoch", 0),
                 "is_live_push": True,
                 "source": f"sync-from:{raw_remote}",
                 "sz_data": _clean_point_records(feed_data.get("sz_data", []), "首站"),
                 "dc_data": _clean_point_records(feed_data.get("dc_data", []), "电厂"),
                 "yw_data": _clean_point_records(feed_data.get("yw_data", []), "一次网"),
+                "gk_data": feed_data.get("gk_data"),
+                "gk_collected_epoch": feed_data.get("gk_collected_epoch"),
             }
             _save_latest_data(local_record)
             return {
@@ -555,6 +588,7 @@ async def sync_from_remote_server(
                     "sz_data": len(local_record["sz_data"]),
                     "dc_data": len(local_record["dc_data"]),
                     "yw_data": len(local_record["yw_data"]),
+                    "gk_data": sum(len(rows) for rows in (local_record.get("gk_data") or {}).values()),
                 },
             }
     except urllib.error.HTTPError as he:

@@ -228,6 +228,23 @@ def get_dashboard_temperature_trend(
     }
 
 
+@public_router.get(
+    "/dashboard/network_water_dumbbell",
+    summary="获取各单位热网耗水量哑铃图数据（当日/本月/供暖期）",
+    tags=["daily_report_25_26"],
+)
+def get_dashboard_network_water_dumbbell(
+    show_date: str = Query(
+        default="",
+        description="展示日期，格式为 YYYY-MM-DD；留空时自动回退至全局基准日期",
+    ),
+):
+    from backend.projects.daily_report_25_26.services.network_water_service import (
+        get_network_water_dumbbell,
+    )
+    return get_network_water_dumbbell(PROJECT_KEY, show_date=show_date)
+
+
 @router.post(
     "/dashboard/cache/publish",
     summary="按日期区间生成看板缓存（保留区间外缓存）",

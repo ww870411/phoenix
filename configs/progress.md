@@ -1,5 +1,402 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-04 修复热网耗水图切换日期失败残留
+
+- `NetworkWaterDumbbellCard.vue` 的 `loadData` 在查询开始清空旧结果，失败仅显示错误与重试；独立请求控制器阻止旧响应覆盖新日期、重绘或关闭新请求加载态，日期 watcher 同步触发，卸载后不提交结果。
+- 按用户确认，未填按 0 的后端统计口径保持不变；刻度取整问题仅解释，未修改。
+- 前端 `node src/projects/daily_report_25_26/tests/networkWaterDumbbell.test.mjs` 及生产构建通过，覆盖 Vue 编译、切日清空、失败、重试、乱序及取消状态；存在既有大文件分包提示。
+- 无需迁移或数据库操作；回滚恢复本轮组件请求逻辑并移除新增测试，保留其他改动。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：移除栏目副标题“自适应标尺”字样
+
+- **需求背景与调优意图**：
+  - 用户反馈图表中间已有明确的“标尺尺度不同”分割虚线说明，要求将两栏顶部的“自适应标尺”副标题字样全部去掉，保持极简视觉。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 从左右两栏头部彻底移除 `<span class="water-column-subtitle">自适应标尺</span>`；
+    - 顶栏只保留纯粹的“本日”与“供暖期累计”徽章标识，界面更纯粹、精简。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（18.22s，生成产物 `DashBoard-DSYJe62I.js`）。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：下层图表下移避让虚线标签
+
+- **需求背景与调优意图**：
+  - 用户反馈“标尺尺度不同”的虚线字样将下方图中的一些内容（外围首行圆球上方的数据标签）遮挡住了，要求将下方的图往下稍微挪挪以避让遮挡。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **Grid 1 显著下沉**：将下层外围五单位的网格顶部坐标从 `top: 138` 下移至 `top: 160`（下移 22px），为首行散点上方的实际值标签拉开充裕净空；
+    2. **虚线微调居中**：`.water-scale-divider` 设定为 `top: 132px`，恰处于上下两层网格几何过渡区的黄金居中位置；
+    3. **容器高度舒展**：左右双图容器高度微调为 `450px`，确保底部的 X 轴千吨刻度与“吨”单位同样拥有充裕的呼吸空间。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（23.54s，生成产物 `DashBoard-DcvDEGOG.js`）。
+
+## 2026-11-04 工况一览三列完整展示（当前生效）
+
+- 按用户方案，`SmartHeatingOverview.vue` 左列电厂、中列首站及一网上下排列、右列换热站及商户；移除固定高度、内部滚动、名称省略及采集详情折叠。`SmartHeatingView.vue` 工况标签最大宽度扩展为 1840px，中小屏回落单列。
+- 分隔位置：电厂 10 / 22 / 25 前，一网 5 前，换热站及商户 5 / 11 / 15 / 19 / 23 前，共九处。按原始序号分段，搜索后不在首条结果前添加空分隔。
+- HAR 渲染、82 项测点、三列和分区顺序、九处分隔位置及无折叠检查、生产构建通过；未完成浏览器截图目视检查。
+- 无需迁移或更新中继；回滚仅恢复本轮两个 Vue 文件、渲染断言和文档改动，保留其他并行修改。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：主城区文字统一转黑与上下双标尺虚线分割
+
+- **需求背景与调优意图**：
+  - 用户反馈主体名称中主城区希望改为黑色字体，保持与集团汇总及外围各单位风格协调一致；
+  - 同时要求在“集团汇总、主城区”板块与“下方外围五单位”板块之间增加一条虚线分割，以明确表示上下两个图表区域的标尺尺度不同。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **主体名称转黑**：将 Grid 0 的 Y 轴主体名称 `axisLabel.color` 由天蓝色回调为深碳黑（`#0f172a`）；
+    2. **响应式自适应虚线分界栏**：在双栏图表容器内增加绝对定位的 `.water-scale-divider` 元素（居中 `top: 127px`），利用两侧 `border-top: 1.5px dashed #cbd5e1` 结合正中微型标签 `标尺尺度不同`（浅灰字 `#94a3b8`），兼顾视觉边界提示与标尺语义解释，且不阻碍图表 hover 交互（`pointer-events: none`）。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（17.38s，生成产物 `DashBoard-qjp8Vprg.js`）。
+
+## 2026-11-04 工况一览四区块对齐
+
+- `SmartHeatingOverview.vue` 桌面改为等宽等高 2×2 区块，高度为 420–640px 自适应，表格内部滚动、表头固定、列宽统一；中屏单列，手机恢复自然高度卡片。
+- 全部 82 项测点、搜索、采集时间及刷新规则保持不变。HAR 渲染回归与生产构建通过；未完成浏览器截图目视检查。
+- 无需迁移或中继更新；回滚仅撤销本轮表格列定义、滚动容器属性和布局样式。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：吨数及差额全面四舍五入取消小数
+
+- **需求背景与调优意图**：
+  - 用户要求两张热网耗水哑铃图中显示的吨数，包括在图中显示的差异，全部四舍五入，不要有小数点，使数据呈现更干练紧凑、符合实物量常规汇报习惯。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **`formatNumber` 算法升级**：改用 `Math.round(Number(val)).toLocaleString('zh-CN')`，彻底抹平多余小数，顶部概览指标与悬浮 Tooltip 吨数全局受益；
+    2. **`currValFormatter` 实物量散点标签**：散点上方的今年实际值全部 `Math.round(val).toLocaleString('zh-CN')`，万吨级同样四舍五入取整万，无任何小数点；
+    3. **`formatCompactValue` 差额标签**：胶囊内的增减吨数差额四舍五入取整吨，如 `-131`、`+2,410`，彻底移除原有的 1 位小数；
+    4. **标尺刻度清理**：X 轴刻度消除 `1.0万` 等小数，统一按整数或整万呈现。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（21.70s，生成产物 `DashBoard-Bsk3Onpm.js`）。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：供暖期全口径数值与“供暖期累计”徽章调整为橙色
+
+- **需求背景与调优意图**：
+  - 用户反馈顶部供暖期全口径热网耗水量的当前数值绿色字体不够贴切，要求将其与右栏上方的“供暖期累计”徽章标签统一改为醒目的橙色，形成色彩语义呼应。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 将 `.water-global-metric:last-child .water-global-metric__val` 的字体颜色由绿色调整为深暖橙色（`#ea580c`）；
+    - 将 `.water-dim-badge--season` 徽章由浅绿底绿字调整为暖橙色系（`background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa;`）；
+    - 与左栏的湖蓝/天蓝色系（`#0369a1`）完美呼应，左右双栏形成鲜明的“天蓝（本日） vs 暖橙（供暖期累计）”对称视觉色彩识别体系。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（20.73s，生成产物 `DashBoard-B3NdMkyb.js`）。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：主城区上方新增“集团汇总”并共用大标尺
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：主城区上方新增“集团汇总”并共用大标尺
+
+- **需求背景与调优意图**：
+  - 用户提出在主城区上方增加一个口径名为“集团汇总”，与主城区共用同一个标尺，直观体现集团总量与主城区占比对比。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **Grid 0 结构重构**：
+       - 上层网格扩展为容纳“集团汇总”与“主城区”两行，绑定同一大标尺 `xAxis[0]`；
+       - `topCategories = ['集团汇总', '主城区']`，启用 `inverse: true` 保证集团汇总排在最顶层第一行；
+       - 上层标尺最大值自适应贴合集团汇总与主城区中的绝对最大值（~20,000 吨）；
+    2. **物理比例直观展现**：
+       - 集团汇总（18,364 吨）满幅贯穿全图；
+       - 主城区（11,557 吨）在同一标尺下长度恰好约占集团总量的 60%，上下两根哑铃线段的长度差异直观展示出主城区在全集团的真实体量分量；
+    3. **外围标尺保持黄金分割**：
+       - 下层外围标尺依然以主城区上限的 2/5 向上取整千（精确保持 5,000 吨整千标尺），不受集团汇总大数值影响；
+    4. **容器高度舒展**：
+       - 图表容器高度调整为 `430px`，Grid 0 高度调整为 `76px`，Grid 1 `top: 138`，整体留白宽裕舒展。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（19.07s，生成产物 `DashBoard-C6h_FXY-.js`）。
+
+## 2026-11-04 数据看板布局调整：各单位热网耗水量对比置于供暖单耗对比上方
+
+## 2026-11-04 数据看板布局调整：各单位热网耗水量对比置于供暖单耗对比上方
+
+- **需求背景与调优意图**：
+  - 用户要求调整看板板块排序，将“各单位热网耗水量对比情况”板块调整至“供暖热单耗对比”（及其整组单耗卡片和切换栏）的上方。
+- **改动范围与落地详情**：
+  - 页面调整 [`frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue)：
+    - 将 `<section class="dashboard-grid__item dashboard-grid__item--water">` 移动到 `<section class="dashboard-grid__item dashboard-grid__item--unit-toggle">` 与供暖热/电/水单耗三张卡片之前；
+    - 形成“调度运行事件 → 全网热网耗水量水力哑铃图（总量与同比） → 供暖单耗对比（单位面积消耗）”的平滑业务浏览动线。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（23.18s，生成产物 `DashBoard-X_Wmz_eG.js`）。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：下方外围标尺调整为主城区 2/5 向上取整千
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：下方外围标尺调整为主城区 2/5 向上取整千
+
+- **需求背景与调优意图**：
+  - 用户提出全新的黄金比例优化方案：“将下方的标尺，改为主城区标尺上限的 2/5，并向上取整千”，替代原 1/2 下取整千，进一步优化外围主体的视觉占比。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 下方标尺上限算法变更为：
+      ```javascript
+      const twoFifthsMain = (mainTrackEnd * 2) / 5
+      const ceilThousand = Math.ceil(twoFifthsMain / 1000) * 1000
+      const subTrackEnd = Math.max(ceilThousand > 0 ? ceilThousand : 1000, Math.ceil(subMax * 1.06))
+      ```
+    - **实测与视觉效果**：
+      - 本日主城区专属标尺量程为 ~12,273 吨；
+      - 其 2/5 为 4,909.2 吨，向上取整千后**精确锁定为标准的 5,000 吨**；
+      - 外围最大主体庄河环海（3,185 吨）在 5,000 吨标尺下占比为 **63.7%**，金州热电（2,545 吨）占 **50.9%**；
+      - 右侧留出约 36% 的开阔视野容纳变动胶囊标签，不偏左也不逼仄，达成极佳的视觉平衡。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（16.82s，生成产物 `DashBoard-BQ06mhN5.js`）。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：移除全口径与双栏维度前的 Emoji 图标
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：移除全口径与双栏维度前的 Emoji 图标
+
+- **需求背景与调优意图**：
+  - 用户反馈顶部全口径指标栏（💧、❄️）与下方双栏维度徽章（📅、❄️）前面的图标显眼多余，要求彻底去掉图标，保持专业纯文本表达。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 移除顶部两项指标标题前方的 `<span class="water-global-metric__icon">💧/❄️</span>`；
+    - 移除左右双栏徽章中的 `📅 本日` 改为 `本日`，`❄️ 供暖期累计` 改为 `供暖期累计`；
+    - 清理冗余的 `.water-global-metric__icon` CSS 规则；
+    - 整体板块呈现出沉稳严谨的企业生产管理风格。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：哑铃差额标签移除单位 t
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：哑铃差额标签移除单位 t
+
+- **需求背景与调优意图**：
+  - 用户反馈图表右侧的变动胶囊标签无需带计量单位 `t`，要求去掉 `t`，使数字与百分比更加纯粹凝练。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 将 `formatCompactTons` 重构为 `formatCompactValue`，彻底移除结尾的 `t` 字符；
+    - 差额胶囊格式化由 `▼ -131.2t (-1.1%)` 纯净化为 `▼ -131.2 (-1.1%)`（正数如 `▲ +408 (+19.1%)`）；
+    - 界面标签更加精简紧凑，完全消除冗余单位字符。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：字号与辨识度全面放大提升
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：字号与辨识度全面放大提升
+
+- **需求背景与调优意图**：
+  - 用户反馈板块文字偏小、远距离或快速浏览时识别较为吃力，要求字号稍微更明显、更易识别。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **ECharts 图内文本字号全面提升**：
+       - 圆球实际值标签由 `11px` 放大至 `13px`（字重 800，`3px` 白色高反差微光描边）；
+       - 右侧同比变动胶囊标签由 `10px` 放大至 `12px`（字重 700，内边距增至 `[3, 7]`，红绿边框增强至 1.5px）；
+       - 左侧 Y 轴主体名称由 `12px` 放大至 `13.5px~14px`（深碳墨黑 `#0f172a` 加粗 700~800，`grid.left` 放宽至 `84` 确保不挤压）；
+       - X 轴刻度文字与“吨”单位由 `10px` 浅灰放大至 `12px`（深石墨灰 `#334155` 加粗 600）；
+       - `grid.right` 扩展至 `105`，为放大的差额胶囊预留充足留白；
+    2. **DOM 文字排版与视觉层级增强**：
+       - 大标题由 `18px` 提升至 `20px` 加粗；
+       - 顶部全口径热网耗水总量由 `20px` 放大至 `24px` 特粗加深，对比文字提升至 `13.5px`；
+       - 左右双栏徽章（📅 本日、❄️ 供暖期累计）由 `13px` 放大至 `14.5px`，图例文案放大至 `13px`。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：实际值圆珠节点增加悬浮数字标签
+
+## 2026-11-04 智慧供热刷新间隔支持当前页面设置
+
+- `SmartHeatingView.vue` 新增刷新间隔选择（15s / 30s / 1m / 2m / 5m）；`refreshIntervals` 在页面内存中分别保存两个标签的设置，默认均 60000ms，不写本地存储或服务器，重新打开页面恢复默认；`refreshIntervalMs` 和 watcher 在修改间隔时立即重建计时器，保留自动刷新开关与手动刷新。
+- 中继核查：实际下载脚本 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py` 默认 60 秒，备用 `backend/projects/daily_report_25_26/smart_heating_sync.py` 默认 30 秒，均优先读取同目录 `smart_heating_config.json`；每轮采集推送完成后再 sleep，实际开始间隔为执行耗时加配置秒数。仓库未发现该配置文件，办公电脑运行值无法据此确认。本轮不修改采集频率。
+- 验证：Vue 脚本与模板编译、刷新状态与计时器行为检查通过。无需迁移，回滚恢复本轮 Vue 选择器、内存状态、watcher 和样式变更。
+
+## 2026-11-04 工况一览恢复 1m 刷新
+
+- 按用户最新要求，`SmartHeatingView.vue` 的 `refreshIntervalMs` 统一返回 60000ms，两标签均每 1 分钟自动刷新，保留手动刷新与开关。
+- Vue 脚本与模板编译通过；无需迁移或更新中继，回滚仅恢复本轮刷新周期表达式。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：实际值圆珠节点增加悬浮数字标签
+
+- **需求背景与调优意图**：
+  - 用户希望无需悬停鼠标，即可在图表上直接看到每个单位当前实际值的数字究竟是多少吨。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 在主城区与外围单位的“今年本期”蔚蓝圆珠散点（`symbol: 'circle'`）系列上配置数据标签：
+      ```javascript
+      label: {
+        show: true,
+        position: 'top',
+        distance: 5,
+        formatter: currValFormatter,
+        fontSize: 11,
+        fontWeight: 700,
+        color: '#0284c7',
+        textBorderColor: '#ffffff',
+        textBorderWidth: 2.5,
+      }
+      ```
+    - **显示与排版效果**：
+      - 数字位于实心圆珠正上方（如 `11,557`、`2,545`、`2,916`），带千分位和白色防遮挡微光描边；
+      - 供暖期累计大数值自动转换为紧凑的“万”字单位；
+      - 与右侧的同比增减红绿胶囊（`▼ -131.2t (-1.1%)`）在空间上完美分离，互不遮挡，图表信息密度与易读性大幅提升。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包校验成功（1058 个模块转换，0 错误 0 警告，生成最新产物 `DashBoard-Cn4g5onR.js`）。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：下方外围标尺锁定为主城区 1/2 并向下取整千
+
+## 2026-11-04 工况一览自动刷新改为 2 分钟
+
+- `SmartHeatingView.vue` 的 `refreshIntervalMs` 按标签选择工况一览 120000ms、热源信息 60000ms；`restartAutoRefresh` 在切换标签或开关时重建定时器，正在请求时跳过重复刷新，页面提示同步显示 2m / 1m，手动刷新仍可用。
+- 验证：Vue 脚本与模板编译通过。只修改前端查询频率，不改变客户端采集周期或数据时效；无需迁移，回滚恢复本轮计时器和文案改动即可。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：下方外围标尺锁定为主城区 1/2 并向下取整千
+
+- **需求背景与调优意图**：
+  - 用户提出明确标尺规则：“规定下方的各单位标尺最大值，为主城区标尺的 1/2 并向下取整（整千）”，替代原有浮动的倍数方案，使坐标刻度完全规整化。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 外围标尺最大值算法更新为：
+      ```javascript
+      const halfMain = mainTrackEnd / 2
+      const floorThousand = Math.floor(halfMain / 1000) * 1000
+      const subTrackEnd = Math.max(floorThousand > 0 ? floorThousand : 1000, Math.ceil(subMax * 1.06))
+      ```
+    - **实测数值**：
+      - 本日主城区专属标尺为 ~12,273 吨；
+      - 12,273 / 2 = 6,136.5 吨，向下取整整千后，**下方标尺上限精确锁定为 6,000 吨**；
+      - X 轴刻度规整呈现为 `0, 2000, 4000, 6000`（或 `0, 1000, 2000, ...`），消除了一切非整数字，外围最大主体庄河环海（3,185 吨）占比为 53.1%，视觉排布整齐专业。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包成功（1058 个模块转换，0 错误 0 警告，生成最新产物 `DashBoard-BTOCzW2s.js`）。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：外围标尺调整为 2 倍放大
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：外围标尺调整为 2 倍放大
+
+- **需求背景与调优意图**：
+  - 用户查看 3 倍放大效果后，希望尝试将外围主体的标尺放大倍数调整为更为温和克制的 **2 倍**，观察整体视觉平衡感。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    - 外围标尺上限设为 `subTrackEnd = Math.max(Math.ceil(mainTrackEnd / 2), Math.ceil(subMax * 1.06))`；
+    - 在当前业务数据下，主城区标尺为 ~12,273 吨，外围标尺锁定在 ~6,137 吨（12,273 / 2 = 6,137），外围每 1 吨的横向物理宽度严格为主城区的 **2.00 倍**；
+    - 外围最大主体庄河环海（3,185 吨）在 6,137 吨标尺下占比约为 52%，金州热电（2,545 吨）占比约 41.5%，视觉对比从容适度。
+- **构建与测试**：
+  - 前端执行 `npm run build` 校验成功。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：移除区域标识与外围标尺精准锁定 3 倍放大
+
+## 2026-11-04 工况一览统一显示源采集时间
+
+- `SmartHeatingOverview.vue` 在顶部新增独立“采集时间”区域，读取测点 `SHIJIAN` / `update_time`，替换此前的中继抓取时间，移除行内详情及悬停中的重复时间。断线、过期或缺失时显示“—”，搜索不改变统一时间。
+- 输入证据：用户 HAR 中主要测点时间为 `2026-11-04 10:47:05`，少数来源时间不同，因此以页面固定 82 项测点中出现最多的时间展示；同频时取较新时间，悬停统一时间说明取值口径。
+- 验证：前端 HAR 渲染回归通过，确认源时间仅出现一次、过期时隐藏。无需接口或数据库迁移；回滚仅恢复本轮组件、测试断言和文档段落。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：移除区域标识与外围标尺精准锁定 3 倍放大
+
+- **需求背景与调优意图**：
+  - 用户反馈原图表内部的“主城区”和“主城区外单位”小标题破坏了图表连贯性，要求彻底移除该标识；
+  - 同时反馈原外围五单位的自适应放大比例（~3.7 倍）偏大，导致外围最大单位（庄河环海）过分逼近右侧边界，要求将外围单位的放大倍数微调收敛为**严格的 3 倍**。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **精准 3 倍物理像素放大比例**：
+       - 外围单位标尺上限改为 `subTrackEnd = Math.max(Math.ceil(mainTrackEnd / 3), Math.ceil(subMax * 1.06))`；
+       - 在当前业务数据下，主城区标尺为 ~12,273 吨，外围标尺精准锁定在 ~4,091 吨（12,273 / 3 = 4,091），使外围单位每 1 吨在屏幕上的像素宽度不多不少正好为主城区的 **3.00 倍**；
+       - 外围最大主体庄河环海（3,185 吨）在 4,091 吨的标尺下占比收敛至约 78%，右侧留出 22% 舒适视觉空间，既放大变动又从容美观；
+    2. **纯粹化视觉布局**：
+       - 彻底移除 ECharts 配置中的 `title` 区域标识，消除“主城区”与“主城区外单位”文字，依靠 Y 轴六大主体名称自然对齐；
+       - 上下 Grid 垂直间隙微调（Grid 0 设为 `top: 14, height: 38`；Grid 1 设为 `top: 88, height: 236`），整体更加舒展规整。
+- **构建与测试**：
+  - 前端执行 `npm run build` 校验成功（1058 个模块转换通过，产物更新为 `DashBoard-CwJshsNB.js`）。
+
+## 2026-11-04 热网耗水量图表文案精简
+
+- `frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`：左右两栏副标题统一为“自适应标尺”；图内区域标题改为“主城区”和“主城区外单位”，去掉括号说明。仅调整展示文案，数据和标尺计算保持不变。
+- 验证：Vue 单文件编译检查通过。无需迁移；回滚仅恢复该组件上述四处文案，保留其他改动。
+
+## 2026-11-04 数据看板热网耗水量对比落地“双层分级自适应标尺”：化解主城区体量压制
+
+- **业务难点与极值破局**：
+  - 用户反馈：主城区热网耗水体量极其庞大（本日 8,000~12,000 吨，全期累计达 180 万吨，占全网 65% 以上），而北方热电、金普公司、庄河环海、研究院等外围单位体量在数百至几千吨之间；
+  - 若在同一单标尺（0 ~ 12,000 吨 / 0 ~ 200 万吨）下绘制哑铃图，主城区以外的各单位哑铃两端距离仅占 2%~5% 宽度，哑铃杆缩成极短的像素点，难以肉眼对比增减趋势。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **ECharts Multi-Grid 双层独立坐标体系**：
+       - 在同一个 ECharts 容器内构建上下双 Grid（Grid 0 上层展示主城区，高度占 22%；Grid 1 下层展示外围 5 个单位，高度占 56%）；
+       - 上下层分别绑定独立的 `xAxis[0]` 与 `xAxis[1]`，彻底解耦极值对小单位的标尺压迫；
+    2. **分级自适应标尺与 4 倍视觉放大**：
+       - **主城区（上层专属标尺）**：最大值自适应贴合主城区数值（本日约 12,000 吨，刻度 0~1.2 万吨）；
+       - **外围 5 单位（下层自适应放大标尺）**：最大值仅以外围单位中的最大值（本日约 3,200 吨）为上限，标尺量程从 12,000 吨收缩为 3,400 吨，**使外围 5 个单位的哑铃线段和增减幅度直接放大近 4 倍（400%）**，微小变化清晰可见；
+    3. **视觉层次与分区标注**：
+       - 在图表内增加轻量级辅助分区线与标尺说明，主城区与外围单位各自对齐专属 X 轴，右侧紧凑差额标签自动跟随；
+       - 保留置顶全口径概览栏、去年同期垂直标杆刻度针（`|`）与今年本期圆珠（`●`）对比。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包成功，1058 个模块转换成功，0 错误 0 警告（18.02s），产物更新 `DashBoard-DZIH_vmn.js`。
+
+## 2026-11-04 智慧供热双标签页排版与手机窄屏适配
+
+- 需求：继续优化“热源信息”和“工况一览”排版，尤其是手机窄屏阅读与操作。
+- 文件与流程：`SmartHeatingView.vue` 统一分段标签、顶部操作栏与指标摘要布局，在 1100px / 640px 断点重排；640px 以下筛选区采用搜索整行与双列选择器，四类桌面表格隐藏，新增 `components/SmartHeatingPointCards.vue` 复用同一 `displayList` 输出首站、电厂、一次网及全网结果的测点卡片，保留所有参数、单位、更新时间，空值不参与温压差计算。配置弹窗限制视口高度，内容独立滚动。
+- 工况一览：`components/SmartHeatingOverview.vue` 增加四分区快捷导航、分区编号与统一搜索样式；桌面保留双栏表格，中屏单栏，手机将原表格行重排为两列参数卡片，新增原生 `details` 供触屏展开采集名称与源更新时间。未改变数据来源或时效规则。
+- 验证（最后验证日期：2026-11-04）：前端 HAR 渲染回归通过（82 项映射、零值/空值、过期/断线隐藏）；新增卡片离线 SSR 验证覆盖三类测点全部 18 项参数、单位、零值、空值、温差与断线空态；`npm run build` 通过，存在既有大文件分包提示。
+- 限制：浏览器访问服务不可用；尝试桌面检查时，工具因无法可靠识别 Chrome URL 而停止，未完成实际桌面/手机截图验收。SSR 不替代 CSS 实际视口目视检查。
+- 迁移与回滚：仅前端布局调整，无需数据库迁移或更新办公电脑中继。恢复上述 Vue 文件及本轮测试断言修改、撤销新增卡片组件即可回滚，保留前轮标签页和中继改造及其他并行修改。
+
+## 2026-11-04 智慧供热新增热源信息与工况一览标签
+
+- 输入：用户 HAR `configs/192.168.1.206(工况一览).har`。独立无请求体 `POST /gk_get_data/` 返回五类字典 137 项，原页面固定选取 82 项。
+- 前端：`SmartHeatingView.vue` 默认保留“热源信息”，新增 `SmartHeatingOverview.vue` 与 `smartHeatingOverview.js`，按电厂 28、首站 18、一网 11、换热站及商户 25 项分区展示，支持搜索、采集时间、源更新时间、零值和空值区分。
+- 中继：更新 `smart_heating_sync.py`、实际下载脚本 `backend_data/projects/daily_report_25_26/smart_heating_relay_win7.py`、`api/smart_heating.py` 与 `dev_relay_pull_sync.py`。`gk_data` 与 `gk_collected_epoch` 贯通采集、接收、转发、feed 及主动拉取；新接口失败不阻断其他源，仅工况成功也能推送。
+- 时效：工况独立按 180 秒判定，前后端隐藏过期值；中继保留上级 `received_epoch`，避免旧快照拉取后被刷新为在线，各节点时钟需一致。旧客户端协议兼容。
+- 验证（2026-11-04）：后端 `python -m unittest backend.projects.daily_report_25_26.tests.test_smart_heating_overview -v`，5 项通过；前端 `node src/projects/daily_report_25_26/tests/smartHeatingOverview.test.mjs`，82 项匹配及实时/过期/断线/旧客户端渲染通过；`npm run build` 成功，有大文件分包提示；两个客户端通过 Python 3.8 AST 校验；本地页面 HTTP 200。
+- 边界：未将 HAR 历史数据写入平台；浏览器控制不可用，未截图目视检查；未验证办公电脑内网实际采集与生产推流；未做全仓覆盖率或依赖审计。
+- 升级与回滚：无需数据库迁移。部署前后端后下载并替换办公电脑客户端、重启脚本，保留配置 JSON。回滚仅撤销上述代码、两个新增测试及本次文档段落，恢复旧客户端，保留其他并行修改和运行数据。
+
+## 2026-11-04 数据看板热网耗水量对比精细化调优：最上方置顶全口径指标与标杆针哑铃图重构
+
+- **需求反馈与精细化调优**：
+  - 用户对热网耗水量组件提出 7 项具体细节改进：
+    1. 标题变更为“各单位热网耗水量对比情况”；
+    2. 移除原长副标题说明；
+    3. 左侧维度标头由“当日（业务日）”精简统一为“本日”；
+    4. 移除“少补达标”、“全期向好”等主观评价胶囊标签；
+    5. 解决图表未充满范围、右侧空白过大的问题；
+    6. 针对两端实物量相差不大（如 1%~5%）导致圆球重叠靠太近看不清的问题，提供专业清晰的图形解决方案；
+    7. 在最上方置顶增加全网“全口径”热网耗水量汇总指标栏。
+- **改动范围与落地详情**：
+  - 组件深度优化 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **顶部置顶全口径汇总横栏**：在卡片最顶部设立高对比度双指标汇总条，并列展示“💧 本日全口径热网耗水量”与“❄️ 供暖期全口径热网耗水量”，大字号呈现全网实际总量（吨），直观比对去年同期值与同比少补/多补吨数与比例；
+    2. **文案精简与标签净化**：卡片大标题更新为“各单位热网耗水量对比情况”，移除冗余副标题，左栏统一标识为“📅 本日”，彻底剔除“少补达标”等冗余标签；
+    3. **解决右侧空白过大、充满宽度**：调整 X 轴最大值为 `maxVal * 1.06`（去除原 35% 冗余留白），配合将 `grid.right` 收紧至 `90px`，使数据柱体饱满贯穿 90% 以上可视区域；
+    4. **标杆刻度针(Target Needle)彻底消除圆球重叠**：
+       - 将去年同期标记升级为**高精度垂直标杆刻度针**（`symbol: 'rect', [3.5, 20]`，琥珀橙色）；
+       - 今年本期保持为**实心指示圆珠**（`symbol: 'circle', 14px`，蔚蓝湖水色）；
+       - 结合中置发光连接杆（节水绿/增耗红），无论两端数值多么接近（哪怕仅差 3~5px），垂直刻度线与圆形球体天然具备极强的几何对比，针珠分离、方向分明，彻底消除了两个大圆球重叠带来的模糊感。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包成功，1056 个模块转换通过，0 警告 0 错误（16.55s）。
+
+## 2026-11-04 数据看板各单位热网耗水量水力哑铃图布局升级：左右双栏并列（左侧当日/右侧供暖期累计）
+
+- **需求调整与交互升级**：
+  - 用户反馈原切换按钮仍需手动点击切换，希望进一步提升看板的一目了然感；
+  - 彻底去除“本月累计”维度与顶部的维度切换药丸按钮；
+  - 将卡片重构为**双栏对称并列排布**：**左侧常驻展示当日（业务日）热网耗水量哑铃图**，**右侧常驻展示供暖期累计热网耗水量哑铃图**，无需任何点击切换，全貌尽收眼底。
+- **改动范围与落地详情**：
+  - 组件升级 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+    1. **双栏响应式栅格结构**：采用 `grid-template-columns: 1fr auto 1fr` 弹性栅格，大屏下左右双翼并列、中置纤细竖线分割，小屏自适应上下折叠；
+    2. **独立双 KPI 胶囊横栏**：左栏顶部配备“📅 当日（业务日）”专属全网耗水概览（当日总量、同期量、同比差额与增减率、少补达标评价）；右栏顶部配备“❄️ 供暖期累计”专属全网耗水概览（全期总量、同期量、全期同比、全期向好评价）；
+    3. **双 ECharts 实例协同管理**：拆分为 `dayChartRef` 与 `seasonChartRef` 双实例容器，统一由 `ResizeObserver` 自适应监听宽度变化，支持富文本标签（如 `▼ -127,208t (-21.2%) 节水`，针对全期大数值自适应紧凑换算），深色毛玻璃 Tooltip 精确区分当日与全期口径；
+    4. **顶栏精简极简化**：移除切换药丸按钮，保留刷新与清晰的“今年本期/去年同期/节水少补/增耗多补”双色图例指示。
+- **构建与测试**：
+  - 前端执行 `npm run build` 打包成功，1053 个模块构建通过，0 警告 0 错误（33.85s）。
+
+## 2026-11-04 数据看板新增各单位热网耗水量对比水力哑铃图(Dumbbell Plot)
+
+- **功能背景与用户诉求**：
+  - 用户希望在数据看板中独立呈现各单位的“热网耗水量/补水量”指标，突出绝对实物量（吨数）的同比情况，杜绝二维表格的网格压迫感；
+  - 明确主体为六大业务板块：**主城区**（打包供热公司总口径：电厂一次网补水 + 换热站补水）、**金州热电**、**北方热电**、**金普公司**、**庄河环海**、**研究院**（均取自“其中：热网补水量”）；剥离电厂自用耗水、剥离购水量与收费面积，纯粹聚焦水耗；
+  - 选用高直观度的**水力哑铃图（Dumbbell Plot）**，支持自由切换**当日（业务日）**、**本月累计**、**供暖期累计**三大维度同比。
+- **改动范围与落地详情**：
+  1. **后端指标统计服务与 API 端点**：
+     - 新建服务模块 [`backend/projects/daily_report_25_26/services/network_water_service.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/network_water_service.py)，基于 `get_season_windows(biz_date)` 动态计算当日、本月累计与供暖期累计时间窗口；
+     - 从底表 `DailyBasicData` 聚合六大主体的当前业务期与去年同期耗水吨数、同比差额及增减率，同时自动计算全网热网耗水总量汇总；
+     - 在 [`backend/projects/daily_report_25_26/api/dashboard.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/dashboard.py) 暴露免鉴权端点 `GET /api/v1/projects/:projectKey/dashboard/network_water_dumbbell`；
+  2. **前端接口服务扩展**：
+     - 在 [`frontend/src/projects/daily_report_25_26/services/api.js`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/services/api.js) 中新增 `getDashboardNetworkWaterDumbbell` 调用方法，支持 `showDate` 参数与 `AbortController` 请求取消；
+  3. **高颜值独立哑铃图组件**：
+     - 新建组件 [`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue)：
+       - **顶栏药丸控制**：提供【当日（业务日）】/【本月累计】/【供暖期累计】轻量切换药丸按钮与刷新按钮；
+       - **全网概览 KPI 胶囊横栏**：动态显示全网热网耗水总量、去年同期值、同比少补/多补吨数与百分比，自动给出“漏损控制良好”或“漏损偏高需重点排查”评价标签；包含今年本期(🔵)、去年同期(🟠)、节水少补(🟢)、增耗多补(🔴)图例提示；
+       - **ECharts 水力哑铃图**：六大主体横向排列，底衬细微轨道线；中间以平滑圆角连接杆串联去年同期与今年本期，同比节水显示翠绿、增耗显示红粉；右侧自带胶囊徽章浮标（如 `▼ -131.2t (-1.1%) 节水`）；鼠标悬浮弹出深色毛玻璃卡片式 Tooltip 详细穿透；
+  4. **看板主页面布局挂载**：
+     - 在 [`frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DashBoard.vue) 中引入组件，紧随供暖单耗行之后以整栏宽度（`grid-column: 1 / -1`）挂载，并自动与看板业务基准日期和打印导出样式协同。
+- **构建与测试**：
+  - 后端执行 `py_compile` 及服务单元测试通过，计算逻辑耗时 < 10ms，精准聚合；
+  - 前端执行 `npm run build` 打包成功，1053 个模块构建通过，0 错误（24.07s）。
+
 ## 2026-11-04 填报页面顶栏按钮布局紧凑化优化与“一并提交”单行归并
 
 - **需求背景**：
@@ -2848,3 +3245,13 @@
   - [`PageSelectView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue)
   - [`DynamicPlanMetricsView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue)
 - **验证**：前端生产构建 `npm run build` 执行成功。
+
+## 2026-11-04 热网耗水图显示修复
+
+- `NetworkWaterDumbbellCard.vue` 移除刷新按钮，保留日期联动和错误重试；两个 X 轴刻度 12000 显示 1.2万、12897 显示 1.2897万，不改范围、比例、整数数据标签和未填按 0 口径。
+- 刻度、原范围、按钮及日期请求回归和生产构建通过，有既有分包提示。无需迁移；回滚仅恢复本轮组件及测试断言。
+
+## 2026-11-04 热网耗水图标尺上限统一整千
+
+- 按用户最新要求，`NetworkWaterDumbbellCard.vue` 上下 X 轴上限均向上取整到 1000 的整数倍，包括下方为容纳大数值而扩大的分支；保留顶部留白和下方参考主城区 2/5 的规则。最小刻度间隔为 1000，万单位最多一位小数，替代上一轮最多四位小数的显示。
+- Vue 编译、日期请求回归与 ECharts SVG 实际刻度检查通过，验证整千上限、无重复刻度文字、下方扩大分支及整数数据标签。无需后端操作；回滚恢复本轮组件及断言修改。

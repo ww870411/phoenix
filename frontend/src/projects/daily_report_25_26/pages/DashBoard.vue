@@ -835,6 +835,14 @@
         </Card>
       </section>
 
+      <!-- 各单位热网耗水量对比情况（置于供暖单耗对比上方） -->
+      <section class="dashboard-grid__item dashboard-grid__item--water">
+        <NetworkWaterDumbbellCard
+          :project-key="projectKey"
+          :biz-date="pushDateValue || dashboardData.meta.pushDate"
+        />
+      </section>
+
       <section class="dashboard-grid__item dashboard-grid__item--unit-toggle">
         <div class="unit-phase-toggle" role="group" aria-label="供暖单耗展示范围">
           <span class="unit-phase-toggle__label">展示范围：</span>
@@ -1006,6 +1014,7 @@ import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, rea
 import { storeToRefs } from 'pinia'
 import DashboardCacheManager from '../components/DashboardCacheManager.vue'
 import MonthlyCoalProgressCard from '../components/MonthlyCoalProgressCard.vue'
+import NetworkWaterDumbbellCard from '../components/NetworkWaterDumbbellCard.vue'
 import {
   cancelCachePublishJob,
   disableDashboardCache,
@@ -7295,6 +7304,10 @@ watch(
     grid-column: 1 / -1;
   }
 
+  .dashboard-grid__item--water {
+    grid-column: 1 / -1;
+  }
+
   .dashboard-grid__item--complaint {
     grid-column: span 8;
     min-height: 360px;
@@ -8456,6 +8469,10 @@ watch(
 }
 
 .dashboard-page--export-standard .dashboard-grid__item--center {
+  grid-column: 1 / -1 !important;
+}
+
+.dashboard-page--export-standard .dashboard-grid__item--water {
   grid-column: 1 / -1 !important;
 }
 

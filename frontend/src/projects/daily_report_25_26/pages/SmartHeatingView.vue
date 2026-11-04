@@ -1,8 +1,13 @@
 <template>
   <div class="smart-heating-view">
     <AppHeader />
-    <main class="smart-main">
+    <main class="smart-main" :class="{ 'overview-main': activeTab === 'overview' }">
       <Breadcrumbs :items="breadcrumbItems" />
+
+      <div class="page-tabs" role="tablist" aria-label="智慧供热信息">
+        <button id="source-tab" type="button" role="tab" :aria-selected="activeTab === 'source'" aria-controls="source-panel" @click="activeTab = 'source'">热源信息</button>
+        <button id="overview-tab" type="button" role="tab" :aria-selected="activeTab === 'overview'" aria-controls="overview-panel" @click="activeTab = 'overview'">工况一览</button>
+      </div>
 
       <!-- 顶部 Banner 卡片 -->
       <section class="card elevated banner-card">
@@ -15,7 +20,7 @@
                 <span class="badge-role">生产实时大屏</span>
               </div>
               <p class="banner-subtitle">
-                按全网统一分类标准实时采集 · 涵盖首站、电厂、一次网三大层级 344 个标准采集点
+                {{ activeTab === 'source' ? '按全网统一分类标准实时采集 · 涵盖首站、电厂、一次网三大层级 344 个标准采集点' : '重点生产工况 · 涵盖电厂、首站、一网、换热站及商户 82 项参数' }}
                 <span v-if="!isRelayOnline" class="offline-note">（数据链路未连接 · 暂无实时数据）</span>
               </p>
             </div>
@@ -67,7 +72,17 @@
 
               <label class="auto-refresh-toggle">
                 <input v-model="autoRefresh" type="checkbox" />
-                <span>自动刷新 (1m)</span>
+                <span>自动刷新</span>
+              </label>
+              <label class="refresh-interval-control">
+                <span>刷新间隔</span>
+                <select v-model.number="refreshIntervals[activeTab]" aria-label="当前标签页刷新间隔，仅本次页面有效" title="仅本次页面有效，重新打开恢复 1m">
+                  <option :value="15000">15s</option>
+                  <option :value="30000">30s</option>
+                  <option :value="60000">1m</option>
+                  <option :value="120000">2m</option>
+                  <option :value="300000">5m</option>
+                </select>
               </label>
 
               <button class="btn primary btn-sm" :disabled="loading" @click="fetchData">
@@ -78,7 +93,7 @@
         </div>
 
         <!-- 核心指标摘要条 -->
-        <div class="metric-strip">
+        <div v-show="activeTab === 'source'" class="metric-strip">
           <div class="metric-item">
             <span class="metric-label">主管网瞬时供水流量</span>
             <div class="metric-val-row">
@@ -126,6 +141,10 @@
         </div>
       </section>
 
+      <SmartHeatingOverview v-if="activeTab === 'overview'" id="overview-panel" role="tabpanel" aria-labelledby="overview-tab"
+        :data="latestPayload.gk_data || null" :collected-epoch="latestPayload.gk_collected_epoch || null" :online="isRelayOnline" :now="currentTime" />
+
+      <div v-show="activeTab === 'source'" id="source-panel" role="tabpanel" aria-labelledby="source-tab">
       <!-- 未连接提示横幅 -->
       <section v-if="!isRelayOnline" class="card elevated offline-callout">
         <div class="offline-icon">🔌</div>
@@ -238,6 +257,9 @@
           </div>
         </div>
       </div>
+
+      <!-- 手机窄屏使用同一筛选结果生成卡片，保留完整测点参数。 -->
+      <SmartHeatingPointCards :items="displayList" :online="isRelayOnline" />
 
       <!-- 数据内容展示区域 -->
 
@@ -560,6 +582,7 @@
         </div>
       </section>
 
+      </div>
       <!-- 中继转发与同步配置弹窗 (仅管理员) -->
       <div v-if="showRelayModal" class="modal-backdrop" @click.self="showRelayModal = false">
         <div class="relay-modal card elevated">
@@ -642,10 +665,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import SmartHeatingOverview from '../components/SmartHeatingOverview.vue'
+import SmartHeatingPointCards from '../components/SmartHeatingPointCards.vue'
 import { useAuthStore } from '../store/auth'
 import {
   getSmartHeatingLatest,
@@ -664,6 +689,9 @@ import {
 } from '../constants/smartHeatingTaxonomy'
 
 const route = useRoute()
+const activeTab = ref('source')
+const currentTime = ref(Date.now())
+let freshnessTimer = null
 const projectKey = String(route.params.projectKey || 'daily_report_25_26')
 const auth = useAuthStore()
 
@@ -711,6 +739,9 @@ const sortBy = ref('default')
 const loading = ref(false)
 const downloading = ref(false)
 const autoRefresh = ref(true)
+// 仅保存在当前页面内存中，两个标签独立设置，重新打开均恢复为 1 分钟。
+const refreshIntervals = ref({ source: 60000, overview: 60000 })
+const refreshIntervalMs = computed(() => refreshIntervals.value[activeTab.value])
 
 const latestPayload = ref({
   timestamp: '',
@@ -1085,28 +1116,42 @@ async function fetchData() {
       relayStatus.value = statusRes
     }
   } catch (err) {
+    relayStatus.value = { is_online: false, seconds_ago: null, last_received_at: null }
     console.error('获取智慧供热实时数据失败:', err)
   } finally {
     loading.value = false
   }
 }
 
+// 切换标签或自动刷新开关时重建计时器，保证各标签按自己的周期刷新。
+function restartAutoRefresh() {
+  if (timer) clearInterval(timer)
+  timer = null
+  if (!autoRefresh.value) return
+  timer = setInterval(() => {
+    if (!loading.value) fetchData()
+  }, refreshIntervalMs.value)
+}
+
+watch([activeTab, autoRefresh, refreshIntervalMs], restartAutoRefresh)
+
 onMounted(async () => {
+  freshnessTimer = setInterval(() => { currentTime.value = Date.now() }, 1000)
+  restartAutoRefresh()
   await fetchData()
   await fetchRelayConfig()
-  timer = setInterval(() => {
-    if (autoRefresh.value) {
-      fetchData()
-    }
-  }, 60000)
 })
 
 onUnmounted(() => {
+  if (freshnessTimer) clearInterval(freshnessTimer)
   if (timer) clearInterval(timer)
 })
 </script>
 
 <style scoped>
+.page-tabs { display: inline-flex; gap: 6px; padding: 5px; margin: 12px 0 20px; background: #e2e8f0; border-radius: 12px; }
+.page-tabs button { min-height: 44px; padding: 10px 28px; background: transparent; border: 0; border-radius: 9px; color: #64748b; font-size: 15px; cursor: pointer; }
+.page-tabs button[aria-selected="true"] { color: #0369a1; background: #fff; box-shadow: 0 2px 6px #0f172a0a; font-weight: 600; }
 .smart-heating-view {
   min-height: 100vh;
   background-color: #f1f5f9;
@@ -1124,6 +1169,7 @@ onUnmounted(() => {
 }
 
 /* 顶部 Banner */
+.smart-main.overview-main { max-width: 1840px; }
 .banner-card {
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   color: #f8fafc;
@@ -1334,6 +1380,7 @@ onUnmounted(() => {
 
 .action-buttons {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }
@@ -1411,10 +1458,14 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.refresh-interval-control { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: #cbd5e1; font-size: 13px; }
+.refresh-interval-control select { min-height: 40px; padding: 8px 10px; border: 1px solid #64748b; border-radius: 8px; background: #1e293b; color: #f8fafc; font-size: 16px; cursor: pointer; }
+.refresh-interval-control select:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
+
 /* 核心指标条 */
 .metric-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 16px;
@@ -1664,6 +1715,7 @@ onUnmounted(() => {
 
 .data-table {
   width: 100%;
+  min-width: 1080px;
   border-collapse: collapse;
   font-size: 13px;
   text-align: left;
@@ -1802,6 +1854,9 @@ onUnmounted(() => {
 }
 
 .relay-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 40px);
   background: #ffffff;
   border-radius: 12px;
   width: 100%;
@@ -1842,6 +1897,8 @@ onUnmounted(() => {
 }
 
 .modal-body {
+  min-height: 0;
+  overflow-y: auto;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -1976,5 +2033,78 @@ input:checked + .slider:before {
   align-items: center;
   gap: 10px;
   margin-left: auto;
+}
+
+/* 中屏先重排工具栏，手机使用测点卡片，避免整页横向滚动。 */
+.modal-header, .modal-footer { flex-shrink: 0; }
+.smart-main, .banner-title-row > div, .banner-actions, .filter-controls-wrapper { min-width: 0; }
+.title-with-badge, .header-left { flex-wrap: wrap; }
+.banner-subtitle, .header-tip { line-height: 1.7; }
+.banner-actions { flex: 1 1 100%; justify-content: space-between; padding-top: 4px; }
+.action-buttons .btn, .callout-actions .btn { min-height: 40px; }
+.banner-icon, .status-indicator .dot, .relay-dot { flex-shrink: 0; }
+.metric-item { min-width: 0; }
+.metric-val-row { flex-wrap: wrap; }
+.metric-value { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.table-responsive { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 10px; overscroll-behavior-x: contain; }
+.data-table .col-num { white-space: nowrap; }
+.page-tabs button:focus-visible, .tab-btn:focus-visible, .btn:focus-visible { outline: 3px solid #38bdf8; outline-offset: 3px; }
+@media (max-width: 1100px) {
+  .metric-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .filter-controls-wrapper { width: 100%; }
+  .banner-actions { align-items: flex-start; gap: 12px; }
+}
+@media (max-width: 640px) {
+  .smart-main { padding: 12px 12px 32px; }
+  .page-tabs { display: flex; margin: 12px 0 16px; }
+  .page-tabs button { flex: 1; padding: 10px 12px; }
+  .banner-card { padding: 18px 14px; border-radius: 16px; }
+  .banner-content { gap: 16px; margin-bottom: 12px; }
+  .banner-title-row { gap: 10px; align-items: flex-start; width: 100%; }
+  .banner-icon { width: 38px; height: 38px; font-size: 23px; border-radius: 10px; }
+  .banner-title { font-size: 19px; line-height: 1.4; }
+  .badge-role { font-size: 10px; }
+  .title-with-badge { gap: 6px; }
+  .banner-subtitle { font-size: 12px; margin-top: 8px; }
+  .offline-note { display: block; margin: 4px 0 0; }
+  .banner-actions { display: grid; width: 100%; gap: 14px; }
+  .status-indicator { justify-self: start; flex-wrap: wrap; padding: 7px 10px; font-size: 12px; }
+  .action-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .action-buttons .btn { min-width: 0; min-height: 44px; padding: 9px 8px; font-size: 12px; justify-content: center; white-space: normal; line-height: 1.5; }
+  .auto-refresh-toggle { min-height: 44px; font-size: 12px; justify-content: center; }
+  .refresh-interval-control { justify-content: center; min-width: 0; font-size: 12px; }
+  .refresh-interval-control select { min-height: 44px; min-width: 0; }
+  .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 14px; }
+  .metric-item { padding: 11px 10px; }
+  .metric-item:last-child { grid-column: 1 / -1; }
+  .metric-label { font-size: 11px; line-height: 1.5; }
+  .metric-value { font-size: 21px; }
+  .metric-hint { line-height: 1.5; }
+  .offline-callout { padding: 16px; flex-wrap: wrap; gap: 10px; }
+  .offline-callout .offline-icon { font-size: 24px; }
+  .offline-callout .offline-body { flex-basis: calc(100% - 40px); min-width: 0; }
+  .offline-callout .offline-title { line-height: 1.5; }
+  .offline-callout .callout-actions { width: 100%; flex-wrap: wrap; }
+  .callout-actions .btn { flex: 1 1 140px; white-space: normal; min-height: 44px; }
+  .nav-and-filter-card { padding: 14px; gap: 14px; }
+  .category-tabs-wrapper { width: 100%; gap: 8px; }
+  .filter-label-prefix { display: none; }
+  .tabs-container { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; gap: 5px; }
+  .tab-btn { min-height: 44px; padding: 8px 3px; font-size: 12px; }
+  .filter-controls-wrapper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 10px; }
+  .selector-group, .search-group { min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+  .search-group { grid-column: 1 / -1; grid-row: 1; }
+  .select-box, .input-search { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; font-size: 16px; padding: 10px; }
+  .data-section { display: none; }
+  .modal-backdrop { padding: 12px; }
+  .relay-modal { width: 100%; max-height: calc(100dvh - 24px); min-width: 0; }
+  .modal-header, .modal-body, .modal-footer { padding: 16px; }
+  .modal-header h3 { font-size: 16px; line-height: 1.5; }
+  .form-switch-row { gap: 12px; }
+  .switch { flex-shrink: 0; }
+  .modal-input { box-sizing: border-box; min-width: 0; font-size: 16px; }
+  .modal-footer { flex-wrap: wrap; gap: 10px; }
+  .modal-footer > .btn, .footer-right { width: 100%; }
+  .footer-right .btn { flex: 1; min-height: 44px; }
 }
 </style>
