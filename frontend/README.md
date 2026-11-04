@@ -1,3 +1,77 @@
+## 2026-11-04 填报页面顶栏按钮布局紧凑化优化与“一并提交”单行归并
+
+- **顶栏按钮布局治理** (`DataEntryView.vue`)：
+  - **防折行弹性排布**：将 `.topbar__title-group` 宽度设定为按需自适应（`flex: 0 0 auto`），`.topbar__actions` 设为 `flex: 1 1 auto; min-width: 0;`，将右侧空间最大化留给操作按钮；
+  - **单行绝对约束**：将 `.topbar__action-row` 与 `.topbar__buttons` 设置为 `flex-wrap: nowrap;`，桌面上坚决杜绝因屏幕尺寸或按钮增多导致的折行；
+  - **消除冗余最小宽度**：移除原 `.topbar__buttons .btn { min-width: 120px; }` 导致的按钮硬性撑大，重构为根据按钮内容自适应（`min-width: auto; height: 34px; padding: 0 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0;`）；
+  - **文案与尺寸精炼**：多表提交按钮由 `一并提交全部表格 (共${unitSheets.length}张)` 精简为 `一并提交 (共${unitSheets.length}张)`（悬浮提示保留完整信息），“📁 上传投诉报表（停用态）”收紧 padding 至 `0 10px`，次要按钮“仅提交当前表”调整为紧凑的 `12px` 文字按钮；整组操作按钮紧凑规整，全部稳定并列在同一行。
+- **构建验证**：`npm run build` 成功通过，生成产物 `DataEntryView-C382HUvE.js` 与 `DataEntryView-BpfPmQAw.css`。
+
+
+
+- **全局管理控制台新增下载按钮** (`GlobalManagementView.vue`)：
+  - 在“12345投诉底表(金山文档)”标签页的操作栏中新增“📥 下载底表到本地”按钮；
+  - 点击后异步调用后端下载端点并转换为浏览器 Blob 下载，保存名为 `2026-2027年度市12345诉求件统计表.xlsx` 的真实工作簿。
+- **供热填报页面交互升级** (`DataEntryView.vue`)：
+  - 将原“📁 上传投诉报表”按钮置为 `disabled` 状态，并设置灰色禁用样式及“已升级为云端自动拉取”浮窗提示；
+  - 在其右侧新增“⚡ 自动拉取投诉量”按钮；
+  - 点击后自动以当前业务日期请求后端一键同步，成功后直接执行 `fillComplaintData()` 将诉求件指标注入供热公司两张表格并高亮显示；随后原有“📊 查看统计结果”按钮自动亮起供随时穿透核对。
+- **构建验证**：`npm run build` 成功通过，生成产物 `DataEntryView-Dcw02uEH.js` 与 `GlobalManagementView-dICUCCo1.js`。
+
+## 2026-11-04 全局管理中心新增12345诉求底表(金山文档)接入与配置选项卡
+
+- **控制台页面升级**：
+  - `GlobalManagementView.vue`（`/projects/:projectKey/pages/global_management`）：
+    1. **新增纵向菜单选项卡**：左侧控制台新增 `📋 12345投诉底表(金山文档)` 标签项，支持在 `activeTab === 'kdocs_complaint'` 时展开专用管理工作区；
+    2. **配置信息表单**：支持配置金山文档只读分享链接（自动提取 `cj8e1PTQW0uN` 等短码）、只读展示 Share ID、输入/明暗切换查看 `wps_sid` 身份 Cookie、自定义维护备注；
+    3. **连通性与授权自检**：提供“🔌 测试连接与凭证有效性”按钮，实时向后端发送探测，回显测试时间、文件大小及详细诊断报告；
+    4. **一键拉取试算**：提供“⚡ 立即拉取并试算当日投诉”操作，免人工下载即时拉取金山云端底表并按当前基准业务日期完成指标测算，直观展示市直办、转办、省办、未办结诉求件；
+    5. **内置凭证获取指南**：提供 5 步开发者工具 `wps_sid` 提取说明，指导管理员在 Cookie 失效时一键换新。
+- **构建验证**：`npm run build` 成功通过，生成打包产物 `GlobalManagementView-BgMTV9Bm.js` 与 `GlobalManagementView-CYCJAlWr.css`。
+
+## 2026-11-04 常量指标同期值提交链路后端闭环与数据库约束修复
+
+- **常量指标提交状态协同**：
+  - 前端 `DataEntryView.vue` 解除 `Global_admin` 对常量同期指标列（`25-26` 等）的编辑锁定后，修改提交时向后端发送的含同期值的完整表格数据；
+  - 配合后端在数据库底层修复 `(company, item, period)` 唯一约束及批次内去重保护后，前端常量指标数据（本期及同期值）的编辑与保存实现全链路打通闭环。
+
+
+
+- **权限控制逻辑优化**：
+  - `DataEntryView.vue`（`/projects/:projectKey/pages/:pageKey/sheets/:sheetKey`）：
+    1. **解绑硬编码锁定**：在 `setupStandardGrid` 与 `applyStandardQueryResult` 中，移除对常量指标表末尾同期列（`isConstantPeerColumn`）的无条件锁定，仅在 `!isGlobalAdmin.value` 时设为只读；
+    2. **精准识别同期列**：在 `isPeerColumnIndex` 与 `isPeerColumnForTable` 中增加对 `同供暖期` 及常量指标表末尾列的智能识别；
+    3. **状态解耦与响应式支持**：确保 `__locked` 仅表示固有基础描述列，将 `isGlobalAdmin.value` 纳入 watch 侦听，用户登录后自动刷新并解开全局管理员的同期值修改权限。
+- **构建验证**：`npm run build` 成功通过，生成打包产物 `DataEntryView-D_l8Xdqq.js`。
+
+## 2026-11-03 智慧供热中继远端配置地址规范化与404修复
+
+- **远端地址规范化**：
+  - `SmartHeatingView.vue`：中继配置弹窗中的“本地拉取远端服务器地址”默认值与占位符规范为 `https://platform.smartview.top`，与后端智能路由解析无缝兼容。
+- **构建验证**：`npm run build` 成功通过，生成产物 `SmartHeatingView-YAeUDPa2.js`。
+
+## 2026-11-03 智慧供热刷新频率调整为1m与客户端下载权限限定
+
+- **刷新周期更新**：
+  - `SmartHeatingView.vue`：自动定时刷新间隔由 30s 调整为 60s（1m），顶部操作栏展示为“自动刷新 (1m)”。
+- **下载按钮仅限 Global_admin**：
+  - `SmartHeatingView.vue`：引入 `useAuthStore`，在顶部 Banner 与离线提示横幅的“📥 客户端脚本”下载按钮上增加 `v-if="isGlobalAdmin"` 条件控制，仅限全局管理员可见；函数内部补充 `!isGlobalAdmin` 阻断逻辑，彻底杜绝越权下载。
+- **构建验证**：`npm run build` 成功通过，生成打包产物 `SmartHeatingView-wruMMfHv.js` 与 `SmartHeatingView-Bv3r5OCP.css`。
+
+## 2026-11-03 智慧供热服务器中继开关与本地开发环境(localhost)同步功能
+
+- **页面交互升级**：
+  - `SmartHeatingView.vue`：
+    1. **本地环境感知与专属同步**：自动检测当前主机名是否为 `localhost` / `127.0.0.1`，若是则在顶部 Banner 与离线提示横幅中展示“📥 从线上中继同步”按钮，点击即可直接从生产服务器中继拉取最新工况至本地开发环境；
+    2. **中继配置模态弹窗**：顶部操作栏新增“服务器中继: 已开启/已关闭”胶囊按钮及呼吸灯状态指示，点击可唤起配置弹窗；
+    3. **中继开关控制**：弹窗内支持自由打开/关闭服务器中继转发（默认开启），可自定义转发目标接收端 URL 与本地拉取远端服务器地址；
+    4. **配套样式与交互**：新增弹窗遮罩、iOS 风格切换 Switch 按钮、中继指示灯及离线横幅同步按钮响应式样式。
+- **服务 API 扩展** (`services/api.js`)：
+  - `getSmartHeatingRelayConfig(projectKey)`：查询服务器中继配置；
+  - `updateSmartHeatingRelayConfig(projectKey, payload)`：更新服务器中继开关与目标 URL；
+  - `syncSmartHeatingFromRemote(projectKey, payload)`：向本地后端发送指令，从远程生产服务器拉取中继实时数据。
+- **构建验证**：`npm run build` 成功通过，生成打包产物 `SmartHeatingView-B7hTYEeq.js` 与 `SmartHeatingView-D2-sDldn.css`。
+
 ## 2026-11-03 智慧供热一级分类与看板界面更名为“一次网”
 
 - **常量规范升级**：

@@ -29,19 +29,45 @@
             </div>
 
             <div class="action-buttons">
+              <!-- 本地开发环境专属一键从线上同步按钮 -->
               <button
+                v-if="isLocalhost"
+                class="btn secondary btn-sm btn-sync-remote"
+                type="button"
+                :disabled="isSyncingRemote"
+                title="本地开发环境专用：直接从远程生产服务器中继拉取最新工况"
+                @click="handleSyncFromRemote"
+              >
+                {{ isSyncingRemote ? '同步中…' : '📥 从线上中继同步' }}
+              </button>
+
+              <!-- 服务器中继配置开关按钮 -->
+              <button
+                class="btn secondary btn-sm btn-relay-cfg"
+                :class="{ 'relay-active': relayConfig.forward_enabled }"
+                type="button"
+                title="设置服务器是否向本地开发环境或其他节点中继转发实时数据"
+                @click="showRelayModal = true"
+              >
+                <span class="relay-dot" :class="{ 'on': relayConfig.forward_enabled }"></span>
+                <span>服务器中继: {{ relayConfig.forward_enabled ? '已开启' : '已关闭' }}</span>
+              </button>
+
+              <!-- 客户端脚本下载：严格仅限 Global_admin -->
+              <button
+                v-if="isGlobalAdmin"
                 class="btn secondary btn-sm btn-download"
                 type="button"
                 :disabled="downloading"
-                title="下载专用的数据同步客户端脚本"
+                title="下载专用的数据同步客户端脚本 (仅限 Global_admin)"
                 @click="handleDownloadScript"
               >
-                {{ downloading ? '下载中…' : '📥 下载同步客户端' }}
+                {{ downloading ? '下载中…' : '📥 客户端脚本' }}
               </button>
 
               <label class="auto-refresh-toggle">
                 <input v-model="autoRefresh" type="checkbox" />
-                <span>自动刷新 (30s)</span>
+                <span>自动刷新 (1m)</span>
               </label>
 
               <button class="btn primary btn-sm" :disabled="loading" @click="fetchData">
@@ -106,17 +132,36 @@
         <div class="offline-body">
           <div class="offline-title">数据链路未连接 · 暂无实时数据</div>
           <div class="offline-desc">
-            系统严格遵循实时数据规范，在未接收到客户端推流前不呈现任何数据。请在办公电脑上运行数据同步客户端（smart_heating_relay_win7.py）以开启实时推流。
+            系统严格遵循实时数据规范，在未接收到客户端推流前不呈现任何数据。
+            <template v-if="isLocalhost">
+              检测到当前处于<strong>本地开发环境 (localhost)</strong>：若服务器已开启中继，您可以直接点击右侧按钮一键从线上同步实时数据流。
+            </template>
+            <template v-else>
+              请在办公电脑上运行数据同步客户端（smart_heating_relay_win7.py）以开启全网实时推流。
+            </template>
           </div>
         </div>
-        <button
-          class="btn primary btn-sm btn-callout-dl"
-          type="button"
-          :disabled="downloading"
-          @click="handleDownloadScript"
-        >
-          {{ downloading ? '下载中…' : '📥 下载客户端脚本' }}
-        </button>
+        <div class="callout-actions">
+          <button
+            v-if="isLocalhost"
+            class="btn primary btn-sm btn-callout-sync"
+            type="button"
+            :disabled="isSyncingRemote"
+            @click="handleSyncFromRemote"
+          >
+            {{ isSyncingRemote ? '同步中…' : '📥 从线上中继拉取数据' }}
+          </button>
+          <button
+            v-if="isGlobalAdmin"
+            class="btn secondary btn-sm btn-callout-dl"
+            type="button"
+            :disabled="downloading"
+            title="下载专用的数据同步客户端脚本 (仅限 Global_admin)"
+            @click="handleDownloadScript"
+          >
+            {{ downloading ? '下载中…' : '📥 客户端脚本' }}
+          </button>
+        </div>
       </section>
 
       <!-- 分类与筛选工具栏 -->
@@ -514,6 +559,84 @@
           </table>
         </div>
       </section>
+
+      <!-- 中继转发与同步配置弹窗 (仅管理员) -->
+      <div v-if="showRelayModal" class="modal-backdrop" @click.self="showRelayModal = false">
+        <div class="relay-modal card elevated">
+          <header class="modal-header">
+            <h3>📡 服务器数据中继与本地同步配置</h3>
+            <button class="btn-close" type="button" @click="showRelayModal = false">×</button>
+          </header>
+
+          <div class="modal-body">
+            <div class="form-item form-switch-row">
+              <div class="switch-label-col">
+                <span class="label-title">服务器中继转发开关</span>
+                <span class="label-desc">当办公电脑推流至服务器后，服务器是否自动中继并转发数据包（默认开启）</span>
+              </div>
+              <label class="switch">
+                <input v-model="relayConfig.forward_enabled" type="checkbox" />
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <div class="form-item">
+              <label class="input-label">中继转发目标接收端 (Webhook / 内网穿透或开发环境地址)</label>
+              <input
+                v-model="relayConfig.forward_target_url"
+                type="text"
+                class="modal-input font-mono"
+                placeholder="http://127.0.0.1:8000/api/v1/projects/daily_report_25_26/smart-heating/receive-relay"
+              />
+              <span class="input-hint">生产服务器接收到新数据时，异步 POST 推送到该地址。</span>
+            </div>
+
+            <div class="form-item">
+              <label class="input-label">本地拉取远端服务器地址 (localhost 专用主动拉取源)</label>
+              <input
+                v-model="relayConfig.remote_server_url"
+                type="text"
+                class="modal-input font-mono"
+                placeholder="https://platform.smartview.top"
+              />
+              <span class="input-hint">当开发环境位于防火墙或局域网内无法直接被推送时，本地前端可通过此中继接口拉取实时流。</span>
+            </div>
+
+            <div class="form-item">
+              <label class="input-label">中继安全通信密钥 (Token)</label>
+              <input
+                v-model="relayConfig.relay_secret"
+                type="text"
+                class="modal-input font-mono"
+                placeholder="phoenix_smart_heating_secret_2026"
+              />
+            </div>
+          </div>
+
+          <footer class="modal-footer">
+            <button
+              v-if="isLocalhost"
+              class="btn secondary btn-sm"
+              type="button"
+              :disabled="isSyncingRemote"
+              @click="handleSyncFromRemote"
+            >
+              {{ isSyncingRemote ? '同步中…' : '📥 立即测试从远端同步' }}
+            </button>
+            <div class="footer-right">
+              <button class="btn secondary btn-sm" type="button" @click="showRelayModal = false">取消</button>
+              <button
+                class="btn primary btn-sm"
+                type="button"
+                :disabled="isSavingRelayConfig"
+                @click="handleSaveRelayConfig"
+              >
+                {{ isSavingRelayConfig ? '保存中…' : '保存配置' }}
+              </button>
+            </div>
+          </footer>
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -523,10 +646,14 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import { useAuthStore } from '../store/auth'
 import {
   getSmartHeatingLatest,
   getSmartHeatingStatus,
   downloadSmartHeatingClientScript,
+  getSmartHeatingRelayConfig,
+  updateSmartHeatingRelayConfig,
+  syncSmartHeatingFromRemote,
 } from '../services/api'
 import {
   LEVEL1_ORDER,
@@ -538,12 +665,39 @@ import {
 
 const route = useRoute()
 const projectKey = String(route.params.projectKey || 'daily_report_25_26')
+const auth = useAuthStore()
+
+// 判定当前用户是否具备 Global_admin 全局管理员权限
+const isGlobalAdmin = computed(() => {
+  const g = auth.user?.group
+  const groups = auth.user?.groups || []
+  return g === 'Global_admin' || groups.includes('Global_admin')
+})
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
   { label: '生产日报', to: `/projects/${encodeURIComponent(projectKey)}/pages` },
   { label: '智慧供热实时工况', to: null },
 ])
+
+// 检测是否处于本地开发环境 (localhost / 127.0.0.1)
+const isLocalhost = computed(() => {
+  if (typeof window === 'undefined') return false
+  const host = window.location.hostname
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+})
+
+// 中继与同步状态控制
+const showRelayModal = ref(false)
+const isSyncingRemote = ref(false)
+const isSavingRelayConfig = ref(false)
+
+const relayConfig = ref({
+  forward_enabled: true,
+  forward_target_url: 'http://127.0.0.1:8000/api/v1/projects/daily_report_25_26/smart-heating/receive-relay',
+  remote_server_url: 'https://platform.smartview.top',
+  relay_secret: 'phoenix_smart_heating_secret_2026',
+})
 
 // 选中的一级分类（默认首站，与 Excel 表顺序一致）
 const currentLevel1 = ref('首站')
@@ -852,6 +1006,10 @@ function getPlantTagClass(name = '') {
 }
 
 async function handleDownloadScript() {
+  if (!isGlobalAdmin.value) {
+    alert('下载同步客户端仅限 Global_admin 角色使用')
+    return
+  }
   downloading.value = true
   try {
     await downloadSmartHeatingClientScript(projectKey)
@@ -859,6 +1017,59 @@ async function handleDownloadScript() {
     alert(err?.message || '下载同步客户端失败，请联系管理员确认权限')
   } finally {
     downloading.value = false
+  }
+}
+
+async function fetchRelayConfig() {
+  try {
+    const res = await getSmartHeatingRelayConfig(projectKey)
+    const cfg = res?.data || res?.config
+    if (cfg) {
+      relayConfig.value = {
+        ...relayConfig.value,
+        ...cfg,
+      }
+    }
+  } catch (err) {
+    // 忽略未授权或普通错误
+  }
+}
+
+async function handleSaveRelayConfig() {
+  isSavingRelayConfig.value = true
+  try {
+    await updateSmartHeatingRelayConfig(projectKey, {
+      forward_enabled: relayConfig.value.forward_enabled,
+      forward_target_url: relayConfig.value.forward_target_url,
+      remote_server_url: relayConfig.value.remote_server_url,
+      relay_secret: relayConfig.value.relay_secret,
+    })
+    showRelayModal.value = false
+    alert('中继转发配置已保存生效')
+  } catch (err) {
+    alert(err?.message || '保存中继配置失败')
+  } finally {
+    isSavingRelayConfig.value = false
+  }
+}
+
+async function handleSyncFromRemote() {
+  isSyncingRemote.value = true
+  try {
+    const res = await syncSmartHeatingFromRemote(projectKey, {
+      remote_url: relayConfig.value.remote_server_url,
+      token: relayConfig.value.relay_secret,
+    })
+    if (res?.ok) {
+      await fetchData()
+      alert('已成功从线上服务器中继拉取最新工况数据！')
+    } else {
+      alert(res?.message || '从线上服务器拉取失败')
+    }
+  } catch (err) {
+    alert(err?.message || '同步失败，请检查网络连接与安全Token')
+  } finally {
+    isSyncingRemote.value = false
   }
 }
 
@@ -882,11 +1093,12 @@ async function fetchData() {
 
 onMounted(async () => {
   await fetchData()
+  await fetchRelayConfig()
   timer = setInterval(() => {
     if (autoRefresh.value) {
       fetchData()
     }
-  }, 30000)
+  }, 60000)
 })
 
 onUnmounted(() => {
@@ -1086,6 +1298,24 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
+.offline-callout .callout-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.offline-callout .btn-callout-sync {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.offline-callout .btn-callout-sync:hover {
+  background: #0369a1;
+}
+
 .offline-callout .btn-callout-dl {
   background: #d97706;
   border-color: #d97706;
@@ -1106,6 +1336,53 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.btn-sync-remote {
+  background: #0284c7;
+  color: #ffffff;
+  border: 1px solid #38bdf8;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-sync-remote:hover {
+  background: #0369a1;
+}
+
+.btn-relay-cfg {
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-relay-cfg:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.btn-relay-cfg.relay-active {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+}
+
+.relay-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #64748b;
+  display: inline-block;
+}
+
+.relay-dot.on {
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
 }
 
 .btn-download {
@@ -1505,5 +1782,199 @@ onUnmounted(() => {
   padding: 36px 0;
   color: #94a3b8;
   font-size: 14px;
+}
+
+/* 中继与同步弹窗 */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.relay-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 580px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #64748b;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.btn-close:hover {
+  color: #0f172a;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-switch-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.switch-label-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.label-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.input-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.modal-input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+.input-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Switch 开关组件 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1;
+  transition: .3s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+}
+
+input:checked + .slider {
+  background-color: #0284c7;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+.slider.round {
+  border-radius: 26px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
 }
 </style>

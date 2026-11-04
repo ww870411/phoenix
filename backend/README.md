@@ -1,3 +1,70 @@
+## 2026-11-04 12345诉求底表金山文档(KDocs)免登录自动抓取服务、配置API与文件直下接口
+
+- **新增金山文档自动拉取与配置服务** (`backend/projects/daily_report_25_26/services/kdocs_complaint_service.py`)：
+  - **持久化配置管理**：配置文件位于 `backend_data/projects/daily_report_25_26/config/kdocs_complaint_config.json`，初始保存分享链接 `https://www.kdocs.cn/l/cj8e1PTQW0uN`、提取的 Share ID 及用户提供的 `wps_sid` Cookie；
+  - **免登录直链嗅探与连通性验证** (`test_kdocs_connectivity`)：通过携带 `wps_sid` 调用金山云端文件下载 API，在服务端换取临时直链，解析文件大小与测试状态；
+  - **流式文件下载** (`download_kdocs_workbook_bytes`)：安全下载约 1.53 MB 的最新 12345 诉求件统计工作簿二进制字节流；
+- **接口扩展** (`backend/projects/daily_report_25_26/api/complaint_optimizer.py` 与 `router.py`)：
+  - `GET /data_entry/complaints/kdocs/config`：获取当前金山文档接入配置；
+  - `POST /data_entry/complaints/kdocs/config`：保存/更新链接、凭证及备注；
+  - `POST /data_entry/complaints/kdocs/test`：在线测试连通性，自动回写最新测试时间与状态；
+  - `POST /data_entry/complaints/kdocs/sync`：一键自动从云端拉取底表并结合目标业务日期调用 `complaint_statistics.calculate` 进行诉求量计算；
+  - `GET /data_entry/complaints/kdocs/download`：服务端拉取最新工作簿二进制流，并通过 `Response(..., media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')` 支持浏览器直接下载 `.xlsx` 到本地。
+- **验证**：通过 TestClient 单元测试连通性接口与文件直下接口，HTTP 200 返回成功，成功获取下载直链与 1.6 MB 真实工作簿，与已有统计函数完美联通。
+
+## 2026-11-04 常量指标底层表(constant_data)唯一约束修复与批次去重增强
+
+## 2026-11-04 常量指标底层表(constant_data)唯一约束修复与批次去重增强
+
+- **常量指标持久化容错与唯一约束对齐**：
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`：
+    - 在 `_persist_constant_data` 函数中引入字典去重保护机制（以 `(company, item, period)` 为键），在批量构造 `upsert_values` 时主动在内存中聚合，防止同批次提交中因包含重复键而触发 PostgreSQL `ON CONFLICT DO UPDATE command cannot affect row a second time` 异常；
+    - 维持基于 PostgreSQL 方言 `pg_insert(ConstantData.__table__).on_conflict_do_update(index_elements=["company", "item", "period"], set_=...)` 的标准 UPSERT 模式，实现指标覆盖写入。
+- **数据库表结构修复** (`public.constant_data`)：
+  - 针对历史表缺失唯一约束的问题，通过安全事务清理 765 条历史重复脏数据后，补齐主键 `PRIMARY KEY (id)` 及唯一约束 `CONSTRAINT uq_constant_data_company_item_period UNIQUE (company, item, period)`；
+  - 同步修正 `backend/sql/create_tables.sql` 与 `backend/sql/create_tables copy.sql`，将历史废弃的 5 元组索引更新为 `uq_constant_data_company_item_period`。
+- **验证**：PostgreSQL 实际批量提交测试 `INSERT 0 2` 成功，单元持久化测试 `Success, count = 2` 正常返回。
+
+
+
+- **常量指标提交与权限协同**：
+  - `backend/projects/daily_report_25_26/api/legacy_full.py`：
+    - 后端 `POST /data_entry/sheets/{sheet_key}/submit` 依赖 `session.get_project_action_flags(PROJECT_KEY).can_submit` 进行提交鉴权，并通过 `_parse_constant_records` 与 `_persist_constant_data` 实现基于 `(company, sheet_name, item, period)` 的 UPSERT 持久化；
+    - 前端配合解除对 `Global_admin` 角色修改常量同期值（如 `25-26` 同期指标）的界面只读锁定后，服务端支持直接接收并持久化更新常量同期值基准；
+    - 非管理员在前端仍受只读拦截和提交保护，保持权限体系的严格隔离。
+- **验证**：与前端 `npm run build` 打包联动校验通过，前后端常量接口与数据结构完全保持一致。
+
+## 2026-11-03 智慧供热中继远端同步智能路由与404根因修复
+
+- **智能路由与防重叠拼接** (`backend/projects/daily_report_25_26/api/smart_heating.py`)：
+  - `sync_from_remote_server` 端点增加自适应 URL 提取：自动检测 `remote_server_url` 是否已包含 `/smart-heating/relay-feed`，消除路径重复追加导致的远端 404 错误。
+- **错误捕获重构**：
+  - 远端连接异常转为规范的 JSON 响应，标明真实的远程请求 URL 与状态码，避免被 Uvicorn 日志直接记录为本地 404 错误。
+- **验证**：Docker 容器内实测同步线上生产服务器数据成功，54 首站 + 58 电厂 + 242 一次网测点原子入库。
+
+## 2026-11-03 智慧供热在线心跳时效扩展与客户端默认轮询周期调整为1m
+
+- **在线心跳容差扩展** (`backend/projects/daily_report_25_26/api/smart_heating.py`)：
+  - 在 `get_smart_heating_latest` 与 `get_smart_heating_status` 接口中，将基于推流时间戳的心跳在线判定区间由 90 秒放宽至 180 秒（3 分钟），以完美配合 1 分钟（1m）的前端与中继刷新频率。
+- **中继脚本与同步工具默认参数**：
+  - `smart_heating_relay_win7.py`（及对应镜像）与 `dev_relay_pull_sync.py`：出厂默认轮询间隔调整为 60 秒。
+- **客户端下载接口防护**：
+  - `GET /smart-heating/client-script` 维持严格仅限 `Global_admin` 角色。
+- **验证**：Python 编译检查与 TestClient 单元测试通过。
+
+## 2026-11-03 智慧供热服务器中继转发API、本地接收接口与开发同步支持
+
+- **中继转发与配置管理** (`backend/projects/daily_report_25_26/api/smart_heating.py`)：
+  - **持久化配置**：新增 `relay_config.json` 存储中继配置，默认开启中继转发 (`forward_enabled: True`)，支持自定义转发目标地址及远端拉取源；
+  - **异步转发任务**：在 `POST /smart-heating/push` 接收数据时，通过 FastAPI `BackgroundTasks` 异步调用 `_forward_payload_task`，非阻塞转发数据包至配置的目标地址；
+  - **中继接收端点**：新增 `POST /smart-heating/receive-relay`，供本地开发环境或次级中继节点接收转发数据并原子入库；
+  - **中继数据流拉取**：新增 `GET /smart-heating/relay-feed`，供开发环境跨 NAT 主动拉取生产服务器最新工况；
+  - **本地主动拉取同步**：新增 `POST /smart-heating/sync-from-remote`，由本地后端一键从远程云端服务器拉取实时流并写入本地；
+  - **中继配置接口**：新增 `GET /smart-heating/relay-config` 与 `POST /smart-heating/relay-config`（限 `Global_admin`），支持查询和开关服务器中继转发。
+- **开发机 CLI 同步脚本**：
+  - 新增 `backend/projects/daily_report_25_26/dev_relay_pull_sync.py`，支持单次拉取或以守护进程（`--daemon`）自动轮询同步远端中继数据流至开发机。
+- **验证**：Python 编译检查无报错；TestClient 单元测试覆盖中继配置读写、开关切换（默认开/关/再开）、推送触发转发、接收端点入库及流式拉取，测试 100% 通过。
+
 ## 2026-11-03 智慧供热一级分类打标规范化为“一次网”
 
 - **服务清洗管道升级**：

@@ -100,7 +100,7 @@ DEFAULT_CONFIG = {
     "dc_list": [2, 3],
     "sz_list": [2, 3, 4, 5],
     "yw_list": [60, 61, 62, 63, 64, 65, 66, 67, 68],
-    "poll_interval_seconds": 30,
+    "poll_interval_seconds": 60,
     "timeout_seconds": 15,
     "intranet_cookie": (
         "session=.eJx9lF2PojAUhv8L114giF93Agvd4pqVkvARk4bVjkOyoEHIXmz2v-8BHKctZW6IPM859bT19a-WRMeE2pj6e4oDeGRuhLWtPuMFsaOMusfQJ7ZS-ThJlAKFmbadj3nop-qVCFLWxwjvlfVpMiGyg2LWuBtTXD5zbZsekG0rBSGhysBDTT0UdvNMGZqOttfL_R4rOYkdfJw2NIYLkzfZ6-wQYU9oxM5wGbqAjol0ccDCdMwIkthPwEmABHaMqP-dUAdnNlYJP7HFbT45zKUWBEk8CuDpEGFxYPCN0jkA7M5BaE5j2C4RJwOWYDivBIfxlEg_RXePMQ08_jAGRmSWOgF32ntF48DCbMyIXDcVQU6JEeSEEEGOixHkBB9BAT9TqHCTQownJ8R4DkIRRU4QFE4IMaMfRswoR6WMykbIKCeFjHJcyihnpBCCgSRhJ0qFjXeJ81DqjGDK_1kNbIghz4jYN4olsGdo5Hsd52aAHooCmaE4C-RmEkszA0uQPW5Owx_wg5bpK570zuoyr1jVaNumbtlMY_fb-Z02RcmgYLUxlxvdMqCyeND8UhaVttVO7fqsm6fWYvny1C6YcYHPb2dTm2m_b9eiokX1doO613uVd6tp1_r6oO2D1Z-V9z8XEHPDXFjLF6xZycpfrO4nHNCjyRvWv3f9NG-bd-iz1ktrvjJd3bCtxcZe71x34Tkrc6e71u7bwtOe5Rd2z-umhF3S4tL3KcxzyC8213cUw8CLj3dl28oy1qd2aZgrU_v3HxeXUQk.aumL-A.LAW_yxLpOahZZybbx5cMHyDxDXs"

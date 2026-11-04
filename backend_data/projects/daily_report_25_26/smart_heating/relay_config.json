@@ -1,0 +1,6 @@
+{
+  "forward_enabled": true,
+  "forward_target_url": "http://127.0.0.1:8000/api/v1/projects/daily_report_25_26/smart-heating/receive-relay",
+  "push_token": "phoenix_smart_heating_secret_2026",
+  "remote_server_url": "https://platform.smartview.top"
+}

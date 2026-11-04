@@ -78,14 +78,23 @@
             />
             <button
               v-if="canUploadComplaint"
-              class="btn secondary complaint-upload-btn"
+              class="btn secondary complaint-upload-btn is-disabled-btn"
               type="button"
-              :disabled="entryLocked || complaintUploading"
-              :title="complaintUploadTitle"
-              @click="triggerComplaintUpload"
+              disabled
+              title="已升级为云端自动拉取，请点击右侧【⚡ 自动拉取投诉量】"
             >
-              <span v-if="complaintUploading">⏳ 统计中…</span>
-              <span v-else>📁 上传投诉报表</span>
+              📁 上传投诉报表
+            </button>
+            <button
+              v-if="canUploadComplaint"
+              class="btn primary complaint-auto-pull-btn"
+              type="button"
+              :disabled="entryLocked || complaintAutoPulling"
+              title="自动从金山文档共享链接下载最新底表并自动计算填入表格对应单元格"
+              @click="triggerAutoPullComplaint"
+            >
+              <span v-if="complaintAutoPulling">⏳ 正在自动拉取填入…</span>
+              <span v-else>⚡ 自动拉取投诉量</span>
             </button>
             <button
               v-if="canUploadComplaint && complaintStats"
@@ -112,7 +121,7 @@
               :title="`一并提交 ${unitGroupName || '本单位'} 全部 ${unitSheets.length} 张表格`"
               @click="onSubmitAll"
             >
-              {{ canSubmitCurrentProject ? `一并提交全部表格 (共${unitSheets.length}张)` : '当前账号无提交权限' }}
+              {{ canSubmitCurrentProject ? `一并提交 (共${unitSheets.length}张)` : '当前账号无提交权限' }}
             </button>
             <button
               v-else
@@ -454,6 +463,7 @@ const canUploadComplaint = computed(() => {
 })
 const complaintUploadTitle = computed(() => '上传投诉报表 .xlsx，智能统计集团及各中心投诉量并支持一键填入')
 const complaintUploading = ref(false)
+const complaintAutoPulling = ref(false)
 const complaintFileInputRef = ref(null)
 const isComplaintModalOpen = ref(false)
 const complaintAutofilledCells = ref(new Set())
@@ -822,7 +832,7 @@ const submitDisabled = computed(() => !canSubmitCurrentProject.value || isReadOn
 const submitButtonDisabled = computed(() => submitDisabled.value || entryLocked.value || hasBlockingValidation.value);
 
 watch(
-  () => [isReadOnlyForDate.value, entryLocked.value],
+  () => [isReadOnlyForDate.value, entryLocked.value, isGlobalAdmin.value],
   () => applyReadonlyToColumns()
 );
 
@@ -1744,18 +1754,28 @@ function isPeerColumnIndex(index, colName = null) {
   // 1. 优先检查原始未替换占位符的列名
   const rawName = Array.isArray(baseColumns.value) ? baseColumns.value[index] : null;
   if (typeof rawName === 'string') {
-    if (rawName.includes('同期') || rawName.includes('去年')) return true;
+    if (rawName.includes('同期') || rawName.includes('去年') || rawName.includes('同供暖期')) return true;
   }
   // 2. 检查当前显示的列名或日期
   const currentName = colName || (Array.isArray(columns.value) ? columns.value[index] : null);
   if (typeof currentName === 'string') {
-    if (currentName.includes('同期') || currentName.includes('去年')) return true;
+    if (currentName.includes('同期') || currentName.includes('去年') || currentName.includes('同供暖期')) return true;
     const peerStr = peerDateYYYYMMDD(bizDate.value);
     if (peerStr && currentName.includes(peerStr)) return true;
   }
   // 3. 5 列标准日报表 (项目, 计量单位, 本期日, 同期日, 解释说明) -> 第 3 列固定为同期日
-  if (Array.isArray(columns.value) && columns.value.length === 5 && index === 3) {
+  if (isDailyPage.value && Array.isArray(columns.value) && columns.value.length === 5 && index === 3) {
     return true;
+  }
+  // 4. 常量指标表：最后一列为同供暖期/同期值列
+  if (templateType.value === 'constant') {
+    const cols = Array.isArray(columns.value) && columns.value.length ? columns.value : (Array.isArray(baseColumns.value) ? baseColumns.value : []);
+    if (Array.isArray(cols) && cols.length > 0) {
+      const limit = resolveReadonlyLimit(cols);
+      if (index === cols.length - 1 && index > limit) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -1764,16 +1784,18 @@ function applyReadonlyToColumns() {
   if (!Array.isArray(gridColumns.value)) return;
   const shouldLockAll = isReadOnlyForDate.value || entryLocked.value;
   gridColumns.value = gridColumns.value.map((def, index) => {
-    let locked = Boolean(def.__locked) || shouldLockAll;
+    const isBaseLocked = index <= readOnlyThreshold.value;
+    let locked = isBaseLocked || shouldLockAll;
     // 同期值字段权限控制：除 Global_admin 之外，全量强制设为只读不可修改
     if (!isGlobalAdmin.value && isPeerColumnIndex(index, def.name)) {
       locked = true;
     }
     const currentReadonly = def.readonly === undefined ? false : def.readonly;
-    if (currentReadonly === locked) {
+    const currentLocked = def.__locked === undefined ? false : def.__locked;
+    if (currentReadonly === locked && currentLocked === isBaseLocked) {
       return def;
     }
-    return { ...def, readonly: locked, __locked: Boolean(def.__locked) || (!isGlobalAdmin.value && isPeerColumnIndex(index, def.name)) };
+    return { ...def, readonly: locked, __locked: isBaseLocked };
   });
 }
 
@@ -1879,14 +1901,15 @@ async function setupStandardGrid(tpl) {
   const isConstant = templateType.value === 'constant';
   gridColumns.value = tpl.columns.map((colName, index) => {
     const isConstantPeerColumn = isConstant && (index === tpl.columns.length - 1) && (index > readonlyLimit);
-    const isPeer = isPeerColumnIndex(index, colName);
-    const locked = index <= readonlyLimit || isConstantPeerColumn || (!isGlobalAdmin.value && isPeer);
+    const isPeer = isPeerColumnIndex(index, colName) || isConstantPeerColumn;
+    const isBaseLocked = index <= readonlyLimit;
+    const locked = isBaseLocked || (!isGlobalAdmin.value && isPeer);
     return {
       prop: `c${index}`,
       name: String(colName ?? ''),
       autoSize: true,
       minSize: index === 0 ? 160 : 120,
-      __locked: locked,
+      __locked: isBaseLocked,
       readonly: locked || isReadOnlyForDate.value,
       cellProperties: makeComplaintCellProperties(index),
     };
@@ -2598,6 +2621,43 @@ async function onSubmitAll() {
   }
 }
 
+// --- 自动从金山文档云端拉取投诉量 ---
+async function triggerAutoPullComplaint() {
+  if (complaintAutoPulling.value || entryLocked.value || !canUploadComplaint.value) return
+  const targetDate = bizDate.value
+  complaintAutoPulling.value = true
+  complaintError.value = ''
+  showSubmitFeedback('info', `正在从金山文档云端自动拉取最新 12345 诉求底表并计算【${targetDate}】指标…`, { autoHide: false })
+
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/data_entry/complaints/kdocs/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ biz_date: targetDate }),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.ok || !json.data) {
+      throw new Error(json.detail || json.message || '从金山文档同步投诉数据失败')
+    }
+
+    if (bizDate.value !== targetDate) {
+      throw new Error('处理期间业务日期已变更，请核实后重试。')
+    }
+
+    complaintStats.value = json.data
+    showSubmitFeedback('info', `✔ 云端底表拉取完成（${json.filename}）！正在执行自动计算与表格填入…`, { autoHide: false })
+
+    // 自动调用现有流程：计算并填入供热公司的两张填报表
+    await fillComplaintData()
+  } catch (err) {
+    console.error('自动拉取投诉量失败:', err)
+    complaintError.value = err.message || String(err)
+    showSubmitFeedback('error', `自动拉取投诉量失败: ${err.message || err}`, { autoHide: false })
+  } finally {
+    complaintAutoPulling.value = false
+  }
+}
+
 // --- 投诉报表上传小工具 ---
 function triggerComplaintUpload() {
   if (complaintUploading.value) return
@@ -2662,13 +2722,14 @@ async function loadComplaintTargetState(targetKey, expectedDate, expectedConfig)
   const isConstant = (tpl.template_type || 'standard') === 'constant'
   const gridCols = (tpl.columns || []).map((name, index) => {
     const isConstantPeer = isConstant && index === tpl.columns.length - 1 && index > readonlyLimit
-    const isPeer = isPeerColumnForTable(index, tpl.columns, baseCols)
-    const locked = index <= readonlyLimit || isConstantPeer || (!isGlobalAdmin.value && isPeer)
+    const isPeer = isPeerColumnForTable(index, tpl.columns, baseCols) || isConstantPeer
+    const isBaseLocked = index <= readonlyLimit
+    const locked = isBaseLocked || (!isGlobalAdmin.value && isPeer)
     return {
       prop: `c${index}`,
       name: String(name ?? '') + (!isGlobalAdmin.value && isPeer ? ' 🔒' : ''),
       size: index === 0 ? 220 : 120,
-      __locked: locked,
+      __locked: isBaseLocked,
       readonly: locked || isReadOnlyForDate.value,
       cellProperties: makeComplaintCellProperties(index),
     }
@@ -2834,10 +2895,10 @@ function isPeerColumnForTable(colIdx, tableCols, baseCols = null) {
   if (!Array.isArray(tableCols) || colIdx < 0 || colIdx >= tableCols.length) return false
   if (Array.isArray(baseCols) && typeof baseCols[colIdx] === 'string') {
     const raw = baseCols[colIdx]
-    if (raw.includes('同期') || raw.includes('去年')) return true
+    if (raw.includes('同期') || raw.includes('去年') || raw.includes('同供暖期')) return true
   }
   const cName = String(tableCols[colIdx] ?? '')
-  if (cName.includes('同期') || cName.includes('去年')) return true
+  if (cName.includes('同期') || cName.includes('去年') || cName.includes('同供暖期')) return true
   const peerStr = peerDateYYYYMMDD(bizDate.value)
   if (peerStr && cName.includes(peerStr)) return true
   if (tableCols.length === 5 && colIdx === 3 && !cName.includes('本期')) {
@@ -2953,13 +3014,14 @@ async function applyEfficiencyDataToSheets(sheetsData) {
             const isConstant = (tpl.template_type || 'standard') === 'constant'
             const gridCols = (tpl.columns || []).map((name, index) => {
               const isConstantPeer = isConstant && (index === tpl.columns.length - 1) && (index > readonlyLimit)
-              const isPeer = isPeerColumnIndex(index, name)
-              const locked = index <= readonlyLimit || isConstantPeer || (!isGlobalAdmin.value && isPeer)
+              const isPeer = isPeerColumnIndex(index, name) || isConstantPeer
+              const isBaseLocked = index <= readonlyLimit
+              const locked = isBaseLocked || (!isGlobalAdmin.value && isPeer)
               return {
                 prop: `c${index}`,
                 name: String(name ?? '') + (!isGlobalAdmin.value && isPeer ? ' 🔒' : ''),
                 size: index === 0 ? 220 : 120,
-                __locked: locked,
+                __locked: isBaseLocked,
                 readonly: locked || isReadOnlyForDate.value,
               }
             })
@@ -3164,14 +3226,18 @@ async function applyStandardQueryResult(payload, isCurrent = () => true) {
     if (!isDailyPage.value) {
       columns.value = q.columns;
       const isConstant = templateType.value === 'constant';
+      const readonlyLimit = resolveReadonlyLimit(q.columns);
+      readOnlyThreshold.value = readonlyLimit;
       const colDefs = q.columns.map((name, index) => {
-        const isConstantPeerColumn = isConstant && (index === q.columns.length - 1) && (index > readOnlyThreshold.value);
-        const locked = index <= readOnlyThreshold.value || isConstantPeerColumn;
+        const isConstantPeerColumn = isConstant && (index === q.columns.length - 1) && (index > readonlyLimit);
+        const isPeer = isPeerColumnIndex(index, name) || isConstantPeerColumn;
+        const isBaseLocked = index <= readonlyLimit;
+        const locked = isBaseLocked || (!isGlobalAdmin.value && isPeer);
         return {
           name: String(name ?? ''),
           prop: `c${index}`,
           size: index === 0 ? 220 : 120,
-          __locked: locked,
+          __locked: isBaseLocked,
           readonly: locked || isReadOnlyForDate.value,
         };
       });
@@ -3304,17 +3370,17 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1 1 220px;
+  flex: 0 0 auto;
 }
 .topbar__actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-end;
-  flex: 1 1 320px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
-.topbar__status-row,
-.topbar__action-row {
+.topbar__status-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3322,21 +3388,40 @@ onBeforeUnmount(() => {
   gap: 8px;
   width: 100%;
 }
-.topbar__buttons {
+.topbar__action-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.topbar__buttons {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
 }
 .topbar__buttons .btn {
-  min-width: 120px;
+  min-width: auto;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .topbar__date {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-right: 8px;
+  margin-right: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .table-wrap {
@@ -3607,6 +3692,38 @@ onBeforeUnmount(() => {
   color: #c2410c !important;
   transform: translateY(-1px);
   box-shadow: 0 4px 6px -1px rgba(194, 65, 12, 0.15);
+}
+
+.complaint-upload-btn:disabled,
+.complaint-upload-btn.is-disabled-btn {
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #94a3b8 !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.complaint-auto-pull-btn {
+  font-weight: 600 !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  border: 1px solid #1d4ed8 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.complaint-auto-pull-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3) !important;
 }
 
 .complaint-view-btn {
@@ -3955,6 +4072,7 @@ onBeforeUnmount(() => {
   border-color: #047857 !important;
   box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
   transition: all 0.2s ease;
+  padding: 0 14px !important;
 }
 .submit-all-btn:hover {
   background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
@@ -3962,11 +4080,12 @@ onBeforeUnmount(() => {
   transform: translateY(-1px);
 }
 .text-btn {
-  font-size: 13px !important;
+  font-size: 12px !important;
   color: #64748b !important;
   background: transparent !important;
   border: 1px solid transparent !important;
-  padding: 6px 10px !important;
+  padding: 0 8px !important;
+  height: 32px !important;
 }
 .text-btn:hover {
   color: #1e293b !important;

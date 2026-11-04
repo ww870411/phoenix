@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS constant_data (
     operation_time  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_constant_unique
-    ON Constant_data (company, center, sheet_name, item, period);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_constant_data_company_item_period
+    ON constant_data (company, item, period);
 
 CREATE TABLE IF NOT EXISTS temperature_data (
     id              BIGSERIAL PRIMARY KEY,

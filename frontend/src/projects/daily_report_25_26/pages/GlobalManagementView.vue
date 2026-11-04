@@ -67,6 +67,13 @@
           </button>
           <button
             type="button"
+            :class="['sidebar-tab-btn', { active: activeTab === 'kdocs_complaint' }]"
+            @click="activeTab = 'kdocs_complaint'"
+          >
+            📋 12345投诉底表(金山文档)
+          </button>
+          <button
+            type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'constants' }]"
             @click="activeTab = 'constants'"
           >
@@ -635,7 +642,204 @@
           </div>
 
           <!-- ========================================== -->
-          <!-- Tab 3: 📊 常量指标与价格基准 (预留扩展模块)  -->
+          <!-- Tab 3: 📋 12345投诉底表 (金山文档) 接入与配置  -->
+          <!-- ========================================== -->
+          <div v-if="activeTab === 'kdocs_complaint'" class="pane-content-wrapper">
+            <section class="card elevated section-card kdocs-config-card">
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">📋 12345 诉求件统计底表 · 金山文档 (KDocs) 接入配置</div>
+                  <p class="sub block-sub">
+                    统一维护金山文档共享链接及用于免登录调取直链的授权凭证 (<code>wps_sid</code>)。支持免人工下载直接自动拉取最新底表并计算。
+                  </p>
+                </div>
+                <div class="section-actions">
+                  <button
+                    class="btn primary shadow-accent execute-sandbox-btn"
+                    type="button"
+                    :disabled="savingKdocs"
+                    @click="saveKdocsConfig"
+                  >
+                    {{ savingKdocs ? '💾 正在保存…' : '💾 保存配置' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 提示通知横幅 -->
+              <div v-if="kdocsTip" :class="['season-tip-banner', kdocsTip.type]">
+                {{ kdocsTip.text }}
+              </div>
+
+              <!-- 表单区域 -->
+              <div class="kdocs-form-layout">
+                <label class="field">
+                  <span class="field-title">🔗 金山文档分享链接 (Share URL)</span>
+                  <input
+                    v-model="kdocsConfig.share_link"
+                    type="text"
+                    class="input kdocs-input-link"
+                    placeholder="例如: https://www.kdocs.cn/l/cj8e1PTQW0uN"
+                    @input="handleShareLinkInput"
+                  />
+                  <small class="field-help">
+                    支持带参数的完整分享链接，输入后系统会自动提取并识别下方的 Share ID。
+                  </small>
+                </label>
+
+                <div class="kdocs-two-col">
+                  <label class="field">
+                    <span class="field-title">🆔 分享标识符 (Share ID)</span>
+                    <input
+                      v-model="kdocsConfig.share_id"
+                      type="text"
+                      class="input readonly-style"
+                      readonly
+                    />
+                    <small class="field-help">金山文档分配给该共享文件的唯一短码。</small>
+                  </label>
+
+                  <label class="field">
+                    <span class="field-title">📝 配置说明与备注</span>
+                    <input
+                      v-model="kdocsConfig.description"
+                      type="text"
+                      class="input"
+                      placeholder="配置备注说明"
+                    />
+                    <small class="field-help">用于标注该底表所属的业务年度或维护部门。</small>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <div class="field-title-row">
+                    <span class="field-title">🔑 WPS 账号身份凭据 (wps_sid Cookie)</span>
+                    <button
+                      type="button"
+                      class="btn-text-action"
+                      @click="showWpsSid = !showWpsSid"
+                    >
+                      {{ showWpsSid ? '🙈 隐藏明文' : '👁️ 显示明文' }}
+                    </button>
+                  </div>
+                  <div class="sid-input-wrap">
+                    <input
+                      v-if="!showWpsSid"
+                      v-model="kdocsConfig.wps_sid"
+                      type="password"
+                      class="input kdocs-sid-input font-mono"
+                      placeholder="请粘贴浏览器中获取的 wps_sid Cookie 值"
+                    />
+                    <textarea
+                      v-else
+                      v-model="kdocsConfig.wps_sid"
+                      rows="2"
+                      class="input kdocs-sid-textarea font-mono"
+                      placeholder="请粘贴浏览器中获取的 wps_sid Cookie 值"
+                    ></textarea>
+                  </div>
+                  <small class="field-help">
+                    用于直接换取免登录下载直链的身份凭据。在浏览器登录 <a href="https://www.kdocs.cn" target="_blank" class="link">kdocs.cn</a> 后按 F12 → Application → Cookies 获取。
+                  </small>
+                </label>
+              </div>
+
+              <!-- 操作与连通性检测区 -->
+              <div class="kdocs-action-bar">
+                <div class="left-actions">
+                  <button
+                    class="btn ghost compact-btn"
+                    type="button"
+                    :disabled="testingKdocs"
+                    @click="testKdocsConnection"
+                  >
+                    {{ testingKdocs ? '⏳ 正在测试连通性…' : '🔌 测试连接与凭证有效性' }}
+                  </button>
+
+                  <button
+                    class="btn ghost compact-btn"
+                    type="button"
+                    :disabled="downloadingKdocs"
+                    title="从金山文档下载当前最新的 12345 诉求件统计底表 .xlsx 文件到本地电脑"
+                    @click="downloadKdocsToLocal"
+                  >
+                    {{ downloadingKdocs ? '⏳ 正在下载中…' : '📥 下载底表到本地' }}
+                  </button>
+
+                  <button
+                    class="btn ghost compact-btn"
+                    type="button"
+                    :disabled="syncingKdocs"
+                    @click="syncKdocsComplaints"
+                  >
+                    {{ syncingKdocs ? '⚡ 正在拉取试算…' : '⚡ 立即拉取并试算当日投诉' }}
+                  </button>
+                </div>
+
+                <div class="status-summary">
+                  <span class="status-badge" :class="kdocsTestBadgeClass">
+                    {{ kdocsTestBadgeText }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 连通性测试报告卡片 -->
+              <div v-if="kdocsConfig.last_test_time || kdocsTestResult" class="kdocs-status-card">
+                <div class="status-row">
+                  <span class="status-label">最近测试时间：</span>
+                  <span class="status-val">{{ kdocsTestResult?.test_time || kdocsConfig.last_test_time || '未测试' }}</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label">诊断结果说明：</span>
+                  <span class="status-val status-desc">{{ kdocsTestResult?.message || kdocsConfig.last_test_message || '暂无信息' }}</span>
+                </div>
+                <div v-if="kdocsConfig.last_sync_time" class="status-row">
+                  <span class="status-label">最后同步时间：</span>
+                  <span class="status-val">{{ kdocsConfig.last_sync_time }}</span>
+                </div>
+              </div>
+
+              <!-- 试算结果预览卡片 -->
+              <div v-if="kdocsSyncResult" class="card elevated sync-preview-card">
+                <div class="preview-header">
+                  <strong>🎉 试算成功反馈 (业务日期: {{ kdocsSyncResult.biz_date }})</strong>
+                  <span class="sub">底表文件: {{ kdocsSyncResult.filename }}</span>
+                </div>
+                <div class="preview-metrics-grid">
+                  <div class="metric-mini-card">
+                    <span class="m-label">市直办/转办</span>
+                    <strong class="m-val">{{ kdocsSyncResult.data?.group?.daily_city ?? 0 }} 件</strong>
+                  </div>
+                  <div class="metric-mini-card">
+                    <span class="m-label">省办</span>
+                    <strong class="m-val">{{ kdocsSyncResult.data?.group?.daily_province ?? 0 }} 件</strong>
+                  </div>
+                  <div class="metric-mini-card">
+                    <span class="m-label">日总诉求量</span>
+                    <strong class="m-val highlight">{{ kdocsSyncResult.data?.group?.daily_total ?? 0 }} 件</strong>
+                  </div>
+                  <div class="metric-mini-card">
+                    <span class="m-label">未办结</span>
+                    <strong class="m-val warning">{{ kdocsSyncResult.data?.group?.unresolved_complaints ?? 0 }} 件</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 帮助指南卡片 -->
+            <section class="card elevated section-card help-guide-card">
+              <div class="card-header">💡 如何获取或更新 WPS 身份凭证 (wps_sid)？</div>
+              <ol class="kdocs-guide-steps">
+                <li>使用电脑 Chrome / Edge 浏览器打开 <a href="https://www.kdocs.cn" target="_blank" class="link">https://www.kdocs.cn</a>，登录你的任意普通 WPS 账号；</li>
+                <li>按键盘 <code>F12</code> 打开浏览器开发者工具，切换到顶部的 <strong>Application (应用程序)</strong> 标签页；</li>
+                <li>在左侧菜单依次展开 <strong>Storage → Cookies → https://www.kdocs.cn</strong>；</li>
+                <li>在右侧列表中找到名为 <strong><code>wps_sid</code></strong> 的一行，双击其 Value 并复制（以 <code>V02S...</code> 开头）；</li>
+                <li>粘贴至上方“WPS 账号身份凭据”输入框并点击“保存配置”即可。该 Cookie 通常具备较长有效期（1~3个月），过期失效时重新提取一次即可。</li>
+              </ol>
+            </section>
+          </div>
+
+          <!-- ========================================== -->
+          <!-- Tab 4: 📊 常量指标与价格基准 (预留扩展模块)  -->
           <!-- ========================================== -->
           <div v-if="activeTab === 'constants'" class="pane-content-wrapper">
             <section class="card elevated section-card">
@@ -779,6 +983,49 @@ const selectedScopeFilter = ref('all')
 const selectedDerivedFilter = ref('all')
 const copiedKey = ref('')
 
+// ==========================================
+// 金山文档 (KDocs) 12345 投诉底表接入与配置状态
+// ==========================================
+const kdocsConfig = ref({
+  share_link: 'https://www.kdocs.cn/l/cj8e1PTQW0uN',
+  share_id: 'cj8e1PTQW0uN',
+  wps_sid: 'V02SdZ9VTFSbBK9yGbjfj93LeD4okis00ab8df8f0012fc69e2',
+  description: '2026-2027年度市12345诉求件统计底表（金山文档共享）',
+  auto_sync_enabled: false,
+  last_sync_time: '',
+  last_test_status: '',
+  last_test_time: '',
+  last_test_message: '',
+})
+const showWpsSid = ref(false)
+const savingKdocs = ref(false)
+const testingKdocs = ref(false)
+const downloadingKdocs = ref(false)
+const syncingKdocs = ref(false)
+const kdocsTip = ref(null)
+const kdocsTestResult = ref(null)
+const kdocsSyncResult = ref(null)
+
+const kdocsTestBadgeText = computed(() => {
+  const status = kdocsTestResult.value
+    ? (kdocsTestResult.value.ok ? 'SUCCESS' : 'FAILED')
+    : kdocsConfig.value.last_test_status
+  if (status === 'SUCCESS') return '🟢 连接畅通'
+  if (status === 'FAILED') return '🔴 授权失效/连接失败'
+  if (status === 'ERROR') return '⚠️ 异常错误'
+  return '⚪ 尚未检测'
+})
+
+const kdocsTestBadgeClass = computed(() => {
+  const status = kdocsTestResult.value
+    ? (kdocsTestResult.value.ok ? 'SUCCESS' : 'FAILED')
+    : kdocsConfig.value.last_test_status
+  if (status === 'SUCCESS') return 'badge-success'
+  if (status === 'FAILED') return 'badge-danger'
+  if (status === 'ERROR') return 'badge-warning'
+  return 'badge-neutral'
+})
+
 // 沙盒状态
 const sandboxDate = ref('')
 const sandboxCompany = ref('JinZhou')
@@ -805,6 +1052,7 @@ onMounted(async () => {
   await loadSeasonConfig()
   await loadBizDate()
   await loadCatalog()
+  await loadKdocsConfig()
 })
 
 function goProjectPages() {
@@ -984,8 +1232,159 @@ async function refreshAll() {
   await loadSeasonConfig()
   await loadBizDate()
   await loadCatalog()
+  await loadKdocsConfig()
   if (sandboxResult.value) {
     await executeSandbox()
+  }
+}
+
+function handleShareLinkInput() {
+  const link = kdocsConfig.value.share_link || ''
+  const match = link.match(/kdocs\.cn\/l\/([a-zA-Z0-9_-]+)/)
+  if (match) {
+    kdocsConfig.value.share_id = match[1]
+  } else if (link && !link.includes('/')) {
+    kdocsConfig.value.share_id = link.trim()
+  }
+}
+
+async function loadKdocsConfig() {
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/data_entry/complaints/kdocs/config`)
+    if (res.ok) {
+      const json = await res.json()
+      if (json.ok && json.data) {
+        kdocsConfig.value = Object.assign({}, kdocsConfig.value, json.data)
+      }
+    }
+  } catch (err) {
+    console.error('加载金山文档配置失败:', err)
+  }
+}
+
+async function saveKdocsConfig() {
+  savingKdocs.value = true
+  kdocsTip.value = null
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/data_entry/complaints/kdocs/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(kdocsConfig.value),
+    })
+    const json = await res.json()
+    if (res.ok && json.ok) {
+      kdocsTip.value = {
+        type: 'success',
+        text: json.message || '金山文档接入配置已成功保存！',
+      }
+      kdocsConfig.value = Object.assign({}, kdocsConfig.value, json.data)
+    } else {
+      kdocsTip.value = {
+        type: 'error',
+        text: json.detail || json.message || '保存配置失败',
+      }
+    }
+  } catch (err) {
+    kdocsTip.value = { type: 'error', text: `保存请求异常: ${err.message}` }
+  } finally {
+    savingKdocs.value = false
+  }
+}
+
+async function testKdocsConnection() {
+  testingKdocs.value = true
+  kdocsTip.value = null
+  kdocsTestResult.value = null
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/data_entry/complaints/kdocs/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        share_link: kdocsConfig.value.share_link,
+        wps_sid: kdocsConfig.value.wps_sid,
+      }),
+    })
+    const json = await res.json()
+    kdocsTestResult.value = {
+      ok: json.ok,
+      message: json.message,
+      test_time: json.data?.test_time || new Date().toLocaleString(),
+    }
+    if (json.ok) {
+      kdocsTip.value = { type: 'success', text: json.message }
+      kdocsConfig.value.last_test_status = 'SUCCESS'
+      kdocsConfig.value.last_test_message = json.message
+      kdocsConfig.value.last_test_time = json.data?.test_time || new Date().toLocaleString()
+    } else {
+      kdocsTip.value = { type: 'error', text: json.message }
+      kdocsConfig.value.last_test_status = 'FAILED'
+      kdocsConfig.value.last_test_message = json.message
+    }
+  } catch (err) {
+    kdocsTip.value = { type: 'error', text: `测试请求失败: ${err.message}` }
+  } finally {
+    testingKdocs.value = false
+  }
+}
+
+async function syncKdocsComplaints() {
+  syncingKdocs.value = true
+  kdocsTip.value = null
+  kdocsSyncResult.value = null
+  try {
+    const targetDate = formBizDate.value || currentBizDate.value || ''
+    const res = await fetch(`/api/v1/projects/${projectKey}/data_entry/complaints/kdocs/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ biz_date: targetDate }),
+    })
+    const json = await res.json()
+    if (res.ok && json.ok) {
+      kdocsSyncResult.value = json
+      kdocsTip.value = { type: 'success', text: json.message }
+      kdocsConfig.value.last_sync_time = new Date().toLocaleString()
+    } else {
+      kdocsTip.value = {
+        type: 'error',
+        text: json.detail || json.message || '拉取试算失败',
+      }
+    }
+  } catch (err) {
+    kdocsTip.value = { type: 'error', text: `拉取请求失败: ${err.message}` }
+  } finally {
+    syncingKdocs.value = false
+  }
+}
+
+async function downloadKdocsToLocal() {
+  downloadingKdocs.value = true
+  kdocsTip.value = null
+  try {
+    const res = await fetch(`/api/v1/projects/${projectKey}/data_entry/complaints/kdocs/download`)
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}))
+      throw new Error(errJson.detail || errJson.message || `HTTP ${res.status}`)
+    }
+    const cd = res.headers.get('content-disposition') || ''
+    let filename = '2026-2027年度市12345诉求件统计表.xlsx'
+    const match = cd.match(/filename\*=UTF-8''([^;&]+)/i)
+    if (match) {
+      filename = decodeURIComponent(match[1])
+    }
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    kdocsTip.value = { type: 'success', text: `✔ 底表文件【${filename}】已成功下载至本地！` }
+  } catch (err) {
+    kdocsTip.value = { type: 'error', text: `下载失败: ${err.message}` }
+  } finally {
+    downloadingKdocs.value = false
   }
 }
 
@@ -2062,5 +2461,235 @@ async function executeSandbox() {
   padding: 2px 6px;
   border-radius: 4px;
   font-weight: 600;
+}
+
+/* ============================================================================== */
+/* 📋 金山文档 (KDocs) 12345 底表配置样式 */
+/* ============================================================================== */
+.kdocs-config-card {
+  border-top: 3px solid #2563eb !important;
+}
+
+.kdocs-form-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.kdocs-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .kdocs-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kdocs-input-link {
+  width: 100%;
+}
+
+.readonly-style {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  cursor: not-allowed !important;
+  font-family: monospace;
+}
+
+.field-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.btn-text-action {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btn-text-action:hover {
+  background: #eff6ff;
+  text-decoration: underline;
+}
+
+.kdocs-sid-input,
+.kdocs-sid-textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.kdocs-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.left-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.badge-success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-danger {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.badge-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.badge-neutral {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.kdocs-status-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-row {
+  display: flex;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.status-label {
+  color: #64748b;
+  width: 105px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.status-val {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.status-desc {
+  color: #0369a1;
+}
+
+.sync-preview-card {
+  margin-top: 16px !important;
+  background: #f0fdf4 !important;
+  border: 1px solid #86efac !important;
+  border-radius: 10px !important;
+  padding: 16px !important;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  color: #166534;
+}
+
+.preview-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.metric-mini-card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #bbf7d0;
+}
+
+.m-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.m-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.m-val.highlight {
+  color: #2563eb;
+}
+
+.m-val.warning {
+  color: #d97706;
+}
+
+.help-guide-card {
+  background: #fdfdfd !important;
+  border-left: 4px solid #6366f1 !important;
+}
+
+.kdocs-guide-steps {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: #334155;
+}
+
+.kdocs-guide-steps li {
+  margin-bottom: 6px;
+}
+
+.kdocs-guide-steps code {
+  background: #f1f5f9;
+  color: #2563eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.link {
+  color: #2563eb;
+  text-decoration: underline;
 }
 </style>

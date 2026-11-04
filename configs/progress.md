@@ -1,5 +1,179 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-04 填报页面顶栏按钮布局紧凑化优化与“一并提交”单行归并
+
+- **需求背景**：
+  - 用户反馈在供热公司的每日填报页面（`DataEntryView.vue`）中，顶栏操作区域内的操作按钮（包括“📁 上传投诉报表”、“⚡ 自动拉取投诉量”、“📊 查看统计结果”、“一并提交全部表格”等）因尺寸过大且样式设为 `flex-wrap: wrap`，导致整体折行成了两行，其中核心的“一并提交”等按钮被挤落到下方第二行；
+  - 希望将操作栏内的所有按钮统一排布在同一行，布局精致、紧凑整齐。
+- **改动范围与落地详情**：
+  1. **顶栏弹性盒与防折行布局治理** (`DataEntryView.vue`)：
+     - 将 `.topbar__title-group` 调整为 `flex: 0 0 auto`，防止左侧大标题/副标题过度挤占水平宽度；
+     - 将 `.topbar__actions` 调整为 `flex: 1 1 auto; min-width: 0;`，将右侧可用宽度最大化开放给操作按钮；
+     - 将 `.topbar__action-row` 与 `.topbar__buttons` 设置为 `flex-wrap: nowrap;`，桌面上坚决杜绝按钮折行形成上下两排，同时添加平滑滚动保护（`overflow-x: auto`）；
+  2. **解除硬性最小宽度与按钮尺寸精细化** (`DataEntryView.vue`)：
+     - 去除原全局 `.topbar__buttons .btn { min-width: 120px; }` 导致的尺寸冗余撑大问题，改为自适应内容宽度（`min-width: auto; height: 34px; padding: 0 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0;`）；
+     - 优化已停用的“📁 上传投诉报表”按钮（`is-disabled-btn`），内边距收紧至 `0 10px`，字号微调为 `12px`，视觉更轻量；
+     - 优化多表合并提交文案：由冗长的 `一并提交全部表格 (共${unitSheets.length}张)` 精简为干练的 `一并提交 (共${unitSheets.length}张)`，完整说明保留在 `title` 悬浮气泡中，大幅节约 50px 宽度；
+     - 优化副按钮“仅提交当前表”（`text-btn`）高度与内边距，确保整组按钮在不同分辨率显示屏下均稳定居于同一行。
+- **构建与测试**：
+  - 前端执行 `npm run build`，1051 个模块构建通过，0 错误（16.51s）。
+
+
+
+## 2026-11-04 全局管理中心新增底表本地下载与供热填报端一键自动拉取投诉量入表
+
+- **功能落地背景**：
+  - 用户反馈希望在全局管理中心（`global_management`）的金山文档配置页中增加“下载到本地”按钮，方便随时备份或离线人工核对最新的 12345 诉求工作簿；
+  - 同时在供热公司的每日填报页面（`DataEntryView.vue`）中，废弃原有的人工手动上传流程：将原“上传投诉报表”按钮置灰锁定不可点击，在其右侧增加“自动拉取投诉量”按钮，实现一键从金山文档云端拉取、计算并自动对齐填入供热公司的两张填报表对应单元格中。
+- **改动范围与落地详情**：
+  1. **后端附件直下接口扩展** (`complaint_optimizer.py`)：
+     - 新增 `GET /data_entry/complaints/kdocs/download` 端点；
+     - 调用 `kdocs_complaint_service.download_kdocs_workbook_bytes()` 获取云端最新底表二进制流，设置标准 `Content-Disposition: attachment; filename*=UTF-8''...` 响应头，支持浏览器直接拉取下载。
+  2. **前端全局管理控制台** (`GlobalManagementView.vue`)：
+     - 操作栏中新增“📥 下载底表到本地”按钮；
+     - 结合 `fetch` 与 Blob URL 触发无阻断的原生文件下载，下载完成时弹出气泡反馈。
+  3. **供热公司填报表交互升级** (`DataEntryView.vue`)：
+     - 将原“📁 上传投诉报表”按钮设置为 `disabled` 且增加不可用禁用态样式，鼠标悬浮提示“已升级为云端自动拉取”；
+     - 在其右侧新增显眼的暖金/极光蓝渐变按钮“⚡ 自动拉取投诉量”；
+     - 实现 `triggerAutoPullComplaint()` 方法：一键异步调用后端 `/data_entry/complaints/kdocs/sync`，自动以当前填报业务日期进行计算，并直接无缝衔接现有的 `fillComplaintData()` 流程，将指标精准填入 `GongRe_Sheet` 与 `GongRe_branches_detail_Sheet`，自动高亮暖金色提示并标记为 dirty 待提交状态；
+     - 填入完成后右侧原有“📊 查看统计结果”按钮自动激活，点击可穿透查阅明细穿透弹窗。
+- **构建与测试**：
+  - 后端执行 `test_download_endpoint.py`，HTTP 200 返回 1.6MB 真实文件流；
+  - 前端执行 `npm run build`，1051 个模块编译成功（16.16s 静态检查 100% 通过）。
+
+## 2026-11-04 12345诉求底表金山文档(KDocs)免登录自动抓取与全局管理中心配置标签页落地
+
+- **需求背景与痛点**：
+  - 供热公司每日填报中的“12345投诉量”原依赖人工从金山文档在线共享表格（`kdocs.cn/l/cj8e1PTQW0uN`）下载 `.xlsx` 底表后再上传至系统，流程割裂繁琐；
+  - 虽然金山文档在浏览器中支持匿名免登录在线查看，但在界面点击“导出/下载副本”时会被强制弹出登录要求；
+  - 用户希望在全局管理中心（`global_management`）开设专门配置标签页，持久化存储金山文档分享链接与普通 WPS 账号的 `wps_sid` Cookie 凭证，使系统能够全自动获取下载直链，实现免人工干预的一键拉取与自动统计。
+- **技术逆向与架构突破**：
+  1. **下载接口逆向与鉴权突破**：
+     - 深入探测金山文档接口，发现核心文件下载端点为 `GET https://www.kdocs.cn/api/v3/office/file/{share_id}/download`；
+     - 未携带登录态时返回 `40100001 用户未登陆`；但携带任意普通 WPS 免费账号的 Cookie（`wps_sid`）后，金山文档即刻返回带签名时效的底层直链，成功拉取约 1.53 MB 的最新 `2026-2027年度市12345诉求件统计表.xlsx`；
+     - 将拉取的二进制文件直接流式送入已有的 `complaint_statistics.calculate()`，全量 10 个中心、市直办/转办、省办等指标秒级计算入库，验证 100% 成功。
+- **改动范围与落地详情**：
+  1. **后端服务层构建** ([`kdocs_complaint_service.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/kdocs_complaint_service.py))：
+     - 实现配置读取与原子保存机制，存储于 `backend_data/projects/daily_report_25_26/config/kdocs_complaint_config.json`；
+     - 提供 `extract_share_id`（自动提取 `cj8e1PTQW0uN` 短码）、`test_kdocs_connectivity`（连通性与 Cookie 凭据有效性自检）及 `download_kdocs_workbook_bytes`（流式下载）；
+  2. **后端 API 端点下沉** ([`complaint_optimizer.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/complaint_optimizer.py) 与 [`router.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/api/router.py))：
+     - `GET /data_entry/complaints/kdocs/config`：读取当前金山文档配置；
+     - `POST /data_entry/complaints/kdocs/config`：保存更新配置并回写；
+     - `POST /data_entry/complaints/kdocs/test`：在线测试连接与凭证有效性，回显文件大小与测试日志；
+     - `POST /data_entry/complaints/kdocs/sync`：一键自动从云端拉取底表并结合目标业务日期计算诉求指标；
+  3. **前端控制台新增独立选项卡** ([`GlobalManagementView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue))：
+     - 左侧菜单新增 `📋 12345投诉底表(金山文档)` 专用选项卡；
+     - 落地配置卡片：支持分享链接编辑、Share ID 自动解析、`wps_sid` 密码/文本明暗切换、备注说明；
+     - 提供操作工具栏：包含“💾 保存配置”、“🔌 测试连接与凭证有效性”及“⚡ 立即拉取并试算当日投诉”；
+     - 落地连通性测试报告横幅与试算结果可视化卡片（实时预览市直办、省办、总数与未办结件数）；
+     - 附带通俗易懂的 5 步开发者工具 `wps_sid` 提取指南。
+- **构建与测试**：
+  - 后端执行 TestClient 模拟测试，配置读取与下载直链探测 HTTP 200 通过；
+  - 前端执行 `npm run build`，1051 个模块编译成功（16.67s 无任何报错）。
+
+## 2026-11-04 常量指标表(constant_data)唯一约束缺失导致ON CONFLICT报错排查与全链路修复
+
+- **问题现象与定位**：
+  - 用户在放开管理员同期常量指标修改权限后，在前端页面修改同期指标值并提交，后端及数据库抛出严重错误：
+    `ERROR: there is no unique or exclusion constraint matching the ON CONFLICT specification`
+    `STATEMENT: INSERT INTO constant_data (...) VALUES (...) ON CONFLICT (company, item, period) DO UPDATE ...`
+  - 经深入排查 Postgres 数据库与代码底层，定位以下根因：
+    1. **数据库缺失唯一约束/索引**：PostgreSQL 执行 `ON CONFLICT (company, item, period)` 依赖底层存在覆盖该键的 `UNIQUE` 约束或唯一索引；但由于历史表结构调整，底层 `constant_data` 缺少该唯一约束与主键；
+    2. **历史重复数据阻碍约束建立**：数据库 `constant_data` 表内存在由历史导入造成的重复记录（总行数 1224，实际由 459 组相同 `(company, item, period)` 记录重复存在 2~3 份构成）；
+    3. **建表脚本历史脱节**：`backend/sql/create_tables.sql` 中仍为旧设计的 `(company, center, sheet_name, item, period)` 索引，未与业务对齐。
+- **全链路修复措施**：
+  1. **数据安全备份与幂等去重**：
+     - 在数据库内建立快照备份表 `constant_data_backup_20261104`；
+     - 基于 `ctid` 进行精准安全去重（清理 765 条冗余完全重复记录，保留 459 条标准基线数据）；
+  2. **建立标准数据库主键与唯一约束**：
+     - 执行 `ALTER TABLE constant_data ADD PRIMARY KEY (id);`；
+     - 执行 `ALTER TABLE constant_data ADD CONSTRAINT uq_constant_data_company_item_period UNIQUE (company, item, period);`，彻底满足 `ON CONFLICT` 匹配要求；
+  3. **后端代码批次内防重增强** (`legacy_full.py`)：
+     - 在 `_persist_constant_data` 中加入字典聚合 `deduped` 机制，在同一提交批次内部按 `(company, item, period)` 自动合并重复项，杜绝 PostgreSQL 二次触发 `ON CONFLICT DO UPDATE command cannot affect row a second time`；
+  4. **建表 SQL 同步**：
+     - 同步更新 `backend/sql/create_tables.sql` 与 `backend/sql/create_tables copy.sql` 中的唯一索引定义为 `(company, item, period)`。
+- **验证结论**：在数据库内实测批量 UPSERT 语句执行成功（`INSERT 0 2`），Python 单元持久化测试 100% 通过（`Success, count = 2` 及批次去重生效）。
+
+## 2026-11-03 常量指标页面解除全局管理员(Global_admin)同期值修改限制
+
+- **问题背景与根因分析**：
+  - 用户反馈在常量指标页面（`constant_data/sheets`，如 `数据结构_常量指标表.json`）中，即便拥有 `Global_admin` 角色，也无法编辑修改“25-26同期值”列；
+  - 经深入排查前端代码 `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`，定位出三处关键根因：
+    1. **列锁定条件硬编码**：在 `setupStandardGrid`、`applyStandardQueryResult` 等多处网格初始化逻辑中，对常量指标表最后一列（`isConstantPeerColumn`）直接赋予了硬编码锁定 `locked = true`，未结合 `!isGlobalAdmin.value` 鉴权；
+    2. **固有不可写标识污染**：在列元数据对象生成及 `applyReadonlyToColumns` 中，将临时权限锁定状态赋值给了 `__locked` 字段（该字段原本仅代表项目名、计量单位等基础描述列的固有只读），导致后续权限重新计算或刷新时，因 `Boolean(def.__locked)` 恒为 `true` 而永远无法解除只读；
+    3. **同期列识别匹配缺漏**：`isPeerColumnIndex` 与 `isPeerColumnForTable` 仅匹配了“同期”与“去年”，未覆盖常量指标表模板原始列名“同供暖期”以及后端动态替换后的供暖期标签（如 `25-26`），导致同期列无法按模板类型与列索引精准识别。
+- **改动范围与修复方案**：
+  - **核心页面**：[`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)
+    1. **完善同期列识别逻辑**：在 `isPeerColumnIndex` 与 `isPeerColumnForTable` 中增加对 `同供暖期` 的支持；针对 `templateType === 'constant'` 场景，准确将最后一列识别为同期指标列；
+    2. **解耦基础锁定与权限锁定**：统一规范 `__locked` 仅表示 `index <= readonlyLimit`（基础描述列固有锁定）；将同期列的编辑权限严格交由 `!isGlobalAdmin.value && isPeer` 控制；
+    3. **全生命周期只读解绑**：
+       - `setupStandardGrid`：常量同期列仅在非 `Global_admin` 时锁定，`Global_admin` 正常开放双击编辑；
+       - `applyStandardQueryResult`：镜像查询数据回填时，保留 `isGlobalAdmin` 权限判断并解开只读锁定；
+       - `applyReadonlyToColumns`：动态只读应用逻辑中，不再向 `__locked` 写入权限只读标志，保证响应式角色切换时列状态可逆；
+       - `loadComplaintTargetState` 与 `fillEfficiencyData`：同步修正表格状态生成与缓存逻辑；
+       - `watch` 响应式增强：将 `isGlobalAdmin.value` 加入响应式侦听，确保管理员会话信息加载完成后即时解开表格编辑限制。
+- **验证结论**：本地执行 `npm run build` 打包构建，耗时 18.40s 静态检查与打包 100% 成功。
+
+## 2026-11-03 智慧供热中继远端同步URL智能容错解析与404根因修复
+
+- **问题排查与根因定位**：
+  - 用户反馈本地容器日志出现 `POST /api/v1/projects/daily_report_25_26/smart-heating/sync-from-remote 404 Not Found`；
+  - 经深入排查，本地后端该路由正常挂载，404 是由于请求远端服务器失败后直接向上抛出 HTTPException(404) 导致；
+  - 根因在于配置中的 `remote_server_url` 保存了带完整路径的 URL，原代码在拼接时未做前缀去重，导致向远端发出的请求路径重复叠增（形如 `https://platform.smartview.top/.../relay-feed/.../relay-feed`），从而遭到远端服务器 404 拒绝。
+- **架构级容错与修复**：
+  1. **智能 URL 自动规范化** (`smart_heating.py`)：在 `sync_from_remote_server` 中引入智能路由解析器，自动识别并兼容“完整端点”、“项目基础路径”或“基础域名”等多种输入风格，彻底消除重复拼接隐患；
+  2. **错误响应模型重构**：捕获远端 HTTPError 时，返回统一的 JSON 结构体 `{"ok": false, "message": "...", "remote_url": ...}`，消除将远端异常误认为本地路由缺失的歧义；
+  3. **前端配置与持久化复位**：将 `relay_config.json` 与 `SmartHeatingView.vue` 中的远端基准地址复位为规范的 `https://platform.smartview.top`。
+- **验证**：在本地 Docker 容器内实测调用 `POST /sync-from-remote`，成功连通生产云端拉取 54 首站 + 58 电厂 + 242 一次网测点，HTTP 200 顺利入库。
+
+## 2026-11-03 智慧供热数据刷新周期调整为1m与客户端下载权限限定为Global_admin
+
+- **刷新频率优化**：
+  - 前端工况看板 (`SmartHeatingView.vue`)：自动刷新计时器由 30 秒调整为 60 秒（1 分钟 / 1m），顶部操作栏复选框文案同步调整为“自动刷新 (1m)”；
+  - 后端心跳与工况时效 (`smart_heating.py`)：将在线心跳判定有效期由 90 秒扩展至 180 秒（3 分钟），以完美容纳 1 分钟轮询周期及网络波动，避免工况在连接/断开状态间抖动；
+  - 本地与内网中继采集脚本 (`smart_heating_relay_win7.py` 与 `dev_relay_pull_sync.py`)：出厂默认采集/同步周期统一调整为 60 秒。
+- **客户端下载权限收敛**：
+  - 前端界面 (`SmartHeatingView.vue`)：引入 `useAuthStore`，增加 `isGlobalAdmin` 权限判定；仅当登录用户角色为 `Global_admin` 时，才在顶部 Banner 及未连接提示横幅中渲染“📥 客户端脚本”下载按钮；非管理员尝试调用时给出明确的弹窗权限拦截提示；
+  - 服务端接口 (`smart_heating.py`)：原已配置 `session.group != "Global_admin"` 403 阻断，前后端权限策略实现严密闭环。
+- **构建与测试**：`npm run build` 成功完成打包；`test_relay_api.py` 覆盖刷新与心跳判定测试 100% 通过。
+
+## 2026-11-03 智慧供热服务器中继转发与本地开发环境(localhost)数据同步链路构建
+
+- **需求背景**：用户在办公电脑上运行中继程序将数据推送到线上生产服务器，服务端接收到数据后，需要将该实时数据流二次中继转发至用户的本地开发环境（`localhost`），使开发者在本地开发、联调测试时也能实时查看全网 344 项智慧供热工况。同时要求服务器上的中继转发功能可自由选择开启或关闭（默认开启）。
+- **技术挑战与双模架构设计 (Push + Pull 双轨保活)**：
+  - **网络屏障**：生产服务器部署于公网，而开发者电脑位于内网/局域网，通常无法直接由公网服务器主动发起 HTTP POST 穿透 NAT 访问 `http://127.0.0.1:8000`（除非配置端口映射或内网穿透）。
+  - **架构解决方案**：
+    1. **主动中继推送 (Push Relay)**：在 `POST /smart-heating/push` 端点注入 FastAPI `BackgroundTasks`，当服务器接收到办公电脑推流且中继开关开启时，异步非阻塞将完整数据包转发至 `forward_target_url`（默认开启，支持配合内网穿透工具或独立次级节点使用）；
+    2. **主动拉取同步 (Pull Relay)**：在生产服务端开放受安全 Token 保护的流接口 `GET /smart-heating/relay-feed`；在本地开发环境提供 `POST /smart-heating/sync-from-remote` API 及开发专用命令行同步工具，支持本地开发机直接从云端服务器中继拉取最新工况写入本地，零网络配置即可突破防火墙与局域网限制。
+- **改动范围与落地详情**：
+  1. **后端中继与开发同步服务** (`backend/projects/daily_report_25_26/api/smart_heating.py`)：
+     - **配置持久化管理**：引入 `_load_relay_config()` 与 `_save_relay_config()`，持久化保存于 `relay_config.json`，配置项包括 `forward_enabled: True`（默认开启）、`forward_target_url`、`remote_server_url`、`push_token` 等；
+     - **异步转发非阻塞任务**：实现 `_forward_payload_task`，采用 5s 超时与 SSL 上下文保护，不阻塞主推流接口响应；
+     - **中继接收端点**：新增 `POST /smart-heating/receive-relay`，用于接收上级服务器转发推送的数据包，支持 `push_token`、`relay_token` 及 `X-Push-Token` 统一鉴权并入库；
+     - **数据拉取数据流**：新增 `GET /smart-heating/relay-feed`，供开发环境安全拉取最新实时工况流；
+     - **本地主动拉取同步**：新增 `POST /smart-heating/sync-from-remote`，限 `Global_admin` 角色，本地后端调用后自动拉取线上最新数据并原子更新本地 `latest.json`；
+     - **中继开关与参数配置接口**：新增 `GET /smart-heating/relay-config` 与 `POST /smart-heating/relay-config`，支持管理员在线查询与一键切换中继开关、修改转发 URL。
+  2. **前端服务 API 封装** (`frontend/src/projects/daily_report_25_26/services/api.js`)：
+     - 新增 `getSmartHeatingRelayConfig(projectKey)`；
+     - 新增 `updateSmartHeatingRelayConfig(projectKey, payload)`；
+     - 新增 `syncSmartHeatingFromRemote(projectKey, payload)`。
+  3. **前端看板交互增强** (`SmartHeatingView.vue`)：
+     - **环境感知与专属同步按钮**：检测 `window.location.hostname`（`localhost` / `127.0.0.1`），若处于本地开发环境，在顶部 Banner 与未连接离线横幅中自动渲染“📥 从线上中继同步”操作按钮，支持一键拉取并刷新页面展示；
+     - **服务器中继开关与状态指示**：顶部 Banner 增加“服务器中继: 已开启/已关闭”胶囊按钮及指示灯，点击直接唤起中继配置弹窗；
+     - **中继配置模态浮层**：提供 iOS 风格开关切换中继开启/关闭状态，支持修改转发目标端点 URL 与线上拉取源 URL，点击保存即时生效；
+     - **全链路样式与交互优化**：完善弹窗遮罩、毛玻璃背景、表单控件及响应式排版。
+  4. **开发环境独立命令行同步脚本** (`dev_relay_pull_sync.py`)：
+     - 新增 `backend/projects/daily_report_25_26/dev_relay_pull_sync.py`，支持命令行单次执行 `python dev_relay_pull_sync.py` 或后台守护轮询 `python dev_relay_pull_sync.py --daemon` 自动同步云端工况至本地。
+- **构建与验证**：
+  - 前端执行 `npm run build`，编译顺利通过（生成 `SmartHeatingView-B7hTYEeq.js` 与 `SmartHeatingView-D2-sDldn.css`）；
+  - 后端执行 `test_relay_api.py` 自动化测试，验证包括：
+    1. `GET /relay-config` 读取默认 `forward_enabled: True` 成功；
+    2. `POST /push` 接收数据并触发后台转发任务成功；
+    3. `GET /relay-feed` 鉴权拉取流数据成功；
+    4. `POST /receive-relay` 开发环境接收并写入本地成功；
+    5. `POST /relay-config` 切换中继开关（开启/关闭）持久化测试成功；
+    6. 所有单元测试 100% 通过。
+
 ## 2026-11-03 智慧供热“一网”一级分类与层级名称规范化更名为“一次网”
 
 - **需求背景**：按用户明确要求，将智慧供热实时工况看板、元数据规范及全链路接口中的一级分类名称“一网”统一规范更名为“一次网”。

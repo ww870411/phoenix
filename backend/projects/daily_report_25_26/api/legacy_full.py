@@ -1469,13 +1469,15 @@ def _persist_constant_data(records: List[Dict[str, Any]]) -> int:
     session = SessionLocal()
     try:
         # 准备要插入或更新的数据（移除对 center/center_cn 的依赖）
-        upsert_values = []
+        deduped = {}
         for r in records:
             r.pop('id', None)  # 移除 id，让数据库自增
             # 不再使用 center/center_cn 字段，确保不存在残留键
             r.pop('center', None)
             r.pop('center_cn', None)
-            upsert_values.append(r)
+            key = (r.get("company"), r.get("item"), r.get("period"))
+            deduped[key] = r
+        upsert_values = list(deduped.values())
 
         if not upsert_values:
             return 0

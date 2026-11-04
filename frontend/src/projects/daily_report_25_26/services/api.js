@@ -3544,3 +3544,51 @@ export async function downloadSmartHeatingClientScript(projectKey = 'daily_repor
   document.body.removeChild(a)
   window.URL.revokeObjectURL(blobUrl)
 }
+
+export async function getSmartHeatingRelayConfig(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating/relay-config`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '获取中继配置失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+export async function updateSmartHeatingRelayConfig(projectKey = 'daily_report_25_26', payload = {}) {
+  const url = `${projectPath(projectKey)}/smart-heating/relay-config`
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '更新中继配置失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+export async function syncSmartHeatingFromRemote(projectKey = 'daily_report_25_26', payload = {}) {
+  const url = `${projectPath(projectKey)}/smart-heating/sync-from-remote`
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '从远程服务器中继同步失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
