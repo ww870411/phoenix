@@ -194,7 +194,7 @@
           <!-- 核心统计汇总表 -->
           <div class="complaint-section-header">
             <h4>单位统计汇总（点击数字可穿透查看对应明细）</h4>
-            <span class="complaint-section-hint">新口径：净投诉量为转办已办结；省平台净投诉为 0；市平台等于净投诉量</span>
+            <span class="complaint-section-hint">新口径：净投诉量为转办已办结且类型为“投诉”；省平台净投诉为 0；市平台等于净投诉量</span>
           </div>
           <div class="complaint-table-wrap">
             <table class="complaint-table">
@@ -501,7 +501,8 @@ const complaintDetailRows = computed(() => {
   const metric = complaintDetailMetric.value
   return data.records.filter(record => {
     if (complaintDetailCenter.value === '未归属' ? record.center : complaintDetailCenter.value !== '供热公司' && record.center !== complaintDetailCenter.value) return false
-    const net = record.source === '转办' && record.status === '已办结'
+    const isComplaint = String(record.type || '').trim() === '投诉'
+    const net = record.source === '转办' && record.status === '已办结' && isComplaint
     if (metric === 'unresolved_complaints') return record.source === '转办' && record.status === '未办结' && record.date <= data.business_date
     if (metric === 'daily_province_net') return false
     if (metric === 'monthly_net') return net && record.date >= data.month_start && record.date <= data.business_date

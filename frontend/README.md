@@ -1,3 +1,11 @@
+## 2026-11-04 供热填报端净投诉量穿透核对与提示口径同步（类型必须为“投诉”）
+
+- **模块**：`frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`
+- **改动详情**：
+  - 核验模态弹窗顶部说明更新为：`新口径：净投诉量为转办已办结且类型为“投诉”；省平台净投诉为 0；市平台等于净投诉量`；
+  - 明细穿透计算属性 `complaintDetailRows` 同步增加 `const isComplaint = String(record.type || '').trim() === '投诉'`，并在计算 `net` 净投诉量筛选时增加 `isComplaint` 约束，确保弹窗穿透表格记录与汇总表中的净投诉数字严格对齐。
+- **构建结果**：`npm run build` 成功通过（17.66s，0 错误）。
+
 ## 2026-11-04 数据看板 PDF 导出采用 1800px 宽度（当前生效）
 
 - 根据用户对扁宽效果的反馈，`DashBoard.vue` 的 `downloadPDF`、导出 CSS、截图视口及提示统一由 2560px 调整为 1800px；2 倍采样输出 3600px 宽截图，继续生成 210mm 宽等比例长页 PDF。此配置替代下方历史 2K 方案。

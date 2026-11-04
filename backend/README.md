@@ -1,3 +1,13 @@
+## 2026-11-04 投诉统计服务净投诉量口径修正（转办已办结且类型为“投诉”）
+
+- **模块**：`backend/projects/daily_report_25_26/services/complaint_statistics.py` 及回归测试 `test_complaint_statistics.py`
+- **改动详情**：
+  - 核心统计算法 `metrics()` 增加对每条记录的 `row.get('type')`（对应底表《转办》中的“类型”字段）的检验：`is_complaint = normalize(row.get('type')) == '投诉'`；
+  - 净投诉判定条件由原先的 `source == '转办' and done` 修正为：`source == '转办' and done and is_complaint`；
+  - `daily_net`（当日净投诉量）、`daily_city_net`（其中：市平台净投诉量）、`monthly_net`（本月累计净投诉量）、`season_net`（本供暖期累计净投诉量）均仅统计类型为“投诉”的已办结转办件，彻底排除咨询、表扬等非投诉记录；
+  - 单测补全咨询类型记录排除断言。
+- **验证结果**：4 项 pytest 测试 100% 通过。
+
 ## 2026-11-04 数据看板 PDF 导出宽度改为 1800px（当前生效）
 
 - 本轮前端 `DashBoard.vue` 将导出布局、截图视口与提示由 2560px 调整为 1800px，沿用 2 倍采样及等比例长页；后端、接口和数据库无需变更或迁移。参数一致性检查通过（最后验证日期：2026-11-04），生产构建结果见本轮交付说明；回滚仅涉及前端本轮导出宽度与提示，尚未实际下载 PDF 目视验收。

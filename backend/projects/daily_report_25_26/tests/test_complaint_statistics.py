@@ -20,17 +20,18 @@ def sample():
         sheet = book.create_sheet('明细（' + source + '）')
         sheet.append(['序号', '日期', '受理编号', '分类', '电话', '内容', '回复', '地址', '投诉类别', '服务中心', '所属所', '站', '办理情况'])
         sheets[source] = sheet
-    def add(source, date, number, center, status):
-        sheets[source].append([None, date, number, '咨询', None, '内容', None, None, '类型', center, None, None, status])
+    def add(source, date, number, center, status, type_='投诉'):
+        sheets[source].append([None, date, number, type_, None, '内容', None, None, '类型', center, None, None, status])
     add('直办', datetime(2027, 2, 10, 23, 59), 'D1', '华乐服务中心', '已办结')
-    add('转办', datetime(2027, 2, 10, 8), 'T1', '华乐中心', '已办结')
-    add('转办', datetime(2027, 2, 10, 9), 'T2', '其他部门', '撤件')
-    add('转办', datetime(2027, 2, 1), 'T3', '东港服务中心', '已办结')
-    add('转办', datetime(2026, 11, 1), 'T4', '东港中心', '已办结')
-    add('转办', datetime(2026, 10, 31), 'T5', '东港中心', '已办结')
-    add('转办', datetime(2027, 2, 11), 'T6', '东港中心', '已办结')
-    add('转办', datetime(2027, 2, 10, 10), 'T7', '华乐中心', '未办结')
-    add('省办', datetime(2027, 2, 10), 'P1', '华乐中心', '已办结')
+    add('转办', datetime(2027, 2, 10, 8), 'T1', '华乐中心', '已办结', '投诉')
+    add('转办', datetime(2027, 2, 10, 8, 30), 'T1_consult', '华乐中心', '已办结', '咨询')
+    add('转办', datetime(2027, 2, 10, 9), 'T2', '其他部门', '撤件', '投诉')
+    add('转办', datetime(2027, 2, 1), 'T3', '东港服务中心', '已办结', '投诉')
+    add('转办', datetime(2026, 11, 1), 'T4', '东港中心', '已办结', '投诉')
+    add('转办', datetime(2026, 10, 31), 'T5', '东港中心', '已办结', '投诉')
+    add('转办', datetime(2027, 2, 11), 'T6', '东港中心', '已办结', '投诉')
+    add('转办', datetime(2027, 2, 10, 10), 'T7', '华乐中心', '未办结', '投诉')
+    add('省办', datetime(2027, 2, 10), 'P1', '华乐中心', '已办结', '投诉')
     data = BytesIO()
     book.save(data)
     return data.getvalue()
@@ -40,9 +41,10 @@ def test_metrics_and_reconciliation():
     result = calculate(sample(), '2027-02-10')
     assert result['month_start'] == '2027-02-01'
     assert result['season_start'] == '2026-11-01'
-    assert result['group'] == {'daily_city': 4, 'daily_province': 1, 'daily_total': 5, 'daily_net': 1, 'daily_province_net': 0, 'daily_city_net': 1, 'monthly_net': 2, 'season_net': 3, 'unresolved_complaints': 1}
+    assert result['group'] == {'daily_city': 5, 'daily_province': 1, 'daily_total': 6, 'daily_net': 1, 'daily_province_net': 0, 'daily_city_net': 1, 'monthly_net': 2, 'season_net': 3, 'unresolved_complaints': 1}
     assert [c['name'] for c in result['centers']] == list(CENTERS)
-    assert result['centers'][0]['metrics']['daily_total'] == 4
+    assert result['centers'][0]['metrics']['daily_total'] == 5
+    assert result['centers'][0]['metrics']['daily_net'] == 1
     assert result['centers'][0]['metrics']['unresolved_complaints'] == 1
     assert result['unmatched']['metrics']['daily_total'] == 1
     for key, value in result['group'].items():

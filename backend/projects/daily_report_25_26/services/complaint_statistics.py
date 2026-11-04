@@ -49,13 +49,15 @@ def metrics(records, day, month, season):
         current = date.fromisoformat(row['date'])
         source, done = row['source'], row['status'] == '已办结'
         unresolved = row['status'] == '未办结'
+        is_complaint = normalize(row.get('type')) == '投诉'
+        is_net = source == '转办' and done and is_complaint
         if current == day:
             counts['daily_city'] += source in ('直办', '转办')
             counts['daily_province'] += source == '省办'
             counts['daily_total'] += 1
-            counts['daily_net'] += source == '转办' and done
-            counts['daily_city_net'] += source == '转办' and done
-        if source == '转办' and done:
+            counts['daily_net'] += is_net
+            counts['daily_city_net'] += is_net
+        if is_net:
             counts['monthly_net'] += month <= current <= day
             counts['season_net'] += season <= current <= day
         if source == '转办' and unresolved:

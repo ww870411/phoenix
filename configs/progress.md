@@ -1,5 +1,26 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-04 供热填报端净投诉量统计口径精细化：仅转办已办结且类型为“投诉”纳入净投诉统计
+
+- **需求背景与口径明确**：
+  - 用户反馈在《转办》明细工作表中存在“类型”字段（包含投诉、咨询、表扬等不同诉求类型）；
+  - 明确要求在计算“净投诉量”时，保持原转办及已办结范围不变的前提下，增加对诉求类型的判定：**必须同时满足该记录的“类型”为“投诉”**，才计入净投诉量统计范围（排除咨询、表扬等非投诉诉求）。
+- **改动范围与落地详情**：
+  1. **后端统计算法精细化** ([`complaint_statistics.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/complaint_statistics.py))：
+     - 在 `metrics(records, day, month, season)` 中，新增 `is_complaint = normalize(row.get('type')) == '投诉'` 判定；
+     - 调整 `is_net` 计算逻辑为 `source == '转办' and done and is_complaint`；
+     - `daily_net`（当日净投诉量）、`daily_city_net`（市平台净投诉量）、`monthly_net`（本月累计净投诉量）、`season_net`（本供暖期累计净投诉量）均严格依据新 `is_net` 进行累加；
+     - 总量指标（`daily_city`、`daily_province`、`daily_total`）与未办结指标保持全量统计口径。
+  2. **前端穿透核对与提示同步** ([`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue))：
+     - 模态弹窗顶部口径说明更新为：`新口径：净投诉量为转办已办结且类型为“投诉”；省平台净投诉为 0；市平台等于净投诉量`；
+     - 穿透过滤逻辑 `complaintDetailRows` 同步增加 `const isComplaint = String(record.type || '').trim() === '投诉'`，确保点击净投诉量数字时穿透出的明细记录与汇总数值完全一一对应。
+  3. **单测用例升级** ([`test_complaint_statistics.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/tests/test_complaint_statistics.py))：
+     - 在样本数据中新增已办结但类型为“咨询”的转办记录，验证其正常计入当日诉求总量（`daily_total`/`daily_city`），但被严格排除在 `daily_net`、`daily_city_net`、`monthly_net`、`season_net` 之外。
+- **构建与测试**：
+  - 后端执行 `python -m pytest backend/projects/daily_report_25_26/tests/test_complaint_statistics.py` 4 项测试全部通过；
+  - 前端执行 `node frontend/src/projects/daily_report_25_26/composables/complaintFill.test.js` 3 项测试全部通过；
+  - 前端执行 `npm --prefix frontend run build` 生产构建成功（17.66s，0 错误）。
+
 ## 2026-11-04 数据看板 PDF 导出宽度改为 1800px（当前生效）
 
 - **需求与变更**：用户反馈 2560px 导出过于扁宽，将 `DashBoard.vue` 的 `EXPORT_STANDARD_WIDTH`、导出 CSS 的宽度/最小宽度/最大宽度及提示统一调整为 1800px，替代上一轮 2K 宽度。
