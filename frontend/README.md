@@ -1,3 +1,22 @@
+## 2026-11-04 窄屏手机模式数据看板精细化响应式排版重构（彻底解决排版错乱与横向白边晃动）
+
+- **故障回滚与清理**：
+  - 彻底撤销并清理了外部非标准脚本引入的侵入性代码（强制横向柱状图翻转、破坏性隐藏差额胶囊、粗暴塞入粘性超链接导航及粗糙折叠树）；
+  - 全面恢复基准图表几何尺度、数据完整度与视觉规范。
+- **专业级窄屏移动端响应式排版落地** (`frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`, `frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`)：
+  - **核心容器防撑爆机制**：在 `@media (max-width: 767px)` 下，为 `.dashboard-page`、`.dashboard-grid`、`.dashboard-card`、`.dashboard-table-wrapper` 统一增加 `min-width: 0 !important; max-width: 100% !important;` 约束，彻底根治宽表格（如服务中心明细表、气温表）撑破移动端横向视口导致左右晃动与大白边的顽疾；
+  - **表格平滑触控滚动**：明细表格外层统一启用 `-webkit-overflow-scrolling: touch` 横向滚动，内部多级表头完整展示且不再发生重叠错位；
+  - **图表自动 Resize 监听**：在 `EChart` 组件内增加原生 `ResizeObserver`，视口或卡片宽度变化时纯净调用 `chart.resize()`，保持柱状图、折线图原有图例与方向完全不变形；
+  - **移动端内边距与字号分级优化**：
+    - 页面内边距精减为 `12px 10px`，卡片内边距调整为 `14px 12px`，极大提升窄屏有效展示面积；
+    - 顶部 Header 标题缩减至 `20px`，日期输入框与操作按钮自适应对齐；
+    - 核心指标卡数字自适应缩放（主数值 `20px`，成对指标 `16px`），保证大数值不折行不截断；
+    - 单耗展示范围胶囊切换栏（`.unit-phase-toggle`）与电力现货卡片（`.spot-kpi-bar`）在窄屏下整齐弹性自适应；
+  - **热网耗水哑铃图手机端适配**：
+    - 窄屏（`< 500px`）自动微调绘图网格（`left: 70, right: 86`），胶囊微调至 `11px`，**完好保留变动差额胶囊与散点数据标签**，既不破坏任何数据，又让哑铃横向绘图空间拓展近 25%；
+    - 顶部全口径指标条在窄屏下整齐纵向排布，对比数值不折断。
+- **构建验证**：`npm run build` 成功通过（45.57s，产物 `DashBoard-CF2S-aq6.js`）。
+
 ## 2026-11-04 数据看板热网耗水量对比精细化调优：移除栏目副标题“自适应标尺”字样
 
 - **UI 文本精简治理** (`frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`)：

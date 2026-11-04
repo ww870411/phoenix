@@ -1379,6 +1379,8 @@ const EChart = defineComponent({
       applyOption()
     }
 
+    let resizeObserver = null
+
     const handleResize = () => {
       if (chart) {
         chart.resize()
@@ -1389,12 +1391,19 @@ const EChart = defineComponent({
       ensureChart()
       if (props.autoresize) {
         window.addEventListener('resize', handleResize)
+        if (container.value && typeof ResizeObserver !== 'undefined') {
+          resizeObserver = new ResizeObserver(() => {
+            if (chart) chart.resize()
+          })
+          resizeObserver.observe(container.value)
+        }
       }
     })
 
     onBeforeUnmount(() => {
       if (props.autoresize) {
         window.removeEventListener('resize', handleResize)
+        resizeObserver?.disconnect()
       }
       dispose()
     })
@@ -8513,6 +8522,213 @@ watch(
 .dashboard-page--export-standard .dashboard-card {
   flex: 1 1 auto !important;
   min-height: 320px !important;
+}
+
+/* ============================================================
+   📱 窄屏手机模式精细化响应式排版适配 (max-width: 767px)
+   ============================================================ */
+@media (max-width: 767px) {
+  /* 1. 页面容器边距与溢出防撑破 */
+  .dashboard-page {
+    padding: 12px 10px !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 核心容器防撑爆规则：确保所有网格项和卡片不被内部宽表格撑破横向视口 */
+  .dashboard-grid,
+  .dashboard-grid__item,
+  .dashboard-card,
+  .dashboard-card__body,
+  .dashboard-summary,
+  .summary-card,
+  .dashboard-table-wrapper {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 表格横向平滑触控滚动 */
+  .dashboard-table-wrapper,
+  .dashboard-table {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 2. 页面头部 Header */
+  .dashboard-header {
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .dashboard-header__title {
+    font-size: 20px !important;
+  }
+
+  .dashboard-header__subtitle {
+    font-size: 12px;
+  }
+
+  .dashboard-header__actions {
+    width: 100%;
+    padding: 10px 12px;
+    gap: 10px;
+    box-sizing: border-box;
+  }
+
+  .dashboard-header__date-group {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .dashboard-header__date-group input[type='date'] {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .pdf-download-btn {
+    width: 100%;
+    padding: 8px;
+    font-size: 13px;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .dashboard-cache-controls {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-cache-buttons {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  /* 3. 核心指标卡 (summary-card) */
+  .dashboard-summary {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .summary-card {
+    padding: 14px 12px;
+    gap: 10px;
+    border-radius: 12px;
+  }
+
+  .summary-card__icon {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 10px;
+  }
+
+  .summary-card__icon::before {
+    width: 24px;
+    height: 24px;
+  }
+
+  .summary-card__value {
+    font-size: 20px;
+  }
+
+  .summary-card__value--paired {
+    font-size: 16px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .summary-card__delta {
+    font-size: 12px;
+    margin-left: 2px;
+  }
+
+  /* 4. 通用卡片内部样式 */
+  .dashboard-card {
+    padding: 14px 12px;
+    border-radius: 12px;
+    gap: 12px;
+  }
+
+  .dashboard-card__header {
+    gap: 6px;
+  }
+
+  .dashboard-card__title {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .dashboard-card__extra {
+    font-size: 11px;
+  }
+
+  /* 5. 单耗切换栏与工具条 */
+  .unit-phase-toggle {
+    width: 100%;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 10px;
+    box-sizing: border-box;
+  }
+
+  .unit-phase-toggle__btn {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .coal-phase-toggle {
+    flex-wrap: wrap;
+  }
+
+  .daily-trend-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* 6. 电力现货与调度卡片 */
+  .spot-kpi-bar {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
+  }
+
+  .spot-kpi-item {
+    padding: 8px 10px;
+  }
+
+  .spot-kpi-item__label {
+    font-size: 11px;
+  }
+
+  .spot-kpi-item__value {
+    font-size: 18px;
+  }
+
+  .dispatch-event-row {
+    grid-template-columns: 46px 1fr;
+    gap: 6px 8px;
+  }
+
+  /* 7. 主城区服务中心指标选择器 */
+  .center-card__controls {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .center-card__metric-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
 }
 </style>
 

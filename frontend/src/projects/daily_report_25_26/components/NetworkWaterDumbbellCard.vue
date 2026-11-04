@@ -331,6 +331,9 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
     }
   }
 
+  const containerWidth = dayChartRef.value?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 800)
+  const isNarrow = containerWidth > 0 && containerWidth < 500
+
   const richStyles = {
     saving: {
       color: '#047857',
@@ -338,8 +341,8 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
       borderColor: '#a7f3d0',
       borderWidth: 1.5,
       borderRadius: 6,
-      padding: [3, 7],
-      fontSize: 12,
+      padding: isNarrow ? [2, 5] : [3, 7],
+      fontSize: isNarrow ? 11 : 12,
       fontWeight: 700,
     },
     waste: {
@@ -348,8 +351,8 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
       borderColor: '#fecaca',
       borderWidth: 1.5,
       borderRadius: 6,
-      padding: [3, 7],
-      fontSize: 12,
+      padding: isNarrow ? [2, 5] : [3, 7],
+      fontSize: isNarrow ? 11 : 12,
       fontWeight: 700,
     },
     equal: {
@@ -358,8 +361,8 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
       borderColor: '#cbd5e1',
       borderWidth: 1,
       borderRadius: 6,
-      padding: [3, 7],
-      fontSize: 12,
+      padding: isNarrow ? [2, 5] : [3, 7],
+      fontSize: isNarrow ? 11 : 12,
       fontWeight: 600,
     },
   }
@@ -373,16 +376,16 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
       {
         top: 20,
         height: 76,
-        left: 84,
-        right: 105,
+        left: isNarrow ? 70 : 84,
+        right: isNarrow ? 86 : 105,
         containLabel: false,
       },
       // Grid 1: 外围五单位 (下方5行自适应区域，标尺为主城区的2/5向上取整千)
       {
         top: 160,
         height: 230,
-        left: 84,
-        right: 105,
+        left: isNarrow ? 70 : 84,
+        right: isNarrow ? 86 : 105,
         containLabel: false,
       },
     ],
@@ -474,9 +477,9 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
         axisTick: { show: false },
         axisLabel: {
           color: '#0f172a',
-          fontSize: 14,
+          fontSize: isNarrow ? 12.5 : 14,
           fontWeight: 800,
-          margin: 12,
+          margin: isNarrow ? 8 : 12,
         },
       },
       // Y 轴 1: 外围五单位
@@ -487,7 +490,7 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
         data: subCategories,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: '#0f172a', fontSize: 13.5, fontWeight: 700, margin: 12 },
+        axisLabel: { color: '#0f172a', fontSize: isNarrow ? 12 : 13.5, fontWeight: 700, margin: isNarrow ? 8 : 12 },
       },
     ],
     series: [
@@ -551,7 +554,7 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
           position: 'top',
           distance: 5,
           formatter: currValFormatter,
-          fontSize: 13,
+          fontSize: isNarrow ? 11.5 : 13,
           fontWeight: 800,
           color: '#0284c7',
           textBorderColor: '#ffffff',
@@ -637,7 +640,7 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
           position: 'top',
           distance: 5,
           formatter: currValFormatter,
-          fontSize: 13,
+          fontSize: isNarrow ? 11.5 : 13,
           fontWeight: 800,
           color: '#0284c7',
           textBorderColor: '#ffffff',
@@ -1093,5 +1096,49 @@ onBeforeUnmount(() => {
   background: #ffffff;
   white-space: nowrap;
   letter-spacing: 0.5px;
+}
+
+/* ============================================================
+   📱 窄屏手机响应式适配 (max-width: 767px)
+   ============================================================ */
+@media (max-width: 767px) {
+  .water-dumbbell-card {
+    padding: 14px 12px;
+    border-radius: 12px;
+    gap: 12px;
+  }
+
+  .water-dumbbell-title {
+    font-size: 16px;
+  }
+
+  .water-legend-chips {
+    gap: 8px 10px;
+  }
+
+  .legend-chip {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .water-global-summary-bar {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+
+  .water-global-metric__val {
+    font-size: 20px;
+  }
+
+  .water-global-metric__compare {
+    font-size: 12px;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+
+  .water-global-metric__divider {
+    display: none !important;
+  }
 }
 </style>
