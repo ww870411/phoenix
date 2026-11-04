@@ -1,5 +1,50 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-04 数据看板 PDF 导出宽度改为 1800px（当前生效）
+
+- **需求与变更**：用户反馈 2560px 导出过于扁宽，将 `DashBoard.vue` 的 `EXPORT_STANDARD_WIDTH`、导出 CSS 的宽度/最小宽度/最大宽度及提示统一调整为 1800px，替代上一轮 2K 宽度。
+- **流程与影响**：`downloadPDF` 按 1800px 布局重绘图表，以原有 2 倍采样生成 3600px 宽截图，再生成 210mm 宽的等比例长页 PDF；导出后恢复原布局。无后端变更，无需迁移。
+- **验证与回滚**：最后验证日期 2026-11-04；布局、截图及虚拟视口参数一致性检查通过，生产构建结果见本轮交付说明，未进行实际 PDF 下载目视验收。已同步前后端 README；回滚仅将本轮导出宽度及对应提示恢复为 2560px。
+
+## 2026-11-04 数据看板 PDF 导出宽度调整为 2K
+
+- **需求与实现**：按用户要求，将 `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue` 的 `downloadPDF` 导出布局宽度、html2canvas 截图及虚拟视口宽度、专用 CSS 的宽度约束由 1600px 统一调整为 2560px，提示文字同步更新。此处 2K 按常见桌面 2560px 宽度解释。
+- **运行流程**：导出时切换 2560px 桌面布局并重绘图表，以原有 2 倍采样生成 5120px 宽截图，再按 210mm 页面宽度等比例生成长页 PDF；完成后恢复屏幕布局。
+- **验证**：最后验证日期 2026-11-04；导出参数及 CSS 一致性断言通过，`frontend` 下 `npm run build` 成功（20.73s），仅有分包大于 500kB 的提示；未进行浏览器实际 PDF 下载与目视验收。
+- **影响与回滚**：截图宽度增加可能提高导出耗时与内存占用；无需迁移。回滚仅将本轮导出常量、CSS 宽度和对应提示恢复为 1600px。已同步前后端 README；无后端代码或接口变更。
+
+## 2026-11-04 修复远程生产数据库拉取 500 报错并全面加固备份同步链路
+
+- **需求背景与故障排查**：
+  - 用户反馈在后台点击拉取远程生产环境备份时，后端日志输出 `POST /api/v1/admin/database/remote-sync/pull HTTP/1.1 500 Internal Server Error`；
+  - **根本诱因分析**：
+    1. **文件名包含本地前缀**：当指定拉取历史备份包时，若传入已包含“远程_”前缀的文件名，后端直接拼接原名向远程生产服务器请求下载（而生产服务器上无此前缀），远程返回 HTTP 404，本地未捕获分类并统一包裹为 500 抛出；
+    2. **Token失效兜底缺陷**：在凭证过期且未持久化管理员明文密码时，`_get_remote_auth_token` 探测失败后仍把无效 Token 原样返回，导致后续请求被远程拦截为 401 并转化为 500；
+    3. **日志排障盲区**：`pull_remote_backup` 关键调用链未引入日志输出，且 `admin_console.py` 顶部缺少 `logger` 初始化，导致异常发生时控制台仅有 uvicorn 的 access log，无任何业务 Traceback；
+    4. **下载原子性保障**：原流式下载直接写入目标文件，若遇网络中断或超时会导致本地残留损坏的 0 字节或半截 dump 文件。
+- **改动范围与落地详情**：
+  - **后端加固** (`backend/api/v1/admin_console.py`)：
+    1. 顶部导入 `logging` 并创建模块级 `logger`，补齐长期遗漏的日志器定义；
+    2. **文件名净化与自动适配**：在 `pull_remote_backup` 中，自动识别并剥离用户传入的“远程_”本地前缀，确保向生产服务器请求的是生产环境原始文件名，本地落盘自动统一追加“远程_”前缀；
+    3. **临时文件原子落盘**：流式下载使用 `.downloading_{uuid}` 临时文件，下载完毕后再原子重命名至最终目标路径，若发生任何异常自动清理临时文件，确保本地文件完整性；
+    4. **确保本地备份目录**：执行 `DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)`；
+    5. **精准 HTTP 状态码与异常透传**：对 `urllib.error.HTTPError`（401/403/404/500/502/504）及 `urllib.error.URLError`（网络超时）进行精准捕获与日志记录，透传远程真实错误原因；
+    6. **Token认证兜底防护**：探测失败且无密码时，显式抛出 401 并给出清晰指导，避免无效 Token 穿透。
+  - **前端对接增强** (`frontend/src/projects/daily_report_25_26/services/api.js`)：
+    - 在 `pullAdminRemoteSyncBackup`、`testAdminRemoteSyncConnection`、`getAdminRemoteSyncBackups` 等方法中统一引入 `parseErrorDetail`，替代直接读取原始 text，确保前端弹窗显示易读的中文错误详情。
+- **验证与测试**：
+  - 容器内执行 `test_remote_sync_connection` 成功连接远程生产环境并获取到 146 个备份存档；
+  - 容器内执行 `pull_remote_backup`，测试带“远程_”前缀的文件名，自动剥离前缀并成功下载校验通过（生成 `远程_phoenix_backup_20261104_155612.dump (7.00 MB)`）；
+  - `python -m py_compile backend/api/v1/admin_console.py` 语法校验通过，容器重启运行稳定。
+
+## 2026-11-04 取消 nyjt 的月报数据查询工具访问权限
+
+- **需求与依据**：按用户要求取消 `nyjt` 的月报查询权限。核对当前账户配置，`Group_viewer` 组仅有 `nyjt` 一名成员，权限由 `AuthManager._build_merged_permissions` 按组解析。
+- **变更**：清空 `backend_data/shared/auth/permissions/monthly_data_show.json` 中 `Group_viewer.page_access`；生产日报及其他组配置不变。本轮仅调整运行权限配置，无业务代码修改，不触发前后端 README 同步要求。
+- **流程与结果**：后端配置重载后，`nyjt` 的月报项目授权为空，项目列表不再展示月报，查询工具直达路由也因缺少页面授权被拒绝；前端需刷新会话权限，可退出后重新登录。
+- **验证**：使用本地 `AuthManager` 解析配置，核对 `nyjt` 月报项目不可访问、生产日报权限保留，比较全部账号变更前后权限摘要，确认仅 `nyjt` 发生变化，`group_admin` 月报查询仍可访问。最后验证日期：2026-11-04；未验证远端部署状态。
+- **影响与回滚**：沿用现有分组模型，未来加入 `Group_viewer` 的账号也默认没有月报权限；无需数据库迁移。回滚时向该组 `page_access` 恢复 `projects_monthly_data_show_query_tool`，并刷新登录权限。
+
 ## 2026-11-04 窄屏手机模式数据看板精细化响应式排版重构（彻底解决排版错乱与横向白边晃动）
 
 - **需求背景与故障诊断**：

@@ -138,9 +138,7 @@
       }
     },
     "Group_viewer": {
-      "page_access": [
-        "projects_monthly_data_show_query_tool"
-      ],
+      "page_access": [],
       "sheet_rules": {},
       "units_access": [
         "Group"

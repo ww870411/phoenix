@@ -2903,8 +2903,8 @@ export async function getAdminRemoteSyncConfig() {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
-    const msg = await response.text()
-    throw new Error(msg || '获取远程同步配置失败')
+    const msg = await parseErrorDetail(response, '获取远程同步配置失败')
+    throw new Error(msg)
   }
   return response.json()
 }
@@ -2916,8 +2916,8 @@ export async function saveAdminRemoteSyncConfig(payload) {
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    const msg = await response.text()
-    throw new Error(msg || '保存远程同步配置失败')
+    const msg = await parseErrorDetail(response, '保存远程同步配置失败')
+    throw new Error(msg)
   }
   return response.json()
 }
@@ -2929,8 +2929,8 @@ export async function testAdminRemoteSyncConnection() {
     body: JSON.stringify({}),
   })
   if (!response.ok) {
-    const msg = await response.text()
-    throw new Error(msg || '测试远程生产环境连接失败')
+    const msg = await parseErrorDetail(response, '测试远程生产环境连接失败')
+    throw new Error(msg)
   }
   return response.json()
 }
@@ -2940,8 +2940,8 @@ export async function getAdminRemoteSyncBackups() {
     headers: attachAuthHeaders(),
   })
   if (!response.ok) {
-    const msg = await response.text()
-    throw new Error(msg || '获取远程生产备份列表失败')
+    const msg = await parseErrorDetail(response, '获取远程生产备份列表失败')
+    throw new Error(msg)
   }
   return response.json()
 }
@@ -2953,8 +2953,8 @@ export async function pullAdminRemoteSyncBackup(payload = {}) {
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    const msg = await response.text()
-    throw new Error(msg || '拉取远程生产备份失败')
+    const msg = await parseErrorDetail(response, '拉取远程生产备份失败')
+    throw new Error(msg)
   }
   return response.json()
 }

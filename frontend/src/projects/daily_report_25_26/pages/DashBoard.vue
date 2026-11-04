@@ -5,7 +5,7 @@
       <div class="pdf-export-loading-card">
         <div class="pdf-export-spinner"></div>
         <div class="pdf-export-loading-title">正在生成标准看板 PDF</div>
-        <div class="pdf-export-loading-desc">正在按标准桌面宽屏版式（1600px）渲染整页数据与图表，请稍候...</div>
+        <div class="pdf-export-loading-desc">正在按桌面宽屏版式（1800px）渲染整页数据与图表，请稍候...</div>
       </div>
     </div>
 
@@ -5024,7 +5024,7 @@ const injectPdfSafeSummaryIcons = (clonedDocument) => {
 }
 
 const isExportingPdf = ref(false)
-const EXPORT_STANDARD_WIDTH = 1600
+const EXPORT_STANDARD_WIDTH = 1800
 
 const downloadPDF = async () => {
   if (isExportingPdf.value || isLoading.value || spotElecLoading.value || dispatchLoading.value || isCoalPlanLoading.value || isStaticCoalPlanLoading.value || !dashboardData.meta.pushDate) return
@@ -5047,17 +5047,17 @@ const downloadPDF = async () => {
     // 1. 展开累计明细表格，确保数据完整呈现
     releaseFold = await ensureCumulativeTableVisibleForExport()
 
-    // 2. 锁定 1600px 桌面标准宽屏版式，消除移动端 narrow viewport 响应式折行与变形
+    // 2. 锁定 1800px 桌面宽屏版式，消除移动端视口响应式折行与变形
     dashboard.classList.add('dashboard-page--export-standard')
     document.body.classList.add('body--export-pdf-locked')
     await nextTick()
 
-    // 3. 驱动页面上所有 ECharts 图表按 1600px 桌面高分辨率像素重新计算与重绘
+    // 3. 驱动页面上所有 ECharts 图表按 1800px 桌面宽度重新计算与重绘
     window.dispatchEvent(new Event('resize'))
     // 留足 ECharts 动画、重新计算与 DOM 渲染时间
     await delay(480)
 
-    // 4. 使用 html2canvas 执行 2 倍视网膜级别渲染，锁死截屏宽度为 1600px
+    // 4. 使用 html2canvas 执行 2 倍渲染，布局与截屏宽度均为 1800px
     const canvas = await html2canvas(dashboard, {
       useCORS: true,
       scale: 2,
@@ -8324,7 +8324,7 @@ watch(
 }
 
 /* ==========================================================================
-   PDF 标准宽屏无缝长页导出专属样式（方案 A：全设备 1600px 桌面版式强制锁定）
+   PDF 标准宽屏无缝长页导出专属样式（全设备 1800px 桌面版式）
    ========================================================================== */
 
 /* 1. 全屏高质感 Loading 遮罩 */
@@ -8395,11 +8395,11 @@ watch(
   }
 }
 
-/* 2. 主页面 1600px 宽屏版式强制锁定（无论手机、平板还是小视口，均强制桌面标准展现） */
+/* 2. 主页面 1800px 宽屏版式强制锁定（手机、平板及电脑使用统一导出布局） */
 .dashboard-page.dashboard-page--export-standard {
-  width: 1600px !important;
-  min-width: 1600px !important;
-  max-width: 1600px !important;
+  width: 1800px !important;
+  min-width: 1800px !important;
+  max-width: 1800px !important;
   padding: 32px !important;
   box-sizing: border-box !important;
   margin: 0 auto !important;

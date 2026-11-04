@@ -1,3 +1,21 @@
+## 2026-11-04 数据看板 PDF 导出采用 1800px 宽度（当前生效）
+
+- 根据用户对扁宽效果的反馈，`DashBoard.vue` 的 `downloadPDF`、导出 CSS、截图视口及提示统一由 2560px 调整为 1800px；2 倍采样输出 3600px 宽截图，继续生成 210mm 宽等比例长页 PDF。此配置替代下方历史 2K 方案。
+- 参数一致性检查通过（最后验证日期：2026-11-04），生产构建结果见本轮交付说明，未实际下载 PDF 目视验收；无需迁移，回滚仅恢复本轮 2560px 导出宽度与提示。
+
+## 2026-11-04 数据看板 PDF 导出采用 2560px 宽度（历史方案）
+
+- `DashBoard.vue` 的 `downloadPDF` 与导出专用 CSS 统一采用 2560px 的 2K 桌面布局，截图及虚拟视口宽度同步调整，提示文字同步更新；原有 2 倍采样输出 5120px 宽截图，PDF 继续按 210mm 宽度等比例生成长页。
+- 导出参数一致性检查与生产构建通过（最后验证日期：2026-11-04），仅有较大分包提示；尚未实际下载 PDF 进行目视验收。宽度增加可能提高导出耗时及内存占用；无需迁移，回滚恢复本轮 1600px 导出配置及提示。
+
+## 2026-11-04 远程生产备份同步接口异常解析与提示增强
+
+- **功能模块**：`frontend/src/projects/daily_report_25_26/services/api.js`
+- **改动详情**：
+  - 在 `pullAdminRemoteSyncBackup`、`testAdminRemoteSyncConnection`、`getAdminRemoteSyncBackups`、`getAdminRemoteSyncConfig`、`saveAdminRemoteSyncConfig` 等方法中，统一接入 `parseErrorDetail(response, fallbackMsg)`；
+  - 避免后端抛出 HTTPException 时前端仅能提取到原始 JSON 文本（如 `{"detail": "..."}`），将后端真实返回的详细中文错误原因结构化提取并直接显示在 UI 提示框与弹窗中。
+- **验证结果**：测试连接及拉取接口均正常交互，异常时界面可清晰显示业务错误原因。
+
 ## 2026-11-04 窄屏手机模式数据看板精细化响应式排版重构（彻底解决排版错乱与横向白边晃动）
 
 - **故障回滚与清理**：

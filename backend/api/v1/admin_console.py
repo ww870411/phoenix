@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import json
 import platform
 import re
@@ -45,6 +46,7 @@ from backend.projects.daily_report_25_26.api.legacy_full import (
 )
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["admin"])
 DATA_ROOT = Path(DATA_DIRECTORY).resolve()
 APP_START_TS = time.time()
@@ -2405,7 +2407,8 @@ def _get_remote_auth_token(cfg: dict, force_relogin: bool = False) -> str:
     if not username or not password:
         if token:
             return token
-        raise HTTPException(status_code=400, detail="未配置远程生产环境的管理员账号或密码，且无可用令牌")
+        logger.warning("远程凭证(Token)已失效且未配置管理员密码，无法自动重新登录")
+        raise HTTPException(status_code=401, detail="远程凭证(Token)已失效且未配置管理员密码，请重新在远程同步配置中输入密码或更新令牌")
 
     login_body = json.dumps({"username": username, "password": password, "remember_me": True}).encode("utf-8")
     login_req = urllib.request.Request(
@@ -2424,8 +2427,10 @@ def _get_remote_auth_token(cfg: dict, force_relogin: bool = False) -> str:
             return access_token
     except urllib.error.HTTPError as he:
         err_msg = he.read().decode("utf-8", errors="ignore")
-        raise HTTPException(status_code=400, detail=f"远程服务器认证失败 (HTTP {he.code}): {err_msg}")
+        logger.error("远程服务器认证失败 (HTTP %s): %s", he.code, err_msg)
+        raise HTTPException(status_code=he.code if he.code in (401, 403) else 400, detail=f"远程服务器认证失败 (HTTP {he.code}): {err_msg}")
     except Exception as e:
+        logger.error("连接远程生产服务器失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"连接远程生产服务器失败: {str(e)}")
 
 
@@ -2498,8 +2503,13 @@ def test_remote_sync_connection(session: AuthSession = Depends(get_current_sessi
             }
     except urllib.error.HTTPError as he:
         err_msg = he.read().decode("utf-8", errors="ignore")
+        logger.error("测试访问远程备份接口失败 (HTTP %s): %s", he.code, err_msg)
         raise HTTPException(status_code=400, detail=f"访问远程备份接口失败 (HTTP {he.code}): {err_msg}")
+    except urllib.error.URLError as ue:
+        logger.error("测试远程连接网络异常: %s", ue.reason)
+        raise HTTPException(status_code=504, detail=f"无法连接远程生产服务器 (网络超时或不可达): {ue.reason}")
     except Exception as e:
+        logger.error("测试远程连接发生未预料异常: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"测试远程连接异常: {str(e)}")
 
 
@@ -2531,7 +2541,16 @@ def list_remote_backups(session: AuthSession = Depends(get_current_session)):
                 "backups": data.get("backups", [])
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取远程备份列表失败: {str(e)}")
+        logger.error("获取远程备份列表失败: %s", e, exc_info=True)
+        err_msg = str(e)
+        status_code = 500
+        if isinstance(e, urllib.error.HTTPError):
+            status_code = e.code if e.code in (400, 401, 403, 404, 502, 503, 504) else 500
+            try:
+                err_msg = e.read().decode("utf-8", errors="ignore")
+            except Exception:
+                pass
+        raise HTTPException(status_code=status_code, detail=f"获取远程备份列表失败: {err_msg}")
 
 
 @router.post("/admin/database/remote-sync/pull", summary="从远程生产环境拉取指定或最新备份文件至本地")
@@ -2543,6 +2562,8 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
 
     _ensure_admin_console_access(session)
     cfg = _load_remote_sync_config()
+    logger.info("收到远程生产数据拉取请求: filename=%s, create_fresh_first=%s, remote_url=%s, user=%s",
+                payload.filename, payload.create_fresh_first, payload.remote_url or cfg.get("remote_url"), session.username)
     if payload.remote_url:
         cfg["remote_url"] = payload.remote_url.strip()
     if payload.username:
@@ -2567,6 +2588,7 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
     target_filename = payload.filename
 
     if do_create:
+        logger.info("准备在远程生产环境创建即时数据库快照: url=%s", remote_url)
         try:
             create_req = urllib.request.Request(
                 f"{remote_url}/api/v1/admin/database/backup",
@@ -2577,11 +2599,25 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
                 c_data = json.loads(c_resp.read().decode("utf-8"))
                 if c_data and c_data.get("ok") and c_data.get("filename"):
                     target_filename = c_data.get("filename")
+                    logger.info("远程生产环境即时备份生成完毕: filename=%s", target_filename)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"在远程生产环境创建即时备份失败: {str(e)}")
+            logger.error("在远程生产环境创建即时备份失败: %s", e, exc_info=True)
+            err_msg = str(e)
+            status_code = 500
+            if isinstance(e, urllib.error.HTTPError):
+                status_code = e.code if e.code in (400, 401, 403, 404, 502, 503, 504) else 500
+                try:
+                    err_msg = e.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    pass
+            elif isinstance(e, urllib.error.URLError):
+                status_code = 504
+                err_msg = f"连接生产环境网络异常: {e.reason}"
+            raise HTTPException(status_code=status_code, detail=f"在远程生产环境创建即时备份失败: {err_msg}")
 
     # 2. 如果未指定文件名，查询远程列表取最新一个 .dump 备份
     if not target_filename:
+        logger.info("未显式指定文件名，正在查询远程生产环境最新备份存档...")
         try:
             list_req = urllib.request.Request(f"{remote_url}/api/v1/admin/database/backups", headers=headers)
             with urllib.request.urlopen(list_req, context=ctx, timeout=20) as l_resp:
@@ -2590,35 +2626,60 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
                 if not remote_backups:
                     raise HTTPException(status_code=404, detail="远程生产环境暂无任何备份文件可拉取")
                 target_filename = remote_backups[0].get("filename")
+                logger.info("成功获取远程最新备份文件名: %s", target_filename)
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"查询远程最新备份文件失败: {str(e)}")
+            logger.error("查询远程最新备份文件失败: %s", e, exc_info=True)
+            err_msg = str(e)
+            status_code = 500
+            if isinstance(e, urllib.error.HTTPError):
+                status_code = e.code if e.code in (400, 401, 403, 404, 502, 503, 504) else 500
+                try:
+                    err_msg = e.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    pass
+            elif isinstance(e, urllib.error.URLError):
+                status_code = 504
+                err_msg = f"连接生产环境网络异常: {e.reason}"
+            raise HTTPException(status_code=status_code, detail=f"查询远程最新备份文件失败: {err_msg}")
 
-    remote_filename = Path(target_filename).name
-    # 本地保存时自动在文件名前添加“远程_”前缀（如 远程_phoenix_backup_xxx.dump），便于与本地创建的备份清晰区分
-    if remote_filename.startswith("远程_") or remote_filename.startswith("远程"):
-        local_filename = remote_filename
+    raw_target_name = Path(target_filename).name
+    if raw_target_name.startswith("远程_"):
+        remote_filename = raw_target_name[len("远程_"):]
+    elif raw_target_name.startswith("远程"):
+        remote_filename = raw_target_name[len("远程"):]
     else:
-        local_filename = f"远程_{remote_filename}"
-
+        remote_filename = raw_target_name
+    local_filename = f"远程_{remote_filename}"
+    # 确保本地备份存储目录存在并定义安全下载目标
+    DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     dest_path = DB_BACKUP_DIR / local_filename
+    temp_dest_path = DB_BACKUP_DIR / f"{local_filename}.downloading_{uuid.uuid4().hex[:6]}"
 
     # 3. 流式下载文件（向远程请求原始文件名）
     download_url = f"{remote_url}/api/v1/admin/database/backup/download/{quote(remote_filename)}"
+    logger.info("准备从远程生产服务器下载备份文件: remote_url=%s, remote_filename=%s -> local=%s", remote_url, remote_filename, local_filename)
     dl_req = urllib.request.Request(download_url, headers=headers)
     try:
         with urllib.request.urlopen(dl_req, context=ctx, timeout=600) as dl_resp:
-            with open(dest_path, "wb") as f:
+            with open(temp_dest_path, "wb") as f:
                 while True:
                     chunk = dl_resp.read(64 * 1024)
                     if not chunk:
                         break
                     f.write(chunk)
 
+        # 下载成功后原子替换目标文件
+        if temp_dest_path.exists():
+            if dest_path.exists():
+                dest_path.unlink()
+            temp_dest_path.replace(dest_path)
+
         st = dest_path.stat()
         size_mb = st.st_size / (1024 * 1024)
         size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{st.st_size / 1024:.1f} KB"
+        logger.info("成功从生产环境下载备份文件: %s, 大小: %s", local_filename, size_str)
 
         audit_log.append_events([{
             "actor_user_id": session.username,
@@ -2639,8 +2700,28 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
             "message": f"成功从生产环境拉取备份文件并保存为 {local_filename} ({size_str})"
         }
     except Exception as e:
+        if temp_dest_path.exists():
+            try:
+                temp_dest_path.unlink()
+            except Exception:
+                pass
         if dest_path.exists() and dest_path.stat().st_size == 0:
-            dest_path.unlink()
-        raise HTTPException(status_code=500, detail=f"下载远程备份包失败: {str(e)}")
+            try:
+                dest_path.unlink()
+            except Exception:
+                pass
+        logger.error("下载远程备份包失败 (remote_filename=%s, url=%s): %s", remote_filename, download_url, e, exc_info=True)
+        status_code = 500
+        err_msg = str(e)
+        if isinstance(e, urllib.error.HTTPError):
+            status_code = e.code if e.code in (400, 401, 403, 404, 502, 503, 504) else 500
+            try:
+                err_msg = e.read().decode("utf-8", errors="ignore")
+            except Exception:
+                pass
+        elif isinstance(e, urllib.error.URLError):
+            status_code = 504
+            err_msg = f"连接生产服务器网络异常或超时: {e.reason}"
+        raise HTTPException(status_code=status_code, detail=f"下载远程备份包失败: {err_msg}")
 
 
