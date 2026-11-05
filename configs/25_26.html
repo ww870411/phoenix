@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>25-26供暖期生产运行周调度汇报系统 | 经济运行部</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@500;600;700&display=swap');
+
+    /* ========== 主题颜色变量：默认浅色模式 (Light Default) & 深色模式 (Dark) ========== */
+    :root, body[data-theme="light"] {
+      --bg-page: #f1f5f9;
+      --bg-header: rgba(255, 255, 255, 0.94);
+      --bg-card: #ffffff;
+      --bg-sub: #f8fafc;
+      --bg-doc-paper: #fffdf9;
+      --border-color: #e2e8f0;
+      --border-doc: #cbd5e1;
+      --text-main: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-bg: rgba(2, 132, 199, 0.08);
+      --table-head-bg: #f1f5f9;
+      --table-row-hover: #f8fafc;
+      --table-total-bg: #eff6ff;
+      --doc-highlight-bg: #fef3c7;
+      --doc-highlight-text: #92400e;
+      --shadow-card: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 1px 3px 0 rgba(15, 23, 42, 0.04);
+      --chart-grid: rgba(148, 163, 184, 0.25);
+      --chart-text: #475569;
+    }
+
+    body[data-theme="dark"] {
+      --bg-page: #070b14;
+      --bg-header: rgba(15, 23, 42, 0.92);
+      --bg-card: rgba(15, 23, 42, 0.85);
+      --bg-sub: rgba(30, 41, 59, 0.65);
+      --bg-doc-paper: rgba(15, 23, 42, 0.95);
+      --border-color: rgba(51, 65, 85, 0.75);
+      --border-doc: rgba(71, 85, 105, 0.8);
+      --text-main: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --accent-primary: #38bdf8;
+      --accent-bg: rgba(56, 189, 248, 0.12);
+      --table-head-bg: rgba(30, 41, 59, 0.85);
+      --table-row-hover: rgba(30, 41, 59, 0.45);
+      --table-total-bg: rgba(14, 165, 233, 0.15);
+      --doc-highlight-bg: rgba(245, 158, 11, 0.18);
+      --doc-highlight-text: #fcd34d;
+      --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+      --chart-grid: rgba(71, 85, 105, 0.35);
+      --chart-text: #cbd5e1;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      transition: background-color 0.25s ease, color 0.25s ease;
+      overflow-x: hidden;
+    }
+
+    .theme-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-card);
+      transition: background-color 0.25s ease, border-color 0.25s ease;
+    }
+
+    .theme-sub {
+      background-color: var(--bg-sub);
+      border: 1px solid var(--border-color);
+    }
+
+    /* 仿真公文/文章汇报精读区样式 (Word 简报阅读体验) */
+    .doc-reading-pane {
+      background-color: var(--bg-doc-paper);
+      border: 1px solid var(--border-doc);
+      box-shadow: var(--shadow-card);
+      position: relative;
+    }
+    .doc-reading-pane::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(180deg, #0284c7, #2563eb);
+      border-top-left-radius: 1rem;
+      border-bottom-left-radius: 1rem;
+    }
+    .doc-serif-title {
+      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+    }
+    .doc-paragraph {
+      text-indent: 2em;
+      line-height: 1.85;
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.85rem;
+      text-align: justify;
+    }
+    .doc-paragraph strong, .doc-key-num {
+      color: var(--text-main);
+      font-weight: 700;
+      background-color: var(--doc-highlight-bg);
+      color: var(--doc-highlight-text);
+      padding: 0.05rem 0.35rem;
+      border-radius: 0.25rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .slide-fade {
+      animation: fadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .num-font { font-variant-numeric: tabular-nums; }
+    .text-main { color: var(--text-main); }
+    .text-secondary { color: var(--text-secondary); }
+    .text-muted { color: var(--text-muted); }
+
+    /* 缩放容器支持 */
+    #zoom-viewport-wrapper {
+      transform-origin: top center;
+      transition: zoom 0.15s ease, transform 0.15s ease;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.5); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.8); }
+  </style>
+</head>
+<body data-theme="light" class="min-h-screen flex flex-col justify-between selection:bg-sky-500 selection:text-white">
+
+  <!-- ==================== 顶部导航与工具栏 (缩放控制 / 深浅色切换 / 供暖初期无上期模拟 / 数据源) ==================== -->
+  <header style="background-color: var(--bg-header); border-bottom: 1px solid var(--border-color);" class="backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5">
+      <!-- 左侧：标题与期次 -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-600 to-blue-700 flex items-center justify-center shadow-sm">
+          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="hdr-season" class="text-[11px] font-bold px-2 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">25-26供暖期</span>
+            <span id="hdr-dept" class="text-xs text-muted font-medium">经济运行部 · 周调度会汇报材料（可读+可展双模版）</span>
+          </div>
+          <h1 id="hdr-title" class="text-sm sm:text-base font-extrabold text-main tracking-tight">第十二周生产运行简报（1月16日—1月24日）</h1>
+        </div>
+      </div>
+
+      <!-- 中部：章节翻页导航胶囊 -->
+      <nav id="slide-nav-pills" class="hidden xl:flex items-center gap-1 p-1 rounded-xl theme-sub">
+        <button data-slide="0" class="nav-pill px-2.5 py-1 rounded-lg text-xs font-semibold transition-all">01 总体概况</button>
+        <button data-slide="1" class="nav-pill px-2.5 py-1 rounded-lg text-xs font-semibold transition-all">02 标煤与外购热</button>
+        <button data-slide="2" class="nav-pill px-2.5 py-1 rounded-lg text-xs font-semibold transition-all">03 产销边际利润</button>
+        <button data-slide="3" class="nav-pill px-2.5 py-1 rounded-lg text-xs font-semibold transition-all">04 供暖三项单耗</button>
+        <button data-slide="4" class="nav-pill px-2.5 py-1 rounded-lg text-xs font-semibold transition-all">05 月度计划与展望</button>
+        <button data-slide="5" class="nav-pill px-2.5 py-1 rounded-lg text-xs font-semibold transition-all text-amber-600">06 AGY自动化架构</button>
+      </nav>
+
+      <!-- 右侧：缩放百分比 + 深浅色模式 + 有无上期开关 + JSON/提示词 -->
+      <div class="flex flex-wrap items-center gap-1.5">
+        <!-- 1. 页面缩放百分比控制器 -->
+        <div class="flex items-center theme-sub rounded-lg px-1.5 py-0.5 text-xs" title="调整页面缩放比例，确保在不同投影仪或屏幕分辨率下完整一屏展示">
+          <span class="text-muted mr-1 hidden sm:inline">缩放</span>
+          <button id="btn-zoom-out" class="px-1.5 py-0.5 rounded hover:bg-sky-500/15 text-main font-bold" title="缩小 5%">−</button>
+          <span id="zoom-val-label" class="px-1.5 font-bold text-sky-600 num-font min-w-[44px] text-center">100%</span>
+          <button id="btn-zoom-in" class="px-1.5 py-0.5 rounded hover:bg-sky-500/15 text-main font-bold" title="放大 5%">+</button>
+          <button id="btn-zoom-reset" class="ml-1 px-1.5 py-0.5 text-[11px] rounded bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 font-medium" title="重置为100%">重置</button>
+        </div>
+
+        <!-- 2. 浅色/深色模式切换按钮 (默认浅色) -->
+        <button id="btn-theme-toggle" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold theme-sub hover:border-sky-500 transition flex items-center gap-1.5" title="切换浅色公文精读模式 / 深色大屏投影模式">
+          <span id="theme-icon">☀️</span>
+          <span id="theme-label">浅色模式</span>
+        </button>
+
+        <!-- 3. 模拟“有无上期数据”动态切换开关 -->
+        <button id="btn-toggle-prev" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center gap-1" title="测试供暖期首周（无上期数据，自动隐藏上期与环比）与常规周的动态切换效果">
+          <span id="prev-status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span id="prev-status-label">含上期(环比)</span>
+        </button>
+
+        <!-- 4. 数据源 JSON & AGY 提示词 -->
+        <button id="btn-open-json" class="px-2.5 py-1.5 rounded-lg text-xs font-medium theme-sub hover:border-sky-500 transition">
+          数据源 JSON
+        </button>
+        <button id="btn-open-agy" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400 transition shadow-sm">
+          复制 AGY 提示词
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 主内容视口（支持整体百分比缩放） ==================== -->
+  <div id="zoom-viewport-wrapper" class="flex-1 flex flex-col justify-center">
+    <main class="max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-3.5">
+
+      <!-- ==================== SLIDE 0: 第一章 一、基本概况（寒潮气象与总体经营韧性） ==================== -->
+      <section id="slide-0" class="slide-panel slide-fade space-y-3.5">
+        <!-- 顶部章节条 -->
+        <div class="theme-card rounded-2xl px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-sky-600">
+          <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 rounded-lg bg-sky-600 text-white text-xs font-bold">第一章 / 共五章</span>
+            <div>
+              <h2 id="s0-headline" class="text-base sm:text-lg font-extrabold text-main doc-serif-title">一、基本概况：迎战75年罕见寒潮（均温-6.71℃，同比低8.85℃），标煤耗同比增2万吨，产销边际利润仅微降191万元</h2>
+              <p class="text-xs text-muted">结合 Word 简报原文结构：左侧为可直接宣读的汇报正文，右侧为关键指标卡片与气温-负荷趋势图</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span id="s0-date-badge" class="px-2.5 py-1 rounded-lg theme-sub font-medium text-secondary">汇报日期：2026年1月26日</span><span class="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 font-bold">极寒最低：<strong id="s0-min-temp">-15.0℃</strong></span><span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 font-bold">边际利润：<strong id="s0-profit-badge">2,761 万元</strong></span>
+          </div>
+        </div>
+
+        <!-- 左文右数双栏布局 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <!-- 左侧 5 列：Word 汇报材料精读区 (可直接照读) -->
+          <div class="lg:col-span-5 doc-reading-pane rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 mb-3 border-b" style="border-color: var(--border-color);">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-600 text-white">会议宣读稿</span>
+                  <h3 class="text-base font-bold text-main doc-serif-title">一、基本概况（节选一：气象与总览）</h3>
+                </div>
+                <span class="text-xs text-muted">字号适中 · 重点高亮</span>
+              </div>
+
+              <!-- 汇报正文段落 -->
+              <div id="doc-text-slide0" class="space-y-3">
+                <p id="s0-weather-p1" class="doc-paragraph">
+                  1月16日—21日，大连迎来75年以来罕见的寒潮天气，主城区最低气温 <strong>-15℃</strong>，全天平均气温低于 <strong>-10℃</strong>，同比低 <strong>10.39℃</strong>。22—24日虽然气温有所回升，但总体气温依然偏低。
+                </p>
+                <p id="s0-weather-p2" class="doc-paragraph">
+                  16—24日平均气温 <strong>-6.71℃</strong>，同比低 <strong>8.85℃</strong><span class="mom-inline-text">，环比上周下降 <strong>6.84℃</strong></span>。在大家的共同努力下，虽然本期标煤耗量同比增加 <strong>2万吨</strong>（实际增加17,318吨，可比口径增加19,972吨），但得益于夏季储煤价格下降与满负荷发电增收，产销边际利润同比仅下降 <strong>191万元</strong>（达2,761万元）。
+                </p>
+              </div>
+
+              <!-- 章节要点提炼框 -->
+              <div class="mt-4 p-3.5 rounded-xl theme-sub space-y-2 text-xs">
+                <div class="font-bold text-sky-600 flex items-center gap-1.5">
+                  <span>📌 汇报解读提示（供领导参阅）：</span>
+                </div>
+                <ul class="space-y-1.5 text-secondary list-disc list-inside leading-relaxed">
+                  <li><strong class="text-main">气象极值罕见：</strong>前期（16-21日）连续6天全天均温低于-10℃，创75年罕见低温，供暖热负荷处于顶峰状态。</li>
+                  <li><strong class="text-main">量增利稳韧性强：</strong>在标煤耗同比激增44.22%的严峻保供压力下，依靠夏储煤成本优势（保护利润869万元）与电热协同增收（+771万元），基本稳住了集团产销边际利润大盘。</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t flex items-center justify-between text-xs text-muted" style="border-color: var(--border-color);">
+              <span>数据来源：集团生产调度系统 & 气象监测平台</span>
+              <span>章节页码：1 / 5</span>
+            </div>
+          </div>
+
+          <!-- 右侧 7 列：4大核心指标卡 + 周期各阶段气温与耗煤负荷对比图 -->
+          <div class="lg:col-span-7 flex flex-col justify-between gap-3.5">
+            <!-- 4 张核心 KPI 卡片 -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="theme-card rounded-xl p-3.5 border-t-4 border-t-sky-500">
+                <div class="text-xs text-muted font-medium">本期平均气温 (16-24日)</div>
+                <div id="kpi-temp-val" class="text-2xl font-extrabold text-main mt-1 num-font">-6.71 ℃</div>
+                <div class="mt-2 pt-2 border-t text-[11px] space-y-0.5" style="border-color: var(--border-color);">
+                  <div class="text-secondary">同比：<strong id="kpi-temp-yoy" class="text-rose-600 font-bold">低 8.85℃</strong></div>
+                  <div class="text-secondary mom-kpi-line">环比：<strong id="kpi-temp-mom" class="text-amber-600 font-bold">降 6.84℃</strong></div>
+                </div>
+              </div>
+
+              <div class="theme-card rounded-xl p-3.5 border-t-4 border-t-amber-500">
+                <div class="text-xs text-muted font-medium">本期集团标煤耗量</div>
+                <div class="flex items-baseline gap-1 mt-1">
+                  <span id="kpi-coal-val" class="text-2xl font-extrabold text-main num-font">56,483</span>
+                  <span class="text-xs text-muted">吨</span>
+                </div>
+                <div class="mt-2 pt-2 border-t text-[11px] space-y-0.5" style="border-color: var(--border-color);">
+                  <div class="text-secondary">同比：<strong id="kpi-coal-yoy" class="text-rose-600 font-bold">+44.22%</strong></div>
+                  <div class="text-secondary mom-kpi-line">环比：<strong id="kpi-coal-mom" class="text-amber-600 font-bold">+23.86%</strong></div>
+                </div>
+              </div>
+
+              <div class="theme-card rounded-xl p-3.5 border-t-4 border-t-emerald-500">
+                <div class="text-xs text-muted font-medium">本期直接收入</div>
+                <div class="flex items-baseline gap-1 mt-1">
+                  <span id="kpi-rev-val" class="text-2xl font-extrabold text-main num-font">8,349</span>
+                  <span class="text-xs text-muted">万元</span>
+                </div>
+                <div class="mt-2 pt-2 border-t text-[11px] space-y-0.5" style="border-color: var(--border-color);">
+                  <div class="text-secondary">同比：<strong id="kpi-rev-yoy" class="text-emerald-600 font-bold">+771万 (+10.17%)</strong></div>
+                  <div class="text-secondary">同期：<strong class="text-main num-font">7,579 万元</strong></div>
+                </div>
+              </div>
+
+              <div class="theme-card rounded-xl p-3.5 border-t-4 border-t-indigo-500">
+                <div class="text-xs text-muted font-medium">产销边际利润</div>
+                <div class="flex items-baseline gap-1 mt-1">
+                  <span id="kpi-profit-val" class="text-2xl font-extrabold text-main num-font">2,761</span>
+                  <span class="text-xs text-muted">万元</span>
+                </div>
+                <div class="mt-2 pt-2 border-t text-[11px] space-y-0.5" style="border-color: var(--border-color);">
+                  <div class="text-secondary">同比：<strong id="kpi-profit-yoy" class="text-amber-600 font-bold">-191万 (-6.46%)</strong></div>
+                  <div class="text-secondary">可比煤价：<strong id="kpi-profit-comp" class="text-main num-font">1,892 万元</strong></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 集团核心指标四维对比图（本期、本期计划、同期、上期） -->
+            <div class="theme-card rounded-2xl p-4 flex-1 flex flex-col justify-between">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div>
+                  <h3 class="text-sm font-bold text-main">集团核心经营指标多维对标概览（本期 vs 本期计划 vs 同期 <span class="mom-chart-subtitle">vs 上期</span>）</h3>
+                  <p class="text-xs text-muted">固定次序：① 本期实际 → ② 本期计划(预算折算) → ③ 去年同期 → ④ 上期数值（若供暖首周无上期则自动隐藏）</p>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-500/10 text-sky-600">标准化序列对比</span>
+              </div>
+              <div class="relative h-56 w-full">
+                <canvas id="chart-overview"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 1: 第二章 二、标煤耗量与外购热量情况 ==================== -->
+      <section id="slide-1" class="slide-panel slide-fade hidden space-y-3.5">
+        <div class="theme-card rounded-2xl px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-amber-500">
+          <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 rounded-lg bg-amber-600 text-white text-xs font-bold">第二章 / 共五章</span>
+            <div>
+              <h2 class="text-base sm:text-lg font-extrabold text-main doc-serif-title">二、标煤耗量情况与各单位运行方式分析</h2>
+              <p class="text-xs text-muted">左侧宣读各单位标煤耗同比/环比变动及炉机运行方式，右侧展示【本期、本期计划、同期、上期】对比图表与明细表</p>
+            </div>
+          </div>
+          <div class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 border border-amber-500/30">
+            可比口径标煤实际增加：<span class="font-extrabold num-font">+19,972 吨</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <!-- 左侧 4 列：Word 原文阅读区 -->
+          <div class="lg:col-span-4 doc-reading-pane rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 mb-3 border-b" style="border-color: var(--border-color);">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 text-white">会议宣读稿</span>
+                  <h3 class="text-base font-bold text-main doc-serif-title">标煤耗量情况正文</h3>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <p class="doc-paragraph">
+                  本期标煤耗量 <strong>56,483吨</strong>，同比增加 <strong>17,318吨</strong>（+44.22%），可比口径实际增加 <strong>19,972吨</strong><span class="mom-inline-text">，环比增加 <strong>10,880吨</strong>（+23.86%）</span>。
+                </p>
+                <p class="doc-paragraph">
+                  分单位看：其中主城区同比增加 <strong>14,805吨</strong><span class="mom-inline-text">、环比增加 <strong>7,856吨</strong></span>；金州热电同比增加 <strong>3,087吨</strong><span class="mom-inline-text">、环比增加 <strong>2,068吨</strong></span>；北方热电同比增加 <strong>1,318吨</strong><span class="mom-inline-text">、环比增加 <strong>386吨</strong></span>（主要是运行方式没变，保持 <strong>3炉2机</strong>）；金普公司同比增加 <strong>729吨</strong><span class="mom-inline-text">、环比增加 <strong>529吨</strong></span>。
+                </p>
+                <p class="doc-paragraph">
+                  庄河环海标煤耗量 <strong>119吨</strong>（同期为2,740吨），外购热量 <strong>7.8万GJ</strong>（实际78,247 GJ）<span class="mom-inline-text">、环比增加 <strong>14.37%</strong>（+9,833 GJ）</span>。
+                </p>
+              </div>
+
+              <div class="mt-4 p-3 rounded-xl theme-sub text-xs space-y-1.5">
+                <div class="font-bold text-amber-600">💡 核算口径说明：</div>
+                <p class="text-secondary leading-relaxed">
+                  1. <strong class="text-main">本期计划值折算：</strong>根据1月各单位月度标煤计划按本期9天（16—24日）折算周度计划基准，便于直观对比“本期实际 vs 本期计划”。<br>
+                  2. <strong class="text-main">庄河环海口径还原：</strong>庄河本供暖期改以清洁外购热为主，直接拉低集团账面标煤同比2,621吨，还原后集团实际多耗标煤近2万吨。
+                </p>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t flex items-center justify-between text-xs text-muted" style="border-color: var(--border-color);">
+              <span>对应原简报：第一部分第2段及表1</span>
+              <span>章节页码：2 / 5</span>
+            </div>
+          </div>
+
+          <!-- 右侧 8 列：图表（上）+ 完整数据表（下） -->
+          <div class="lg:col-span-8 flex flex-col gap-3.5">
+            <!-- 图表：严格按【本期、本期计划、同期、上期(可选)】次序排列 -->
+            <div class="theme-card rounded-2xl p-4">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h3 class="text-sm font-bold text-main">各主力单位标煤耗量对比图（次序：本期 → 本期计划 → 同期 <span class="mom-chart-subtitle">→ 上期</span>）</h3>
+                <span class="text-xs text-muted">单位：吨（本期计划按1月计划折算9天基准）</span>
+              </div>
+              <div class="relative h-48 w-full">
+                <canvas id="chart-coal"></canvas>
+              </div>
+            </div>
+
+            <!-- 表格：标煤耗量情况表 -->
+            <div class="theme-card rounded-2xl p-4 overflow-x-auto">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-bold text-main">表1：标煤耗量及外购热量情况明细表</h3>
+                <span class="text-xs text-muted">标煤单位：吨 | 庄河外购热单位：GJ</span>
+              </div>
+              <table class="w-full text-xs text-left border-collapse num-font">
+                <thead id="tbl-coal-head">
+                  <!-- 动态渲染表头（支持有无上期切换） -->
+                </thead>
+                <tbody id="tbl-coal-body" class="divide-y" style="border-color: var(--border-color);">
+                  <!-- 动态渲染行 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 2: 第三章 三、产销边际利润与成本归因 ==================== -->
+      <section id="slide-2" class="slide-panel slide-fade hidden space-y-3.5">
+        <div class="theme-card rounded-2xl px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-emerald-600">
+          <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold">第三章 / 共五章</span>
+            <div>
+              <h2 class="text-base sm:text-lg font-extrabold text-main doc-serif-title">三、直接收入、成本拆解与产销边际利润分析</h2>
+              <p class="text-xs text-muted">左侧完整呈现原简报关于收入两大增量、边际利润四大影响因素及各单位可比利润的深度剖析，右侧为图表与全表</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 border border-emerald-500/30 font-semibold">
+              实际边际利润：<strong class="num-font">2,761 万元</strong>（可比煤价口径：<strong class="num-font">1,892 万元</strong>）
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <!-- 左侧 5 列：Word 原文阅读区 -->
+          <div class="lg:col-span-5 doc-reading-pane rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 mb-3 border-b" style="border-color: var(--border-color);">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-600 text-white">会议宣读稿</span>
+                  <h3 class="text-base font-bold text-main doc-serif-title">收入与产销边际利润正文</h3>
+                </div>
+              </div>
+
+              <div class="space-y-2.5 max-h-[430px] overflow-y-auto pr-1.5">
+                <p class="doc-paragraph">
+                  本期直接收入 <strong>8,349万元</strong>，同比增加 <strong>771万元</strong>（+10.17%），主要差异：一是满负荷运行，上网电量增加了 <strong>245万kWh</strong>，电收入增加了 <strong>115万元</strong>，其中北方热电多 <strong>64万元</strong>。二是气温偏低，高温水销售量增加了 <strong>58,860GJ</strong>，升高 <strong>53%</strong>（与气温变动供暖用热量模型 <strong>49.76%</strong> 增幅接近）；售汽量同比增加 <strong>3,380吨</strong>，增幅 <strong>25.2%</strong> 偏少，工商业热销售收入增加 <strong>601万元</strong>。
+                </p>
+                <p class="doc-paragraph">
+                  得益于夏季储煤价格下降，本期边际利润 <strong>2,761万元</strong>，同比略下降 <strong>191万元</strong>；可比煤价边际利润 <strong>1,892万元</strong>，同比减少 <strong>1,319万元</strong>：
+                </p>
+                <div class="pl-3 border-l-2 border-sky-500/50 space-y-1.5 text-xs text-secondary leading-relaxed">
+                  <p>• <strong class="text-main">一是燃煤与外购热：</strong>收入增长771万元，可比口径标煤耗量增加 <strong class="doc-key-num">2万吨</strong>，外购热成本增加 <strong class="doc-key-num">373万元</strong>，影响利润 <strong class="doc-key-num">2,363万元</strong>；</p>
+                  <p>• <strong class="text-main">二是水耗与水费：</strong>水耗量同比减少 <strong class="doc-key-num">1万吨</strong>，水费下降 <strong class="doc-key-num">4万元</strong>，其中主城区水耗增加4,400吨、<strong class="doc-key-num">一次网水耗同比增加6,500吨</strong>、金州热电减少6,100吨、北方热电减少2,100吨、金普增加700吨；</p>
+                  <p>• <strong class="text-main">三是外购电：</strong>外购电减少 <strong class="doc-key-num">5万kWh</strong>（电成本-8万元），主城区、北方持平，金普增加6万kWh、金州增加4万kWh、研究院电锅炉增加 <strong class="doc-key-num">17万kWh</strong>；</p>
+                  <p>• <strong class="text-main">四是辅助材料：</strong>成本 <strong class="doc-key-num">60万元</strong>，同比减少4万元，主要是采购单价下降影响，氨水耗量增加 <strong class="doc-key-num">25.7%</strong>、石灰石增加 <strong class="doc-key-num">37.7%</strong>，小于原煤耗量 <strong class="doc-key-num">46.7%</strong> 增幅。</p>
+                </div>
+                <p class="doc-paragraph mt-2">
+                  本期分单位可比煤价边际利润：主城区同比减少 <strong>772万元</strong>、金州热电减少 <strong>310万元</strong>、北方热电减少 <strong>64万元</strong>、金普公司减少 <strong>83万元</strong>、环海热电减少 <strong>83万元</strong>。研究院边际利润 <strong>-13万元</strong>，同比减少 <strong>7万元</strong>。
+                </p>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t flex items-center justify-between text-xs text-muted" style="border-color: var(--border-color);">
+              <span>对应原简报：第一部分第3-5段及表2</span>
+              <span>章节页码：3 / 5</span>
+            </div>
+          </div>
+
+          <!-- 右侧 7 列：图表（上）+ 产销边际利润明细表（下） -->
+          <div class="lg:col-span-7 flex flex-col gap-3.5">
+            <div class="theme-card rounded-2xl p-4">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h3 class="text-sm font-bold text-main">收入、成本与边际利润对标图（次序：本期 → 本期计划 → 同期 <span class="mom-chart-subtitle">→ 上期</span>）</h3>
+                <span class="text-xs text-muted">单位：万元</span>
+              </div>
+              <div class="relative h-44 w-full">
+                <canvas id="chart-profit"></canvas>
+              </div>
+            </div>
+
+            <div class="theme-card rounded-2xl p-4 overflow-x-auto flex-1">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-bold text-main">表2：集团产销边际利润及分单位可比煤价边际利润表</h3>
+                <span class="text-xs text-muted">单位：万元</span>
+              </div>
+              <div class="max-h-[260px] overflow-y-auto pr-1">
+                <table class="w-full text-xs text-left border-collapse num-font">
+                  <thead class="sticky top-0 z-10" style="background-color: var(--table-head-bg);">
+                    <tr class="border-b text-muted" style="border-color: var(--border-color);">
+                      <th class="py-2 px-2.5 font-semibold">项目名称</th>
+                      <th class="py-2 px-2 text-center font-semibold">单位</th>
+                      <th class="py-2 px-2 text-right font-bold text-main">本期</th>
+                      <th class="py-2 px-2 text-right font-semibold text-sky-600">本期计划</th>
+                      <th class="py-2 px-2 text-right font-semibold">同期</th>
+                      <th class="py-2 px-2 text-right font-semibold mom-col-cell">上期</th>
+                      <th class="py-2 px-2 text-right font-semibold">同比增减</th>
+                      <th class="py-2 px-2 text-right font-semibold">同比差异率</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbl-profit-body" class="divide-y" style="border-color: var(--border-color);">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 3: 第四章 四、供暖热、电、水三项单耗分析 ==================== -->
+      <section id="slide-3" class="slide-panel slide-fade hidden space-y-3.5">
+        <div class="theme-card rounded-2xl px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-indigo-600">
+          <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-bold">第四章 / 共五章</span>
+            <div>
+              <h2 class="text-base sm:text-lg font-extrabold text-main doc-serif-title">四、供暖热、电、水三项单耗分单位对标与管网查漏预警</h2>
+              <p class="text-xs text-muted">左侧为热/电/水三项单耗的点评原文与一次网查漏要求，右侧支持一键切换或同屏查阅三项单耗表格与对比图</p>
+            </div>
+          </div>
+          <!-- 切换选项卡 -->
+          <div class="flex items-center gap-1 p-1 rounded-xl theme-sub">
+            <button data-unit-tab="heat" class="unit-tab-btn px-3 py-1 rounded-lg text-xs font-bold bg-sky-600 text-white transition">热单耗 (GJ/万㎡)</button>
+            <button data-unit-tab="elec" class="unit-tab-btn px-3 py-1 rounded-lg text-xs font-semibold text-secondary hover:text-main transition">电单耗 (kWh/万㎡)</button>
+            <button data-unit-tab="water" class="unit-tab-btn px-3 py-1 rounded-lg text-xs font-semibold text-secondary hover:text-main transition">水单耗 (吨/万㎡)</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <!-- 左侧 5 列：Word 原文阅读区 -->
+          <div class="lg:col-span-5 doc-reading-pane rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 mb-3 border-b" style="border-color: var(--border-color);">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-600 text-white">会议宣读稿</span>
+                  <h3 class="text-base font-bold text-main doc-serif-title">三项单耗诊断与查漏要求正文</h3>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <div class="p-3 rounded-xl theme-sub border-l-4 border-l-sky-500">
+                  <div class="text-xs font-bold text-sky-600 mb-1">1. 供暖热单耗点评（集团汇总 267 GJ/万㎡，同比+54.56%）</div>
+                  <p class="doc-paragraph !mb-0 !text-xs">
+                    从供暖热单耗来看，各单位增幅有较大差异，主城区、金州热电同比增幅最大，分别达 <strong>63.96%</strong>、<strong>61.3%</strong>，北方增幅 <strong>33.71%</strong>、金普增幅 <strong>40.42%</strong>、研究院增幅 <strong>37.05%</strong>。庄河增幅最小，为 <strong>27.52%</strong>，外购热环比增幅也较小，仅 <strong>14.37%</strong>，运行调整较前期有一定提升。
+                  </p>
+                </div>
+
+                <div class="p-3 rounded-xl theme-sub border-l-4 border-l-amber-500">
+                  <div class="text-xs font-bold text-amber-600 mb-1">2. 供暖电单耗点评（集团汇总 1,220 kWh/万㎡，同比-2.45%）</div>
+                  <p class="doc-paragraph !mb-0 !text-xs">
+                    电单耗方面，气温下降，各单位均加大了循环量，但管控效果差异较大，主城区较前几期下降13%相比有所升高，但仍保持同比下降 <strong>2.44%</strong>；金州、金普升高 <strong>11.43%</strong>、<strong>12.27%</strong>；北方热电略高 <strong>3.23%</strong>。
+                  </p>
+                </div>
+
+                <div class="p-3 rounded-xl theme-sub border-l-4 border-l-rose-500">
+                  <div class="text-xs font-bold text-rose-600 mb-1">3. 供暖水单耗与一次网安全预警（集团汇总 28.78 吨/万㎡，同比-7.82%）</div>
+                  <p class="doc-paragraph !mb-0 !text-xs">
+                    水单耗方面，与之前同比下降20%相比，管网漏泄增加，本期精力可能更多聚焦保供服务，查漏工作聚焦不足，水单耗出现回升（主城区同比+1.96%、金普同比+10.94%）。<strong>各单位要打起精神把查漏工作贯穿供暖期始终，要特别关注一次网安全。</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t flex items-center justify-between text-xs text-muted" style="border-color: var(--border-color);">
+              <span>对应原简报：表3、表4、表5及单耗分析三段正文</span>
+              <span>章节页码：4 / 5</span>
+            </div>
+          </div>
+
+          <!-- 右侧 7 列：单耗对比图（本期、本期计划、同期、上期）+ 单耗明细表 -->
+          <div class="lg:col-span-7 flex flex-col gap-3.5">
+            <div class="theme-card rounded-2xl p-4">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h3 id="unit-chart-title" class="text-sm font-bold text-main">供暖热单耗分单位对比图（次序：本期 → 本期计划 → 同期 <span class="mom-chart-subtitle">→ 上期</span>）</h3>
+                <span id="unit-chart-note" class="text-xs text-muted">单位：GJ/万㎡</span>
+              </div>
+              <div class="relative h-48 w-full">
+                <canvas id="chart-unit"></canvas>
+              </div>
+            </div>
+
+            <div class="theme-card rounded-2xl p-4 overflow-x-auto flex-1">
+              <div class="flex items-center justify-between mb-2">
+                <h3 id="unit-table-title" class="text-sm font-bold text-main">表3：供暖热单耗分单位对标明细表 (GJ/万㎡)</h3>
+                <span class="text-xs text-muted">点击右上角按钮可切换 热 / 电 / 水 视图</span>
+              </div>
+              <table class="w-full text-xs text-left border-collapse num-font">
+                <thead>
+                  <tr class="border-b text-muted" style="background-color: var(--table-head-bg); border-color: var(--border-color);">
+                    <th class="py-2 px-3 font-semibold">单位名称</th>
+                    <th class="py-2 px-2.5 text-right font-bold text-main">本期</th>
+                    <th class="py-2 px-2.5 text-right font-semibold text-sky-600">本期计划</th>
+                    <th class="py-2 px-2.5 text-right font-semibold">同期</th>
+                    <th class="py-2 px-2.5 text-right font-semibold mom-col-cell">上期</th>
+                    <th class="py-2 px-2.5 text-right font-semibold">同比差异</th>
+                    <th class="py-2 px-2.5 text-right font-semibold">同比增减率</th>
+                  </tr>
+                </thead>
+                <tbody id="tbl-unit-body" class="divide-y" style="border-color: var(--border-color);">
+                  <!-- Populated by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 4: 第五章 五、1月计划完成情况与下周展望 ==================== -->
+      <section id="slide-4" class="slide-panel slide-fade hidden space-y-3.5">
+        <div class="theme-card rounded-2xl px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-rose-600">
+          <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-xs font-bold">第五章 / 共五章</span>
+            <div>
+              <h2 class="text-base sm:text-lg font-extrabold text-main doc-serif-title">五、1月标煤耗量与外购热量计划完成情况及下周工作展望</h2>
+              <p class="text-xs text-muted">左侧为月度控煤指标研判与下周天气调度要求原文，右侧为月度计划执行图表与剩余日均额度表</p>
+            </div>
+          </div>
+          <div class="px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs font-bold text-rose-600">
+            月度预警：除金普外，1月份完成煤耗控制指标难度很大
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <!-- 左侧 5 列：Word 原文阅读区 -->
+          <div class="lg:col-span-5 doc-reading-pane rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 mb-3 border-b" style="border-color: var(--border-color);">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-600 text-white">会议宣读稿</span>
+                  <h3 class="text-base font-bold text-main doc-serif-title">月度计划完成与下周展望正文</h3>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <p class="doc-paragraph">
+                  截至1月24日，集团1月标煤耗量计划 <strong>157,995吨</strong>，已完成 <strong>133,090吨</strong>（完成率84.24%），月末最后7天剩余日均可用额度仅 <strong>3,558吨/天</strong>；庄河环海外购热量1月计划 <strong>181,300 GJ</strong>，已完成 <strong>193,506 GJ</strong>，剩余日均 <strong>-1,744 GJ</strong>（已超月度计划）。
+                </p>
+                <p class="doc-paragraph">
+                  从当前完成情况来看，<strong>除金普外，1月份完成煤耗控制指标难度很大</strong>。现有天气预报，<strong>1月30日后气温方可大幅回升</strong>，去年同期27日开始也是一波 <strong>-9℃左右</strong> 的降温过程。
+                </p>
+                <p class="doc-paragraph">
+                  <strong>请各单位密切跟踪天气情况，抓住最后这一周时间控制负荷、组织好经济运行，尽量控制、追赶指标。</strong>
+                </p>
+              </div>
+
+              <!-- 落款与调度指令 -->
+              <div class="mt-4 p-3.5 rounded-xl theme-sub text-xs space-y-2">
+                <div class="font-bold text-rose-600">🎯 下周（1月25日—31日）三项核心调度行动：</div>
+                <ol class="list-decimal list-inside space-y-1 text-secondary">
+                  <li><strong class="text-main">紧盯1月30日回暖窗口：</strong>提前制定升温期压负荷曲线，严禁超温供热；</li>
+                  <li><strong class="text-main">严控循环泵电耗与外购热：</strong>金州、金普随气温回升及时下调循环流量，庄河压减外购热日均耗量；</li>
+                  <li><strong class="text-main">常态化一次网查漏：</strong>主城区与金普立即开展管网失水排查，把失水率压回安全红线内。</li>
+                </ol>
+                <div class="pt-2 border-t text-right font-bold text-main doc-serif-title" style="border-color: var(--border-color);">
+                  经济运行部 · 2026年1月26日
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t flex items-center justify-between text-xs text-muted" style="border-color: var(--border-color);">
+              <span>对应原简报：表6、最后一段展望正文及落款</span>
+              <span>章节页码：5 / 5</span>
+            </div>
+          </div>
+
+          <!-- 右侧 7 列：月度已完成 vs 1月计划对比图 + 剩余日均明细表 -->
+          <div class="lg:col-span-7 flex flex-col gap-3.5">
+            <div class="theme-card rounded-2xl p-4">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h3 class="text-sm font-bold text-main">1月累计已完成 vs 1月计划 vs 同期累计对比图</h3>
+                <span class="text-xs text-muted">单位：标煤（吨）</span>
+              </div>
+              <div class="relative h-44 w-full">
+                <canvas id="chart-plan"></canvas>
+              </div>
+            </div>
+
+            <div class="theme-card rounded-2xl p-4 overflow-x-auto flex-1">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-bold text-main">表6：1月标煤耗量与外购热量计划完成情况表（截至1月24日）</h3>
+                <span class="text-xs text-muted">剩余日均 = (1月计划 - 已完成) ÷ 剩余7天</span>
+              </div>
+              <table class="w-full text-xs text-left border-collapse num-font">
+                <thead>
+                  <tr class="border-b text-muted" style="background-color: var(--table-head-bg); border-color: var(--border-color);">
+                    <th class="py-2 px-3 font-semibold">考核单位</th>
+                    <th class="py-2 px-2 text-center font-semibold">单位</th>
+                    <th class="py-2 px-2.5 text-right font-semibold text-sky-600">1月计划</th>
+                    <th class="py-2 px-2.5 text-right font-bold text-main">已完成(本期累计)</th>
+                    <th class="py-2 px-2.5 text-right font-semibold">剩余日均可用</th>
+                    <th class="py-2 px-3 font-semibold w-36">月度计划耗用进度</th>
+                  </tr>
+                </thead>
+                <tbody id="tbl-plan-body" class="divide-y" style="border-color: var(--border-color);">
+                  <!-- Populated by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 5: 第六章 六、交给 AGY 的灵活自适应开发架构与提示词 ==================== -->
+      <section id="slide-5" class="slide-panel slide-fade hidden space-y-3.5">
+        <div class="theme-card rounded-2xl px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-amber-500">
+          <div>
+            <span class="text-xs font-bold text-amber-600 uppercase tracking-wider">系统平台自动化对接专区（供在 IDE 中交给 AGY）</span>
+            <h2 class="text-base sm:text-lg font-extrabold text-main mt-0.5">
+              自适应数据驱动架构：AGY 自动探查平台真实数据表 → 动态适配有无上期/有无计划 → 结合当周实际特征撰写文章
+            </h2>
+          </div>
+          <button id="btn-slide5-copy" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-sm">
+            一键复制交给 AGY 的完整提示词
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div class="theme-card rounded-2xl p-4 border-t-4 border-t-sky-500">
+            <div class="font-bold text-sky-600 text-sm">1. 去教条化：以系统真实数据表为准</div>
+            <p class="text-secondary mt-2 leading-relaxed">
+              新提示词明确告知 AGY：**第12周简报仅为结构与文风范例，绝非死板填空模板**。AGY 在 IDE 中需要先扫描你系统平台的真实 Schema（包含哪些下属单位、是否有电锅炉/外购热、是否有周计划/月计划字段），根据系统实际存在的数据列动态组装报表。
+            </p>
+          </div>
+
+          <div class="theme-card rounded-2xl p-4 border-t-4 border-t-emerald-500">
+            <div class="font-bold text-emerald-600 text-sm">2. 动态时序：自动识别供暖期首周（无上期）</div>
+            <p class="text-secondary mt-2 leading-relaxed">
+              图表与表格统一按 **【①本期 → ②本期计划 → ③同期 → ④上期(可选)】** 次序构建。当处于供暖期第1周（或系统无 `prev` 上期数据）时，只需将 `meta.hasPrevPeriod` 设为 `false`，页面所有图表、表格和正文将**自动隐藏“上期”与“环比”**（你可点击顶部绿色“含上期(环比)”按钮立刻测试该效果）。
+            </p>
+          </div>
+
+          <div class="theme-card rounded-2xl p-4 border-t-4 border-t-amber-500">
+            <div class="font-bold text-amber-600 text-sm">3. 数据驱动叙事：根据当周异动撰写文章</div>
+            <p class="text-secondary mt-2 leading-relaxed">
+              提示词要求 AGY 根据当周计算出的**真实极值与异动**来写左侧汇报正文：有寒潮写寒潮保供，若遇暖冬则写“气温偏高下主动压降负荷”；哪家单位单耗异常或一次网失水偏高就点名哪家，真正做到“每周一文、因势撰稿”。
+            </p>
+          </div>
+        </div>
+
+        <div class="theme-card rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-bold text-main">改进版 AGY 提示词预览（已去除死板套话，强化 IDE 数据库探查与动态撰稿能力）</h3>
+            <span id="copy-toast-inline" class="text-xs font-bold text-emerald-600 hidden">✓ 已成功复制到剪贴板！</span>
+          </div>
+          <pre id="slide5-prompt-preview" class="p-3.5 rounded-xl theme-sub font-mono text-xs text-secondary overflow-x-auto max-h-[270px] leading-relaxed whitespace-pre-wrap"></pre>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ==================== 底部翻页控制栏 ==================== -->
+  <footer style="background-color: var(--bg-header); border-top: 1px solid var(--border-color);" class="backdrop-blur-md sticky bottom-0 z-30">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-2.5 text-xs text-muted">
+        <span id="footer-page-indicator" class="font-bold text-main px-2.5 py-1 rounded-lg theme-sub num-font">第 1 / 6 页</span>
+        <span class="hidden md:inline">支持键盘 <kbd class="px-1.5 py-0.5 theme-sub rounded text-main font-mono">←</kbd> <kbd class="px-1.5 py-0.5 theme-sub rounded text-main font-mono">→</kbd> 翻页 · 顶部可调节百分比缩放与深浅色</span>
+      </div>
+
+      <!-- 页码指示点 -->
+      <div class="flex items-center gap-2">
+        <button data-dot="0" class="slide-dot w-2.5 h-2.5 rounded-full bg-sky-600 transition-all" title="一、基本概况"></button>
+        <button data-dot="1" class="slide-dot w-2.5 h-2.5 rounded-full bg-slate-400 hover:bg-slate-500 transition-all" title="二、标煤与外购热"></button>
+        <button data-dot="2" class="slide-dot w-2.5 h-2.5 rounded-full bg-slate-400 hover:bg-slate-500 transition-all" title="三、产销边际利润"></button>
+        <button data-dot="3" class="slide-dot w-2.5 h-2.5 rounded-full bg-slate-400 hover:bg-slate-500 transition-all" title="四、供暖三项单耗"></button>
+        <button data-dot="4" class="slide-dot w-2.5 h-2.5 rounded-full bg-slate-400 hover:bg-slate-500 transition-all" title="五、月度计划与展望"></button>
+        <button data-dot="5" class="slide-dot w-2.5 h-2.5 rounded-full bg-slate-400 hover:bg-slate-500 transition-all" title="六、AGY对接与架构"></button>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btn-prev-slide" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold theme-sub hover:border-sky-500 text-main transition">
+          ← 上一页
+        </button>
+        <button id="btn-next-slide" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition shadow-sm">
+          下一页 →
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==================== 弹窗 1：JSON 数据源在线编辑与测试 ==================== -->
+  <div id="modal-json" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="theme-card rounded-2xl max-w-4xl w-full p-5 flex flex-col max-h-[88vh]">
+      <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--border-color);">
+        <div>
+          <h3 class="text-base font-bold text-main">平台自动化 JSON 数据契约 (<code class="text-sky-600">window.REPORT_DATA</code>)</h3>
+          <p class="text-xs text-muted mt-0.5">支持将 <code class="text-amber-600">"hasPrevPeriod": false</code> 测试供暖期首周（无上期/无环比）模式</p>
+        </div>
+        <button id="btn-close-json" class="text-muted hover:text-main px-2 py-1 text-sm font-bold">✕ 关闭</button>
+      </div>
+      <textarea id="json-editor-textarea" class="w-full flex-1 min-h-[340px] mt-3 bg-slate-950 text-emerald-300 font-mono text-xs p-3.5 rounded-xl border border-slate-800 focus:outline-none focus:border-sky-500"></textarea>
+      <div class="mt-3 pt-3 border-t flex items-center justify-between" style="border-color: var(--border-color);">
+        <span id="json-status-msg" class="text-xs text-muted">当前加载：25-26供暖期第十二周数据（含本期计划与上期对比）</span>
+        <div class="flex items-center gap-2">
+          <button id="btn-reset-json" class="px-3 py-1.5 rounded-lg text-xs theme-sub text-secondary">恢复第12周默认数据</button>
+          <button id="btn-apply-json" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white">应用并重绘大屏</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 弹窗 2：交给 AGY 的完整提示词 ==================== -->
+  <div id="modal-agy" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="theme-card rounded-2xl max-w-4xl w-full p-5 flex flex-col max-h-[88vh]">
+      <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--border-color);">
+        <div>
+          <h3 class="text-base font-bold text-amber-600">交给 AGY 的《生产运行周报自适应生成》完整提示词（IDE 开发专用版）</h3>
+          <p class="text-xs text-muted mt-0.5">已针对 IDE 真实数据库探查、动态有无上期/计划值、灵活撰写章节文章进行了全面升级</p>
+        </div>
+        <button id="btn-close-agy" class="text-muted hover:text-main px-2 py-1 text-sm font-bold">✕ 关闭</button>
+      </div>
+      <textarea id="agy-prompt-textarea" readonly class="w-full flex-1 min-h-[360px] mt-3 bg-slate-950 text-slate-200 font-mono text-xs p-3.5 rounded-xl border border-slate-800 focus:outline-none"></textarea>
+      <div class="mt-3 pt-3 border-t flex items-center justify-between" style="border-color: var(--border-color);">
+        <span id="agy-copy-feedback" class="text-xs text-emerald-600 font-semibold">可直接点击右侧按钮复制发送给 IDE 中的 AGY</span>
+        <button id="btn-copy-agy-modal" class="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950">一键复制完整提示词</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== 1. 默认数据源（包含本期、本期计划、同期、上期及可读章节正文） ====================
+    const DEFAULT_REPORT_DATA = {
+      meta: {
+        season: "25-26供暖期",
+        weekTitle: "第十二周生产运行简报（1月16日—1月24日）",
+        department: "经济运行部",
+        reportDate: "2026年1月26日",
+        hasPrevPeriod: true, // 当供暖期刚开始无“上期”时设为 false，图表与表格会自动隐藏“上期”与“环比”
+        hasPlanValue: true   // 是否在图表中展示“本期计划”
+      },
+      weather: {
+        minTempMainCity: "-15.0℃",
+        avgTemp: -6.71,
+        yoyDiff: -8.85,
+        momDiff: -6.84
+      },
+      kpis: {
+        coalTotal: 56483,
+        coalPlan: 45870,
+        coalSync: 39165,
+        coalPrev: 45603,
+        coalYoYDiff: 17318,
+        coalYoYRate: "44.22%",
+        coalComparableInc: 19972,
+        coalMoMDiff: 10880,
+        coalMoMRate: "23.86%",
+        revenueTotal: 8349,
+        revenuePlan: 7850,
+        revenueSync: 7579,
+        revenuePrev: 7420,
+        revenueYoYDiff: 771,
+        revenueYoYRate: "10.17%",
+        profitActual: 2761,
+        profitPlan: 2850,
+        profitSync: 2952,
+        profitPrev: 2680,
+        profitYoYDiff: -191,
+        profitYoYRate: "-6.46%",
+        profitComparable: 1892,
+        profitComparableYoYDiff: -1319
+      },
+      // 表1：标煤耗量与外购热（含本期、本期计划[按1月计划折算9天]、同期、上期）
+      coalTable: [
+        { name: "集团汇总", unit: "吨", curr: 56483, plan: 45870, sync: 39165, prev: 45603, yoy: 17318, mom: 10880, yoyRate: "44.22%", momRate: "23.86%", isTotal: true },
+        { name: "主城区", unit: "吨", curr: 40045, plan: 32564, sync: 25240, prev: 32189, yoy: 14805, mom: 7856, yoyRate: "58.66%", momRate: "24.41%" },
+        { name: "金州热电", unit: "吨", curr: 9261, plan: 7279, sync: 6174, prev: 7193, yoy: 3087, mom: 2068, yoyRate: "50.00%", momRate: "28.75%" },
+        { name: "北方热电", unit: "吨", curr: 4502, plan: 3720, sync: 3184, prev: 4116, yoy: 1318, mom: 386, yoyRate: "41.39%", momRate: "9.37%", note: "3炉2机未变" },
+        { name: "金普公司", unit: "吨", curr: 2555, plan: 2222, sync: 1826, prev: 2026, yoy: 729, mom: 529, yoyRate: "39.91%", momRate: "26.12%" },
+        { name: "庄河环海(标煤)", unit: "吨", curr: 119, plan: 85, sync: 2740, prev: 79, yoy: -2621, mom: 41, yoyRate: "-95.65%", momRate: "51.74%" },
+        { name: "庄河环海(外购热)", unit: "GJ", curr: 78247, plan: 52635, sync: null, prev: 68414, yoy: null, mom: 9833, yoyRate: "-", momRate: "14.37%", isExtHeat: true }
+      ],
+      // 表2：产销边际利润表（含本期、本期计划、同期、上期）
+      profitTable: [
+        { name: "直接收入", unit: "万元", curr: 8349, plan: 7850, sync: 7579, prev: 7420, yoy: 771, rate: "10.17%", section: "rev-head", inChart: true },
+        { name: "其中：电收入", unit: "万元", curr: 1224, plan: 1150, sync: 1110, prev: 1120, yoy: 115, rate: "10.32%" },
+        { name: "暖收入", unit: "万元", curr: 5178, plan: 5150, sync: 5123, prev: 5160, yoy: 55, rate: "1.07%" },
+        { name: "高温水收入", unit: "万元", curr: 1443, plan: 1100, sync: 943, prev: 720, yoy: 500, rate: "53.04%" },
+        { name: "蒸汽收入", unit: "万元", curr: 504, plan: 450, sync: 403, prev: 420, yoy: 101, rate: "25.06%" },
+        { name: "直接成本", unit: "万元", curr: 5588, plan: 5000, sync: 4627, prev: 4740, yoy: 961, rate: "20.78%", section: "cost-head", inChart: true },
+        { name: "其中：煤成本", unit: "万元", curr: 4779, plan: 4250, sync: 4176, prev: 4010, yoy: 604, rate: "14.46%" },
+        { name: "外购热成本", unit: "万元", curr: 373, plan: 310, sync: 0, prev: 325, yoy: 373, rate: "新增" },
+        { name: "电成本", unit: "万元", curr: 285, plan: 285, sync: 293, prev: 260, yoy: -8, rate: "-2.65%" },
+        { name: "水成本", unit: "万元", curr: 90, plan: 92, sync: 94, prev: 86, yoy: -4, rate: "-4.33%" },
+        { name: "可计量辅材", unit: "万元", curr: 60, plan: 63, sync: 64, prev: 59, yoy: -4, rate: "-5.99%" },
+        { name: "产销边际利润（实际）", unit: "万元", curr: 2761, plan: 2850, sync: 2952, prev: 2680, yoy: -191, rate: "-6.46%", section: "profit-actual", inChart: true },
+        { name: "可比煤价边际利润（集团）", unit: "万元", curr: 1892, plan: 2650, sync: 3211, prev: 2150, yoy: -1319, rate: "-41.07%", section: "profit-comp", inChart: true },
+        { name: "其中：主城区", unit: "万元", curr: 1816, plan: 2200, sync: 2589, prev: 1980, yoy: -772, rate: "-29.84%", isUnitComp: true },
+        { name: "金州热电", unit: "万元", curr: 143, plan: 310, sync: 454, prev: 210, yoy: -310, rate: "-68.39%", isUnitComp: true },
+        { name: "北方热电", unit: "万元", curr: 89, plan: 125, sync: 153, prev: 105, yoy: -64, rate: "-41.89%", isUnitComp: true },
+        { name: "金普公司", unit: "万元", curr: -48, plan: 20, sync: 35, prev: -25, yoy: -83, rate: "-238.87%", isUnitComp: true },
+        { name: "庄河环海", unit: "万元", curr: -95, plan: -2, sync: -13, prev: -108, yoy: -83, rate: "-661.90%", isUnitComp: true },
+        { name: "研究院", unit: "万元", curr: -13, plan: -3, sync: -6, prev: -12, yoy: -7, rate: "-110.29%", isUnitComp: true }
+      ],
+      // 表3-5：三项单耗（含本期、本期计划、同期、上期）
+      unitConsumption: {
+        heat: {
+          title: "表3：供暖热单耗分单位对标明细表 (GJ/万㎡)",
+          unit: "GJ/万㎡",
+          rows: [
+            { name: "集团汇总", curr: 267, plan: 215, sync: 173, prev: 216, diff: 94, rate: "54.56%", isTotal: true },
+            { name: "主城区", curr: 245, plan: 195, sync: 149, prev: 197, diff: 96, rate: "63.96%" },
+            { name: "金州热电", curr: 299, plan: 235, sync: 185, prev: 232, diff: 114, rate: "61.30%" },
+            { name: "北方热电", curr: 291, plan: 250, sync: 218, prev: 266, diff: 73, rate: "33.71%" },
+            { name: "金普公司", curr: 299, plan: 252, sync: 213, prev: 237, diff: 86, rate: "40.42%" },
+            { name: "庄河环海", curr: 348, plan: 310, sync: 273, prev: 304, diff: 75, rate: "27.52%" },
+            { name: "研究院", curr: 391, plan: 330, sync: 286, prev: 315, diff: 106, rate: "37.05%" }
+          ]
+        },
+        elec: {
+          title: "表4：供暖电单耗分单位对标明细表 (kWh/万㎡)",
+          unit: "kWh/万㎡",
+          rows: [
+            { name: "集团汇总", curr: 1220, plan: 1200, sync: 1251, prev: 1140, diff: -31, rate: "-2.45%", isTotal: true },
+            { name: "主城区", curr: 858, plan: 860, sync: 879, prev: 795, diff: -21, rate: "-2.44%" },
+            { name: "金州热电", curr: 885, plan: 810, sync: 794, prev: 820, diff: 91, rate: "11.43%" },
+            { name: "北方热电", curr: 993, plan: 965, sync: 962, prev: 950, diff: 31, rate: "3.23%" },
+            { name: "金普公司", curr: 3179, plan: 2900, sync: 2831, prev: 2980, diff: 347, rate: "12.27%" },
+            { name: "庄河环海", curr: 1534, plan: 1800, sync: 2986, prev: 1490, diff: -1452, rate: "-48.63%" },
+            { name: "研究院(电锅炉)", curr: 93841, plan: 75000, sync: 65258, prev: 78500, diff: 28583, rate: "43.80%", excludeFromChart: true }
+          ]
+        },
+        water: {
+          title: "表5：供暖水单耗分单位对标明细表 (吨/万㎡)",
+          unit: "吨/万㎡",
+          rows: [
+            { name: "集团汇总", curr: 28.78, plan: 27.50, sync: 31.22, prev: 25.40, diff: -2, rate: "-7.82%", isTotal: true },
+            { name: "主城区", curr: 26.97, plan: 25.00, sync: 26.45, prev: 23.80, diff: 1, rate: "1.96%" },
+            { name: "金州热电", curr: 21.70, plan: 23.00, sync: 26.01, prev: 20.90, diff: -4, rate: "-16.56%" },
+            { name: "北方热电", curr: 24.30, plan: 26.00, sync: 30.77, prev: 23.50, diff: -6, rate: "-21.03%" },
+            { name: "金普公司", curr: 39.57, plan: 35.00, sync: 35.67, prev: 36.20, diff: 4, rate: "10.94%" },
+            { name: "庄河环海", curr: 64.36, plan: 68.00, sync: 88.48, prev: 62.10, diff: -24, rate: "-27.26%" },
+            { name: "研究院", curr: 18.44, plan: 20.00, sync: 22.93, prev: 17.80, diff: -4, rate: "-19.60%" }
+          ]
+        }
+      },
+      // 表6：月度计划完成情况
+      monthlyPlan: [
+        { name: "集团汇总", unit: "吨", plan: 157995, done: 133090, syncDone: 112500, remDaily: 3558, isTotal: true },
+        { name: "主城区", unit: "吨", plan: 112166, done: 93914, syncDone: 76800, remDaily: 2607 },
+        { name: "金州热电", unit: "吨", plan: 25073, done: 21490, syncDone: 18100, remDaily: 512 },
+        { name: "北方热电", unit: "吨", plan: 12812, done: 11460, syncDone: 9850, remDaily: 193 },
+        { name: "金普公司", unit: "吨", plan: 7652, done: 5973, syncDone: 5200, remDaily: 240, isSafe: true },
+        { name: "庄河环海(标煤)", unit: "吨", plan: 292, done: 253, syncDone: 2550, remDaily: 6 },
+        { name: "庄河环海(外购热)", unit: "GJ", plan: 181300, done: 193506, syncDone: null, remDaily: -1744, isOver: true }
+      ]
+    };
+
+    // ==================== 2. 改进版 AGY 提示词（去教条化、自适应系统真实表结构与动态叙事） ====================
+    const AGY_PROMPT_CONTENT = `# Role: 热电集团生产运行周报自动化研发与撰稿智能体 (AGY IDE Agent)
+
+## 1. 核心设计原则（请勿死板套用示例文本！）
+你收到的《第十二周生产运行简报》及配套 HTML 页面仅作为**章节框架、汇报文风与前端渲染契约的参考范例**。
+当你在 IDE 中对接集团系统平台时，**严禁教条式地照搬第12周的固定句式或硬编码数值**，必须遵循以下三大自适应原则：
+1. **以系统平台内实际存在的数据表与字段为准（Schema 优先）**：先扫描/查询平台数据库或 API，确认系统内实际有哪些下属单位、哪些能源品种（如标煤、外购热、天然气、电锅炉等）、是否维护了“周度计划/月度计划”字段。
+2. **动态时序适配（自动兼容“有无上期”与“有无计划”）**：
+   - 图表与表格的标准对比序列固定为：**① 本期实际 (\`curr\`) → ② 本期计划 (\`plan\`) → ③ 去年同期 (\`sync\`) → ④ 上期数值 (\`prev\`，当存在上期时展示)**。
+   - **供暖期首周/无上期处理**：若当前为供暖期第1周（或系统内无 \`prev\` 数据），请将 JSON 中的 \`meta.hasPrevPeriod\` 设为 \`false\`，此时不要计算环比，前端图表与表格会自动隐藏“上期”序列与“环比”列，正文撰稿也完全省略环比表述。
+   - **计划值折算处理**：若系统内仅有“月度计划”而无“周度计划”，可按 \`本期计划 = 当月计划 ÷ 当月总天数 × 本汇报周期天数\` 折算，或在无计划值时将 \`plan\` 置为 \`null\`。
+3. **数据驱动的章节化撰稿（先读数、后立意）**：
+   - 页面采用**“左侧类 Word 章节精读文章 + 右侧图表与明细表”**的布局，左侧正文是供领导在调度会上直接“读”的材料。
+   - 你必须根据当周计算出的**真实数据特征与异动**来撰写每一章的正文：比如第12周遇75年罕见寒潮，主线是“极寒顶峰保供、夏储煤对冲成本保利润”；但若某周气温偏高，主线则应写“抓住暖冬窗口期主动压降负荷、节煤增效”；哪家单位单耗异常、哪项成本超支，就针对性地剖析哪项。
+
+---
+
+## 2. 建议你在 IDE 中执行的 4 步工程流程
+
+### 第一步：探查系统数据库与接口（Discovery）
+在编写代码前，先检查项目中已有的数据库连接、ORM 模型或 API 接口，重点确认：
+- **气象数据**：日均温、最低温、未来7天天气预报接口；是否存在“气温-供暖用热量测算模型”参数。
+- **生产能耗数据**：各热源厂/分公司的标煤耗量、原煤耗量、外购热量、上网电量、高温水/蒸汽销售量，以及炉机运行方式日志（如几炉几机）。
+- **财务边际利润数据**：直接收入（电、暖、高温水、蒸汽）、直接成本（煤、外购热、电、水、可计量辅材）、实际煤价与同期可比煤价。
+- **单耗与管网数据**：各单位供暖面积（万㎡）、热/电/水总耗量或单耗，特别是**一次网补水/失水量**。
+- **月度计划数据**：当月各单位标煤耗量计划、外购热量计划及月累已完成值。
+
+### 第二步：确定性指标计算引擎（Calculation）
+所有数值计算必须由 Python/TypeScript/SQL 等后端代码精确完成（不要用 LLM 心算）：
+- 计算各维度的同比增量、同比增减率；当 \`hasPrevPeriod === true\` 时计算环比增量与环比增减率。
+- **可比口径还原**：若系统内有单位发生供热方式结构变更（如煤改外购热），计算剔除该不可比因素后的集团可比口径能耗增量。
+- **双口径边际利润**：同时核算“实际边际利润”（反映真实财务结果）与“可比煤价边际利润”（剔除煤价波动，考核生产单位真实运行效率）。
+- **月度剩余日均可用额度**：\`剩余日均 = (当月计划 - 截至本期月累已完成) ÷ 当月剩余天数\`，并对比近期实际日均耗量评估月底达标难度。
+
+### 第三步：生成“可读性强”的五章汇报文章（Narrative Generation）
+将计算好的结构化 JSON 注入 LLM Prompt，生成左侧精读区的 5 个章节段落（支持使用 \`<strong>\` 高亮核心数据）：
+- **第一章（基本概况）**：综述周期天气走势（若有明显降温/回暖拐点则分段叙述）与集团“能耗-收入-边际利润”的总体表现。
+- **第二章（标煤与外购热）**：通报集团及各单位标煤耗、外购热完成情况，结合系统内的运行方式记录（如某厂启停炉机或保持固定运行方式）解释变动原因。
+- **第三章（产销边际利润）**：先讲收入端（发电与工商业售热，若有模型值则对比气温用热模型），再从煤/热、水（关注一次网水耗）、外购电、辅材（对比耗量增幅与原煤增幅）四方面拆解成本与各单位可比利润。
+- **第四章（供暖三项单耗）**：分别点评热、电、水单耗的单位间分化。**动态预警机制**：若发现某单位水单耗回升或一次网水耗同比增加，自动写入强化管网查漏、保障一次网安全的督办要求；若电单耗或热单耗某单位控制优异，也予以及时点名肯定。
+- **第五章（月度计划与下周展望）**：结合各单位月度计划剩余日均额度与下周天气预报走势，给出下周负荷调控与经济运行的具体指令。
+
+### 第四步：输出标准 JSON 驱动 HTML 翻页汇报页面
+将计算结果与章节文本组装为符合前端 \`window.REPORT_DATA\` 规范的 JSON，调用 \`window.renderWeeklyReport(reportJson)\`。
+- 前端页面已内置：**百分比缩放控制器（75%~130%）**、**浅色/深色模式切换（默认浅色适合读材料）**、**按【本期、本期计划、同期、上期(可选)】次序渲染的 Chart.js 图表** 以及 **左文右表章节翻页器**。`;
+
+    // ==================== 3. 状态管理与核心渲染逻辑 ====================
+    let currentSlideIndex = 0;
+    const totalSlides = 6;
+    let activeUnitTab = 'heat';
+    let currentZoom = 100;
+    let currentTheme = 'light'; // 默认浅色模式
+    let reportState = JSON.parse(JSON.stringify(DEFAULT_REPORT_DATA));
+
+    let chartOverviewInstance = null;
+    let chartCoalInstance = null;
+    let chartProfitInstance = null;
+    let chartUnitInstance = null;
+    let chartPlanInstance = null;
+
+    function fmtNum(val) {
+      if (val === null || val === undefined || val === '') return '-';
+      if (typeof val === 'number') return val.toLocaleString('zh-CN');
+      return val;
+    }
+
+    // 调整页面缩放百分比
+    function applyZoom(newZoom) {
+      currentZoom = Math.max(70, Math.min(130, newZoom));
+      document.getElementById('zoom-val-label').textContent = currentZoom + '%';
+      const wrapper = document.getElementById('zoom-viewport-wrapper');
+      wrapper.style.zoom = (currentZoom / 100);
+    }
+
+    // 切换深色/浅色主题 (默认浅色)
+    function applyTheme(theme) {
+      currentTheme = theme;
+      document.body.setAttribute('data-theme', theme);
+      const iconEl = document.getElementById('theme-icon');
+      const labelEl = document.getElementById('theme-label');
+      if (theme === 'light') {
+        iconEl.textContent = '☀️';
+        labelEl.textContent = '浅色模式';
+      } else {
+        iconEl.textContent = '🌙';
+        labelEl.textContent = '深色模式';
+      }
+      renderCharts();
+    }
+
+    // 渲染所有数据与表格
+    function renderAll(data) {
+      reportState = data;
+      const hasPrev = Boolean(data.meta && data.meta.hasPrevPeriod);
+
+      // 更新顶部“含上期(环比)”按钮状态
+      const prevBtn = document.getElementById('btn-toggle-prev');
+      const prevDot = document.getElementById('prev-status-dot');
+      const prevLabel = document.getElementById('prev-status-label');
+      if (hasPrev) {
+        prevBtn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center gap-1';
+        prevDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+        prevLabel.textContent = '含上期(环比)';
+      } else {
+        prevBtn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-500/15 text-muted border border-slate-500/30 hover:bg-slate-500/25 transition flex items-center gap-1';
+        prevDot.className = 'w-2 h-2 rounded-full bg-slate-400';
+        prevLabel.textContent = '供暖首周(无上期)';
+      }
+
+      // 控制页面内所有与“上期/环比”相关的文字与列显隐
+      document.querySelectorAll('.mom-inline-text, .mom-kpi-line, .mom-chart-subtitle').forEach(el => {
+        if (hasPrev) {
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      });
+
+      // Header & Slide 0 KPIs
+      document.getElementById('hdr-season').textContent = data.meta.season;
+      document.getElementById('hdr-title').textContent = data.meta.weekTitle;
+      document.getElementById('s0-date-badge').textContent = '汇报日期：' + data.meta.reportDate;
+
+      document.getElementById('kpi-temp-val').textContent = data.weather.avgTemp + ' ℃';
+      document.getElementById('kpi-temp-yoy').textContent = (data.weather.yoyDiff < 0 ? '低 ' : '高 ') + Math.abs(data.weather.yoyDiff) + '℃';
+      document.getElementById('kpi-temp-mom').textContent = (data.weather.momDiff < 0 ? '降 ' : '升 ') + Math.abs(data.weather.momDiff) + '℃';
+
+      document.getElementById('kpi-coal-val').textContent = fmtNum(data.kpis.coalTotal);
+      document.getElementById('kpi-coal-yoy').textContent = '+' + data.kpis.coalYoYRate + ' (+' + fmtNum(data.kpis.coalYoYDiff) + 't)';
+      document.getElementById('kpi-coal-mom').textContent = '+' + data.kpis.coalMoMRate + ' (+' + fmtNum(data.kpis.coalMoMDiff) + 't)';
+
+      document.getElementById('kpi-rev-val').textContent = fmtNum(data.kpis.revenueTotal);
+      document.getElementById('kpi-rev-yoy').textContent = '+' + fmtNum(data.kpis.revenueYoYDiff) + '万 (' + data.kpis.revenueYoYRate + ')';
+
+      document.getElementById('kpi-profit-val').textContent = fmtNum(data.kpis.profitActual);
+      document.getElementById('kpi-profit-yoy').textContent = fmtNum(data.kpis.profitYoYDiff) + '万 (' + data.kpis.profitYoYRate + ')';
+      document.getElementById('kpi-profit-comp').textContent = fmtNum(data.kpis.profitComparable) + ' 万元';
+
+      // Slide 1: 表1 标煤耗量表（次序：本期、本期计划、同期、[上期]、同比、[环比]、同比率、[环比率]）
+      const coalThead = document.getElementById('tbl-coal-head');
+      coalThead.innerHTML = `
+        <tr class="border-b text-muted" style="background-color: var(--table-head-bg); border-color: var(--border-color);">
+          <th class="py-2 px-2.5 font-semibold">项目 / 单位</th>
+          <th class="py-2 px-2 text-right font-bold text-main">本期</th>
+          <th class="py-2 px-2 text-right font-semibold text-sky-600">本期计划</th>
+          <th class="py-2 px-2 text-right font-semibold">同期</th>
+          ${hasPrev ? '<th class="py-2 px-2 text-right font-semibold">上期</th>' : ''}
+          <th class="py-2 px-2 text-right font-semibold">同比增量</th>
+          <th class="py-2 px-2 text-right font-semibold">同比差异</th>
+          ${hasPrev ? '<th class="py-2 px-2 text-right font-semibold">环比增量</th><th class="py-2 px-2 text-right font-semibold">环比差异</th>' : ''}
+        </tr>
+      `;
+
+      const coalTbody = document.getElementById('tbl-coal-body');
+      coalTbody.innerHTML = '';
+      data.coalTable.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.backgroundColor = row.isTotal ? 'var(--table-total-bg)' : '';
+        tr.className = row.isTotal ? 'font-bold text-main' : 'text-secondary hover:opacity-90';
+        const yoyColor = row.yoy > 0 ? 'text-rose-600 font-semibold' : row.yoy < 0 ? 'text-emerald-600 font-semibold' : 'text-muted';
+        tr.innerHTML = `
+          <td class="py-2 px-2.5 font-medium text-main">
+            ${row.name}
+            ${row.note ? `<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-amber-500/15 text-amber-700 border border-amber-500/30">${row.note}</span>` : ''}
+          </td>
+          <td class="py-2 px-2 text-right font-bold text-main">${fmtNum(row.curr)}</td>
+          <td class="py-2 px-2 text-right text-sky-600 font-medium">${fmtNum(row.plan)}</td>
+          <td class="py-2 px-2 text-right">${fmtNum(row.sync)}</td>
+          ${hasPrev ? `<td class="py-2 px-2 text-right">${fmtNum(row.prev)}</td>` : ''}
+          <td class="py-2 px-2 text-right ${yoyColor}">${row.yoy !== null ? (row.yoy > 0 ? '+' : '') + fmtNum(row.yoy) : '-'}</td>
+          <td class="py-2 px-2 text-right ${yoyColor}">${row.yoyRate}</td>
+          ${hasPrev ? `
+            <td class="py-2 px-2 text-right text-amber-600 font-medium">${row.mom !== null ? (row.mom > 0 ? '+' : '') + fmtNum(row.mom) : '-'}</td>
+            <td class="py-2 px-2 text-right text-amber-600 font-medium">${row.momRate}</td>
+          ` : ''}
+        `;
+        coalTbody.appendChild(tr);
+      });
+
+      // Slide 2: 表2 产销边际利润表（次序：本期、本期计划、同期、[上期]、同比、差异率）
+      const profitTbody = document.getElementById('tbl-profit-body');
+      profitTbody.innerHTML = '';
+      data.profitTable.forEach(row => {
+        const tr = document.createElement('tr');
+        if (row.section === 'rev-head' || row.section === 'cost-head' || row.section === 'profit-actual' || row.section === 'profit-comp') {
+          tr.style.backgroundColor = 'var(--table-total-bg)';
+          tr.className = 'font-bold text-main';
+        } else {
+          tr.className = 'text-secondary';
+        }
+        const yoyColor = row.yoy > 0 ? 'text-emerald-600 font-semibold' : row.yoy < 0 ? 'text-rose-600 font-semibold' : 'text-muted';
+        tr.innerHTML = `
+          <td class="py-1.5 px-2.5 text-main">${row.name}</td>
+          <td class="py-1.5 px-2 text-center text-muted">${row.unit}</td>
+          <td class="py-1.5 px-2 text-right font-bold text-main">${fmtNum(row.curr)}</td>
+          <td class="py-1.5 px-2 text-right text-sky-600">${fmtNum(row.plan)}</td>
+          <td class="py-1.5 px-2 text-right">${fmtNum(row.sync)}</td>
+          <td class="py-1.5 px-2 text-right mom-col-cell ${hasPrev ? '' : 'hidden'}">${fmtNum(row.prev)}</td>
+          <td class="py-1.5 px-2 text-right ${yoyColor}">${row.yoy > 0 ? '+' : ''}${fmtNum(row.yoy)}</td>
+          <td class="py-1.5 px-2 text-right ${yoyColor}">${row.rate}</td>
+        `;
+        profitTbody.appendChild(tr);
+      });
+
+      // Slide 3: 表3-5 供暖三项单耗
+      renderUnitConsumptionTab(activeUnitTab);
+
+      // Slide 4: 表6 月度计划完成表
+      const planTbody = document.getElementById('tbl-plan-body');
+      planTbody.innerHTML = '';
+      data.monthlyPlan.forEach(row => {
+        const pct = Math.min(100, Math.round((row.done / row.plan) * 1000) / 10);
+        const actualPct = ((row.done / row.plan) * 100).toFixed(1);
+        const barColor = row.isOver ? 'bg-rose-600' : row.isSafe ? 'bg-emerald-600' : 'bg-amber-500';
+        const tr = document.createElement('tr');
+        tr.style.backgroundColor = row.isTotal ? 'var(--table-total-bg)' : '';
+        tr.className = row.isTotal ? 'font-bold text-main' : 'text-secondary';
+        tr.innerHTML = `
+          <td class="py-2 px-3 font-medium text-main">
+            ${row.name}
+            ${row.isSafe ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/15 text-emerald-700 font-bold">达标可控</span>' : ''}
+            ${row.isOver ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-rose-500/15 text-rose-600 font-bold">已超计划</span>' : ''}
+          </td>
+          <td class="py-2 px-2 text-center text-muted">${row.unit}</td>
+          <td class="py-2 px-2.5 text-right text-sky-600 font-medium">${fmtNum(row.plan)}</td>
+          <td class="py-2 px-2.5 text-right font-bold text-main">${fmtNum(row.done)}</td>
+          <td class="py-2 px-2.5 text-right font-bold ${row.remDaily < 0 ? 'text-rose-600' : row.isSafe ? 'text-emerald-600' : 'text-amber-600'}">${fmtNum(row.remDaily)}</td>
+          <td class="py-2 px-3">
+            <div class="flex items-center gap-2">
+              <div class="w-full h-2 rounded-full bg-slate-300/60 overflow-hidden">
+                <div class="h-full ${barColor}" style="width: ${pct}%"></div>
+              </div>
+              <span class="text-[11px] w-12 text-right font-semibold text-main">${actualPct}%</span>
+            </div>
+          </td>
+        `;
+        planTbody.appendChild(tr);
+      });
+
+      // 控制所有静态表头中的 .mom-col-cell 显隐
+      document.querySelectorAll('.mom-col-cell').forEach(cell => {
+        if (hasPrev) cell.classList.remove('hidden');
+        else cell.classList.add('hidden');
+      });
+
+      renderCharts();
+    }
+
+    function renderUnitConsumptionTab(tabKey) {
+      activeUnitTab = tabKey;
+      const hasPrev = Boolean(reportState.meta && reportState.meta.hasPrevPeriod);
+      const tabData = reportState.unitConsumption[tabKey];
+      document.getElementById('unit-table-title').textContent = tabData.title;
+      document.getElementById('unit-chart-title').innerHTML = `${tabData.title.split('：')[1].replace('分单位对标明细表', '对比图')}（次序：本期 → 本期计划 → 同期 ${hasPrev ? '→ 上期' : ''}）`;
+      document.getElementById('unit-chart-note').textContent = '单位：' + tabData.unit + (tabKey === 'elec' ? '（注：研究院电锅炉93,841在表中单列）' : '');
+
+      document.querySelectorAll('.unit-tab-btn').forEach(btn => {
+        if (btn.getAttribute('data-unit-tab') === tabKey) {
+          btn.className = 'unit-tab-btn px-3 py-1 rounded-lg text-xs font-bold bg-sky-600 text-white transition';
+        } else {
+          btn.className = 'unit-tab-btn px-3 py-1 rounded-lg text-xs font-semibold text-secondary hover:text-main transition';
+        }
+      });
+
+      const tbody = document.getElementById('tbl-unit-body');
+      tbody.innerHTML = '';
+      tabData.rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.backgroundColor = row.isTotal ? 'var(--table-total-bg)' : '';
+        tr.className = row.isTotal ? 'font-bold text-main' : 'text-secondary';
+        const diffColor = row.diff > 0 ? 'text-rose-600 font-semibold' : row.diff < 0 ? 'text-emerald-600 font-semibold' : 'text-muted';
+        tr.innerHTML = `
+          <td class="py-2 px-3 font-medium text-main">${row.name}</td>
+          <td class="py-2 px-2.5 text-right font-bold text-main">${fmtNum(row.curr)}</td>
+          <td class="py-2 px-2.5 text-right text-sky-600">${fmtNum(row.plan)}</td>
+          <td class="py-2 px-2.5 text-right">${fmtNum(row.sync)}</td>
+          <td class="py-2 px-2.5 text-right mom-col-cell ${hasPrev ? '' : 'hidden'}">${fmtNum(row.prev)}</td>
+          <td class="py-2 px-2.5 text-right ${diffColor}">${row.diff > 0 ? '+' : ''}${fmtNum(row.diff)}</td>
+          <td class="py-2 px-2.5 text-right ${diffColor}">${row.rate}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      renderUnitChart(tabKey);
+    }
+
+    // ==================== 4. 图表渲染引擎：严格遵循【①本期、②本期计划、③同期、④上期(可选)】次序 ====================
+    function buildOrderedDatasets(items, unitLabel = '') {
+      const hasPrev = Boolean(reportState.meta && reportState.meta.hasPrevPeriod);
+      const suffix = unitLabel ? ` (${unitLabel})` : '';
+      const datasets = [
+        {
+          label: '① 本期实际' + suffix,
+          data: items.map(r => r.curr),
+          backgroundColor: 'rgba(2, 132, 199, 0.9)', // 主色深蓝
+          borderRadius: 4
+        },
+        {
+          label: '② 本期计划' + suffix,
+          data: items.map(r => r.plan),
+          backgroundColor: 'rgba(16, 185, 129, 0.82)', // 计划翠绿
+          borderRadius: 4
+        },
+        {
+          label: '③ 同期值' + suffix,
+          data: items.map(r => r.sync),
+          backgroundColor: 'rgba(245, 158, 11, 0.82)', // 同期琥珀橙
+          borderRadius: 4
+        }
+      ];
+
+      if (hasPrev) {
+        datasets.push({
+          label: '④ 上期值' + suffix,
+          data: items.map(r => r.prev),
+          backgroundColor: 'rgba(148, 163, 184, 0.65)', // 上期中性灰蓝
+          borderRadius: 4
+        });
+      }
+      return datasets;
+    }
+
+    function getCommonChartOptions() {
+      const textColor = currentTheme === 'dark' ? '#cbd5e1' : '#334155';
+      const gridColor = currentTheme === 'dark' ? 'rgba(71, 85, 105, 0.35)' : 'rgba(148, 163, 184, 0.25)';
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { color: textColor, boxWidth: 12, font: { size: 11, weight: '600' } }
+          }
+        },
+        scales: {
+          x: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+          y: { ticks: { color: textColor, font: { size: 11 } }, grid: { color: gridColor } }
+        }
+      };
+    }
+
+    function renderCharts() {
+      if (typeof Chart === 'undefined') return;
+
+      // 0. Slide 0 Overview Chart (集团标煤耗[十吨]、直接收入[万元]、直接成本[万元]、实际边际利润[万元])
+      const ctxOverview = document.getElementById('chart-overview');
+      if (ctxOverview) {
+        if (chartOverviewInstance) chartOverviewInstance.destroy();
+        const k = reportState.kpis;
+        const overviewItems = [
+          { name: '集团标煤耗 (十吨)', curr: Math.round(k.coalTotal / 10), plan: Math.round(k.coalPlan / 10), sync: Math.round(k.coalSync / 10), prev: Math.round(k.coalPrev / 10) },
+          { name: '直接收入 (万元)', curr: k.revenueTotal, plan: k.revenuePlan, sync: k.revenueSync, prev: k.revenuePrev },
+          { name: '实际边际利润 (万元)', curr: k.profitActual, plan: k.profitPlan, sync: k.profitSync, prev: k.profitPrev }
+        ];
+        chartOverviewInstance = new Chart(ctxOverview, {
+          type: 'bar',
+          data: {
+            labels: overviewItems.map(i => i.name),
+            datasets: buildOrderedDatasets(overviewItems)
+          },
+          options: getCommonChartOptions()
+        });
+      }
+
+      // 1. Slide 1 Coal Chart (各主力单位标煤耗：本期 -> 本期计划 -> 同期 -> 上期)
+      const ctxCoal = document.getElementById('chart-coal');
+      if (ctxCoal) {
+        if (chartCoalInstance) chartCoalInstance.destroy();
+        const coalUnits = reportState.coalTable.filter(r => !r.isTotal && !r.isExtHeat);
+        chartCoalInstance = new Chart(ctxCoal, {
+          type: 'bar',
+          data: {
+            labels: coalUnits.map(r => r.name.replace('(标煤)', '')),
+            datasets: buildOrderedDatasets(coalUnits, '吨')
+          },
+          options: getCommonChartOptions()
+        });
+      }
+
+      // 2. Slide 2 Profit Chart (直接收入、直接成本、实际边际利润、可比煤价边际利润)
+      const ctxProfit = document.getElementById('chart-profit');
+      if (ctxProfit) {
+        if (chartProfitInstance) chartProfitInstance.destroy();
+        const profitMainRows = reportState.profitTable.filter(r => r.inChart);
+        chartProfitInstance = new Chart(ctxProfit, {
+          type: 'bar',
+          data: {
+            labels: profitMainRows.map(r => r.name.replace('（集团）', '')),
+            datasets: buildOrderedDatasets(profitMainRows, '万元')
+          },
+          options: getCommonChartOptions()
+        });
+      }
+
+      // 3. Slide 3 Unit Consumption Chart
+      renderUnitChart(activeUnitTab);
+
+      // 4. Slide 4 Monthly Plan Chart (已完成[本期月累] -> 1月计划 -> 同期月累)
+      const ctxPlan = document.getElementById('chart-plan');
+      if (ctxPlan) {
+        if (chartPlanInstance) chartPlanInstance.destroy();
+        const planUnits = reportState.monthlyPlan.filter(r => !r.isTotal && r.unit === '吨');
+        chartPlanInstance = new Chart(ctxPlan, {
+          type: 'bar',
+          data: {
+            labels: planUnits.map(r => r.name.replace('(标煤)', '')),
+            datasets: [
+              { label: '① 本期月累已完成 (吨)', data: planUnits.map(r => r.done), backgroundColor: 'rgba(2, 132, 199, 0.9)', borderRadius: 4 },
+              { label: '② 1月计划总额 (吨)', data: planUnits.map(r => r.plan), backgroundColor: 'rgba(16, 185, 129, 0.82)', borderRadius: 4 },
+              { label: '③ 同期月累值 (吨)', data: planUnits.map(r => r.syncDone), backgroundColor: 'rgba(245, 158, 11, 0.82)', borderRadius: 4 }
+            ]
+          },
+          options: getCommonChartOptions()
+        });
+      }
+    }
+
+    function renderUnitChart(tabKey) {
+      if (typeof Chart === 'undefined') return;
+      const tabData = reportState.unitConsumption[tabKey];
+      const chartRows = tabData.rows.filter(r => !r.excludeFromChart);
+      const ctxUnit = document.getElementById('chart-unit');
+      if (!ctxUnit) return;
+      if (chartUnitInstance) chartUnitInstance.destroy();
+      chartUnitInstance = new Chart(ctxUnit, {
+        type: 'bar',
+        data: {
+          labels: chartRows.map(r => r.name),
+          datasets: buildOrderedDatasets(chartRows, tabData.unit)
+        },
+        options: getCommonChartOptions()
+      });
+    }
+
+    // ==================== 5. 章节翻页与全局 API ====================
+    function goToSlide(index) {
+      if (index < 0) index = 0;
+      if (index >= totalSlides) index = totalSlides - 1;
+      currentSlideIndex = index;
+
+      for (let i = 0; i < totalSlides; i++) {
+        const el = document.getElementById('slide-' + i);
+        if (el) {
+          if (i === currentSlideIndex) el.classList.remove('hidden');
+          else el.classList.add('hidden');
+        }
+      }
+
+      document.querySelectorAll('.nav-pill').forEach(btn => {
+        const idx = parseInt(btn.getAttribute('data-slide'), 10);
+        if (idx === currentSlideIndex) {
+          btn.className = 'nav-pill px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-600 text-white shadow-sm transition-all';
+        } else {
+          btn.className = 'nav-pill px-2.5 py-1 rounded-lg text-xs font-semibold text-secondary hover:text-main transition-all' + (idx === 5 ? ' text-amber-600' : '');
+        }
+      });
+
+      document.querySelectorAll('.slide-dot').forEach(dot => {
+        const idx = parseInt(dot.getAttribute('data-dot'), 10);
+        if (idx === currentSlideIndex) {
+          dot.className = 'slide-dot w-6 h-2.5 rounded-full bg-sky-600 transition-all';
+        } else {
+          dot.className = 'slide-dot w-2.5 h-2.5 rounded-full bg-slate-400 hover:bg-slate-500 transition-all';
+        }
+      });
+
+      document.getElementById('footer-page-indicator').textContent = `第 ${currentSlideIndex + 1} / ${totalSlides} 页`;
+      setTimeout(() => renderCharts(), 50);
+    }
+
+    window.REPORT_DATA = DEFAULT_REPORT_DATA;
+    window.renderWeeklyReport = function(customJson) {
+      if (customJson && typeof customJson === 'object') {
+        window.REPORT_DATA = customJson;
+        renderAll(customJson);
+      }
+    };
+
+    function copyTextSafe(text, feedbackEl) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        if (feedbackEl) {
+          feedbackEl.textContent = '✓ 已成功复制改进版 AGY 提示词到剪贴板！';
+          feedbackEl.classList.remove('hidden');
+        }
+      } catch (e) {
+        if (navigator.clipboard) navigator.clipboard.writeText(text);
+      }
+      document.body.removeChild(ta);
+    }
+
+    // ==================== 6. 初始化与事件绑定 ====================
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('slide5-prompt-preview').textContent = AGY_PROMPT_CONTENT;
+      document.getElementById('agy-prompt-textarea').value = AGY_PROMPT_CONTENT;
+
+      applyTheme('light'); // 默认浅色模式
+      renderAll(DEFAULT_REPORT_DATA);
+      goToSlide(0);
+
+      // 缩放百分比控制
+      document.getElementById('btn-zoom-out').addEventListener('click', () => applyZoom(currentZoom - 5));
+      document.getElementById('btn-zoom-in').addEventListener('click', () => applyZoom(currentZoom + 5));
+      document.getElementById('btn-zoom-reset').addEventListener('click', () => applyZoom(100));
+
+      // 浅色/深色模式切换
+      document.getElementById('btn-theme-toggle').addEventListener('click', () => {
+        applyTheme(currentTheme === 'light' ? 'dark' : 'light');
+      });
+
+      // 有无上期（供暖期首周 vs 常规周）一键切换测试
+      document.getElementById('btn-toggle-prev').addEventListener('click', () => {
+        reportState.meta.hasPrevPeriod = !reportState.meta.hasPrevPeriod;
+        renderAll(reportState);
+      });
+
+      // 章节导航与翻页
+      document.querySelectorAll('.nav-pill').forEach(btn => {
+        btn.addEventListener('click', () => goToSlide(parseInt(btn.getAttribute('data-slide'), 10)));
+      });
+      document.querySelectorAll('.slide-dot').forEach(dot => {
+        dot.addEventListener('click', () => goToSlide(parseInt(dot.getAttribute('data-dot'), 10)));
+      });
+      document.getElementById('btn-prev-slide').addEventListener('click', () => goToSlide(currentSlideIndex - 1));
+      document.getElementById('btn-next-slide').addEventListener('click', () => goToSlide(currentSlideIndex + 1));
+
+      window.addEventListener('keydown', (e) => {
+        const modalJsonOpen = !document.getElementById('modal-json').classList.contains('hidden');
+        const modalAgyOpen = !document.getElementById('modal-agy').classList.contains('hidden');
+        if (modalJsonOpen || modalAgyOpen) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') goToSlide(currentSlideIndex + 1);
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') goToSlide(currentSlideIndex - 1);
+      });
+
+      // 三项单耗切换
+      document.querySelectorAll('.unit-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => renderUnitConsumptionTab(btn.getAttribute('data-unit-tab')));
+      });
+
+      // JSON 弹窗
+      const modalJson = document.getElementById('modal-json');
+      const jsonTextarea = document.getElementById('json-editor-textarea');
+      document.getElementById('btn-open-json').addEventListener('click', () => {
+        jsonTextarea.value = JSON.stringify(reportState, null, 2);
+        modalJson.classList.remove('hidden');
+        modalJson.classList.add('flex');
+      });
+      document.getElementById('btn-close-json').addEventListener('click', () => {
+        modalJson.classList.add('hidden');
+        modalJson.classList.remove('flex');
+      });
+      document.getElementById('btn-reset-json').addEventListener('click', () => {
+        jsonTextarea.value = JSON.stringify(DEFAULT_REPORT_DATA, null, 2);
+        window.renderWeeklyReport(JSON.parse(JSON.stringify(DEFAULT_REPORT_DATA)));
+        document.getElementById('json-status-msg').textContent = '已恢复默认数据并重绘';
+      });
+      document.getElementById('btn-apply-json').addEventListener('click', () => {
+        try {
+          const parsed = JSON.parse(jsonTextarea.value);
+          window.renderWeeklyReport(parsed);
+          document.getElementById('json-status-msg').textContent = '✓ JSON 校验通过，页面与图表已重绘！';
+          setTimeout(() => {
+            modalJson.classList.add('hidden');
+            modalJson.classList.remove('flex');
+          }, 400);
+        } catch (err) {
+          document.getElementById('json-status-msg').textContent = '❌ JSON 语法错误：' + err.message;
+        }
+      });
+
+      // AGY 提示词弹窗
+      const modalAgy = document.getElementById('modal-agy');
+      document.getElementById('btn-open-agy').addEventListener('click', () => {
+        modalAgy.classList.remove('hidden');
+        modalAgy.classList.add('flex');
+      });
+      document.getElementById('btn-close-agy').addEventListener('click', () => {
+        modalAgy.classList.add('hidden');
+        modalAgy.classList.remove('flex');
+      });
+      document.getElementById('btn-copy-agy-modal').addEventListener('click', () => {
+        copyTextSafe(AGY_PROMPT_CONTENT, document.getElementById('agy-copy-feedback'));
+      });
+      document.getElementById('btn-slide5-copy').addEventListener('click', () => {
+        copyTextSafe(AGY_PROMPT_CONTENT, document.getElementById('copy-toast-inline'));
+      });
+    });
+  </script>
+</body>
+</html>

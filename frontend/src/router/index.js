@@ -4,6 +4,11 @@ import { canAccessDailyBrief } from '../projects/daily_report_25_26/composables/
 
 const routes = [
   {
+    path: '/projects/daily_report_25_26/pages/period_report',
+    component: () => import('../projects/daily_report_25_26/pages/PeriodReportView.vue'),
+    meta: { title: '生产运行汇报' },
+  },
+  {
     path: '/',
     redirect: '/login',
   },
@@ -154,9 +159,9 @@ router.beforeEach(async (to) => {
   }
 
   // 每日简报独立校验，防止绕过入口直接输入地址。
-  if (to.path === '/projects/daily_report_25_26/pages/daily_brief') {
+  if (['/projects/daily_report_25_26/pages/daily_brief', '/projects/daily_report_25_26/pages/period_report'].includes(to.path)) {
     return canAccessDailyBrief('daily_report_25_26', auth.user)
-      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'daily_brief')
+      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', to.path.endsWith('/period_report') ? 'period_report' : 'daily_brief')
   }
 
   // 2. 全局管理后台权限校验

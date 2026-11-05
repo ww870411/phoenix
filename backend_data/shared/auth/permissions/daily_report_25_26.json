@@ -259,6 +259,9 @@
       "page_access": [
         "dashboard",
         "data_show",
+        "data_entry",
+        "data_approval",
+        "constant_data",
         "data_analysis",
         "dynamic_plan",
         "dispatch_info",
@@ -267,10 +270,19 @@
       "sheet_rules": {
         "data_show": {
           "mode": "all"
+        },
+        "data_entry": {
+          "mode": "all"
+        },
+        "data_approval": {
+          "mode": "all"
+        },
+        "constant_data": {
+          "mode": "all"
         }
       },
       "units_access": [
-        "Group"
+        "*"
       ],
       "actions": {
         "can_revoke": false,

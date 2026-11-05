@@ -34,6 +34,7 @@
           :row-size="30"
           :resize="true"
           :range="true"
+          :readonly="true"
           :columns="gridColumns"
           :source="gridSource"
           style="height: 70vh; width: 100%;"

@@ -4,9 +4,10 @@ export function canAccessDailyBrief(projectKey, user) {
 }
 
 export function withDailyBriefPage(pages, projectKey, user) {
-  const existing = (Array.isArray(pages) ? pages : []).filter(page => page.page_key !== 'daily_brief')
+  const existing = (Array.isArray(pages) ? pages : []).filter(page => !['daily_brief', 'period_report'].includes(page.page_key))
   if (!canAccessDailyBrief(projectKey, user)) return existing
-  return [{ page_key: 'daily_brief', page_name: '每日简报', page_description: '每日生产状况内参', page_url: '/projects/daily_report_25_26/pages/daily_brief' }, ...existing]
+  return [{ page_key: 'daily_brief', page_name: '每日简报', page_description: '每日生产状况内参', page_url: '/projects/daily_report_25_26/pages/daily_brief' },
+    { page_key: 'period_report', page_name: '生产运行汇报', page_description: '自选周期生成分析材料，左文右表整页汇报', page_url: '/projects/daily_report_25_26/pages/period_report' }, ...existing]
 }
 
 // 主版与专刊分别按指标键排布，不依赖接口数组的位置，也不改变每日摘要顺序。

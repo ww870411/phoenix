@@ -49,54 +49,74 @@
 
       <!-- 纵向双栏侧边控制台 -->
       <div class="admin-workbench-layout">
-        <!-- 左侧纵向选项卡菜单 -->
-        <aside class="admin-sidebar">
+        <!-- 移动端专属快捷功能板块切换器 (仅在手机窄屏显示) -->
+        <div class="mobile-tab-switcher">
+          <div class="switcher-header">
+            <span class="switcher-title">⚙️ 当前管理板块</span>
+            <span class="switcher-hint">可下拉选择 / 下方支持左右横滑</span>
+          </div>
+          <div class="mobile-select-wrap">
+            <select v-model="activeTab" class="mobile-tab-select" @change="onMobileSelectChange">
+              <option value="algorithms">🧮 生产指标与算法体系</option>
+              <option value="season_params">⚙️ 供暖期与时间参数</option>
+              <option value="kdocs_complaint">📋 12345投诉底表(金山文档)</option>
+              <option value="constants">📊 常量指标与价格基准</option>
+              <option value="entities">🏢 供热单位与组织架构</option>
+              <option value="weather_mgmt">⛅ 气温与气象数据管理</option>
+              <option value="raw_config">💻 原始配置结构预览</option>
+            </select>
+            <span class="select-arrow-icon">▼</span>
+          </div>
+        </div>
+
+        <!-- 选项卡菜单 (桌面端纵向侧栏 / 移动端横向平滑滚动胶囊栏) -->
+        <aside class="admin-sidebar" ref="sidebarRef">
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'algorithms' }]"
-            @click="activeTab = 'algorithms'"
+            @click="selectTab('algorithms', $event)"
           >
             🧮 生产指标与算法体系
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'season_params' }]"
-            @click="activeTab = 'season_params'"
+            @click="selectTab('season_params', $event)"
           >
             ⚙️ 供暖期与时间参数
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'kdocs_complaint' }]"
-            @click="activeTab = 'kdocs_complaint'"
+            @click="selectTab('kdocs_complaint', $event)"
           >
             📋 12345投诉底表(金山文档)
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'constants' }]"
-            @click="activeTab = 'constants'"
+            @click="selectTab('constants', $event)"
           >
             📊 常量指标与价格基准
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'entities' }]"
-            @click="activeTab = 'entities'"
+            @click="selectTab('entities', $event)"
           >
             🏢 供热单位与组织架构
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'weather_mgmt' }]"
-            @click="activeTab = 'weather_mgmt'"
+            @click="selectTab('weather_mgmt', $event)"
           >
             ⛅ 气温与气象数据管理
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'raw_config' }]"
-            @click="activeTab = 'raw_config'"
+            @click="selectTab('raw_config', $event)"
           >
             💻 原始配置结构预览
           </button>
@@ -252,6 +272,7 @@
 
             <!-- B. 紧凑表格视图 -->
             <section v-else class="card elevated section-card">
+              <div class="mobile-table-hint">💡 提示：表格内容较宽，可左右横向滑动查看完整指标</div>
               <div class="table-wrap">
                 <table class="table editor-table catalog-table">
                   <thead>
@@ -939,9 +960,26 @@ const breadcrumbItems = computed(() => [
   { label: pageDisplayName.value, to: null },
 ])
 
-// 选项卡状态
+// 选项卡状态与移动端导航
 const activeTab = ref('algorithms')
 const viewMode = ref('cards') // 'cards' | 'table'
+const sidebarRef = ref(null)
+
+function selectTab(tabKey, event) {
+  activeTab.value = tabKey
+  if (event && event.currentTarget && typeof event.currentTarget.scrollIntoView === 'function') {
+    event.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }
+}
+
+function onMobileSelectChange() {
+  setTimeout(() => {
+    const activeEl = sidebarRef.value?.querySelector('.sidebar-tab-btn.active')
+    if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+      activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    }
+  }, 50)
+}
 
 // 基础状态
 const loading = ref(false)
@@ -1617,14 +1655,12 @@ async function executeSandbox() {
   align-items: start !important;
 }
 
-@media (max-width: 1024px) {
-  .admin-workbench-layout {
-    grid-template-columns: 1fr !important;
-  }
+.mobile-tab-switcher {
+  display: none !important;
 }
 
 .admin-sidebar {
-  background: rgba(255, 255, 255, 0.8) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
   backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(226, 232, 240, 0.8) !important;
   border-radius: 14px !important;
@@ -1634,6 +1670,7 @@ async function executeSandbox() {
   gap: 6px !important;
   position: sticky;
   top: 80px;
+  z-index: 10;
 }
 
 .sidebar-tab-btn {
@@ -1662,6 +1699,136 @@ async function executeSandbox() {
   color: #2563eb !important;
   background: #eff6ff !important;
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.15) !important;
+}
+
+@media (max-width: 1024px) {
+  .admin-workbench-layout {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* 移动端专属快捷功能板块切换器 */
+  .mobile-tab-switcher {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    background: #ffffff !important;
+    border: 1.5px solid #93c5fd !important;
+    border-radius: 10px !important;
+    padding: 10px 14px !important;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08) !important;
+  }
+
+  .switcher-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .switcher-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e40af;
+  }
+
+  .switcher-hint {
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  .mobile-select-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  .mobile-tab-select {
+    width: 100%;
+    height: 40px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e293b;
+    background: #f0f7ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 0 34px 0 12px;
+    appearance: none;
+    cursor: pointer;
+  }
+
+  .select-arrow-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: #2563eb;
+    pointer-events: none;
+  }
+
+  /* 移动端侧栏转为横向平滑滚动条 */
+  .admin-sidebar {
+    position: static !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #f1f5f9;
+    padding: 6px !important;
+    border-radius: 10px !important;
+    gap: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  /* 优雅细微的滚动条，明确提示右侧有内容可滑动 */
+  .admin-sidebar::-webkit-scrollbar {
+    height: 4px !important;
+    display: block !important;
+  }
+
+  .admin-sidebar::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+    border-radius: 4px !important;
+  }
+
+  .admin-sidebar::-webkit-scrollbar-thumb {
+    background: #94a3b8 !important;
+    border-radius: 4px !important;
+  }
+
+  /* 核心修复：移动端按钮自适应紧凑药丸，绝不占 100% 宽度 */
+  .sidebar-tab-btn {
+    width: auto !important;
+    min-width: max-content !important;
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    padding: 8px 14px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+    background: #f1f5f9 !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #334155 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    box-shadow: none !important;
+  }
+
+  .sidebar-tab-btn:hover {
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+  }
+
+  .sidebar-tab-btn.active {
+    background: #2563eb !important;
+    color: #ffffff !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35) !important;
+  }
 }
 
 .admin-content-pane {
@@ -2691,5 +2858,573 @@ async function executeSandbox() {
 .link {
   color: #2563eb;
   text-decoration: underline;
+}
+
+/* ============================================================================== */
+/* 📱 移动端与手机窄屏极致体验适配 (Mobile & Narrow Screen Optimization)           */
+/* ============================================================================== */
+
+/* 移动端表格横向滑动提示条 */
+.mobile-table-hint {
+  display: none;
+  font-size: 11.5px;
+  color: #0369a1;
+  background: #f0f9ff;
+  border: 1px dashed #bae6fd;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .mobile-table-hint {
+    display: block;
+  }
+
+  /* 根容器与主容器适配：消除两边过大空白 */
+  .dr-global-mgmt-view {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  .tube-page-main {
+    padding: 10px 12px 48px !important;
+  }
+
+  /* 顶栏垂直流式排布：标题居上，操作按钮均分双列居下 */
+  .premium-topbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+    padding: 6px 0 12px !important;
+  }
+
+  .premium-topbar h2 {
+    font-size: 18px !important;
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+
+  .premium-topbar .sub {
+    font-size: 12px !important;
+    line-height: 1.5;
+  }
+
+  .topbar-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .topbar-actions .btn {
+    width: 100% !important;
+    height: 38px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+    padding: 0 8px !important;
+  }
+
+  /* 磨砂玻璃态全局数据看板：2 列网格紧凑重构，引擎项整行通栏突出 */
+  .quick-dashboard-card {
+    padding: 12px 10px !important;
+    margin-bottom: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .meta-dashboard {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .meta-dashboard .meta-card {
+    padding: 8px 10px;
+    background: rgba(248, 250, 252, 0.85);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 8px;
+    gap: 2px;
+  }
+
+  .meta-dashboard .meta-card:nth-child(3) {
+    grid-column: 1 / -1; /* 底层计算引擎卡片通栏跨两列 */
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .meta-label {
+    font-size: 11px !important;
+  }
+
+  .meta-value {
+    font-size: 15px !important;
+  }
+
+  /* 通用配置卡片内边距紧凑适配 */
+  .section-card {
+    padding: 14px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .card-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .card-header {
+    font-size: 16px !important;
+    line-height: 1.4;
+  }
+
+  .block-sub {
+    font-size: 12px !important;
+    line-height: 1.5;
+  }
+
+  /* 视图切换按钮（卡片 / 表格）：全宽分段开关 (Segmented Control) */
+  .view-mode-toggle {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+
+  .view-mode-toggle .btn {
+    width: 100% !important;
+    height: 34px !important;
+    justify-content: center !important;
+  }
+
+  /* 筛选工具栏单列化 */
+  .filter-toolbar {
+    flex-direction: column !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .search-box {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .filter-dropdowns {
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+
+  .scope-select,
+  .derived-select {
+    width: 100% !important;
+    height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  /* 分类胶囊栏：横向单行顺滑滚动，防止垂直堆叠占满屏幕 */
+  .category-pills {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-top: 10px !important;
+    padding-bottom: 6px !important;
+    gap: 6px !important;
+  }
+
+  .category-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .category-pill {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 5px 11px !important;
+    font-size: 12px !important;
+  }
+
+  /* 🧮 算法指标卡片网格：单列撑满，消除 360px 宽度导致的屏幕横向溢出 */
+  .catalog-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .metric-card {
+    padding: 14px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .metric-card-header {
+    gap: 8px;
+  }
+
+  .metric-title-wrap {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .metric-name {
+    font-size: 15px !important;
+    word-break: break-word;
+  }
+
+  .unit-badge {
+    flex-shrink: 0;
+    align-self: flex-start;
+  }
+
+  .metric-key-bar {
+    min-width: 0;
+    padding: 4px 6px;
+  }
+
+  .metric-key {
+    font-size: 12px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .formula-box {
+    padding: 6px 8px !important;
+  }
+
+  .formula-code {
+    font-size: 12px !important;
+  }
+
+  .metric-meta-details {
+    font-size: 11.5px !important;
+    gap: 6px !important;
+  }
+
+  .meta-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .row-label {
+    min-width: 58px;
+  }
+
+  .sandbox-trigger-btn {
+    height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  /* 紧凑表格视图横向滚动包裹 */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .catalog-table {
+    min-width: 680px;
+  }
+
+  /* 🧪 在线沙盒控制区：垂直单列排布，大触控区 */
+  .sandbox-control-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 12px 10px !important;
+  }
+
+  .date-input-group {
+    display: flex;
+    gap: 6px;
+  }
+
+  .date-input-group input[type="date"] {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sandbox-action-wrap {
+    width: 100%;
+  }
+
+  .execute-sandbox-btn {
+    width: 100% !important;
+    height: 42px !important;
+    font-size: 14px !important;
+    justify-content: center !important;
+  }
+
+  /* 沙盒验算结果头部卡片 */
+  .result-headline-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    padding: 12px 10px !important;
+  }
+
+  .headline-title {
+    font-size: 16px !important;
+  }
+
+  .headline-meta {
+    font-size: 12px !important;
+    line-height: 1.5;
+  }
+
+  .final-unit-pill {
+    align-self: flex-start;
+    font-size: 12px !important;
+    padding: 2px 8px !important;
+  }
+
+  /* 8 窗口结果矩阵卡片：2x2 双列对比排布，在手机上一屏对比 4 个阶段 */
+  .matrix-8-windows {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .window-card {
+    padding: 10px 8px !important;
+  }
+
+  .win-label {
+    font-size: 11px !important;
+  }
+
+  .win-val {
+    font-size: 17px !important;
+  }
+
+  .win-peer {
+    font-size: 11px !important;
+  }
+
+  .win-growth {
+    font-size: 11.5px !important;
+  }
+
+  /* 推导步骤卡片 */
+  .derivation-steps-block {
+    padding: 12px 10px !important;
+  }
+
+  .steps-heading {
+    font-size: 14px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .timeline-step-item {
+    gap: 8px !important;
+  }
+
+  .step-num-badge {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 11px !important;
+  }
+
+  .step-title {
+    font-size: 13.5px !important;
+  }
+
+  .step-desc {
+    font-size: 12px !important;
+  }
+
+  .step-breakdown-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .step-subtable {
+    min-width: 320px;
+  }
+
+  /* Tab 2: ⚙️ 供暖期与时间参数管控 */
+  .biz-date-form-row {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .date-picker-field,
+  .date-status-card {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .date-picker-wrap {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .highlight-date-input {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+
+  .season-control-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .season-safety-notice {
+    padding: 12px 14px !important;
+  }
+
+  .safety-title {
+    font-size: 13.5px !important;
+  }
+
+  .safety-list {
+    font-size: 12px !important;
+    padding-left: 16px;
+  }
+
+  /* Tab 3: 📋 12345 投诉底表 (金山文档) 移动端排版 */
+  .kdocs-two-col {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .kdocs-action-bar {
+    flex-direction: column-reverse !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding-top: 12px !important;
+    margin-top: 14px !important;
+  }
+
+  .status-summary {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .status-badge {
+    width: 100% !important;
+    text-align: center;
+    padding: 6px 12px !important;
+  }
+
+  .left-actions {
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+
+  .left-actions .btn {
+    width: 100% !important;
+    height: 38px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+    padding: 0 10px !important;
+  }
+
+  .status-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .status-label {
+    width: auto !important;
+    font-size: 12px;
+  }
+
+  .status-val {
+    font-size: 12.5px;
+  }
+
+  .preview-metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .metric-mini-card {
+    padding: 8px 10px !important;
+  }
+
+  .m-val {
+    font-size: 15px !important;
+  }
+
+  .kdocs-guide-steps {
+    padding-left: 16px;
+    font-size: 12.5px !important;
+    line-height: 1.6;
+  }
+
+  /* Tab 5: 🏢 供热单位与组织架构 2 列紧凑排布 */
+  .entities-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .entity-card {
+    padding: 10px 8px !important;
+    gap: 4px !important;
+  }
+
+  .entity-name {
+    font-size: 13px !important;
+  }
+
+  .entity-code {
+    font-size: 11px !important;
+  }
+
+  .entity-type-badge {
+    font-size: 10px !important;
+  }
+
+  /* Tab 6: 💻 原始配置代码盒 */
+  .json-code-box {
+    padding: 10px !important;
+    font-size: 11px !important;
+    max-height: 320px !important;
+  }
+}
+
+/* 针对更极窄手机屏幕 (<= 420px，如 iPhone SE, 375px 小屏) 的细节微调 */
+@media (max-width: 420px) {
+  .tube-page-main {
+    padding: 8px 8px 40px !important;
+  }
+
+  .premium-topbar h2 {
+    font-size: 16.5px !important;
+  }
+
+  .topbar-actions .btn {
+    font-size: 12px !important;
+    padding: 0 4px !important;
+  }
+
+  .meta-dashboard {
+    gap: 6px !important;
+  }
+
+  .meta-dashboard .meta-card {
+    padding: 6px 8px !important;
+  }
+
+  .meta-value {
+    font-size: 14px !important;
+  }
+
+  .matrix-8-windows {
+    gap: 6px !important;
+  }
+
+  .win-val {
+    font-size: 15px !important;
+  }
+
+  .category-pill {
+    padding: 4px 9px !important;
+    font-size: 11.5px !important;
+  }
 }
 </style>

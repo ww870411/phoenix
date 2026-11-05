@@ -21,6 +21,7 @@
       </div>
       <div class="topbar__actions">
         <div class="topbar__status-row">
+          <span v-if="!canSubmitCurrentProject" class="submit-time" role="status">只读查看：当前账号不可修改或提交数据</span>
           <span class="submit-time" v-if="submitTime">最近提交：{{ submitTime }}</span>
           <input
             v-if="shouldShowSheetValidationToggle"
@@ -537,6 +538,7 @@ const isDailyPage = computed(() => {
 
 const userGroup = computed(() => auth.user?.group ?? '')
 const normalizedGroup = computed(() => userGroup.value.toLowerCase())
+const canSubmitCurrentProject = computed(() => auth.canSubmitFor(projectKey));
 const isUnitScopedEditor = computed(() => normalizedGroup.value === 'unit_admin' || normalizedGroup.value === 'unit_filler')
 const isGlobalAdmin = computed(() => normalizedGroup.value === 'global_admin')
 const isGroupAdminOrHigher = computed(() => normalizedGroup.value === 'global_admin' || normalizedGroup.value === 'group_admin')
@@ -603,7 +605,8 @@ let loadGeneration = 0;
 let internalDateChange = false;
 const currentEntryContext = computed(() => entryContextKey(activeSheetKey.value, bizDate.value, pageConfig.value));
 const entryDataReady = computed(() => !isLoadingTemplate.value && !entryLoadError.value && loadedEntryContext.value === currentEntryContext.value);
-const entryLocked = computed(() => !entryDataReady.value || isPreparingSubmission.value || isSubmitting.value || efficiencyUploading.value);
+// 页面访问与写入授权分别判断：无提交权限时，网格编辑和回填入口均保持只读。
+const entryLocked = computed(() => !canSubmitCurrentProject.value || !entryDataReady.value || isPreparingSubmission.value || isSubmitting.value || efficiencyUploading.value);
 
 // --- 本单位分析启用开关 ---
 const UNIT_ANALYSIS_DEFAULT_ENABLED = new Set([
@@ -829,7 +832,6 @@ const sheetValidationToggleDisabled = computed(
 );
 
 const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
-const canSubmitCurrentProject = computed(() => auth.canSubmitFor(projectKey));
 const submitDisabled = computed(() => !canSubmitCurrentProject.value || isReadOnlyForDate.value);
 const submitButtonDisabled = computed(() => submitDisabled.value || entryLocked.value || hasBlockingValidation.value);
 
@@ -2670,6 +2672,7 @@ function triggerComplaintUpload() {
 }
 
 async function onComplaintFileSelected(event) {
+  if (entryLocked.value) return
   const files = event?.target?.files
   if (!files || !files.length) return
   const file = files[0]
@@ -2823,7 +2826,7 @@ function downloadComplaintBlob(blob, filename) {
 
 // --- 能效报表上传与回填（支持北海、香海、供热公司） ---
 function triggerEfficiencyUpload() {
-  if (efficiencyUploading.value) return
+  if (entryLocked.value) return
   if (efficiencyFileInputRef.value) {
     efficiencyFileInputRef.value.value = ''
     efficiencyFileInputRef.value.click()
@@ -2831,6 +2834,7 @@ function triggerEfficiencyUpload() {
 }
 
 async function onEfficiencyFileSelected(event) {
+  if (entryLocked.value) return
   const files = event?.target?.files
   if (!files || !files.length) return
   const file = files[0]
@@ -2910,6 +2914,7 @@ function isPeerColumnForTable(colIdx, tableCols, baseCols = null) {
 }
 
 async function applyEfficiencyDataToSheets(sheetsData) {
+  if (!canSubmitCurrentProject.value) return
   if (!sheetsData || typeof sheetsData !== 'object') return
 
   saveCurrentSheetToCache(activeSheetKey.value)

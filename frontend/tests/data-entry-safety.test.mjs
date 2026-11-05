@@ -23,6 +23,50 @@ function deferred() {
 }
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
+test('只读账号加载完成仍锁定所有列，授权编辑账号保持可编辑列', () => {
+  const state = {
+    computed: getter => ({ get value() { return getter() } }),
+    canSubmitCurrentProject: ref(false), entryDataReady: ref(true),
+    isPreparingSubmission: ref(false), isSubmitting: ref(false), efficiencyUploading: ref(false),
+    isReadOnlyForDate: ref(false), isGlobalAdmin: ref(false), readOnlyThreshold: ref(1),
+    gridColumns: ref(['指标', '单位', '本期', '同期', '备注'].map(name => ({ name, readonly: false }))),
+    isPeerColumnIndex: index => index === 3,
+  }
+  const view = functions(state, ['entryLocked', 'applyReadonlyToColumns'])
+  assert.equal(view.entryLocked.value, true)
+  view.applyReadonlyToColumns()
+  assert.ok(state.gridColumns.value.every(column => column.readonly))
+  state.canSubmitCurrentProject.value = true
+  assert.equal(view.entryLocked.value, false)
+  view.applyReadonlyToColumns()
+  assert.deepEqual(state.gridColumns.value.map(column => column.readonly), [true, true, false, true, false])
+  state.isReadOnlyForDate.value = true
+  view.applyReadonlyToColumns()
+  assert.ok(state.gridColumns.value.every(column => column.readonly))
+})
+
+test('只读状态拒绝编辑事件、上传回填及单表批量提交，保留网格原值', async () => {
+  const state = {
+    entryLocked: ref(true), canSubmitCurrentProject: ref(false),
+    complaintFilling: ref(false),
+    gridSource: ref([{ c2: 10 }]), dirtySheets: new Set(),
+    showSubmitFeedback() {},
+  }
+  const view = functions(state, ['handleAfterEdit', 'triggerEfficiencyUpload', 'onEfficiencyFileSelected',
+    'onComplaintFileSelected', 'applyEfficiencyDataToSheets', 'fillComplaintData', 'onSubmit', 'onSubmitAll'])
+  view.handleAfterEdit({ detail: { rowIndex: 0, prop: 'c2', val: 99 } })
+  view.triggerEfficiencyUpload()
+  const event = { get target() { throw Error('只读账号不应读取上传文件') } }
+  await view.onEfficiencyFileSelected(event)
+  await view.onComplaintFileSelected(event)
+  await view.applyEfficiencyDataToSheets({ A: { cells: [{ value: 99 }] } })
+  await view.fillComplaintData()
+  await view.onSubmit()
+  await view.onSubmitAll()
+  assert.deepEqual(state.gridSource.value, [{ c2: 10 }])
+  assert.equal(state.dirtySheets.size, 0)
+})
+
 function loadState() {
   const state = {
     projectKey: 'p', loadGeneration: 0, internalDateChange: false,
@@ -31,6 +75,7 @@ function loadState() {
     loadedEntryContext: ref(null), entryLoadError: ref(''), isDailyPage: ref(true),
     linkageMap: ref(new Map()), baseColumns: ref([]), sheetName: ref(''), unitName: ref(''), unitId: ref(''),
     columns: ref([]), rows: ref([]), templateType: ref('standard'), validationEnabled: ref(true),
+    complaintStats: ref(null), complaintAutofilledCells: ref(new Set()), isComplaintModalOpen: ref(false),
     validationExplanationMap: ref(new Map()), templateValidationRaw: ref(null), latestRequestId: ref(''),
     gridColumns: ref([]), gridSource: ref([]), readOnlyThreshold: ref(1), isReadOnlyForDate: ref(false),
     templateDicts: ref({}), clearRefreshCountdown() {}, nextTick: async () => {},

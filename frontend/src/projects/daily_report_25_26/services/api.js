@@ -127,6 +127,15 @@ export async function fetchDailyBrief(showDate = '', { signal } = {}) {
   return response.json()
 }
 
+export async function fetchPeriodReport(params = {}, { signal } = {}) {
+  const query = new URLSearchParams(params)
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report?${query}`, {
+    headers: attachAuthHeaders(), signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '生成生产运行汇报失败'))
+  return response.json()
+}
+
 function buildDev8001FallbackUrl(url) {
   const rawUrl = String(url || '')
   if (!rawUrl) return ''
