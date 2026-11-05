@@ -50,23 +50,26 @@ export function generateChapterNarrative(data) {
   const days = data.meta?.days || 7
 
   // 1. 第一章：基本概况
-  const avgTemp = weather.avgTemp ?? -6.71
-  const minTemp = weather.minTempMainCity || '-15.0℃'
-  const tempDiffYoY = weather.yoyDiff ?? -8.85
-  const tempDiffMoM = weather.momDiff ?? -6.84
+  const avgTemp = weather.avgTemp != null ? Number(weather.avgTemp) : null
+  const minTemp = weather.minTempMainCity || (weather.minTemp != null ? `${weather.minTemp}℃` : '—')
+  const tempDiffYoY = weather.yoyDiff != null ? Number(weather.yoyDiff) : null
+  const tempDiffMoM = weather.momDiff != null ? Number(weather.momDiff) : null
 
   // 判断气温基调（严寒 / 平稳 / 偏暖）
   let weatherTone = ''
   let weatherStory = ''
-  if (avgTemp <= -5 || tempDiffYoY <= -3) {
+  if (avgTemp == null) {
+    weatherTone = '气象平稳与常态保供'
+    weatherStory = `本统计周期（共${days}天）内，主城区气温运行平稳，全集团生产运行平稳有序。`
+  } else if (avgTemp <= -5 || (tempDiffYoY != null && tempDiffYoY <= -3)) {
     weatherTone = '极寒低温保供'
-    weatherStory = `本统计周期（共${days}天）内，主城区遭遇强降温天气，最低气温下探至 <span class="doc-key-num">${minTemp}</span>，周期平均气温 <span class="doc-key-num">${avgTemp}℃</span>，较去年同期偏低 <span class="doc-key-num">${Math.abs(tempDiffYoY)}℃</span>${hasPrev ? `，环比上周下降 <span class="doc-key-num">${Math.abs(tempDiffMoM)}℃</span>` : ''}。全网供暖热负荷处于顶峰承压运行状态。`
-  } else if (avgTemp >= 2 || tempDiffYoY >= 3) {
+    weatherStory = `本统计周期（共${days}天）内，主城区遭遇强降温天气，最低气温下探至 <span class="doc-key-num">${minTemp}</span>，周期平均气温 <span class="doc-key-num">${avgTemp}℃</span>${tempDiffYoY != null ? `，较去年同期偏低 <span class="doc-key-num">${Math.abs(tempDiffYoY)}℃</span>` : ''}${hasPrev && tempDiffMoM != null ? `，环比上周下降 <span class="doc-key-num">${Math.abs(tempDiffMoM)}℃</span>` : ''}。全网供暖热负荷处于顶峰承压运行状态。`
+  } else if (avgTemp >= 2 || (tempDiffYoY != null && tempDiffYoY >= 3)) {
     weatherTone = '气温回暖与精细节煤'
-    weatherStory = `本统计周期（共${days}天）内，主城区气象条件相对温和，平均气温回升至 <span class="doc-key-num">${avgTemp}℃</span>，较去年同期偏高 <span class="doc-key-num">${Math.abs(tempDiffYoY)}℃</span>${hasPrev ? `，环比变动 <span class="doc-key-num">${tempDiffMoM > 0 ? '+' : ''}${tempDiffMoM}℃</span>` : ''}。各单位抓住升温窗口，积极优化供热曲线并下调运行负荷。`
+    weatherStory = `本统计周期（共${days}天）内，主城区气象条件相对温和，平均气温回升至 <span class="doc-key-num">${avgTemp}℃</span>${tempDiffYoY != null ? `，较去年同期偏高 <span class="doc-key-num">${Math.abs(tempDiffYoY)}℃</span>` : ''}${hasPrev && tempDiffMoM != null ? `，环比变动 <span class="doc-key-num">${tempDiffMoM > 0 ? '+' : ''}${tempDiffMoM}℃</span>` : ''}。各单位抓住升温窗口，积极优化供热曲线并下调运行负荷。`
   } else {
     weatherTone = '气象平稳与常态保供'
-    weatherStory = `本统计周期（共${days}天）内，主城区气温运行平稳，平均气温为 <span class="doc-key-num">${avgTemp}℃</span>，较去年同期差异 <span class="doc-key-num">${tempDiffYoY > 0 ? '+' : ''}${tempDiffYoY}℃</span>${hasPrev ? `，环比变动 <span class="doc-key-num">${tempDiffMoM > 0 ? '+' : ''}${tempDiffMoM}℃</span>` : ''}。全集团生产运行平稳有序。`
+    weatherStory = `本统计周期（共${days}天）内，主城区气温运行平稳，平均气温为 <span class="doc-key-num">${avgTemp}℃</span>${tempDiffYoY != null ? `，较去年同期差异 <span class="doc-key-num">${tempDiffYoY > 0 ? '+' : ''}${tempDiffYoY}℃</span>` : ''}${hasPrev && tempDiffMoM != null ? `，环比变动 <span class="doc-key-num">${tempDiffMoM > 0 ? '+' : ''}${tempDiffMoM}℃</span>` : ''}。全集团生产运行平稳有序。`
   }
 
   // 判断能耗与利润表现
@@ -434,15 +437,16 @@ export function assemblePeriodPresentation(apiReport) {
   const coal = findMetric('consumption_std_coal')
   const heat = findMetric('consumption_outer_purchased_heat')
   const income = findMetric('eco_direct_income')
+  const incomePower = findMetric('eco_power_supply_income')
+  const incomeHeating = findMetric('eco_heating_supply_income')
+  const incomeHotWater = findMetric('eco_hot_water_supply_income')
+  const incomeSteam = findMetric('eco_steam_supply_income')
   const profit = findMetric('eco_marginal_profit')
   const profitComp = findMetric('eco_comparable_marginal_profit')
-  const coalCost = findMetric('eco_coal_cost')
-  const powerCost = findMetric('eco_purchased_power_cost')
-  const waterCost = findMetric('eco_purchased_water_cost')
-  const auxCost = findMetric('eco_measurable_auxiliary_materials')
-  const powerGen = findMetric('amount_power_generation')
-  const hotWaterSales = findMetric('amount_hot_water_sales')
-  const steamSales = findMetric('amount_steam_sales')
+  const costCoal = findMetric('eco_coal_cost')
+  const costPower = findMetric('eco_purchased_power_cost')
+  const costWater = findMetric('eco_purchased_water_cost')
+  const costAux = findMetric('eco_measurable_auxiliary_materials')
 
   const rateHeat = findMetric('rate_heat_per_10k_m2')
   const ratePower = findMetric('rate_power_per_10k_m2')
@@ -450,44 +454,62 @@ export function assemblePeriodPresentation(apiReport) {
 
   const groupVal = (metric, field) => metric?.rows?.[0]?.[field] ?? null
 
+  const sumGroupCost = (field) => {
+    let s = 0
+    let has = false
+    ;[costCoal, costPower, costWater, costAux].forEach(m => {
+      const v = groupVal(m, field)
+      if (v != null) {
+        s += v
+        has = true
+      }
+    })
+    return has ? Number(s.toFixed(2)) : null
+  }
+
+  const costTotalCur = sumGroupCost('curr')
+  const costTotalSync = sumGroupCost('sync')
+  const costTotalPrev = hasPrev ? sumGroupCost('prev') : null
+  const costTotalPlan = sumGroupCost('plan')
+
   // 1. KPI 计算
   const coalTotal = groupVal(coal, 'curr')
   const coalSync = groupVal(coal, 'sync')
-  const coalPrev = groupVal(coal, 'prev')
-  const coalYoYDiff = coalTotal != null && coalSync != null ? coalTotal - coalSync : null
+  const coalPrev = hasPrev ? groupVal(coal, 'prev') : null
+  const coalYoYDiff = coalTotal != null && coalSync != null ? Number((coalTotal - coalSync).toFixed(2)) : null
   const coalYoYRate = coalSync ? reportRate(((coalYoYDiff / coalSync) * 100)) : '—'
 
   const revTotal = groupVal(income, 'curr')
   const revSync = groupVal(income, 'sync')
-  const revPrev = groupVal(income, 'prev')
-  const revYoYDiff = revTotal != null && revSync != null ? revTotal - revSync : null
+  const revPrev = hasPrev ? groupVal(income, 'prev') : null
+  const revYoYDiff = revTotal != null && revSync != null ? Number((revTotal - revSync).toFixed(2)) : null
   const revYoYRate = revSync ? reportRate(((revYoYDiff / revSync) * 100)) : '—'
 
   const pftActual = groupVal(profit, 'curr')
   const pftSync = groupVal(profit, 'sync')
-  const pftPrev = groupVal(profit, 'prev')
-  const pftYoYDiff = pftActual != null && pftSync != null ? pftActual - pftSync : null
+  const pftPrev = hasPrev ? groupVal(profit, 'prev') : null
+  const pftYoYDiff = pftActual != null && pftSync != null ? Number((pftActual - pftSync).toFixed(2)) : null
   const pftYoYRate = pftSync ? reportRate(((pftYoYDiff / Math.abs(pftSync)) * 100)) : '—'
 
   const pftCompVal = groupVal(profitComp, 'curr')
   const pftCompSync = groupVal(profitComp, 'sync')
-  const pftCompDiff = pftCompVal != null && pftCompSync != null ? pftCompVal - pftCompSync : null
+  const pftCompDiff = pftCompVal != null && pftCompSync != null ? Number((pftCompVal - pftCompSync).toFixed(2)) : null
 
   // 2. 标煤与外购热表组装
   const coalRows = (coal?.rows || []).map((r, i) => {
     const isTotal = i === 0
-    const diff = r.curr != null && r.sync != null ? r.curr - r.sync : null
+    const diff = r.curr != null && r.sync != null ? Number((r.curr - r.sync).toFixed(2)) : null
     const rate = r.sync ? reportRate(((diff / r.sync) * 100)) : '—'
-    const momDiff = hasPrev && r.curr != null && r.prev != null ? r.curr - r.prev : null
+    const momDiff = hasPrev && r.curr != null && r.prev != null ? Number((r.curr - r.prev).toFixed(2)) : null
     const momRate = hasPrev && r.prev ? reportRate(((momDiff / r.prev) * 100)) : '—'
     const note = r.name.includes('北方') ? '3炉2机未变' : ''
     return {
       name: r.name,
       unit: '吨',
       curr: r.curr,
-      plan: r.curr != null ? Math.round(r.curr * 0.82) : null,
+      plan: r.plan != null ? r.plan : null,
       sync: r.sync,
-      prev: r.prev,
+      prev: hasPrev ? r.prev : null,
       yoy: diff,
       mom: momDiff,
       yoyRate: rate,
@@ -500,17 +522,17 @@ export function assemblePeriodPresentation(apiReport) {
   // 补入庄河外购热
   const zhuangheHeat = heat?.rows?.find(r => r.name.includes('庄河')) || heat?.rows?.[0]
   if (zhuangheHeat) {
-    const zhDiff = zhuangheHeat.curr != null && zhuangheHeat.sync != null ? zhuangheHeat.curr - zhuangheHeat.sync : null
+    const zhDiff = zhuangheHeat.curr != null && zhuangheHeat.sync != null ? Number((zhuangheHeat.curr - zhuangheHeat.sync).toFixed(2)) : null
     const zhRate = zhuangheHeat.sync ? reportRate(((zhDiff / zhuangheHeat.sync) * 100)) : '—'
-    const zhMomDiff = hasPrev && zhuangheHeat.curr != null && zhuangheHeat.prev != null ? zhuangheHeat.curr - zhuangheHeat.prev : null
+    const zhMomDiff = hasPrev && zhuangheHeat.curr != null && zhuangheHeat.prev != null ? Number((zhuangheHeat.curr - zhuangheHeat.prev).toFixed(2)) : null
     const zhMomRate = hasPrev && zhuangheHeat.prev ? reportRate(((zhMomDiff / zhuangheHeat.prev) * 100)) : '—'
     coalRows.push({
       name: '庄河环海(外购热)',
       unit: 'GJ',
       curr: zhuangheHeat.curr,
-      plan: zhuangheHeat.curr != null ? Math.round(zhuangheHeat.curr * 0.75) : null,
+      plan: zhuangheHeat.plan != null ? zhuangheHeat.plan : null,
       sync: zhuangheHeat.sync,
-      prev: zhuangheHeat.prev,
+      prev: hasPrev ? zhuangheHeat.prev : null,
       yoy: zhDiff,
       mom: zhMomDiff,
       yoyRate: zhRate,
@@ -522,17 +544,18 @@ export function assemblePeriodPresentation(apiReport) {
   // 3. 产销边际利润明细表组装
   const calcRowDiff = (m, name, isHeader = false, isSub = false, inChart = false) => {
     const curr = groupVal(m, 'curr')
+    const plan = groupVal(m, 'plan')
     const sync = groupVal(m, 'sync')
-    const prev = groupVal(m, 'prev')
-    const yoy = curr != null && sync != null ? curr - sync : null
+    const prev = hasPrev ? groupVal(m, 'prev') : null
+    const yoy = curr != null && sync != null ? Number((curr - sync).toFixed(2)) : null
     const rate = sync ? reportRate((yoy / Math.abs(sync)) * 100) : '—'
     return {
       name,
       unit: '万元',
-      curr,
-      plan: curr != null ? Math.round(curr * 0.95) : null,
-      sync,
-      prev,
+      curr: curr != null ? Number(curr.toFixed(2)) : null,
+      plan: plan != null ? Number(plan.toFixed(2)) : null,
+      sync: sync != null ? Number(sync.toFixed(2)) : null,
+      prev: prev != null ? Number(prev.toFixed(2)) : null,
       yoy,
       rate,
       isHeader,
@@ -543,14 +566,27 @@ export function assemblePeriodPresentation(apiReport) {
 
   const profitRows = [
     calcRowDiff(income, '直接收入', true, false, true),
-    calcRowDiff(powerGen, '其中：电收入', false, true, false),
-    calcRowDiff(hotWaterSales, '高温水收入', false, true, false),
-    calcRowDiff(steamSales, '售汽量收入', false, true, false),
-    calcRowDiff(coalCost, '直接成本', true, false, true),
-    calcRowDiff(coalCost, '其中：煤成本', false, true, false),
-    calcRowDiff(powerCost, '电成本', false, true, false),
-    calcRowDiff(waterCost, '水成本', false, true, false),
-    calcRowDiff(auxCost, '可计量辅材', false, true, false),
+    calcRowDiff(incomePower, '其中：售电收入', false, true, false),
+    calcRowDiff(incomeHeating, '供暖收入', false, true, false),
+    calcRowDiff(incomeHotWater, '售高温水收入', false, true, false),
+    calcRowDiff(incomeSteam, '售汽收入', false, true, false),
+    {
+      name: '直接成本',
+      unit: '万元',
+      curr: costTotalCur,
+      plan: costTotalPlan,
+      sync: costTotalSync,
+      prev: costTotalPrev,
+      yoy: costTotalCur != null && costTotalSync != null ? Number((costTotalCur - costTotalSync).toFixed(2)) : null,
+      rate: costTotalSync ? reportRate(((costTotalCur - costTotalSync) / Math.abs(costTotalSync)) * 100) : '—',
+      isHeader: true,
+      isSub: false,
+      inChart: true
+    },
+    calcRowDiff(costCoal, '其中：煤成本', false, true, false),
+    calcRowDiff(costPower, '外购电成本', false, true, false),
+    calcRowDiff(costWater, '购水成本', false, true, false),
+    calcRowDiff(costAux, '可计量辅材', false, true, false),
     calcRowDiff(profit, '产销边际利润（实际）', true, false, true),
     calcRowDiff(profitComp, '可比煤价边际利润（集团）', true, false, true)
   ]
@@ -558,15 +594,15 @@ export function assemblePeriodPresentation(apiReport) {
   // 追加各单位可比利润
   if (profitComp?.rows?.length > 1) {
     profitComp.rows.slice(1).forEach(r => {
-      const yoy = r.curr != null && r.sync != null ? r.curr - r.sync : null
+      const yoy = r.curr != null && r.sync != null ? Number((r.curr - r.sync).toFixed(2)) : null
       const rate = r.sync ? reportRate((yoy / Math.abs(r.sync)) * 100) : '—'
       profitRows.push({
         name: r.name,
         unit: '万元',
-        curr: r.curr,
-        plan: r.curr != null ? Math.round(r.curr * 0.9) : null,
-        sync: r.sync,
-        prev: r.prev,
+        curr: r.curr != null ? Number(r.curr.toFixed(2)) : null,
+        plan: r.plan != null ? Number(r.plan.toFixed(2)) : null,
+        sync: r.sync != null ? Number(r.sync.toFixed(2)) : null,
+        prev: hasPrev && r.prev != null ? Number(r.prev.toFixed(2)) : null,
         yoy,
         rate,
         isUnitComp: true
@@ -576,15 +612,15 @@ export function assemblePeriodPresentation(apiReport) {
 
   // 4. 三项单耗组装
   const buildUnitRows = metric => (metric?.rows || []).map((r, i) => {
-    const diff = r.curr != null && r.sync != null ? r.curr - r.sync : null
+    const diff = r.curr != null && r.sync != null ? Number((r.curr - r.sync).toFixed(2)) : null
     const rate = r.sync ? reportRate((diff / r.sync) * 100) : '—'
     const exclude = r.name.includes('电锅炉') && r.curr > 10000
     return {
       name: r.name,
-      curr: r.curr,
-      plan: r.curr != null ? Math.round(r.curr * 0.95) : null,
-      sync: r.sync,
-      prev: r.prev,
+      curr: r.curr != null ? Number(r.curr.toFixed(2)) : null,
+      plan: r.plan != null ? Number(r.plan.toFixed(2)) : null,
+      sync: r.sync != null ? Number(r.sync.toFixed(2)) : null,
+      prev: hasPrev && r.prev != null ? Number(r.prev.toFixed(2)) : null,
       diff,
       rate,
       isTotal: i === 0,
@@ -629,36 +665,45 @@ export function assemblePeriodPresentation(apiReport) {
       prevStart: apiReport.prevStart,
       prevEnd: apiReport.prevEnd
     },
-    weather: {
-      minTempMainCity: '-15.0℃',
-      avgTemp: -6.71,
-      yoyDiff: -8.85,
-      momDiff: -6.84
+    weather: apiReport.weather || {
+      avgTemp: null,
+      minTemp: null,
+      maxTemp: null,
+      minTempMainCity: '—',
+      peerAvgTemp: null,
+      prevAvgTemp: null,
+      yoyDiff: null,
+      momDiff: null
     },
     kpis: {
-      coalTotal: coalTotal ?? DEFAULT_PERIOD_MOCK.kpis.coalTotal,
-      coalPlan: Math.round((coalTotal || 56483) * 0.85),
-      coalSync: coalSync ?? DEFAULT_PERIOD_MOCK.kpis.coalSync,
-      coalPrev: coalPrev ?? DEFAULT_PERIOD_MOCK.kpis.coalPrev,
-      coalYoYDiff: coalYoYDiff ?? DEFAULT_PERIOD_MOCK.kpis.coalYoYDiff,
+      coalTotal,
+      coalPlan: groupVal(coal, 'plan'),
+      coalSync,
+      coalPrev,
+      coalYoYDiff,
       coalYoYRate,
-      coalComparableInc: coalYoYDiff ? Math.round(coalYoYDiff * 1.1) : 19972,
-      coalMoMDiff: hasPrev && coalTotal != null && coalPrev != null ? coalTotal - coalPrev : null,
+      coalComparableInc: coalYoYDiff,
+      coalMoMDiff: hasPrev && coalTotal != null && coalPrev != null ? Number((coalTotal - coalPrev).toFixed(2)) : null,
       coalMoMRate: hasPrev && coalPrev ? reportRate(((coalTotal - coalPrev) / coalPrev) * 100) : '—',
-      revenueTotal: revTotal ?? DEFAULT_PERIOD_MOCK.kpis.revenueTotal,
-      revenuePlan: Math.round((revTotal || 8349) * 0.95),
-      revenueSync: revSync ?? DEFAULT_PERIOD_MOCK.kpis.revenueSync,
-      revenuePrev: revPrev ?? DEFAULT_PERIOD_MOCK.kpis.revenuePrev,
-      revenueYoYDiff: revYoYDiff ?? DEFAULT_PERIOD_MOCK.kpis.revenueYoYDiff,
+      revenueTotal: revTotal,
+      revenuePlan: groupVal(income, 'plan'),
+      revenueSync: revSync,
+      revenuePrev: revPrev,
+      revenueYoYDiff: revYoYDiff,
       revenueYoYRate: revYoYRate,
-      profitActual: pftActual ?? DEFAULT_PERIOD_MOCK.kpis.profitActual,
-      profitPlan: Math.round((pftActual || 2761) * 1.05),
-      profitSync: pftSync ?? DEFAULT_PERIOD_MOCK.kpis.profitSync,
-      profitPrev: pftPrev ?? DEFAULT_PERIOD_MOCK.kpis.profitPrev,
-      profitYoYDiff: pftYoYDiff ?? DEFAULT_PERIOD_MOCK.kpis.profitYoYDiff,
+      costTotal: costTotalCur,
+      costPlan: costTotalPlan,
+      costSync: costTotalSync,
+      costPrev: costTotalPrev,
+      profitActual: pftActual,
+      profitPlan: groupVal(profit, 'plan'),
+      profitSync: pftSync,
+      profitPrev: pftPrev,
+      profitYoYDiff: pftYoYDiff,
       profitYoYRate: pftYoYRate,
-      profitComparable: pftCompVal ?? DEFAULT_PERIOD_MOCK.kpis.profitComparable,
-      profitComparableYoYDiff: pftCompDiff ?? DEFAULT_PERIOD_MOCK.kpis.profitComparableYoYDiff
+      profitComparable: pftCompVal,
+      profitComparableSync: pftCompSync,
+      profitComparableYoYDiff: pftCompDiff
     },
     coalTable: coalRows.length > 0 ? coalRows : DEFAULT_PERIOD_MOCK.coalTable,
     profitTable: profitRows.length > 0 ? profitRows : DEFAULT_PERIOD_MOCK.profitTable,

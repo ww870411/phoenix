@@ -814,10 +814,10 @@ function drawOverviewChart() {
   const categories = ['标煤耗量(百吨)', '直接收入', '直接成本', '实际边际利润', '可比煤价利润']
   const k = reportState.value.kpis || {}
 
-  const coalCur = k.coalTotal ? Math.round(k.coalTotal / 100) : 565
-  const coalPlan = k.coalPlan ? Math.round(k.coalPlan / 100) : 459
-  const coalSync = k.coalSync ? Math.round(k.coalSync / 100) : 392
-  const coalPrev = k.coalPrev ? Math.round(k.coalPrev / 100) : 456
+  const coalCur = k.coalTotal != null ? Math.round(k.coalTotal / 100) : null
+  const coalPlan = k.coalPlan != null ? Math.round(k.coalPlan / 100) : null
+  const coalSync = k.coalSync != null ? Math.round(k.coalSync / 100) : null
+  const coalPrev = k.coalPrev != null ? Math.round(k.coalPrev / 100) : null
 
   const series = [
     {
@@ -825,21 +825,21 @@ function drawOverviewChart() {
       type: 'bar',
       barMaxWidth: 28,
       itemStyle: { color: c.bar1, borderRadius: [4, 4, 0, 0] },
-      data: [coalCur, k.revenueTotal, 5588, k.profitActual, k.profitComparable]
+      data: [coalCur, k.revenueTotal, k.costTotal, k.profitActual, k.profitComparable]
     },
     {
       name: '本期计划',
       type: 'bar',
       barMaxWidth: 28,
       itemStyle: { color: c.bar4, borderRadius: [4, 4, 0, 0] },
-      data: [coalPlan, k.revenuePlan || 7850, 5000, k.profitPlan || 2850, 2650]
+      data: [coalPlan, k.revenuePlan, k.costPlan, k.profitPlan, null]
     },
     {
       name: '去年同期',
       type: 'bar',
       barMaxWidth: 28,
       itemStyle: { color: c.bar2, borderRadius: [4, 4, 0, 0] },
-      data: [coalSync, k.revenueSync, 4627, k.profitSync, 3211]
+      data: [coalSync, k.revenueSync, k.costSync, k.profitSync, k.profitComparableSync]
     }
   ]
 
@@ -849,7 +849,7 @@ function drawOverviewChart() {
       type: 'bar',
       barMaxWidth: 28,
       itemStyle: { color: c.bar3, borderRadius: [4, 4, 0, 0] },
-      data: [coalPrev, k.revenuePrev, 4740, k.profitPrev, 2150]
+      data: [coalPrev, k.revenuePrev, k.costPrev, k.profitPrev, null]
     })
   }
 
@@ -1140,6 +1140,9 @@ async function generateReport() {
       end: end.value,
       include_prev: String(includePrev.value)
     })
+    if (rawData.hasPrev !== undefined) {
+      includePrev.value = Boolean(rawData.hasPrev)
+    }
     reportState.value = assemblePeriodPresentation(rawData)
     currentSlide.value = 0
     renderCurrentSlideChart()

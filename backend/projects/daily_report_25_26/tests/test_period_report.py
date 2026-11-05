@@ -58,11 +58,18 @@ class PeriodReportTests(TestCase):
     def test_permission_and_bad_dates_before_database(self):
         app = FastAPI()
         app.include_router(router)
-        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_viewer')
         client = TestClient(app)
-        self.assertEqual(client.get('/period-report').status_code, 403)
+        with patch('backend.projects.daily_report_25_26.api.period_report.SessionLocal') as session:
+            for group in ('Group_viewer', 'unit_admin', 'admin', 'global_admin', 'Global_admin ', ''):
+                app.dependency_overrides[get_current_session] = lambda group=group: SimpleNamespace(group=group)
+                self.assertEqual(client.get('/period-report').status_code, 403)
+                self.assertEqual(client.get('/period-report?start=2026-11-01&end=2026-11-04').status_code, 403)
+            session.assert_not_called()
         app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Global_admin')
         with patch('backend.projects.daily_report_25_26.api.period_report.SessionLocal') as session:
+            session.return_value.__enter__.return_value.execute.return_value.scalars.return_value.all.return_value = []
+            self.assertEqual(client.get('/period-report').status_code, 200)
+            session.reset_mock()
             self.assertEqual(client.get('/period-report?start=2026-01-01').status_code, 422)
             self.assertEqual(client.get('/period-report?start=2026-02-01&end=2026-01-01').status_code, 422)
             session.assert_not_called()

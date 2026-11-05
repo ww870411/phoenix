@@ -6,7 +6,7 @@ const routes = [
   {
     path: '/projects/daily_report_25_26/pages/period_report',
     component: () => import('../projects/daily_report_25_26/pages/PeriodReportView.vue'),
-    meta: { title: '生产运行汇报' },
+    meta: { title: '生产运行汇报', globalAdminOnly: true },
   },
   {
     path: '/',
@@ -156,6 +156,12 @@ router.beforeEach(async (to) => {
   }
   if (to.path === '/projects' || to.path === '/login' || to.path === '/forbidden') {
     return true
+  }
+
+  // 使用路由元信息覆盖尾斜杠和大小写等匹配形式，仅允许精确的管理员组。
+  if (to.meta.globalAdminOnly) {
+    return auth.user?.group === 'Global_admin'
+      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'period_report')
   }
 
   // 每日简报独立校验，防止绕过入口直接输入地址。

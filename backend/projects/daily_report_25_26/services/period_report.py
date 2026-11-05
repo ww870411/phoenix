@@ -19,6 +19,10 @@ METRICS = [
     (1, 'consumption_outer_purchased_heat', '外购热量', 'GJ'),
     (1, 'consumption_natural_gas', '天然气耗量', '立方米'),
     (2, 'eco_direct_income', '直接收入', '万元'),
+    (2, 'eco_power_supply_income', '售电收入', '万元'),
+    (2, 'eco_heating_supply_income', '供暖收入', '万元'),
+    (2, 'eco_hot_water_supply_income', '售高温水收入', '万元'),
+    (2, 'eco_steam_supply_income', '售汽收入', '万元'),
     (2, 'eco_coal_cost', '煤成本', '万元'),
     (2, 'eco_purchased_power_cost', '外购电成本', '万元'),
     (2, 'eco_purchased_water_cost', '购水成本', '万元'),
@@ -37,6 +41,91 @@ def report_value(value):
     """用户确认：汇报找不到的指标按0，与现有引擎的缺项补零保持一致。"""
     result = number(value)
     return result if result is not None else 0.0
+
+
+def compute_period_weather(db, start, end, peer_start, peer_end, prev_start, prev_end, prev_valid):
+    """从数据库真实读取指定统计周期、去年同期及上期的实际气温极值与均值。"""
+    if db is None:
+        return {
+            'avgTemp': None, 'minTemp': None, 'maxTemp': None, 'minTempMainCity': '—',
+            'peerAvgTemp': None, 'prevAvgTemp': None, 'yoyDiff': None, 'momDiff': None
+        }
+    try:
+        from backend.services.heating_metrics.daily_engine import DailyDashboardEngine
+        engine = DailyDashboardEngine(db)
+        curr_rows = engine.compute_temperature_data(start, end)
+        peer_rows = engine.compute_temperature_data(peer_start, peer_end)
+        prev_rows = engine.compute_temperature_data(prev_start, prev_end) if prev_valid and prev_start and prev_end else []
+
+        curr_avgs = [r['aver_temp'] for r in curr_rows if r.get('aver_temp') is not None]
+        peer_avgs = [r['aver_temp'] for r in peer_rows if r.get('aver_temp') is not None]
+        prev_avgs = [r['aver_temp'] for r in prev_rows if r.get('aver_temp') is not None]
+
+        curr_mins = [r['min_temp'] for r in curr_rows if r.get('min_temp') is not None]
+        curr_maxs = [r['max_temp'] for r in curr_rows if r.get('max_temp') is not None]
+
+        avg_temp = round(sum(curr_avgs) / len(curr_avgs), 2) if curr_avgs else None
+        min_temp = round(min(curr_mins), 1) if curr_mins else None
+        max_temp = round(max(curr_maxs), 1) if curr_maxs else None
+
+        peer_avg = round(sum(peer_avgs) / len(peer_avgs), 2) if peer_avgs else None
+        prev_avg = round(sum(prev_avgs) / len(prev_avgs), 2) if prev_avgs else None
+
+        yoy_diff = round(avg_temp - peer_avg, 2) if avg_temp is not None and peer_avg is not None else None
+        mom_diff = round(avg_temp - prev_avg, 2) if avg_temp is not None and prev_avg is not None else None
+
+        return {
+            'avgTemp': avg_temp,
+            'minTemp': min_temp,
+            'maxTemp': max_temp,
+            'minTempMainCity': f"{min_temp}℃" if min_temp is not None else "—",
+            'peerAvgTemp': peer_avg,
+            'prevAvgTemp': prev_avg,
+            'yoyDiff': yoy_diff,
+            'momDiff': mom_diff,
+        }
+    except Exception:
+        return {
+            'avgTemp': None, 'minTemp': None, 'maxTemp': None, 'minTempMainCity': '—',
+            'peerAvgTemp': None, 'prevAvgTemp': None, 'yoyDiff': None, 'momDiff': None
+        }
+
+
+def compute_period_plans(db, start, end):
+    """从月度计划底表按周期天数合理折算本期计划值，单耗指标按目标均值。"""
+    if db is None:
+        return {}
+    try:
+        from decimal import Decimal
+        from sqlalchemy import text
+        cursor = start.replace(day=1)
+        plan_dict = {}
+        while cursor <= end:
+            cutoff = min(end, cursor.replace(day=monthrange(cursor.year, cursor.month)[1]))
+            month_days = monthrange(cursor.year, cursor.month)[1]
+            period_days = (cutoff - max(start, cursor)).days + 1
+            ratio = Decimal(period_days) / Decimal(month_days)
+
+            rows = db.execute(text("""
+                SELECT company, item, value, unit FROM paln_and_real_month_data
+                WHERE period = :period AND type = 'plan'
+            """), {'period': cursor.isoformat()}).mappings().all()
+
+            for r in rows:
+                c, it = r['company'], r['item']
+                val = r['value']
+                if val is not None:
+                    if 'rate_' in it:
+                        plan_dict[(c, it)] = float(val)
+                    else:
+                        prorated = float(Decimal(str(val)) * ratio)
+                        plan_dict[(c, it)] = plan_dict.get((c, it), 0.0) + prorated
+
+            cursor = cutoff.replace(day=1) + timedelta(days=32)
+            cursor = cursor.replace(day=1)
+        return plan_dict
+    except Exception:
+        return {}
 
 
 def validate_period(start, end):
@@ -71,10 +160,10 @@ def build_period_report(db, start, end, include_prev=True):
     days = days_between(start, end)
     prev_end = start - timedelta(days=1)
     prev_start = prev_end - timedelta(days=len(days) - 1)
-    prev_valid = include_prev and get_season_period(prev_start) == get_season_period(end)
+    prev_in_season = include_prev and get_season_period(prev_start) == get_season_period(end)
     peer_days = [get_peer_date(d) for d in days]
     windows = [('curr', start, end), ('sync', min(peer_days), max(peer_days))]
-    if prev_valid:
+    if prev_in_season:
         windows.append(('prev', prev_start, prev_end))
     engine = HeatingAnalysisEngine(db)
     keys = [m[1] for m in METRICS]
@@ -84,12 +173,29 @@ def build_period_report(db, start, end, include_prev=True):
             calculated = engine.compute_analysis_rows(company, keys, begin, finish, aggregate=True, clip_to_season=False)
             for key in keys:
                 values[side, company, key] = report_value(calculated.get(key, {}).get('value_biz_date'))
+
+    # 供暖期首周/无上期判定：若上期区间在系统内核心生产指标全为0或空，判定为无上期数据
+    has_prev_data = prev_in_season and any(
+        (values.get(('prev', 'Group', k)) or 0) > 0
+        for k in ['consumption_std_coal', 'eco_direct_income', 'amount_power_generation']
+    )
+    prev_valid = has_prev_data
+
+    # 计算真实天气与折算计划
+    peer_start_date = min(peer_days)
+    peer_end_date = max(peer_days)
+    weather = compute_period_weather(db, start, end, peer_start_date, peer_end_date, prev_start, prev_end, prev_valid)
+    period_plans = compute_period_plans(db, start, end)
+
     pages = []
     for chapter, key, label, unit in METRICS:
         rows = []
         for company in SUBJECTS:
             row = {'name': COMPANIES[company], 'company': company,
-                   **{side: values.get((side, company, key)) for side in ('curr', 'sync', 'prev')}}
+                   'curr': values.get(('curr', company, key)),
+                   'plan': round(period_plans.get((company, key)), 2) if period_plans.get((company, key)) is not None else None,
+                   'sync': values.get(('sync', company, key)),
+                   'prev': values.get(('prev', company, key)) if prev_valid else None}
             row['delta'] = comparison(row['curr'], row['sync'])['delta']
             row['missing'] = {}
             rows.append(row)
@@ -108,7 +214,7 @@ def build_period_report(db, start, end, include_prev=True):
         for item in plan['items']:
             if item['company'] not in SUBJECTS:
                 continue
-            rows.append({'name': item['company_cn'], 'plan': report_value(item['plan_value']), 'curr': report_value(item['actual_value']),
+            rows.append({'name': item['company_cn'], 'unit': '吨', 'plan': report_value(item['plan_value']), 'curr': report_value(item['actual_value']),
                          'percent': item['completion_percent'],
                          'remaining': item['remaining_value'] / remaining_days if remaining_days and item['remaining_value'] is not None else None,
                          'status': item['status']})
@@ -120,6 +226,7 @@ def build_period_report(db, start, end, include_prev=True):
         cursor = cutoff.replace(day=1) + timedelta(days=32)
         cursor = cursor.replace(day=1)
     return {'start': start.isoformat(), 'end': end.isoformat(), 'days': len(days), 'hasPrev': prev_valid,
-            'peerStart': min(peer_days).isoformat(), 'peerEnd': max(peer_days).isoformat(),
+            'peerStart': peer_start_date.isoformat(), 'peerEnd': peer_end_date.isoformat(),
             'prevStart': prev_start.isoformat() if prev_valid else None, 'prevEnd': prev_end.isoformat() if prev_valid else None,
+            'weather': weather,
             'pages': pages}

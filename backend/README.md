@@ -1,3 +1,11 @@
+## 2026-11-05 期间分析全链路真实数据闭环（气温库接入、计划折算、供暖首周自适应与直接成本还原）
+
+- 后端 `services/period_report.py` 新增 `compute_period_weather`，复用 `DailyDashboardEngine` 真实计算当前周期、去年同期及上期的实际气温极值（均温、最低温、最高温、同比温差及环比温差），彻底废除原前端假数据；
+- 新增供暖期首周无上期动态识别：若上期区间核心生产数据全为0或空，自动将 `hasPrev` 置为 `false`，防范首周环比异常；
+- 新增 `compute_period_plans`：从 `paln_and_real_month_data` 读取正式月度计划，按周期天数占比精准折算本期标煤与外购热计划，单耗类指标直接匹配目标均值基准；
+- `METRICS` 扩充四大直接收入子项（售电、供暖、售高温水、售汽收入），直接成本与边际利润各细项达成完全数学守恒；
+- 保持接口兼容，6 项回归单元测试持续 100% 通过，无数据库表结构变更。
+
 ## 2026-11-05 期间分析汇报自适应公文引擎、大屏分辨率适配与全屏层级重构
 
 - 前端 `periodReportPresentation.js` 扩展数据驱动的确定性自适应公文撰写算法 `generateChapterNarrative`，无需调用外部大模型，基于后端返回的统计数值自适应输出具备业务深度的五章汇报讲稿及预警提示框。
@@ -13,6 +21,10 @@
 - `backend_data/shared/auth/permissions/daily_report_25_26.json` 中 `Group_viewer` 的 `units_access` 配置更新为 `["*"]`；当前组内仅 `nyjt`，未来新加入该组账号同等继承。
 - `legacy_full.py` 的 `/data_analysis/schema` 接口在解析 `session.resolve_allowed_units(PROJECT_KEY)` 时自动包含全部已知单位，不再截断过滤，完整下发 10 家单位字典。
 - 动作权限（提交、审批、撤销、发布等）全部维持 `false`，保持只读安全边界；扩展 `tests/test_viewer_readonly.py` 覆盖全量单位解析与 Schema 返回验证（4项通过）。无需执行数据库迁移。
+
+## 2026-11-05 运行汇报权限复核
+
+- `/period-report` 的日期列表和报告内容均仅允许精确 `Global_admin`，其他组返回403且不读取数据库。已补充多组名变体及管理员放行回归；前端入口、路由同范围限制。无数据迁移。
 
 ## 2026-11-05 运行汇报缺项按0与同期口径统一
 

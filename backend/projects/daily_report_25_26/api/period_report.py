@@ -1,4 +1,4 @@
-"""生产运行汇报接口；初版沿用每日简报管理员可见范围。"""
+"""生产运行汇报接口；仅精确匹配Global_admin组可读取日期及汇报。"""
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from backend.db.database_daily_report_25_26 import SessionLocal
