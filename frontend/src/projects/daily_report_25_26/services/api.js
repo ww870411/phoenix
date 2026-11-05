@@ -3452,6 +3452,24 @@ export async function fetchDynamicDailyDecomposition({
   return response.json()
 }
 
+export async function fetchDynamicPlanActuals(projectKey, params, signal) {
+  const query = new URLSearchParams(params)
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dynamic_plan/actuals?${query}`, {
+    method: 'GET', headers: attachAuthHeaders(), signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '实际值读取失败'))
+  return response.json()
+}
+
+export async function fetchDynamicPlanCumulativeActuals(projectKey, params, signal) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dynamic_plan/cumulative_actuals`, {
+    method: 'POST', headers: { ...JSON_HEADERS, ...attachAuthHeaders() }, signal,
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '累计实际值读取失败'))
+  return response.json()
+}
+
 export async function fetchMonthlyCoalProgress(projectKey, bizDate, signal) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/dynamic_plan/monthly_coal_progress?biz_date=${encodeURIComponent(bizDate)}`, {
     method: 'GET', headers: attachAuthHeaders(), signal,

@@ -228,9 +228,11 @@ class HeatingAnalysisEngine:
         end_date_in: Any,
         target_company: Optional[str] = None,
         aggregate: bool = False,
+        clip_to_season: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         计算等价于 `analysis_company_daily` (start==end) 或 `analysis_company_sum` (start!=end) 的全量公司级指标。
+        clip_to_season 默认保留供暖期裁剪；计划图表显式关闭以统计完整自然月。
         """
         d_start = parse_date(start_date_in)
         d_end = parse_date(end_date_in)
@@ -239,7 +241,7 @@ class HeatingAnalysisEngine:
         requested_end = biz_end
         peer_start = get_peer_date(biz_start)
         peer_end = get_peer_date(biz_end)
-        if biz_start != biz_end or aggregate:
+        if clip_to_season and (biz_start != biz_end or aggregate):
             # 单日明细不裁剪；区间累计只使用各期独立的统计日期。
             from .season_utils import clip_statistical_range
             biz_start, biz_end = clip_statistical_range(biz_start, biz_end, get_season_period(requested_end))
@@ -598,6 +600,7 @@ class HeatingAnalysisEngine:
         end_date_in: Any,
         target_group: Optional[str] = None,
         aggregate: bool = False,
+        clip_to_season: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         计算等价于 `analysis_groups_daily` 或 `analysis_groups_sum` 的分组指标。
@@ -614,7 +617,7 @@ class HeatingAnalysisEngine:
         peer_period = get_season_period(peer_end)
 
         # 1. 递归获取各基础公司的全量指标
-        company_rows = self.compute_company_analysis(biz_start, biz_end, None, aggregate=aggregate)
+        company_rows = self.compute_company_analysis(biz_start, biz_end, None, aggregate=aggregate, clip_to_season=clip_to_season)
         const_biz, const_peer = self.fetch_constants(biz_period, peer_period)
 
         # 整理公司指标哈希表: { (company, item): (val_biz, val_peer, item_cn, unit) }
@@ -1174,10 +1177,12 @@ class HeatingAnalysisEngine:
         end_date: date,
         sheet_name: Optional[str] = None,
         aggregate: bool = False,
+        clip_to_season: bool = True,
     ) -> Dict[str, Dict[str, Any]]:
         """
         高精细对齐并替代 `_query_analysis_rows`。
         返回：{ item_key: { "company": ..., "item": ..., "value_biz_date": ..., "value_peer_date": ... } }
+        clip_to_season=False 仅供需要自然日期区间的调用方使用，不改变原有默认统计口径。
         """
         if not metric_keys:
             return {}
@@ -1187,9 +1192,9 @@ class HeatingAnalysisEngine:
         if sheet_name in ("BeiHai_co_generation_Sheet", "BeiHai_water_boiler_Sheet") or (unit_key == "BeiHai" and sheet_name):
             all_rows = self.compute_beihai_sub_analysis(start_date, end_date, sheet_name, aggregate=aggregate)
         elif unit_key in ("ZhuChengQu", "Group"):
-            all_rows = self.compute_groups_analysis(start_date, end_date, unit_key, aggregate=aggregate)
+            all_rows = self.compute_groups_analysis(start_date, end_date, unit_key, aggregate=aggregate, clip_to_season=clip_to_season)
         else:
-            all_rows = self.compute_company_analysis(start_date, end_date, unit_key, aggregate=aggregate)
+            all_rows = self.compute_company_analysis(start_date, end_date, unit_key, aggregate=aggregate, clip_to_season=clip_to_season)
 
         res: Dict[str, Dict[str, Any]] = {}
         for r in all_rows:

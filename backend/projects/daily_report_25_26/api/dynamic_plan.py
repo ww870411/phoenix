@@ -201,6 +201,8 @@ def _format_month_label(p: str) -> str:
 )
 def get_dynamic_plan_meta():
     """返回单位清单、数据库已有的周期列表与指标分类配置"""
+    from backend.services.workflow_status import workflow_status_manager
+    published = workflow_status_manager.list_published_dates(PROJECT_KEY)
     with SessionLocal() as session:
         # 获取 26-27 供暖期的可用周期
         rows = session.execute(
@@ -232,6 +234,7 @@ def get_dynamic_plan_meta():
         "units": STANDARD_UNITS,
         "available_periods": periods,
         "available_months": months,
+        "latest_published_date": published[0] if published else None,
         "categories": categories,
         "default_range": {
             "start_month": "2026-11",
@@ -501,11 +504,63 @@ async def get_daily_decomposition_endpoint(
     from backend.services.dynamic_decomposition_service import get_dynamic_daily_decomposition
     session = SessionLocal()
     try:
-        return get_dynamic_daily_decomposition(company=company, year_month=year_month, session=session)
+        from backend.services.workflow_status import workflow_status_manager
+        result = get_dynamic_daily_decomposition(company=company, year_month=year_month, session=session)
+        published = workflow_status_manager.list_published_dates(PROJECT_KEY)
+        result['latest_published_date'] = published[0] if published else None
+        return result
     except Exception as exc:
-        return {"ok": False, "has_full_month": False, "message": f"计算动态计划日分解异常: {str(exc)}"}
+        return {"ok": False, "has_full_month": False, "message": f"逐日测算异常: {str(exc)}"}
     finally:
         session.close()
+
+
+@public_router.get('/dynamic_plan/actuals', summary='单指标日实际值或月实际累计（截止最新发布日）')
+def get_dynamic_plan_actuals_endpoint(
+    company: str = Query(...), item: str = Query(...), unit: str = Query(''),
+    start_month: str = Query(..., pattern=r'^\d{4}-\d{2}$'),
+    end_month: str = Query(..., pattern=r'^\d{4}-\d{2}$'),
+    granularity: str = Query('month', pattern='^(day|month)$'),
+):
+    from backend.services.workflow_status import workflow_status_manager
+    from backend.projects.daily_report_25_26.services.dynamic_plan_actuals import get_dynamic_plan_actuals
+    if company not in {entry['company'] for entry in STANDARD_UNITS}:
+        raise HTTPException(status_code=422, detail='未知单位')
+    published = workflow_status_manager.list_published_dates(PROJECT_KEY)
+    with SessionLocal() as session:
+        try:
+            return get_dynamic_plan_actuals(session, company, item, unit, start_month, end_month, granularity, published)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class CumulativeActualMetric(BaseModel):
+    item: str
+    unit: str = ''
+
+
+class CumulativeActualRequest(BaseModel):
+    company: str
+    year_month: str = Field(pattern=r'^\d{4}-\d{2}$')
+    metrics: List[CumulativeActualMetric]
+
+
+@public_router.post('/dynamic_plan/cumulative_actuals', summary='发布当月多指标累计实际值（只读）')
+def get_cumulative_actuals_endpoint(payload: CumulativeActualRequest):
+    from backend.services.workflow_status import workflow_status_manager
+    from backend.projects.daily_report_25_26.services.dynamic_plan_actuals import get_dynamic_plan_actuals_batch
+    if payload.company not in {entry['company'] for entry in STANDARD_UNITS}:
+        raise HTTPException(status_code=422, detail='未知单位')
+    published = workflow_status_manager.list_published_dates(PROJECT_KEY)
+    cutoff = published[0] if published else None
+    if cutoff is None or cutoff[:7] != payload.year_month:
+        return {'ok': True, 'available': False, 'company': payload.company,
+                'year_month': payload.year_month, 'latest_published_date': cutoff, 'metrics': {}}
+    with SessionLocal() as session:
+        result = get_dynamic_plan_actuals_batch(session, payload.company,
+            [{'item': metric.item, 'unit': metric.unit} for metric in payload.metrics],
+            payload.year_month, payload.year_month, 'month', published)
+    return {**result, 'available': True, 'year_month': payload.year_month}
 
 
 @public_router.get('/dynamic_plan/monthly_coal_progress', summary='静态月度及供暖期标煤计划完成情况')

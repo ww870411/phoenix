@@ -179,7 +179,7 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   data_entry: '填写并提交日报数据',
   constant_data: '维护常量指标数据',
   data_analysis: '数据自由组合提取',
-  dynamic_plan: '供暖期各单位月度计划指标图谱与多维趋势分析',
+  dynamic_plan: '基于气温情景进行计划分解测算，仅供运行分析',
   spot_electricity: '15分钟日前/实时电价与走势',
   global_management: '核心运行参数设定',
   dispatch_info: '主城区生产调度全景工况监控',
@@ -561,7 +561,7 @@ function openPage(page) {
   if (isDynamicPlan) {
     router.push({
       path: `${base}`,
-      query: { pageName: page.page_name || '计划动态分解模块' },
+      query: { pageName: '计划情景分解模型（测试）' },
     })
     return
   }

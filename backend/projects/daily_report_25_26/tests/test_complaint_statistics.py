@@ -41,9 +41,9 @@ def test_metrics_and_reconciliation():
     result = calculate(sample(), '2027-02-10')
     assert result['month_start'] == '2027-02-01'
     assert result['season_start'] == '2026-11-01'
-    assert result['group'] == {'daily_city': 5, 'daily_province': 1, 'daily_total': 6, 'daily_net': 1, 'daily_province_net': 0, 'daily_city_net': 1, 'monthly_net': 2, 'season_net': 3, 'unresolved_complaints': 1}
+    assert result['group'] == {'daily_city': 4, 'daily_province': 1, 'daily_total': 5, 'daily_net': 1, 'daily_province_net': 0, 'daily_city_net': 1, 'monthly_net': 2, 'season_net': 3, 'unresolved_complaints': 1}
     assert [c['name'] for c in result['centers']] == list(CENTERS)
-    assert result['centers'][0]['metrics']['daily_total'] == 5
+    assert result['centers'][0]['metrics']['daily_total'] == 4
     assert result['centers'][0]['metrics']['daily_net'] == 1
     assert result['centers'][0]['metrics']['unresolved_complaints'] == 1
     assert result['unmatched']['metrics']['daily_total'] == 1

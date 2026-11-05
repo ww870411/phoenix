@@ -146,6 +146,8 @@ function getGroupLabel(group) {
 }
 
 function getCurrentPageName() {
+  // 历史链接可能仍携带旧名称，情景模型统一展示当前名称。
+  if (route.path.includes('/pages/dynamic_plan') || route.path.includes('/dynamic_plan')) return '计划情景分解模型（测试）'
   if (route.query?.pageName && typeof route.query.pageName === 'string' && route.query.pageName.trim()) {
     return route.query.pageName.trim()
   }
@@ -156,7 +158,6 @@ function getCurrentPageName() {
 
   // 1. 特殊固定业务页面与工具页判定
   if (path.includes('/pages/global_management') || path.includes('/global_management')) return '全局管理中心'
-  if (path.includes('/pages/dynamic_plan') || path.includes('/dynamic_plan')) return '计划动态分解模块'
   if (path.includes('/pages/spot_electricity') || path.includes('/spot_electricity')) return '电力现货市场'
   if (path.includes('/spring-dashboard')) return '春节专刊大盘'
   if (path.includes('/import-workspace')) return '月度数据导入'

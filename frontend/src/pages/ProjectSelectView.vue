@@ -22,7 +22,7 @@
             @click="enter(project)"
           >
             <div class="card-header">{{ project.project_name }}</div>
-            <div class="name">{{ project.project_id }}</div>
+            <div class="name">{{ project.project_id === 'daily_report_25_26' ? 'daily_report_26_27' : project.project_id }}</div>
             <div class="desc">点击进入项目工作台</div>
           </div>
         </template>

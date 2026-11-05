@@ -174,7 +174,7 @@ def get_dynamic_daily_decomposition(
             "total_days": total_days,
             "available_days": len(temp_rows),
             "missing_dates": missing_dates,
-            "message": f"{year_month} 气温数据不完整（已录入 {len(temp_rows)}/{total_days} 天），缺少全月气温，无法进行动态分解。请先点击【导入35天预报】补全气温。",
+            "message": f"{year_month} 气温数据不完整（已录入 {len(temp_rows)}/{total_days} 天），缺少全月气温，无法进行逐日测算。请先点击【导入35天预报】补全气温。",
         }
 
     # 2. 计算日均温序列与 HDD20 序列

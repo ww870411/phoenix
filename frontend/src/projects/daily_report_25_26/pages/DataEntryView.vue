@@ -194,7 +194,7 @@
           <!-- 核心统计汇总表 -->
           <div class="complaint-section-header">
             <h4>单位统计汇总（点击数字可穿透查看对应明细）</h4>
-            <span class="complaint-section-hint">新口径：净投诉量为转办已办结且类型为“投诉”；省平台净投诉为 0；市平台等于净投诉量</span>
+            <span class="complaint-section-hint">新口径：省市平台总投诉量及净投诉量仅限分类为“投诉”；净投诉量须同时为转办且已办结；省平台净投诉为 0；市平台等于净投诉量</span>
           </div>
           <div class="complaint-table-wrap">
             <table class="complaint-table">
@@ -508,6 +508,7 @@ const complaintDetailRows = computed(() => {
     if (metric === 'monthly_net') return net && record.date >= data.month_start && record.date <= data.business_date
     if (metric === 'season_net') return net && record.date >= data.season_start && record.date <= data.business_date
     if (record.date !== data.business_date) return false
+    if (!isComplaint) return false
     if (metric === 'daily_city') return record.source !== '省办'
     if (metric === 'daily_province') return record.source === '省办'
     if (metric === 'daily_net' || metric === 'daily_city_net') return net

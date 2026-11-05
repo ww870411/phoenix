@@ -1,3 +1,73 @@
+## 2026-11-05 计划情景分解模型（测试）文案同步
+
+- 按用户后续要求，项目列表中的入口卡片介绍精简为“基于气温情景进行计划分解测算，仅供运行分析”；页面内部仍展示完整建模介绍及不作为下达或考核依据的说明。
+- `backend_data/shared/项目列表.json` 中 `dynamic_plan` 的名称及介绍按用户指定文案更新，明确功能仅供运行分析，不作为下达或考核依据。
+- `api/dynamic_plan.py`（项目目录下）及 `services/dynamic_decomposition_service.py` 的逐日计算错误提示使用“逐日测算”；月度正式计划及基准仍称“计划”。计算算法、数据库和接口字段不变，无需迁移；回滚本轮文案即可。
+
+## 2026-11-05 项目列表生产日报编号展示调整
+
+- 前端项目选择页按用户最新要求将生产日报卡片副标题显示为 `daily_report_26_27`。后端仍以 `daily_report_25_26` 提供项目列表、页面权限和业务接口；展示标识不参与路由或权限解析，无后端代码、接口或数据库变更，无需迁移。
+
+## 2026-11-04 庄河环海 25-26 供暖期投诉量口径修正（净投诉=已结案，剔除省民心网）
+
+- **数据迁移与脚本**：
+  - 新增庄河修正执行脚本：`backend/scripts/apply_zhuanghe_complaint_v2_migration.py`
+  - 新增生产环境庄河 SQL 补丁：`configs/migrate_25_26_zhuanghe_complaints_v2_exclude_province.sql`
+  - 新增预迁移历史备份快照：`backend_data/projects/daily_report_25_26/backup_zhuanghe_complaints_20261104_pre_exclude_province.json`
+- **修正内容与影响范围**：
+  - 针对 `daily_basic_data` 中庄河环海（`company = 'ZhuangHe'`, `sheet_name = 'ZhuangHe_Sheet'`）在 2025-11-01 至 2026-04-05（共 156 天）的历史记录：
+    1. 依据《11.4 庄河环海_25-26供暖期每日投诉统计_净投诉=已结案，去除省.xlsx》；
+    2. 净投诉量口径调整为仅计非省平台且已结案工单，剔除省民心网已结案 75 件；
+    3. 全期累计净投诉量由 172 件下调为 **97 件**；
+    4. 当日净投诉量、本月累计净投诉量、本供暖期累计净投诉量全面更新；
+    5. “其中：2.市平台净投诉量”严格联动保持等于当日净投诉量；
+    6. “其中：1.省平台净投诉量”保持恒为 0，当日省市平台投诉量保持 859 件；
+    7. 既有 `25-26_raw_*` 归档记录（936条）完好保留。
+- **验证**：逐日 156 天全量 6 项指标交叉比对 100% 吻合，单测 4 项 pytest 全部通过。
+
+## 2026-11-04 供热公司及各中心 25-26 供暖期“当日省市平台投诉量”口径修正（仅限投诉类）
+
+- **数据迁移与代码调整**：
+  - 新增迁移执行脚本：`backend/scripts/apply_complaint_v3_service_complaints_migration.py`
+  - 新增生产环境 SQL 补丁：`configs/migrate_25_26_complaints_v3_complaint_only.sql`
+  - 新增预迁移历史备份快照：`backend_data/projects/daily_report_25_26/backup_complaints_20261104_pre_v3_migration.json`
+  - 核心计算服务对齐：`backend/projects/daily_report_25_26/services/complaint_statistics.py` 中的 `daily_total`、`daily_city`、`daily_province` 统一增加 `is_complaint` 限制。
+- **修正内容与影响范围**：
+  - 依据成果表《11.4 25-26供暖期主城区及各中心投诉统计_各类投诉量仅限投诉类.xlsx》：
+    1. 供热公司总表（`GongRe_Sheet`）：156 天 `amount_daily_service_complaints` 更新，全期总投诉量由 5,696 降至 5,539 件（剔除 157 件非投诉件）；
+    2. 10 个服务中心（`GongRe_branches_detail_Sheet`）：1,560 天次 `amount_daily_service_complaints` 全量更新；
+    3. 净投诉量指标（全期累计 184 件）保持不变。
+- **验证**：逐日 156 天交叉比对 100% 吻合，单测 4 项 pytest 全部通过。
+
+## 2026-11-04 庄河环海 25-26 供暖期投诉量历史归档与新标准数据入库
+
+- **数据迁移与脚本**：
+  - 新增庄河迁移执行脚本：`backend/scripts/apply_zhuanghe_complaint_migration.py`
+  - 新增生产环境庄河 SQL 补丁：`configs/migrate_25_26_zhuanghe_complaints_production.sql`
+  - 新增预迁移历史备份快照：`backend_data/projects/daily_report_25_26/backup_zhuanghe_complaints_20261104_pre_migration.json`
+- **修正内容与影响范围**：
+  - 针对 `daily_basic_data` 中庄河环海（`company = 'ZhuangHe'`, `sheet_name = 'ZhuangHe_Sheet'`）在 2025-11-01 至 2026-04-05（共 156 天）的历史记录：
+    1. 原 6 项旧指标原子重命名添加 `25-26_raw_` 前缀归档（共 936 条）；
+    2. 基于《11.4 庄河环海_25-26供暖期每日投诉统计_完整版.xlsx》写入 6 项新标准指标（共 936 条）；
+    3. “其中：1.省平台净投诉量”全赋 0，“其中：2.市平台净投诉量”同步等于当日净投诉量。
+  - 全期累计投诉总量校准为 859 件，累计净投诉量校准为 172 件，`sum_basic_data` 动态视图实时反映同期数值。
+- **验证**：逐日 156 天全量 6 项指标交叉比对 100% 吻合，单测 4 项 pytest 全部通过。
+
+## 2026-11-04 供热公司及10中心 25-26 供暖期投诉量同期值修正（净投诉新标准）
+
+- **数据迁移与脚本**：
+  - 新增迁移执行脚本：`backend/scripts/apply_complaint_v2_migration.py`
+  - 新增生产环境 SQL 补丁：`configs/migrate_25_26_complaints_v2_new_standard.sql`
+  - 新增预迁移历史备份快照：`backend_data/projects/daily_report_25_26/backup_complaints_20261104_pre_v2_migration.json`
+- **修正内容与影响范围**：
+  - 针对 `daily_basic_data` 中 2025-11-01 至 2026-04-05（156天）的记录，全面依据新成果表《11.4 25-26供暖期主城区及各中心投诉统计_净投诉新口径.xlsx》进行修正：
+    1. 供热公司总表（`GongRe_Sheet`）：更新当日净投诉量、本月累计净投诉量、本供暖期累计净投诉量（共 468 条）；
+    2. 10 个服务中心（`GongRe_branches_detail_Sheet`）：更新三项净投诉指标（共 4,680 条）；
+    3. 市平台净投诉量（`amount_daily_city_net_complaints`）：联动更新为当日净投诉量（共 1,716 条）；
+    4. 原始 `25-26_raw_*` 归档指标完整保留不变。
+  - 供热公司全期累计净投诉量由 195 件校准为 184 件（精准剔除 11 件非投诉件），`sum_basic_data` 动态视图实时反映同期修正。
+- **验证**：全量交叉比对 100% 吻合，单测 4 项 pytest 全部通过。
+
 ## 2026-11-04 投诉统计服务净投诉量口径修正（转办已办结且类型为“投诉”）
 
 - **模块**：`backend/projects/daily_report_25_26/services/complaint_statistics.py` 及回归测试 `test_complaint_statistics.py`
@@ -12067,3 +12137,26 @@ get_season_coal_progress复用get_season_windows供暖期起止边界，查询�
 ## 2026-11-04 热网耗水图标尺整千说明
 
 - 本轮前端上下标尺上限统一向上取整至整千，万单位刻度文字最多一位小数；不修改后端数据、未填按 0 统计口径或数据库，无需迁移或重启。回滚仅涉及本轮前端标尺取整及测试。
+## 2026-11-04 计划图表单指标实际值接口
+
+- 最新逐日规则（2026-11-04）：移除 `get_dynamic_plan_actuals_batch()` 的逐日发布月份相等判断；历史月份返回该月已发生的每日实际，查询仍限定到最新发布日，未来月份返回空实际。累计专属接口的“仅发布当月可用”规则保留。更新历史月份回归，后端含月标煤测试25项通过，无迁移或数据写入。
+
+- 2026-11-04 非动态分解前端选框改名为“显示累计完成值”并移到分解开关前；仅模板调整，后端接口、统计口径和数据库无变更，无需迁移。
+
+- 2026-11-04 前端选框改名为“显示逐日实际值”，累计实际柱改为蓝色（计划柱仍为橙色）；本轮仅展示调整，后端接口、数据和聚合逻辑无变更，无需迁移。
+
+- 2026-11-04 前端二次筛选默认仅选一个指标（优先标煤耗量）；本轮仅变更前端默认选择，后端接口、聚合口径和数据库无变更，无需迁移。
+
+- 2026-11-04 累计图调整为实际聚合在左、计划聚合在右并使用橙色；此次仅变更前端顺序与配色，后端计算及接口无变更，无需迁移。
+
+- 后续扩展（最后验证日期：2026-11-04）：新增只读 `POST /api/v1/projects/daily_report_25_26/dynamic_plan/cumulative_actuals`，请求为 `{company, year_month, metrics: [{item, unit}]}`；仅最新发布业务日所在月份可用，响应含 `available`、`latest_published_date` 和各指标月实际累计。其他月份直接返回不可用，不查询底表。
+- `get_dynamic_plan_actuals_batch()` 在同一发布日快照下共用底表读取与累计公式，各指标缺报独立判定，原单指标服务委托该服务保持协议兼容。日实际接口支持历史月份并按发布日截断；月实际接口继续支持各月累计。`meta` 与 `daily_decomposition` 响应补充 `latest_published_date` 供前端决定累计选框可用性。无迁移或业务数据写入。
+- 累计与原有月标煤回归共25项通过；页面代理验证标煤耗量、供热量及热单耗批量累计与原单指标月累计一致，非发布月份累计不可用、日实际为空。
+
+- 2026-11-04 前端将一次、二次指标筛选中的“标煤耗量”置顶；此排序在前端完成，后端接口与计算口径无变更，无需迁移。
+
+- 新增 `GET /api/v1/projects/daily_report_25_26/dynamic_plan/actuals`（实际前缀沿用项目路由），参数：`company`、`item`、`unit`、`start_month`、`end_month`、`granularity=day|month`。日模式仅支持一个月；月模式按自然月独立累计，不跨月滚存。
+- `projects/daily_report_25_26/services/dynamic_plan_actuals.py` 在后端获取最新发布日并截断所有底表读取；无发布记录或目标月份晚于截止日返回空实际，不以零星入库日替代发布日。只计算所选一个指标；集团/主城区与派生指标复用 `HeatingAnalysisEngine`，缺报检查复用 `BriefEvidence`。单位统一到请求的计划单位，不能确认的单位不强行转换。
+- 底表一次按日聚合读取，在内存中分发每日与月累计公式；`HeatingAnalysisEngine` 新增默认保持既有行为的 `clip_to_season` 参数，仅本接口设为 `False` 以保留自然月完整范围。无数据库迁移或业务数据写入。
+- 最后验证日期：2026-11-04；测试文件：`projects/daily_report_25_26/tests/test_dynamic_plan_actuals.py`。实库集团2026年11月截至11月3日标煤累计4571.0395吨，与标准引擎一致。回滚时撤销本轮接口、服务和引擎参数增量，保留其他既有修改。
+

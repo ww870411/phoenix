@@ -1,5 +1,206 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-05 向各单位 filler 和 admin 开放数据查询与分析
+
+- **需求与变更**：依据用户指令，在 `backend_data/shared/auth/permissions/daily_report_25_26.json` 的 `Unit_admin`、`unit_filler`、`shoudian_filler` 三组 `page_access` 中新增 `data_analysis`。覆盖北海、香海、供热、金州、北方、金普、庄河、研究院各自的 admin/filler，以及 `shoudian_filler`，共17个现有账号；集团和主城区 admin 已有权限。
+- **模块与流程**：沿用 `AuthManager._build_merged_permissions` 合并授权、会话项目页面授权及前后端既有页面过滤规则；未修改业务代码，不触发前后端 README 同步要求。
+- **验证（最后验证日期：2026-11-05）**：本地解析全部账号权限，对照三个组移除/恢复本次页面授权的前后完整对象，确认仅目标17个账号变化，唯一差异为新增 `data_analysis`；逐账号构建会话确认授权可读。操作权限、单位配置及其他项目不变，JSON 解析与配置差异空白检查通过。未执行真实业务查询或验证远端配置同步。
+- **生效与回滚**：后端需读取更新配置，前端刷新会话（必要时退出重登）；线上生效尚未验证。三个组未来新增成员继承页面权限。无数据库迁移；回滚时移除这三个组本次新增的 `data_analysis`，保留其他组及既有修改。
+
+## 2026-11-05 生产日报项目卡片恢复标识并显示 daily_report_26_27
+
+- **需求与文件**：按用户最新要求，`frontend/src/pages/ProjectSelectView.vue` 恢复生产日报卡片的编号副标题，将内部 `daily_report_25_26` 映射显示为 `daily_report_26_27`；其他项目继续展示自身编号。同步前后端 README。
+- **模块与流程**：仅模板展示使用映射；卡片键及 `enter(project)` 仍读取真实 `project_id`，继续跳转原路由并沿用原权限，无接口或数据库变化。
+- **验证（最后验证日期：2026-11-05）**：使用 `@vue/compiler-sfc` 对项目选择页脚本与模板编译通过；本轮组件差异空白检查通过。未做浏览器视觉验证或线上部署。
+- **回滚**：将该编号元素恢复为上一版隐藏生产日报编号的 `v-if` 条件；无需迁移。
+
+## 2026-11-05 逐日分解测算按钮与入口卡片介绍精简
+
+- **需求与文件**：按用户要求，`DynamicPlanMetricsView.vue` 的逐日开关改为“逐日分解测算”；`PageSelectView.vue` 默认卡片介绍及 `backend_data/shared/项目列表.json` 的页面描述统一简写为“基于气温情景进行计划分解测算，仅供运行分析”。同步前后端 README。
+- **流程与结果**：页面选择卡片沿用项目配置及默认描述解析，展示简短介绍；模型页面保留完整介绍与用途说明。仅更换文案，计算及权限不变。
+- **验证（最后验证日期：2026-11-05）**：前端 `npm run build` 通过（18.16秒，仅既有分包体积提示）；项目列表 JSON 解析及本轮代码差异空白检查通过。未验证线上部署或浏览器视觉效果。
+- **回滚**：恢复本轮按钮与两处介绍文字即可，无需迁移。
+
+## 2026-11-05 计划情景分解模型（测试）：区分月度计划与逐日测算
+
+- **需求与来源**：依据用户指定名称“计划情景分解模型（测试）”及完整介绍调整页面，月度正式计划保留“计划”，逐日分解结果统一使用“测算”。
+- **前端文件与流程**：`DynamicPlanMetricsView.vue` 更新主标题、介绍、逐日开关、算法与守恒说明、曲线及 Tooltip、明细列与累计对比文案。`renderDynamicDecompositionChart` 的每日序列始终标注“测算”，`renderCumulativeComparisonChart` 使用“累计测算值”；月度图表、原月度基准及导出仍为正式计划。`PageSelectView.vue`、`AppHeader.vue` 和 `frontend/src/router/index.js` 同步入口及标题，历史查询参数不覆盖新名称。
+- **后端与配置**：`backend_data/shared/项目列表.json` 同步名称及介绍；`backend/projects/daily_report_25_26/api/dynamic_plan.py`、`backend/services/dynamic_decomposition_service.py` 更新逐日测算错误文案；未更改计算、权限、路由或数据协议。同步前后端 README，保留仓库已有其他修改。
+- **验证（最后验证日期：2026-11-05）**：`node --test tests/dynamic-plan-actuals.test.mjs` 13 项通过，覆盖真实月度计划图表、每日测算图表、累计测算对比与明细 Vue 渲染，验证实际值开启/关闭时的测算标注及月度计划基准保留；`npm run build` 通过（17.90秒，仅既有分包体积提示），两处后端文件 Python 语法及项目列表 JSON 校验通过。未验证线上部署或浏览器视觉效果。
+- **迁移与回滚**：无迁移，直接替换展示文案；回滚只恢复本轮上述文案、入口配置及对应测试断言，不回滚已有计算逻辑或其他工作区改动。
+
+## 2026-11-05 隐藏生产日报项目卡片的内部编号
+
+- **需求与改动**：按用户要求，在 `/projects` 页面隐藏“26-27供暖期生产日报”下方的 `daily_report_25_26`。`frontend/src/pages/ProjectSelectView.vue` 的编号元素通过 `v-if` 对该项目跳过渲染；项目名称、工作台入口及其他项目卡片保持既有行为。
+- **模块与影响**：仅修改项目选择页展示条件，`enter(project)` 仍使用原始项目标识跳转，后端路由、权限及数据库不变；同步更新 `frontend/README.md` 与 `backend/README.md`。
+- **验证（最后验证日期：2026-11-05）**：本地 `npm run build` 通过（17.65秒），仅出现既有分包超过500 kB提示；未做线上部署或浏览器视觉验证。
+- **迁移与回滚**：无需迁移；回滚时移除编号元素新增的 `v-if` 条件，并同步撤销本轮文档说明。
+
+## 2026-11-05 向 nyjt 开放数据查询与分析页面
+
+- **需求与来源**：按用户明确要求，为公用账号 `nyjt` 增加生产日报“数据查询与分析”页面浏览权限。依据本地账户及权限配置，`Group_viewer` 当前仅有 `nyjt` 一名成员。
+- **文件与流程**：在 `backend_data/shared/auth/permissions/daily_report_25_26.json` 的 `Group_viewer.page_access` 中增加 `data_analysis`；`AuthManager._build_merged_permissions` 合并项目授权，`list_project_pages` 根据会话授权展示页面，前端沿用既有页面访问判断。仅调整运行配置，无业务代码改动，不触发前后端 README 同步要求。
+- **验证结果（最后验证日期：2026-11-05）**：使用本地 `AuthManager` 比较所有账号增加授权前后的完整权限对象，确认仅 `nyjt` 变化，且唯一差异为新增 `data_analysis`；操作权限、单位范围及其他项目权限保持原值。直接调用 `list_project_pages`，确认返回“数据查询与分析”入口及原有五个页面。未执行真实数据查询，未验证远端配置同步或线上会话；验证加载接口时出现既有 Pydantic 配置弃用告警，不影响权限检查通过。
+- **生效与回滚**：运行后端需读取本次配置，前端刷新会话权限（必要时退出重新登录）。无需数据库迁移；回滚只需移除此组本次新增的 `data_analysis` 并刷新会话。未来加入 `Group_viewer` 的账号也继承该页面权限。
+
+## 2026-11-04 逐日实际支持历史月份并加入分解明细表
+
+- **需求与变更**：按用户本轮指令，取消“显示逐日实际值”必须属于最新发布月份的限制；历史月份可查看全月实际，当前月份仍按最新发布日截断，未来日期/缺报保留空值。“显示累计实际值”仍仅在发布当月可用，互斥与逐日单选规则不变。
+- **前端模块与流程**：`DynamicPlanMetricsView.vue` 移除逐日选框禁用、切月撤选和请求月份门禁；逐日明细按指标并列展示计划及实际完成列。`getDailyDetailActual()` 复用图表实际数据，核对单位、指标、口径与发布日期；真实0保留，未发布/缺报显示“—”。`getDailyDetailActualTotal()` 仅聚合所选月已发布区间且完整的数据，缺一天即不冒充完整累计。`decompDetailData` 为气温不足的月份提供日历与空计划，仍可查看实际明细；明细按钮天数按所选月份动态计算。
+- **后端模块**：`dynamic_plan_actuals.py` 删除逐日读取的“必须同发布月份”判断，保留最新发布日硬截断及未来月份直接返回空实际；累计专属接口月份门禁保持不变。无接口协议或数据库变更。
+- **验证（最后验证日期：2026-11-04）**：扩展前端 `dynamic-plan-actuals.test.mjs` 的 Vue 实际表格渲染回归，覆盖计划/实际列、0与缺失、发布日截断、完整累计、历史月及无气温明细；更新后端历史月份逐日回归。前端13项、后端含月标煤回归25项通过，前端构建成功（22.25秒，仅有既有包体积告警），最终模板编译及差异空白检查通过。页面代理HTTP 200验证：最新发布日2026-11-03时，2026年3月返回31天实际，11月仅返回1—3日，未来月份实际为空；历史月份累计接口仍不可用。测试使用 Vue 编译与服务端渲染，未做浏览器视觉验收。
+- **回滚**：恢复本轮逐日前后端月份判断与原明细模板即可；无需迁移，无业务数据写入，保留其他已有功能及修改。
+
+## 2026-11-04 非动态分解累计完成值选框文案与位置
+
+- `frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue` 的 `chart-actions` 在非动态分解模式将“显示实际值”改为“显示累计完成值”，置于计划分解开关前；动态模式的逐日/累计实际值选框继续位于分解开关后。两种模式沿用原有状态绑定与取数逻辑。
+- 同步前后端 README；验证使用现有11项前端回归及 Vue 模板编译。最后验证日期：2026-11-04，实际结果见交付说明。
+- 仅前端条件渲染及文案/位置调整，无接口、计算或数据库变更，无需迁移；回滚上述模板增量即可。
+
+## 2026-11-04 逐日实际值选框命名与累计实际柱色调整
+
+- `DynamicPlanMetricsView.vue` 将动态分解选框文案更新为“显示逐日实际值”；`renderCumulativeComparisonChart()` 中左侧累计实际柱由绿色改为蓝色 `#2563eb`，右侧累计分解计划柱继续使用橙色 `#f97316`，图例同步使用系列配色。
+- 同步前后端 README 与现有前端回归断言；验证选框文案、系列配色及既有累计/逐日交互，结果见交付说明。最后验证日期：2026-11-04。
+- 仅前端展示变更，无接口或数据改动，无需迁移；回滚本轮文案和累计实际系列配色即可。
+
+## 2026-11-04 二次筛选默认只选一个指标
+
+- `DynamicPlanMetricsView.vue` 的 `getDefaultChartMetricKeys()` 统一返回最多一个指标，优先标煤耗量，无标煤时取当前列表首项，无指标时为空；页面初始化、切换单位/计划范围及恢复默认均复用此逻辑。仅改变默认选择数量，累计模式与普通计划模式仍可手动多选，每日实际模式继续单选。
+- 同步前后端 README；复用 `frontend/tests/dynamic-plan-actuals.test.mjs` 核验默认选项、缺少标煤/空列表兜底及恢复默认。最后验证日期：2026-11-04，验证结果见交付说明。
+- 后端接口和业务数据无变更，无需迁移；回滚本轮默认选择函数及对应注释即可。
+
+## 2026-11-04 动态分解增加累计实际与累计分解计划成对对比
+
+- **后续展示调整（2026-11-04）**：按用户要求，`renderCumulativeComparisonChart()` 中每组双柱改为左侧累计实际（绿色）、右侧累计分解计划（橙色 `#f97316`），图例和悬浮内容同步按实际在前、计划在后排序；已有前端回归同步检查系列顺序、数值及颜色。仅调整展示，无迁移；回滚本项系列顺序、配色及图例/悬浮顺序即可。
+
+- **用户确认的规则**：动态分解下将“显示实际值”改名为“显示每日实际值”，新增互斥的“显示累计实际值”；两项都仅在最新发布业务日属于当前分解月份时可用，其他月份禁用。切换到不匹配月份或无发布日期时自动撤销选中；关闭动态分解时保留原有月度实际对比。
+- **前端流程**：`DynamicPlanMetricsView.vue` 维护发布日期与两项互斥状态。每日模式继续单选；累计模式允许二次筛选多选，按指标展示相邻的累计分解计划/累计实际双柱。两柱使用月初至最新发布日的同一窗口，各指标按单位分轴；不同单位使用重合分类轴以保持每组双柱相邻。累计图不混入每日气温曲线，多个指标时提供横向缩放。
+- **累计口径与取数**：`useDynamicPlanActuals.js` 支持单指标与批量请求、取消及过期响应拦截，并用 `aggregateDecomposedPlan()` 聚合已展示模型产生的逐日计划。数量与固定面积单耗累加；全厂热效率按分解后分子/分母重算，缺日值、零分母及未定义的非累加比率保留空值。`services/api.js` 新增累计读取方法。
+- **后端模块**：`dynamic_plan.py` 的元数据和日分解响应增加最新发布日；新增只读 `POST /dynamic_plan/cumulative_actuals`，后端再次校验月份。`dynamic_plan_actuals.py` 将原有单指标计算统一委托给批量服务，一次读取底表并按各指标原有公式计算累计，沿用缺报校验；每日接口同样限制到最新发布月份。无数据库迁移或业务数据写入。
+- **验证（最后验证日期：2026-11-04）**：新增/扩展 `frontend/tests/dynamic-plan-actuals.test.mjs` 和 `backend/projects/daily_report_25_26/tests/test_dynamic_plan_actuals.py`，覆盖月份禁用、互斥切换、累计多选切回每日单选、发布日截断、批量独立缺报、乱序响应、计划截取、单耗及比率聚合，并使用真实 ECharts SVG 渲染校验多轴双柱。前端11项通过，后端含月标煤回归25项通过；`npm run build` 成功（22.34秒，仅有既有打包体积告警），差异空白检查通过。页面代理实测最新发布日2026-11-03：11月批量累计可用，标煤/供热量/热单耗与原单指标月累计一致；其他月份累计返回不可用、每日实际全空。未做浏览器视觉验收。
+- **回滚**：撤销本轮页面、composable、API 方法、后端元数据/累计接口及批量服务的增量即可恢复上一版；无迁移，保留之前已完成的实际值对比和标煤置顶功能及其他已有修改。
+
+## 2026-11-04 计划指标两级筛选标煤耗量置顶
+
+- **改动**：`frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue` 的一次筛选和二次筛选分别使用 `primaryFilterMetrics`、`secondaryFilterMetrics`，共用 `prioritizeStandardCoal()` 将标煤耗量置顶，其他指标维持原有相对顺序；默认核心指标顺序同步以标煤耗量为首项。二次筛选仍仅包含一次筛选中已勾选的指标，实际值模式继续保持单选。
+- **验证**：复用 `frontend/tests/dynamic-plan-actuals.test.mjs` 检查两级筛选顺序及已有单选、日/月图表回归，前端构建结果见交付说明。最后验证日期：2026-11-04。
+- **影响与回滚**：仅调整前端筛选展示与默认核心指标顺序，后端接口、数据计算和数据库不变；无需迁移，撤销本节对应的页面增量即可回滚。
+
+## 2026-11-04 计划动态分解图表增加可选实际值对比
+
+- **需求与口径**：按用户本轮确认，新增默认关闭的“显示实际值”；开启后图表二次筛选最多选一个指标，选新项替换旧项。动态分解开启时显示目标月逐日实际；关闭时显示各自然月从月初累计的实际。实际底表读取以项目最新发布业务日为硬截止，不回退到最新入库日，不新增截止日期/完成率等说明提示。不同指标之间不相加。
+- **前端文件**：`frontend/src/projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue` 增加开关、单选联动和实际柱形；`composables/useDynamicPlanActuals.js` 负责请求取消、过期响应拦截、日历日期及柱形序列；`services/api.js` 接入独立实际值接口。表格行聚焦、默认重置与口径切换同样遵守单选。月走势为计划线+实际柱，月柱图为并列柱；环形图保留计划分布含义。气温不完整时仍可看实际柱，计划为空。
+- **后端文件与流程**：`backend/projects/daily_report_25_26/api/dynamic_plan.py` 新增 `GET /dynamic_plan/actuals`，从 `workflow_status_manager.list_published_dates()` 获取截止日；`services/dynamic_plan_actuals.py` 一次读取截止日以内的底表与本期常量，在内存中复用 `HeatingAnalysisEngine` 计算同一指标的日值/月累计，并复用 `BriefEvidence` 校验缺报、区分空值和真实零。相同面积单位 `万m²/万㎡` 统一识别。`backend/services/heating_metrics/analysis_engine.py` 增加默认开启的 `clip_to_season` 参数，本接口显式关闭以保留自然月边界，其他调用默认行为不变。
+- **验证记录（最后验证日期：2026-11-04）**：新增后端 `tests/test_dynamic_plan_actuals.py`、前端 `frontend/tests/dynamic-plan-actuals.test.mjs`，覆盖发布日截断、零/空值、逐月重置、同指标集团汇总、单耗公式、自然月与闰年边界，以及单选、日/月切换、乱序响应和实际图表序列。后端连同月标煤、供暖期切换、暖收入分摊回归共41项通过，1项数据库临时表用例因未显式开启 `PHOENIX_TEST_POSTGRES` 跳过；前端7项通过；最终 `npm run build` 成功（17.25秒，仅有打包体积告警）。通过页面代理地址请求实际接口得到HTTP 200。只读实库核验：最新发布日为 2026-11-03，集团11月日实际仅返回1—3日；标煤月累计4571.0395吨与既有标准引擎一致，日实际查询约0.04秒。环境未提供 pytest-cov，未声明已达到全仓覆盖率90%；未做浏览器视觉验收。
+- **迁移与回滚**：无数据库迁移，无业务数据写入。撤销上述代码文件本轮增量及新增测试即可回滚；保留本轮之前已有的其他未提交修改。未开启实际值时沿用原有图表行为。
+
+## 2026-11-04 庄河环海 25-26 供暖期投诉量口径修正（净投诉=已结案，剔除省民心网）
+
+- **需求背景与业务依据**：
+  - 用户依据新核准成果表 [`11.4 庄河环海_25-26供暖期每日投诉统计_净投诉=已结案，去除省.xlsx`](file:///D:/编程项目/phoenix/configs/11.4%20庄河环海_25-26供暖期每日投诉统计_净投诉=已结案，去除省.xlsx)，对庄河 25-26 供暖期（2025-11-01 至 2026-04-05，共 156 天）投诉指标进行口径再修正；
+  - **核心业务口径**：庄河原始台账混合了市平台（784件）与省民心网（75件），总投诉量保持 859 件不变；净投诉量口径重定义为仅计非省平台（即剔除省民心网已结案 75 件）且已结案的工单，全供暖期累计净投诉量由原 172 件下调为 **97 件**；
+  - 同步更新指标：
+    1. `amount_daily_net_complaints`（当日净投诉量）
+    2. `sum_month_total_net_complaints`（本月累计净投诉量）
+    3. `sum_season_total_net_complaints`（本供暖期累计净投诉量，全期最终累计为 97 件）
+    4. `amount_daily_city_net_complaints`（其中：2.市平台净投诉量）保持与当日“当日净投诉量”严格相等；
+    5. `amount_daily_provincial_net_complaints`（其中：1.省平台净投诉量）保持恒为 0；
+    6. `amount_daily_service_complaints`（当日省市平台投诉量）全期保持 859 件不变；
+  - 既有封存的 `25-26_raw_*` 原始归档数据（936条）与煤、电、水、热等非投诉指标绝对保留。
+- **改动范围与落地措施**：
+  1. **数据备份与溯源留痕**：
+     - 执行前将庄河当前 936 条投诉指标记录导出备份至 [`backend_data/projects/daily_report_25_26/backup_zhuanghe_complaints_20261104_pre_exclude_province.json`](file:///D:/编程项目/phoenix/backend_data/projects/daily_report_25_26/backup_zhuanghe_complaints_20261104_pre_exclude_province.json)。
+  2. **生产环境标准 SQL 迁移脚本交付**：
+     - 生成独立可执行脚本 [`configs/migrate_25_26_zhuanghe_complaints_v2_exclude_province.sql`](file:///D:/编程项目/phoenix/configs/migrate_25_26_zhuanghe_complaints_v2_exclude_province.sql)（129.2 KB），支持事务更新与校验查询。
+  3. **自动化同步与入库脚本**：
+     - 编写并执行 [`backend/scripts/apply_zhuanghe_complaint_v2_migration.py`](file:///D:/编程项目/phoenix/backend/scripts/apply_zhuanghe_complaint_v2_migration.py)，完成庄河 156 天全部 6 项指标（共 936 条）的批量 UPSERT。
+  4. **全量交叉比对与视图验证**：
+     - 本地数据库更新后，逐日核验 156 天全部 6 项指标与新 Excel 100% 吻合；
+     - 确认 2026-04-05 全供暖期最终累计净投诉量精准收敛为 **97.0 件**；
+     - 确认市平台净投诉量每日严格等于当日净投诉量，省平台净投诉量恒为 0；
+     - 确认 `25-26_raw_*` 936 条记录完好无损；
+     - `sum_basic_data` 动态视图实时反映同期抓取联动。
+- **验证与测试**：
+  - 后端 pytest 4 项测试全部通过；
+  - 前端 complaintFill 3 项测试全部通过。
+
+
+## 2026-11-04 供热公司及各中心 25-26 供暖期“当日省市平台投诉量”口径修正（各类投诉量统一仅限“投诉”类）
+
+- **需求背景与业务依据**：
+  - 用户重新梳理并核准了新成果表 [`11.4 25-26供暖期主城区及各中心投诉统计_各类投诉量仅限投诉类.xlsx`](file:///D:/编程项目/phoenix/configs/11.4%2025-26供暖期主城区及各中心投诉统计_各类投诉量仅限投诉类.xlsx)；
+  - 明确统一定义：“当日省市平台投诉量”（`amount_daily_service_complaints`）也必须与净投诉量一致，分类仅限严格等于“投诉”的诉求件，剔除原数据中混入的“咨询”、“表扬”和空白分类；
+  - 供热公司全期省市平台总投诉量由 5,696 件精准更新为 **5,539 件**（剔除 157 件非投诉件）；净投诉量指标（全期累计 184 件）保持不变。
+- **改动范围与落地措施**：
+  1. **数据备份留痕**：
+     - 执行前将当前两张表全部 10,296 条指标记录导出备份至 [`backend_data/projects/daily_report_25_26/backup_complaints_20261104_pre_v3_migration.json`](file:///D:/编程项目/phoenix/backend_data/projects/daily_report_25_26/backup_complaints_20261104_pre_v3_migration.json)。
+  2. **生产环境标准 SQL 迁移脚本交付**：
+     - 生成独立可执行脚本 [`configs/migrate_25_26_complaints_v3_complaint_only.sql`](file:///D:/编程项目/phoenix/configs/migrate_25_26_complaints_v3_complaint_only.sql)（199.1 KB），支持事务更新与全期校验。
+  3. **自动化同步与算法对齐**：
+     - 编写并执行 [`backend/scripts/apply_complaint_v3_service_complaints_migration.py`](file:///D:/编程项目/phoenix/backend/scripts/apply_complaint_v3_service_complaints_migration.py)，完成供热公司总表 156 天与 10 个中心 1,560 天次 `amount_daily_service_complaints` 的数据库更新；
+     - 同步升级后端计算服务 [`complaint_statistics.py`](file:///D:/编程项目/phoenix/backend/projects/daily_report_25_26/services/complaint_statistics.py)，使每日提报算法中 `daily_total`、`daily_city`、`daily_province` 同步受 `is_complaint` 约束，确保未来提报与历史同期基准完全同口径；
+     - 同步升级前端填报端 [`DataEntryView.vue`](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue)：核验弹窗口径说明更新，穿透筛选明细计算属性 `complaintDetailRows` 在过滤当日平台指标时同步加入 `isComplaint` 判定，点击数字下钻查看的工单列表与统计数字绝对闭环。
+  4. **全量交叉比对与视图验证**：
+     - 数据库更新后，核验 156 天总表及 10 个分中心数据与新 Excel 100% 吻合，供热公司全期总投诉量求和严格等于 5,539.0 件；
+     - `sum_basic_data` 动态视图实时反映同期抓取（如 2026-11-03 业务日提取 2025-11-03 供热公司省市平台总投诉量同期值由 122 动态更新为 115）。
+- **验证与测试**：
+  - 后端 pytest 4 项测试全部通过；
+  - 前端 complaintFill 3 项测试全部通过；
+  - 前端生产构建 `npm run build` 打包校验成功（20.69s，0 错误）。
+
+
+## 2026-11-04 庄河环海 25-26 供暖期投诉量历史归档（加 raw 前缀）与新核定数据入库
+
+- **需求背景与业务依据**：
+  - 用户提供了全新的庄河环海标准成果表 [`11.4 庄河环海_25-26供暖期每日投诉统计_完整版.xlsx`](file:///D:/编程项目/phoenix/configs/11.4%20庄河环海_25-26供暖期每日投诉统计_完整版.xlsx)（涵盖 2025-11-01 至 2026-04-05，共 156 天连续记录）；
+  - 明确要求：
+    1. 库内原有的庄河相关 25-26 供暖期各类投诉指标添加 `25-26_raw_` 前缀安全封存归档；
+    2. 将新表格中的每日投诉总量、每日净投诉量、本月累计净投诉量、供暖期累计净投诉量入库；
+    3. “其中：1.省平台净投诉量”每日恒为 0，“其中：2.市平台净投诉量”则与“当日净投诉量”严格相等。
+- **改动范围与落地措施**：
+  1. **数据备份与溯源保障**：
+     - 执行前将庄河当前 936 条投诉记录全量导出至 [`backend_data/projects/daily_report_25_26/backup_zhuanghe_complaints_20261104_pre_migration.json`](file:///D:/编程项目/phoenix/backend_data/projects/daily_report_25_26/backup_zhuanghe_complaints_20261104_pre_migration.json)。
+  2. **生产环境标准 SQL 迁移脚本交付**：
+     - 生成独立可执行脚本 [`configs/migrate_25_26_zhuanghe_complaints_production.sql`](file:///D:/编程项目/phoenix/configs/migrate_25_26_zhuanghe_complaints_production.sql)（129.7 KB），内含事务归档、冲突保护更新及校验查询。
+  3. **自动化执行脚本**：
+     - 编写并执行 [`backend/scripts/apply_zhuanghe_complaint_migration.py`](file:///D:/编程项目/phoenix/backend/scripts/apply_zhuanghe_complaint_migration.py)：
+       - 步骤 1：将 `daily_basic_data` 中庄河 6 项旧指标（共 936 条）原子重命名添加 `25-26_raw_` 前缀；
+       - 步骤 2：插入新核定的 6 项标准指标（156 天 × 6 指标 = 936 条新记录）。
+  4. **全量交叉比对与视图验证**：
+     - 本地数据库更新后，逐日核验 156 天全部 6 项指标与 Excel 完全 100% 吻合；
+     - 验证 2026-04-05 庄河环海全期最终累计净投诉量收敛为标准的 172.0 件（投诉总量 859 件）；
+     - 验证 `sum_basic_data` 动态视图实时反映同期抓取（如 2026-11-03 业务日提取 2025-11-03 庄河同期投诉量准确对齐）。
+- **验证与测试**：
+  - 后端 pytest 4 项测试全部通过；
+  - 前端 complaintFill 3 项测试全部通过。
+
+
+## 2026-11-04 供热公司及10个服务中心 25-26 供暖期投诉量同期值修正（净投诉新口径：精准剔除11件非投诉件）
+
+- **需求背景与口径依据**：
+  - 用户依据最新口径核定并制作了全新的标准成果表 [`11.4 25-26供暖期主城区及各中心投诉统计_净投诉新口径.xlsx`](file:///D:/编程项目/phoenix/configs/11.4%2025-26供暖期主城区及各中心投诉统计_净投诉新口径.xlsx)；
+  - 明确要求将数据库中 2025-11-01 至 2026-04-05（共 156 天）的同期投诉量指标进行全面修正，与新表格保持 100% 吻合；
+  - 核心口径精细化：仅“转办”+“已办结”且类型为“投诉”纳入净投诉统计，排除了此前统计中包含的 11 件“咨询”和“表扬”件，供暖期全期最终累计净投诉量由 195 件下调为 184 件。
+- **改动范围与落地措施**：
+  1. **数据全量备份留痕**：
+     - 在修改前，将库内当前 25-26 供暖期两张表全部 10,296 条记录（含原始 `raw` 归档与现行指标）全量导出并安全备份至 [`backend_data/projects/daily_report_25_26/backup_complaints_20261104_pre_v2_migration.json`](file:///D:/编程项目/phoenix/backend_data/projects/daily_report_25_26/backup_complaints_20261104_pre_v2_migration.json)。
+  2. **生产环境标准 SQL 迁移脚本交付**：
+     - 生成可独立在生产服务器上一键执行的标准迁移脚本 [`configs/migrate_25_26_complaints_v2_new_standard.sql`](file:///D:/编程项目/phoenix/configs/migrate_25_26_complaints_v2_new_standard.sql)（587.2 KB），内嵌事务 `BEGIN ... COMMIT` 与校验查询。
+  3. **自动化同步与修正执行脚本**：
+     - 新建 [`backend/scripts/apply_complaint_v2_migration.py`](file:///D:/编程项目/phoenix/backend/scripts/apply_complaint_v2_migration.py)，实现：
+       - 供热公司总表（`GongRe_Sheet`）156 天 × 3 指标 = 468 条数据更新；
+       - 10 个服务中心（`GongRe_branches_detail_Sheet`）1,560 天次 × 3 指标 = 4,680 条数据更新；
+       - 市平台净投诉量（`amount_daily_city_net_complaints`）同步联动更新 = 当日净投诉量，共 1,716 条；
+       - 原始历史封存指标（`25-26_raw_*`）严格保留绝对不动。
+  4. **全量交叉比对与视图验证**：
+     - 本地数据库更新后，自动对 156 天总表 4 项指标（624 条）与 10 中心 4 项指标（6,240 条）执行逐条交叉比对，实现与 Excel 100% 零误差吻合；
+     - 验证 2026-04-05 供热公司最终累计净投诉量准确收敛为 184.0 件；
+     - 验证 `sum_basic_data` 动态视图实时反映同期变化（如 2026-11-03 业务日提取 2025-11-03 同期值：供热公司由 59 变为 55，北岗由 13 变为 10，兴工由 5 变为 4）。
+- **测试与验证**：
+  - 后端执行 `python -m pytest backend/projects/daily_report_25_26/tests/test_complaint_statistics.py` 4 项测试全部通过；
+  - 前端执行 `node frontend/src/projects/daily_report_25_26/composables/complaintFill.test.js` 3 项测试全部通过。
+
+
 ## 2026-11-04 供热填报端净投诉量统计口径精细化：仅转办已办结且类型为“投诉”纳入净投诉统计
 
 - **需求背景与口径明确**：

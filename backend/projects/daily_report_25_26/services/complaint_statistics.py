@@ -52,9 +52,10 @@ def metrics(records, day, month, season):
         is_complaint = normalize(row.get('type')) == '投诉'
         is_net = source == '转办' and done and is_complaint
         if current == day:
-            counts['daily_city'] += source in ('直办', '转办')
-            counts['daily_province'] += source == '省办'
-            counts['daily_total'] += 1
+            if is_complaint:
+                counts['daily_city'] += source in ('直办', '转办')
+                counts['daily_province'] += source == '省办'
+                counts['daily_total'] += 1
             counts['daily_net'] += is_net
             counts['daily_city_net'] += is_net
         if is_net:

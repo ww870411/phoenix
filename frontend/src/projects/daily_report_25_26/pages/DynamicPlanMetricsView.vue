@@ -11,7 +11,7 @@
           </button>
           <button class="btn export-btn" type="button" :disabled="loading || !metricsList.length" @click="exportToExcel">
             <span class="btn-icon">📥</span>
-            <span>导出当前计划表</span>
+            <span>导出月度计划表</span>
           </button>
         </div>
       </div>
@@ -21,11 +21,11 @@
         <div class="banner-content">
           <div class="banner-title-row">
             <span class="badge-tag">2026–2027 供暖期</span>
-            <h2>动态计划指标图谱</h2>
+            <h2>计划情景分解模型（测试）</h2>
             <span class="status-indicator live">● 数据库已同步</span>
           </div>
           <p class="banner-desc">
-            全维度展示各主体月度计划基准（2026-10 至 2027-04），支持按单位口径、连续月度区间筛选，呈现供热、燃料、电水及单耗多维趋势与分布规律。
+            根据同期数据离散建模，基于本期近、远期气温预报对供暖期生产计划进行动态分解测算。本功能仅供运行分析使用，不作为下达或考核依据
           </p>
         </div>
       </section>
@@ -138,7 +138,7 @@
               <!-- 指标复选滚动列表 -->
               <div class="dropdown-list-scroll">
                 <label
-                  v-for="m in metricsList"
+                  v-for="m in primaryFilterMetrics"
                   :key="m.item"
                   class="dropdown-checkbox-item"
                   :class="{ 'is-checked': selectedMetricKeys.includes(m.item) }"
@@ -285,8 +285,14 @@
             </button>
           </div>
           <div class="chart-actions">
+            <label v-if="!isDynamicDecomposeEnabled" class="decomp-toggle-pill" :class="{ 'is-active': showActualValues }">
+              <input type="checkbox" v-model="showActualValues" class="decomp-toggle-input" />
+              <span class="toggle-dot"></span>
+              <span class="toggle-text">显示累计完成值</span>
+            </label>
+
             <!-- 动态分解独立高质感开关 -->
-            <label class="decomp-toggle-pill" :class="{ 'is-active': isDynamicDecomposeEnabled }" title="基于目标月份逐日气温HDD20与k值模型，将月度计划自适应分解至每日">
+            <label class="decomp-toggle-pill" :class="{ 'is-active': isDynamicDecomposeEnabled }" title="基于目标月份逐日气温HDD20与k值模型，以月度计划为基准进行逐日测算">
               <input
                 type="checkbox"
                 v-model="isDynamicDecomposeEnabled"
@@ -294,10 +300,21 @@
                 @change="handleDynamicDecomposeToggle"
               />
               <span class="toggle-dot"></span>
-              <span class="toggle-text">⚡ 动态分解</span>
+              <span class="toggle-text">⚡ 逐日分解测算</span>
             </label>
 
-            <!-- 图表专属二次指标筛选下拉器（默认相同，可下拉取消勾选） -->
+            <label v-if="isDynamicDecomposeEnabled" class="decomp-toggle-pill" :class="{ 'is-active': showActualValues }">
+              <input type="checkbox" v-model="showActualValues" class="decomp-toggle-input" />
+              <span class="toggle-dot"></span>
+              <span class="toggle-text">显示逐日实际值</span>
+            </label>
+            <label v-if="isDynamicDecomposeEnabled" class="decomp-toggle-pill" :class="{ 'is-active': showCumulativeActual, 'is-disabled': !canShowDynamicActuals }">
+              <input type="checkbox" v-model="showCumulativeActual" :disabled="!canShowDynamicActuals" class="decomp-toggle-input" />
+              <span class="toggle-dot"></span>
+              <span class="toggle-text">显示累计实际值</span>
+            </label>
+
+            <!-- 显示实际值时二次筛选为单选，其他模式保留多选。 -->
             <div ref="chartMetricDropdownRef" class="chart-multiselect-dropdown">
               <button
                 type="button"
@@ -317,25 +334,26 @@
                 <div class="chart-dropdown-header">
                   <span class="chart-dropdown-title">二次筛选指标</span>
                   <div class="action-btn-group">
-                    <button type="button" class="action-link-btn" title="全选当前列表全部指标" @click="selectAllChartMetrics">全选</button>
-                    <span class="action-divider">|</span>
+                    <button v-if="!showActualValues" type="button" class="action-link-btn" title="全选当前列表全部指标" @click="selectAllChartMetrics">全选</button>
+                    <span v-if="!showActualValues" class="action-divider">|</span>
                     <button type="button" class="action-link-btn" title="清空全部图表指标" @click="clearAllChartMetrics">清空</button>
                   </div>
                 </div>
 
                 <div class="chart-dropdown-scroll">
                   <label
-                    v-for="m in filteredMetrics"
+                    v-for="m in secondaryFilterMetrics"
                     :key="'chart_' + m.item"
                     class="dropdown-checkbox-item"
                     :class="{ 'is-checked': chartSelectedMetricKeys.includes(m.item) }"
                   >
                     <input
-                      type="checkbox"
+                      :type="showActualValues ? 'radio' : 'checkbox'"
+                      name="chart-metric"
                       :value="m.item"
-                      v-model="chartSelectedMetricKeys"
+                      :checked="chartSelectedMetricKeys.includes(m.item)"
                       class="item-checkbox"
-                      @change="isChartCustomized = true"
+                      @change="handleChartMetricSelection(m.item, $event.target.checked)"
                     />
                     <span class="item-name">{{ m.item_cn }}</span>
                     <span v-if="m.unit" class="item-unit">({{ m.unit }})</span>
@@ -366,13 +384,13 @@
         <!-- 动态分解专属控制横栏 (仅开启动态分解时展示，排版整洁大方，绝不拥挤换行) -->
         <div v-if="isDynamicDecomposeEnabled" class="decomp-sub-toolbar">
           <div class="decomp-sub-left">
-            <span v-if="dynamicDecompData?.is_rollup" class="sub-label">总量：子口径逐日汇总；单耗：本口径分解</span>
-            <span class="sub-label">📅 分解计划月份：</span>
+            <span v-if="dynamicDecompData?.is_rollup" class="sub-label">总量：子口径逐日测算汇总；单耗：本口径测算</span>
+            <span class="sub-label">📅 测算月份：</span>
             <select
               v-model="dynamicTargetMonth"
               class="decomp-month-select"
               @change="loadDynamicDecompositionData"
-              title="选择动态日分解的目标计划月份"
+              title="选择逐日测算的目标月份"
             >
               <option v-for="m in displayedMonths" :key="'decomp_' + m" :value="m">
                 {{ formatMonthCn(m) }}
@@ -387,7 +405,7 @@
                 🔥 月平均 HDD20: <b>{{ dynamicDecompData.avg_hdd20 }}</b>
               </span>
               <span class="decomp-badge-audit">
-                ✓ 逐日计划加总与分解基准一致
+                ✓ 逐日测算值加总与月度计划基准一致
               </span>
             </template>
           </div>
@@ -395,7 +413,7 @@
           <div class="decomp-sub-right">
             <!-- 平均气温曲线显隐切换胶囊 -->
             <label
-              v-if="dynamicDecompData?.has_full_month"
+              v-if="dynamicDecompData?.has_full_month && !showCumulativeActual"
               class="decomp-temp-pill"
               :class="{ 'is-active': showDecompTemperature }"
               title="开启或关闭每日平均气温(℃)参考曲线"
@@ -416,7 +434,7 @@
               class="btn-toggle-decomp-algorithm"
               :class="{ active: showDecompAlgorithmPanel }"
               @click="showDecompAlgorithmPanel = !showDecompAlgorithmPanel"
-              title="展开/收起动态分解数学算法原理与各指标 k 值模型"
+              title="展开/收起逐日测算数学算法原理与各指标 k 值模型"
             >
               {{ showDecompAlgorithmPanel ? '📐 收起算法与 k 值' : '📐 查看算法与 k 值' }}
             </button>
@@ -426,9 +444,9 @@
               class="btn-toggle-decomp-table"
               :class="{ active: showDecompDetailTable }"
               @click="showDecompDetailTable = !showDecompDetailTable"
-              title="展开/收起全月逐日分解明细核对表"
+              title="展开/收起全月逐日测算明细核对表"
             >
-              {{ showDecompDetailTable ? '📋 收起 30 天逐日明细表' : '📋 查看 30 天逐日明细表' }}
+              {{ showDecompDetailTable ? '📋 收起' : '📋 查看' }} {{ monthDates(dynamicTargetMonth).length }} 天逐日测算明细表
             </button>
           </div>
         </div>
@@ -438,7 +456,7 @@
           <div class="panel-header">
             <div class="panel-title-wrap">
               <span class="panel-badge-icon">📐</span>
-              <h4 class="panel-heading">动态分解算法原理与各指标气温敏感度 k 值模型</h4>
+              <h4 class="panel-heading">逐日测算算法原理与各指标气温敏感度 k 值模型</h4>
               <span class="panel-context-tag">
                 🏢 {{ currentUnitLabel }} ｜ 📅 {{ formatMonthCn(dynamicTargetMonth) }}
               </span>
@@ -464,7 +482,7 @@
             <div class="algo-formula-col">
               <div class="algo-sub-title">
                 <span class="sub-step-num">∑</span>
-                <span>HDD20 采暖度日与日计划分解模型原理</span>
+                <span>HDD20 采暖度日与逐日测算模型原理</span>
               </div>
               <div class="formula-cards-list">
                 <div class="formula-card">
@@ -496,14 +514,14 @@
 
                 <div class="formula-card">
                   <div class="formula-card-header">
-                    <span class="card-step-badge">3. 全月守恒日分解计划 (P<sub>d</sub>)</span>
+                    <span class="card-step-badge">3. 全月守恒逐日测算值 (P<sub>d</sub>)</span>
                     <span class="card-tag">总量绝对守恒</span>
                   </div>
                   <div class="formula-math-box">
                     <code>P<sub>d</sub> = P<sub>month</sub> × (W<sub>d</sub> / &sum;W<sub>i</sub>)</code>
                   </div>
                   <p class="formula-card-desc">
-                    按权重归一化分解月度计划总量 <code>P<sub>month</sub></code>，并实施分厘平差调整，确保全月各日分解合计严格守恒等于月计划总量。
+                    以月度计划总量 <code>P<sub>month</sub></code> 为基准，按归一化权重测算各日参考值，并实施分厘平差调整，确保全月各日测算值合计严格守恒等于月计划总量。
                   </p>
                 </div>
               </div>
@@ -660,7 +678,7 @@
         </div>
 
         <!-- 双纵轴/多纵轴对应指引条 (恢复左右轴高质感标签徽标与指标药丸卡片) -->
-        <div v-if="chartAxisMappingInfo.showBanner" class="axis-mapping-banner">
+        <div v-if="chartAxisMappingInfo.showBanner && !showCumulativeActual" class="axis-mapping-banner">
           <!-- 左轴对应指标组 -->
           <div class="axis-indicator-group axis-left-group">
             <span class="axis-badge axis-left-badge">左纵轴 ({{ chartAxisMappingInfo.leftUnit }})</span>
@@ -717,11 +735,13 @@
 
         <div class="chart-body">
           <div ref="chartContainerRef" class="echarts-container"></div>
-          <div v-if="loading || dynamicDecompLoading" class="chart-loading">
+          <div v-if="loading || dynamicDecompLoading || actualLoading || cumulativeLoading" class="chart-loading">
             <div class="spinner"></div>
-            <span>{{ dynamicDecompLoading ? '正在核对全月气温并试算动态日分解计划…' : '计划数据加载与图谱渲染中…' }}</span>
+            <span>{{ dynamicDecompLoading ? '正在核对全月气温并进行逐日测算…' : '月度计划数据加载与图谱渲染中…' }}</span>
           </div>
         </div>
+
+        <div v-if="actualError || cumulativeError" class="decomp-warning-banner">{{ actualError || cumulativeError }}</div>
 
         <!-- 气温不完整提示横幅 -->
         <div v-if="isDynamicDecomposeEnabled && dynamicDecompError" class="decomp-warning-banner">
@@ -738,13 +758,13 @@
         </div>
 
         <!-- 全月逐日分解明细表格（支持折叠） -->
-        <div v-if="isDynamicDecomposeEnabled && dynamicDecompData?.has_full_month && showDecompDetailTable" class="decomp-detail-section">
+        <div v-if="isDynamicDecomposeEnabled && (dynamicDecompData?.has_full_month || showActualValues) && showDecompDetailTable" class="decomp-detail-section">
           <div class="decomp-detail-header">
-            <h4>📅 {{ dynamicDecompData.company_cn }} ｜ {{ formatMonthCn(dynamicTargetMonth) }} 逐日动态计划分解明细</h4>
-            <div class="decomp-detail-meta">
+            <h4>📅 {{ decompDetailData.company_cn }} ｜ {{ formatMonthCn(dynamicTargetMonth) }} 逐日动态测算明细</h4>
+            <div v-if="dynamicDecompData?.has_full_month" class="decomp-detail-meta">
               <span>全月平均气温: <b>{{ dynamicDecompData.avg_temperature }} ℃</b></span>
               <span>月平均 HDD20: <b>{{ dynamicDecompData.avg_hdd20 }}</b></span>
-              <span class="badge-audit">✓ 各日分解合计守恒</span>
+              <span class="badge-audit">✓ 各日测算值合计守恒</span>
             </div>
           </div>
           <div class="decomp-table-wrapper">
@@ -754,31 +774,41 @@
                   <th class="th-date">日期</th>
                   <th class="th-temp">日均温(℃)</th>
                   <th class="th-hdd">HDD20</th>
-                  <th v-for="m in activeDecompositionMetrics" :key="'th_d_' + m.item" class="th-metric">
-                    {{ m.item_cn }} ({{ m.unit }})
-                    <span v-if="m.aggregation_method === 'sum_children'" class="th-k">子口径逐日汇总</span>
-                    <span v-else class="th-k">k={{ Number(m.k_value || 0).toFixed(4) }}</span>
-                  </th>
+                  <template v-for="m in activeDecompositionMetrics" :key="'th_d_' + m.item">
+                    <th class="th-metric">
+                      {{ m.item_cn }}·测算 ({{ m.unit }})
+                      <span v-if="m.aggregation_method === 'sum_children'" class="th-k">子口径逐日汇总</span>
+                      <span v-else-if="dynamicDecompData?.has_full_month" class="th-k">k={{ Number(m.k_value || 0).toFixed(4) }}</span>
+                    </th>
+                    <th v-if="showActualValues" class="th-metric">{{ m.item_cn }}·实际完成 ({{ m.unit }})</th>
+                  </template>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(d, idx) in dynamicDecompData.dates" :key="'tr_d_' + d">
-                  <td class="td-date font-mono">{{ dynamicDecompData.day_labels[idx] }}</td>
-                  <td class="td-temp font-mono">{{ dynamicDecompData.temperatures[idx] }}</td>
-                  <td class="td-hdd font-mono">{{ dynamicDecompData.hdd20_series[idx] }}</td>
-                  <td v-for="m in activeDecompositionMetrics" :key="'td_dv_' + m.item + '_' + idx" class="td-val font-mono">
-                    {{ formatNumber(m.daily_plans[idx]) }}
-                  </td>
+                <tr v-for="(d, idx) in decompDetailData.dates" :key="'tr_d_' + d">
+                  <td class="td-date font-mono">{{ decompDetailData.day_labels[idx] }}</td>
+                  <td class="td-temp font-mono">{{ formatCell(decompDetailData.temperatures[idx]) }}</td>
+                  <td class="td-hdd font-mono">{{ formatCell(decompDetailData.hdd20_series[idx]) }}</td>
+                  <template v-for="m in activeDecompositionMetrics" :key="'td_dv_' + m.item + '_' + idx">
+                    <td class="td-val font-mono">{{ formatCell(m.daily_plans[idx]) }}</td>
+                    <td v-if="showActualValues" class="td-val font-mono">{{ formatCell(getDailyDetailActual(m, d)) }}</td>
+                  </template>
                 </tr>
                 <tr class="tr-total">
-                  <td class="td-date font-bold">全月合计</td>
-                  <td class="td-temp font-bold">{{ dynamicDecompData.avg_temperature }} (均值)</td>
-                  <td class="td-hdd font-bold">{{ dynamicDecompData.avg_hdd20 }} (均值)</td>
-                  <td v-for="m in activeDecompositionMetrics" :key="'td_d_sum_' + m.item" class="td-val font-bold text-primary">
-                    {{ formatNumber(m.daily_plans.reduce((a, b) => a + b, 0)) }}
-                    <span v-if="m.aggregation_method === 'sum_children' && m.reported_month_plan != null && Math.abs(m.month_plan_difference) > 0.01" class="sub-target">直报: {{ formatNumber(m.reported_month_plan) }}；差额: {{ formatNumber(m.month_plan_difference) }}</span>
-                    <span class="sub-target" title="分解基准值">({{ m.aggregation_method === 'sum_children' ? '子口径月计划合计' : '原计划' }}: {{ formatNumber(m.month_plan) }})</span>
-                  </td>
+                  <td class="td-date font-bold">{{ showActualValues ? '合计' : '全月合计' }}</td>
+                  <td class="td-temp font-bold">{{ formatCell(decompDetailData.avg_temperature) }} (均值)</td>
+                  <td class="td-hdd font-bold">{{ formatCell(decompDetailData.avg_hdd20) }} (均值)</td>
+                  <template v-for="m in activeDecompositionMetrics" :key="'td_d_sum_' + m.item">
+                    <td class="td-val font-bold text-primary">
+                      {{ formatCell(m.daily_plans.every(value => value != null) ? m.daily_plans.reduce((a, b) => a + b, 0) : null) }}
+                      <span v-if="m.aggregation_method === 'sum_children' && m.reported_month_plan != null && Math.abs(m.month_plan_difference) > 0.01" class="sub-target">直报: {{ formatNumber(m.reported_month_plan) }}；差额: {{ formatNumber(m.month_plan_difference) }}</span>
+                      <span v-if="dynamicDecompData?.has_full_month" class="sub-target" title="月度计划基准值">({{ m.aggregation_method === 'sum_children' ? '子口径月计划合计' : '月度计划值' }}: {{ formatNumber(m.month_plan) }})</span>
+                    </td>
+                    <td v-if="showActualValues" class="td-val font-bold text-primary">
+                      {{ formatCell(getDailyDetailActualTotal(m)) }}
+                      <span class="sub-target">累计完成</span>
+                    </td>
+                  </template>
                 </tr>
               </tbody>
             </table>
@@ -876,6 +906,7 @@ import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getDynamicPlanMeta, getDynamicPlanData, importEnsembleTemperature, fetchDynamicDailyDecomposition, updateDynamicPlanKParameters } from '../services/api'
 import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
+import { useDynamicPlanActuals, singleMetricSelection, actualBarSeries, monthDates, aggregateDecomposedPlan } from '../composables/useDynamicPlanActuals'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -986,7 +1017,7 @@ async function executeSaveParams(updates) {
     if (res.ok) {
       paramFeedback.value = {
         type: 'success',
-        message: res.message || 'm 缩放系数保存成功，已实时重新试算日分解分布律！',
+        message: res.message || 'm 缩放系数保存成功，已实时更新逐日测算分布！',
       }
       updates.forEach((u) => {
         if (editingParams.value[u.item]) {
@@ -1015,12 +1046,8 @@ async function executeSaveParams(updates) {
 }
 
 const pageDisplayName = computed(() => {
-  const raw = route.query.pageName
-  const legacyNames = new Set(['动态计划指标', '动态计划模块'])
-  if (typeof raw === 'string' && raw.trim() && !legacyNames.has(raw.trim())) {
-    return raw.trim()
-  }
-  return '计划动态分解模块'
+  // 固定显示当前名称，兼容携带历史 pageName 的收藏链接。
+  return '计划情景分解模型（测试）'
 })
 
 // 页面基础响应状态
@@ -1100,12 +1127,14 @@ watch(
 
 // 当前在动态分解模式下处于激活展示状态的指标（与图表二次筛选严格联动）
 const activeDecompositionMetrics = computed(() => {
-  if (!dynamicDecompData.value || !dynamicDecompData.value.metrics) return []
+  // 气温不足时实际值仍可查看，计划序列保持空值。
+  const allDecomp = dynamicDecompData.value?.metrics || (showActualValues.value || showCumulativeActual.value
+    ? chartMetrics.value.map((metric) => ({ ...metric, daily_plans: monthDates(dynamicTargetMonth.value).map(() => null) }))
+    : [])
   // 若用户在二次筛选中清空了勾选，严格返回空，不呈现任何指标
   if (chartSelectedMetricKeys.value.length === 0) {
     return []
   }
-  const allDecomp = dynamicDecompData.value.metrics
   const selectedSet = new Set(chartSelectedMetricKeys.value)
   return allDecomp.filter((m) => selectedSet.has(m.item))
 })
@@ -1132,14 +1161,15 @@ async function loadDynamicDecompositionData() {
       yearMonth,
     })
     if (!isCurrent()) return
+    latestPublishedDate.value = res.latest_published_date || null
     dynamicDecompData.value = res
     if (!res.has_full_month) {
-      dynamicDecompError.value = res.message || `${dynamicTargetMonth.value} 气温数据不完整，缺少全月气温，无法执行动态分解`
+      dynamicDecompError.value = res.message || `${dynamicTargetMonth.value} 气温数据不完整，缺少全月气温，无法执行逐日测算`
     }
   } catch (err) {
     if (!isCurrent()) return
     dynamicDecompData.value = null
-    dynamicDecompError.value = err.message || '加载动态日分解数据失败'
+    dynamicDecompError.value = err.message || '加载逐日测算数据失败'
   } finally {
     if (!isCurrent()) return
     dynamicDecompLoading.value = false
@@ -1174,22 +1204,47 @@ const metricDropdownRef = ref(null)
 const isMetricDropdownOpen = ref(false)
 const selectedMetricKeys = ref([])
 
-// 图表专属二次指标筛选状态（默认仅选中供热量、发电量、标煤耗量，可下拉取消或增选）
+// 图表二次筛选默认仅选标煤耗量；无标煤时选首项，支持按当前模式手动增选。
 const chartMetricDropdownRef = ref(null)
 const isChartMetricDropdownOpen = ref(false)
 const chartSelectedMetricKeys = ref([])
 const isChartCustomized = ref(false)
+const showActualValues = ref(false)
+const showCumulativeActual = ref(false)
+const latestPublishedDate = ref(null)
+const canShowDynamicActuals = computed(() => Boolean(latestPublishedDate.value && latestPublishedDate.value.slice(0, 7) === dynamicTargetMonth.value))
 
-// 默认选中的核心生产指标：供热量、发电量、标煤耗量
-const DEFAULT_CORE_METRIC_KEYS = ['amount_heat_supply', 'amount_power_generation', 'consumption_std_coal']
+// 逐日模式允许历史月份；累计对比仍仅在发布当月可用，两项继续互斥。
+watch(showActualValues, (enabled) => {
+  if (enabled) showCumulativeActual.value = false
+}, { flush: 'sync' })
+watch(showCumulativeActual, (enabled) => {
+  if (!enabled) return
+  if (!isDynamicDecomposeEnabled.value || !canShowDynamicActuals.value) showCumulativeActual.value = false
+  else showActualValues.value = false
+}, { flush: 'sync' })
+watch([isDynamicDecomposeEnabled, dynamicTargetMonth, latestPublishedDate], () => {
+  if (!isDynamicDecomposeEnabled.value) showCumulativeActual.value = false
+  else if (!canShowDynamicActuals.value) showCumulativeActual.value = false
+}, { flush: 'sync' })
 
-function getDefaultChartMetricKeys(availableMetrics) {
-  const availableSet = new Set((availableMetrics || []).map((m) => m.item))
-  const matched = DEFAULT_CORE_METRIC_KEYS.filter((k) => availableSet.has(k))
-  if (matched.length > 0) {
-    return matched
+function handleChartMetricSelection(item, checked) {
+  isChartCustomized.value = true
+  if (showActualValues.value) {
+    chartSelectedMetricKeys.value = [item]
+  } else {
+    chartSelectedMetricKeys.value = checked
+      ? [...chartSelectedMetricKeys.value.filter((key) => key !== item), item]
+      : chartSelectedMetricKeys.value.filter((key) => key !== item)
   }
-  return (availableMetrics || []).slice(0, 3).map((m) => m.item)
+  if (focusedMetricKey.value && !chartSelectedMetricKeys.value.includes(focusedMetricKey.value)) {
+    focusedMetricKey.value = ''
+  }
+}
+
+// 默认仅选一个指标，优先标煤耗量。
+function getDefaultChartMetricKeys(availableMetrics) {
+  return prioritizeStandardCoal(availableMetrics || []).slice(0, 1).map((metric) => metric.item)
 }
 
 const isAllMetricsSelected = computed(() => {
@@ -1199,6 +1254,13 @@ const isAllMetricsSelected = computed(() => {
 // 数据集
 const displayedMonths = ref([])
 const metricsList = ref([])
+// 两级筛选都将标煤耗量置顶，其他指标保持接口原有顺序。
+function prioritizeStandardCoal(metrics) {
+  return [...metrics.filter((metric) => metric.item === 'consumption_std_coal'),
+    ...metrics.filter((metric) => metric.item !== 'consumption_std_coal')]
+}
+const primaryFilterMetrics = computed(() => prioritizeStandardCoal(metricsList.value))
+const secondaryFilterMetrics = computed(() => prioritizeStandardCoal(filteredMetrics.value))
 const summaryCards = ref({})
 
 // ECharts
@@ -1297,6 +1359,7 @@ const chartAxisMappingInfo = computed(() => {
   // 动态分解模式下是否启用了平均气温曲线
   const hasTempRightAxis =
     isDynamicDecomposeEnabled.value &&
+    !showCumulativeActual.value &&
     showDecompTemperature.value &&
     (dynamicDecompData.value?.temperatures?.length > 0)
 
@@ -1416,7 +1479,7 @@ function toggleChartMetricDropdown() {
   isChartMetricDropdownOpen.value = !isChartMetricDropdownOpen.value
 }
 
-// 还原默认选中的核心生产指标：供热量、发电量、标煤耗量
+// 还原默认单指标选择，优先标煤耗量。
 function resetToDefaultChartMetrics() {
   isChartCustomized.value = false
   chartSelectedMetricKeys.value = getDefaultChartMetricKeys(filteredMetrics.value)
@@ -1424,7 +1487,8 @@ function resetToDefaultChartMetrics() {
 
 function selectAllChartMetrics() {
   isChartCustomized.value = true
-  chartSelectedMetricKeys.value = filteredMetrics.value.map((m) => m.item)
+  const keys = filteredMetrics.value.map((m) => m.item)
+  chartSelectedMetricKeys.value = showActualValues.value ? singleMetricSelection(keys) : keys
 }
 
 function clearAllChartMetrics() {
@@ -1476,7 +1540,7 @@ function focusMetric(row) {
     }
     // 确保在图表呈现指标中也予以勾选展示
     if (!chartSelectedMetricKeys.value.includes(row.item)) {
-      chartSelectedMetricKeys.value.push(row.item)
+      chartSelectedMetricKeys.value = showActualValues.value ? [row.item] : [...chartSelectedMetricKeys.value, row.item]
     }
   }
   renderChart()
@@ -1500,6 +1564,76 @@ watch(
 )
 
 // 图表二次筛选改变时，标记为已定制并触发重绘
+watch([showActualValues, chartSelectedMetricKeys], () => {
+  if (showActualValues.value && chartSelectedMetricKeys.value.length > 1) {
+    chartSelectedMetricKeys.value = singleMetricSelection(chartSelectedMetricKeys.value, focusedMetricKey.value)
+  }
+  if (showActualValues.value && focusedMetricKey.value && !chartSelectedMetricKeys.value.includes(focusedMetricKey.value)) {
+    focusedMetricKey.value = ''
+  }
+}, { deep: true, flush: 'sync' })
+
+watch(showActualValues, (enabled) => {
+  if (enabled && !chartSelectedMetricKeys.value.length && filteredMetrics.value.length) {
+    chartSelectedMetricKeys.value = [filteredMetrics.value[0].item]
+  }
+  nextTick(renderChart)
+})
+
+const actualQuery = computed(() => {
+  if (!showActualValues.value || loading.value ||
+      (!isDynamicDecomposeEnabled.value && activeChartTab.value === 'donut_distribution')) return null
+  const item = chartSelectedMetricKeys.value[0]
+  const metric = (isDynamicDecomposeEnabled.value ? activeDecompositionMetrics.value : chartMetrics.value)
+    .find((entry) => entry.item === item)
+  if (!metric) return null
+  const start = isDynamicDecomposeEnabled.value ? dynamicTargetMonth.value : displayedMonths.value[0]
+  const end = isDynamicDecomposeEnabled.value ? dynamicTargetMonth.value : displayedMonths.value.at(-1)
+  if (!start || !end) return null
+  return { company: currentCompany.value, item, unit: metric.unit || '', start_month: start,
+    end_month: end, granularity: isDynamicDecomposeEnabled.value ? 'day' : 'month' }
+})
+const { data: actualData, loading: actualLoading, error: actualError } = useDynamicPlanActuals(projectKey, actualQuery)
+
+function getDailyDetailActual(metric, day) {
+  const data = actualData.value
+  const cutoff = data?.latest_published_date
+  if (!showActualValues.value || !data || data.granularity !== 'day' ||
+      data.company !== currentCompany.value || data.item !== metric.item || data.unit !== (metric.unit || '') ||
+      !cutoff || day > cutoff || day.slice(0, 7) !== dynamicTargetMonth.value) return null
+  return data.values?.[day] ?? null
+}
+
+function getDailyDetailActualTotal(metric) {
+  const dates = decompDetailData.value.dates
+  const published = actualData.value?.latest_published_date
+  if (!dates.length || !published) return null
+  const cutoff = published < dates.at(-1) ? published : dates.at(-1)
+  const actualMetric = { ...metric, daily_plans: dates.map(day => getDailyDetailActual(metric, day)) }
+  return aggregateDecomposedPlan(actualMetric, dates, cutoff, [actualMetric])
+}
+
+// 历史月气温不足时仍提供完整日历，计划与气温缺值留空，实际值照常展示。
+const decompDetailData = computed(() => {
+  if (dynamicDecompData.value?.has_full_month) return dynamicDecompData.value
+  const dates = monthDates(dynamicTargetMonth.value)
+  return { company_cn: currentUnitLabel.value, dates, day_labels: dates.map(day => day.slice(5)),
+    temperatures: [], hdd20_series: [], avg_temperature: null, avg_hdd20: null }
+})
+
+const cumulativeQuery = computed(() => {
+  if (!showCumulativeActual.value || !isDynamicDecomposeEnabled.value || !canShowDynamicActuals.value || loading.value) return null
+  const metrics = prioritizeStandardCoal(activeDecompositionMetrics.value).map(metric => ({ item: metric.item, unit: metric.unit || '' }))
+  return metrics.length ? { company: currentCompany.value, year_month: dynamicTargetMonth.value, metrics } : null
+})
+const { data: cumulativeData, loading: cumulativeLoading, error: cumulativeError } = useDynamicPlanActuals(projectKey, cumulativeQuery)
+watch([actualData, cumulativeData], ([daily, cumulative]) => {
+  const result = daily || cumulative
+  if (result) latestPublishedDate.value = result.latest_published_date || null
+  nextTick(renderChart)
+})
+watch(showCumulativeActual, () => nextTick(renderChart))
+
 watch(
   chartSelectedMetricKeys,
   () => {
@@ -1527,6 +1661,7 @@ async function initMeta() {
   try {
     const res = await getDynamicPlanMeta(projectKey)
     if (res.ok) {
+      latestPublishedDate.value = res.latest_published_date || null
       unitOptions.value = res.units || []
       if (res.available_months && res.available_months.length) {
         availableMonths.value = res.available_months
@@ -1570,7 +1705,7 @@ async function fetchData() {
       summaryCards.value = res.summary_cards || {}
       // 表格保持全选当前单位下的全部指标
       selectedMetricKeys.value = (res.metrics || []).map((m) => m.item)
-      // 图表二次筛选默认仅选中：供热量、发电量、标煤耗量三个指标
+      // 图表二次筛选默认只选一个指标，优先标煤耗量。
       chartSelectedMetricKeys.value = getDefaultChartMetricKeys(res.metrics || [])
       isChartCustomized.value = false
 
@@ -1607,11 +1742,11 @@ function renderDynamicDecomposeChart() {
   }
 
   // 1. 若气温不完整或发生错误
-  if (!dynamicDecompData.value || !dynamicDecompData.value.has_full_month) {
+  if ((!dynamicDecompData.value || !dynamicDecompData.value.has_full_month) && !showActualValues.value) {
     chartInstance.setOption(
       {
         title: {
-          text: `⚠️ ${formatMonthCn(dynamicTargetMonth.value)} 气温数据不完整，无法进行动态分解`,
+          text: `⚠️ ${formatMonthCn(dynamicTargetMonth.value)} 气温数据不完整，无法进行逐日测算`,
           subtext:
             dynamicDecompError.value ||
             '该月份在数据库中缺少全月完整气温数据，请先导入预报或选择气温完整的月份（如 2026-11）',
@@ -1637,7 +1772,11 @@ function renderDynamicDecomposeChart() {
     avg_temperature,
     avg_hdd20,
     company_cn,
-  } = dynamicDecompData.value
+  } = dynamicDecompData.value?.has_full_month ? dynamicDecompData.value : {
+    dates: monthDates(dynamicTargetMonth.value),
+    day_labels: monthDates(dynamicTargetMonth.value).map((day) => day.slice(5)),
+    temperatures: [], hdd20_series: [],
+  }
 
   const activeMetrics = activeDecompositionMetrics.value
 
@@ -1645,7 +1784,7 @@ function renderDynamicDecomposeChart() {
     chartInstance.setOption(
       {
         title: {
-          text: '未勾选具备 k 值的分解指标',
+          text: '未勾选具备 k 值的测算指标',
           subtext: '请在右上角【图表呈现】中勾选具备 k 模型的指标项（如供热量、发电量、耗煤等）',
           left: 'center',
           top: 'center',
@@ -1669,7 +1808,7 @@ function renderDynamicDecomposeChart() {
 
   const series = []
 
-  // 1. 各生产指标的每日计划平滑曲线
+  // 1. 各生产指标的每日测算平滑曲线，月度计划序列沿用正式计划名称。
   activeMetrics.forEach((m) => {
     const isFocused = focusedMetricKey.value === m.item
     const hasFocus = !!focusedMetricKey.value
@@ -1677,7 +1816,7 @@ function renderDynamicDecomposeChart() {
     const useRightAxis = hasDualAxis && m.unit === rightUnit
 
     const baseSeries = {
-      name: `${m.item_cn} (${m.unit || '—'})`,
+      name: `${m.item_cn}·测算 (${m.unit || '—'})`,
       type: 'line',
       yAxisIndex: unitList.indexOf(m.unit || '数值'),
       smooth: true,
@@ -1693,7 +1832,7 @@ function renderDynamicDecomposeChart() {
       itemStyle: { color },
     }
 
-    if (activeMetrics.length === 1 && !showDecompTemperature.value) {
+    if (activeMetrics.length === 1 && !showDecompTemperature.value && !showActualValues.value) {
       baseSeries.areaStyle = {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
           { offset: 0, color: 'rgba(37, 99, 235, 0.3)' },
@@ -1702,6 +1841,9 @@ function renderDynamicDecomposeChart() {
       }
     }
     series.push(baseSeries)
+    if (showActualValues.value) {
+      series.push(actualBarSeries(m, dates, actualData.value, color, unitList.indexOf(m.unit || '数值')))
+    }
   })
 
   // 2. 气温曲线配置（默认开启平均气温，亦可勾选关闭）
@@ -1792,7 +1934,7 @@ function renderDynamicDecomposeChart() {
 
           let tip = `<div style="font-weight:700;margin-bottom:6px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;display:flex;justify-content:space-between;gap:16px;">
             <span>📅 ${dFull}</span>
-            <span style="color:#0284c7;">🌡️ ${temp} ℃ (HDD20: ${hdd})</span>
+            ${temp == null ? '' : `<span style="color:#0284c7;">🌡️ ${temp} ℃ (HDD20: ${hdd})</span>`}
           </div>`
 
           params.forEach((p) => {
@@ -1803,7 +1945,7 @@ function renderDynamicDecomposeChart() {
               </div>`
               return
             }
-            const metricItem = activeMetrics.find((m) => `${m.item_cn} (${m.unit || '—'})` === p.seriesName)
+            const metricItem = activeMetrics.find((m) => `${m.item_cn}·测算 (${m.unit || '—'})` === p.seriesName)
             const w = metricItem?.daily_weights?.[idx]
             const hasK = metricItem?.has_k !== false
             tip += `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;margin:3px 0;">
@@ -1811,7 +1953,7 @@ function renderDynamicDecomposeChart() {
                 <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};"></span>
                 <span>${p.seriesName}:</span>
               </span>
-              <span style="font-weight:700;">${formatNumber(p.value)} ${hasK && w !== undefined ? `<small style="color:#64748b;font-weight:normal;">(权重 ${w})</small>` : `<small style="color:#94a3b8;font-weight:normal;">${metricItem?.aggregation_method === 'sum_children' ? '(子口径逐日汇总)' : '(无k·日均摊)'}</small>`}</span>
+              <span style="font-weight:700;">${p.value == null ? '—' : formatNumber(p.value)} ${!metricItem || p.value == null ? '' : hasK && w !== undefined ? `<small style="color:#64748b;font-weight:normal;">(权重 ${w})</small>` : `<small style="color:#94a3b8;font-weight:normal;">${metricItem?.aggregation_method === 'sum_children' ? '(子口径逐日汇总)' : '(无k·日均摊)'}</small>`}</span>
             </div>`
           })
           return tip
@@ -1834,6 +1976,52 @@ function renderDynamicDecomposeChart() {
 // -------------------------------------------------------------
 // ECharts 图表渲染引擎
 // -------------------------------------------------------------
+function renderCumulativeComparisonChart() {
+  const targets = prioritizeStandardCoal(activeDecompositionMetrics.value)
+  const cutoff = cumulativeData.value?.latest_published_date || latestPublishedDate.value
+  const allPlans = dynamicDecompData.value?.has_full_month ? dynamicDecompData.value.metrics : []
+  const dates = dynamicDecompData.value?.dates || monthDates(dynamicTargetMonth.value)
+  const plans = targets.map(metric => aggregateDecomposedPlan(metric, dates, cutoff, allPlans))
+  const actuals = targets.map(metric => cumulativeData.value?.metrics?.[metric.item]?.values?.[dynamicTargetMonth.value] ?? null)
+  const units = metricUnits(targets)
+  const categories = targets.map(metric => metric.item_cn)
+  const series = units.flatMap((unit, axisIndex) => [
+    { name: '累计实际', values: actuals, color: '#2563eb' },
+    { name: '累计测算值', values: plans, color: '#f97316' },
+  ].map(entry => ({
+    name: entry.name, type: 'bar', xAxisIndex: axisIndex, yAxisIndex: axisIndex,
+    barMaxWidth: 32, barGap: '20%',
+    // 同单位共享一个分类轴；不同单位的分类轴重合，保持每组两柱居中相邻。
+    data: targets.map((metric, index) => (metric.unit || '数值') === unit ? entry.values[index] : null),
+    itemStyle: { color: entry.color, borderRadius: [3, 3, 0, 0] },
+    label: { show: targets.length <= 6, position: 'top', fontSize: 11,
+      formatter: param => param.value == null ? '' : formatNumber(param.value) },
+  })))
+  chartInstance.setOption({
+    title: { show: !targets.length, text: '未勾选任何图表呈现指标', left: 'center', top: 'center',
+      textStyle: { color: '#94a3b8', fontSize: 16 } },
+    legend: { data: ['累计实际', '累计测算值'], top: 8 },
+    grid: { left: '3%', right: Math.max(65, (units.length - 1) * 65), top: 56,
+      bottom: targets.length > 6 ? 75 : 35, containLabel: true },
+    xAxis: units.map((unit, index) => ({ type: 'category', data: categories, show: index === 0,
+      axisLabel: { interval: 0, rotate: targets.length > 4 ? 12 : 0, fontSize: 11 } })),
+    yAxis: metricAxes(targets),
+    axisPointer: { link: [{ xAxisIndex: 'all' }] },
+    tooltip: { trigger: 'axis', confine: true, axisPointer: { type: 'shadow' },
+      formatter: params => {
+        const index = params?.[0]?.dataIndex
+        const metric = targets[index]
+        if (!metric) return ''
+        const value = number => number == null ? '—' : formatNumber(number)
+        return `<b>${metric.item_cn} (${metric.unit || '—'})</b><br/>累计实际：${value(actuals[index])}<br/>累计测算值：${value(plans[index])}`
+      } },
+    dataZoom: targets.length > 6 ? [{ type: 'slider', xAxisIndex: units.map((_, index) => index),
+      filterMode: 'none', start: 0, end: Math.min(100, 600 / targets.length), bottom: 5 }] : [],
+    series,
+  }, true)
+  chartInstance.resize()
+}
+
 function renderChart() {
   if (!chartContainerRef.value) return
   if (!chartInstance) {
@@ -1842,6 +2030,10 @@ function renderChart() {
 
   // 若开启动态分解模式，则执行动态日计划分解走势图渲染
   if (isDynamicDecomposeEnabled.value) {
+    if (showCumulativeActual.value && canShowDynamicActuals.value) {
+      renderCumulativeComparisonChart()
+      return
+    }
     renderDynamicDecomposeChart()
     return
   }
@@ -1881,7 +2073,7 @@ function renderChart() {
       const useRightAxis = hasDualAxis && mapping.rightKeys.has(m.item)
 
       const baseSeries = {
-        name: `${m.item_cn} (${m.unit || '—'})`,
+        name: `${m.item_cn}${showActualValues.value ? '·计划' : ''} (${m.unit || '—'})`,
         type: 'line',
         yAxisIndex: metricUnits(targetMetrics).indexOf(m.unit || '数值'),
         smooth: true,
@@ -1903,7 +2095,7 @@ function renderChart() {
       }
 
       // 单指标时添加渐变面积填充
-      if (isSingle) {
+      if (isSingle && !showActualValues.value) {
         baseSeries.areaStyle = {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(37, 99, 235, 0.35)' },
@@ -1914,6 +2106,10 @@ function renderChart() {
 
       return baseSeries
     })
+
+    if (showActualValues.value && targetMetrics[0]) {
+      series.push(actualBarSeries(targetMetrics[0], months, actualData.value, getMetricColor(targetMetrics[0].item)))
+    }
 
     const yAxes = metricAxes(targetMetrics)
 
@@ -1931,7 +2127,7 @@ function renderChart() {
                   <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};"></span>
                   <span>${p.seriesName}:</span>
                 </span>
-                <span style="font-weight:700;">${formatNumber(p.value)}</span>
+                <span style="font-weight:700;">${p.value == null ? '—' : formatNumber(p.value)}</span>
               </div>`
             })
             return tip
@@ -1985,7 +2181,7 @@ function renderChart() {
       const useRightAxis = hasDualAxis && mapping.rightKeys.has(m.item)
 
       return {
-        name: `${m.item_cn} (${m.unit || '—'})`,
+        name: `${m.item_cn}${showActualValues.value ? '·计划' : ''} (${m.unit || '—'})`,
         type: 'bar',
         yAxisIndex: metricUnits(targetMetrics).indexOf(m.unit || '数值'),
         barMaxWidth: targetMetrics.length > 4 ? 20 : 32,
@@ -1997,6 +2193,10 @@ function renderChart() {
         },
       }
     })
+
+    if (showActualValues.value && targetMetrics[0]) {
+      series.push(actualBarSeries(targetMetrics[0], months, actualData.value, getMetricColor(targetMetrics[0].item)))
+    }
 
     const yAxes = metricAxes(targetMetrics)
 
@@ -2014,7 +2214,7 @@ function renderChart() {
                   <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};"></span>
                   <span>${p.seriesName}:</span>
                 </span>
-                <span style="font-weight:700;">${formatNumber(p.value)}</span>
+                <span style="font-weight:700;">${p.value == null ? '—' : formatNumber(p.value)}</span>
               </div>`
             })
             return tip
@@ -2135,7 +2335,7 @@ function exportToExcel() {
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '动态计划数据')
+  XLSX.utils.book_append_sheet(wb, ws, '月度计划数据')
   const fileName = `${currentUnitLabel.value}_${pageDisplayName.value}_${startMonth.value}_${endMonth.value}.xlsx`
   XLSX.writeFile(wb, fileName)
 }
@@ -3308,6 +3508,11 @@ onBeforeUnmount(() => {
 .decomp-toggle-pill:hover {
   background: #e2e8f0;
   color: #1e293b;
+}
+
+.decomp-toggle-pill.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .decomp-toggle-pill.is-active {

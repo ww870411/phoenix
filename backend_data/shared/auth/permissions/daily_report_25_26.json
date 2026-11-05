@@ -152,6 +152,7 @@
         "data_show",
         "data_approval",
         "data_entry",
+        "data_analysis",
         "dynamic_plan",
         "dispatch_info"
       ],
@@ -188,6 +189,7 @@
         "dashboard",
         "data_show",
         "data_entry",
+        "data_analysis",
         "dynamic_plan",
         "dispatch_info"
       ],
@@ -221,6 +223,7 @@
         "dashboard",
         "data_show",
         "data_entry",
+        "data_analysis",
         "dynamic_plan",
         "dispatch_info"
       ],
@@ -256,6 +259,7 @@
       "page_access": [
         "dashboard",
         "data_show",
+        "data_analysis",
         "dynamic_plan",
         "dispatch_info",
         "placeholder"

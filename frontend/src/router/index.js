@@ -80,7 +80,7 @@ const routes = [
   {
     path: '/projects/:projectKey/pages/dynamic_plan',
     component: () => import('../projects/daily_report_25_26/pages/DynamicPlanMetricsView.vue'),
-    meta: { title: '计划动态分解模块' },
+    meta: { title: '计划情景分解模型（测试）' },
   },
   {
     path: '/projects/:projectKey/pages/global_management',
