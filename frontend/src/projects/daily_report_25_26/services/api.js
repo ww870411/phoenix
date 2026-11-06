@@ -136,6 +136,261 @@ export async function fetchPeriodReport(params = {}, { signal } = {}) {
   return response.json()
 }
 
+export async function fetchPeriodReportFiles({ signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/files`, {
+    headers: attachAuthHeaders(), signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '获取汇报文件列表失败'))
+  return response.json()
+}
+
+export async function savePeriodReportHtml({ filename, content }, { signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/files/save`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ filename, content }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '保存汇报 HTML 文件失败'))
+  return response.json()
+}
+
+export async function uploadPeriodReportFile(file, { signal } = {}) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/files/upload`, {
+    method: 'POST',
+    headers: attachAuthHeaders(),
+    body: formData,
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '上传汇报 HTML 文件失败'))
+  return response.json()
+}
+
+export async function fetchPeriodReportContent(relPath, { signal } = {}) {
+  const query = new URLSearchParams({ path: relPath })
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/files/content?${query}`, {
+    headers: attachAuthHeaders(), signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '读取汇报 HTML 内容失败'))
+  return response.json()
+}
+
+export async function downloadPeriodReportFile(relPath) {
+  const query = new URLSearchParams({ path: relPath })
+  const url = `${projectPath('daily_report_25_26')}/period-report/files/download?${query}`
+  const response = await authAwareFetch(url, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '下载汇报文件失败'))
+  const blob = await response.blob()
+  const downloadUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = downloadUrl
+  const filename = relPath.split('/').pop() || 'report.html'
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(downloadUrl)
+}
+
+export async function deletePeriodReportFile(relPath, { signal } = {}) {
+  const query = new URLSearchParams({ path: relPath })
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/files?${query}`, {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '删除汇报文件失败'))
+  return response.json()
+}
+
+export async function renamePeriodReportFile(path, newName, { signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/files/rename`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ path, new_name: newName }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '重命名汇报文件失败'))
+  return response.json()
+}
+
+// ==================== 工作流目录（Workflow Space）前端 API ====================
+
+export async function fetchWorkflowFiles(folder = '', { signal } = {}) {
+  const query = folder ? `?folder=${encodeURIComponent(folder)}` : ''
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/workflow/files${query}`, {
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '获取工作流文件列表失败'))
+  return response.json()
+}
+
+export async function createWorkflowFolder(parentFolder, folderName, { signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/workflow/folders/create`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ parent_folder: parentFolder, folder_name: folderName }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '创建工作流子目录失败'))
+  return response.json()
+}
+
+export async function fetchWorkflowFileContent(relPath, { signal } = {}) {
+  const query = new URLSearchParams({ path: relPath })
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/workflow/files/content?${query}`, {
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '读取工作流文档内容失败'))
+  return response.json()
+}
+
+export async function downloadWorkflowFile(relPath) {
+  const query = new URLSearchParams({ path: relPath })
+  const url = `${projectPath('daily_report_25_26')}/period-report/workflow/files/download?${query}`
+  const response = await authAwareFetch(url, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '下载工作流文件失败'))
+  const blob = await response.blob()
+  const downloadUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = downloadUrl
+  const filename = relPath.split('/').pop() || 'workflow_doc.md'
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(downloadUrl)
+}
+
+export async function uploadWorkflowFile(file, folder = '', { signal } = {}) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const query = folder ? `?folder=${encodeURIComponent(folder)}` : ''
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/workflow/files/upload${query}`, {
+    method: 'POST',
+    headers: attachAuthHeaders(),
+    body: formData,
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '上传工作流文件失败'))
+  return response.json()
+}
+
+export async function renameWorkflowFile(path, newName, { signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/workflow/files/rename`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ path, new_name: newName }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '重命名工作流文件失败'))
+  return response.json()
+}
+
+export async function deleteWorkflowFile(relPath, { signal } = {}) {
+  const query = new URLSearchParams({ path: relPath })
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/workflow/files?${query}`, {
+    method: 'DELETE',
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '删除工作流文件失败'))
+  return response.json()
+}
+
+export async function downloadWorkflowArchive(folder = '', { signal } = {}) {
+  const query = folder ? `?folder=${encodeURIComponent(folder)}` : ''
+  const url = `${projectPath('daily_report_25_26')}/period-report/workflow/archive${query}`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({
+      Accept: 'application/zip, application/octet-stream',
+    }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '打包下载工作流目录失败'))
+
+  const blob = await response.blob()
+  const downloadUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = downloadUrl
+
+  let filename = '工作流资料包.zip'
+  const disposition = response.headers.get('content-disposition') || ''
+  const utf8Match = disposition.match(/filename\*=utf-8''([^;]+)/i)
+  if (utf8Match && utf8Match[1]) {
+    filename = decodeURIComponent(utf8Match[1])
+  } else {
+    const plainMatch = disposition.match(/filename="?([^";]+)"?/i)
+    if (plainMatch && plainMatch[1]) {
+      filename = decodeURIComponent(plainMatch[1])
+    }
+  }
+
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(downloadUrl)
+  return { ok: true, filename }
+}
+
+export async function exportPeriodReportXlsx({ start, end, include_prev = true, save_to_space = false, filename = null }, { signal } = {}) {
+  const params = new URLSearchParams({
+    start,
+    end,
+    include_prev: String(include_prev),
+    save_to_space: String(save_to_space),
+  })
+  if (filename) {
+    params.set('filename', filename)
+  }
+  const url = `${projectPath('daily_report_25_26')}/period-report/export-xlsx?${params.toString()}`
+
+  if (save_to_space) {
+    const response = await authAwareFetch(url, {
+      headers: attachAuthHeaders(),
+      signal,
+    })
+    if (!response.ok) throw new Error(await parseErrorDetail(response, '保存生产数据 XLSX 报表失败'))
+    return response.json()
+  } else {
+    const response = await authAwareFetch(url, {
+      headers: attachAuthHeaders(),
+      signal,
+    })
+    if (!response.ok) throw new Error(await parseErrorDetail(response, '导出生产数据 XLSX 报表失败'))
+    const blob = await response.blob()
+    const downloadUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    let outFilename = filename
+    if (!outFilename) {
+      const disposition = response.headers.get('content-disposition') || ''
+      const match = disposition.match(/filename\*=utf-8''([^;]+)/i) || disposition.match(/filename="?([^";]+)"?/i)
+      if (match && match[1]) {
+        outFilename = decodeURIComponent(match[1])
+      } else {
+        outFilename = `${start}_${end}_生产数据明细.xlsx`
+      }
+    }
+    a.download = outFilename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(downloadUrl)
+    return { ok: true, filename: outFilename }
+  }
+}
+
 function buildDev8001FallbackUrl(url) {
   const rawUrl = String(url || '')
   if (!rawUrl) return ''
@@ -1880,6 +2135,25 @@ export async function disableDashboardCache(projectKey) {
     const message = await response.text()
     throw new Error(message || `禁用缓存失败: ${response.status}`)
   }
+  return response.json()
+}
+
+// 全局管理中心与看板导入共用同一份气温来源配置。
+export async function getTemperatureImportConfig(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/config`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '读取气温 API 配置失败'))
+  return response.json()
+}
+
+export async function saveTemperatureImportConfig(projectKey, apiUrl) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/config`, {
+    method: 'PUT',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ api_url: apiUrl }),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '保存气温 API 配置失败'))
   return response.json()
 }
 

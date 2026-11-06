@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- [AI-SLOT: META_TITLE] 替换为当前汇报材料的完整标题 -->
+  <title>通用经营分析与专项汇报演示引擎 (Universal Report Presentation Engine v2.0)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+    :root {
+      --font-scale: 1;
+      --bg-primary: #f1f5f9;
+      --card-bg: #ffffff;
+      --brand-navy: #0f3d68;
+      --brand-blue: #1d6fa5;
+      --brand-teal: #0d9488;
+      --brand-amber: #d97706;
+      --brand-red: #dc2626;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0b2545 0%, #13315c 50%, #0f172a 100%);
+      color: var(--text-main);
+      overflow-x: hidden;
+    }
+
+    .stage-wrapper {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    body.mode-continuous .stage-wrapper {
+      height: auto;
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+
+    .top-bar {
+      height: 52px;
+      min-height: 52px;
+      background: rgba(11, 37, 69, 0.94);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 50;
+    }
+
+    .slides-viewport {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 92px);
+      perspective: 1600px;
+      overflow: hidden;
+      padding: 10px 16px;
+    }
+
+    body.mode-continuous .slides-viewport {
+      height: auto;
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+
+    .slide-page {
+      position: absolute;
+      inset: 10px 16px;
+      background: #f8fafc;
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(60px) scale(0.97);
+      transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.48s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    body.mode-continuous .slide-page {
+      position: relative;
+      inset: auto;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      transform: none !important;
+      min-height: 780px;
+    }
+
+    .slide-page.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) translateY(0) scale(1) rotateX(0deg) rotateY(0deg);
+      z-index: 10;
+    }
+
+    .fx-slide .slide-page.prev-page { transform: translateX(-80px) scale(0.96); opacity: 0; }
+    .fx-slide .slide-page.next-page { transform: translateX(80px) scale(0.96); opacity: 0; }
+
+    .fx-cube .slide-page.prev-page { transform: translateX(-45%) rotateY(-38deg) scale(0.88); opacity: 0; transform-origin: right center; }
+    .fx-cube .slide-page.next-page { transform: translateX(45%) rotateY(38deg) scale(0.88); opacity: 0; transform-origin: left center; }
+
+    .fx-flip .slide-page.prev-page { transform: translateY(-40px) rotateX(28deg) scale(0.92); opacity: 0; transform-origin: center bottom; }
+    .fx-flip .slide-page.next-page { transform: translateY(40px) rotateX(-28deg) scale(0.92); opacity: 0; transform-origin: center top; }
+
+    .fx-zoom .slide-page.prev-page { transform: scale(1.12); opacity: 0; }
+    .fx-zoom .slide-page.next-page { transform: scale(0.86); opacity: 0; }
+
+    .slide-header {
+      background: linear-gradient(90deg, #0f3d68 0%, #164e85 60%, #1e6091 100%);
+      color: #ffffff;
+      padding: 11px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #f59e0b;
+      flex-shrink: 0;
+    }
+
+    .slide-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 46% 54%;
+      gap: 14px;
+      padding: 12px 16px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    body.layout-chart-focus .slide-body { grid-template-columns: 32% 68%; }
+    body.layout-text-focus .slide-body { grid-template-columns: 58% 42%; }
+
+    .slide-body.single-col {
+      grid-template-columns: 1fr !important;
+      overflow-y: auto;
+    }
+
+    @media (max-width: 1024px) {
+      .slide-body {
+        grid-template-columns: 1fr !important;
+        overflow-y: auto;
+      }
+      .slides-viewport { height: calc(100vh - 92px); }
+    }
+
+    .script-panel {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      min-height: 0;
+    }
+
+    .panel-toolbar {
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .script-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      font-size: calc(15.5px * var(--font-scale));
+      line-height: 1.72;
+      color: #1e293b;
+    }
+
+    .reading-para {
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      border-radius: 10px;
+      border-left: 4px solid #cbd5e1;
+      background: #f8fafc;
+      transition: all 0.22s ease;
+      cursor: pointer;
+    }
+
+    .reading-para:hover {
+      border-left-color: #1d6fa5;
+      background: #f0f9ff;
+    }
+
+    .reading-para.reading-active {
+      border-left: 5px solid #d97706;
+      background: #fffbeb;
+      box-shadow: 0 4px 14px rgba(217, 119, 6, 0.14);
+      font-weight: 500;
+      color: #0f172a;
+    }
+
+    /* 三色语义化数值高亮标签 */
+    .num-pos { color: #0f3d68; font-weight: 700; background: #e0f2fe; padding: 1px 5px; border-radius: 4px; }
+    .num-down { color: #0f766e; font-weight: 700; background: #ccfbf1; padding: 1px 5px; border-radius: 4px; }
+    .num-warn { color: #b91c1c; font-weight: 700; background: #fee2e2; padding: 1px 5px; border-radius: 4px; }
+
+    .visual-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      min-height: 0;
+      padding-right: 2px;
+      position: relative;
+    }
+
+    .chart-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      flex: 1;
+      min-height: 240px;
+    }
+
+    .chart-title {
+      font-size: calc(15px * var(--font-scale));
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+      line-height: 1.35;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chart-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 15px;
+      background: #0f3d68;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .chart-box {
+      width: 100%;
+      flex: 1;
+      min-height: 215px;
+    }
+
+    /* 表格自适应紧凑全显 + 首列冻结锁定 */
+    .table-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      gap: 8px;
+    }
+
+    .data-table-wrap {
+      overflow-x: auto;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      position: relative;
+    }
+
+    table.report-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: calc(12.5px * var(--font-scale));
+      table-layout: auto;
+    }
+
+    table.report-table th {
+      background: #0f3d68;
+      color: #ffffff;
+      font-weight: 600;
+      padding: 6px 5px;
+      text-align: right;
+      border-bottom: 1px solid #1e4976;
+      border-right: 1px solid #1e4976;
+      line-height: 1.25;
+      white-space: normal;
+      word-break: keep-all;
+    }
+
+    table.report-table th:first-child {
+      text-align: left;
+      padding-left: 8px;
+      position: sticky;
+      left: 0;
+      z-index: 4;
+      background: #0f3d68;
+      white-space: nowrap;
+      box-shadow: 2px 0 5px rgba(15, 23, 42, 0.18);
+    }
+
+    table.report-table td {
+      padding: 5px 5px;
+      border-bottom: 1px solid #e2e8f0;
+      border-right: 1px solid #e2e8f0;
+      text-align: right;
+      color: #1e293b;
+      white-space: nowrap;
+      background: #ffffff;
+    }
+
+    table.report-table td:first-child {
+      text-align: left;
+      padding-left: 8px;
+      font-weight: 700;
+      color: #0f3d68;
+      background: #f8fafc;
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      box-shadow: 2px 0 5px rgba(15, 23, 42, 0.08);
+    }
+
+    table.report-table tr.row-total td {
+      background: #fef3c7;
+      font-weight: 700;
+      color: #92400e;
+    }
+
+    table.report-table tr.row-total td:first-child {
+      background: #fde68a;
+      color: #78350f;
+    }
+
+    table.report-table tr:hover td { background: #e0f2fe; }
+    table.report-table tr:hover td:first-child { background: #bae6fd; }
+
+    /* 右侧大屏表格放大覆盖层（引擎自动为每页附表注入） */
+    .expanded-table-overlay {
+      position: absolute;
+      inset: 0;
+      background: #ffffff;
+      border: 2px solid #0f3d68;
+      border-radius: 12px;
+      z-index: 30;
+      display: none;
+      flex-direction: column;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+      overflow: hidden;
+    }
+
+    .expanded-table-overlay.active {
+      display: flex;
+    }
+
+    .expanded-table-overlay table.report-table {
+      font-size: calc(15px * var(--font-scale));
+    }
+
+    .expanded-table-overlay table.report-table th,
+    .expanded-table-overlay table.report-table td {
+      padding: 10px 12px;
+    }
+
+    .bottom-bar {
+      height: 40px;
+      min-height: 40px;
+      background: rgba(11, 37, 69, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 50;
+      font-size: 13px;
+    }
+
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.6);
+      z-index: 90;
+      display: none;
+    }
+    .drawer-backdrop.open { display: block; }
+
+    .toc-drawer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 360px;
+      max-width: 85vw;
+      background: #0f172a;
+      color: #f8fafc;
+      z-index: 100;
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid rgba(255,255,255,0.15);
+    }
+    .toc-drawer.open { transform: translateX(0); }
+  </style>
+</head>
+<body class="fx-cube">
+  <!-- ==================== 全局固定外壳：侧边章节导航抽屉 ==================== -->
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+  <aside id="tocDrawer" class="toc-drawer">
+    <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+      <div>
+        <div class="text-xs text-amber-400 font-semibold tracking-wider">章节与页码导航</div>
+        <!-- [AI-SLOT: DRAWER_REPORT_SHORT_TITLE] 替换为汇报简称 -->
+        <div id="drawerReportTitle" class="text-base font-bold text-white">通用汇报模板引擎 · 标准版式库</div>
+      </div>
+      <button id="closeTocBtn" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm">关闭 ✕</button>
+    </div>
+    <div id="tocList" class="flex-1 overflow-y-auto p-3 space-y-1.5 text-sm"></div>
+  </aside>
+
+  <div class="stage-wrapper">
+    <!-- ==================== 全局固定外壳：顶部投屏控制栏 ==================== -->
+    <header class="top-bar">
+      <div class="flex items-center gap-3">
+        <button id="openTocBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-800/80 hover:bg-sky-700 text-white text-xs font-semibold border border-sky-500/40 transition">
+          <span>☰ 章节目录</span>
+          <span id="pageIndicatorTop" class="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold">1 / 6</span>
+        </button>
+        <div class="hidden md:block">
+          <!-- [AI-SLOT: TOPBAR_REPORT_TITLE] 替换为汇报全称 -->
+          <h1 id="topBarReportTitle" class="text-base font-bold tracking-wide text-white">通用经营分析与专项汇报演示引擎（L1–L4 数据层级规范样板）</h1>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- 翻页特效选择 -->
+        <div class="hidden sm:flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-700 text-xs">
+          <span class="text-slate-400">翻页特效:</span>
+          <select id="fxSelector" class="bg-transparent text-amber-300 font-semibold focus:outline-none cursor-pointer">
+            <option value="fx-cube" class="bg-slate-900">3D 立体魔方</option>
+            <option value="fx-slide" class="bg-slate-900">平滑推拉画卷</option>
+            <option value="fx-flip" class="bg-slate-900">纵深卡片翻转</option>
+            <option value="fx-zoom" class="bg-slate-900">聚焦缩放渐变</option>
+          </select>
+        </div>
+
+        <!-- 分屏比例切换 -->
+        <div class="hidden lg:flex items-center bg-slate-900/80 p-0.5 rounded-lg border border-slate-700 text-xs">
+          <button id="layoutBalancedBtn" class="px-2 py-1 rounded bg-sky-700 text-white font-medium">标准同屏</button>
+          <button id="layoutChartBtn" class="px-2 py-1 rounded text-slate-300 hover:text-white">图表放大</button>
+          <button id="layoutTextBtn" class="px-2 py-1 rounded text-slate-300 hover:text-white">念稿放大</button>
+          <button id="layoutScrollBtn" class="px-2 py-1 rounded text-slate-300 hover:text-white">长卷连读</button>
+        </div>
+
+        <!-- 字号缩放 -->
+        <div class="flex items-center bg-slate-900/80 rounded-lg border border-slate-700 text-xs overflow-hidden">
+          <button id="fontDecBtn" class="px-2 py-1 hover:bg-slate-800 text-slate-200" title="缩小字号">A-</button>
+          <span id="fontScaleLabel" class="px-1.5 text-amber-300 font-mono">100%</span>
+          <button id="fontIncBtn" class="px-2 py-1 hover:bg-slate-800 text-slate-200" title="放大字号">A+</button>
+        </div>
+
+        <!-- 上下页与全屏 -->
+        <div class="flex items-center gap-1">
+          <button id="prevSlideBtn" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold border border-slate-600">◀ 上一页</button>
+          <button id="nextSlideBtn" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold">下一页 ▶</button>
+          <button id="fullscreenBtn" class="px-2.5 py-1.5 rounded-lg bg-sky-900/80 hover:bg-sky-800 text-sky-100 text-xs border border-sky-600/40" title="全屏投影">⛶ 全屏</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ==================== 16:9 幻灯片主视口（AI Agent 动态生成区） ==================== -->
+    <main id="slidesViewport" class="slides-viewport">
+
+      <!-- ========================================================================================
+           【版式 A · L1 决策总览封面页】 (Archetype A: Executive Summary & KPI Bento Grid)
+           适用场景：第1页开篇总览。顶部左5右7（引言+6张北极星指标卡），底部5~6张结构化结论Bento卡。
+           ======================================================================================== -->
+      <section class="slide-page active" data-slide-index="0" data-title="01. [版式A·L1总览] 封面与核心结论全屏总览">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 01 / 06 页 · L1 决策总览</span>
+            <h2 class="text-lg font-bold tracking-wide">一、总体情况 —— [填写周期/专项名称] 核心结论与关键指标总览</h2>
+          </div>
+          <span class="text-xs text-sky-200">版式 A（全屏 Bento 决策视图）· 键盘 ← / → 翻页</span>
+        </div>
+
+        <div class="slide-body single-col bg-slate-100/90 !p-4">
+          <div class="w-full h-full flex flex-col justify-between gap-4">
+            <!-- 顶部庄重横幅（左5右7黄金比例：左侧背景引言，右侧6大北极星指标卡） -->
+            <div class="bg-gradient-to-r from-[#0f3d68] via-[#164e85] to-[#0d9488] rounded-2xl p-5 lg:p-6 text-white shadow-md grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch shrink-0">
+              <div class="lg:col-span-5 flex flex-col justify-between">
+                <div>
+                  <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 text-xs font-semibold mb-2">
+                    <span>[填写编制组织/部门名称] · 汇总分析报告</span>
+                  </div>
+                  <h1 class="text-xl lg:text-2xl xl:text-[26px] font-extrabold tracking-tight leading-snug">[报告主标题：组织名称 + 报告期 + 核心主题情况说明]</h1>
+                </div>
+                <p class="mt-3 text-sm lg:text-[15px] text-sky-50 leading-relaxed reading-para !bg-white/10 !border-amber-400 !text-white !mb-0 !py-3 !px-4">
+                  <strong>【核心定性总纲】</strong>经各业务单元填报与多轮数据核对，形成本期分析汇报。从汇总口径看，本期在<strong>核心业务规模</strong>与<strong>基础资源投入</strong>上保持稳健，但在<strong>区域贡献分布、月度排产节奏、资源消耗结构、单耗效率及经营边际效益</strong>五个维度呈现显著的结构性优化：
+                </p>
+              </div>
+
+              <!-- 右侧 6 大核心指标卡（前5张常规玻璃态卡，第6张琥珀金高亮底线效益卡） -->
+              <div class="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-3.5 items-stretch">
+                <!-- KPI 卡 1 -->
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-4 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs lg:text-sm font-semibold text-sky-100">核心产出规模 (KPI-1)</span>
+                    <span class="px-2 py-0.5 rounded bg-amber-400/25 border border-amber-300/50 text-amber-200 text-xs font-bold">+4.20%</span>
+                  </div>
+                  <div class="text-2xl lg:text-3xl font-extrabold text-white my-1 tracking-tight">1,450.0<span class="text-xs lg:text-sm font-medium text-sky-200 ml-1">万单位</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1.5">
+                    <span>基期: 1,391.5</span>
+                    <span class="text-amber-300 font-semibold">同比 +58.5万</span>
+                  </div>
+                </div>
+
+                <!-- KPI 卡 2 -->
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-4 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs lg:text-sm font-semibold text-sky-100">服务/覆盖基数 (KPI-2)</span>
+                    <span class="px-2 py-0.5 rounded bg-amber-400/25 border border-amber-300/50 text-amber-200 text-xs font-bold">+1.85%</span>
+                  </div>
+                  <div class="text-2xl lg:text-3xl font-extrabold text-white my-1 tracking-tight">3,820.5<span class="text-xs lg:text-sm font-medium text-sky-200 ml-1">万㎡/户</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1.5">
+                    <span>基期: 3,751.1</span>
+                    <span class="text-amber-300 font-semibold">同比 +69.4万</span>
+                  </div>
+                </div>
+
+                <!-- KPI 卡 3 -->
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-4 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs lg:text-sm font-semibold text-sky-100">协同业务产出 (KPI-3)</span>
+                    <span class="px-2 py-0.5 rounded bg-emerald-400/25 border border-emerald-300/50 text-emerald-200 text-xs font-bold">-1.20%</span>
+                  </div>
+                  <div class="text-2xl lg:text-3xl font-extrabold text-white my-1 tracking-tight">58,200<span class="text-xs lg:text-sm font-medium text-sky-200 ml-1">万kWh</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1.5">
+                    <span>基期: 58,907</span>
+                    <span class="text-emerald-300 font-semibold">主动削峰调优</span>
+                  </div>
+                </div>
+
+                <!-- KPI 卡 4 -->
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-4 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs lg:text-sm font-semibold text-sky-100">主资源消耗量 (KPI-4)</span>
+                    <span class="px-2 py-0.5 rounded bg-emerald-400/25 border border-emerald-300/50 text-emerald-200 text-xs font-bold">-2.10%</span>
+                  </div>
+                  <div class="text-2xl lg:text-3xl font-extrabold text-white my-1 tracking-tight">61.40<span class="text-xs lg:text-sm font-medium text-sky-200 ml-1">万吨</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1.5">
+                    <span>基期: 62.72万吨</span>
+                    <span class="text-emerald-300 font-semibold">同比 -1.32万吨</span>
+                  </div>
+                </div>
+
+                <!-- KPI 卡 5 -->
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-4 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs lg:text-sm font-semibold text-sky-100">综合转化效率 (KPI-5)</span>
+                    <span class="px-2 py-0.5 rounded bg-amber-400/25 border border-amber-300/50 text-amber-200 text-xs font-bold">+0.65 pct</span>
+                  </div>
+                  <div class="text-2xl lg:text-3xl font-extrabold text-white my-1 tracking-tight">83.45<span class="text-xs lg:text-sm font-medium text-sky-200 ml-1">%</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1.5">
+                    <span>基期: 82.80%</span>
+                    <span class="text-amber-300 font-semibold">全线达标提升</span>
+                  </div>
+                </div>
+
+                <!-- KPI 卡 6（北极星效益底线指标，固定采用琥珀金高亮边框） -->
+                <div class="bg-amber-500/25 backdrop-blur-md rounded-xl p-4 border-2 border-amber-300/70 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs lg:text-sm font-bold text-amber-200">核心经营效益 (北极星)</span>
+                    <span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-xs font-extrabold">+5.80%</span>
+                  </div>
+                  <div class="text-2xl lg:text-3xl font-extrabold text-amber-300 my-1 tracking-tight">56,800<span class="text-xs lg:text-sm font-medium text-amber-100 ml-1">万元</span></div>
+                  <div class="text-xs text-amber-100 flex items-center justify-between border-t border-amber-300/30 pt-1.5">
+                    <span>基期: 53,686万</span>
+                    <span class="text-white font-bold">净增 +3,114万</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 底部五大结构性要点 Bento 卡片网格（6列栅格：上3张各占2列，下2张占4列+2列） -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 flex-1 min-h-0 items-stretch">
+              <div class="reading-para reading-active bg-white shadow-sm border border-slate-200 !mb-0 lg:col-span-2 flex flex-col justify-between !p-5">
+                <div>
+                  <div class="flex items-center justify-between mb-2.5">
+                    <span class="px-2.5 py-1 rounded-md bg-sky-900 text-white text-xs lg:text-sm font-bold">要点 01 · 业务规模与区域分布</span>
+                    <span class="text-xs lg:text-sm font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded">核心区领涨 +4.2%</span>
+                  </div>
+                  <p class="text-sm lg:text-[15.5px] leading-relaxed">
+                    <strong>1.总量稳步扩张，各业务单元贡献分化。</strong>全口径核心业务产出<span class="num-pos">1,450.0万单位（同比+4.20%）</span>。其中主力A区贡献最大增量<span class="num-pos">+68.0万单位（+6.5%）</span>，B区与C区保持平稳，D区因业务模式转型主动缩减低效产能<span class="num-down">-9.5万单位（-7.8%）</span>。
+                  </p>
+                </div>
+                <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>增量结构：A1单元 +45.0万 / A2单元 +23.0万</span>
+                  <span class="font-semibold text-sky-800">详见 第04页</span>
+                </div>
+              </div>
+
+              <div class="reading-para bg-white shadow-sm border border-slate-200 !mb-0 lg:col-span-2 flex flex-col justify-between !p-5">
+                <div>
+                  <div class="flex items-center justify-between mb-2.5">
+                    <span class="px-2.5 py-1 rounded-md bg-sky-900 text-white text-xs lg:text-sm font-bold">要点 02 · 时序节奏与负荷调优</span>
+                    <span class="text-xs lg:text-sm font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded">削峰填谷 / 曲线平滑</span>
+                  </div>
+                  <p class="text-sm lg:text-[15.5px] leading-relaxed">
+                    <strong>2.月度排产曲线更加平滑，单元间分配动态寻优。</strong>针对外部市场价格波动，主动压降Q1低价期基数<span class="num-down">-6.2%</span>，并在高毛利期提升负荷<span class="num-pos">+8.4%</span>；同时将内部负荷向高效率的A2单元倾斜（<span class="num-pos">+7.5%</span>）。
+                  </p>
+                </div>
+                <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>内部结构置换：A1单元 -8.5% ↔ A2单元 +7.5%</span>
+                  <span class="font-semibold text-sky-800">详见 第04页</span>
+                </div>
+              </div>
+
+              <div class="reading-para bg-white shadow-sm border border-slate-200 !mb-0 lg:col-span-2 flex flex-col justify-between !p-5">
+                <div>
+                  <div class="flex items-center justify-between mb-2.5">
+                    <span class="px-2.5 py-1 rounded-md bg-sky-900 text-white text-xs lg:text-sm font-bold">要点 03 · 转化效率与替代资源</span>
+                    <span class="text-xs lg:text-sm font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">效率 +0.65pct / 新增清洁投入</span>
+                  </div>
+                  <p class="text-sm lg:text-[15.5px] leading-relaxed">
+                    <strong>3.主资源标量消耗同比下降，综合效率稳步提升。</strong>全口径耗主资源标量<span class="num-down">61.40万吨（同比-2.10%）</span>，综合转化效率达<span class="num-pos">83.45%（同比+0.65个百分点）</span>；高峰期新增清洁辅助资源投入<span class="num-warn">35万m³</span>保障峰值安全。
+                  </p>
+                </div>
+                <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>峰值保障分布：12月5万 · 1月20万 · 2月10万</span>
+                  <span class="font-semibold text-sky-800">详见 第03页</span>
+                </div>
+              </div>
+
+              <div class="reading-para bg-white shadow-sm border border-slate-200 !mb-0 lg:col-span-4 flex flex-col justify-between !p-5">
+                <div>
+                  <div class="flex items-center justify-between mb-2.5">
+                    <span class="px-2.5 py-1 rounded-md bg-teal-800 text-white text-xs lg:text-sm font-bold">要点 04 · 辅料水电压降与单耗对标</span>
+                    <span class="text-xs lg:text-sm font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded">辅耗A -14.2% / 辅耗B -8.0%</span>
+                  </div>
+                  <p class="text-sm lg:text-[15.5px] leading-relaxed">
+                    <strong>4.过程辅料及能耗单耗大幅下降，减量集中在管网终端侧。</strong>全口径辅料A消耗同比下降<span class="num-down">8.0%</span>，单位面积单耗<span class="num-down">45.31 kg/㎡（同比-14.25%）</span>，其中<span class="num-down">93.8%</span>的节降来自终端管网侧；但各子单元基数差异显著，D单元（<span class="num-warn">90.0 kg/㎡</span>）仍为集团均值的<span class="num-warn">1.99倍</span>，为下阶段重点治理对象。
+                  </p>
+                </div>
+                <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>重点治理靶点：D单元与E单元单耗高于均值红线 33%~99%</span>
+                  <span class="font-semibold text-teal-800">详见 第02、04页</span>
+                </div>
+              </div>
+
+              <div class="reading-para bg-white shadow-sm border border-slate-200 !mb-0 lg:col-span-2 flex flex-col justify-between !p-5">
+                <div>
+                  <div class="flex items-center justify-between mb-2.5">
+                    <span class="px-2.5 py-1 rounded-md bg-amber-800 text-white text-xs lg:text-sm font-bold">要点 05 · 边际效益与专项费用</span>
+                    <span class="text-xs lg:text-sm font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded">净增 +3,114万 (+5.8%)</span>
+                  </div>
+                  <p class="text-sm lg:text-[15.5px] leading-relaxed">
+                    <strong>5.“对外增收+成本节流”双轮驱动效益增长，专项费用结构分化。</strong>可比口径边际利润净增<span class="num-pos">+3,114万元</span>（增收贡献62%、节支贡献38%）；运维抢修等专项费用前移至Q4集中投放（占全期<span class="num-warn">64.7%</span>）。
+                  </p>
+                </div>
+                <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>增收 +1,930万 | 变动成本净节支 +1,184万</span>
+                  <span class="font-semibold text-amber-800">详见 第05、06页</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================================
+           【版式 B · L1 全局指标分布与二级结构图页】 (Archetype B: Macro Spectrum & Sub-structure)
+           适用场景：第2页全局扫描。左栏完整念稿，右栏上图为12~18项核心指标同比排序柱状图，下图为2幅结构拆解图。
+           ======================================================================================== -->
+      <section class="slide-page" data-slide-index="1" data-title="02. [版式B·L1全貌] 全量指标同比谱系与三级结构拆解">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 02 / 06 页 · L1 指标谱系</span>
+            <h2 class="text-lg font-bold">一、总体情况 —— 核心指标同比变化率全谱系排序 & 重点资源三级结构对比</h2>
+          </div>
+          <span class="text-xs text-sky-200">版式 B（左文 + 右上通栏谱系图 + 右下双结构图）</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 总体情况宣讲念稿（点击段落可高亮导读）</span>
+              <span class="text-[11px] text-sky-700 font-semibold">L1 宏观扫描层</span>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【设计规范说明 · 版式 B】</strong>本版式用于承接第1页的Executive Summary，将全报告涉及的 <strong>12～18 项核心指标同比变化率</strong> 按从低到高排序置于右上通栏图（深蓝代表正增长/扩张，青色斜纹代表压降/节流），帮助听众在10秒内建立全局坐标系。
+              </div>
+              <div class="reading-para">
+                <strong>1. 产出端指标稳中有升：</strong>高附加值细分品类A（<span class="num-pos">+6.80%</span>）、核心产品产出（<span class="num-pos">+4.20%</span>）与基础覆盖规模（<span class="num-pos">+1.85%</span>）均保持正增长，跑赢总体资源消耗增速。
+              </div>
+              <div class="reading-para">
+                <strong>2. 能耗与物耗指标全面压降：</strong>通过精细化管控，水耗单耗（<span class="num-down">-14.25%</span>）、电耗单耗（<span class="num-down">-8.00%</span>）、总水耗（<span class="num-down">-8.00%</span>）及外购电总量（<span class="num-down">-7.40%</span>）位居降幅榜前列，构成成本节支的核心来源。
+              </div>
+              <div class="reading-para">
+                <strong>3. 三级结构拆解定位减量来源：</strong>如右下图所示，将总耗用拆解为“源头端—干线端—终端侧”三级结构后可见，<span class="num-down">93.8%</span>的节水减量来自终端管网侧（<span class="num-down">-18.3%</span>），<span class="num-down">83.3%</span>的节电减量同样来自管网侧（<span class="num-down">-7.4%</span>），证明末端治理成效显著。
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图1-1 全口径核心指标同比变化率排序分布图（●深蓝为正增长 / □青色斜纹为同比压降）</div>
+              <div id="chart_demo_1_1" class="chart-box"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" style="flex: 1; min-height: 240px;">
+              <div class="chart-card !min-h-[220px]">
+                <div class="chart-title">图1-2(a) 资源A三级结构对比（全口径322.1万吨，-8.0%）</div>
+                <div id="chart_demo_1_2a" class="chart-box !min-h-[190px]"></div>
+              </div>
+              <div class="chart-card !min-h-[220px]">
+                <div class="chart-title">图1-2(b) 资源B三级结构对比（全口径6,495万kWh，-7.4%）</div>
+                <div id="chart_demo_1_2b" class="chart-box !min-h-[190px]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================================
+           【版式 C · L2 全口径底座双栏矩阵表页】 (Archetype C: Master Data Matrix with Category Filter)
+           适用场景：第3页全量数据底座。支持顶部按分类高亮筛选，下方双栏并排展示20~30项指标，一屏免滚动。
+           ======================================================================================== -->
+      <section class="slide-page" data-slide-index="2" data-title="03. [版式C·L2底座] 全口径核心指标双栏汇总矩阵表">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 03 / 06 页 · L2 全口径数据底座</span>
+            <h2 class="text-lg font-bold">二、全口径数据底座 —— 表2-1 全口径主要经营与生产指标汇总矩阵表</h2>
+          </div>
+          <span class="text-xs text-sky-200">版式 C（全宽双栏并排矩阵表 + 分类高亮筛选器）</span>
+        </div>
+
+        <div class="slide-body single-col">
+          <div class="flex flex-col gap-3 h-full">
+            <!-- 顶部说明与通用分类筛选器（使用 data-filter-cat 属性，引擎自动绑定筛选逻辑） -->
+            <div class="reading-para reading-active !mb-0 bg-white shadow-sm border border-slate-200">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <span class="text-xs font-bold text-sky-900 bg-sky-100 px-2.5 py-0.5 rounded">📄 L2 全口径数据底座说明</span>
+                <div class="flex items-center gap-1.5 text-xs flex-wrap" data-table-filter>
+                  <span class="text-slate-500">指标分类高亮筛选：</span>
+                  <button type="button" class="cat-filter-btn px-2 py-0.5 rounded bg-sky-800 text-white font-semibold" data-filter-cat="all">全部指标 (16项示例)</button>
+                  <button type="button" class="cat-filter-btn px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" data-filter-cat="scale">产销与规模 (4项)</button>
+                  <button type="button" class="cat-filter-btn px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" data-filter-cat="resource">主辅资源投入 (6项)</button>
+                  <button type="button" class="cat-filter-btn px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" data-filter-cat="efficiency">效率单耗与费用 (6项)</button>
+                </div>
+              </div>
+              <p class="text-sm lg:text-base leading-relaxed">
+                <strong>【设计规范说明 · 版式 C】</strong>当汇总表包含 16～30 项指标时，单表纵向排列会导致大屏投影底部溢出。采用<strong>左右双栏等高拆分（上表+下表）</strong>并配合顶部分类筛选按钮（<code>data-filter-cat</code>），既保证全量数据 100% 忠实呈现，又支持汇报人在演讲时一键高亮特定业务板块。
+              </p>
+            </div>
+
+            <!-- 双栏并排展示汇总表 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto">
+              <div class="data-table-wrap !mt-0">
+                <div class="bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-800 border-b border-slate-200">表2-1（左栏） 产销规模与主辅资源消耗指标（第1—8项）</div>
+                <table class="report-table">
+                  <thead>
+                    <tr><th>指标项目</th><th>单位</th><th>本期计划/实际</th><th>对比基期</th><th>同比增减值</th><th>同比变化率</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr data-cat="scale"><td>核心业务产出量</td><td>万单位</td><td>1,450.0</td><td>1,391.5</td><td>+58.5</td><td class="text-sky-800 font-semibold">+4.20%</td></tr>
+                    <tr data-cat="scale"><td>协同产品产出量</td><td>万kWh</td><td>58,200.0</td><td>58,906.9</td><td>-706.9</td><td class="text-teal-700 font-semibold">-1.20%</td></tr>
+                    <tr data-cat="scale"><td>高毛利品类销量</td><td>万吨</td><td>18.04</td><td>16.89</td><td>+1.15</td><td class="text-sky-800 font-bold">+6.80%</td></tr>
+                    <tr data-cat="scale"><td>有效覆盖服务基数</td><td>万㎡</td><td>3,820.5</td><td>3,751.1</td><td>+69.4</td><td class="text-sky-800 font-semibold">+1.85%</td></tr>
+                    <tr data-cat="resource"><td>主原料实物消耗量</td><td>万吨</td><td>86.20</td><td>87.51</td><td>-1.31</td><td class="text-teal-700 font-semibold">-1.50%</td></tr>
+                    <tr data-cat="resource" class="row-total"><td>主原料折标消耗总量</td><td>万吨</td><td>61.40</td><td>62.72</td><td>-1.32</td><td class="text-teal-700 font-bold">-2.10%</td></tr>
+                    <tr data-cat="resource"><td>清洁辅助能源耗量</td><td>万m³</td><td>35.0</td><td>0.0</td><td>+35.0</td><td class="text-red-700 font-bold">新增项</td></tr>
+                    <tr data-cat="resource"><td>外部采购成品量</td><td>万单位</td><td>83.5</td><td>88.5</td><td>-5.0</td><td class="text-teal-700 font-semibold">-5.69%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="data-table-wrap !mt-0">
+                <div class="bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-800 border-b border-slate-200">表2-1（右栏） 过程能耗、转化效率、单耗及专项费用指标（第9—16项）</div>
+                <table class="report-table">
+                  <thead>
+                    <tr><th>指标项目</th><th>单位</th><th>本期计划/实际</th><th>对比基期</th><th>同比增减值</th><th>同比变化率</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr data-cat="resource" class="row-total"><td>辅料A（水）消耗总量</td><td>万吨</td><td>322.12</td><td>350.12</td><td>-28.00</td><td class="text-teal-700 font-bold">-8.00%</td></tr>
+                    <tr data-cat="resource" class="row-total"><td>辅料B（外购电）总量</td><td>万kWh</td><td>6,495.3</td><td>7,014.4</td><td>-519.1</td><td class="text-teal-700 font-bold">-7.40%</td></tr>
+                    <tr data-cat="efficiency"><td>综合转化效率</td><td>%</td><td>83.45%</td><td>82.80%</td><td>+0.65 pct</td><td class="text-sky-800 font-semibold">+0.79%</td></tr>
+                    <tr data-cat="efficiency"><td>核心产出单位单耗</td><td>GJ/㎡</td><td>0.2925</td><td>0.2926</td><td>-0.0001</td><td class="text-teal-700">-0.02%</td></tr>
+                    <tr data-cat="efficiency" class="row-total"><td>过程水单耗指标</td><td>kg/㎡</td><td>45.31</td><td>52.84</td><td>-7.53</td><td class="text-teal-700 font-bold">-14.25%</td></tr>
+                    <tr data-cat="efficiency" class="row-total"><td>过程电单耗指标</td><td>kWh/㎡</td><td>1.4809</td><td>1.6098</td><td>-0.1289</td><td class="text-teal-700 font-bold">-8.00%</td></tr>
+                    <tr data-cat="efficiency"><td>专项外包劳务费</td><td>万元</td><td>1,410.87</td><td>1,345.29</td><td>+65.58</td><td class="text-red-700 font-bold">+4.88%</td></tr>
+                    <tr data-cat="efficiency"><td>专项运维抢修费</td><td>万元</td><td>1,290.00</td><td>1,271.55</td><td>+18.45</td><td class="text-red-700 font-semibold">+1.45%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================================
+           【版式 D1 · L3 维度深潜：瀑布图 + 多维分组对比页】 (Archetype D1: Waterfall & Multi-Metric Bar)
+           适用场景：L3 业务维度分单位/分区域拆解。左栏为文字+首列冻结数据表（支持一键放大），右栏为瀑布图+对比图。
+           ======================================================================================== -->
+      <section class="slide-page" data-slide-index="3" data-title="04. [版式D1·L3深潜] 增量瀑布分解与多维协同对比">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 04 / 06 页 · L3 维度深潜 (瀑布+分组)</span>
+            <h2 class="text-lg font-bold">三、各单元业务深潜 —— （一）总量增量贡献瀑布分解与多指标协同对比</h2>
+          </div>
+          <span class="text-xs text-sky-200">版式 D1（左文表 + 右侧增量瀑布图 & 多指标分组柱状图）</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 维度分析正文 & 附表（点击右侧按钮可大屏投射表格）</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大附表</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【设计规范说明 · 版式 D1】</strong>这是汇报中最常用的主力分屏版式。左栏上半部分放置 2～3 段结构化念稿，下半部分放置<strong>首列冻结的支撑明细表</strong>；点击工具栏右上角按钮，可将左侧表格一键投射到右侧宽屏大字展示。
+              </div>
+              <div class="reading-para">
+                <strong>增量贡献拆解：</strong>全集团核心产出同比净增<span class="num-pos">+58.5万单位（+4.20%）</span>。通过右上<strong>增量贡献瀑布图</strong>清晰可见：A1单元（<span class="num-pos">+45.0万</span>）与A2单元（<span class="num-pos">+23.0万</span>）是绝对主力增长极，完全对冲了D单元因淘汰老旧产线带来的主动减量（<span class="num-down">-9.5万</span>）。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表3-1 各业务单元产出规模、覆盖基数及单耗协同对比表</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>业务单元</th><th>本期产出<br/>(万单位)</th><th>基期产出<br/>(万单位)</th><th>同比增减<br/>(万单位)</th><th>产出<br/>同比</th><th>覆盖基数<br/>(万㎡)</th><th>基数<br/>同比</th><th>单位单耗<br/>同比</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团汇总</td><td>1,450.0</td><td>1,391.5</td><td>+58.5</td><td>+4.20%</td><td>3,820.5</td><td>+1.85%</td><td>-1.10%</td></tr>
+                    <tr><td>A1 主力单元</td><td>620.0</td><td>575.0</td><td class="text-sky-800 font-bold">+45.0</td><td class="text-sky-800 font-bold">+7.83%</td><td>1,520.0</td><td>+4.10%</td><td>-0.80%</td></tr>
+                    <tr><td>A2 协同单元</td><td>380.0</td><td>357.0</td><td class="text-sky-800 font-bold">+23.0</td><td class="text-sky-800 font-bold">+6.44%</td><td>960.5</td><td>+3.20%</td><td>-1.20%</td></tr>
+                    <tr><td>B 区域单元</td><td>210.0</td><td>208.0</td><td>+2.0</td><td>+0.96%</td><td>640.0</td><td>+0.50%</td><td>-0.45%</td></tr>
+                    <tr><td>C 区域单元</td><td>128.0</td><td>130.0</td><td>-2.0</td><td>-1.54%</td><td>420.0</td><td>-0.40%</td><td>-1.15%</td></tr>
+                    <tr class="row-total"><td>D 转型单元</td><td>112.0</td><td>121.5</td><td class="text-red-700 font-bold">-9.5</td><td class="text-red-700 font-bold">-7.82%</td><td>280.0</td><td>-3.10%</td><td>-4.89%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图3-1 核心产出同比净增+58.5万单位（+4.20%）的各单元增量贡献瀑布分解图</div>
+              <div id="chart_demo_3_1" class="chart-box"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">图3-2 各业务单元“产出规模—覆盖基数—单位单耗”三联指标同比变化率协同对比图</div>
+              <div id="chart_demo_3_2" class="chart-box"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================================
+           【版式 D2 · L3/L4 对标与归因：三联基准线对标 + 效益归因页】 (Archetype D2: Benchmark & Attribution)
+           适用场景：单耗/效率跨单位对标（带集团均值红虚线，暴露超标倍数）及收入/成本双轮驱动效益归因。
+           ======================================================================================== -->
+      <section class="slide-page" data-slide-index="4" data-title="05. [版式D2·L4归因] 均值红线对标与边际效益驱动拆解">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 05 / 06 页 · L3 单耗对标 & L4 效益归因</span>
+            <h2 class="text-lg font-bold">四、单耗基准对标与边际效益归因 —— 均值红线对标及“增收+节支”双轮驱动拆解</h2>
+          </div>
+          <span class="text-xs text-sky-200">版式 D2（左文表 + 右侧均值基准线对标图 & 正负双向归因图）</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 对标与效益归因正文 & 表4-1</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大表4-1</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【设计规范说明 · 均值对标与效益归因】</strong>在分析单耗与效率时，不能只看同比降幅，必须同时展示<strong>“绝对值基数 vs 集团均值红线”</strong>（右上图：条形代表本期计划，圆点○代表同期实际，红虚线代表全集团均值），直观识别“降幅大但绝对基数仍超标”的单元。
+              </div>
+              <div class="reading-para">
+                <strong>边际效益双轮驱动归因（右下图）：</strong>为剔除外部市场价格干扰，按可比常量单价测算，全口径边际利润净增<span class="num-pos">+3,114.0万元（+5.80%）</span>。其中前端业务扩张带动直接收入增加<span class="num-pos">+1,930.0万元（贡献率62.0%）</span>，后端物耗压降带动变动成本净节支<span class="num-down">+1,184.0万元（贡献率38.0%）</span>。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表4-1 各单元单耗对标及可比边际效益驱动拆解表（单位：万元）</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>业务单元</th><th>本期水单耗<br/>(kg/㎡)</th><th>对比集团均值<br/>(45.31)</th><th>本期边际利润<br/>(万元)</th><th>利润同比<br/>增减额</th><th>其中:收入端<br/>同比贡献</th><th>其中:成本端<br/>节支贡献</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团全口径</td><td>45.31</td><td>1.00 倍 (基准)</td><td>56,800.0</td><td>+3,114.0</td><td>+1,930.0</td><td>+1,184.0</td></tr>
+                    <tr><td>A1 主力单元</td><td>41.20</td><td>0.91 倍 (优良)</td><td>28,400.0</td><td class="text-sky-800 font-bold">+1,620.0</td><td>+1,280.0</td><td>+340.0</td></tr>
+                    <tr><td>A2 协同单元</td><td>37.60</td><td>0.83 倍 (标杆)</td><td>14,200.0</td><td class="text-sky-800 font-bold">+890.0</td><td>+750.0</td><td>+140.0</td></tr>
+                    <tr><td>B 区域单元</td><td>38.50</td><td>0.85 倍 (优良)</td><td>8,100.0</td><td>+260.0</td><td>+80.0</td><td>+180.0</td></tr>
+                    <tr class="row-total"><td>C 重点治理</td><td class="text-red-700 font-bold">60.19</td><td class="text-red-700 font-bold">1.33 倍 (偏高)</td><td>3,600.0</td><td>-156.0</td><td>-180.0</td><td>+24.0</td></tr>
+                    <tr class="row-total"><td>D 转型单元</td><td class="text-red-700 font-bold">90.00</td><td class="text-red-700 font-bold">1.99 倍 (超标)</td><td>2,500.0</td><td class="text-teal-700 font-bold">+500.0</td><td>+0.0</td><td class="text-teal-700 font-bold">+500.0</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图4-1 各单元水单耗“同期○→本期●”演进及集团均值红线（45.31 kg/㎡）对标图</div>
+              <div id="chart_demo_4_1" class="chart-box"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">图4-2 集团边际利润净增+3,114万元分项驱动因子贡献拆解图（深蓝增收 / 青绿节支 / 红色减利）</div>
+              <div id="chart_demo_4_2" class="chart-box"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================================
+           【版式 E · L4 四宫格多维视图切换页】 (Archetype E: 2x2 Quad-Chart Grid with View Switcher)
+           适用场景：需要同时展示“分单位横向对比（2图）”与“分月度纵向节奏（2图）”的专项管控页。
+           ======================================================================================== -->
+      <section class="slide-page" data-slide-index="5" data-title="06. [版式E·四图切换] 专项费用分单位对比与分月节奏">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 06 / 06 页 · L4 专项管控 (四图切换)</span>
+            <h2 class="text-lg font-bold">五、专项费用管控 —— 分单位预算对比与全周期月度投放节奏</h2>
+          </div>
+          <span class="text-xs text-sky-200">版式 E（左文表 + 右侧 2×2 四图同屏 / 分组放大切换器）</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 专项费用说明正文 & 表5-1</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大表5-1</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【设计规范说明 · 版式 E 四图切换】</strong>当某一章节包含两项并列指标（如劳务费与抢修费、销售费用与管理费用），且既要看<strong>各单位横向对比</strong>又要看<strong>月度纵向节奏</strong>时，使用右侧<code>data-view-switch</code>四宫格切换器：默认2×2四图同屏总览，点击按钮可单独放大“按单位对比”或“按月度节奏”。
+              </div>
+              <div class="reading-para">
+                <strong>横向分单位分化与纵向月度前移：</strong>专项费用A合计<span class="num-warn">1,410.9万元（+4.88%）</span>，在3—4月收尾期受同期基数偏低影响同比冲高；专项费用B合计<span class="num-warn">1,290.0万元（+1.45%）</span>，投放节奏高度前置，10—12月前三个月合计占比达<span class="num-pos">64.65%</span>。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表5-1 各业务单元两项专项费用计划与同期对比表（单位：万元）</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>业务单元</th><th>专项费A<br/>本期</th><th>专项费A<br/>同期</th><th>专项费A<br/>同比</th><th>专项费B<br/>本期</th><th>专项费B<br/>同期</th><th>专项费B<br/>同比</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团汇总</td><td>1,410.9</td><td>1,345.3</td><td>+4.88%</td><td>1,290.0</td><td>1,271.6</td><td>+1.45%</td></tr>
+                    <tr><td>A1 主力单元</td><td>259.0</td><td>315.4</td><td class="text-teal-700 font-bold">-17.88%</td><td>712.2</td><td>733.9</td><td>-2.96%</td></tr>
+                    <tr><td>A2 协同单元</td><td>247.3</td><td>179.6</td><td class="text-red-700 font-bold">+37.69%</td><td>101.0</td><td>103.6</td><td>-2.51%</td></tr>
+                    <tr><td>B 区域单元</td><td>166.1</td><td>100.7</td><td class="text-red-700 font-bold">+64.95%</td><td>226.0</td><td>214.0</td><td>+5.61%</td></tr>
+                    <tr><td>C 区域单元</td><td>408.6</td><td>382.4</td><td>+6.85%</td><td>20.0</td><td>15.0</td><td class="text-red-700 font-bold">+33.33%</td></tr>
+                    <tr><td>D 转型单元</td><td>329.9</td><td>367.2</td><td class="text-teal-700 font-bold">-10.16%</td><td>230.8</td><td>205.0</td><td>+12.59%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右侧支持通用 data-view-switch 协议的四图面板 -->
+          <div class="visual-panel" data-view-switch-container>
+            <div class="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
+              <span class="text-xs font-bold text-slate-700">📊 多维图表视图切换：</span>
+              <div class="flex gap-1.5 text-xs flex-wrap" data-view-switch>
+                <button type="button" class="view-switch-btn px-2.5 py-1 rounded bg-sky-800 text-white font-semibold" data-view-mode="all">四图同屏总览</button>
+                <button type="button" class="view-switch-btn px-2.5 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300" data-view-mode="unit">放大：分单元横向对比 (图5-1/5-2)</button>
+                <button type="button" class="view-switch-btn px-2.5 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300" data-view-mode="month">放大：分月度纵向节奏 (图5-3/5-4)</button>
+              </div>
+            </div>
+
+            <div class="view-switch-grid grid grid-cols-1 md:grid-cols-2 gap-2.5 flex-1 min-h-0">
+              <div class="chart-card !min-h-[190px]" data-chart-group="unit">
+                <div class="chart-title">图5-1 各单元专项费A本期与同期对比（均值282.2万）</div>
+                <div id="chart_demo_5_1" class="chart-box !min-h-[165px]"></div>
+              </div>
+              <div class="chart-card !min-h-[190px]" data-chart-group="unit">
+                <div class="chart-title">图5-2 各单元专项费B本期与同期对比（均值258.0万）</div>
+                <div id="chart_demo_5_2" class="chart-box !min-h-[165px]"></div>
+              </div>
+              <div class="chart-card !min-h-[190px]" data-chart-group="month">
+                <div class="chart-title">图5-3 专项费A月度分布节奏及全期月均基准线（月均201.6万）</div>
+                <div id="chart_demo_5_3" class="chart-box !min-h-[165px]"></div>
+              </div>
+              <div class="chart-card !min-h-[190px]" data-chart-group="month">
+                <div class="chart-title">图5-4 专项费B月度分布节奏及全期月均基准线（前3月占64.7%）</div>
+                <div id="chart_demo_5_4" class="chart-box !min-h-[165px]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==================== 全局固定外壳：底部页码进度条与快捷跳页 ==================== -->
+    <footer class="bottom-bar">
+      <div class="flex items-center gap-2">
+        <span class="font-semibold text-amber-300" id="bottomSlideTitle">01. 封面与总体情况</span>
+        <span class="hidden sm:inline text-slate-400">| 快捷键：← 上一页 · → 下一页 · 点击段落高亮导读</span>
+      </div>
+      <div id="pageDots" class="flex items-center gap-1 flex-wrap"></div>
+    </footer>
+  </div>
+
+  <!-- ========================================================================================
+       通用汇报演示内核引擎 (Universal Presentation Runtime Engine v2.0)
+       说明：前半部分为固定交互内核（无需修改），后半部分 CHART_REGISTRY 为图表配置注册区。
+       ======================================================================================== -->
+  <script>
+    (function() {
+      // 1. 标准品牌视觉色板常量（供所有 ECharts 图表统一调用）
+      const THEME = {
+        NAVY: '#14446b',       // 本期计划/实际、核心正增长（深海蓝）
+        BLUE: '#2678b2',       // 正向增量贡献、次级主色（科技蓝）
+        GOLD: '#f3c677',       // 同期完成/对比基期柱体填充（暖金黄）
+        GOLD_BORDER: '#b45309',// 同期完成边框与折线色（深琥珀）
+        TEAL: '#7fd1ae',       // 成本节支、能耗压降填充（青翠绿）
+        TEAL_DARK: '#0f766e',  // 成本节支、能耗压降边框与文字（深青绿）
+        RED: '#c83e37',        // 均值红线、超标预警、减利因素（警示红）
+        RED_LIGHT: '#fca5a5',  // 负向减利条形填充（浅珊瑚红）
+        GRAY: '#64748b'        // 辅助基准或次要折线（中性灰）
+      };
+
+      const slides = Array.from(document.querySelectorAll('.slide-page'));
+      const totalSlides = slides.length;
+      let currentSlide = 0;
+      let fontScale = 1.0;
+      const chartInstances = {};
+
+      // 2. 自动修正每页顶部徽章的页码总数 & 生成目录抽屉与底部页码点
+      const tocList = document.getElementById('tocList');
+      const pageDots = document.getElementById('pageDots');
+
+      slides.forEach((sec, idx) => {
+        sec.setAttribute('data-slide-index', idx);
+        const title = sec.getAttribute('data-title') || ('第 ' + (idx + 1) + ' 页');
+
+        // 侧边目录项
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full text-left px-3 py-2 rounded-lg transition flex items-center justify-between ' +
+          (idx === 0 ? 'bg-amber-500 text-slate-950 font-bold' : 'hover:bg-slate-800 text-slate-200');
+        btn.innerHTML = '<span class="truncate pr-2">' + title + '</span><span class="text-xs opacity-75 shrink-0">P' + (idx + 1) + '</span>';
+        btn.addEventListener('click', () => {
+          goToSlide(idx);
+          closeToc();
+        });
+        tocList.appendChild(btn);
+
+        // 底部快捷页码点
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'w-6 h-5 rounded text-[11px] font-bold transition ' +
+          (idx === 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700');
+        dot.textContent = idx + 1;
+        dot.title = title;
+        dot.addEventListener('click', () => goToSlide(idx));
+        pageDots.appendChild(dot);
+      });
+
+      // 3. 自动为所有带 .expand-table-btn 的分屏页生成右侧宽屏大字表格放大层
+      slides.forEach((sec) => {
+        const expandBtn = sec.querySelector('.expand-table-btn');
+        const tableWrap = sec.querySelector('.data-table-wrap');
+        const visualPanel = sec.querySelector('.visual-panel');
+        const titleEl = sec.querySelector('.table-header-bar span');
+        if (!expandBtn || !tableWrap || !visualPanel) return;
+
+        const origLabel = expandBtn.textContent;
+        const tableTitle = titleEl ? titleEl.textContent : '附表数据宽屏展示';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'expanded-table-overlay';
+        overlay.innerHTML =
+          '<div class="bg-[#0f3d68] text-white px-4 py-2.5 flex items-center justify-between shrink-0">' +
+            '<div class="font-bold text-sm lg:text-base">📋 ' + tableTitle + '（宽屏大字投屏视图）</div>' +
+            '<button type="button" class="close-expand-btn px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition">📊 返回 ECharts 图表视图</button>' +
+          '</div>' +
+          '<div class="p-4 overflow-auto flex-1 bg-slate-50 flex flex-col justify-center">' +
+            '<div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-x-auto">' +
+              tableWrap.innerHTML +
+            '</div>' +
+          '</div>';
+        visualPanel.appendChild(overlay);
+
+        function toggleTableOverlay(forceState) {
+          const isNowOpen = typeof forceState === 'boolean' ? forceState : !overlay.classList.contains('active');
+          if (isNowOpen) {
+            overlay.classList.add('active');
+            expandBtn.textContent = '📊 返回图表视图';
+            expandBtn.className = 'expand-table-btn px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition';
+          } else {
+            overlay.classList.remove('active');
+            expandBtn.textContent = origLabel;
+            expandBtn.className = 'expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition';
+            setTimeout(resizeAllCharts, 50);
+          }
+        }
+
+        expandBtn.addEventListener('click', () => toggleTableOverlay());
+        overlay.querySelector('.close-expand-btn').addEventListener('click', () => toggleTableOverlay(false));
+      });
+
+      // 4. 通用分类表格高亮筛选器（支持任意页使用 [data-table-filter] 与 [data-filter-cat]）
+      document.querySelectorAll('[data-table-filter]').forEach(filterBar => {
+        const parentSlide = filterBar.closest('.slide-page');
+        if (!parentSlide) return;
+        const buttons = Array.from(filterBar.querySelectorAll('[data-filter-cat]'));
+        buttons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const cat = btn.getAttribute('data-filter-cat');
+            buttons.forEach(b => {
+              b.className = (b === btn)
+                ? 'cat-filter-btn px-2 py-0.5 rounded bg-sky-800 text-white font-semibold'
+                : 'cat-filter-btn px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700';
+            });
+            parentSlide.querySelectorAll('tbody tr[data-cat]').forEach(tr => {
+              if (cat === 'all' || tr.getAttribute('data-cat') === cat) {
+                tr.style.opacity = '1';
+                tr.style.backgroundColor = (cat !== 'all') ? '#f0f9ff' : '';
+              } else {
+                tr.style.opacity = '0.28';
+                tr.style.backgroundColor = '';
+              }
+            });
+          });
+        });
+      });
+
+      // 5. 通用多图视图切换器（支持任意页使用 [data-view-switch-container] 与 [data-view-mode]）
+      document.querySelectorAll('[data-view-switch-container]').forEach(container => {
+        const switchBar = container.querySelector('[data-view-switch]');
+        const grid = container.querySelector('.view-switch-grid');
+        if (!switchBar || !grid) return;
+        const buttons = Array.from(switchBar.querySelectorAll('[data-view-mode]'));
+        const cards = Array.from(grid.querySelectorAll('[data-chart-group]'));
+
+        buttons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const mode = btn.getAttribute('data-view-mode');
+            buttons.forEach(b => {
+              b.className = (b === btn)
+                ? 'view-switch-btn px-2.5 py-1 rounded bg-sky-800 text-white font-semibold'
+                : 'view-switch-btn px-2.5 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300';
+            });
+            if (mode === 'all') {
+              grid.className = 'view-switch-grid grid grid-cols-1 md:grid-cols-2 gap-2.5 flex-1 min-h-0';
+              cards.forEach(c => { c.style.display = 'flex'; });
+            } else {
+              grid.className = 'view-switch-grid grid grid-cols-1 gap-3 flex-1 min-h-0';
+              cards.forEach(c => {
+                c.style.display = (c.getAttribute('data-chart-group') === mode) ? 'flex' : 'none';
+              });
+            }
+            setTimeout(resizeAllCharts, 60);
+          });
+        });
+      });
+
+      // 6. 导航状态更新与翻页控制
+      function updateNavUI() {
+        document.getElementById('pageIndicatorTop').textContent = (currentSlide + 1) + ' / ' + totalSlides;
+        const activeTitle = slides[currentSlide].getAttribute('data-title') || '';
+        document.getElementById('bottomSlideTitle').textContent = activeTitle;
+
+        Array.from(tocList.children).forEach((btn, idx) => {
+          btn.className = 'w-full text-left px-3 py-2 rounded-lg transition flex items-center justify-between ' +
+            (idx === currentSlide ? 'bg-amber-500 text-slate-950 font-bold' : 'hover:bg-slate-800 text-slate-200');
+        });
+
+        Array.from(pageDots.children).forEach((dot, idx) => {
+          dot.className = 'w-6 h-5 rounded text-[11px] font-bold transition ' +
+            (idx === currentSlide ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700');
+        });
+      }
+
+      function goToSlide(targetIdx) {
+        if (targetIdx < 0 || targetIdx >= totalSlides) return;
+        currentSlide = targetIdx;
+
+        if (document.body.classList.contains('mode-continuous')) {
+          slides[currentSlide].scrollIntoView({ behavior: 'smooth', block: 'start' });
+          updateNavUI();
+          resizeAllCharts();
+          return;
+        }
+
+        slides.forEach((sec, idx) => {
+          sec.classList.remove('active', 'prev-page', 'next-page');
+          if (idx === currentSlide) {
+            sec.classList.add('active');
+          } else if (idx < currentSlide) {
+            sec.classList.add('prev-page');
+          } else {
+            sec.classList.add('next-page');
+          }
+        });
+
+        updateNavUI();
+        setTimeout(() => {
+          initChartsForSlide(currentSlide);
+          resizeAllCharts();
+        }, 60);
+      }
+
+      // 侧边目录抽屉开关
+      const tocDrawer = document.getElementById('tocDrawer');
+      const drawerBackdrop = document.getElementById('drawerBackdrop');
+      function openToc() { tocDrawer.classList.add('open'); drawerBackdrop.classList.add('open'); }
+      function closeToc() { tocDrawer.classList.remove('open'); drawerBackdrop.classList.remove('open'); }
+      document.getElementById('openTocBtn').addEventListener('click', openToc);
+      document.getElementById('closeTocBtn').addEventListener('click', closeToc);
+      drawerBackdrop.addEventListener('click', closeToc);
+
+      // 上下页按钮与键盘方向键
+      document.getElementById('prevSlideBtn').addEventListener('click', () => goToSlide(currentSlide - 1));
+      document.getElementById('nextSlideBtn').addEventListener('click', () => goToSlide(currentSlide + 1));
+      document.addEventListener('keydown', (e) => {
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); goToSlide(currentSlide + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goToSlide(currentSlide - 1); }
+      });
+
+      // 3D 翻页特效切换
+      document.getElementById('fxSelector').addEventListener('change', (e) => {
+        document.body.classList.remove('fx-cube', 'fx-slide', 'fx-flip', 'fx-zoom');
+        document.body.classList.add(e.target.value);
+      });
+
+      // 四种分屏与长卷模式切换
+      const layoutBtns = [
+        { id: 'layoutBalancedBtn', cls: '' },
+        { id: 'layoutChartBtn', cls: 'layout-chart-focus' },
+        { id: 'layoutTextBtn', cls: 'layout-text-focus' },
+        { id: 'layoutScrollBtn', cls: 'mode-continuous' }
+      ];
+      layoutBtns.forEach(item => {
+        document.getElementById(item.id).addEventListener('click', () => {
+          document.body.classList.remove('layout-chart-focus', 'layout-text-focus', 'mode-continuous');
+          if (item.cls) document.body.classList.add(item.cls);
+          layoutBtns.forEach(b => {
+            const el = document.getElementById(b.id);
+            el.className = (b.id === item.id)
+              ? 'px-2 py-1 rounded bg-sky-700 text-white font-medium'
+              : 'px-2 py-1 rounded text-slate-300 hover:text-white';
+          });
+          if (item.cls === 'mode-continuous') {
+            for (let i = 0; i < totalSlides; i++) initChartsForSlide(i);
+          }
+          setTimeout(resizeAllCharts, 120);
+        });
+      });
+
+      // 全局字号无级缩放
+      function updateFontScale(delta) {
+        fontScale = Math.min(1.35, Math.max(0.85, +(fontScale + delta).toFixed(2)));
+        document.documentElement.style.setProperty('--font-scale', fontScale);
+        document.getElementById('fontScaleLabel').textContent = Math.round(fontScale * 100) + '%';
+      }
+      document.getElementById('fontDecBtn').addEventListener('click', () => updateFontScale(-0.08));
+      document.getElementById('fontIncBtn').addEventListener('click', () => updateFontScale(0.08));
+
+      // 全屏投影切换
+      document.getElementById('fullscreenBtn').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+
+      // 念稿段落点击高亮导读
+      document.querySelectorAll('.reading-para').forEach(para => {
+        para.addEventListener('click', () => {
+          const parentSlide = para.closest('.slide-page');
+          if (parentSlide) {
+            parentSlide.querySelectorAll('.reading-para').forEach(p => p.classList.remove('reading-active'));
+          }
+          para.classList.add('reading-active');
+        });
+      });
+
+      // 7. ECharts 实例生命周期管理与标准图表预设工厂 (ChartPresets)
+      function getOrCreateChart(domId) {
+        const el = document.getElementById(domId);
+        if (!el || typeof echarts === 'undefined') return null;
+        if (chartInstances[domId]) return chartInstances[domId];
+        const inst = echarts.init(el);
+        chartInstances[domId] = inst;
+        return inst;
+      }
+
+      function resizeAllCharts() {
+        Object.values(chartInstances).forEach(inst => {
+          if (inst && typeof inst.resize === 'function') inst.resize();
+        });
+      }
+      window.addEventListener('resize', resizeAllCharts);
+
+      // 标准图表快速构建器（AI Agent 可直接调用，也可传入原生 ECharts Option）
+      const ChartPresets = {
+        // 预设1：正负分化排序柱状图（适用于图1-1 全指标变化率谱系）
+        divergingBar: function(categories, values, yName, minVal, maxVal) {
+          return {
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 }, formatter: '{b}: <b>{c}%</b>' },
+            grid: { left: 56, right: 24, top: 32, bottom: 64 },
+            xAxis: { type: 'category', data: categories, axisLabel: { rotate: 28, fontSize: 12, fontWeight: 600, color: '#0f172a', interval: 0 } },
+            yAxis: { type: 'value', name: yName || '同比变化率 (%)', nameTextStyle: { fontSize: 12.5, fontWeight: 'bold' }, min: minVal, max: maxVal, axisLabel: { formatter: '{value}%', fontSize: 12 }, splitLine: { lineStyle: { type: 'dashed' } } },
+            series: [{
+              type: 'bar', barWidth: '58%',
+              data: values.map(v => ({
+                value: v,
+                itemStyle: {
+                  color: v >= 0 ? THEME.NAVY : THEME.TEAL,
+                  borderColor: v >= 0 ? '#0b2545' : THEME.TEAL_DARK,
+                  borderWidth: 1.5,
+                  decal: v < 0 ? { symbol: 'rect', dashArrayX: [1, 0], dashArrayY: [2, 4], rotation: -Math.PI / 4, color: 'rgba(15,118,110,0.35)' } : undefined
+                },
+                label: {
+                  show: true, position: v >= 0 ? 'top' : 'bottom',
+                  formatter: (v >= 0 ? '+' : '') + v.toFixed(2) + '%',
+                  fontSize: 11.5, fontWeight: 'bold',
+                  color: v >= 0 ? THEME.NAVY : THEME.TEAL_DARK
+                }
+              }))
+            }]
+          };
+        },
+
+        // 预设2：本期vs同期双柱对比图（支持可选均值基准线 markLineValue）
+        groupedComparisonBar: function(categories, currentData, priorData, yName, currentName, priorName, markLineValue, markLineLabel) {
+          const markLineObj = (typeof markLineValue === 'number') ? {
+            symbol: 'none',
+            lineStyle: { color: THEME.RED, type: 'dashed', width: 1.5 },
+            label: { formatter: markLineLabel || ('均值 ' + markLineValue), position: 'insideEndTop', fontSize: 11, fontWeight: 'bold', color: THEME.RED },
+            data: [{ yAxis: markLineValue }]
+          } : undefined;
+
+          return {
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 } },
+            legend: { top: 0, right: 8, itemWidth: 15, itemHeight: 10, textStyle: { fontSize: 12, fontWeight: 600 } },
+            grid: { left: 52, right: 16, top: 34, bottom: 42 },
+            xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a', interval: 0 } },
+            yAxis: { type: 'value', name: yName || '', nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, axisLabel: { fontSize: 11.5 }, splitLine: { lineStyle: { type: 'dashed' } } },
+            series: [
+              {
+                name: currentName || '本期计划', type: 'bar', barGap: '8%',
+                itemStyle: { color: THEME.NAVY },
+                label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY },
+                data: currentData,
+                markLine: markLineObj
+              },
+              {
+                name: priorName || '同期完成', type: 'bar',
+                itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 },
+                label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold', color: '#92400e' },
+                data: priorData
+              }
+            ]
+          };
+        }
+      };
+
+      // ========================================================================================
+      // [AI-SLOT: CHART_REGISTRY] 按页码索引 (0-based) 注册每页的 ECharts 初始化函数
+      // ========================================================================================
+      const CHART_REGISTRY = {
+        // 第 2 页 (index = 1)：版式 B 全局指标谱系与三级结构图
+        1: function() {
+          const c11 = getOrCreateChart('chart_demo_1_1');
+          if (c11) {
+            const labels = ['过程水单耗','过程电单耗','辅料A总量','辅料B总量','外部采购量','主料标量','主料实物量','协同产品量','产出单耗','综合效率','服务基数','专项抢修费','核心产出量','专项劳务费','核心效益','高毛利销量'];
+            const vals = [-14.25, -8.00, -8.00, -7.40, -5.69, -2.10, -1.50, -1.20, -0.02, 0.79, 1.85, 1.45, 4.20, 4.88, 5.80, 6.80];
+            c11.setOption(ChartPresets.divergingBar(labels, vals, '同比变化率 (%)', -16, 9));
+          }
+
+          const c12a = getOrCreateChart('chart_demo_1_2a');
+          if (c12a) {
+            c12a.setOption(ChartPresets.groupedComparisonBar(
+              ['源头生产端\n(占总量48.5%)', '干线传输端\n(占总量15.1%)', '终端管网侧\n(占总量36.5%)'],
+              [156.2, 48.5, 117.4],
+              [157.9, 48.6, 143.7],
+              '万吨', '本期计划', '同期完成'
+            ));
+          }
+
+          const c12b = getOrCreateChart('chart_demo_1_2b');
+          if (c12b) {
+            c12b.setOption(ChartPresets.groupedComparisonBar(
+              ['终端管网侧\n(占总量83.3%)', '特种设备端\n(占总量12.8%)', '源头生产端\n(占总量3.9%)'],
+              [5411, 829, 255],
+              [5843, 828, 343],
+              '万kWh', '本期计划', '同期完成'
+            ));
+          }
+        },
+
+        // 第 4 页 (index = 3)：版式 D1 增量贡献瀑布图与多指标协同对比图
+        3: function() {
+          const c31 = getOrCreateChart('chart_demo_3_1');
+          if (c31) {
+            const xLabels = ['基期总量\n(集团基数)','A1主力单元\n(+7.83%)','A2协同单元\n(+6.44%)','B区域单元\n(+0.96%)','C区域单元\n(-1.54%)','D转型单元\n(-7.82%)','本期总量\n(集团+4.20%)'];
+            const baseVals = [1350, 1391.5, 1436.5, 1459.5, 1459.5, 1450.0, 1350];
+            const barVals  = [41.5, 45.0, 23.0, 2.0, 2.0, 9.5, 100.0];
+            const dispText = ['1,391.5万','+45.0万','+23.0万','+2.0万','-2.0万','-9.5万','1,450.0万'];
+            const barColors = [THEME.GOLD, THEME.BLUE, THEME.BLUE, THEME.BLUE, '#f87171', '#f87171', THEME.NAVY];
+
+            c31.setOption({
+              tooltip: {
+                trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 },
+                formatter: (p) => { const i = p[0].dataIndex; return xLabels[i].replace('\n', ' ') + ': <b>' + dispText[i] + '</b>'; }
+              },
+              grid: { left: 58, right: 20, top: 32, bottom: 44 },
+              xAxis: { type: 'category', data: xLabels, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a', interval: 0 } },
+              yAxis: { type: 'value', name: '万单位 (局部放大)', nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, min: 1350, max: 1475, axisLabel: { fontSize: 12 }, splitLine: { lineStyle: { type: 'dashed' } } },
+              series: [
+                { type: 'bar', stack: 'wf', silent: true, itemStyle: { color: 'transparent' }, data: baseVals },
+                {
+                  type: 'bar', stack: 'wf', barWidth: 42,
+                  data: barVals.map((v, i) => ({
+                    value: v,
+                    itemStyle: { color: barColors[i], borderColor: '#0f172a', borderWidth: 1 },
+                    label: {
+                      show: true, position: (i === 4 || i === 5) ? 'bottom' : 'top',
+                      formatter: dispText[i], fontSize: 11.5, fontWeight: 'bold',
+                      color: (i === 4 || i === 5) ? THEME.RED : THEME.NAVY
+                    }
+                  }))
+                }
+              ]
+            });
+          }
+
+          const c32 = getOrCreateChart('chart_demo_3_2');
+          if (c32) {
+            c32.setOption({
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 } },
+              legend: { top: 0, textStyle: { fontSize: 12, fontWeight: 600 } },
+              grid: { left: 52, right: 20, top: 34, bottom: 32 },
+              xAxis: { type: 'category', data: ['A1主力单元', 'A2协同单元', 'B区域单元', 'C区域单元', 'D转型单元'], axisLabel: { fontSize: 12, fontWeight: 600, color: '#0f172a' } },
+              yAxis: { type: 'value', name: '同比变化率 (%)', nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, min: -10, max: 10, axisLabel: { fontSize: 12 }, splitLine: { lineStyle: { type: 'dashed' } } },
+              series: [
+                {
+                  name: '产出规模同比 (%) [集团+4.20%]', type: 'bar',
+                  itemStyle: { color: THEME.NAVY },
+                  label: { show: true, position: 'top', formatter: '{c}%', fontSize: 11, fontWeight: 'bold' },
+                  data: [7.83, 6.44, 0.96, -1.54, -7.82]
+                },
+                {
+                  name: '覆盖基数同比 (%) [集团+1.85%]', type: 'bar',
+                  itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 },
+                  label: { show: true, position: 'top', formatter: '{c}%', fontSize: 11, fontWeight: 'bold' },
+                  data: [4.10, 3.20, 0.50, -0.40, -3.10]
+                },
+                {
+                  name: '单位单耗同比 (%) [集团-1.10%]', type: 'bar',
+                  itemStyle: { color: THEME.TEAL, borderColor: THEME.TEAL_DARK, borderWidth: 1 },
+                  label: { show: true, position: 'bottom', formatter: '{c}%', fontSize: 11, fontWeight: 'bold' },
+                  data: [-0.80, -1.20, -0.45, -1.15, -4.89]
+                }
+              ]
+            });
+          }
+        },
+
+        // 第 5 页 (index = 4)：版式 D2 均值红线对标图与边际效益驱动因子拆解图
+        4: function() {
+          const c41 = getOrCreateChart('chart_demo_4_1');
+          if (c41) {
+            c41.setOption({
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 } },
+              legend: { top: 0, textStyle: { fontSize: 12, fontWeight: 600 } },
+              grid: { left: 90, right: 48, top: 32, bottom: 28 },
+              xAxis: { type: 'value', name: 'kg/㎡', nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, max: 135, axisLabel: { fontSize: 11.5 }, splitLine: { lineStyle: { type: 'dashed' } } },
+              yAxis: { type: 'category', data: ['D 转型单元', 'C 重点治理', 'A1 主力单元', 'B 区域单元', 'A2 协同单元'], axisLabel: { fontSize: 12, fontWeight: 600, color: '#0f172a' } },
+              series: [
+                {
+                  name: '本期计划单耗 (条形)', type: 'bar', barWidth: 18,
+                  itemStyle: { color: 'rgba(20,68,107,0.30)', borderColor: THEME.NAVY, borderWidth: 1.5 },
+                  label: { show: true, position: 'right', formatter: '{c} kg/㎡', fontSize: 11.5, fontWeight: 'bold', color: THEME.NAVY },
+                  data: [90.00, 60.19, 41.20, 38.50, 37.60],
+                  markLine: {
+                    symbol: 'none',
+                    lineStyle: { color: THEME.RED, type: 'dashed', width: 2 },
+                    label: { formatter: '集团均值红线 45.31', fontSize: 11.5, fontWeight: 'bold', color: THEME.RED },
+                    data: [{ xAxis: 45.31 }]
+                  }
+                },
+                {
+                  name: '同期实际单耗 (圆点)', type: 'scatter', symbolSize: 12,
+                  itemStyle: { color: '#f59e0b', borderColor: THEME.GOLD_BORDER, borderWidth: 2 },
+                  data: [124.93, 67.22, 46.80, 43.97, 42.24]
+                }
+              ]
+            });
+          }
+
+          const c42 = getOrCreateChart('chart_demo_4_2');
+          if (c42) {
+            const drivers = ['低毛利品类缩减','新增峰值保障能源','外包服务费微增','环保及辅材节支','高毛利品类A增收','过程水耗压降节支','外购成品结构节支','高毛利品类B增收','过程电耗压降节支','核心业务规模增收'];
+            const vals = [-220.0, -172.6, -65.6, 180.2, 310.0, 326.4, 390.0, 520.0, 520.0, 1325.6];
+            const types = ['neg','neg','neg','save','rev','save','save','rev','save','rev'];
+
+            c42.setOption({
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 }, formatter: '{b}: <b>{c}万元</b>' },
+              grid: { left: 128, right: 58, top: 20, bottom: 28 },
+              xAxis: { type: 'value', name: '对边际利润同比贡献 (万元)', nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, min: -300, max: 1500, axisLabel: { fontSize: 12 }, splitLine: { lineStyle: { type: 'dashed' } } },
+              yAxis: { type: 'category', data: drivers, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a' } },
+              series: [{
+                type: 'bar', barWidth: 16,
+                data: vals.map((v, i) => ({
+                  value: v,
+                  itemStyle: {
+                    color: types[i] === 'rev' ? THEME.NAVY : (types[i] === 'save' ? THEME.TEAL : THEME.RED_LIGHT),
+                    borderColor: types[i] === 'rev' ? '#0b2545' : (types[i] === 'save' ? THEME.TEAL_DARK : THEME.RED),
+                    borderWidth: 1
+                  },
+                  label: {
+                    show: true, position: v >= 0 ? 'right' : 'left',
+                    formatter: (v >= 0 ? '+' : '') + v + '万',
+                    fontSize: 11, fontWeight: 'bold',
+                    color: v >= 0 ? '#0f172a' : THEME.RED
+                  }
+                }))
+              }]
+            });
+          }
+        },
+
+        // 第 6 页 (index = 5)：版式 E 四宫格视图切换页
+        5: function() {
+          const units = ['A1主力', 'A2协同', 'B区域', 'C区域', 'D转型'];
+          const months = ['10月', '11月', '12月', '1月', '2月', '3月', '4月'];
+
+          const c51 = getOrCreateChart('chart_demo_5_1');
+          if (c51) {
+            c51.setOption(ChartPresets.groupedComparisonBar(
+              units, [259.0, 247.3, 166.1, 408.6, 329.9], [315.4, 179.6, 100.7, 382.4, 367.2],
+              '万元', '本期计划', '同期完成', 282.18, '单元均值 282.2'
+            ));
+          }
+
+          const c52 = getOrCreateChart('chart_demo_5_2');
+          if (c52) {
+            c52.setOption(ChartPresets.groupedComparisonBar(
+              units, [712.2, 101.0, 226.0, 20.0, 230.8], [733.9, 103.6, 214.0, 15.0, 205.0],
+              '万元', '本期计划', '同期完成', 258.0, '单元均值 258.0'
+            ));
+          }
+
+          const c53 = getOrCreateChart('chart_demo_5_3');
+          if (c53) {
+            c53.setOption({
+              tooltip: { trigger: 'axis', textStyle: { fontSize: 13 } },
+              legend: { top: 0, right: 6, itemWidth: 14, itemHeight: 10, textStyle: { fontSize: 11.5, fontWeight: 600 } },
+              grid: { left: 46, right: 16, top: 32, bottom: 30 },
+              xAxis: { type: 'category', data: months, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a' } },
+              yAxis: { type: 'value', name: '万元', nameTextStyle: { fontSize: 11.5, fontWeight: 'bold' }, max: 290, axisLabel: { fontSize: 11.5 }, splitLine: { lineStyle: { type: 'dashed' } } },
+              series: [
+                {
+                  name: '本期月度计划', type: 'line', symbolSize: 8,
+                  itemStyle: { color: THEME.NAVY }, lineStyle: { width: 2.5 },
+                  label: { show: true, position: 'top', fontSize: 10.5, fontWeight: 'bold', color: THEME.NAVY },
+                  data: [185.8, 230.3, 224.1, 209.8, 211.6, 225.3, 123.9],
+                  markLine: {
+                    symbol: 'none', lineStyle: { color: THEME.RED, type: 'dashed' },
+                    label: { formatter: '月均201.6', position: 'insideEndTop', fontSize: 11, fontWeight: 'bold', color: THEME.RED },
+                    data: [{ yAxis: 201.55 }]
+                  }
+                },
+                {
+                  name: '同期月度实际', type: 'line', symbol: 'rect', symbolSize: 7,
+                  itemStyle: { color: THEME.GOLD_BORDER }, lineStyle: { width: 2, type: 'dashed' },
+                  data: [252.0, 249.1, 204.8, 207.4, 215.2, 173.9, 42.8]
+                }
+              ]
+            });
+          }
+
+          const c54 = getOrCreateChart('chart_demo_5_4');
+          if (c54) {
+            c54.setOption({
+              tooltip: { trigger: 'axis', textStyle: { fontSize: 13 } },
+              legend: { top: 0, right: 6, itemWidth: 14, itemHeight: 10, textStyle: { fontSize: 11.5, fontWeight: 600 } },
+              grid: { left: 46, right: 16, top: 32, bottom: 30 },
+              xAxis: { type: 'category', data: months, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a' } },
+              yAxis: { type: 'value', name: '万元', nameTextStyle: { fontSize: 11.5, fontWeight: 'bold' }, max: 390, axisLabel: { fontSize: 11.5 }, splitLine: { lineStyle: { type: 'dashed' } } },
+              series: [
+                {
+                  name: '本期月度计划', type: 'line', symbolSize: 8,
+                  itemStyle: { color: THEME.NAVY }, lineStyle: { width: 2.5 },
+                  label: { show: true, position: 'top', fontSize: 10.5, fontWeight: 'bold', color: THEME.NAVY },
+                  data: [239.3, 342.0, 252.7, 183.3, 127.6, 132.1, 13.0],
+                  markLine: {
+                    symbol: 'none', lineStyle: { color: THEME.RED, type: 'dashed' },
+                    label: { formatter: '月均184.3', position: 'insideEndTop', fontSize: 11, fontWeight: 'bold', color: THEME.RED },
+                    data: [{ yAxis: 184.29 }]
+                  }
+                },
+                {
+                  name: '同期月度实际', type: 'line', symbol: 'rect', symbolSize: 7,
+                  itemStyle: { color: THEME.GOLD_BORDER }, lineStyle: { width: 2, type: 'dashed' },
+                  data: [232.5, 325.2, 235.8, 194.3, 131.0, 138.9, 13.8]
+                }
+              ]
+            });
+          }
+        }
+      };
+
+      function initChartsForSlide(idx) {
+        if (typeof CHART_REGISTRY[idx] === 'function') {
+          CHART_REGISTRY[idx]();
+        }
+      }
+
+      // 初始渲染首页
+      goToSlide(0);
+    })();
+  </script>
+</body>
+</html>

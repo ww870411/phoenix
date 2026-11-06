@@ -21,6 +21,8 @@ from backend.services.weather_importer import (
     compare_with_existing,
     fetch_hourly_temperatures,
     persist_hourly_temperatures,
+    load_weather_import_config,
+    save_weather_import_config,
 )
 
 
@@ -319,6 +321,35 @@ def disable_dashboard_cache_endpoint(
         "cache_disabled": status.get("disabled", True),
         "cache_updated_at": status.get("updated_at"),
     }
+
+
+class WeatherImportConfigPayload(BaseModel):
+    """全局管理中心维护的逐小时气温来源。"""
+
+    api_url: str
+
+
+@router.get("/dashboard/temperature/config", summary="读取气温导入 API 配置")
+def get_temperature_import_config(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    try:
+        return {"ok": True, "data": load_weather_import_config()}
+    except WeatherImporterError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.put("/dashboard/temperature/config", summary="保存气温导入 API 配置")
+def update_temperature_import_config(
+    payload: WeatherImportConfigPayload,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    try:
+        return {"ok": True, "data": save_weather_import_config(payload.api_url)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="保存气温 API 配置失败，请检查运行时目录是否可写。") from exc
 
 
 @router.post(

@@ -8,10 +8,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-RUN [ -f /etc/apt/sources.list ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && [ -f /etc/apt/sources.list ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
-    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
+# 兼容传统及Deb822源配置，使用中科大HTTPS源下载构建依赖。
+RUN set -eu; \
+    for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+        if [ -f "$source_file" ]; then \
+            sed -i -e 's|https\?://deb\.debian\.org|https://mirrors.ustc.edu.cn|g' \
+                -e 's|https\?://security\.debian\.org|https://mirrors.ustc.edu.cn|g' "$source_file"; \
+        fi; \
+    done \
     && apt-get update -o Acquire::Retries=5 \
     && apt-get install -y --fix-missing --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -30,17 +34,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN [ -f /etc/apt/sources.list ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && [ -f /etc/apt/sources.list ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list || true \
-    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
-    && [ -f /etc/apt/sources.list.d/debian.sources ] && sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || true \
+# 运行阶段同步切换，避免构建阶段成功后再次访问被拒的旧源。
+RUN set -eu; \
+    for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+        if [ -f "$source_file" ]; then \
+            sed -i -e 's|https\?://deb\.debian\.org|https://mirrors.ustc.edu.cn|g' \
+                -e 's|https\?://security\.debian\.org|https://mirrors.ustc.edu.cn|g' "$source_file"; \
+        fi; \
+    done \
     && apt-get update -o Acquire::Retries=5 \
     && apt-get install -y --fix-missing --no-install-recommends libpq5 postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local
 COPY backend /app/backend
-COPY backend_data /app/data-template
+# 业务配置和运行数据统一通过 /app/data 的服务器绑定挂载提供。
 
 EXPOSE 8000
 VOLUME ["/app/data"]

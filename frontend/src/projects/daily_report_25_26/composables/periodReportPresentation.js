@@ -732,3 +732,647 @@ export function assemblePeriodPresentation(apiReport) {
   model.narrative = generateChapterNarrative(model)
   return model
 }
+
+// 获取周期汇报默认文件名（以日期区间为前缀）
+export function getPeriodReportDefaultFilename(data) {
+  const start = data?.meta?.start || '周期'
+  const end = data?.meta?.end || '未定'
+  return `${start}_${end}_生产情况汇报.html`
+}
+
+// 生成单文件自包含的独立 HTML 演示汇报材料
+export function generateStandalonePeriodReportHtml(data) {
+  const safeDataJson = JSON.stringify(data || {}).replace(/<\/script/gi, '<\\/script')
+  const title = data?.meta?.weekTitle || `生产运行调度汇报材料（${data?.meta?.start || ''} — ${data?.meta?.end || ''}）`
+  const season = data?.meta?.season || '25-26供暖期'
+  const department = data?.meta?.department || '经济运行部'
+  const periodText = `周期：${data?.meta?.start || ''} 至 ${data?.meta?.end || ''}（共 ${data?.meta?.days || 7} 天）`
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title}</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"><\/script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+    :root {
+      --bg-stage: #f1f5f9;
+      --bg-card: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      --brand-navy: #0f3d68;
+      --brand-sky: #0284c7;
+    }
+    body.dark {
+      --bg-stage: #090d16;
+      --bg-card: #131b2e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: #1e293b;
+      --brand-navy: #1e293b;
+      --brand-sky: #38bdf8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-stage);
+      color: var(--text-main);
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .top-bar {
+      height: 54px;
+      background: rgba(15, 61, 104, 0.96);
+      backdrop-filter: blur(10px);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .main-stage {
+      flex: 1;
+      max-width: 1720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px 20px 70px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .nav-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .nav-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .nav-pill {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      border-radius: 9999px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .nav-pill:hover { border-color: var(--brand-sky); color: var(--brand-sky); }
+    .nav-pill.active {
+      background: #0284c7;
+      border-color: #0284c7;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+    }
+    .slide-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+      display: none;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.06);
+    }
+    .slide-section.active { display: block; }
+    .slide-head {
+      background: linear-gradient(90deg, #0f3d68 0%, #1e5285 100%);
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #f59e0b;
+    }
+    .slide-grid {
+      display: grid;
+      grid-template-columns: 46% 54%;
+      gap: 16px;
+      padding: 18px 24px;
+      min-height: 620px;
+    }
+    @media (max-width: 1024px) {
+      .slide-grid { grid-template-columns: 1fr; }
+    }
+    .doc-box {
+      background: rgba(248, 250, 252, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    body.dark .doc-box { background: rgba(15, 23, 42, 0.6); }
+    .doc-para {
+      font-size: 14px;
+      line-height: 1.9;
+      color: var(--text-main);
+      margin-bottom: 14px;
+      text-indent: 2em;
+    }
+    .doc-key-num {
+      font-weight: 700;
+      color: #0284c7;
+      background: rgba(2, 132, 199, 0.08);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .doc-callout {
+      background: rgba(245, 158, 11, 0.08);
+      border-left: 4px solid #f59e0b;
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-top: 14px;
+      font-size: 13px;
+    }
+    .chart-box {
+      width: 100%;
+      height: 280px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .report-table th, .report-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .report-table th {
+      background: rgba(241, 245, 249, 0.8);
+      font-weight: 600;
+      color: var(--text-muted);
+      text-align: left;
+      position: sticky;
+      top: 0;
+    }
+    body.dark .report-table th { background: #1e293b; }
+    .row-total {
+      background: rgba(245, 158, 11, 0.12) !important;
+      font-weight: 700;
+    }
+    .bottom-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 48px;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 40;
+    }
+    .btn-nav {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-nav:hover { background: #0369a1; }
+    .btn-nav:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <!-- 顶部控制条 -->
+  <header class="top-bar">
+    <div class="flex items-center gap-3">
+      <span class="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">${season}</span>
+      <h1 class="text-sm font-bold tracking-wide">${title}</h1>
+    </div>
+    <div class="flex items-center gap-3 text-xs">
+      <span>${department}</span>
+      <button onclick="toggleTheme()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white transition">🌓 模式切换</button>
+      <button onclick="toggleFullscreen()" class="px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-semibold transition">⛶ 全屏播放</button>
+    </div>
+  </header>
+
+  <main class="main-stage">
+    <!-- 导航栏 -->
+    <div class="nav-bar">
+      <div>
+        <div class="text-xs text-slate-400">${periodText}</div>
+        <div class="text-base font-bold">${title}</div>
+      </div>
+      <div class="nav-pills">
+        <button class="nav-pill active" onclick="switchSlide(0)"><span>01</span> 基本概况</button>
+        <button class="nav-pill" onclick="switchSlide(1)"><span>02</span> 标煤与外购热</button>
+        <button class="nav-pill" onclick="switchSlide(2)"><span>03</span> 产销边际利润</button>
+        <button class="nav-pill" onclick="switchSlide(3)"><span>04</span> 供暖三项单耗</button>
+        <button class="nav-pill" onclick="switchSlide(4)"><span>05</span> 月度计划与展望</button>
+      </div>
+    </div>
+
+    <!-- 幻灯片 0: 基本概况 -->
+    <section id="slide-0" class="slide-section active">
+      <div class="slide-head">
+        <div>
+          <span class="text-xs px-2 py-0.5 rounded bg-sky-500 font-bold">第一章 / 共五章</span>
+          <h2 class="text-base font-bold mt-1">一、基本概况：气象走势与生产经营总体表现</h2>
+        </div>
+        <div class="text-xs text-sky-200">${periodText}</div>
+      </div>
+      <div class="slide-grid">
+        <div class="doc-box">
+          <div class="text-xs font-bold text-sky-700 uppercase mb-2">会议宣读讲稿</div>
+          <div id="narrative-0"></div>
+          <div id="callout-0" class="doc-callout"></div>
+        </div>
+        <div class="flex flex-col gap-3">
+          <div class="grid grid-cols-2 gap-3" id="kpi-grid-0"></div>
+          <div class="border rounded-xl p-3 flex-1 flex flex-col" style="border-color: var(--border-color); background: var(--bg-card);">
+            <div class="text-xs font-bold text-slate-700 mb-1">五维综合经营对标图 (本期实际 vs 本期计划 vs 去年同期)</div>
+            <div id="chart-0" class="chart-box flex-1"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 幻灯片 1: 标煤与外购热 -->
+    <section id="slide-1" class="slide-section">
+      <div class="slide-head">
+        <div>
+          <span class="text-xs px-2 py-0.5 rounded bg-sky-500 font-bold">第二章 / 共五章</span>
+          <h2 class="text-base font-bold mt-1">二、燃料与能源消耗：标煤耗用与外购热对比分析</h2>
+        </div>
+      </div>
+      <div class="slide-grid">
+        <div class="doc-box">
+          <div class="text-xs font-bold text-sky-700 uppercase mb-2">会议宣读讲稿</div>
+          <div id="narrative-1"></div>
+          <div id="callout-1" class="doc-callout"></div>
+          <div class="mt-4 flex-1 overflow-auto max-h-56">
+            <table class="report-table" id="table-coal"></table>
+          </div>
+        </div>
+        <div class="border rounded-xl p-3 flex flex-col" style="border-color: var(--border-color); background: var(--bg-card);">
+          <div class="text-xs font-bold text-slate-700 mb-1">主要热源标煤耗量分布与同比结构对比</div>
+          <div id="chart-1" class="chart-box flex-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 幻灯片 2: 产销边际利润 -->
+    <section id="slide-2" class="slide-section">
+      <div class="slide-head">
+        <div>
+          <span class="text-xs px-2 py-0.5 rounded bg-sky-500 font-bold">第三章 / 共五章</span>
+          <h2 class="text-base font-bold mt-1">三、经营效益深潜：直接收入、成本与产销边际利润对标</h2>
+        </div>
+      </div>
+      <div class="slide-grid">
+        <div class="doc-box">
+          <div class="text-xs font-bold text-sky-700 uppercase mb-2">会议宣读讲稿</div>
+          <div id="narrative-2"></div>
+          <div id="callout-2" class="doc-callout"></div>
+          <div class="mt-4 flex-1 overflow-auto max-h-56">
+            <table class="report-table" id="table-profit"></table>
+          </div>
+        </div>
+        <div class="border rounded-xl p-3 flex flex-col" style="border-color: var(--border-color); background: var(--bg-card);">
+          <div class="text-xs font-bold text-slate-700 mb-1">各生产单位实际边际利润 vs 可比煤价边际利润 (万元)</div>
+          <div id="chart-2" class="chart-box flex-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 幻灯片 3: 供暖三项单耗 -->
+    <section id="slide-3" class="slide-section">
+      <div class="slide-head">
+        <div>
+          <span class="text-xs px-2 py-0.5 rounded bg-sky-500 font-bold">第四章 / 共五章</span>
+          <h2 class="text-base font-bold mt-1">四、能效对标分析：供暖热单耗、电单耗与水单耗横向对标</h2>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="switchUnitTab('heat')" class="px-2 py-0.5 rounded bg-sky-700 text-white text-xs font-bold" id="btn-u-heat">热单耗</button>
+          <button onclick="switchUnitTab('elec')" class="px-2 py-0.5 rounded bg-slate-800 text-slate-200 text-xs font-bold" id="btn-u-elec">电单耗</button>
+          <button onclick="switchUnitTab('water')" class="px-2 py-0.5 rounded bg-slate-800 text-slate-200 text-xs font-bold" id="btn-u-water">水单耗</button>
+        </div>
+      </div>
+      <div class="slide-grid">
+        <div class="doc-box">
+          <div class="text-xs font-bold text-sky-700 uppercase mb-2">会议宣读讲稿</div>
+          <div id="narrative-3"></div>
+          <div id="callout-3" class="doc-callout"></div>
+          <div class="mt-4 flex-1 overflow-auto max-h-56">
+            <table class="report-table" id="table-unit"></table>
+          </div>
+        </div>
+        <div class="border rounded-xl p-3 flex flex-col" style="border-color: var(--border-color); background: var(--bg-card);">
+          <div class="text-xs font-bold text-slate-700 mb-1" id="chart-unit-title">各分公司单耗横向对标与全网均值红线</div>
+          <div id="chart-3" class="chart-box flex-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 幻灯片 4: 月度计划与展望 -->
+    <section id="slide-4" class="slide-section">
+      <div class="slide-head">
+        <div>
+          <span class="text-xs px-2 py-0.5 rounded bg-sky-500 font-bold">第五章 / 共五章</span>
+          <h2 class="text-base font-bold mt-1">五、后程展望：本月关键生产指标进度与后期调度工作建议</h2>
+        </div>
+      </div>
+      <div class="slide-grid">
+        <div class="doc-box">
+          <div class="text-xs font-bold text-sky-700 uppercase mb-2">会议宣读讲稿</div>
+          <div id="narrative-4"></div>
+          <div id="callout-4" class="doc-callout"></div>
+          <div class="mt-4 flex-1 overflow-auto max-h-56">
+            <table class="report-table" id="table-plan"></table>
+          </div>
+        </div>
+        <div class="border rounded-xl p-3 flex flex-col" style="border-color: var(--border-color); background: var(--bg-card);">
+          <div class="text-xs font-bold text-slate-700 mb-1">当月主要生产经营指标累计进度达成率 (%)</div>
+          <div id="chart-4" class="chart-box flex-1"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 底部固定翻页控制条 -->
+  <footer class="bottom-bar">
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-400">页码指示：</span>
+      <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-200" id="slide-idx-text">1 / 5</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="btn-nav" id="btn-prev" onclick="prevSlide()">◀ 上一章</button>
+      <button class="btn-nav" id="btn-next" onclick="nextSlide()">下一章 ▶</button>
+    </div>
+  </footer>
+
+  <script>
+    const REPORT_DATA = ${safeDataJson};
+    let currentSlide = 0;
+    let currentUnitTab = 'heat';
+    const chartInstances = {};
+
+    function toggleTheme() {
+      document.body.classList.toggle('dark');
+      renderAllCharts();
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    function switchSlide(idx) {
+      currentSlide = idx;
+      document.querySelectorAll('.slide-section').forEach((el, i) => {
+        el.classList.toggle('active', i === idx);
+      });
+      document.querySelectorAll('.nav-pill').forEach((el, i) => {
+        el.classList.toggle('active', i === idx);
+      });
+      document.getElementById('slide-idx-text').textContent = (idx + 1) + ' / 5';
+      document.getElementById('btn-prev').disabled = idx === 0;
+      document.getElementById('btn-next').disabled = idx === 4;
+      setTimeout(() => {
+        renderChartForSlide(idx);
+      }, 50);
+    }
+
+    function prevSlide() { if (currentSlide > 0) switchSlide(currentSlide - 1); }
+    function nextSlide() { if (currentSlide < 4) switchSlide(currentSlide + 1); }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') nextSlide();
+    });
+
+    function fillNarrative(idx, n) {
+      const narEl = document.getElementById('narrative-' + idx);
+      const callEl = document.getElementById('callout-' + idx);
+      if (!narEl || !n) return;
+      narEl.innerHTML = (n.paragraphs || []).map(p => '<p class="doc-para">' + p + '</p>').join('');
+      if (n.callout) {
+        callEl.style.display = 'block';
+        callEl.innerHTML = '<div class="font-bold text-amber-700 mb-1">' + n.callout.title + '</div><ul class="list-disc pl-4 space-y-1">' +
+          (n.callout.items || []).map(it => '<li>' + it + '</li>').join('') + '</ul>';
+      } else {
+        callEl.style.display = 'none';
+      }
+    }
+
+    function initContent() {
+      const n = REPORT_DATA.narrative?.chapters || [];
+      for (let i = 0; i < 5; i++) {
+        fillNarrative(i, n[i]);
+      }
+
+      // KPI 卡片
+      const k = REPORT_DATA.kpis || {};
+      const kpisHtml = [
+        { label: '标煤总耗用', val: (k.coalTotal ?? '—') + ' 吨', rate: k.coalYoYRate ?? '—', color: 'sky' },
+        { label: '直接总收入', val: (k.revenueTotal ?? '—') + ' 万元', rate: k.revenueYoYRate ?? '—', color: 'emerald' },
+        { label: '实际边际利润', val: (k.profitActual ?? '—') + ' 万元', rate: k.profitYoYRate ?? '—', color: 'amber' },
+        { label: '最低运行气温', val: (REPORT_DATA.weather?.minTempMainCity ?? '—'), rate: '同期差异 ' + (REPORT_DATA.weather?.yoyDiff ?? '—') + '℃', color: 'rose' }
+      ].map(it => \`
+        <div class="kpi-card border-t-4 border-\${it.color}-500">
+          <div class="text-xs text-slate-500">\${it.label}</div>
+          <div class="text-lg font-bold text-slate-800 mt-1">\${it.val}</div>
+          <div class="text-xs text-slate-400 mt-0.5">\${it.rate}</div>
+        </div>
+      \`).join('');
+      document.getElementById('kpi-grid-0').innerHTML = kpisHtml;
+
+      // 渲染各表格
+      renderTable('table-coal', ['单位/热源', '本期实际(吨)', '本期计划(吨)', '去年同期(吨)', '同期增减(吨)', '增减率'], (REPORT_DATA.coalTable || []).map(r => [
+        r.name, r.curr, r.plan, r.sync, r.delta, r.rate
+      ]));
+
+      renderTable('table-profit', ['生产单位', '本期实际(万元)', '本期计划(万元)', '去年同期(万元)', '同期增减(万元)', '增减率'], (REPORT_DATA.profitTable || []).map(r => [
+        r.name, r.curr, r.plan, r.sync, r.delta, r.rate
+      ]));
+
+      renderUnitTable();
+
+      renderTable('table-plan', ['指标项目', '计量单位', '全月计划', '累计完成', '完成进度(%)'], (REPORT_DATA.monthlyPlan || []).map(r => [
+        r.name, r.unit, r.plan, r.actual, r.progress
+      ]));
+    }
+
+    function renderTable(tableId, headers, rows) {
+      const el = document.getElementById(tableId);
+      if (!el) return;
+      let html = '<thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>';
+      rows.forEach(r => {
+        const isTotal = String(r[0]).includes('合计') || String(r[0]).includes('集团');
+        html += '<tr class="' + (isTotal ? 'row-total' : '') + '">' + r.map(c => '<td>' + (c ?? '—') + '</td>').join('') + '</tr>';
+      });
+      html += '</tbody>';
+      el.innerHTML = html;
+    }
+
+    function renderUnitTable() {
+      const ds = REPORT_DATA.unitConsumption?.[currentUnitTab] || {};
+      const unit = ds.unit || '';
+      renderTable('table-unit', ['用能单位', '本期实际(' + unit + ')', '去年同期(' + unit + ')', '增减量', '变化率'], (ds.rows || []).map(r => [
+        r.name, r.curr, r.sync, r.delta, r.rate
+      ]));
+    }
+
+    function switchUnitTab(tab) {
+      currentUnitTab = tab;
+      ['heat', 'elec', 'water'].forEach(t => {
+        const btn = document.getElementById('btn-u-' + t);
+        if (btn) {
+          if (t === tab) {
+            btn.className = 'px-2 py-0.5 rounded bg-sky-700 text-white text-xs font-bold';
+          } else {
+            btn.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-200 text-xs font-bold';
+          }
+        }
+      });
+      renderUnitTable();
+      renderChartForSlide(3);
+    }
+
+    function renderChartForSlide(idx) {
+      const elId = 'chart-' + idx;
+      const el = document.getElementById(elId);
+      if (!el) return;
+      if (!chartInstances[idx]) {
+        chartInstances[idx] = echarts.init(el);
+      }
+      const chart = chartInstances[idx];
+      chart.resize();
+
+      if (idx === 0) {
+        const k = REPORT_DATA.kpis || {};
+        chart.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11 } },
+          grid: { left: 40, right: 16, top: 30, bottom: 24 },
+          xAxis: { type: 'category', data: ['标煤耗量(百吨)', '直接收入', '直接成本', '实际边际利润'] },
+          yAxis: { type: 'value' },
+          series: [
+            { name: '本期实际', type: 'bar', itemStyle: { color: '#0284c7' }, data: [Math.round((k.coalTotal||0)/100), k.revenueTotal, k.costTotal, k.profitActual] },
+            { name: '本期计划', type: 'bar', itemStyle: { color: '#f59e0b' }, data: [Math.round((k.coalPlan||0)/100), k.revenuePlan, k.costPlan, k.profitPlan] },
+            { name: '去年同期', type: 'bar', itemStyle: { color: '#10b981' }, data: [Math.round((k.coalSync||0)/100), k.revenueSync, k.costSync, k.profitSync] }
+          ]
+        });
+      } else if (idx === 1) {
+        const rows = (REPORT_DATA.coalTable || []).filter(r => !r.name.includes('合计') && !r.name.includes('集团'));
+        chart.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0 },
+          grid: { left: 50, right: 16, top: 30, bottom: 24 },
+          xAxis: { type: 'category', data: rows.map(r => r.name) },
+          yAxis: { type: 'value', name: '吨' },
+          series: [
+            { name: '本期实际', type: 'bar', itemStyle: { color: '#0284c7' }, data: rows.map(r => r.curr) },
+            { name: '去年同期', type: 'bar', itemStyle: { color: '#10b981' }, data: rows.map(r => r.sync) }
+          ]
+        });
+      } else if (idx === 2) {
+        const rows = (REPORT_DATA.profitTable || []).filter(r => !r.name.includes('合计') && !r.name.includes('集团'));
+        chart.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0 },
+          grid: { left: 50, right: 16, top: 30, bottom: 24 },
+          xAxis: { type: 'category', data: rows.map(r => r.name) },
+          yAxis: { type: 'value', name: '万元' },
+          series: [
+            { name: '实际边际利润', type: 'bar', itemStyle: { color: '#0284c7' }, data: rows.map(r => r.curr) },
+            { name: '去年同期利润', type: 'bar', itemStyle: { color: '#f59e0b' }, data: rows.map(r => r.sync) }
+          ]
+        });
+      } else if (idx === 3) {
+        const ds = REPORT_DATA.unitConsumption?.[currentUnitTab] || {};
+        const rows = (ds.rows || []).filter(r => !r.name.includes('全网') && !r.name.includes('均值') && !r.name.includes('合计'));
+        const avgRow = (ds.rows || []).find(r => r.name.includes('全网') || r.name.includes('均值'));
+        const avgVal = avgRow ? Number(avgRow.curr) : null;
+        chart.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0 },
+          grid: { left: 50, right: 16, top: 30, bottom: 24 },
+          xAxis: { type: 'category', data: rows.map(r => r.name) },
+          yAxis: { type: 'value', name: ds.unit || '' },
+          series: [
+            {
+              name: '本期单耗', type: 'bar', itemStyle: { color: '#0284c7' }, data: rows.map(r => r.curr),
+              markLine: avgVal ? { data: [{ yAxis: avgVal, name: '全网均值' }], lineStyle: { color: '#ef4444', type: 'dashed' } } : undefined
+            },
+            { name: '同期单耗', type: 'bar', itemStyle: { color: '#10b981' }, data: rows.map(r => r.sync) }
+          ]
+        });
+      } else if (idx === 4) {
+        const rows = (REPORT_DATA.monthlyPlan || []).filter(r => r.progress != null);
+        chart.setOption({
+          tooltip: { trigger: 'axis' },
+          grid: { left: 90, right: 30, top: 20, bottom: 20 },
+          xAxis: { type: 'value', max: 100, name: '%' },
+          yAxis: { type: 'category', data: rows.map(r => r.name) },
+          series: [
+            {
+              name: '达成进度', type: 'bar', barWidth: 16,
+              itemStyle: { color: '#0284c7', borderRadius: [0, 4, 4, 0] },
+              label: { show: true, position: 'right', formatter: '{c}%' },
+              data: rows.map(r => r.progress)
+            }
+          ]
+        });
+      }
+    }
+
+    function renderAllCharts() {
+      Object.keys(chartInstances).forEach(idx => {
+        chartInstances[idx].dispose();
+        delete chartInstances[idx];
+      });
+      renderChartForSlide(currentSlide);
+    }
+
+    window.addEventListener('resize', () => {
+      if (chartInstances[currentSlide]) {
+        chartInstances[currentSlide].resize();
+      }
+    });
+
+    initContent();
+    switchSlide(0);
+  <\/script>
+</body>
+</html>`
+}
+

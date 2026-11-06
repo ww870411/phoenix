@@ -1,14 +1,18 @@
 """
 Open-Meteo 天气数据获取服务。
 
-当前阶段仅负责从用户指定的 API 读取逐小时气温数据，不执行数据库写入。
+负责气温来源配置、逐小时数据获取、差异比较与确认入库。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import os
+import tempfile
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import select
@@ -16,8 +20,9 @@ from sqlalchemy.orm import Session
 
 from backend.db.database_daily_report_25_26 import TemperatureData
 from backend.services.auth_manager import EAST_8
+from backend.services.project_data_paths import get_project_runtime_dir
 
-# 用户提供的 API，暂不允许自定义参数。
+# 未保存管理配置时沿用原气温来源，兼容现有部署。
 OPEN_METEO_API_URL = (
     "https://api.open-meteo.com/v1/forecast?"
     "latitude=38.875&longitude=121.625&hourly=temperature_2m"
@@ -37,7 +42,57 @@ class WeatherImporterError(RuntimeError):
     """天气数据获取过程中出现的通用错误。"""
 
 
+def _weather_config_path():
+    """复用项目运行时目录，不修改基础种子配置。"""
+    return get_project_runtime_dir("daily_report_25_26") / "weather_import_config.json"
+
+
+def _validate_api_url(api_url: str) -> str:
+    """只校验地址格式，数据格式由现有逐小时解析器校验。"""
+    value = api_url.strip()
+    try:
+        parsed = urlsplit(value)
+        valid = parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+        parsed.port
+    except ValueError:
+        valid = False
+    if not valid or any(char.isspace() for char in value):
+        raise ValueError("请输入有效的 HTTP 或 HTTPS 气温 API 完整地址。")
+    return value
+
+
+def load_weather_import_config() -> Dict[str, str]:
+    """每次读取持久化地址，保存后立即对预览和入库生效。"""
+    path = _weather_config_path()
+    if not path.exists():
+        return {"api_url": OPEN_METEO_API_URL}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {"api_url": _validate_api_url(data["api_url"])}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise WeatherImporterError("读取气温 API 配置失败，请在全局管理中心重新保存。") from exc
+
+
+def save_weather_import_config(api_url: str) -> Dict[str, str]:
+    """原子替换配置文件，避免读取到未写完的 JSON。"""
+    config = {"api_url": _validate_api_url(api_url)}
+    path = _weather_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as handle:
+            temp_path = handle.name
+            json.dump(config, handle, ensure_ascii=False, indent=2)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+    return config
+
+
 def _validate_hourly_payload(payload: Dict) -> Sequence[HourlyTemperature]:
+    if not isinstance(payload, dict):
+        raise WeatherImporterError("气温 API 响应不是 JSON 对象。")
     hourly = payload.get("hourly")
     if not isinstance(hourly, dict):
         raise WeatherImporterError("Open-Meteo 响应缺少 hourly 字段。")
@@ -256,9 +311,10 @@ def fetch_hourly_temperatures() -> Dict[str, object]:
     - dates: 涵盖到的业务日期（去重/排序）。
     """
 
+    api_url = load_weather_import_config()["api_url"]
     try:
         with httpx.Client(timeout=20.0) as client:
-            response = client.get(OPEN_METEO_API_URL)
+            response = client.get(api_url)
             response.raise_for_status()
             payload = response.json()
     except httpx.HTTPError as exc:
@@ -272,7 +328,7 @@ def fetch_hourly_temperatures() -> Dict[str, object]:
     return {
         "source": {
             "provider": "open-meteo",
-            "url": OPEN_METEO_API_URL,
+            "url": api_url,
             "timezone": payload.get("timezone"),
             "latitude": payload.get("latitude"),
             "longitude": payload.get("longitude"),

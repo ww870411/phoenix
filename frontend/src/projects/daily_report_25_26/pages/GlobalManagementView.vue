@@ -898,7 +898,7 @@
           </div>
 
           <!-- ========================================== -->
-          <!-- Tab 5: ⛅ 气温与气象数据管理 (预留扩展模块)  -->
+          <!-- Tab 5: ⛅ 气温与气象数据管理 -->
           <!-- ========================================== -->
           <div v-if="activeTab === 'weather_mgmt'" class="pane-content-wrapper">
             <section class="card elevated section-card">
@@ -908,9 +908,24 @@
                   <p class="sub block-sub">逐小时温度数据接入、Open-Meteo 天气同步与日度聚合状态。</p>
                 </div>
               </div>
-              <div class="panel-state">
-                气温数据统一由 <code>temperature_data</code> 实体表管理，并通过 <code>DailyDashboardEngine.compute_temperature_data()</code> 毫秒级聚合。
-              </div>
+              <form class="weather-config-form" @submit.prevent="saveWeatherConfig">
+                <label class="field">
+                  <span class="field-title">气温导入 API 地址</span>
+                  <textarea v-model.trim="weatherApiUrl" class="input" rows="4" required
+                    :disabled="loadingWeather || savingWeather" placeholder="请输入完整的 HTTP / HTTPS API 地址（含查询参数）"></textarea>
+                </label>
+                <p class="sub block-sub">保存后，下次在数据看板或项目后台点击“导入气温”即使用此地址，无需重启。查询参数可调整经纬度、时区及历史天数。</p>
+                <p class="sub block-sub">接口须返回 Open-Meteo 兼容的 hourly.time 和 hourly.temperature_2m 数组。保存配置不会请求天气接口或写入气温数据。</p>
+                <div class="section-actions">
+                  <button class="btn primary" type="submit" :disabled="loadingWeather || savingWeather || !weatherApiUrl">
+                    {{ savingWeather ? '保存中…' : '保存气温 API 配置' }}
+                  </button>
+                  <button class="btn ghost" type="button" :disabled="loadingWeather || savingWeather" @click="loadWeatherConfig">
+                    {{ loadingWeather ? '读取中…' : '重新读取' }}
+                  </button>
+                </div>
+                <p v-if="weatherTip" :class="['page-tip', weatherTip.type]" role="status">{{ weatherTip.text }}</p>
+              </form>
             </section>
           </div>
 
@@ -940,6 +955,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
+import { getTemperatureImportConfig, saveTemperatureImportConfig } from '../services/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -985,6 +1001,37 @@ function onMobileSelectChange() {
 const loading = ref(false)
 const errorMessage = ref('')
 const globalTip = ref(null)
+const weatherApiUrl = ref('')
+const loadingWeather = ref(false)
+const savingWeather = ref(false)
+const weatherTip = ref(null)
+
+async function loadWeatherConfig() {
+  loadingWeather.value = true
+  weatherTip.value = null
+  try {
+    const result = await getTemperatureImportConfig(projectKey)
+    weatherApiUrl.value = result.data.api_url
+  } catch (err) {
+    weatherTip.value = { type: 'error', text: err.message }
+  } finally {
+    loadingWeather.value = false
+  }
+}
+
+async function saveWeatherConfig() {
+  savingWeather.value = true
+  weatherTip.value = null
+  try {
+    const result = await saveTemperatureImportConfig(projectKey, weatherApiUrl.value)
+    weatherApiUrl.value = result.data.api_url
+    weatherTip.value = { type: 'success', text: '配置已保存，下次导入气温时生效。' }
+  } catch (err) {
+    weatherTip.value = { type: 'error', text: err.message }
+  } finally {
+    savingWeather.value = false
+  }
+}
 const currentBizDate = ref('')
 const currentSeasonCode = ref('25-26')
 const seasonConfig = ref({
@@ -1091,6 +1138,7 @@ onMounted(async () => {
   await loadBizDate()
   await loadCatalog()
   await loadKdocsConfig()
+  await loadWeatherConfig()
 })
 
 function goProjectPages() {
@@ -1267,6 +1315,7 @@ async function loadCatalog() {
 }
 
 async function refreshAll() {
+  await loadWeatherConfig()
   await loadSeasonConfig()
   await loadBizDate()
   await loadCatalog()
@@ -1569,6 +1618,24 @@ async function executeSandbox() {
 </script>
 
 <style scoped>
+.weather-config-form {
+  display: grid;
+  gap: 12px;
+}
+
+.weather-config-form .field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.weather-config-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  overflow-wrap: anywhere;
+}
+
 .dr-global-mgmt-view {
   min-height: 100vh;
   background: #f8fafc;

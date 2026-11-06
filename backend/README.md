@@ -1,3 +1,132 @@
+## 2026-11-06 工作流目录新增“一键递归打包下载服务”(ZIP 格式)
+
+- **新增服务与接口**：
+  - 升级 `projects/daily_report_25_26/services/period_report_workflow.py`：
+    1. 新增 `create_workflow_archive(folder: str = "") -> Tuple[io.BytesIO, str]`：
+       - 基于标准库 `zipfile` 实现内存流式打包（采用 `ZIP_DEFLATED`）；
+       - 支持全量工作流根目录或任意指定子目录的单键递归打包；
+       - 保留深层目录树结构与空文件夹项，文件时间戳严格对齐东八区（UTC+8 北京时间）；
+       - 自动生成中文防冲突文件名（如 `工作流_全量资料_YYYYMMDD_HHMMSS.zip` 或 `工作流_{子目录名}_YYYYMMDD_HHMMSS.zip`）；
+  - 扩充 `projects/daily_report_25_26/api/period_report.py`：
+    - 新增 `GET /period-report/workflow/archive` 端点（入参：`folder: str = Query("")`）；
+    - 采用 `StreamingResponse` 流式输出 ZIP 二进制流，设置标准的 `Content-Disposition` 附件头并暴露给跨域/前端；
+    - 绑定 `check_admin_session`，严格限定 `Global_admin` 角色访问。
+- **验证结果**：
+  - `tests/test_period_report.py` 10 项测试全部通过（覆盖未授权拦截、全量 ZIP 解压文件校验、指定子目录 ZIP 范围隔离及防穿越拦截）；无数据库变更。
+
+## 2026-11-06 工作流目录升级为“层级子目录浏览与管理服务”（支持面包屑与新建文件夹）
+
+- **新增服务与接口**：
+  - 升级 `projects/daily_report_25_26/services/period_report_workflow.py`：
+    1. 升级 `list_workflow_files(folder: str = "")`：
+       - 支持按指定相对子目录进行单层精准扫描；
+       - 自动生成面向前端的面包屑导航链路 `breadcrumbs`（每一项含 `name` 与 `path`）；
+       - 自动计算并返回上一层目录相对路径 `parent_folder`（根目录下为 `None`）；
+       - 分离返回当前目录直属子文件夹集合 `directories`（包含子文件夹名称、相对路径、包含项目数/文件数、东八区修改时间）与当前目录直属文件集合 `files`，并保留合并项 `items` 兼容；
+    2. 新增 `create_workflow_folder(parent_folder: str, folder_name: str)`：
+       - 支持在工作流根目录或任意合法子目录下创建新文件夹，包含防路径穿越与非法字符严格校验；
+  - 扩充 `projects/daily_report_25_26/api/period_report.py`：
+    - `GET /period-report/workflow/files` 端点增加 `folder: str = Query("")` 查询参数；
+    - 新增 `POST /period-report/workflow/folders` 端点（入参：`{"parent_folder": str, "folder_name": str}`），严格限定 `Global_admin` 角色访问；
+- **验证结果**：
+  - `tests/test_period_report.py` 10 项测试用例全部 100% 通过；无数据库表结构变更。
+
+## 2026-11-06 工作流目录专属管理服务与文档接口扩展
+
+- **新增服务与接口**：
+  - 新建 `projects/daily_report_25_26/services/period_report_workflow.py`：
+    1. 专属管理 `backend_data/projects/daily_report_25_26/period_report/工作流` 目录空间；
+    2. 提供 `list_workflow_files`（递归扫描子目录、提取相对路径、提取子文件夹列表并自动识别 Markdown / HTML / Excel / 文本类型）；
+    3. 提供 `get_workflow_file_content`（在线读取 Markdown 规范与 HTML 模版内容，UTF-8 容错解码）；
+    4. 提供 `get_workflow_file_path`（安全文件路径下载）、`upload_workflow_file`（支持上传至指定子文件夹）、`rename_workflow_file`（防穿越并自动锁定扩展名）与 `delete_workflow_file`；
+    5. 全部时间戳严格对齐东八区（UTC+8 北京时间）；
+  - 扩充 `projects/daily_report_25_26/api/period_report.py`：
+    - 新增 6 个 RESTful 接口：
+      * `GET /period-report/workflow/files`
+      * `GET /period-report/workflow/files/content`
+      * `GET /period-report/workflow/files/download`
+      * `POST /period-report/workflow/files/upload`
+      * `POST /period-report/workflow/files/rename`
+      * `DELETE /period-report/workflow/files`
+    - 全部统一绑定 `check_admin_session`，严格限定 `Global_admin` 角色访问。
+- **验证结果**：
+  - `tests/test_period_report.py` 扩充 `test_workflow_management_endpoints` 测试用例，覆盖非管理员 403 拦截、正常列表读取、Markdown 内容读取、防穿越拦截、上传至子目录、重命名、下载与安全删除，10 项单元测试全部 100% 通过；无数据库表结构变更。
+
+## 2026-11-06 材料仓库时间严格东八区对齐与空间文件重命名服务
+
+- **新增服务与接口**：
+  - 升级 `projects/daily_report_25_26/services/period_report_files.py`：
+    1. 引入东八区时区定义（`BEIJING_TZ = timezone(timedelta(hours=8))`）与 `format_beijing_time` 工具函数，解析 POSIX 时间戳为 UTC 后严格转为北京时间（UTC+8），彻底消除 Docker 容器或服务器默认 UTC 时区导致的慢 8 小时现象；
+    2. 新增 `rename_report_file(rel_path, new_name)` 函数：
+       - 支持 HTML 汇报与 XLSX 数据明细重命名；
+       - 强制保护核心模板（工作流模板禁止重命名并抛出 403）；
+       - 智能扩展名锁定保护：自动继承并纠正为原文件的有效扩展名（如 `.html`、`.xlsx`），防止用户因未输后缀或输错后缀破坏文件格式；
+       - 安全防穿越校验与同名冲突排查；
+  - 升级 `projects/daily_report_25_26/services/period_report_export.py`：
+    - `save_period_report_xlsx` 一并调用 `format_beijing_time` 输出东八区的 `created_at` 与 `updated_at`；
+  - 扩充 `projects/daily_report_25_26/api/period_report.py`：
+    - 新增 `POST /period-report/files/rename` 接口，接收 `{ "path": str, "new_name": str }`，严格限定 `Global_admin` 角色访问。
+- **验证结果**：
+  - `tests/test_period_report.py` 扩充重命名拦截、正常重命名、扩展名自动锁定及东八区时间戳字段校验，9 项单元测试全部 100% 通过；无数据库表结构变更。
+
+## 2026-11-06 生产运行多维数据明细 XLSX 导出与材料仓库保存
+
+- **新增服务与接口**：
+  - 新建 `projects/daily_report_25_26/services/period_report_export.py`：
+    1. 指标白名单与口径约束：严格对齐底层物理字段，排除 9 项指定指标、瞬时工况、中长期合约分解及服务中心细分，涵盖 10 个标准主体（`Group`、`ZhuChengQu`、`BeiHai`、`XiangHai`、`GongRe`、`JinZhou`、`BeiFang`、`JinPu`、`ZhuangHe`、`YanJiuYuan`）共 28 项核心生产/经营/单耗/客服指标；
+    2. 增补产销全要素月计划与分解测算值：针对自选期间，完整覆盖供热量、发电量、售电量、高温水销售量、售汽量、标煤耗量、原煤耗量、耗水量、耗电量、外购热量、站内耗热量及单耗等产销核心指标，实现“月度计划值”与“期间分解测算值”双列呈现，并计算完成率与进度偏差；
+    3. 自下而上层级智能补齐（`compute_period_and_month_plans`）：针对主城区汇总（`ZhuChengQu`）与集团全口径汇总（`Group`）在底表未单独填报某些产销指标（如发电量、售电量、售汽量、高温水销售量）的情况，建立自动聚合求和算法，彻底消除上层口径计划值留白；
+    4. 智能多期对标计算（`compute_comparison_dates`）：整月模式（如 3.1~3.31）自动对齐上一个完整自然整月（2.1~2.28/29，即使天数不同）；非整月模式向前等长追溯相同天数；
+    5. 标准 4 个 Sheet 的 XLSX 工作簿构建：
+       - Sheet 1: `指标对标全景总表`（10家主体 × 28项指标、月度计划值、期间计划测算值、完成率、进度偏差、同环比差值与增幅、基准气温事实）；
+       - Sheet 2: `设备运行与开停机`（汽机与锅炉工况状态、开停机时序、点火并网等真实调度记录）；
+       - Sheet 3: `电力现货电价走势`（辽宁现货 15 分钟 96 点日前电价、实时电价与价差时序流）；
+       - Sheet 4: `调度日志与抢修记录`（调度发令事件、管网抢修/检修工作票、责任单位与工期执行明细）；
+    5. 支持流式内存生成（`generate_period_report_xlsx`）与服务器落盘物理保存（`save_period_report_xlsx` 至 `backend_data/projects/daily_report_25_26/period_report/材料仓库/`）；
+  - 升级 `projects/daily_report_25_26/services/period_report_files.py`：扩展文件名过滤与列表扫描，兼容 `.xlsx` 格式并赋予 `kind: 'excel' | 'html'` 属性，支持统一管理；
+  - 扩充 `projects/daily_report_25_26/api/period_report.py`：
+    - 新增 `GET /period-report/export-xlsx` 端点（参数：`start`, `end`, `include_prev`, `save_to_space`, `filename`），支持直接下载或一键保存至材料仓库；
+    - 升级 `GET /period-report/files/download` 端点，根据文件扩展名自适应返回 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` 或 `text/html`；
+  - 严格限制 `Global_admin` 权限访问，保持安全边界。
+- **验证结果**：
+  - `tests/test_period_report.py` 扩充 `test_comparison_dates_logic` 与 `test_export_xlsx_endpoints_and_space_save`，覆盖整月与非整月追溯算法、4 个 Sheet 结构、流式下载、空间保存与删除，9 项单元测试全部 100% 通过；无数据库表结构变更。
+
+- **新增服务与接口**：
+  - 新建 `projects/daily_report_25_26/services/period_report_files.py`，专门维护 `backend_data/projects/daily_report_25_26/period_report/材料仓库` 空间下的 HTML 汇报文档（同时支持只读演示工作流模板）；
+  - 提供文件列表扫描（`list_report_files`）、保存 HTML（`save_report_html`）、上传文件（`upload_report_html`）、读取文本内容（`get_report_html_content`）、下载路径（`get_report_file_path`）及删除（`delete_report_file`）；
+  - 具备严密的安全防御机制：
+    1. 路径防穿越拦截（基于 `Path.is_relative_to` 确保文件严格限制在目标空间内，防止越界访问）；
+    2. 文件名安全清洗（去除路径前缀与特殊符号，强制保留合法 `.html`/`.htm` 后缀）；
+    3. 系统核心模板保护机制（`html模板与使用说明` 目录下的模板标记为 `is_template=True`，禁止通过 API 删除）；
+  - `projects/daily_report_25_26/api/period_report.py` 扩充 6 个 RESTful 路由：
+    - `GET /period-report/files`：列出可用 HTML 报告列表
+    - `POST /period-report/files/save`：一键保存生成的 HTML 文本
+    - `POST /period-report/files/upload`：上传外部 HTML 汇报文件
+    - `GET /period-report/files/content`：读取指定文件内容用于前端 iframe 播放
+    - `GET /period-report/files/download`：流式下载指定文件
+    - `DELETE /period-report/files`：删除指定文件
+  - 全部接口统一执行 `Global_admin` 会话校验，安全边界与既有周期汇报保持一致。
+- **验证结果**：
+  - `tests/test_period_report.py` 扩充 `test_files_management_endpoints` 测试用例，覆盖非管理员拦截、正常列出、保存、读取、下载、防穿越拦截、模板删除保护与正常删除全流程，7 项回归测试全通；无需执行数据库表结构变更。
+
+## 2026-11-06 生产镜像不再携带本地业务数据
+
+- 根 `.dockerignore` 排除 `backend_data/`，`Dockerfile.prod` 删除数据模板复制指令；后端镜像不再包含本地数据库备份、日志、业务文件和运行配置。
+- 生产数据由 `lo1_new_server.yml` 的 `/home/ww870411/25-26/backend_data:/app/data` 绑定挂载提供，`DATA_DIRECTORY=/app/data` 保持一致。服务器已有数据无需迁移；新服务器须准备挂载目录及业务配置。本地管理页面保存的气温 API 等配置不会通过镜像发布同步。
+- 回滚仅恢复本轮忽略规则及数据复制指令，不涉及数据修改。最后验证日期：2026-11-06，检查复制规则及挂载约定，不执行镜像推送。
+
+## 2026-11-06 看板气温 API 运行时配置
+
+- `projects/daily_report_25_26/api/dashboard.py` 新增 `GET/PUT /dashboard/temperature/config`，项目完整路径前缀为 `/api/v1/projects/daily_report_25_26`。请求体为 `{"api_url":"完整 HTTP/HTTPS 地址"}`，成功响应为 `{"ok":true,"data":{"api_url":"..."}}`；复用 `_ensure_cache_operator` 现有权限规则。非法地址返回 422，读取或保存配置异常返回 500。
+- `services/weather_importer.py` 的 `load_weather_import_config` / `save_weather_import_config` 通过统一项目路径工具读写 `DATA_DIRECTORY/projects/daily_report_25_26/runtime/weather_import_config.json`，UTF-8 无 BOM、原子替换。缺省使用原 `OPEN_METEO_API_URL`；已存在但损坏的配置明确报错，管理员可重新保存修复。
+- `fetch_hourly_temperatures` 每次获取前读取配置，因此导入预览、确认入库及项目后台导入均立即使用新地址；返回的 `source.url` 为实际请求地址。仍按 Open-Meteo 格式解析，不支持任意天气供应商协议转换。
+- 无数据库迁移；恢复原地址可在页面保存原链接，或撤销本轮服务与接口增量恢复旧版本，遗留配置不影响旧版本。最后验证日期：2026-11-06；`test_weather_import_config.py` 通过隔离配置、模拟网络与数据库验证，具体结果见本轮交付说明。
+
+## 2026-11-05 生产镜像APT切换中科大HTTPS源
+
+- `Dockerfile.prod` 的builder、runtime阶段均使用 `https://mirrors.ustc.edu.cn` 提供的Debian及安全更新源，兼容传统 `sources.list` 和Deb822 `debian.sources`。修复清华APT源返回403导致后端ARM64镜像构建中断的问题。
+- 保留原Python依赖源、系统包列表、镜像入口和发布流程；无数据库迁移。回滚本次Dockerfile增量即可恢复原源配置。此前已在同一ARM64基础镜像中验证中科大APT更新成功；本轮配置验证见progress。
+
 ## 2026-11-05 期间分析全链路真实数据闭环（气温库接入、计划折算、供暖首周自适应与直接成本还原）
 
 - 后端 `services/period_report.py` 新增 `compute_period_weather`，复用 `DailyDashboardEngine` 真实计算当前周期、去年同期及上期的实际气温极值（均温、最低温、最高温、同比温差及环比温差），彻底废除原前端假数据；

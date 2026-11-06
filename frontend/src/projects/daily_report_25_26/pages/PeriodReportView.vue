@@ -54,10 +54,110 @@
             <span>大屏全屏</span>
           </button>
 
-          <!-- 数据源 JSON -->
-          <button class="btn-tool" @click="showJsonModal = true" title="查看当前计算出的底层数据源结构">数据源 JSON</button>
-          <!-- 下载文本材料 -->
-          <button class="btn-tool" @click="downloadReport" title="下载汇报纯文稿">下载讲稿</button>
+          <!-- 控制台下拉菜单（仅限 Global_admin 使用） -->
+          <div v-if="isGlobalAdmin" ref="consoleDropdownRef" class="console-dropdown-container">
+            <button
+              class="btn-tool btn-console-trigger"
+              :class="{ active: showConsoleDropdown }"
+              @click.stop="toggleConsoleDropdown"
+              title="管理控制台（仅限 Global_admin）：数据导出、材料仓库、工作流保存与源数据查看"
+            >
+              <span class="console-icon">⚙️</span>
+              <span>控制台</span>
+              <span class="dropdown-arrow" :class="{ rotated: showConsoleDropdown }">▾</span>
+            </button>
+
+            <!-- 下拉菜单浮层 -->
+            <transition name="dropdown-fade">
+              <div v-if="showConsoleDropdown" class="console-dropdown-menu">
+                <div class="dropdown-header">
+                  <span class="dropdown-tag">Global_admin</span>
+                  <span class="dropdown-title">管理控制台</span>
+                </div>
+
+                <!-- 1. 材料空间 -->
+                <button
+                  class="dropdown-item"
+                  @click="closeConsoleDropdown(); openFileManager()"
+                  title="打开 HTML 与 XLSX 汇报材料管理空间"
+                >
+                  <span class="item-icon">📁</span>
+                  <div class="item-text">
+                    <span class="item-title">材料空间管理</span>
+                    <span class="item-desc">管理材料仓库中的文档与明细文件</span>
+                  </div>
+                </button>
+
+                <!-- 2. 工作流目录空间 -->
+                <button
+                  class="dropdown-item"
+                  @click="closeConsoleDropdown(); openWorkflowManager()"
+                  title="专门管理与浏览工作流目录下的规范文档、模板引擎与指导材料"
+                >
+                  <span class="item-icon">🗂️</span>
+                  <div class="item-text">
+                    <span class="item-title">工作流目录空间</span>
+                    <span class="item-desc">管理工作流规范文档、模板引擎与资料</span>
+                  </div>
+                </button>
+
+                <!-- 2. 保存至空间(HTML) -->
+                <button
+                  class="dropdown-item"
+                  :disabled="savingHtml"
+                  @click="closeConsoleDropdown(); saveCurrentReportToSpace()"
+                  title="将当期分析汇报一键保存为独立 HTML 格式文件至材料仓库"
+                >
+                  <span class="item-icon">💾</span>
+                  <div class="item-text">
+                    <span class="item-title">{{ savingHtml ? '正在保存…' : '保存至空间 (HTML)' }}</span>
+                    <span class="item-desc">生成自包含独立 HTML 演示汇报</span>
+                  </div>
+                </button>
+
+                <!-- 3. 导出生产运行数据(XLSX) -->
+                <button
+                  class="dropdown-item"
+                  @click="closeConsoleDropdown(); openExportXlsxModal()"
+                  title="导出包含 4 个标准化 Sheet 的多维生产经营明细 XLSX 表格"
+                >
+                  <span class="item-icon">📊</span>
+                  <div class="item-text">
+                    <span class="item-title">导出数据 (XLSX)</span>
+                    <span class="item-desc">生成 10 家主体 × 28 项指标全要素对标表</span>
+                  </div>
+                </button>
+
+                <div class="dropdown-divider"></div>
+
+                <!-- 4. 下载纯讲稿 -->
+                <button
+                  class="dropdown-item"
+                  @click="closeConsoleDropdown(); downloadReport()"
+                  title="下载汇报各章节宣读公文纯文本"
+                >
+                  <span class="item-icon">📄</span>
+                  <div class="item-text">
+                    <span class="item-title">下载汇报讲稿</span>
+                    <span class="item-desc">导出纯文本格式调度汇报发言稿</span>
+                  </div>
+                </button>
+
+                <!-- 5. 数据源 JSON -->
+                <button
+                  class="dropdown-item"
+                  @click="closeConsoleDropdown(); showJsonModal = true"
+                  title="查看当前统计周期的底层结构化数据源"
+                >
+                  <span class="item-icon">🔍</span>
+                  <div class="item-text">
+                    <span class="item-title">底层数据源 (JSON)</span>
+                    <span class="item-desc">查看前端接收到的多维计算源数据</span>
+                  </div>
+                </button>
+              </div>
+            </transition>
+          </div>
         </div>
       </div>
     </header>
@@ -651,20 +751,1016 @@
         </div>
       </div>
     </div>
+
+    <!-- ==================== 弹窗：周期汇报与数据材料管理空间 ==================== -->
+    <div v-if="showFileManagerModal" class="modal-mask" @click.self="showFileManagerModal = false">
+      <div class="modal-card modal-card-space">
+        <!-- 弹窗 Header -->
+        <div class="modal-header space-modal-header">
+          <div class="space-header-info">
+            <div class="space-header-title-row">
+              <span class="space-title-icon">📁</span>
+              <h3 class="modal-title">周期汇报与数据材料仓库</h3>
+              <span class="space-title-badge">空间中枢</span>
+            </div>
+            <p class="modal-subtitle">集中管理当期生产运行明细(XLSX)与汇报讲稿(HTML)，支持在线演示、一键下载与快速维护</p>
+          </div>
+          <button class="btn-close space-btn-close" title="关闭窗口" @click="showFileManagerModal = false">✕</button>
+        </div>
+
+        <!-- 空间工具栏与筛选栏 -->
+        <div class="space-toolbar-row">
+          <!-- 左侧操作与筛选 -->
+          <div class="space-toolbar-left">
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept=".html,.htm"
+              style="display: none"
+              @change="handleFileUpload"
+            />
+            <button class="btn-primary space-btn-upload" :disabled="uploadingFile" @click="triggerUpload">
+              <span v-if="uploadingFile" class="spinner"></span>
+              {{ uploadingFile ? '正在上传…' : '📤 上传材料' }}
+            </button>
+            <button class="btn-tool space-btn-refresh" :disabled="fileLoading" title="重新扫描并刷新仓库列表" @click="loadFiles">
+              <span v-if="fileLoading" class="spinner"></span>
+              {{ fileLoading ? '刷新中…' : '🔄 刷新' }}
+            </button>
+
+            <!-- 分割线 -->
+            <div class="space-toolbar-divider"></div>
+
+            <!-- 分类药丸 Tab -->
+            <div class="space-filter-pills">
+              <button
+                class="filter-pill"
+                :class="{ active: fileTypeFilter === 'all' }"
+                @click="fileTypeFilter = 'all'"
+              >
+                全部 <span class="pill-count">({{ fileStats.total }})</span>
+              </button>
+              <button
+                class="filter-pill pill-excel"
+                :class="{ active: fileTypeFilter === 'excel' }"
+                @click="fileTypeFilter === 'excel'"
+              >
+                📊 数据明细 <span class="pill-count">({{ fileStats.excel }})</span>
+              </button>
+              <button
+                class="filter-pill pill-report"
+                :class="{ active: fileTypeFilter === 'report' }"
+                @click="fileTypeFilter === 'report'"
+              >
+                📄 汇报讲稿 <span class="pill-count">({{ fileStats.report }})</span>
+              </button>
+              <button
+                class="filter-pill pill-template"
+                :class="{ active: fileTypeFilter === 'template' }"
+                @click="fileTypeFilter === 'template'"
+              >
+                ⚙️ 系统母版 <span class="pill-count">({{ fileStats.template }})</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 右侧即时搜索框 -->
+          <div class="space-toolbar-right">
+            <div class="space-search-box">
+              <span class="search-icon">🔍</span>
+              <input
+                v-model="fileSearchKeyword"
+                type="text"
+                class="space-search-input"
+                placeholder="搜索材料文件名…"
+              />
+              <button
+                v-if="fileSearchKeyword"
+                class="search-clear-btn"
+                title="清空搜索"
+                @click="fileSearchKeyword = ''"
+              >✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 文件表格卡片包裹 -->
+        <div class="space-table-card">
+          <div class="file-table-wrap space-table-scroll">
+            <table class="report-table space-table">
+              <thead>
+                <tr>
+                  <th style="width: 44%">文件材料名称</th>
+                  <th style="width: 14%">分类属性</th>
+                  <th style="width: 10%; text-align: center">大小</th>
+                  <th style="width: 18%">时间信息 (东八区)</th>
+                  <th style="width: 14%; text-align: right">操作动作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="fileLoading && fileList.length === 0">
+                  <td colspan="5" class="space-empty-cell">
+                    <div class="space-empty-box">
+                      <span class="spinner" style="width: 24px; height: 24px"></span>
+                      <span>正在扫描空间材料仓库…</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-else-if="filteredFileList.length === 0">
+                  <td colspan="5" class="space-empty-cell">
+                    <div class="space-empty-box">
+                      <span class="space-empty-icon">📂</span>
+                      <p class="space-empty-title">
+                        {{ fileSearchKeyword ? '未找到符合条件的材料文件' : '暂无相关汇报材料或生产数据明细' }}
+                      </p>
+                      <p class="space-empty-desc">
+                        {{ fileSearchKeyword ? '可尝试缩短搜索词或切换分类筛选查看' : '您可点击上方“📤 上传材料”，或在控制台使用“导出数据(XLSX)”一键保存' }}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+                <tr
+                  v-for="item in filteredFileList"
+                  :key="item.rel_path"
+                  class="space-file-row"
+                >
+                  <!-- 1. 文件名称列 -->
+                  <td>
+                    <div class="space-file-title-cell">
+                      <div class="space-file-avatar" :class="item.kind === 'excel' ? 'avatar-excel' : (item.is_template ? 'avatar-template' : 'avatar-html')">
+                        <span>{{ item.kind === 'excel' ? '📊' : (item.is_template ? '⚙️' : '📄') }}</span>
+                      </div>
+                      <div class="space-file-name-meta">
+                        <span
+                          class="space-file-name"
+                          :title="item.kind === 'excel' ? '点击直接下载此表格' : '点击在此窗口中打开播放'"
+                          @click="item.kind === 'excel' ? downloadFile(item.rel_path) : openPlayer(item)"
+                        >
+                          {{ item.name }}
+                        </span>
+                        <div class="space-file-sub-tags">
+                          <span class="file-ext-tag">{{ item.ext || (item.kind === 'excel' ? '.xlsx' : '.html') }}</span>
+                          <span v-if="item.is_template" class="file-sub-note">只读母版</span>
+                          <span v-else-if="item.name.includes('_生产情况汇报')" class="file-sub-note">当期自动生成</span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- 2. 分类属性列 -->
+                  <td>
+                    <span v-if="item.kind === 'excel'" class="space-badge badge-excel">
+                      <span class="badge-dot"></span>数据明细 (XLSX)
+                    </span>
+                    <span v-else-if="item.is_template" class="space-badge badge-template">
+                      <span class="badge-dot"></span>系统演示模板
+                    </span>
+                    <span v-else-if="item.name.includes('_生产情况汇报') || item.name.includes('_生产运行调度汇报')" class="space-badge badge-report">
+                      <span class="badge-dot"></span>当期分析报告
+                    </span>
+                    <span v-else class="space-badge badge-doc">
+                      <span class="badge-dot"></span>汇报文档
+                    </span>
+                  </td>
+
+                  <!-- 3. 文件大小 -->
+                  <td style="text-align: center">
+                    <span class="space-size-text">{{ item.size_formatted }}</span>
+                  </td>
+
+                  <!-- 4. 时间信息（东八区双行精美微排） -->
+                  <td>
+                    <div class="space-time-cell">
+                      <div class="time-primary" title="最后修改/更新时间">
+                        <span class="time-label">更新:</span>
+                        <span class="time-val">{{ item.updated_at }}</span>
+                      </div>
+                      <div class="time-secondary" title="创建/入库时间">
+                        <span class="time-label">创建:</span>
+                        <span class="time-val">{{ item.created_at || item.updated_at }}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- 5. 管理操作列 -->
+                  <td style="text-align: right">
+                    <div class="space-actions-group">
+                      <button
+                        v-if="item.kind !== 'excel'"
+                        class="space-btn-action action-play"
+                        title="在当前窗口中打开沉浸式播放"
+                        @click="openPlayer(item)"
+                      >
+                        <span>▶</span> 播放
+                      </button>
+                      <button
+                        class="space-btn-action action-down"
+                        title="下载文件至本地电脑"
+                        @click="downloadFile(item.rel_path)"
+                      >
+                        <span>📥</span> 下载
+                      </button>
+                      <button
+                        v-if="!item.is_template"
+                        class="space-btn-action action-rename"
+                        title="重命名材料文件"
+                        @click="openRenameModal(item)"
+                      >
+                        <span>✏️</span> 改名
+                      </button>
+                      <button
+                        v-if="!item.is_template"
+                        class="space-btn-action action-del"
+                        title="删除此文件"
+                        @click="deleteFile(item)"
+                      >
+                        <span>🗑</span>
+                      </button>
+                      <span v-else class="space-badge-protected" title="核心模板防误删保护中">🔒 受保护</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 弹窗 Footer -->
+        <div class="modal-footer space-modal-footer">
+          <div class="space-footer-left">
+            <span class="space-path-tag" title="点击一键复制文件物理存放路径" @click="copyStoragePath">
+              <span class="path-icon">💾</span>
+              <span>路径: <code>backend_data/projects/daily_report_25_26/period_report/材料仓库</code></span>
+              <span class="copy-hint">复制</span>
+            </span>
+          </div>
+          <div class="space-footer-right">
+            <span class="space-stats-hint">
+              已显示 <strong>{{ filteredFileList.length }}</strong> / 共 {{ fileList.length }} 个材料
+            </span>
+            <button class="btn-primary space-btn-close-main" @click="showFileManagerModal = false">
+              完成关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：工作流目录管理空间 ==================== -->
+    <div v-if="showWorkflowModal" class="modal-mask" @click.self="showWorkflowModal = false">
+      <div class="modal-card modal-card-space">
+        <!-- 弹窗 Header -->
+        <div class="modal-header space-modal-header">
+          <div class="space-header-info">
+            <div class="space-header-title-row">
+              <span class="space-title-icon">🗂️</span>
+              <h3 class="modal-title">生产汇报工作流管理中枢</h3>
+              <span class="space-title-badge" style="background: linear-gradient(135deg, #8b5cf6, #0284c7)">工作流空间</span>
+            </div>
+            <p class="modal-subtitle">层级浏览与维护工作流规范文档(.md)、模版引擎(.html)与数据架构目录，支持子目录进入、在线阅读与即时维护</p>
+          </div>
+          <button class="btn-close space-btn-close" title="关闭窗口" @click="showWorkflowModal = false">✕</button>
+        </div>
+
+        <!-- 面包屑与层级导航条 -->
+        <div class="workflow-breadcrumb-bar">
+          <div class="breadcrumb-left">
+            <button
+              v-if="currentWorkflowFolder"
+              class="btn-nav-back"
+              title="返回上级目录"
+              @click="goToParentWorkflowFolder"
+            >
+              <span>↩️ 返回上级</span>
+            </button>
+            <div class="breadcrumb-trail">
+              <span
+                v-for="(crumb, idx) in workflowBreadcrumbs"
+                :key="crumb.path"
+                class="breadcrumb-node"
+                :class="{ active: idx === workflowBreadcrumbs.length - 1 }"
+                @click="openWorkflowFolder(crumb.path)"
+              >
+                <span v-if="idx === 0" class="crumb-icon">🗂️</span>
+                <span v-else class="crumb-icon">📁</span>
+                <span class="crumb-name">{{ crumb.name }}</span>
+                <span v-if="idx < workflowBreadcrumbs.length - 1" class="breadcrumb-sep">/</span>
+              </span>
+            </div>
+          </div>
+          <div class="breadcrumb-right">
+            <span class="location-badge">
+              当前层级: <code>{{ currentWorkflowFolder ? '/' + currentWorkflowFolder : '工作流根目录' }}</code>
+            </span>
+          </div>
+        </div>
+
+        <!-- 工作流工具栏 -->
+        <div class="space-toolbar-row">
+          <!-- 左侧操作 -->
+          <div class="space-toolbar-left">
+            <input
+              ref="workflowFileInputRef"
+              type="file"
+              style="display: none"
+              @change="handleWorkflowUpload"
+            />
+            <button
+              class="btn-primary space-btn-upload"
+              style="background: #7c3aed; border-color: #7c3aed"
+              :disabled="workflowUploading"
+              title="上传文档至当前所在目录"
+              @click="triggerWorkflowUpload"
+            >
+              <span v-if="workflowUploading" class="spinner"></span>
+              {{ workflowUploading ? '正在上传…' : '📤 上传至当前目录' }}
+            </button>
+
+            <button
+              class="btn-tool"
+              style="border-color: #c4b5fd; color: #6d28d9; background: #f5f3ff"
+              title="在当前目录下创建新的子目录"
+              @click="openNewFolderModal"
+            >
+              <span>📁 新建文件夹</span>
+            </button>
+
+            <!-- 一键打包下载目录（含所有子目录与文件） -->
+            <button
+              class="btn-tool space-btn-archive"
+              style="border-color: #8b5cf6; color: #6d28d9; background: #f5f3ff"
+              :disabled="workflowArchiving"
+              :title="currentWorkflowFolder ? `一键打包下载当前目录【${currentWorkflowFolder}】及其下所有子目录和文件 (ZIP)` : '一键打包下载工作流目录中的所有子目录和文件 (ZIP)'"
+              @click="handleDownloadArchive(currentWorkflowFolder)"
+            >
+              <span v-if="workflowArchiving" class="spinner"></span>
+              <span>{{ workflowArchiving ? '正在打包…' : (currentWorkflowFolder ? '📦 打包本目录 (ZIP)' : '📦 打包下载全部 (ZIP)') }}</span>
+            </button>
+
+            <!-- 当处于子目录时，额外提供一键打包全量工作流根目录入口 -->
+            <button
+              v-if="currentWorkflowFolder"
+              class="btn-tool"
+              style="border-color: #c4b5fd; color: #7c3aed"
+              :disabled="workflowArchiving"
+              title="一键打包下载整个工作流的所有子目录和文件 (ZIP)"
+              @click="handleDownloadArchive('')"
+            >
+              <span>📦 打包全部</span>
+            </button>
+
+            <button
+              class="btn-tool space-btn-refresh"
+              :disabled="workflowLoading"
+              title="重新扫描当前目录"
+              @click="loadWorkflowFiles(currentWorkflowFolder)"
+            >
+              <span v-if="workflowLoading" class="spinner"></span>
+              {{ workflowLoading ? '扫描中…' : '🔄 刷新' }}
+            </button>
+          </div>
+
+          <!-- 右侧即时搜索框 -->
+          <div class="space-toolbar-right">
+            <div class="space-search-box">
+              <span class="search-icon">🔍</span>
+              <input
+                v-model="workflowSearchKeyword"
+                type="text"
+                class="space-search-input"
+                placeholder="搜索当前目录内容…"
+              />
+              <button
+                v-if="workflowSearchKeyword"
+                class="search-clear-btn"
+                title="清空搜索"
+                @click="workflowSearchKeyword = ''"
+              >✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 工作流表格卡片包裹 -->
+        <div class="space-table-card">
+          <div class="file-table-wrap space-table-scroll">
+            <table class="report-table space-table">
+              <thead>
+                <tr>
+                  <th style="width: 44%">名称</th>
+                  <th style="width: 14%">类型</th>
+                  <th style="width: 12%">包含内容</th>
+                  <th style="width: 8%; text-align: center">大小</th>
+                  <th style="width: 12%">修改时间 (北京)</th>
+                  <th style="width: 10%; text-align: right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- 加载状态 -->
+                <tr v-if="workflowLoading && totalCurrentItemsCount === 0">
+                  <td colspan="6" class="space-empty-cell">
+                    <div class="space-empty-box">
+                      <span class="spinner" style="width: 24px; height: 24px"></span>
+                      <span>正在扫描目录…</span>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- 空状态 -->
+                <tr v-else-if="totalCurrentItemsCount === 0">
+                  <td colspan="6" class="space-empty-cell">
+                    <div class="space-empty-box">
+                      <span class="space-empty-icon">📂</span>
+                      <p class="space-empty-title">
+                        {{ workflowSearchKeyword ? '未找到匹配项' : '当前目录为空' }}
+                      </p>
+                      <p class="space-empty-desc">
+                        {{ workflowSearchKeyword ? '可尝试缩短关键词或清空搜索' : '您可点击上方“📤 上传至当前目录”或“📁 新建文件夹”添加内容' }}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- 1. 渲染子目录行 (先渲染子文件夹，黄色醒目，点击即可进入) -->
+                <tr
+                  v-for="dir in filteredWorkflowDirectories"
+                  :key="dir.relative_path"
+                  class="space-file-row space-dir-row"
+                  @click="openWorkflowFolder(dir.relative_path)"
+                >
+                  <!-- 文件夹名称列 -->
+                  <td>
+                    <div class="space-file-title-cell">
+                      <div class="space-file-avatar avatar-folder">
+                        <span>📁</span>
+                      </div>
+                      <div class="space-file-name-meta">
+                        <span
+                          class="space-file-name space-dir-name"
+                          title="点击进入该子目录"
+                        >
+                          {{ dir.name }}
+                        </span>
+                        <div class="space-file-sub-tags">
+                          <span class="file-sub-note font-mono">{{ dir.relative_path }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- 类型 -->
+                  <td>
+                    <span class="space-badge badge-dir">
+                      <span class="badge-dot"></span>子文件夹
+                    </span>
+                  </td>
+
+                  <!-- 包含内容统计 -->
+                  <td>
+                    <span class="space-dir-count font-mono">{{ dir.file_count }} 个文件</span>
+                  </td>
+
+                  <!-- 大小（目录为空标示） -->
+                  <td style="text-align: center">
+                    <span class="text-muted text-xs">—</span>
+                  </td>
+
+                  <!-- 修改时间 -->
+                  <td>
+                    <span class="text-xs font-mono text-muted">{{ dir.updated_at }}</span>
+                  </td>
+
+                  <!-- 操作列 -->
+                  <td style="text-align: right" @click.stop>
+                    <div class="space-actions-group">
+                      <button
+                        class="space-btn-action action-enter"
+                        title="点击进入此子目录"
+                        @click="openWorkflowFolder(dir.relative_path)"
+                      >
+                        <span>👉</span> 进入
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- 2. 渲染当前目录下的直属文件行 -->
+                <tr
+                  v-for="item in filteredWorkflowFiles"
+                  :key="item.rel_path"
+                  class="space-file-row"
+                >
+                  <!-- 文件名称列 -->
+                  <td>
+                    <div class="space-file-title-cell">
+                      <div
+                        class="space-file-avatar"
+                        :class="{
+                          'avatar-md': item.kind === 'markdown',
+                          'avatar-html': item.kind === 'html',
+                          'avatar-excel': item.kind === 'excel'
+                        }"
+                      >
+                        <span>{{ item.kind === 'markdown' ? '📑' : (item.kind === 'html' ? '🌐' : (item.kind === 'excel' ? '📊' : '📄')) }}</span>
+                      </div>
+                      <div class="space-file-name-meta">
+                        <span
+                          class="space-file-name"
+                          :title="item.kind === 'markdown' ? '点击在线阅览 Markdown 文档' : (item.kind === 'html' ? '点击在线播放 HTML 演示' : '点击下载此文件')"
+                          @click="item.kind === 'markdown' ? openDocReader(item) : (item.kind === 'html' ? openPlayer(item) : downloadWorkflow(item))"
+                        >
+                          {{ item.name }}
+                        </span>
+                        <div class="space-file-sub-tags">
+                          <span class="file-ext-tag">{{ item.ext }}</span>
+                          <span class="file-sub-note font-mono">{{ item.name }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- 格式类型 -->
+                  <td>
+                    <span v-if="item.kind === 'markdown'" class="space-badge badge-markdown">
+                      <span class="badge-dot"></span>Markdown 文档
+                    </span>
+                    <span v-else-if="item.kind === 'html'" class="space-badge badge-report">
+                      <span class="badge-dot"></span>HTML 模版引擎
+                    </span>
+                    <span v-else-if="item.kind === 'excel'" class="space-badge badge-excel">
+                      <span class="badge-dot"></span>XLSX 数据表
+                    </span>
+                    <span v-else class="space-badge badge-doc">
+                      <span class="badge-dot"></span>{{ item.ext ? item.ext.toUpperCase().replace('.', '') : '文件' }}
+                    </span>
+                  </td>
+
+                  <!-- 包含内容/性质 -->
+                  <td>
+                    <span class="text-xs text-muted">
+                      {{ item.kind === 'markdown' ? '规范说明' : (item.kind === 'html' ? '模板系统' : (item.kind === 'excel' ? '数据材料' : '资料文档')) }}
+                    </span>
+                  </td>
+
+                  <!-- 文件大小 -->
+                  <td style="text-align: center">
+                    <span class="space-size-text">{{ item.size_formatted }}</span>
+                  </td>
+
+                  <!-- 最后更新时间 (东八区) -->
+                  <td>
+                    <span class="text-xs font-mono text-muted">{{ item.updated_at }}</span>
+                  </td>
+
+                  <!-- 管理操作列 -->
+                  <td style="text-align: right">
+                    <div class="space-actions-group">
+                      <button
+                        v-if="item.kind === 'markdown'"
+                        class="space-btn-action action-read"
+                        title="在线精读查看 Markdown 规范"
+                        @click="openDocReader(item)"
+                      >
+                        <span>👁️</span> 阅读
+                      </button>
+                      <button
+                        v-else-if="item.kind === 'html'"
+                        class="space-btn-action action-play"
+                        title="在当前窗口中打开模版引擎演示播放"
+                        @click="openPlayer(item)"
+                      >
+                        <span>▶</span> 播放
+                      </button>
+                      <button
+                        class="space-btn-action action-down"
+                        title="下载文件至本地"
+                        @click="downloadWorkflow(item)"
+                      >
+                        <span>📥</span> 下载
+                      </button>
+                      <button
+                        class="space-btn-action action-rename"
+                        title="重命名工作流文件"
+                        @click="openWorkflowRename(item)"
+                      >
+                        <span>✏️</span> 改名
+                      </button>
+                      <button
+                        class="space-btn-action action-del"
+                        title="删除此工作流文件"
+                        @click="deleteWorkflow(item)"
+                      >
+                        <span>🗑</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 弹窗 Footer -->
+        <div class="modal-footer space-modal-footer">
+          <div class="space-footer-left">
+            <span class="space-path-tag" title="点击一键复制工作流物理存放路径" @click="copyWorkflowPath">
+              <span class="path-icon">💾</span>
+              <span>路径: <code>backend_data/projects/daily_report_25_26/period_report/工作流{{ currentWorkflowFolder ? '/' + currentWorkflowFolder : '' }}</code></span>
+              <span class="copy-hint">复制</span>
+            </span>
+
+            <button
+              class="space-path-tag space-pack-tag"
+              style="border-color: #ddd6fe; color: #7c3aed; background: #fdf4ff"
+              :disabled="workflowArchiving"
+              title="一键将整个工作流目录中的所有子目录与文件打包下载为 ZIP 压缩包"
+              @click="handleDownloadArchive('')"
+            >
+              <span class="path-icon">📦</span>
+              <span>{{ workflowArchiving ? '正在打包…' : '一键打包下载全部资料 (ZIP)' }}</span>
+            </button>
+          </div>
+          <div class="space-footer-right">
+            <span class="space-stats-hint">
+              当前目录包含 <strong>{{ filteredWorkflowDirectories.length }}</strong> 个文件夹 · <strong>{{ filteredWorkflowFiles.length }}</strong> 个文件
+            </span>
+            <button class="btn-primary space-btn-close-main" @click="showWorkflowModal = false">
+              完成关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：工作流新建子目录 ==================== -->
+    <div v-if="showNewFolderModal" class="modal-mask" @click.self="closeNewFolderModal">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">📁 新建子文件夹</h3>
+            <p class="modal-subtitle">在当前目录创建新的分类目录，组织结构化工作流材料</p>
+          </div>
+          <button class="btn-close" @click="closeNewFolderModal">✕</button>
+        </div>
+
+        <div class="modal-body" style="padding: 16px 20px">
+          <div class="form-group mb-3">
+            <label class="form-label text-xs text-muted mb-1 block">所在位置：</label>
+            <div class="text-xs font-mono text-slate-500 break-all p-2 rounded bg-slate-50 dark:bg-slate-800" style="border: 1px solid var(--border-color)">
+              工作流 / {{ currentWorkflowFolder || '(根目录)' }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label text-xs font-bold mb-1 block">文件夹名称：</label>
+            <input
+              ref="newFolderInputRef"
+              v-model="newFolderName"
+              type="text"
+              class="input-control font-mono text-sm"
+              placeholder="请输入文件夹名称（如 4.分析指标模型）"
+              @keyup.enter="confirmCreateFolder"
+            />
+            <p class="text-xs text-muted mt-1">文件夹名不能包含 <code>\ / : * ? " &lt; &gt; |</code> 等字符</p>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 12px 20px">
+          <button class="btn-tool" @click="closeNewFolderModal">取消</button>
+          <button
+            class="btn-primary"
+            :disabled="newFolderLoading || !newFolderName.trim()"
+            @click="confirmCreateFolder"
+          >
+            <span v-if="newFolderLoading" class="spinner"></span>
+            {{ newFolderLoading ? '正在创建…' : '确认创建' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：工作流文档沉浸式阅读窗口 (Markdown / Text) ==================== -->
+    <div v-if="showDocReaderModal" class="modal-mask" @click.self="closeDocReader">
+      <div class="modal-card modal-card-lg doc-reader-card">
+        <div class="modal-header doc-reader-header">
+          <div class="doc-reader-meta">
+            <div class="flex items-center gap-2">
+              <span class="badge-tag badge-tag-purple">工作流规范</span>
+              <h3 class="modal-title font-mono">{{ docReaderData?.name }}</h3>
+              <span class="text-xs text-muted">({{ docReaderData?.size_formatted }})</span>
+            </div>
+            <p class="modal-subtitle font-mono text-xs">相对路径：{{ docReaderData?.rel_path }} · 最后更新：{{ docReaderData?.updated_at }}</p>
+          </div>
+          <div class="doc-reader-actions">
+            <button class="btn-tool" title="复制文档全部纯文本内容" @click="copyDocContent">
+              <span>📋 复制全文</span>
+            </button>
+            <button class="btn-tool" title="下载此文档" @click="downloadWorkflow({ rel_path: docReaderData?.rel_path })">
+              <span>📥 下载</span>
+            </button>
+            <button class="btn-close space-btn-close" @click="closeDocReader">✕</button>
+          </div>
+        </div>
+
+        <div class="doc-reader-body">
+          <pre class="doc-reader-content">{{ docReaderData?.content }}</pre>
+        </div>
+
+        <div class="modal-footer" style="padding-top: 10px">
+          <span class="text-xs text-muted">提示：本阅读器直接读取服务端最新源文件</span>
+          <button class="btn-primary" @click="closeDocReader">关闭阅读</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：工作流文件重命名 ==================== -->
+    <div v-if="showWorkflowRenameModal" class="modal-mask" @click.self="closeWorkflowRename">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">✏️ 重命名工作流文件</h3>
+            <p class="modal-subtitle">修改工作流文档名称，系统将自动保持原扩展名格式</p>
+          </div>
+          <button class="btn-close" @click="closeWorkflowRename">✕</button>
+        </div>
+
+        <div class="modal-body" style="padding: 16px 20px">
+          <div class="form-group mb-3">
+            <label class="form-label text-xs text-muted mb-1 block">原文件：</label>
+            <div class="text-xs font-mono text-slate-500 break-all p-2 rounded bg-slate-50 dark:bg-slate-800" style="border: 1px solid var(--border-color)">
+              {{ workflowRenamingFile?.rel_path }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label text-xs font-bold mb-1 block">新文件名：</label>
+            <div class="flex items-center gap-2">
+              <input
+                ref="workflowRenameInputRef"
+                v-model="workflowRenameInput"
+                type="text"
+                class="input-control flex-1 font-mono text-sm"
+                placeholder="请输入新文件名"
+                @keyup.enter="confirmWorkflowRename"
+              />
+              <span class="text-xs font-bold text-muted font-mono px-2 py-1.5 rounded bg-slate-100 dark:bg-slate-700" style="border: 1px solid var(--border-color)">
+                {{ workflowRenamingFile?.ext || '' }}
+              </span>
+            </div>
+            <p class="text-xs text-muted mt-1">无需输入后缀，系统将自动保留 <code>{{ workflowRenamingFile?.ext }}</code> 格式</p>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 12px 20px">
+          <button class="btn-tool" @click="closeWorkflowRename">取消</button>
+          <button
+            class="btn-primary"
+            :disabled="workflowRenamingLoading || !workflowRenameInput.trim()"
+            @click="confirmWorkflowRename"
+          >
+            <span v-if="workflowRenamingLoading" class="spinner"></span>
+            {{ workflowRenamingLoading ? '正在重命名…' : '确认重命名' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：文件重命名 ==================== -->
+    <div v-if="showRenameModal" class="modal-mask" @click.self="closeRenameModal">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">✏️ 重命名文件</h3>
+            <p class="modal-subtitle">修改材料文件名称，系统将自动保持原扩展名格式</p>
+          </div>
+          <button class="btn-close" @click="closeRenameModal">✕</button>
+        </div>
+
+        <div class="modal-body" style="padding: 16px 20px">
+          <div class="form-group mb-3">
+            <label class="form-label text-xs text-muted mb-1 block">原文件名：</label>
+            <div class="text-xs font-mono text-slate-500 break-all p-2 rounded bg-slate-50 dark:bg-slate-800" style="border: 1px solid var(--border-color)">
+              {{ renamingFile?.name }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label text-xs font-bold mb-1 block">新文件名：</label>
+            <div class="flex items-center gap-2">
+              <input
+                ref="renameInputRef"
+                v-model="renameInput"
+                type="text"
+                class="input-control flex-1 font-mono text-sm"
+                placeholder="请输入新文件名"
+                @keyup.enter="confirmRenameFile"
+              />
+              <span class="text-xs font-bold text-muted font-mono px-2 py-1.5 rounded bg-slate-100 dark:bg-slate-700" style="border: 1px solid var(--border-color)">
+                {{ renamingFile?.ext || '' }}
+              </span>
+            </div>
+            <p class="text-xs text-muted mt-1">无需输入后缀，系统将自动保留 <code>{{ renamingFile?.ext }}</code> 格式</p>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 12px 20px">
+          <button class="btn-tool" @click="closeRenameModal">取消</button>
+          <button
+            class="btn-primary"
+            :disabled="renamingLoading || !renameInput.trim()"
+            @click="confirmRenameFile"
+          >
+            <span v-if="renamingLoading" class="spinner"></span>
+            {{ renamingLoading ? '正在重命名…' : '确认重命名' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：导出生产运行多维数据配置 (XLSX) ==================== -->
+    <div v-if="showExportXlsxModal" class="modal-mask" @click.self="showExportXlsxModal = false">
+      <div class="modal-card modal-card-md">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">📊 生产运行数据导出 (XLSX)</h3>
+            <p class="modal-subtitle">生成包含 4 个标准化 Sheet 的数据明细报表，供后续 AI Agent 自动化分析或本地审阅</p>
+          </div>
+          <button class="btn-close" @click="showExportXlsxModal = false">✕</button>
+        </div>
+
+        <div class="export-modal-body">
+          <!-- 统计周期选择 -->
+          <div class="form-group-row">
+            <div class="form-field flex-1">
+              <label class="field-label">开始日期</label>
+              <input v-model="exportStart" type="date" class="form-input" />
+            </div>
+            <div class="form-field flex-1">
+              <label class="field-label">结束日期</label>
+              <input v-model="exportEnd" type="date" class="form-input" />
+            </div>
+          </div>
+
+          <!-- 环比对标选项 -->
+          <div class="export-opt-box">
+            <label class="checkbox-label">
+              <input v-model="exportIncludePrev" type="checkbox" class="checkbox-input" />
+              <span class="font-bold">包含上期值 (环比对标数据)</span>
+            </label>
+            <p class="opt-desc">
+              💡 <strong>对标规则：</strong>若当前区间为完整自然月（如 3.1~3.31），上期将自动对齐上一个完整自然月（如 2.1~2.28）；若为非整月，向前等长追溯相同天数。
+            </p>
+          </div>
+
+          <!-- 数据架构清单概览卡片 -->
+          <div class="sheets-preview-card">
+            <div class="card-title">📋 导出的报表包含以下 4 个结构化 Sheet：</div>
+            <div class="sheet-item">
+              <span class="sheet-badge">Sheet 1</span>
+              <div>
+                <strong>指标对标全景总表：</strong>
+                <span>10家主体单位 × 28项核心指标（供热量/发电量/售电量/售汽量/高温水/标煤耗量/原煤/单耗/收入/边际利润/净投诉量等，含完整月度计划值、期间计划分解测算值、完成率、进度偏差与同环比对标）。</span>
+              </div>
+            </div>
+            <div class="sheet-item">
+              <span class="sheet-badge">Sheet 2</span>
+              <div>
+                <strong>设备运行与开停机：</strong>
+                <span>各电厂/单位汽机与锅炉状态、开停机时序、点火并汽并网等真实调度操作记录。</span>
+              </div>
+            </div>
+            <div class="sheet-item">
+              <span class="sheet-badge">Sheet 3</span>
+              <div>
+                <strong>电力现货电价走势：</strong>
+                <span>辽宁电力现货市场 15 分钟/96 点日前电价、实时电价与价差时序流。</span>
+              </div>
+            </div>
+            <div class="sheet-item">
+              <span class="sheet-badge">Sheet 4</span>
+              <div>
+                <strong>调度日志与抢修记录：</strong>
+                <span>调度发令事件、管网抢修/检修工作票、责任单位与工期执行明细。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer flex items-center justify-between">
+          <button class="btn-tool" @click="showExportXlsxModal = false">取消</button>
+          <div class="flex items-center gap-2">
+            <button
+              class="btn-primary btn-export-down"
+              :disabled="exportingDownload || exportingSpace || !exportStart || !exportEnd"
+              @click="handleExportXlsxDownload"
+            >
+              <span v-if="exportingDownload" class="spinner"></span>
+              {{ exportingDownload ? '正在生成…' : '⬇️ 下载至本地' }}
+            </button>
+            <button
+              class="btn-success"
+              :disabled="exportingDownload || exportingSpace || !exportStart || !exportEnd"
+              @click="handleExportXlsxSaveToSpace"
+            >
+              <span v-if="exportingSpace" class="spinner"></span>
+              {{ exportingSpace ? '正在保存…' : '💾 一键保存至材料仓库' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：HTML 汇报播放窗口 ==================== -->
+    <div v-if="showPlayerModal" class="player-overlay">
+      <div class="player-header">
+        <div class="player-title-box">
+          <span class="badge-tag badge-tag-emerald">正在播放</span>
+          <h2 class="player-title">{{ currentPlayingFile?.name || 'HTML 汇报材料' }}</h2>
+          <span class="text-xs text-slate-300">({{ currentPlayingFile?.size_formatted }})</span>
+        </div>
+        <div class="player-actions">
+          <button class="btn-tool-dark" @click="openPlayerInNewTab" title="在新浏览器标签页中全尺寸打开">
+            <span>🔗 新标签页打开</span>
+          </button>
+          <button class="btn-tool-dark" @click="toggleIframeFullscreen" title="全屏沉浸播放">
+            <span>⛶ 全屏播放</span>
+          </button>
+          <button class="btn-tool-dark btn-close-player" @click="closePlayer" title="关闭播放器">
+            <span>✕ 关闭返回</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="player-body">
+        <div v-if="playerLoading" class="player-loading">
+          <div class="spinner spinner-lg"></div>
+          <p class="mt-3 text-sm">正在加载汇报材料内容…</p>
+        </div>
+        <iframe
+          v-show="!playerLoading"
+          ref="playerIframeRef"
+          :srcdoc="playerHtmlContent"
+          class="player-iframe"
+          sandbox="allow-scripts allow-same-origin allow-popups"
+        ></iframe>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { fetchPeriodReport } from '../services/api'
+import { useAuthStore } from '../store/auth'
+import {
+  fetchPeriodReport,
+  fetchPeriodReportFiles,
+  savePeriodReportHtml,
+  uploadPeriodReportFile,
+  fetchPeriodReportContent,
+  downloadPeriodReportFile,
+  deletePeriodReportFile,
+  renamePeriodReportFile,
+  exportPeriodReportXlsx,
+  fetchWorkflowFiles,
+  fetchWorkflowFileContent,
+  downloadWorkflowFile,
+  uploadWorkflowFile,
+  renameWorkflowFile,
+  deleteWorkflowFile,
+  createWorkflowFolder,
+  downloadWorkflowArchive
+} from '../services/api'
 import {
   REPORT_CHAPTERS as chapters,
   reportNumber as fmt,
   assemblePeriodPresentation,
   DEFAULT_PERIOD_MOCK,
-  generateChapterNarrative
+  generateChapterNarrative,
+  generateStandalonePeriodReportHtml,
+  getPeriodReportDefaultFilename
 } from '../composables/periodReportPresentation'
+
+// 用户与权限判定（控制台仅限 Global_admin 可用）
+const auth = useAuthStore()
+const isGlobalAdmin = computed(() => {
+  const grp = String(auth.user?.group || auth.user?.role || '').trim()
+  return grp === 'Global_admin' || grp.toLowerCase() === 'global_admin'
+})
+
+// 控制台下拉菜单状态
+const consoleDropdownRef = ref(null)
+const showConsoleDropdown = ref(false)
+
+function toggleConsoleDropdown() {
+  showConsoleDropdown.value = !showConsoleDropdown.value
+}
+
+function closeConsoleDropdown() {
+  showConsoleDropdown.value = false
+}
+
+function handleClickOutside(e) {
+  if (consoleDropdownRef.value && !consoleDropdownRef.value.contains(e.target)) {
+    showConsoleDropdown.value = false
+  }
+}
 
 // 基础响应式状态
 const start = ref('')
@@ -678,6 +1774,70 @@ const isDark = ref(false)
 const isFullscreen = ref(false)
 const zoomLevel = ref(100)
 const showJsonModal = ref(false)
+
+// 材料空间管理与播放器状态
+const showFileManagerModal = ref(false)
+const fileList = ref([])
+const fileLoading = ref(false)
+const savingHtml = ref(false)
+const uploadingFile = ref(false)
+const fileInputRef = ref(null)
+
+// 空间管理搜索与类型筛选状态
+const fileSearchKeyword = ref('')
+const fileTypeFilter = ref('all') // 'all' | 'excel' | 'report' | 'template'
+
+// 空间材料统计计算
+const fileStats = computed(() => {
+  const list = fileList.value || []
+  const excelCount = list.filter(f => f.kind === 'excel').length
+  const tplCount = list.filter(f => f.is_template).length
+  const reportCount = list.length - excelCount - tplCount
+  return {
+    total: list.length,
+    excel: excelCount,
+    report: reportCount,
+    template: tplCount
+  }
+})
+
+// 空间材料计算过滤列表
+const filteredFileList = computed(() => {
+  let list = fileList.value || []
+  if (fileTypeFilter.value === 'excel') {
+    list = list.filter(f => f.kind === 'excel')
+  } else if (fileTypeFilter.value === 'report') {
+    list = list.filter(f => f.kind !== 'excel' && !f.is_template)
+  } else if (fileTypeFilter.value === 'template') {
+    list = list.filter(f => f.is_template)
+  }
+  const kw = fileSearchKeyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter(f => f.name.toLowerCase().includes(kw))
+  }
+  return list
+})
+
+// 一键复制材料仓库相对路径
+function copyStoragePath() {
+  const path = 'backend_data/projects/daily_report_25_26/period_report/材料仓库'
+  navigator.clipboard.writeText(path)
+  alert('已复制材料仓库相对路径至剪贴板：\n' + path)
+}
+
+const showPlayerModal = ref(false)
+const currentPlayingFile = ref(null)
+const playerHtmlContent = ref('')
+const playerLoading = ref(false)
+const playerIframeRef = ref(null)
+
+// 导出生产运行数据 (XLSX) 弹窗状态
+const showExportXlsxModal = ref(false)
+const exportStart = ref('')
+const exportEnd = ref('')
+const exportIncludePrev = ref(true)
+const exportingDownload = ref(false)
+const exportingSpace = ref(false)
 
 // 视图展示数据
 const reportState = ref(DEFAULT_PERIOD_MOCK)
@@ -775,6 +1935,549 @@ function downloadReport() {
   a.download = `生产运行调度汇报讲稿_${reportState.value.meta?.start || '周期'}.txt`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// ==================== 汇报材料 HTML 空间管理与播放器方法 ====================
+
+// 加载空间 HTML 文件列表
+async function loadFiles() {
+  fileLoading.value = true
+  try {
+    const res = await fetchPeriodReportFiles()
+    fileList.value = res.items || []
+  } catch (err) {
+    error.value = '加载材料空间文件列表失败: ' + err.message
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+// 打开导出 XLSX 数据配置弹窗
+function openExportXlsxModal() {
+  exportStart.value = start.value || reportState.value?.meta?.start || ''
+  exportEnd.value = end.value || reportState.value?.meta?.end || ''
+  exportIncludePrev.value = includePrev.value
+  showExportXlsxModal.value = true
+}
+
+// 导出生产数据并直接下载至本地
+async function handleExportXlsxDownload() {
+  if (!exportStart.value || !exportEnd.value) {
+    alert('请选择起止日期')
+    return
+  }
+  exportingDownload.value = true
+  try {
+    await exportPeriodReportXlsx({
+      start: exportStart.value,
+      end: exportEnd.value,
+      include_prev: exportIncludePrev.value,
+      save_to_space: false
+    })
+  } catch (err) {
+    alert('导出下载 XLSX 失败: ' + err.message)
+  } finally {
+    exportingDownload.value = false
+  }
+}
+
+// 导出生产数据并一键保存至材料仓库空间
+async function handleExportXlsxSaveToSpace() {
+  if (!exportStart.value || !exportEnd.value) {
+    alert('请选择起止日期')
+    return
+  }
+  exportingSpace.value = true
+  try {
+    const res = await exportPeriodReportXlsx({
+      start: exportStart.value,
+      end: exportEnd.value,
+      include_prev: exportIncludePrev.value,
+      save_to_space: true
+    })
+    alert(`🎉 生产运行数据明细已成功保存至材料仓库！\n文件名：${res.file.name}\n大小：${res.file.size_formatted}`)
+    if (showFileManagerModal.value) {
+      loadFiles()
+    }
+    showExportXlsxModal.value = false
+  } catch (err) {
+    alert('保存 XLSX 至材料仓库失败: ' + err.message)
+  } finally {
+    exportingSpace.value = false
+  }
+}
+
+// 打开材料空间弹窗
+function openFileManager() {
+  showFileManagerModal.value = true
+  loadFiles()
+}
+
+// 一键保存当前分析材料至空间
+async function saveCurrentReportToSpace() {
+  if (!reportState.value) {
+    alert('当前没有可导出的分析汇报数据')
+    return
+  }
+  savingHtml.value = true
+  try {
+    const filename = getPeriodReportDefaultFilename(reportState.value)
+    const content = generateStandalonePeriodReportHtml(reportState.value)
+    const res = await savePeriodReportHtml({ filename, content })
+    alert(`🎉 当期分析材料已成功保存至空间！\n文件名：${res.name}\n大小：${res.size_formatted}`)
+    if (showFileManagerModal.value) {
+      loadFiles()
+    }
+  } catch (err) {
+    alert('保存 HTML 文件失败: ' + err.message)
+  } finally {
+    savingHtml.value = false
+  }
+}
+
+// 触发文件上传
+function triggerUpload() {
+  fileInputRef.value?.click()
+}
+
+// 处理文件上传
+async function handleFileUpload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  if (!file.name.toLowerCase().endsWith('.html') && !file.name.toLowerCase().endsWith('.htm')) {
+    alert('仅支持上传 .html 或 .htm 格式的分析汇报文件')
+    event.target.value = ''
+    return
+  }
+  uploadingFile.value = true
+  try {
+    const res = await uploadPeriodReportFile(file)
+    alert(`上传成功: ${res.name}`)
+    await loadFiles()
+  } catch (err) {
+    alert('上传文件失败: ' + err.message)
+  } finally {
+    uploadingFile.value = false
+    event.target.value = ''
+  }
+}
+
+// 在当前窗口打开播放器播放指定 HTML 文件
+async function openPlayer(fileItem) {
+  currentPlayingFile.value = fileItem
+  showPlayerModal.value = true
+  playerLoading.value = true
+  playerHtmlContent.value = ''
+  try {
+    const res = await fetchPeriodReportContent(fileItem.rel_path)
+    playerHtmlContent.value = res.content
+  } catch (err) {
+    alert('读取汇报内容失败: ' + err.message)
+    showPlayerModal.value = false
+  } finally {
+    playerLoading.value = false
+  }
+}
+
+// 关闭播放器
+function closePlayer() {
+  showPlayerModal.value = false
+  playerHtmlContent.value = ''
+  currentPlayingFile.value = null
+}
+
+// 在新标签页中打开播放
+function openPlayerInNewTab() {
+  if (!playerHtmlContent.value) return
+  const blob = new Blob([playerHtmlContent.value], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  window.open(blobUrl, '_blank')
+}
+
+// 全屏播放 iframe
+function toggleIframeFullscreen() {
+  if (playerIframeRef.value) {
+    if (playerIframeRef.value.requestFullscreen) {
+      playerIframeRef.value.requestFullscreen()
+    }
+  }
+}
+
+// 下载文件
+async function downloadFile(relPath) {
+  try {
+    await downloadPeriodReportFile(relPath)
+  } catch (err) {
+    alert('下载文件失败: ' + err.message)
+  }
+}
+
+// 重命名文件状态与操作
+const showRenameModal = ref(false)
+const renamingFile = ref(null)
+const renameInput = ref('')
+const renamingLoading = ref(false)
+const renameInputRef = ref(null)
+
+function openRenameModal(fileItem) {
+  if (fileItem.is_template) {
+    alert('系统核心模板受保护，禁止重命名')
+    return
+  }
+  renamingFile.value = fileItem
+  const ext = fileItem.ext || (fileItem.name.endsWith('.xlsx') ? '.xlsx' : '.html')
+  let baseName = fileItem.name
+  if (baseName.toLowerCase().endsWith(ext.toLowerCase())) {
+    baseName = baseName.slice(0, -ext.length)
+  }
+  renameInput.value = baseName
+  showRenameModal.value = true
+  nextTick(() => {
+    renameInputRef.value?.focus()
+    renameInputRef.value?.select()
+  })
+}
+
+function closeRenameModal() {
+  showRenameModal.value = false
+  renamingFile.value = null
+  renameInput.value = ''
+  renamingLoading.value = false
+}
+
+async function confirmRenameFile() {
+  if (!renamingFile.value) return
+  const newBase = renameInput.value.trim()
+  if (!newBase) {
+    alert('新文件名不能为空')
+    return
+  }
+  const ext = renamingFile.value.ext || (renamingFile.value.name.endsWith('.xlsx') ? '.xlsx' : '.html')
+  const newFullName = `${newBase}${ext}`
+  if (newFullName === renamingFile.value.name) {
+    closeRenameModal()
+    return
+  }
+  renamingLoading.value = true
+  try {
+    const res = await renamePeriodReportFile(renamingFile.value.rel_path, newFullName)
+    alert(`🎉 重命名成功！\n新文件名：${res.name}`)
+    closeRenameModal()
+    await loadFiles()
+  } catch (err) {
+    alert('重命名失败: ' + err.message)
+  } finally {
+    renamingLoading.value = false
+  }
+}
+
+// 删除文件
+async function deleteFile(fileItem) {
+  if (fileItem.is_template) {
+    alert('系统核心模板受保护，禁止删除')
+    return
+  }
+  if (!confirm(`确认要删除汇报材料【${fileItem.name}】吗？此操作不可恢复。`)) {
+    return
+  }
+  try {
+    await deletePeriodReportFile(fileItem.rel_path)
+    alert('删除成功')
+    await loadFiles()
+  } catch (err) {
+    alert('删除文件失败: ' + err.message)
+  }
+}
+
+// ==================== 工作流目录（Workflow Space）状态与方法 ====================
+const showWorkflowModal = ref(false)
+const currentWorkflowFolder = ref('')
+const workflowParentFolder = ref(null)
+const workflowBreadcrumbs = ref([{ name: '工作流根目录', path: '' }])
+const workflowDirectories = ref([])
+const workflowFiles = ref([])
+const workflowFileList = ref([]) // 兼容字段
+const workflowLoading = ref(false)
+const workflowUploading = ref(false)
+const workflowArchiving = ref(false)
+const workflowSearchKeyword = ref('')
+const workflowFileInputRef = ref(null)
+const uploadTargetFolder = ref('')
+
+// 新建文件夹状态
+const showNewFolderModal = ref(false)
+const newFolderName = ref('')
+const newFolderLoading = ref(false)
+const newFolderInputRef = ref(null)
+
+// 工作流重命名状态
+const showWorkflowRenameModal = ref(false)
+const workflowRenamingFile = ref(null)
+const workflowRenameInput = ref('')
+const workflowRenamingLoading = ref(false)
+const workflowRenameInputRef = ref(null)
+
+// Markdown / 文本在线阅读视口状态
+const showDocReaderModal = ref(false)
+const docReaderData = ref({ name: '', rel_path: '', content: '', updated_at: '', size_formatted: '' })
+const docReaderLoading = ref(false)
+
+// 计算属性：当前层级过滤后的子文件夹
+const filteredWorkflowDirectories = computed(() => {
+  let list = workflowDirectories.value || []
+  const kw = workflowSearchKeyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter(d => d.name.toLowerCase().includes(kw))
+  }
+  return list
+})
+
+// 计算属性：当前层级过滤后的直接文件
+const filteredWorkflowFiles = computed(() => {
+  let list = workflowFiles.value || []
+  const kw = workflowSearchKeyword.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter(f => f.name.toLowerCase().includes(kw) || f.rel_path.toLowerCase().includes(kw))
+  }
+  return list
+})
+
+// 计算属性：当前层级总项目数
+const totalCurrentItemsCount = computed(() => {
+  return filteredWorkflowDirectories.value.length + filteredWorkflowFiles.value.length
+})
+
+// 打开工作流空间
+function openWorkflowManager() {
+  showWorkflowModal.value = true
+  currentWorkflowFolder.value = ''
+  workflowSearchKeyword.value = ''
+  loadWorkflowFiles('')
+}
+
+// 加载工作流目录内容（支持指定子目录）
+async function loadWorkflowFiles(folder = currentWorkflowFolder.value) {
+  workflowLoading.value = true
+  try {
+    const res = await fetchWorkflowFiles(folder)
+    currentWorkflowFolder.value = res.current_folder || ''
+    workflowParentFolder.value = res.parent_folder !== undefined ? res.parent_folder : null
+    workflowBreadcrumbs.value = res.breadcrumbs && res.breadcrumbs.length > 0
+      ? res.breadcrumbs
+      : [{ name: '工作流根目录', path: '' }]
+    workflowDirectories.value = res.directories || []
+    workflowFiles.value = res.files || []
+    workflowFileList.value = res.files || []
+  } catch (err) {
+    alert('加载工作流目录失败: ' + err.message)
+  } finally {
+    workflowLoading.value = false
+  }
+}
+
+// 进入指定子文件夹
+function openWorkflowFolder(folderPath) {
+  currentWorkflowFolder.value = folderPath || ''
+  workflowSearchKeyword.value = ''
+  loadWorkflowFiles(folderPath || '')
+}
+
+// 返回上级目录
+function goToParentWorkflowFolder() {
+  if (workflowParentFolder.value !== null && workflowParentFolder.value !== undefined) {
+    openWorkflowFolder(workflowParentFolder.value)
+  }
+}
+
+// 新建子文件夹窗口交互
+function openNewFolderModal() {
+  newFolderName.value = ''
+  showNewFolderModal.value = true
+  nextTick(() => {
+    newFolderInputRef.value?.focus()
+  })
+}
+
+function closeNewFolderModal() {
+  showNewFolderModal.value = false
+  newFolderName.value = ''
+  newFolderLoading.value = false
+}
+
+async function confirmCreateFolder() {
+  const name = newFolderName.value.trim()
+  if (!name) {
+    alert('文件夹名称不能为空')
+    return
+  }
+  if (/[\\/:*?"<>|]/.test(name)) {
+    alert('文件夹名称不能包含 \\ / : * ? " < > | 等特殊字符')
+    return
+  }
+  newFolderLoading.value = true
+  try {
+    const res = await createWorkflowFolder(currentWorkflowFolder.value, name)
+    alert(`🎉 文件夹【${name}】创建成功！`)
+    closeNewFolderModal()
+    await loadWorkflowFiles(currentWorkflowFolder.value)
+  } catch (err) {
+    alert('创建文件夹失败: ' + err.message)
+  } finally {
+    newFolderLoading.value = false
+  }
+}
+
+// 一键打包下载指定或当前目录（ZIP）
+async function handleDownloadArchive(targetFolder = null) {
+  const folderToPack = targetFolder !== null ? targetFolder : currentWorkflowFolder.value
+  const targetDesc = folderToPack ? `子目录【${folderToPack}】` : '全量工作流根目录'
+  workflowArchiving.value = true
+  try {
+    const res = await downloadWorkflowArchive(folderToPack)
+    alert(`🎉 打包下载已启动！\n打包范围：${targetDesc}\n文件名：${res.filename}`)
+  } catch (err) {
+    alert('打包下载失败: ' + err.message)
+  } finally {
+    workflowArchiving.value = false
+  }
+}
+
+// 复制工作流物理路径
+function copyWorkflowPath() {
+  const sub = currentWorkflowFolder.value ? `/${currentWorkflowFolder.value}` : ''
+  const path = `backend_data/projects/daily_report_25_26/period_report/工作流${sub}`
+  navigator.clipboard.writeText(path)
+  alert('已复制工作流目录相对路径至剪贴板：\n' + path)
+}
+
+// 触发工作流上传（上传至当前所在目录）
+function triggerWorkflowUpload() {
+  uploadTargetFolder.value = currentWorkflowFolder.value || ''
+  workflowFileInputRef.value?.click()
+}
+
+// 处理工作流上传
+async function handleWorkflowUpload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  workflowUploading.value = true
+  try {
+    const res = await uploadWorkflowFile(file, uploadTargetFolder.value)
+    alert(`🎉 工作流文件上传成功: ${res.name}`)
+    await loadWorkflowFiles(currentWorkflowFolder.value)
+  } catch (err) {
+    alert('上传工作流文件失败: ' + err.message)
+  } finally {
+    workflowUploading.value = false
+    event.target.value = ''
+  }
+}
+
+// 在线查看文档（Markdown / 纯文本）
+async function openDocReader(fileItem) {
+  showDocReaderModal.value = true
+  docReaderLoading.value = true
+  docReaderData.value = {
+    name: fileItem.name,
+    rel_path: fileItem.rel_path,
+    content: '正在加载文档内容…',
+    updated_at: fileItem.updated_at,
+    size_formatted: fileItem.size_formatted,
+  }
+  try {
+    const res = await fetchWorkflowFileContent(fileItem.rel_path)
+    docReaderData.value = res
+  } catch (err) {
+    docReaderData.value.content = '加载文档内容失败: ' + err.message
+  } finally {
+    docReaderLoading.value = false
+  }
+}
+
+// 关闭文档阅览
+function closeDocReader() {
+  showDocReaderModal.value = false
+  docReaderData.value = { name: '', rel_path: '', content: '' }
+}
+
+// 复制阅读器内容
+function copyDocContent() {
+  if (docReaderData.value?.content) {
+    navigator.clipboard.writeText(docReaderData.value.content)
+    alert('已复制文档内容至剪贴板')
+  }
+}
+
+// 下载工作流文件
+async function downloadWorkflow(fileItem) {
+  try {
+    await downloadWorkflowFile(fileItem.rel_path)
+  } catch (err) {
+    alert('下载文件失败: ' + err.message)
+  }
+}
+
+// 打开工作流重命名
+function openWorkflowRename(fileItem) {
+  workflowRenamingFile.value = fileItem
+  const ext = fileItem.ext || ''
+  let base = fileItem.name
+  if (base.toLowerCase().endsWith(ext.toLowerCase())) {
+    base = base.slice(0, -ext.length)
+  }
+  workflowRenameInput.value = base
+  showWorkflowRenameModal.value = true
+  nextTick(() => {
+    workflowRenameInputRef.value?.focus()
+    workflowRenameInputRef.value?.select()
+  })
+}
+
+function closeWorkflowRename() {
+  showWorkflowRenameModal.value = false
+  workflowRenamingFile.value = null
+  workflowRenameInput.value = ''
+  workflowRenamingLoading.value = false
+}
+
+async function confirmWorkflowRename() {
+  if (!workflowRenamingFile.value) return
+  const newBase = workflowRenameInput.value.trim()
+  if (!newBase) {
+    alert('新文件名不能为空')
+    return
+  }
+  const ext = workflowRenamingFile.value.ext || ''
+  const newFullName = `${newBase}${ext}`
+  if (newFullName === workflowRenamingFile.value.name) {
+    closeWorkflowRename()
+    return
+  }
+  workflowRenamingLoading.value = true
+  try {
+    const res = await renameWorkflowFile(workflowRenamingFile.value.rel_path, newFullName)
+    alert(`🎉 工作流文件重命名成功！\n新名称：${res.name}`)
+    closeWorkflowRename()
+    await loadWorkflowFiles(currentWorkflowFolder.value)
+  } catch (err) {
+    alert('重命名失败: ' + err.message)
+  } finally {
+    workflowRenamingLoading.value = false
+  }
+}
+
+// 删除工作流文件
+async function deleteWorkflow(fileItem) {
+  if (!confirm(`确认要删除工作流文件【${fileItem.rel_path}】吗？此操作不可恢复。`)) {
+    return
+  }
+  try {
+    await deleteWorkflowFile(fileItem.rel_path)
+    alert('删除成功')
+    await loadWorkflowFiles(currentWorkflowFolder.value)
+  } catch (err) {
+    alert('删除文件失败: ' + err.message)
+  }
 }
 
 function copyJson() {
@@ -1184,6 +2887,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', handleResize)
   document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('click', handleClickOutside)
 
   // 绑定 ResizeObserver 实时监听视口尺寸，确保在任何分辨率伸缩时图表完全贴合
   if (viewportRef.value && window.ResizeObserver) {
@@ -1219,6 +2923,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', handleResize)
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('click', handleClickOutside)
   resizeObserver?.disconnect()
   chartOverviewInstance?.dispose()
   chartCoalInstance?.dispose()
@@ -2342,6 +4047,1133 @@ kbd {
   gap: 10px;
   border-top: 1px solid var(--border-color);
   padding-top: 12px;
+}
+
+/* ==================== 空间管理模块与播放器样式 ==================== */
+/* Global_admin 控制台下拉菜单样式 */
+.console-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-console-trigger {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  color: #f8fafc;
+  border: 1px solid #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.btn-console-trigger:hover,
+.btn-console-trigger.active {
+  background: linear-gradient(135deg, #0f172a, #020617);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.25);
+}
+
+.console-icon {
+  font-size: 13px;
+}
+
+.dropdown-arrow {
+  font-size: 11px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.dropdown-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.console-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 270px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  padding: 6px;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+}
+
+.dropdown-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.dropdown-tag {
+  font-size: 10px;
+  font-weight: 700;
+  background: #0284c7;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.dropdown-item:hover:not(:disabled) {
+  background: var(--bg-sub);
+  transform: translateX(2px);
+}
+
+.dropdown-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dropdown-item .item-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.dropdown-item .item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdown-item .item-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.dropdown-item .item-desc {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 6px;
+}
+
+/* 过渡动画 */
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.btn-save-html {
+  background: #059669;
+  color: #fff;
+  border-color: #059669;
+}
+.btn-save-html:hover:not(:disabled) {
+  background: #047857;
+  color: #fff;
+}
+.btn-export-xlsx {
+  background: #0d9488;
+  color: #fff;
+  border-color: #0d9488;
+}
+.btn-export-xlsx:hover {
+  background: #0f766e;
+  color: #fff;
+}
+.btn-space-manage {
+  background: #0284c7;
+  color: #fff;
+  border-color: #0284c7;
+}
+.btn-space-manage:hover {
+  background: #0369a1;
+  color: #fff;
+}
+
+.modal-card-md {
+  max-width: 680px;
+}
+.modal-card-lg {
+  max-width: 1050px;
+}
+
+.export-modal-body {
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group-row {
+  display: flex;
+  gap: 14px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.form-input {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-main);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+.form-input:focus {
+  border-color: #0284c7;
+}
+
+.export-opt-box {
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.checkbox-input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.opt-desc {
+  margin: 6px 0 0 24px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.sheets-preview-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sheets-preview-card .card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 2px;
+}
+.sheet-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-sub);
+}
+.sheet-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 700;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.btn-success {
+  background: #059669;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.btn-success:hover {
+  background: #047857;
+}
+.btn-success:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-export-down {
+  background: #0284c7;
+}
+.btn-export-down:hover {
+  background: #0369a1;
+}
+
+/* ==================== 空间管理中枢深度优化样式 ==================== */
+.modal-card-space {
+  max-width: 1100px;
+  width: 94vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 16px;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.45);
+}
+
+.space-modal-header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.space-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.space-title-icon {
+  font-size: 20px;
+}
+.space-title-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #0284c7, #0d9488);
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+.space-btn-close {
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.space-btn-close:hover {
+  background: var(--border-color);
+  color: var(--text-main);
+}
+
+/* 工具栏与筛选行 */
+.space-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.space-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.space-btn-upload {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+.space-btn-refresh {
+  padding: 7px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.space-toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border-color);
+  margin: 0 4px;
+}
+
+/* 分类药丸 Tab */
+.space-filter-pills {
+  display: flex;
+  align-items: center;
+  background: var(--bg-sub);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  gap: 2px;
+}
+.filter-pill {
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.filter-pill:hover {
+  color: var(--text-main);
+}
+.filter-pill.active {
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.filter-pill .pill-count {
+  font-size: 10.5px;
+  opacity: 0.7;
+}
+
+/* 搜索框 */
+.space-toolbar-right {
+  display: flex;
+  align-items: center;
+}
+.space-search-box {
+  display: flex;
+  align-items: center;
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px 10px;
+  width: 220px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.space-search-box:focus-within {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+.space-search-box .search-icon {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+.space-search-input {
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 12px;
+  width: 100%;
+  outline: none;
+}
+.search-clear-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+}
+.search-clear-btn:hover {
+  color: var(--text-main);
+}
+
+/* 表格卡片容器 */
+.space-table-card {
+  flex: 1;
+  min-height: 320px;
+  max-height: 52vh;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+}
+.space-table-scroll {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+}
+.space-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.space-table th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-sub);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+}
+.space-file-row {
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.15s;
+}
+.space-file-row:last-child {
+  border-bottom: none;
+}
+.space-file-row:hover {
+  background: rgba(2, 132, 199, 0.04);
+}
+.space-table td {
+  padding: 10px 14px;
+  vertical-align: middle;
+}
+
+/* 文件名称列 */
+.space-file-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.space-file-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.avatar-excel {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+.avatar-html {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+.avatar-template {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.space-file-name-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.space-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.space-file-name:hover {
+  color: #0284c7;
+  text-decoration: underline;
+}
+.space-file-sub-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.file-ext-tag {
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--bg-sub);
+  color: var(--text-muted);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+.file-sub-note {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+/* 分类徽章 */
+.space-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+.badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.badge-excel {
+  background: #dcfce7;
+  color: #15803d;
+}
+.badge-excel .badge-dot { background: #16a34a; }
+.badge-template {
+  background: #fef3c7;
+  color: #b45309;
+}
+.badge-template .badge-dot { background: #d97706; }
+.badge-report {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.badge-report .badge-dot { background: #0284c7; }
+.badge-doc {
+  background: var(--bg-sub);
+  color: var(--text-sub);
+  border: 1px solid var(--border-color);
+}
+.badge-doc .badge-dot { background: var(--text-muted); }
+
+/* 文件大小 */
+.space-size-text {
+  font-family: monospace;
+  font-size: 11.5px;
+  color: var(--text-sub);
+}
+
+/* 时间列（双行卡片） */
+.space-time-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: monospace;
+}
+.time-primary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-main);
+  font-weight: 600;
+}
+.time-secondary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.time-label {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* 操作按钮组 */
+.space-actions-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.space-btn-action {
+  border: 1px solid var(--border-color);
+  background: var(--bg-sub);
+  color: var(--text-main);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.space-btn-action:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+  transform: translateY(-1px);
+}
+.space-btn-action.action-play {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #fff;
+  font-weight: 600;
+}
+.space-btn-action.action-play:hover {
+  background: #0369a1;
+  border-color: #0369a1;
+  color: #fff;
+}
+.space-btn-action.action-del {
+  color: #b91c1c;
+  border-color: #fca5a5;
+  background: #fee2e2;
+  padding: 4px 6px;
+}
+.space-btn-action.action-del:hover {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+.space-badge-protected {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-sub);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+/* 空状态单元格 */
+.space-empty-cell {
+  padding: 48px 16px !important;
+  text-align: center;
+}
+.space-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.space-empty-icon {
+  font-size: 36px;
+  opacity: 0.5;
+}
+.space-empty-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+}
+.space-empty-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* 弹窗 Footer */
+.space-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 0;
+  margin-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+.space-path-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s;
+}
+.space-path-tag:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+}
+.space-pack-tag:hover {
+  border-color: #7c3aed !important;
+  color: #6d28d9 !important;
+  background: #ede9fe !important;
+}
+.space-path-tag code {
+  font-family: monospace;
+  font-size: 10.5px;
+}
+.space-path-tag .copy-hint {
+  font-size: 10px;
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.space-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.space-stats-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.space-btn-close-main {
+  padding: 7px 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+/* 工作流专属卡片与阅读器样式 */
+.workflow-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.breadcrumb-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+}
+.btn-nav-back {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-nav-back:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background: #f5f3ff;
+}
+.breadcrumb-trail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.breadcrumb-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.breadcrumb-node:hover {
+  background: rgba(124, 58, 237, 0.08);
+  color: #7c3aed;
+}
+.breadcrumb-node.active {
+  color: var(--text-main);
+  font-weight: 700;
+  cursor: default;
+}
+.breadcrumb-node.active:hover {
+  background: transparent;
+}
+.breadcrumb-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-left: 4px;
+}
+.location-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.location-badge code {
+  color: #7c3aed;
+  font-weight: 600;
+  background: rgba(124, 58, 237, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* 文件夹行专属样式 */
+.space-dir-row {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.space-dir-row:hover {
+  background-color: rgba(245, 158, 11, 0.06) !important;
+}
+.avatar-folder {
+  background: #fef3c7;
+  color: #d97706;
+  border: 1px solid #fde68a;
+  font-size: 16px;
+}
+.space-dir-name {
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.space-dir-name:hover {
+  color: #d97706;
+  text-decoration: underline;
+}
+.badge-dir {
+  background: #fef3c7;
+  color: #b45309;
+}
+.badge-dir .badge-dot {
+  background: #f59e0b;
+}
+.space-dir-count {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.action-enter {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+  font-weight: 600;
+}
+.action-enter:hover {
+  background: #fde68a;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.avatar-md {
+  background: #ede9fe;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+.badge-markdown {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.badge-markdown .badge-dot {
+  background: #7c3aed;
+}
+.badge-folder {
+  background: var(--bg-sub);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+.badge-folder .badge-dot {
+  background: var(--text-muted);
+}
+.action-read {
+  background: #7c3aed;
+  color: #fff;
+  border-color: #7c3aed;
+  font-weight: 600;
+}
+.action-read:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
+  color: #fff;
+}
+.badge-tag-purple {
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+.doc-reader-card {
+  max-width: 1000px;
+  width: 92vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+.doc-reader-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+.doc-reader-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.doc-reader-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px;
+  background: var(--bg-sub);
+  border-radius: 10px;
+  margin: 14px 0;
+  border: 1px solid var(--border-color);
+}
+.doc-reader-content {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-main);
+}
+
+.modal-card-sm {
+  width: 100%;
+  max-width: 440px;
+}
+
+/* 沉浸式 HTML 播放器 */
+.player-overlay {
+  position: fixed;
+  inset: 0;
+  background: #020617;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-header {
+  height: 50px;
+  min-height: 50px;
+  background: rgba(15, 23, 42, 0.96);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  color: #fff;
+}
+
+.player-title-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  color: #f8fafc;
+}
+
+.player-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-tool-dark {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f8fafc;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-tool-dark:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-close-player {
+  background: #dc2626;
+  border-color: #ef4444;
+}
+.btn-close-player:hover {
+  background: #b91c1c;
+}
+
+.player-body {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+.player-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+.player-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #38bdf8;
+  background: #090d16;
+}
+
+.spinner-lg {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
 }
 
 /* 宽屏超大分辨率优化（1680px、1920px、2560px 等，消除空旷留白，字号与图表呼吸感自适应放大，便于场下观看） */

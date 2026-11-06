@@ -1,0 +1,3 @@
+{
+  "api_url": "https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&hourly=temperature_2m&timezone=Asia%2FSingapore&past_days=3"
+}

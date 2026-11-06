@@ -1,5 +1,250 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-06 工作流目录空间支持一键打包下载所有子目录与文件 (ZIP 格式)
+
+- **需求背景**：
+  - 用户提出希望能够“一键打包下载目录中的所有子目录和文件”，便于一次性将生产运行汇报工作流下的所有标准化规范文档（.md）、模板引擎系统（.html）、数据结构与相关子目录打包归档或离线分享。
+- **改动范围与主要工作**：
+  - **后端 (`period_report_workflow.py` & `api/period_report.py`)**：
+    1. 新增 `create_workflow_archive(folder: str = "")` 服务函数：
+       - 基于标准库 `zipfile` 实现内存流式打包（`ZIP_DEFLATED` 高压缩比）；
+       - 支持两种打包模式：全量根目录打包（包含所有子目录、孙目录及文件）与指定子目录精准打包；
+       - 智能保留目录树结构（包含空子文件夹），各级文件的时间戳严格保持东八区真实修改时间；
+       - 动态生成规范中文压缩包名称：如 `工作流_全量资料_YYYYMMDD_HHMMSS.zip` 或 `工作流_{子目录名}_YYYYMMDD_HHMMSS.zip`；
+    2. 新增端点 `GET /period-report/workflow/archive`：
+       - 挂载 `folder` 可选参数，采用 `StreamingResponse` 流式响应，设置标准 `Content-Disposition` 附件头；
+       - 绑定 `check_admin_session`，严格限定 `Global_admin` 权限；
+    3. 完善自动化测试 `test_period_report.py`：
+       - 覆盖未授权 403 拦截、全量工作流打包验证（解压校验包含规范文档与模板引擎）、指定子目录打包验证（校验仅包含子目录内容）、以及非法路径穿越（`folder=../../`）拦截，全部 10 项测试 100% 通过。
+  - **前端 (`PeriodReportView.vue` & `services/api.js`)**：
+    1. `services/api.js`：
+       - 新增并导出 `downloadWorkflowArchive(folder)`，支持解析 UTF-8 / RFC 5987 编码的中文压缩包文件名并自动拉起浏览器本地下载；
+    2. `PeriodReportView.vue`：
+       - **工具栏操作集成**：在工作流弹窗工具栏中增加“📦 一键打包下载 (ZIP)”动作按钮：
+         * 处于根目录时：一键触发全量工作流打包；
+         * 处于任一子目录时：按钮自适应切换为“📦 打包本目录 (ZIP)”，并额外提供“📦 打包全部”快捷胶囊，方便随心切换；
+       - **底栏 Footer 联动**：在底栏路径标签旁增加“📦 一键打包下载全部资料 (ZIP)”常驻微入口；
+       - **即时交互反馈**：打包中按钮显示 `spinner` 动画并防重复点击，下载拉起后弹窗提示打包范围与生成的文件名。
+- **验证结论**：
+  - 后端 pytest 10/10 项通过；
+  - 前端 vite build 构建成功（1062 模块编译，0 错误）。
+
+## 2026-11-06 工作流目录空间支持子目录层级展示、面包屑树状导航与文件夹创建管理
+
+- **需求背景**：
+  - 用户反馈工作流目录空间不应直接平铺所有深层文件，而是应该以清晰直观的目录层级结构呈现，子目录也应该明确展示出来，支持层级穿透与管理。
+- **改动范围与主要工作**：
+  - **后端 (`period_report_workflow.py` & `api/period_report.py`)**：
+    1. 升级 `list_workflow_files(folder: str = "")`：
+       - 支持按指定相对子目录进行单层精准扫描；
+       - 自动生成面向前端的面包屑导航链路数组 `breadcrumbs`（如 `[{"name": "工作流根目录", "path": ""}, {"name": "1.html模板与使用说明", "path": "1.html模板与使用说明"}]`）；
+       - 自动计算并返回上一层目录相对路径 `parent_folder`；
+       - 将结果严格分离为 `directories`（包含子文件夹名称、相对路径、包含项目数/文件数、东八区修改时间）与 `files`（直属文件列表），并保留合并项 `items` 兼容；
+    2. 新增 `create_workflow_folder(parent_folder: str, folder_name: str)`：
+       - 支持在工作流根目录或任意合法子目录下创建新文件夹，包含防路径穿越与非法字符严格校验；
+    3. 扩充 API 端点：
+       - `GET /period-report/workflow/files` 支持 `?folder=` 查询参数；
+       - 新增 `POST /period-report/workflow/folders` 创建子目录接口，绑定 `Global_admin` 鉴权；
+    4. 扩充自动化测试：
+       - `test_period_report.py` 增补层级子目录浏览、面包屑验证及新建子目录测试，10 项测试全部通过。
+  - **前端 (`PeriodReportView.vue` & `services/api.js`)**：
+    1. `services/api.js`：
+       - `fetchWorkflowFiles(folder)` 支持向后端传递当前目录路径；
+       - 新增导出 `createWorkflowFolder(folder, folderName)`；
+    2. `PeriodReportView.vue`（组件全面升级为树状层级资源管理器）：
+       - **顶部面包屑导航条 (`workflow-breadcrumb-bar`)**：包含“↩️ 返回上级”快捷按钮、层级路径节点（可点击任意层级平滑跳转）、右侧当前相对路径标识；
+       - **工具栏升级**：新增“📁 新建文件夹”动作按钮，上传按钮自动绑定上传至当前所处的子目录；
+       - **表格结构树状渲染**：
+         * **子目录行（黄徽标 📁）**：优先展示子文件夹行，名称加粗，悬停黄色卡片高亮，显示子文件项数统计，点击文件夹行或“👉 进入”即可平滑进入该子目录；
+         * **直属文件行（📑 / 🌐 / 📊）**：展示当前层级的文档与模板，支持直接在线阅读 Markdown、播放 HTML 模版、下载、改名与删除；
+       - **新建子文件夹弹窗 (`showNewFolderModal`)**：支持即时输入文件夹名称，回车自动创建并无感刷新当前目录；
+       - **操作无感刷新**：在子目录中上传、改名、删除或创建文件夹后，均保持在当前子目录并自动刷新。
+- **验证结论**：
+  - 后端 pytest 10/10 项通过；
+  - 前端 vite build 顺利完成构建，零错误。
+
+## 2026-11-06 控制台专属集成“工作流目录空间”管理与沉浸式 Markdown 阅读
+
+- **需求背景**：
+  - 用户提出在控制台（`Global_admin` 下拉控制台）中，应该专门将工作流目录 `phoenix\backend_data\projects\daily_report_25_26\period_report\工作流` 独立作为一个目录空间进行管理；
+  - 该目录包含标准化工作流规范文档（`工作流概述.md`）、模板引擎说明（`模板引擎说明.md`、`模版引擎.html`）以及材料结构要求（`汇报材料结构与要求.md`）等核心支撑材料。
+- **改动范围与主要工作**：
+  - **后端**：
+    1. 新建 `backend/projects/daily_report_25_26/services/period_report_workflow.py`：
+       - 封装 `WORKFLOW_DIR` 工作流目录专属管理服务；
+       - 提供 `list_workflow_files`（递归扫描子目录、提取相对路径、子文件夹分类与文件类型推断）、`get_workflow_file_content`（在线读取 Markdown / HTML / 纯文本）、`get_workflow_file_path`（流式下载）、`upload_workflow_file`（支持上传至指定子文件夹）、`rename_workflow_file`（防穿越并保留原格式）与 `delete_workflow_file`；
+       - 所有时间戳统一采用东八区（UTC+8 北京时间）格式化；
+    2. 扩充 `backend/projects/daily_report_25_26/api/period_report.py`：
+       - 新增 6 个 RESTful 接口：
+         * `GET /period-report/workflow/files`
+         * `GET /period-report/workflow/files/content`
+         * `GET /period-report/workflow/files/download`
+         * `POST /period-report/workflow/files/upload`
+         * `POST /period-report/workflow/files/rename`
+         * `DELETE /period-report/workflow/files`
+       - 保持严格的 `Global_admin` 会话拦截；
+    3. 扩充单元测试 `backend/projects/daily_report_25_26/tests/test_period_report.py`：
+       - 新增 `test_workflow_management_endpoints` 测试用例（覆盖非管理员 403 拦截、正常列表读取、Markdown 内容读取、防穿越拦截、上传至子目录、重命名、下载与安全删除），10 项测试全部 100% 通过。
+  - **前端**：
+    1. `services/api.js`：
+       - 新增 `fetchWorkflowFiles`、`fetchWorkflowFileContent`、`downloadWorkflowFile`、`uploadWorkflowFile`、`renameWorkflowFile`、`deleteWorkflowFile` 六项接口封装；
+    2. `PeriodReportView.vue`：
+       - 控制台下拉菜单的“空间与数据”组别中，专门新增“🗂️ 工作流目录空间”按钮；
+       - 新增专属宽屏管理弹窗 `showWorkflowModal`（1100px 自适应容器、子目录筛选药丸 Tab、即时搜索框、拟态文件头像、双行东八区时间卡片与一键复制路径徽标）；
+       - 新增“📑 工作流文档沉浸式阅读窗口”`showDocReaderModal`：点击任意 `.md` 规范或点击“👁️ 阅读”直接弹窗精读全文，支持一键复制与下载；
+       - 新增“✏️ 工作流文件重命名窗口”`showWorkflowRenameModal`：支持修改文件名主体并自动锁定原扩展名。
+- **验证结论**：
+  - 后端 10 项单元测试全部通过；
+  - 前端生产构建通过（1062 模块编译成功，耗时 16.71s，0 错误）。
+
+## 2026-11-06 材料仓库管理弹窗排版全面升维（分类筛选、即时搜索与高质感表格设计）
+
+- **改动缘由**：
+  - 用户反馈“周期汇报与数据材料仓库”弹窗排版不够美观大方整齐，存在横向列过多导致日期重复拥挤、文件名超长被挤压、缺少分类筛选与搜索定位能力等痛点；
+  - 站在真实用户使用与大屏观赏角度进行全方位视觉升级，实现美观、大方、整齐的高级管理中枢体验。
+- **改动点**：
+  - **前端 (`PeriodReportView.vue`)**：
+    1. **弹窗容器升级为 `modal-card-space`**：
+       - 采用 1100px 宽屏流式自适应容器（最大宽 94vw、最大高 88vh），边角微弧度与多层级环境阴影，彻底消除局促感；
+       - Header 强化主题标识（`空间中枢` 渐变胶囊徽标、副标题与自适应关闭按钮）。
+    2. **工具栏与分类筛选一体化架构**：
+       - 左侧组合动作：`📤 上传材料`（主题强调）+ `🔄 刷新` + 竖向精细分隔线；
+       - 新增分类药丸 Tab：支持实时在“全部 (X)”、“📊 数据明细 (N)”、“📄 汇报讲稿 (M)”、“⚙️ 系统母版 (K)”之间无缝过滤切换；
+       - 右侧新增即时模糊搜索框：带放大镜图标与一键清空按钮，输入即搜，大方整洁。
+    3. **表格布局整齐划一（Strict Column Proportions）**：
+       - 采用 `table-layout: fixed` 约束列宽（44% 文件名 / 14% 分类 / 10% 大小 / 18% 时间 / 14% 操作），表头吸顶且绝不变形挤压；
+       - 文件名称列：配有精致拟态头像（Excel 为翠绿头像 `📊`、HTML 汇报为天蓝头像 `📄`、系统模板为琥珀头像 `⚙️`），粗体超链点击可直接动作（Excel 下载 / HTML 在线播放），并配有格式小胶囊；
+       - 分类属性列：精美徽章与发光小圆点（`badge-dot`），层级分明；
+       - 时间信息列：垂直双行精巧微排，上行高亮展示“更新: 2026-11-06 15:02:18”，下行次级小字显示“创建: 2026-11-06 14:35:10”，节省横向宽度的同时完整保留东八区双时间审计信息；
+       - 操作列：统一动作小胶囊按钮组（`▶ 播放`、`📥 下载`、`✏️ 改名`、`🗑 删除`），微交互过渡自然；核心模板显示“🔒 受保护”锁形徽章。
+    4. **空状态与 Footer 优化**：
+       - 空状态增加精致大图标、引导性说明；
+       - 底部 Footer 左侧将底层存储路径收拢为可一键点击复制的徽章标签（`💾 路径: .../材料仓库 (点击复制)`），右侧清晰统计“已显示 X / 共 Y 个材料”。
+- **验证结论**：
+  - 前端 1062 模块成功编译，耗时 18.01s，0 错误；后端 9 项测试持续全通。
+
+## 2026-11-06 材料仓库时间严格东八区对齐与空间文件重命名功能
+
+- **改动缘由**：
+  1. 用户反馈材料仓库中的文件时间戳（创建时间与最后修改时间）受 Docker 容器或环境默认 UTC 影响存在时差，未按东八区（UTC+8 北京时间）显示；
+  2. 用户需要在材料管理空间中直接对已保存或已导出的汇报与数据文件（HTML 报告 / XLSX 数据明细）进行自定义重命名。
+- **改动点**：
+  - **后端**：
+    - `period_report_files.py`：
+      * 引入 `BEIJING_TZ = timezone(timedelta(hours=8))` 与 `format_beijing_time` 工具函数，将文件的 POSIX 时间戳严格解析为 UTC 并转换为东八区（UTC+8 北京时间）标准时间字符串，彻底消除宿主环境时区差异；
+      * 新增 `rename_report_file(rel_path, new_name)` 函数，支持合法文件名清洗、路径防穿越校验、已存在同名冲突防御，并自动锁定与继承原文件的有效扩展名（`.html`、`.xlsx` 等），受保护的核心模板禁止重命名；
+      * `list_report_files`、`save_report_html`、`upload_report_html` 统一返回东八区的 `created_at` 与 `updated_at`；
+    - `period_report_export.py`：
+      * `save_period_report_xlsx` 一并调用 `format_beijing_time` 返回东八区 `created_at` 与 `updated_at`；
+    - `api/period_report.py`：
+      * 新增 `POST /period-report/files/rename` 接口，定义 `RenameReportRequest(path, new_name)` 模型，并保持严格的 `Global_admin` 角色会话拦截；
+    - `tests/test_period_report.py`：
+      * 扩展 `test_files_management_endpoints` 测试用例，增加模板重命名受限 403 拦截、正常重命名、智能扩展名继承校验及东八区时间戳格式验证。
+  - **前端**：
+    - `services/api.js`：
+      * 新增 `renamePeriodReportFile(path, newName)` 方法；
+    - `PeriodReportView.vue`：
+      * 材料仓库表格表头增设“创建时间 (北京)”与“修改时间 (北京)”独立列，均精确显示东八区时间；
+      * 材料列表操作列中为非模板文件增加“✏️ 重命名”操作按钮；
+      * 增加高质感小巧模态弹窗 `showRenameModal`，展示原文件名并允许用户直接输入新文件名主体，输入框侧边锁定显示原文件扩展名徽标（`.html` 或 `.xlsx`），支持 Enter 确认与点击确认，成功后自动刷新列表。
+- **验证结论**：
+  - 后端 9 项单元测试全部 100% 通过（`python -m pytest backend/projects/daily_report_25_26/tests/test_period_report.py`）；
+  - 前端生产构建通过（`npm run build --prefix frontend`，1062 模块编译成功，耗时 19.07s，0 错误）；
+  - 核心模板受保护逻辑不变，向后兼容所有文件查询与下载接口。
+
+## 2026-11-06 生产运行汇报新增多维数据 XLSX 导出与材料仓库保存模块
+
+- **需求背景**：
+  - 为给后续 AI Agent 自动化分析与生成周期汇报提供高结构化、高保真的真实数据底座，在生产运行汇报页面（`http://localhost:5173/projects/daily_report_25_26/pages/period_report`）中新增**生产运行数据 XLSX 导出功能**；
+  - 导出数据覆盖选定时间区间（`start` ~ `end`）内全集团、主城区及下属各单位的生产、经营、单耗、客服与气温指标，以及调度主设备工况开停机记录、电力现货 15 分钟 96 点电价走势和调度指令/抢修工作票记录；
+  - 支持浏览器直接下载至本地，以及一键物理保存至服务器【材料仓库】空间（`backend_data/projects/daily_report_25_26/period_report/材料仓库/`），并与空间管理弹窗实现无缝联动。
+- **改动范围与主要工作**：
+  1. **数据指标忠实对齐与白名单约束**：
+     - **指标名称 100% 对齐底层物理字段**，绝不自创或随意更改；
+     - **严格剔除 9 项指定指标**：`amount_steam_supply`（供汽量 吨）、`amount_network_interface_heat_supply`（网口供热量 万GJ）、`consumption_std_coal_zhangtun`（标煤耗量(张屯) 吨）、`consumption_amount_raw_coal_zhangtun`（原煤耗量(张屯) 吨）、`consumption_natural_gas`（耗天然气量 Nm³）、`eco_inner_heat_supply_income`（内售热收入 万元）、`amount_daily_city_net_complaints`（其中：2.市平台净投诉量）、`amount_unresolved_complaints_to_date`（截至该日未办结投诉量）、`sum_month_total_net_complaints`（本月累计净投诉量）；
+     - **严格剔除其它非事实/暂不具备条件内容**：主设备启停文本说明、`dynamic_month_plan_k` 敏感度建议模型参数、管网首站瞬时工况、主力机组出力分解与中长期合约对冲账单、省平台净投诉量；
+     - **严格剔除组织细分**：不展开各供热服务中心（管网中心、春海、华乐等），仅保留 10 个标准主体口径（`Group`、`ZhuChengQu`、`BeiHai`、`XiangHai`、`GongRe`、`JinZhou`、`BeiFang`、`JinPu`、`ZhuangHe`、`YanJiuYuan`）；
+     - **增补计划分解测算值与产销月度计划提取**：
+       * 针对自选期间，完整覆盖月度计划底表 `paln_and_real_month_data` 中全部产销核心指标（供热量、发电量、售电量、高温水销售量、售汽量、标煤耗量、原煤耗量、耗水量、耗电量、外购热量、站内耗热量及供热单耗），实现**月度计划值**（全月批复总目标）与**期间计划分解测算值**（按天折算目标）双列呈现；
+       * 针对集团全口径汇总（`Group`）与主城区汇总（`ZhuChengQu`）在底表中未录入发电量、售电量、售汽量、高温水销售量等分项计划的情况，建立**自下而上层级智能补齐算法**（主城区由北海+香海+供热求和补齐；集团由全集团8家分公司求和补齐），彻底解决产销计划项提取缺失问题。
+  2. **智能多期对标与上期追溯逻辑**：
+     - 同期（去年对标）：通过 `get_peer_date` 逐日映射同期时间窗口；
+     - 上期（环比对标）：提供“包含上期值 (环比对标)”选项。**整月模式**（`start` 为 1 号且 `end` 为当月最后一天）自动对齐上一个完整自然整月（如 3.1~3.31 对齐 2.1~2.28/29，即使天数不同）；**非整月模式**按相同天数向前等长追溯。
+  3. **后端报表生成服务与接口实现**：
+     - 新建 `backend/projects/daily_report_25_26/services/period_report_export.py`：
+       * 实现 `compute_comparison_dates`（整月与非整月智能追溯）；
+       * 基于 `openpyxl` 构建标准 4 个 Sheet 的 XLSX 工作簿：
+         - Sheet 1: `指标对标全景总表`（10家主体 × 28项核心指标，含计划测算值、完成率、进度偏差、同比增减与增幅、环比增减与增幅及基准气温事实）；
+         - Sheet 2: `设备运行与开停机`（各电厂/单位汽机与锅炉工况状态、开停机时序、点火并网调度记录）；
+         - Sheet 3: `电力现货电价走势`（辽宁现货 15 分钟 96 点日前电价、实时电价及价差时序流）；
+         - Sheet 4: `调度日志与抢修记录`（调度发令事件、管网抢修/检修工作票、责任单位与工期执行明细）；
+       * 实现 `generate_period_report_xlsx`（返回二进制内存流）与 `save_period_report_xlsx`（物理落盘至材料仓库）；
+     - 升级 `backend/projects/daily_report_25_26/services/period_report_files.py`：
+       * `sanitize_filename` 与 `list_report_files` 扩展兼容 `.xlsx` 格式扫描，并赋予 `kind: 'excel' | 'html'` 与 `ext` 标识；
+     - 升级 `backend/projects/daily_report_25_26/api/period_report.py`：
+       * 新增 `GET /period-report/export-xlsx`，支持参数 `start`, `end`, `include_prev`, `save_to_space`, `filename`；
+       * 升级 `GET /period-report/files/download` 端点，根据文件扩展名动态返回 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` 或 `text/html`；
+     - 扩充单元测试 `backend/projects/daily_report_25_26/tests/test_period_report.py`：
+       * 新增 `test_comparison_dates_logic`（覆盖整月与非整月追溯算法）；
+       * 新增 `test_export_xlsx_endpoints_and_space_save`（覆盖 XLSX 流式下载、多 Sheet 结构完整性、保存至空间、空间文件列表识别、下载与安全删除）。9 项单元测试全部 100% 通过。
+  4. **前端交互与控制台收拢（仅限 Global_admin）**：
+     - `services/api.js` 新增 `exportPeriodReportXlsx({ start, end, include_prev, save_to_space, filename })`；
+     - `PeriodReportView.vue` 顶部工具栏将此前平铺的 5 项高级运维/管理功能（材料空间管理、一键保存至空间HTML、导出生产数据XLSX、下载纯讲稿、底层数据源JSON）收归入统一的“⚙️ 控制台 ▾”点击下拉菜单中；
+     - 增加严格的权限隔离校验：通过 `isGlobalAdmin` 判定仅当前会话为 `Global_admin` 时才展示并允许触发控制台功能，普通或非管理员账号不渲染控制台按钮，实现界面精简与管理功能受控；
+     - 新增“📊 生产运行数据导出 (XLSX)”模态框：支持起止日期调整、环比对标开关勾选、4 个 Sheet 的架构说明预览、“⬇️ 下载至本地”与“💾 一键保存至材料仓库”双模式触发；
+     - 升级“📁 周期汇报与数据材料仓库”模态框：支持展示 `.xlsx` 文件的专属图标 `📊`、类型标签 `数据明细 (XLSX)`、直接点击下载与文件删除，与 HTML 报告无缝共管。
+- **验证结论**：
+  - 后端 9 项单元测试全部通过（`python -m pytest backend/projects/daily_report_25_26/tests/test_period_report.py`）；
+  - 前端生产构建通过（`npm run build --prefix frontend`，1062 模块编译成功，耗时 17.93s）；
+  - 无破坏性改动，未修改种子配置或既有接口定义。
+
+## 2026-11-06 周期运行汇报增加 HTML 材料管理空间与在线演示播放模块
+
+- **需求背景**：
+  - 用户计划构建每周自动化生成 HTML 汇报分析材料的工作流；
+  - 为给后续自动化工作流做好承载准备，需在生产运行汇报页面（`http://localhost:5173/projects/daily_report_25_26/pages/period_report`）构建专属的文件管理模块，打通“生成材料 -> 保存至空间 -> 文件管理 -> 在线演示播放”的完整交互闭环。
+- **改动范围与主要工作**：
+  1. **后端文件管理服务与 API**：
+     - 新建 `backend/projects/daily_report_25_26/services/period_report_files.py`，负责 `backend_data/projects/daily_report_25_26/period_report/材料仓库` 专属目录下的 HTML 报告文件管理（扫描列表、元数据提取、保存、上传、读取内容、下载、删除），同时联动识别 `工作流/` 下的核心模板演示；实施路径防穿越安全校验与工作流模板保护规则（`is_template` 保护，禁止修改或删除核心模板）；
+     - 扩展 `backend/projects/daily_report_25_26/api/period_report.py`：新增 `GET /period-report/files`、`POST /period-report/files/save`、`POST /period-report/files/upload`、`GET /period-report/files/content`、`GET /period-report/files/download`、`DELETE /period-report/files` 接口，严格维持 `Global_admin` 鉴权保护；
+     - 扩展单元测试 `backend/projects/daily_report_25_26/tests/test_period_report.py`，新增覆盖文件列出、模板识别、保存生成、内容读取、文件下载、防穿越拦截、模板删除保护与正常删除全流程测试（7 项回归测试 100% 通过）。
+  2. **前端自包含 HTML 汇报生成引擎**：
+     - `periodReportPresentation.js` 扩展 `generateStandalonePeriodReportHtml(reportState)` 与 `getPeriodReportDefaultFilename(reportState)`，能够将当前选定日期区间内计算好的 5 个章节完整内容（标题、气温、KPI卡片、公文叙事段落、标煤表、边际利润表、三项单耗表、月度计划表、图表配置 JS）组装为单文件自包含、支持 16:9 全屏演示、深浅色模式切换与 ECharts 自适应渲染的独立 HTML 格式文件；
+     - 导出文件名强制以选定的分析日期区间为前缀（调整为 `start_end_生产情况汇报.html`，如 `2026-03-01_2026-03-07_生产情况汇报.html`）。
+  3. **前端管理模块交互与在线播放视口**：
+     - `PeriodReportView.vue` 顶部工具栏新增“💾 保存至空间(HTML)”与“📁 材料空间”两大核心操作入口；
+     - 新增“📁 周期汇报 HTML 材料管理空间”模态窗：支持文件列表查看、类型标签、大小、修改时间、一键上传 HTML 文件、刷新、下载与删除操作；
+     - 新增沉浸式“HTML 汇报材料播放视口”：用户在列表中点击任意文件（含本系统保存的报告、外部上传的汇报或引擎模板），即可在当前窗口中以原生 iframe 沉浸式全屏播放演示，并支持在新标签页中全尺寸打开，完美衔接后续 AI Agent 自动化生成材料的展示需求。
+  4. **前端 API 服务扩充**：
+     - `frontend/src/projects/daily_report_25_26/services/api.js` 扩充 `fetchPeriodReportFiles`、`savePeriodReportHtml`、`uploadPeriodReportFile`、`fetchPeriodReportContent`、`downloadPeriodReportFile`、`deletePeriodReportFile`。
+- **验证结论**：
+  - 后端 7 项单元测试全部通过（`python -m pytest backend/projects/daily_report_25_26/tests/test_period_report.py`）；
+  - 前端生产构建通过（`npm run build --prefix frontend`，1062 模块编译成功，耗时 18.25s）；
+  - 无需数据库变更，无破坏性改动。
+
+## 2026-11-06 镜像构建排除挂载数据与本机前端依赖
+
+- 用户明确要求不再将 `backend_data/` 和 `frontend/node_modules/` 打包。根 `.dockerignore` 新增两项目录排除，`backend/Dockerfile.prod` 删除 `COPY backend_data /app/data-template`，保留既有 APT 源调整。
+- 后端数据继续使用 `lo1_new_server.yml` 已有的 `/home/ww870411/25-26/backend_data:/app/data` 绑定挂载及 `DATA_DIRECTORY=/app/data`。在后端、部署与脚本范围检索未发现 `/app/data-template` 的启动读取或初始化逻辑。
+- 前端 `deploy/Dockerfile.web` 继续在镜像中通过 `npm ci` 按锁文件安装依赖，本机依赖不再覆盖容器依赖。同步前后端 README，无数据库迁移、无服务器数据复制或删除。
+- 验证：本地静态断言检查排除规则、生产 Dockerfile 的复制来源、前端 `npm ci` 顺序及服务器绑定挂载配置，全部通过；定向 `git diff --check` 通过，仅提示 Git 行尾转换约定。未重新构建镜像，未执行构建推送脚本。首次部署新服务器时须自行准备挂载目录中的业务配置；本地保存的气温 API 配置不会随镜像同步到服务器。
+- 回滚：仅移除本轮新增的两条忽略规则及注释，并恢复后端的 `COPY backend_data /app/data-template`，无需修改或回滚挂载数据。
+
+## 2026-11-06 全局管理中心配置看板气温 API
+
+- 输入来源：用户要求在生产日报全局管理中心配置“导入气温”的 API 链接；核实该页面已有气温管理栏目，原地址硬编码于 `backend/services/weather_importer.py`。
+- 文件与流程：`GlobalManagementView.vue` 气温栏目新增完整地址编辑、读取、保存及结果提示；`services/api.js` 复用认证请求；`api/dashboard.py` 新增 `GET/PUT /dashboard/temperature/config`，沿用看板运维权限；`weather_importer.py` 负责格式校验、原子保存与每次导入读取，预览、确认入库和项目后台共用地址。
+- 配置位置：`DATA_DIRECTORY/projects/daily_report_25_26/runtime/weather_import_config.json`，字段 `api_url`。无数据库迁移，未配置时继续使用原默认地址；保存后下次导入生效，无需重启。接口仍须兼容 Open-Meteo 的 `hourly.time` 和 `hourly.temperature_2m` 数组。
+- 验证（2026-11-06）：`python -m unittest backend.projects.daily_report_25_26.tests.test_weather_import_config backend.projects.daily_report_25_26.tests.test_dashboard_cache_ranges -v` 共 26 项通过，其中新增气温配置测试 11 项，覆盖默认值、保存读取、非法地址、损坏配置、原子替换失败、立即生效、响应格式、权限、存储异常及预览/入库共用配置；`npm run build` 成功，仅有大于 500 kB 的产物体积告警。定向 `git diff --check` 无空白错误。未认证请求本地 5173 代理配置接口返回 401，登录态页面操作未做浏览器实测。测试使用仓库内临时目录及模拟天气/数据库，不修改正式配置或业务气温数据。
+- 同步前后端 README；保留工作区既有修改。本轮未调用外部天气接口、未执行真实入库。回滚仅撤销本轮四个业务文件的增量；恢复原地址可直接在管理页面保存原链接，配置文件可保留，不影响旧版本。
+
+## 2026-11-05 生产后端镜像切换中科大APT源
+
+- 输入：用户构建日志中清华APT源403，以及用户明确要求改为中科大源。本地ARM64基础镜像中已验证清华HTTP/HTTPS均403，中科大HTTPS `apt-get update`成功，下载10.1MB索引并退出0。
+- 修改 `backend/Dockerfile.prod` builder/runtime两阶段APT地址，统一中科大HTTPS，循环兼容传统及Deb822源文件，避免旧的多段`&&/|| true`混合逻辑掩盖替换错误。Python pip源、依赖列表、镜像版本和构建推送脚本保持不变。
+- 同步前后端README。本轮只调整构建源配置，无数据库迁移、不执行推送或发布；回滚Dockerfile本次增量可恢复旧源。
+- 最后验证2026-11-05：`docker build --check --platform linux/arm64 -f backend/Dockerfile.prod .`通过且无告警；从Dockerfile提取实际换源命令在ARM64基础镜像执行，确认两个阶段配置完全一致、Debian与security URIs均为中科大HTTPS，`apt-get update --print-uris`全部指向新源。上一轮实际更新已成功；本轮未执行完整镜像构建。
+
 ## 2026-11-05 生产运行汇报仅限Global_admin
 
 - 按用户要求复核入口、直接访问和后端接口：卡片和API原已精确限制 `Global_admin`。路由新增 `globalAdminOnly` 元信息，由守卫统一校验，覆盖Vue Router接受的尾斜杠及大小写路径变体，其他用户跳转无权限页。
