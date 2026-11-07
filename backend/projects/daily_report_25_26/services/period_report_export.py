@@ -8,7 +8,7 @@
 3. 严格排除非白名单及用户指定剔除的 9 项指标、瞬时工况与服务中心级细分；
 4. 智能追溯同期值与上期值（支持整月自然月对标与非整月向前等长对标）；
 5. 整合调度主设备运行状态、电力现货 15 分钟 96 点电价走势及调度日志/抢修记录；
-6. 生成标准 4 个 Sheet 的 XLSX 报表，支持直接下载与一键保存至【材料仓库】供 Agent 深度分析。
+6. 生成标准 5 个 Sheet 的 XLSX 报表，包含期间内每日气温，支持直接下载与一键保存至【材料仓库】供 Agent 深度分析。
 """
 
 from __future__ import annotations
@@ -291,7 +291,7 @@ def generate_period_report_xlsx(
     include_prev: bool = True
 ) -> io.BytesIO:
     """
-    生成周期运行汇报综合多维数据分析 XLSX 报表（包含 4 个标准 Sheet）。
+    生成周期运行汇报综合多维数据分析 XLSX 报表（包含 5 个标准 Sheet）。
     返回内存中的二进制字节流。
     """
     comp_dates = compute_comparison_dates(start, end, include_prev)
@@ -614,6 +614,40 @@ def generate_period_report_xlsx(
             row_idx4 += 1
 
     _apply_styles_to_sheet(ws4, "调度日志与抢修记录", header_row_idx=2)
+
+    # Sheet 5：复用北京时间逐日聚合口径，保留完整日期和缺测空值。
+    # 气温明细单独延伸结束日期后 7 天，不扩大其他工作表的统计范围。
+    weather_end = end + timedelta(days=7)
+    weather_peer_end = get_peer_date(weather_end)
+    ws5 = wb.create_sheet(title="每日气温明细")
+    ws5.cell(row=1, column=1, value=f"主城区每日气温明细（北京时间） [{start.isoformat()} ~ {weather_end.isoformat()}]；查询期间截至 {end.isoformat()}，另含结束日期后7日本期及同期气温；缺测留空")
+    ws5.append(["日期", "最高气温(℃)", "最低气温(℃)", "平均气温(℃)",
+                "同期日期", "同期最高气温(℃)", "同期最低气温(℃)", "同期平均气温(℃)"])
+    temperature_engine = DailyDashboardEngine(db)
+    daily_weather = {
+        row["date"]: row
+        for row in temperature_engine.compute_temperature_data(start, weather_end)
+    }
+    peer_daily_weather = {
+        row["date"]: row
+        for row in temperature_engine.compute_temperature_data(peer_start, weather_peer_end)
+    }
+    for offset in range(comp_dates["days_count"] + 7):
+        day = start + timedelta(days=offset)
+        weather = daily_weather.get(day, {})
+        # 逐日沿用系统同期映射，闰年 2 月 29 日对齐去年 2 月 28 日。
+        peer_day = get_peer_date(day)
+        peer_weather = peer_daily_weather.get(peer_day, {})
+        ws5.append([day, weather.get("max_temp"), weather.get("min_temp"), weather.get("aver_temp"),
+                    peer_day, peer_weather.get("max_temp"), peer_weather.get("min_temp"), peer_weather.get("aver_temp")])
+        for cell in ws5[ws5.max_row]:
+            cell.font = data_font
+            cell.border = data_border
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.number_format = "yyyy-mm-dd" if cell.column in (1, 5) else "0.00"
+            if cell.row % 2 == 1:
+                cell.fill = alt_fill
+    _apply_styles_to_sheet(ws5, "每日气温明细", header_row_idx=2)
 
     # 保存至内存流
     output = io.BytesIO()

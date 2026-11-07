@@ -1706,7 +1706,7 @@
 
           <!-- 数据架构清单概览卡片 -->
           <div class="sheets-preview-card">
-            <div class="card-title">📋 导出的报表包含以下 4 个结构化 Sheet：</div>
+            <div class="card-title">📋 导出的报表包含以下 5 个结构化 Sheet：</div>
             <div class="sheet-item">
               <span class="sheet-badge">Sheet 1</span>
               <div>
@@ -1733,6 +1733,13 @@
               <div>
                 <strong>调度日志与抢修记录：</strong>
                 <span>调度发令事件、管网抢修/检修工作票、责任单位与工期执行明细。</span>
+              </div>
+            </div>
+            <div class="sheet-item">
+              <span class="sheet-badge">Sheet 5</span>
+              <div>
+                <strong>每日气温明细：</strong>
+                <span>所选期间及结束日期后7日，每日的本期与去年同期最高、最低、平均气温（℃），含同期日期，按北京时间统计，缺测留空。</span>
               </div>
             </div>
           </div>
@@ -2439,6 +2446,21 @@ async function loadDisplayConfig() {
   }
 }
 
+// 辅助函数：将目标文件名与当前登录 Token 安全注入给 HTML 页面，支持直接原位覆盖保存当前文件
+function injectMetaIntoHtml(htmlStr, filename, token) {
+  if (!htmlStr) return htmlStr
+  const safeFilename = (filename || '').replace(/"/g, '&quot;')
+  const safeToken = (token || '').replace(/"/g, '&quot;')
+  const metaScript = `<script>
+    window.__REPORT_FILENAME__ = "${safeFilename}";
+    window.__REPORT_AUTH_TOKEN__ = "${safeToken}";
+  <\/script>`
+  if (htmlStr.includes('<head>')) {
+    return htmlStr.replace('<head>', `<head>\n  ${metaScript}`)
+  }
+  return metaScript + htmlStr
+}
+
 // 加载指定的 HTML 材料内容
 async function loadCustomHtml(filename) {
   if (!filename) return
@@ -2446,7 +2468,7 @@ async function loadCustomHtml(filename) {
   customHtmlError.value = ''
   try {
     const res = await fetchPeriodReportContent(filename)
-    customHtmlContent.value = res.content || ''
+    customHtmlContent.value = injectMetaIntoHtml(res.content || '', filename, auth.token)
   } catch (err) {
     customHtmlError.value = '读取材料文档内容失败: ' + err.message
   } finally {
@@ -2457,7 +2479,8 @@ async function loadCustomHtml(filename) {
 // 在新标签页中打开当前默认展示的 HTML
 function openCustomHtmlInNewTab() {
   if (!customHtmlContent.value) return
-  const blob = new Blob([customHtmlContent.value], { type: 'text/html;charset=utf-8' })
+  const injected = injectMetaIntoHtml(customHtmlContent.value, displayConfig.value.target_file, auth.token)
+  const blob = new Blob([injected], { type: 'text/html;charset=utf-8' })
   const blobUrl = URL.createObjectURL(blob)
   window.open(blobUrl, '_blank')
 }
@@ -2769,7 +2792,7 @@ async function openPlayer(fileItem) {
   playerHtmlContent.value = ''
   try {
     const res = await fetchPeriodReportContent(fileItem.rel_path)
-    playerHtmlContent.value = res.content
+    playerHtmlContent.value = injectMetaIntoHtml(res.content || '', fileItem.rel_path, auth.token)
   } catch (err) {
     alert('读取汇报内容失败: ' + err.message)
     showPlayerModal.value = false
@@ -2788,7 +2811,9 @@ function closePlayer() {
 // 在新标签页中打开播放
 function openPlayerInNewTab() {
   if (!playerHtmlContent.value) return
-  const blob = new Blob([playerHtmlContent.value], { type: 'text/html;charset=utf-8' })
+  const relPath = currentPlayingFile.value?.rel_path || displayConfig.value.target_file || ''
+  const injected = injectMetaIntoHtml(playerHtmlContent.value, relPath, auth.token)
+  const blob = new Blob([injected], { type: 'text/html;charset=utf-8' })
   const blobUrl = URL.createObjectURL(blob)
   window.open(blobUrl, '_blank')
 }
@@ -3582,9 +3607,34 @@ watch([isDark, includePrev], () => {
   renderCurrentSlideChart()
 })
 
+// 监听 iframe 汇报页面发来的原位保存请求，直接覆写服务器当前文件
+async function handleIframeReportMessage(event) {
+  if (!event.data || event.data.type !== 'phoenix-save-report') return
+  const { filename, content } = event.data
+  try {
+    const res = await savePeriodReportHtml({ filename, content })
+    if (event.source && typeof event.source.postMessage === 'function') {
+      event.source.postMessage({ type: 'phoenix-save-success', filename: res.name || filename }, '*')
+    }
+    // 同步更新材料空间文件列表
+    loadFiles()
+    if (activeViewMode.value === 'custom_html' && displayConfig.value.target_file === filename) {
+      customHtmlContent.value = injectMetaIntoHtml(content, filename, auth.token)
+    }
+    if (showPlayerModal.value && currentPlayingFile.value?.rel_path === filename) {
+      playerHtmlContent.value = injectMetaIntoHtml(content, filename, auth.token)
+    }
+  } catch (err) {
+    if (event.source && typeof event.source.postMessage === 'function') {
+      event.source.postMessage({ type: 'phoenix-save-error', error: err.message || '保存失败' }, '*')
+    }
+  }
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', handleResize)
+  window.addEventListener('message', handleIframeReportMessage)
   document.addEventListener('fullscreenchange', handleFullscreenChange)
   document.addEventListener('click', handleClickOutside)
 
@@ -3625,6 +3675,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('message', handleIframeReportMessage)
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   document.removeEventListener('click', handleClickOutside)
   resizeObserver?.disconnect()

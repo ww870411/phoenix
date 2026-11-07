@@ -159,7 +159,7 @@ def export_xlsx(
     session: AuthSession = Depends(get_current_session)
 ):
     """
-    导出周期多维生产运行明细 XLSX 报表（包含 4 个标准 Sheet）。
+    导出周期多维生产运行明细 XLSX 报表（包含每日气温等 5 个标准 Sheet）。
     支持直接浏览器流式下载，或一键保存至【材料仓库】供 Agent 深度分析。
     """
     check_period_report_session(session)

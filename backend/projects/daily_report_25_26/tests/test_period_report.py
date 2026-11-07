@@ -1,8 +1,8 @@
 """周期边界、分析分支与接口权限回归；不写业务数据库。"""
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from backend.services.auth_manager import get_current_session
@@ -10,11 +10,79 @@ from backend.projects.daily_report_25_26.api.period_report import router
 import io
 import zipfile
 import openpyxl
-from backend.projects.daily_report_25_26.services.period_report_export import compute_comparison_dates
+from backend.projects.daily_report_25_26.services.period_report_export import compute_comparison_dates, generate_period_report_xlsx
 from backend.projects.daily_report_25_26.services.period_report import validate_period, metric_story, report_value, build_period_report
 
 
 class PeriodReportTests(TestCase):
+    def test_export_daily_weather_preserves_dates_values_and_gaps(self):
+        """跨月、负温、零度、部分及整日缺测均按真实值导出，不受环比开关影响。"""
+        module = 'backend.projects.daily_report_25_26.services.period_report_export'
+        start, end = date(2026, 1, 31), date(2026, 2, 2)
+        db = MagicMock()
+        db.execute.return_value.mappings.return_value.all.return_value = []
+        for include_prev in (False, True):
+            with self.subTest(include_prev=include_prev), \
+                    patch(module + '.HeatingAnalysisEngine') as analysis, \
+                    patch(module + '.compute_period_and_month_plans', return_value=({}, {})), \
+                    patch(module + '.compute_period_weather', return_value={}), \
+                    patch(module + '.DailyDashboardEngine') as daily:
+                analysis.return_value.compute_analysis_rows.return_value = {}
+                daily.return_value.compute_temperature_data.side_effect = [[
+                    {'date': date(2026, 2, 9), 'max_temp': 4.0, 'min_temp': -6.0, 'aver_temp': -0.5},
+                    {'date': end, 'max_temp': 0.0, 'min_temp': None, 'aver_temp': -1.2345},
+                    {'date': start, 'max_temp': 2.5, 'min_temp': -8.0, 'aver_temp': -3.25},
+                ], [
+                    {'date': date(2025, 2, 9), 'max_temp': 5.0, 'min_temp': -7.0, 'aver_temp': -1.5},
+                    {'date': date(2025, 2, 2), 'max_temp': None, 'min_temp': -5.0, 'aver_temp': 0.0},
+                    {'date': date(2025, 1, 31), 'max_temp': 1.5, 'min_temp': -9.0, 'aver_temp': -4.25},
+                ]]
+                wb = openpyxl.load_workbook(generate_period_report_xlsx(db, start, end, include_prev))
+                self.assertEqual(daily.return_value.compute_temperature_data.call_args_list, [
+                    call(start, date(2026, 2, 9)), call(date(2025, 1, 31), date(2025, 2, 9))])
+                ws = wb['每日气温明细']
+                self.assertEqual(list(ws.values)[1], ('日期', '最高气温(℃)', '最低气温(℃)', '平均气温(℃)',
+                                                    '同期日期', '同期最高气温(℃)', '同期最低气温(℃)', '同期平均气温(℃)'))
+                rows = list(ws.values)[2:]
+                self.assertEqual(len(rows), 10)
+                self.assertEqual([r[0].date() for r in rows], [start + timedelta(days=i) for i in range(10)])
+                self.assertEqual([r[4].date() for r in rows], [date(2025, 1, 31) + timedelta(days=i) for i in range(10)])
+                self.assertEqual(rows[-1][1:4], (4, -6, -0.5))
+                self.assertEqual(rows[-1][5:], (5, -7, -1.5))
+                self.assertTrue(all(r[1:4] == (None, None, None) and r[5:] == (None, None, None) for r in rows[3:9]))
+                self.assertIn('结束日期后7日', ws['A1'].value)
+                rows = rows[:3]
+                self.assertEqual([r[0].date() for r in rows], [start, date(2026, 2, 1), end])
+                self.assertEqual([r[1:4] for r in rows], [(2.5, -8, -3.25), (None, None, None), (0, None, -1.2345)])
+                self.assertEqual([r[4].date() for r in rows], [date(2025, 1, 31), date(2025, 2, 1), date(2025, 2, 2)])
+                self.assertEqual([r[5:] for r in rows], [(1.5, -9, -4.25), (None, None, None), (None, -5, 0)])
+                self.assertEqual(ws.freeze_panes, 'A3')
+                self.assertEqual(ws['B5'].number_format, '0.00')
+                self.assertEqual(ws['E5'].number_format, 'yyyy-mm-dd')
+
+    def test_export_daily_weather_leap_day_peer_mapping(self):
+        """闰日同期回退到去年 2 月 28 日，次日仍正确对齐 3 月 1 日。"""
+        module = 'backend.projects.daily_report_25_26.services.period_report_export'
+        db = MagicMock()
+        db.execute.return_value.mappings.return_value.all.return_value = []
+        with patch(module + '.HeatingAnalysisEngine') as analysis, \
+                patch(module + '.compute_period_and_month_plans', return_value=({}, {})), \
+                patch(module + '.compute_period_weather', return_value={}), \
+                patch(module + '.DailyDashboardEngine') as daily:
+            analysis.return_value.compute_analysis_rows.return_value = {}
+            daily.return_value.compute_temperature_data.side_effect = [[], [
+                {'date': date(2023, 2, 28), 'max_temp': 3, 'min_temp': -2, 'aver_temp': 0},
+                {'date': date(2023, 3, 1), 'max_temp': 4, 'min_temp': -1, 'aver_temp': 1},
+            ]]
+            wb = openpyxl.load_workbook(generate_period_report_xlsx(db, date(2024, 2, 28), date(2024, 3, 1), False))
+            rows = list(wb['每日气温明细'].values)[2:]
+            self.assertEqual(len(rows), 10)
+            self.assertEqual(rows[-1][0].date(), date(2024, 3, 8))
+            self.assertEqual(rows[-1][4].date(), date(2023, 3, 8))
+            rows = rows[:3]
+            self.assertEqual([r[4].date() for r in rows], [date(2023, 2, 28), date(2023, 2, 28), date(2023, 3, 1)])
+            self.assertEqual([r[5:] for r in rows], [(3, -2, 0), (3, -2, 0), (4, -1, 1)])
+
     def test_missing_metrics_follow_user_zero_convention(self):
         for value in (None, '', float('nan'), float('inf')):
             self.assertEqual(report_value(value), 0)
@@ -190,7 +258,7 @@ class PeriodReportTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.headers["content-type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         wb = openpyxl.load_workbook(io.BytesIO(res.content))
-        self.assertEqual(wb.sheetnames, ['指标对标全景总表', '设备运行与开停机', '电力现货电价走势', '调度日志与抢修记录'])
+        self.assertEqual(wb.sheetnames, ['指标对标全景总表', '设备运行与开停机', '电力现货电价走势', '调度日志与抢修记录', '每日气温明细'])
 
         # 2. 一键保存至材料仓库空间测试
         save_res = client.get('/period-report/export-xlsx?start=2026-01-16&end=2026-01-24&include_prev=true&save_to_space=true&filename=test_export.xlsx')
@@ -211,6 +279,8 @@ class PeriodReportTests(TestCase):
         down_res = client.get('/period-report/files/download?path=test_export.xlsx')
         self.assertEqual(down_res.status_code, 200)
         self.assertEqual(down_res.headers["content-type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        saved_wb = openpyxl.load_workbook(io.BytesIO(down_res.content))
+        self.assertEqual(list(saved_wb['每日气温明细'].values), list(wb['每日气温明细'].values))
 
         # 5. 清理测试文件
         del_res = client.delete('/period-report/files?path=test_export.xlsx')

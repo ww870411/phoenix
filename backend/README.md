@@ -1,3 +1,141 @@
+## 2026-11-07 气温导出延伸结束日期后 7 日
+
+- `projects/daily_report_25_26/services/period_report_export.py` 的 `generate_period_report_xlsx` 单独将气温查询及输出范围扩展至 `end + 7日`；同期结束日期由扩展后的日期经 `get_peer_date` 映射，沿用逐日气温引擎。表内标题注明原查询结束日期和延伸范围，其他工作表仍按原统计区间生成。
+- 本期及同期每天均输出最高、最低、平均气温，保留缺测空值、零负温及闰日映射。本地下载、材料仓库保存共用此逻辑；无接口或数据库迁移。
+- 最后验证日期：2026-11-07；导出和对比日期相关 pytest 4 项通过（9 项未执行），覆盖延伸第 7 日、缺测、跨月、闰日及环比开关。实际查询 2026-11-01～11-05，工作簿输出至 11-12，共 12 日，本期和同期六个气温字段均与数据库聚合核对一致。回滚仅撤销此次气温范围扩展及对应说明、测试增量。
+
+## 2026-11-07 工作流提示词同步新增《每日气温明细》数据源契约
+
+- **工作流与规范文件变更**：
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/汇报材料结构与要求.md`：
+    - 输入数据源架构从 4 类核心表扩展为 5 类，新增表5《每日气温明细表》（气象时序底表）；
+    - 第一章将表5纳入必选系统输入，规范气温双线走势与气象复盘直接取该表数据；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/工作流概述.md`：
+    - 第二步与输入材料组 2 正式写入 5 张子工作表清单，阶段 1 SOP 注入《每日气温明细》读取指引；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/重点关注.md`：
+    - 段落 1 与图1明确直接读取《每日气温明细》。
+
+## 2026-11-07 周期汇报工作流提示词与规范重大升级（双线气温图、新增发电量与现货电价章节、统一公文句式）
+
+- **工作流与规范文件变更**：
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/重点关注.md` (升级至 V2.4)：
+    - 图1气温图简化为本期日均温与同期日均温双线对比，删除最高/最低气温；
+    - 新增“三、发电量与电力现货市场情况”章节，正文总段落数微调为 11～13 段，字数 1600～2300 字，篇幅严格锁定 5～6 页；
+    - 新增数值差异公文句式硬约束，统一规范为“`标煤耗量8,807吨，同比减少1,210吨，降幅12.08%`”，严禁括号硬塞比较；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/汇报材料结构与要求.md`：
+    - 章节结构由 5 模块扩展为 6 模块，新增第三章发售电量与辽宁电力现货 96 点实时出清电价分析；
+    - 第五部分 Guardrails 增订第 7 条公文差异句式规范，同步顺延利润段落隔离编号（段落 5/6）；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/工作流概述.md`：
+    - 全面同步 6 章节结构、8 页 HTML（P1～P8）与 11～13 段 DOCX 规范；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模版引擎.html` & `模板引擎说明.md`：
+    - `ChartPresets.temperatureCurve` 精简为 `(dates, avgTemps, priorAvgTemps)` 双折线对比图。
+- **验证结果**：
+  - `projects/daily_report_25_26/tests/test_period_report.py` 13 项测试用例全部 100% 通过（9.34s）；无数据库表结构变更。
+
+## 2026-11-07 期间报表 XLSX 增加每日气温明细
+
+- 同日补充同期导出：`generate_period_report_xlsx` 复用逐日气温引擎批量查询同期区间，以 `get_peer_date` 逐行匹配，追加同期日期与最高、最低、平均气温四列；同期缺测留空，闰日回退到去年 2 月 28 日，不受环比开关影响。对应测试补齐同期缺测、零负温、跨月与闰日；相关 pytest 更新为 4 项通过，实际 2025-11-01～11-05 的同期日期及三个气温字段全部与数据库聚合核对一致。无需迁移，回滚仅撤销此次同期四列、对应说明与测试增量。
+- `projects/daily_report_25_26/services/period_report_export.py` 的 `generate_period_report_xlsx` 在原有 4 张表之后追加“每日气温明细”；接口模块 `api/period_report.py` 同步更新说明。
+- 复用 `DailyDashboardEngine.compute_temperature_data(start, end)`，从 `temperature_data` 按北京时间逐日计算 MAX/MIN/AVG；所选日期含首尾完整输出，缺测留空，零值与负温保留，显示两位小数但保留底层数值精度。明细包含本期与去年同期日期及气温，不受环比开关影响。
+- 下载与材料仓库保存共用生成函数；无数据库及接口参数变更，无需迁移。回滚仅撤销本轮新增工作表、对应说明与测试，保留其他既有改动。
+- 最后验证日期：2026-11-07；`python -m pytest backend/projects/daily_report_25_26/tests/test_period_report.py -k 'export or comparison_dates' -q`：3 项通过。覆盖跨月、零负温、缺测、环比开关、下载和材料仓库文件内容一致性；实际 2026-11-01～11-05 的 5 天数据逐字段与数据库聚合结果核对一致。依赖弃用提示不影响导出。
+
+## 2026-11-07 HTML汇报页面直接原位覆盖保存机制升级（打通 postMessage 总线与 Token 注入）
+
+- **工作流与材料资产文件变更**：
+  - 更新 `frontend/src/projects/daily_report_25_26/pages/PeriodReportView.vue`：
+    - 注入 `injectMetaIntoHtml`，将当前文件相对路径与 Bearer Token 随 HTML 页面一并传递；
+    - 挂载 `window.addEventListener('message')` 消息监听总线，安全代理保存请求。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模版引擎.html` 与 `材料仓库/2026_2027.html`：
+    - 升级 `executeSave()` 持久化逻辑，优先通过 postMessage 委托宿主保存，彻底解决 401 降级为另存的问题；
+    - 实现系统内直接原位覆盖服务器物理文件，免去另存弹窗与重复下载。
+- **验证结果**：
+  - `tests/test_period_report.py` 11 项测试用例全部 100% 通过（7.87s）；无数据库表结构变更。
+
+## 2026-11-07 周期汇报 HTML 演示框架支持所见即所得在线文字编辑与双模持久化保存
+
+- **工作流与材料资产文件变更**：
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模版引擎.html`：
+    - 顶栏增设 `✏️ 编辑` 与 `💾 保存` 控制组；
+    - 注入 `body.is-editing` 编辑高亮样式与 Toast 提示；
+    - 挂载 `executeSave` 保存中枢与全局按键监听（`E` 切换编辑，`Ctrl+S` 随时保存）。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/材料仓库/2026_2027.html`：
+    - 同步升级在线编辑与双模持久化保存中枢，方便用户在材料空间管理中直接体验。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模板引擎说明.md`：
+    - 增订“第七部分：在线讲稿文字编辑与持久化保存机制说明（WYSIWYG 实时编辑器）”。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/工作流概述.md`：
+    - 阶段 3 同步注明在线编辑与保存能力。
+- **验证结果**：
+  - `tests/test_period_report.py` 11 项测试用例全部 100% 通过（7.72s）；无数据库表结构变更。
+
+## 2026-11-07 周期汇报工作流规范深度精进（杜绝指令泄露、三大辅助工具锦上添花、可比利润为主体且物理分段）
+
+- **工作流与材料资产文件变更**：
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/重点关注.md` (V2.3)：
+    - 确立以真实生产运行大盘为主线，三大辅助工具（HDD20、计划测算、调度信息）按需引入、锦上添花、严禁抢戏；
+    - 规范利润指标：主体固定为“可比煤价边际利润”，辅助固定为“边际利润”，段落 4 与段落 5 物理隔离，严禁自创词汇；
+    - 杜绝指令泄露：正文直接平实播报两项投诉量，严禁抄录“严禁两项指标相加”等系统禁令，提供 Bad vs Good 对照范例。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/汇报材料结构与要求.md`：
+    - 重构法则 01、法则 02、法则 09；升级第五部分 Guardrails（第 3、5、11 条）。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/工作流概述.md`：
+    - 阶段 3、4、5 全面同步上述规范。
+- **验证结果**：
+  - `tests/test_period_report.py` 11 项测试用例全部 100% 通过（7.94s）；无数据库表结构变更。
+
+## 2026-11-07 周期汇报工作流规范深度重构（DOCX 5～6页篇幅硬熔断与 HTML“完整同款讲稿+生动图表”双轨定位）
+
+- **工作流与材料资产文件变更**：
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/重点关注.md`：
+    - 参考真实简报《第十二周生产运行简报.docx》（全篇约 1500 字、10 段、6 张核心表）提取物理对照基准；
+    - 建立《大连洁净能源集团周期生产运行简报 · 重点关注与 DOCX/HTML 双轨行文规范 (V2.2)》；
+    - 逐段锁定 DOCX 10～12 个自然段（1500～2200 字，打印 5～6 页 A4）的字数与段落预算；
+    - 阐明 HTML 汇报定位：左栏念稿面板完整保留 DOCX 同款讲稿，右栏为生动、高对比度的 ECharts 动态图表与大表。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/汇报材料结构与要求.md`：
+    - 修正第二章、第三章诱导模型逐一展开各单位的表述，确立“表看全貌、文抓异常”原则；
+    - 第五部分追加第 10 条篇幅硬熔断与 HTML 双轨定位红线。
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/工作流概述.md`：
+    - 阶段 3（HTML）与阶段 4（DOCX）同步补充 5～6 页篇幅控制及 HTML 双轨定位要求。
+- **验证结果**：
+  - `tests/test_period_report.py` 11 项测试用例全部 100% 通过（7.75s）；无数据库表结构变更。
+
+## 2026-11-07 工作流核心提示词全域规范化（集团命名、DOCX两行标题、零口径解释、零暴露提示词、红增绿减、投诉量非并列不相加与气温曲线）
+
+- **工作流与材料资产文件变更**：
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/汇报材料结构与要求.md`：
+    - 统一集团名称为“大连洁净能源集团”；
+    - 规定 DOCX 标题两行居中标准形式（第一行集团名称，第二行日期区间+生产运行情况简报）；
+    - 重构法则 09，明确省市平台总投诉量与考核净投诉量业务本质，建立严禁相加铁律；
+    - 第一章要求 HTML 首页与 DOCX 概述部分必配期间每日平均、最高、最低及同期气温曲线图；
+    - 第五部分确立严禁口径解释、严禁暴露法则/提示词术语、红增绿减、投诉量严禁求和等行文红线；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/工作流概述.md`：
+    - 阶段 1 废除投诉量求和公式，调整为双轨独立统计；
+    - 阶段 3（HTML）与阶段 4（DOCX）明确主标题两行格式、图表/字体差异率红增绿减及气温曲线图规范；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模板引擎说明.md`：
+    - 更新数字标签契约（增加红、减少绿），图谱指南新增正负分化图红增绿减及气温曲线图预设，自检清单扩充至 15 项；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模版引擎.html` 与 `材料仓库/2026_2027.html`：
+    - CSS 语义类与 `ChartPresets` 全面适配红增绿减；首页 P1 标题、KPI 卡片与 Bento 气象走势曲线图落地；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/3.材料结构与要点/重点关注.md`：
+    - 补充红线提示与集团命名使用说明。
+- **验证结果**：
+  - `tests/test_period_report.py` 11 项测试用例全部 100% 通过；无数据库表结构变更。
+
+## 2026-11-07 工作流目录与材料空间 HTML 模版引擎升级 8:3 异形巨幕大屏投影（模式一预挤压）
+
+- **工作流与材料资产文件变更**：
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模版引擎.html`：
+    - 注入 `body.screen-8-3` 反向变形预挤压样式规则（`width: 150%; transform: scaleX(0.6666667)`）；
+    - 顶栏挂载 `#ratio16x9Btn` 与 `#ratio8x3Btn` 切换按钮、`#squeezeBadge` 状态徽章；
+    - 绑定 `setScreenRatio(ratio)`、按键 `8` 快捷键与 `resizeAllCharts` 重绘联动；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/1.html模板与使用说明/模板引擎说明.md`：
+    - 补充自检清单第 11 条关于 8:3 巨幕预压兼容性校验项；
+    - 增订“第六部分：8:3 异形巨幕大屏投影模式与反向预挤压规范（模式一）”；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/工作流/工作流概述.md`：
+    - 阶段 3 规范增订 16:9 与 8:3 双模视口兼容性；
+  - 更新 `backend_data/projects/daily_report_25_26/period_report/材料仓库/2026_2027.html`：
+    - 同步升级 8:3 预压模式，方便在材料管理空间中即时预览体验；
+- **验证结果**：
+  - `tests/test_period_report.py` 11 项测试用例全部 100% 通过；无数据库表结构变更。
+
 ## 2026-11-07 生产运行汇报支持自定义默认展示页面、跨空间/内部文件传输移动与 Group_admin 授权
 
 - **新增服务与接口变更**：
