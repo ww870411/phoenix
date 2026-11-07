@@ -1,12 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../projects/daily_report_25_26/store/auth'
-import { canAccessDailyBrief } from '../projects/daily_report_25_26/composables/dailyBriefPresentation'
+import { canAccessDailyBrief, canAccessPeriodReport } from '../projects/daily_report_25_26/composables/dailyBriefPresentation'
 
 const routes = [
   {
     path: '/projects/daily_report_25_26/pages/period_report',
     component: () => import('../projects/daily_report_25_26/pages/PeriodReportView.vue'),
-    meta: { title: '生产运行汇报', globalAdminOnly: true },
+    meta: { title: '生产运行汇报' },
   },
   {
     path: '/',
@@ -164,10 +164,16 @@ router.beforeEach(async (to) => {
       ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'period_report')
   }
 
-  // 每日简报独立校验，防止绕过入口直接输入地址。
-  if (['/projects/daily_report_25_26/pages/daily_brief', '/projects/daily_report_25_26/pages/period_report'].includes(to.path)) {
+  // 每日简报独立校验，防止绕过入口直接输入地址，仅限 Global_admin
+  if (to.path === '/projects/daily_report_25_26/pages/daily_brief') {
     return canAccessDailyBrief('daily_report_25_26', auth.user)
-      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', to.path.endsWith('/period_report') ? 'period_report' : 'daily_brief')
+      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'daily_brief')
+  }
+
+  // 生产运行汇报独立校验，开放给 Global_admin 与 Group_admin
+  if (to.path === '/projects/daily_report_25_26/pages/period_report') {
+    return canAccessPeriodReport('daily_report_25_26', auth.user)
+      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'period_report')
   }
 
   // 2. 全局管理后台权限校验

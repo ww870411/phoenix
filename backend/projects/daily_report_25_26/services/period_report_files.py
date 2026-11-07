@@ -9,11 +9,13 @@
 4. 实施严格的路径防穿越校验，确保仅限合法 HTML 文件的受控操作。
 """
 
+import json
 import os
 import re
+import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, UploadFile
 from backend.config import DATA_DIRECTORY
 
@@ -40,6 +42,75 @@ STORAGE_DIR = (STORAGE_ROOT_DIR / "材料仓库").resolve()
 
 # 工作流模板目录
 WORKFLOW_DIR = (STORAGE_ROOT_DIR / "工作流").resolve()
+
+# 页面默认显示模式配置文件路径
+DISPLAY_CONFIG_PATH = (STORAGE_ROOT_DIR / "display_config.json").resolve()
+
+
+def get_display_config() -> Dict[str, Any]:
+    """
+    获取生产运行汇报页面的默认显示配置。
+    若未设定，默认采用动态生成页（mode="generated"）。
+    """
+    if DISPLAY_CONFIG_PATH.exists():
+        try:
+            content = DISPLAY_CONFIG_PATH.read_text(encoding="utf-8")
+            data = json.loads(content)
+            mode = data.get("mode", "generated")
+            target_file = data.get("target_file", "")
+            return {
+                "mode": mode if mode in ("generated", "custom_html") else "generated",
+                "target_file": target_file if mode == "custom_html" else "",
+                "updated_by": data.get("updated_by", ""),
+                "updated_at": data.get("updated_at", ""),
+            }
+        except Exception:
+            pass
+
+    return {
+        "mode": "generated",
+        "target_file": "",
+        "updated_by": "",
+        "updated_at": "",
+    }
+
+
+def set_display_config(mode: str, target_file: str = "", operator: str = "") -> Dict[str, Any]:
+    """
+    由 Global_admin 设定生产运行汇报页面的默认打开内容。
+    mode 可选：
+      - 'generated': 默认自选周期图文动态生成汇报；
+      - 'custom_html': 指定材料空间中的某份 HTML 汇报文档作为默认打开页。
+    """
+    clean_mode = (mode or "").strip().lower()
+    if clean_mode not in ("generated", "custom_html"):
+        raise HTTPException(400, "不支持的默认显示模式，仅支持 'generated' 或 'custom_html'")
+
+    final_target = ""
+    if clean_mode == "custom_html":
+        clean_file = (target_file or "").strip()
+        if not clean_file:
+            raise HTTPException(400, "请指定材料空间中的 HTML 文件作为默认展示内容")
+
+        # 检查指定文件在材料空间或工作流空间中的存在性与安全性
+        safe_path = resolve_safe_path(clean_file, must_exist=True, for_write=False)
+        if safe_path.suffix.lower() not in ('.html', '.htm'):
+            raise HTTPException(400, "指定的默认展示文件必须为 HTML 格式")
+        final_target = clean_file
+
+    config_data = {
+        "mode": clean_mode,
+        "target_file": final_target,
+        "updated_by": operator or "Global_admin",
+        "updated_at": format_beijing_time(datetime.now().timestamp()),
+    }
+
+    try:
+        STORAGE_ROOT_DIR.mkdir(parents=True, exist_ok=True)
+        DISPLAY_CONFIG_PATH.write_text(json.dumps(config_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return config_data
+    except Exception as exc:
+        raise HTTPException(500, f"保存默认展示配置失败: {str(exc)}") from exc
 
 
 def ensure_storage_dir() -> Path:
@@ -119,41 +190,53 @@ def resolve_safe_path(rel_path: str, must_exist: bool = True, for_write: bool = 
 def list_report_files() -> List[Dict[str, Any]]:
     """
     列出空间中的所有 HTML 报告文件与 XLSX 数据文件。
-    1. 扫描材料仓库中的所有汇报与明细文件（is_template=False）；
+    1. 递归扫描材料仓库中的所有汇报与明细文件（is_template=False），包含子文件夹识别；
     2. 兼容扫描工作流模板目录中的演示引擎母版（is_template=True）。
     """
     store_dir = ensure_storage_dir()
     file_list: List[Dict[str, Any]] = []
     allowed_exts = ('.html', '.htm', '.xlsx')
 
-    # 1. 扫描材料仓库目录
+    # 1. 递归扫描材料仓库目录
     if store_dir.exists():
-        for f in os.listdir(store_dir):
-            lower_f = f.lower()
-            if lower_f.endswith(allowed_exts):
-                full_path = store_dir / f
-                if full_path.is_file():
-                    try:
-                        stat = full_path.stat()
-                        is_excel = lower_f.endswith('.xlsx')
-                        file_list.append({
-                            "name": f,
-                            "rel_path": f,
-                            "size": stat.st_size,
-                            "size_formatted": format_file_size(stat.st_size),
-                            "updated_at": format_beijing_time(stat.st_mtime),
-                            "created_at": format_beijing_time(stat.st_ctime),
-                            "is_template": False,
-                            "kind": "excel" if is_excel else "html",
-                            "ext": ".xlsx" if is_excel else ".html",
-                        })
-                    except Exception:
-                        continue
+        for root, dirs, files in os.walk(store_dir):
+            # 排除隐藏目录
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for f in files:
+                if f.startswith('.'):
+                    continue
+                lower_f = f.lower()
+                if lower_f.endswith(allowed_exts):
+                    full_path = Path(root) / f
+                    if full_path.is_file():
+                        try:
+                            stat = full_path.stat()
+                            rel_to_store = full_path.relative_to(store_dir).as_posix()
+                            parent_rel = full_path.parent.relative_to(store_dir).as_posix()
+                            folder_name = "" if parent_rel == "." else parent_rel
+                            is_excel = lower_f.endswith('.xlsx')
+                            file_list.append({
+                                "name": f,
+                                "rel_path": rel_to_store,
+                                "folder": folder_name,
+                                "size": stat.st_size,
+                                "size_formatted": format_file_size(stat.st_size),
+                                "updated_at": format_beijing_time(stat.st_mtime),
+                                "created_at": format_beijing_time(stat.st_ctime),
+                                "is_template": False,
+                                "kind": "excel" if is_excel else "html",
+                                "ext": ".xlsx" if is_excel else ".html",
+                            })
+                        except Exception:
+                            continue
 
     # 2. 扫描工作流模板目录
     if WORKFLOW_DIR.exists():
-        for root, _, files in os.walk(WORKFLOW_DIR):
+        for root, dirs, files in os.walk(WORKFLOW_DIR):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
             for f in files:
+                if f.startswith('.'):
+                    continue
                 lower_f = f.lower()
                 if lower_f.endswith(allowed_exts):
                     full_path = Path(root) / f
@@ -161,10 +244,13 @@ def list_report_files() -> List[Dict[str, Any]]:
                         try:
                             stat = full_path.stat()
                             rel_to_root = full_path.relative_to(STORAGE_ROOT_DIR).as_posix()
+                            parent_rel = full_path.parent.relative_to(WORKFLOW_DIR).as_posix()
+                            folder_name = "" if parent_rel == "." else parent_rel
                             is_excel = lower_f.endswith('.xlsx')
                             file_list.append({
                                 "name": f,
                                 "rel_path": rel_to_root,
+                                "folder": folder_name,
                                 "size": stat.st_size,
                                 "size_formatted": format_file_size(stat.st_size),
                                 "updated_at": format_beijing_time(stat.st_mtime),
@@ -362,3 +448,196 @@ def rename_report_file(rel_path: str, new_name: str) -> Dict[str, Any]:
         }
     except Exception as exc:
         raise HTTPException(500, f"重命名文件失败: {str(exc)}") from exc
+
+
+# ==================== 空间目录管理与跨空间/空间内传输服务 ====================
+
+def get_space_root(space: str) -> Path:
+    """根据空间标识返回物理根目录。"""
+    clean_space = (space or "").strip().lower()
+    if clean_space in ("material", "材料空间", "材料仓库"):
+        return ensure_storage_dir()
+    elif clean_space in ("workflow", "工作流", "工作流目录"):
+        WORKFLOW_DIR.mkdir(parents=True, exist_ok=True)
+        return WORKFLOW_DIR
+    else:
+        raise HTTPException(400, f"未知的空间类型: {space}，仅支持 'material' 或 'workflow'")
+
+
+def list_space_folders(space: str) -> List[Dict[str, str]]:
+    """
+    列出指定空间（材料空间或工作流空间）中的所有文件夹。
+    根目录用 path="" 表示。
+    """
+    base_dir = get_space_root(space)
+    folders: List[Dict[str, str]] = [
+        {
+            "name": "材料仓库根目录" if space == "material" else "工作流根目录",
+            "path": ""
+        }
+    ]
+
+    if base_dir.exists():
+        for root, dirs, _ in os.walk(base_dir):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for d in sorted(dirs):
+                full_d = Path(root) / d
+                rel_p = full_d.relative_to(base_dir).as_posix()
+                folders.append({
+                    "name": rel_p,
+                    "path": rel_p
+                })
+
+    return folders
+
+
+def create_space_folder(space: str, parent_folder: str = "", folder_name: str = "") -> Dict[str, Any]:
+    """在指定空间（材料空间或工作流空间）中创建新的子文件夹。"""
+    base_dir = get_space_root(space)
+    clean_name = (folder_name or "").strip()
+    if not clean_name:
+        raise HTTPException(400, "文件夹名称不能为空")
+
+    clean_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', clean_name).strip()
+    if not clean_name or clean_name in ('.', '..'):
+        raise HTTPException(400, "文件夹名称不合法")
+
+    clean_parent = (parent_folder or "").replace("\\", "/").strip().strip("/")
+    if clean_parent in (".", "根目录", "全部"):
+        clean_parent = ""
+
+    target_parent = (base_dir / clean_parent).resolve() if clean_parent else base_dir
+    if not target_parent.is_relative_to(base_dir):
+        raise HTTPException(400, "非法的父文件夹路径（路径穿越拦截）")
+
+    new_dir = (target_parent / clean_name).resolve()
+    if not new_dir.is_relative_to(base_dir):
+        raise HTTPException(400, "非法的新建目录路径（路径穿越拦截）")
+
+    if new_dir.exists():
+        raise HTTPException(400, f"目录【{clean_name}】已存在")
+
+    try:
+        new_dir.mkdir(parents=True, exist_ok=False)
+        rel_to_base = new_dir.relative_to(base_dir).as_posix()
+        return {
+            "ok": True,
+            "space": space,
+            "name": clean_name,
+            "rel_path": rel_to_base,
+            "message": f"目录【{clean_name}】创建成功"
+        }
+    except Exception as exc:
+        raise HTTPException(500, f"创建目录失败: {str(exc)}") from exc
+
+
+def transfer_space_file(
+    source_space: str,
+    source_path: str,
+    target_space: str,
+    target_folder: str = "",
+    action: str = "copy",
+    overwrite: bool = False
+) -> Dict[str, Any]:
+    """
+    跨空间（材料空间 ⇄ 工作流目录空间）或在各自空间内部传输/移动文件。
+    支持：
+      - action="copy": 复制文件（保留原文件，目标生成副本）
+      - action="move": 移动文件（移至目标文件夹，原位置删除）
+    如果目标同名且 overwrite=False，则自动重命名追加副本序号，保障文件安全。
+    """
+    src_root = get_space_root(source_space)
+    dst_root = get_space_root(target_space)
+
+    clean_action = (action or "copy").strip().lower()
+    if clean_action not in ("copy", "move"):
+        raise HTTPException(400, "不支持的操作方式，仅支持 'copy'（复制）或 'move'（移动）")
+
+    clean_src = (source_path or "").replace("\\", "/").strip().lstrip("/")
+    # 去除可能携带的所属空间前缀
+    if clean_src.startswith("材料仓库/"):
+        clean_src = clean_src[len("材料仓库/"):]
+    elif clean_src.startswith("工作流/"):
+        clean_src = clean_src[len("工作流/"):]
+
+    src_full = (src_root / clean_src).resolve()
+    if not src_full.is_relative_to(src_root):
+        raise HTTPException(400, "非法的源文件路径（路径穿越拦截）")
+
+    if not src_full.exists():
+        raise HTTPException(404, f"源文件不存在: {source_path}")
+
+    if not src_full.is_file():
+        raise HTTPException(400, "仅支持对具体文件进行传输或移动")
+
+    # 目标目录解析
+    clean_dst_folder = (target_folder or "").replace("\\", "/").strip().strip("/")
+    if clean_dst_folder in (".", "根目录", "全部"):
+        clean_dst_folder = ""
+    if clean_dst_folder.startswith("材料仓库/"):
+        clean_dst_folder = clean_dst_folder[len("材料仓库/"):]
+    elif clean_dst_folder.startswith("工作流/"):
+        clean_dst_folder = clean_dst_folder[len("工作流/"):]
+
+    dst_dir = (dst_root / clean_dst_folder).resolve() if clean_dst_folder else dst_root
+    if not dst_dir.is_relative_to(dst_root):
+        raise HTTPException(400, "非法目标文件夹路径（路径穿越拦截）")
+
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    # 计算目标文件完整路径与重名冲突处理
+    target_file = dst_dir / src_full.name
+
+    # 如果是同空间同目录下的移动，且文件名相同
+    if src_full == target_file:
+        if clean_action == "move":
+            return {
+                "ok": True,
+                "action": clean_action,
+                "source_space": source_space,
+                "target_space": target_space,
+                "target_rel_path": target_file.relative_to(dst_root).as_posix(),
+                "target_name": target_file.name,
+                "message": "源文件与目标文件路径完全一致，无需移动"
+            }
+        else:
+            # 复制同名副本
+            base_stem = src_full.stem
+            ext = src_full.suffix
+            counter = 1
+            while target_file.exists():
+                target_file = dst_dir / f"{base_stem}_副本{counter}{ext}"
+                counter += 1
+    elif target_file.exists() and not overwrite:
+        # 目标已存在且未开启覆盖，自动重命名避开冲突
+        base_stem = src_full.stem
+        ext = src_full.suffix
+        counter = 1
+        while target_file.exists():
+            target_file = dst_dir / f"{base_stem}_副本{counter}{ext}"
+            counter += 1
+
+    try:
+        if clean_action == "move":
+            shutil.move(str(src_full), str(target_file))
+        else:
+            shutil.copy2(str(src_full), str(target_file))
+
+        rel_to_dst_space = target_file.relative_to(dst_root).as_posix()
+        stat = target_file.stat()
+        return {
+            "ok": True,
+            "action": clean_action,
+            "source_space": source_space,
+            "target_space": target_space,
+            "source_name": src_full.name,
+            "target_name": target_file.name,
+            "target_rel_path": rel_to_dst_space,
+            "target_folder": clean_dst_folder,
+            "size": stat.st_size,
+            "size_formatted": format_file_size(stat.st_size),
+            "updated_at": format_beijing_time(stat.st_mtime),
+            "message": f"文件已成功{'移动' if clean_action == 'move' else '复制'}至{target_space}空间"
+        }
+    except Exception as exc:
+        raise HTTPException(500, f"文件传输失败: {str(exc)}") from exc

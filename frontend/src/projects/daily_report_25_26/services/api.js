@@ -391,6 +391,65 @@ export async function exportPeriodReportXlsx({ start, end, include_prev = true, 
   }
 }
 
+export async function fetchPeriodReportDisplayConfig({ signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/display-config`, {
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '获取默认显示配置失败'))
+  return response.json()
+}
+
+export async function savePeriodReportDisplayConfig({ mode, target_file }, { signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/display-config`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ mode, target_file }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '保存默认显示配置失败'))
+  return response.json()
+}
+
+export async function fetchSpaceFolders(space = 'material', { signal } = {}) {
+  const query = new URLSearchParams({ space })
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/folders?${query}`, {
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '获取空间文件夹列表失败'))
+  return response.json()
+}
+
+export async function createSpaceFolder(space, parentFolder, folderName, { signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/folders/create-in-space`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ space, parent_folder: parentFolder, folder_name: folderName }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '创建空间文件夹失败'))
+  return response.json()
+}
+
+export async function transferPeriodReportFile({ source_space, source_path, target_space, target_folder = '', action = 'copy', overwrite = false }, { signal } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/period-report/files/transfer`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({
+      source_space,
+      source_path,
+      target_space,
+      target_folder,
+      action,
+      overwrite,
+    }),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '传输文件失败'))
+  return response.json()
+}
+
 function buildDev8001FallbackUrl(url) {
   const rawUrl = String(url || '')
   if (!rawUrl) return ''

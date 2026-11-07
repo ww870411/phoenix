@@ -1,13 +1,35 @@
 // 每日简报只对 Global_admin 开放，不能用其他管理员能力代替这一身份。
 export function canAccessDailyBrief(projectKey, user) {
-  return projectKey === 'daily_report_25_26' && user?.group === 'Global_admin'
+  const grp = String(user?.group || user?.role || '').trim()
+  return projectKey === 'daily_report_25_26' && grp === 'Global_admin'
+}
+
+// 生产运行汇报对 Global_admin 与 Group_admin 开放。
+export function canAccessPeriodReport(projectKey, user) {
+  const grp = String(user?.group || user?.role || '').trim().toLowerCase()
+  return projectKey === 'daily_report_25_26' && (grp === 'global_admin' || grp === 'group_admin')
 }
 
 export function withDailyBriefPage(pages, projectKey, user) {
   const existing = (Array.isArray(pages) ? pages : []).filter(page => !['daily_brief', 'period_report'].includes(page.page_key))
-  if (!canAccessDailyBrief(projectKey, user)) return existing
-  return [{ page_key: 'daily_brief', page_name: '每日简报', page_description: '每日生产状况内参', page_url: '/projects/daily_report_25_26/pages/daily_brief' },
-    { page_key: 'period_report', page_name: '生产运行汇报', page_description: '自选周期生成分析材料，左文右表整页汇报', page_url: '/projects/daily_report_25_26/pages/period_report' }, ...existing]
+  const additions = []
+  if (canAccessDailyBrief(projectKey, user)) {
+    additions.push({
+      page_key: 'daily_brief',
+      page_name: '每日简报',
+      page_description: '每日生产状况内参',
+      page_url: '/projects/daily_report_25_26/pages/daily_brief'
+    })
+  }
+  if (canAccessPeriodReport(projectKey, user)) {
+    additions.push({
+      page_key: 'period_report',
+      page_name: '生产运行汇报',
+      page_description: '自选周期生成分析材料，左文右表整页汇报',
+      page_url: '/projects/daily_report_25_26/pages/period_report'
+    })
+  }
+  return [...additions, ...existing]
 }
 
 // 主版与专刊分别按指标键排布，不依赖接口数组的位置，也不改变每日摘要顺序。

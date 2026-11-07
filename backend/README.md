@@ -1,3 +1,31 @@
+## 2026-11-07 生产运行汇报支持自定义默认展示页面、跨空间/内部文件传输移动与 Group_admin 授权
+
+- **新增服务与接口变更**：
+  - 调整 `projects/daily_report_25_26/services/period_report_workflow.py`：
+    - **子目录扫描双向兼容强化**：在 `list_workflow_files` 返回的子目录及文件字典中，同时输出 `rel_path` 与 `relative_path`、`item_count` 与 `file_count`，保障前端多层级子目录进入、树状下钻与面包屑精准定位；
+  - 调整 `projects/daily_report_25_26/services/period_report_files.py`：
+    1. **默认展示配置持久化**：新增 `get_display_config()` 与 `set_display_config(mode, target_file, operator)`，持久化至 `period_report/display_config.json`；
+    2. **材料仓库递归与文件夹抽象**：升级 `list_report_files()` 为递归扫描材料仓库目录树，提取相对子目录 `folder`；新增 `list_space_folders(space)` 与 `create_space_folder(space, parent_folder, folder_name)`，统一抽象材料空间与工作流空间的目录树管理；
+    3. **跨空间与空间内部文件传输服务**：新增 `transfer_space_file(source_space, source_path, target_space, target_folder, action, overwrite)`：
+       - 支持跨空间（材料空间 ⇋ 工作流空间）与空间内部移动；
+       - 支持 `copy`（复制）与 `move`（移动）；
+       - 包含非法路径穿越校验、核心模板文件保护、目标同名自动追加递增序号（`_副本1`、`_副本2`）；
+  - 扩充 `projects/daily_report_25_26/api/period_report.py`：
+    1. **双层权限校验分级**：
+       - `check_period_report_session(session)`：精确放行 `Global_admin` 与 `Group_admin`，保护业务汇报接口、材料空间管理接口及默认展示配置查询接口；
+       - `check_workflow_admin_session(session)`：精确限定 `Global_admin`，保护工作流目录空间、默认配置修改及涉及工作流空间的文件传输；
+    2. **新增 RESTful 端点**：
+       - `GET /period-report/display-config`（双角色可用，返回默认展示模式与目标文件）；
+       - `POST /period-report/display-config`（限定 `Global_admin`，更新默认展示配置）；
+       - `GET /period-report/folders`（查询指定空间内的合法文件夹列表）；
+       - `POST /period-report/folders/create-in-space`（在指定空间下创建归档子目录）；
+       - `POST /period-report/files/transfer`（文件跨空间/内部传输移动，源/目标涉及工作流时严格校验 `Global_admin`）；
+  - 扩充 `projects/daily_report_25_26/tests/test_period_report.py`：
+    - 验证 `Group_admin` 正常读取汇报数据和管理材料仓库文件，访问工作流端点被 403 拦截；
+    - 新增 `test_display_config_and_space_transfer` 测试用例，覆盖：默认模式存取切换、空间子文件夹创建与枚举、空间内部移动归档、跨空间文件复制与同名防冲自增递增序号校验；
+- **验证结果**：
+  - `tests/test_period_report.py` 11 项测试用例全部 100% 通过；无数据库表结构变更。
+
 ## 2026-11-06 工作流目录新增“一键递归打包下载服务”(ZIP 格式)
 
 - **新增服务与接口**：

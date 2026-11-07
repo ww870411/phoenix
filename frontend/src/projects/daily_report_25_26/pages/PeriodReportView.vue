@@ -54,13 +54,13 @@
             <span>大屏全屏</span>
           </button>
 
-          <!-- 控制台下拉菜单（仅限 Global_admin 使用） -->
-          <div v-if="isGlobalAdmin" ref="consoleDropdownRef" class="console-dropdown-container">
+          <!-- 控制台下拉菜单（Global_admin 全量可用，Group_admin 仅开放材料空间管理） -->
+          <div v-if="canAccessConsole" ref="consoleDropdownRef" class="console-dropdown-container">
             <button
               class="btn-tool btn-console-trigger"
               :class="{ active: showConsoleDropdown }"
               @click.stop="toggleConsoleDropdown"
-              title="管理控制台（仅限 Global_admin）：数据导出、材料仓库、工作流保存与源数据查看"
+              :title="isGlobalAdmin ? '管理控制台（Global_admin）：数据导出、材料仓库、工作流保存与源数据查看' : '管理控制台（Group_admin）：材料空间管理'"
             >
               <span class="console-icon">⚙️</span>
               <span>控制台</span>
@@ -71,11 +71,11 @@
             <transition name="dropdown-fade">
               <div v-if="showConsoleDropdown" class="console-dropdown-menu">
                 <div class="dropdown-header">
-                  <span class="dropdown-tag">Global_admin</span>
+                  <span class="dropdown-tag">{{ isGlobalAdmin ? 'Global_admin' : 'Group_admin' }}</span>
                   <span class="dropdown-title">管理控制台</span>
                 </div>
 
-                <!-- 1. 材料空间 -->
+                <!-- 1. 材料空间（面向 Global_admin 与 Group_admin 均开放） -->
                 <button
                   class="dropdown-item"
                   @click="closeConsoleDropdown(); openFileManager()"
@@ -88,8 +88,9 @@
                   </div>
                 </button>
 
-                <!-- 2. 工作流目录空间 -->
+                <!-- 2. 工作流目录空间（仅限 Global_admin） -->
                 <button
+                  v-if="isGlobalAdmin"
                   class="dropdown-item"
                   @click="closeConsoleDropdown(); openWorkflowManager()"
                   title="专门管理与浏览工作流目录下的规范文档、模板引擎与指导材料"
@@ -101,8 +102,9 @@
                   </div>
                 </button>
 
-                <!-- 2. 保存至空间(HTML) -->
+                <!-- 3. 保存至空间(HTML)（仅限 Global_admin） -->
                 <button
+                  v-if="isGlobalAdmin"
                   class="dropdown-item"
                   :disabled="savingHtml"
                   @click="closeConsoleDropdown(); saveCurrentReportToSpace()"
@@ -115,8 +117,9 @@
                   </div>
                 </button>
 
-                <!-- 3. 导出生产运行数据(XLSX) -->
+                <!-- 4. 导出生产运行数据(XLSX)（仅限 Global_admin） -->
                 <button
+                  v-if="isGlobalAdmin"
                   class="dropdown-item"
                   @click="closeConsoleDropdown(); openExportXlsxModal()"
                   title="导出包含 4 个标准化 Sheet 的多维生产经营明细 XLSX 表格"
@@ -128,10 +131,11 @@
                   </div>
                 </button>
 
-                <div class="dropdown-divider"></div>
+                <div v-if="isGlobalAdmin" class="dropdown-divider"></div>
 
-                <!-- 4. 下载纯讲稿 -->
+                <!-- 5. 下载纯讲稿（仅限 Global_admin） -->
                 <button
+                  v-if="isGlobalAdmin"
                   class="dropdown-item"
                   @click="closeConsoleDropdown(); downloadReport()"
                   title="下载汇报各章节宣读公文纯文本"
@@ -143,8 +147,9 @@
                   </div>
                 </button>
 
-                <!-- 5. 数据源 JSON -->
+                <!-- 6. 数据源 JSON（仅限 Global_admin） -->
                 <button
+                  v-if="isGlobalAdmin"
                   class="dropdown-item"
                   @click="closeConsoleDropdown(); showJsonModal = true"
                   title="查看当前统计周期的底层结构化数据源"
@@ -155,9 +160,41 @@
                     <span class="item-desc">查看前端接收到的多维计算源数据</span>
                   </div>
                 </button>
+
+                <!-- 7. 默认显示设定（仅限 Global_admin） -->
+                <button
+                  v-if="isGlobalAdmin"
+                  class="dropdown-item"
+                  @click="closeConsoleDropdown(); openDisplayConfigModal()"
+                  title="设定生产运行汇报页面的默认打开内容（动态生成页或指定材料空间 HTML）"
+                >
+                  <span class="item-icon">⚙️</span>
+                  <div class="item-text">
+                    <span class="item-title">默认显示设定</span>
+                    <span class="item-desc">指定首屏展示动态生成页或材料空间 HTML</span>
+                  </div>
+                </button>
               </div>
             </transition>
           </div>
+
+          <!-- 模式切换快捷胶囊：当设定了默认 HTML 文档时，支持随手切换 -->
+          <button
+            v-if="displayConfig.mode === 'custom_html' && activeViewMode === 'generated'"
+            class="btn-tool btn-back-custom"
+            @click="activeViewMode = 'custom_html'"
+            title="返回系统默认设定的材料空间文档展示"
+          >
+            <span>📌 查看默认材料文档</span>
+          </button>
+          <button
+            v-else-if="activeViewMode === 'custom_html'"
+            class="btn-tool btn-back-custom"
+            @click="activeViewMode = 'generated'"
+            title="切换回自选周期动态生成汇报视口"
+          >
+            <span>📊 切换至动态生成页</span>
+          </button>
         </div>
       </div>
     </header>
@@ -168,8 +205,51 @@
       <button class="btn-close-error" @click="error = ''">✕</button>
     </div>
 
-    <!-- ==================== 2. 主舞台视口（全屏宽屏分辨率自适应，占满可用空间） ==================== -->
-    <div ref="viewportRef" class="report-viewport" :style="{ zoom: zoomLevel / 100 }">
+    <!-- ==================== 2.1 默认材料空间 HTML 视口（当设定为默认打开材料文档时呈现） ==================== -->
+    <div v-if="activeViewMode === 'custom_html'" class="custom-html-stage">
+      <div class="custom-html-banner">
+        <div class="banner-left">
+          <span class="badge-custom-tag">📌 默认材料文档</span>
+          <span class="banner-filename">{{ displayConfig.target_file }}</span>
+          <span v-if="displayConfig.updated_at" class="banner-time">更新于 {{ displayConfig.updated_at }}</span>
+        </div>
+        <div class="banner-right">
+          <button class="btn-tool btn-highlight" @click="activeViewMode = 'generated'" title="切换查看系统自选周期的动态生成汇报分析">
+            <span>📊 切换至动态生成汇报</span>
+          </button>
+          <button class="btn-tool" @click="openCustomHtmlInNewTab" title="在新浏览器标签页中全屏打开">
+            <span>🔗 新标签页打开</span>
+          </button>
+          <button v-if="isGlobalAdmin" class="btn-tool" @click="openDisplayConfigModal" title="修改系统默认打开内容设置">
+            <span>⚙️ 默认显示设置</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="custom-html-container">
+        <div v-if="customHtmlLoading" class="custom-loading-box">
+          <div class="spinner spinner-lg"></div>
+          <p class="mt-2">正在加载默认材料文档【{{ displayConfig.target_file }}】…</p>
+        </div>
+        <div v-else-if="customHtmlError" class="custom-error-box">
+          <p>⚠️ {{ customHtmlError }}</p>
+          <div class="mt-3 flex gap-2">
+            <button class="btn-primary" @click="loadCustomHtml(displayConfig.target_file)">重试加载</button>
+            <button class="btn-tool" @click="activeViewMode = 'generated'">切换至动态生成页</button>
+          </div>
+        </div>
+        <iframe
+          v-else
+          ref="customHtmlIframeRef"
+          :srcdoc="customHtmlContent"
+          class="custom-html-frame"
+          sandbox="allow-scripts allow-same-origin allow-popups"
+        ></iframe>
+      </div>
+    </div>
+
+    <!-- ==================== 2.2 动态生成汇报主舞台视口（全屏宽屏分辨率自适应，占满可用空间） ==================== -->
+    <div v-else ref="viewportRef" class="report-viewport" :style="{ zoom: zoomLevel / 100 }">
       <main class="report-stage">
 
         <!-- 紧靠主要内容的“汇报标题与章节导航标签栏”（全屏下常驻） -->
@@ -787,6 +867,9 @@
               <span v-if="fileLoading" class="spinner"></span>
               {{ fileLoading ? '刷新中…' : '🔄 刷新' }}
             </button>
+            <button class="btn-tool space-btn-folder" title="在材料仓库中创建子文件夹归档材料" @click="openNewFolderModalForSpace('material')">
+              <span>📁 新建文件夹</span>
+            </button>
 
             <!-- 分割线 -->
             <div class="space-toolbar-divider"></div>
@@ -850,11 +933,11 @@
             <table class="report-table space-table">
               <thead>
                 <tr>
-                  <th style="width: 44%">文件材料名称</th>
-                  <th style="width: 14%">分类属性</th>
-                  <th style="width: 10%; text-align: center">大小</th>
+                  <th style="width: 30%">文件材料名称</th>
+                  <th style="width: 12%">分类属性</th>
+                  <th style="width: 8%; text-align: center">大小</th>
                   <th style="width: 18%">时间信息 (东八区)</th>
-                  <th style="width: 14%; text-align: right">操作动作</th>
+                  <th style="width: 32%; text-align: right">操作动作</th>
                 </tr>
               </thead>
               <tbody>
@@ -900,6 +983,8 @@
                         </span>
                         <div class="space-file-sub-tags">
                           <span class="file-ext-tag">{{ item.ext || (item.kind === 'excel' ? '.xlsx' : '.html') }}</span>
+                          <span v-if="item.folder" class="file-folder-tag" title="所在子文件夹">📁 {{ item.folder }}</span>
+                          <span v-if="displayConfig.mode === 'custom_html' && (displayConfig.target_file === item.rel_path || displayConfig.target_file === item.name)" class="badge-default-active" title="当前设定的页面默认打开文档">📌 默认打开</span>
                           <span v-if="item.is_template" class="file-sub-note">只读母版</span>
                           <span v-else-if="item.name.includes('_生产情况汇报')" class="file-sub-note">当期自动生成</span>
                         </div>
@@ -959,6 +1044,21 @@
                         @click="downloadFile(item.rel_path)"
                       >
                         <span>📥</span> 下载
+                      </button>
+                      <button
+                        v-if="isGlobalAdmin && item.kind !== 'excel'"
+                        class="space-btn-action action-setdefault"
+                        title="将此文档设为进入页面的默认打开内容"
+                        @click="quickSetAsDefault(item)"
+                      >
+                        <span>📌</span> 设为默认
+                      </button>
+                      <button
+                        class="space-btn-action action-transfer"
+                        title="在材料空间内部移动至其他文件夹，或传输至工作流空间"
+                        @click="openTransferModal(item, 'material')"
+                      >
+                        <span>📦</span> 移动/传输
                       </button>
                       <button
                         v-if="!item.is_template"
@@ -1146,18 +1246,17 @@
             <table class="report-table space-table">
               <thead>
                 <tr>
-                  <th style="width: 44%">名称</th>
-                  <th style="width: 14%">类型</th>
-                  <th style="width: 12%">包含内容</th>
-                  <th style="width: 8%; text-align: center">大小</th>
-                  <th style="width: 12%">修改时间 (北京)</th>
-                  <th style="width: 10%; text-align: right">操作</th>
+                  <th style="width: 32%">名称</th>
+                  <th style="width: 16%">类型与用途</th>
+                  <th style="width: 9%; text-align: center">大小 / 统计</th>
+                  <th style="width: 16%">修改时间 (北京)</th>
+                  <th style="width: 27%; text-align: right">操作</th>
                 </tr>
               </thead>
               <tbody>
                 <!-- 加载状态 -->
                 <tr v-if="workflowLoading && totalCurrentItemsCount === 0">
-                  <td colspan="6" class="space-empty-cell">
+                  <td colspan="5" class="space-empty-cell">
                     <div class="space-empty-box">
                       <span class="spinner" style="width: 24px; height: 24px"></span>
                       <span>正在扫描目录…</span>
@@ -1167,7 +1266,7 @@
 
                 <!-- 空状态 -->
                 <tr v-else-if="totalCurrentItemsCount === 0">
-                  <td colspan="6" class="space-empty-cell">
+                  <td colspan="5" class="space-empty-cell">
                     <div class="space-empty-box">
                       <span class="space-empty-icon">📂</span>
                       <p class="space-empty-title">
@@ -1183,9 +1282,9 @@
                 <!-- 1. 渲染子目录行 (先渲染子文件夹，黄色醒目，点击即可进入) -->
                 <tr
                   v-for="dir in filteredWorkflowDirectories"
-                  :key="dir.relative_path"
+                  :key="dir.rel_path || dir.relative_path || dir.name"
                   class="space-file-row space-dir-row"
-                  @click="openWorkflowFolder(dir.relative_path)"
+                  @click="openWorkflowFolder(dir.rel_path || dir.relative_path || dir.name)"
                 >
                   <!-- 文件夹名称列 -->
                   <td>
@@ -1201,27 +1300,22 @@
                           {{ dir.name }}
                         </span>
                         <div class="space-file-sub-tags">
-                          <span class="file-sub-note font-mono">{{ dir.relative_path }}</span>
+                          <span class="file-sub-note font-mono">{{ dir.rel_path || dir.relative_path || dir.name }}</span>
                         </div>
                       </div>
                     </div>
                   </td>
 
-                  <!-- 类型 -->
+                  <!-- 类型与用途 -->
                   <td>
                     <span class="space-badge badge-dir">
-                      <span class="badge-dot"></span>子文件夹
+                      <span class="badge-dot"></span>工作流子目录
                     </span>
                   </td>
 
                   <!-- 包含内容统计 -->
-                  <td>
-                    <span class="space-dir-count font-mono">{{ dir.file_count }} 个文件</span>
-                  </td>
-
-                  <!-- 大小（目录为空标示） -->
                   <td style="text-align: center">
-                    <span class="text-muted text-xs">—</span>
+                    <span class="space-dir-count font-mono">{{ dir.file_count ?? dir.item_count ?? 0 }} 个文件</span>
                   </td>
 
                   <!-- 修改时间 -->
@@ -1235,7 +1329,7 @@
                       <button
                         class="space-btn-action action-enter"
                         title="点击进入此子目录"
-                        @click="openWorkflowFolder(dir.relative_path)"
+                        @click="openWorkflowFolder(dir.rel_path || dir.relative_path || dir.name)"
                       >
                         <span>👉</span> 进入
                       </button>
@@ -1246,7 +1340,7 @@
                 <!-- 2. 渲染当前目录下的直属文件行 -->
                 <tr
                   v-for="item in filteredWorkflowFiles"
-                  :key="item.rel_path"
+                  :key="item.rel_path || item.name"
                   class="space-file-row"
                 >
                   <!-- 文件名称列 -->
@@ -1278,27 +1372,22 @@
                     </div>
                   </td>
 
-                  <!-- 格式类型 -->
+                  <!-- 类型与用途 -->
                   <td>
-                    <span v-if="item.kind === 'markdown'" class="space-badge badge-markdown">
-                      <span class="badge-dot"></span>Markdown 文档
-                    </span>
-                    <span v-else-if="item.kind === 'html'" class="space-badge badge-report">
-                      <span class="badge-dot"></span>HTML 模版引擎
-                    </span>
-                    <span v-else-if="item.kind === 'excel'" class="space-badge badge-excel">
-                      <span class="badge-dot"></span>XLSX 数据表
-                    </span>
-                    <span v-else class="space-badge badge-doc">
-                      <span class="badge-dot"></span>{{ item.ext ? item.ext.toUpperCase().replace('.', '') : '文件' }}
-                    </span>
-                  </td>
-
-                  <!-- 包含内容/性质 -->
-                  <td>
-                    <span class="text-xs text-muted">
-                      {{ item.kind === 'markdown' ? '规范说明' : (item.kind === 'html' ? '模板系统' : (item.kind === 'excel' ? '数据材料' : '资料文档')) }}
-                    </span>
+                    <div class="flex flex-col gap-0.5">
+                      <span v-if="item.kind === 'markdown'" class="space-badge badge-markdown">
+                        <span class="badge-dot"></span>Markdown 规范
+                      </span>
+                      <span v-else-if="item.kind === 'html'" class="space-badge badge-report">
+                        <span class="badge-dot"></span>HTML 模版引擎
+                      </span>
+                      <span v-else-if="item.kind === 'excel'" class="space-badge badge-excel">
+                        <span class="badge-dot"></span>XLSX 生产数据
+                      </span>
+                      <span v-else class="space-badge badge-doc">
+                        <span class="badge-dot"></span>{{ item.ext ? item.ext.toUpperCase().replace('.', '') : '文件' }}
+                      </span>
+                    </div>
                   </td>
 
                   <!-- 文件大小 -->
@@ -1336,6 +1425,13 @@
                         @click="downloadWorkflow(item)"
                       >
                         <span>📥</span> 下载
+                      </button>
+                      <button
+                        class="space-btn-action action-transfer"
+                        title="在工作流空间内部移动至其他文件夹，或传输至材料空间"
+                        @click="openTransferModal(item, 'workflow')"
+                      >
+                        <span>📦</span> 移动/传输
                       </button>
                       <button
                         class="space-btn-action action-rename"
@@ -1701,6 +1797,344 @@
         ></iframe>
       </div>
     </div>
+
+    <!-- ==================== 弹窗：页面默认打开内容设定 ==================== -->
+    <div v-if="showDisplayConfigModal" class="modal-mask" @click.self="showDisplayConfigModal = false">
+      <div class="modal-card modal-card-sm modal-card-config">
+        <div class="modal-header">
+          <div class="space-header-title-row">
+            <span class="space-title-icon">⚙️</span>
+            <h3 class="modal-title">设定默认展示内容</h3>
+          </div>
+          <button class="btn-close" @click="showDisplayConfigModal = false">✕</button>
+        </div>
+        <div class="modal-body p-4">
+          <p class="modal-subtitle mb-3 text-xs text-muted">
+            设定所有用户访问生产运行汇报页面时的首屏默认打开内容。此功能仅限 Global_admin 超管设定。
+          </p>
+
+          <div class="display-mode-selector mb-4">
+            <label
+              class="mode-option-card"
+              :class="{ selected: configSettingMode === 'generated' }"
+              @click="configSettingMode = 'generated'"
+            >
+              <input type="radio" value="generated" v-model="configSettingMode" class="mt-1" />
+              <div class="option-text">
+                <div class="option-title font-bold">📊 动态自选周期生成页（系统默认）</div>
+                <div class="option-desc text-xs text-muted mt-1">加载经济运行部多维对标算法，自选任意起止日期，左文右表整页调度汇报</div>
+              </div>
+            </label>
+
+            <label
+              class="mode-option-card mt-3"
+              :class="{ selected: configSettingMode === 'custom_html' }"
+              @click="configSettingMode = 'custom_html'"
+            >
+              <input type="radio" value="custom_html" v-model="configSettingMode" class="mt-1" />
+              <div class="option-text">
+                <div class="option-title font-bold">📄 指定材料空间 HTML 文档</div>
+                <div class="option-desc text-xs text-muted mt-1">首屏直接展示指定的成熟自包含汇报材料或大屏演示系统</div>
+              </div>
+            </label>
+          </div>
+
+          <!-- 当选择 custom_html 时显示下拉选择 -->
+          <div v-if="configSettingMode === 'custom_html'" class="form-group mb-3 bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+            <label class="form-label font-bold text-xs mb-1 block">选择要默认打开的 HTML 材料文档：</label>
+            <select v-model="configSettingFile" class="form-select w-full p-2 rounded border text-sm">
+              <option value="" disabled>-- 请选择材料文档 --</option>
+              <option
+                v-for="f in availableHtmlFiles"
+                :key="f.rel_path"
+                :value="f.rel_path"
+              >
+                {{ f.name }} ({{ f.size_formatted }})
+              </option>
+            </select>
+            <p v-if="availableHtmlFiles.length === 0" class="text-xs text-amber-500 mt-2">
+              ⚠️ 材料空间中暂无 HTML 材料文档，请先在控制台中保存或上传汇报文档。
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-footer flex justify-end gap-2 p-3 border-t">
+          <button class="btn-tool" @click="showDisplayConfigModal = false">取消</button>
+          <button
+            class="btn-primary"
+            :disabled="savingConfig || (configSettingMode === 'custom_html' && !configSettingFile)"
+            @click="submitDisplayConfig"
+          >
+            <span v-if="savingConfig" class="spinner mr-1"></span>
+            {{ savingConfig ? '正在保存…' : '💾 保存默认设置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：文件移动与跨空间传输 ==================== -->
+    <div v-if="showTransferModal" class="modal-mask" @click.self="showTransferModal = false">
+      <div class="modal-card modal-card-transfer">
+        <!-- 弹窗 Header -->
+        <div class="modal-header transfer-modal-header">
+          <div class="space-header-title-row">
+            <span class="space-title-icon transfer-icon-badge">📦</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="modal-title font-bold text-base">文件移动与传输中枢</h3>
+                <span class="transfer-mode-pill" :class="isSameSpaceTransfer ? 'pill-internal' : 'pill-cross'">
+                  {{ isSameSpaceTransfer ? '📁 空间内部整理' : '🚀 跨空间流转' }}
+                </span>
+              </div>
+              <p class="text-xs text-muted mt-0.5">支持材料空间与工作流目录空间互相传输，或在当前空间内移动至指定文件夹归档</p>
+            </div>
+          </div>
+          <button class="btn-close space-btn-close" title="关闭窗口" @click="showTransferModal = false">✕</button>
+        </div>
+
+        <div class="modal-body transfer-modal-body">
+          <!-- 1. 流转关系示意看板 -->
+          <div class="transfer-flow-card">
+            <!-- 左侧源信息 -->
+            <div class="flow-endpoint endpoint-source">
+              <div class="endpoint-header">
+                <span class="endpoint-badge source-tag">当前源文件</span>
+                <span class="endpoint-space-name font-mono">{{ transferSourceSpace === 'material' ? '📁 材料空间' : '🗂️ 工作流空间' }}</span>
+              </div>
+              <div class="endpoint-file-row">
+                <div class="file-icon-box" :class="transferTargetItem?.kind === 'excel' ? 'icon-excel' : (transferTargetItem?.kind === 'markdown' ? 'icon-md' : 'icon-html')">
+                  <span>{{ transferTargetItem?.kind === 'excel' ? '📊' : (transferTargetItem?.kind === 'markdown' ? '📑' : '📄') }}</span>
+                </div>
+                <div class="file-info-col">
+                  <span class="file-main-name font-bold" :title="transferTargetItem?.name">{{ transferTargetItem?.name }}</span>
+                  <span class="file-sub-path text-muted font-mono">
+                    {{ transferTargetItem?.folder ? '📁 位于: ' + transferTargetItem.folder : '🏠 位于根目录' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 中间流转动向 -->
+            <div class="flow-arrow-col">
+              <div class="flow-arrow-circle" :class="transferAction === 'move' ? 'circle-move' : 'circle-copy'">
+                <span class="arrow-symbol">➔</span>
+              </div>
+              <span class="flow-action-text font-bold" :class="transferAction === 'move' ? 'text-amber-600 dark:text-amber-400' : 'text-purple-600 dark:text-purple-400'">
+                {{ transferAction === 'move' ? '剪切移动' : '生成副本' }}
+              </span>
+            </div>
+
+            <!-- 右侧目标终点 -->
+            <div class="flow-endpoint endpoint-target">
+              <div class="endpoint-header">
+                <span class="endpoint-badge target-tag">目标落盘位置</span>
+                <span class="endpoint-space-name font-mono" :style="{ color: transferTargetSpace === 'material' ? '#0284c7' : '#7c3aed' }">
+                  {{ transferTargetSpace === 'material' ? '📁 材料空间' : '🗂️ 工作流空间' }}
+                </span>
+              </div>
+              <div class="endpoint-file-row">
+                <div class="file-icon-box icon-folder">
+                  <span>📂</span>
+                </div>
+                <div class="file-info-col">
+                  <span class="file-main-name font-bold text-sky-600 dark:text-sky-400">
+                    {{ transferTargetFolder ? '📁 ' + transferTargetFolder : '🏠 根目录直属' }}
+                  </span>
+                  <span class="file-sub-path text-muted font-mono">
+                    {{ isSameSpaceTransfer ? '（同空间归档）' : '（跨空间流转）' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. 目标空间选择卡片 -->
+          <div class="transfer-section-box">
+            <div class="flex items-center justify-between mb-2">
+              <label class="section-label font-bold text-xs">1. 选择目标文件空间</label>
+              <span v-if="!isGlobalAdmin" class="text-xs text-amber-600 dark:text-amber-400">⚠️ 工作流空间仅限 Global_admin 管理</span>
+            </div>
+            <div class="space-choice-grid">
+              <div
+                class="space-choice-card"
+                :class="{ active: transferTargetSpace === 'material' }"
+                @click="setTransferTargetSpace('material')"
+              >
+                <div class="choice-card-header">
+                  <div class="flex items-center gap-2">
+                    <span class="choice-icon">📁</span>
+                    <span class="choice-title font-bold">材料空间 (材料仓库)</span>
+                  </div>
+                  <span v-if="transferTargetSpace === 'material'" class="choice-check">✓ 选定</span>
+                </div>
+                <p class="choice-desc text-xs text-muted">存放正式汇报材料 HTML、XLSX 导出数据明细及归档材料</p>
+              </div>
+
+              <div
+                class="space-choice-card"
+                :class="{
+                  active: transferTargetSpace === 'workflow',
+                  disabled: !isGlobalAdmin
+                }"
+                @click="isGlobalAdmin && setTransferTargetSpace('workflow')"
+                :title="!isGlobalAdmin ? '工作流目录空间仅限 Global_admin 管理' : ''"
+              >
+                <div class="choice-card-header">
+                  <div class="flex items-center gap-2">
+                    <span class="choice-icon">🗂️</span>
+                    <span class="choice-title font-bold">工作流目录空间</span>
+                  </div>
+                  <span v-if="transferTargetSpace === 'workflow'" class="choice-check">✓ 选定</span>
+                  <span v-if="!isGlobalAdmin" class="choice-lock">🔒 超管专属</span>
+                </div>
+                <p class="choice-desc text-xs text-muted">存放工作流标准化规范说明文档、模板引擎系统及规则底表</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. 目标文件夹选择与新建 -->
+          <div class="transfer-section-box">
+            <div class="flex justify-between items-center mb-1.5">
+              <label class="section-label font-bold text-xs">2. 选择存放目标子文件夹</label>
+              <button
+                class="btn-new-folder-inline"
+                title="在当前目标空间中即时创建新的分类文件夹"
+                @click="openNewFolderModalForSpace(transferTargetSpace)"
+              >
+                <span>➕</span> 新建子文件夹
+              </button>
+            </div>
+            <div v-if="transferLoadingFolders" class="transfer-loading-folders">
+              <span class="spinner" style="width: 14px; height: 14px"></span>
+              <span>正在读取 {{ transferTargetSpace === 'material' ? '材料空间' : '工作流空间' }} 文件夹列表…</span>
+            </div>
+            <div v-else class="folder-select-wrap">
+              <select v-model="transferTargetFolder" class="transfer-select font-mono">
+                <option
+                  v-for="folder in transferFolderList"
+                  :key="folder.path"
+                  :value="folder.path"
+                >
+                  {{ folder.path ? '📁 ' + folder.name : '🏠 【根目录直属】' }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 4. 操作模式与同名冲突策略 -->
+          <div class="transfer-section-box">
+            <label class="section-label font-bold text-xs mb-2 block">3. 操作方式与冲突策略</label>
+            <div class="action-mode-grid">
+              <div
+                class="action-mode-card"
+                :class="{
+                  active: transferAction === 'move',
+                  disabled: isTemplateItem
+                }"
+                @click="!isTemplateItem && (transferAction = 'move')"
+                :title="isTemplateItem ? '工作流系统母版受保护，禁止移动，仅可复制' : ''"
+              >
+                <div class="mode-card-radio">
+                  <span class="radio-dot" v-if="transferAction === 'move'"></span>
+                </div>
+                <div class="mode-card-content">
+                  <div class="font-bold text-xs flex items-center gap-1.5">
+                    <span>🚚 移动 (剪切)</span>
+                    <span v-if="isTemplateItem" class="text-xs text-rose-500 font-normal">🔒 母版受保护禁移动</span>
+                  </div>
+                  <p class="text-xs text-muted mt-0.5">将文件转移至选定文件夹，原位置将不再保留原文件</p>
+                </div>
+              </div>
+
+              <div
+                class="action-mode-card"
+                :class="{ active: transferAction === 'copy' }"
+                @click="transferAction = 'copy'"
+              >
+                <div class="mode-card-radio">
+                  <span class="radio-dot" v-if="transferAction === 'copy'"></span>
+                </div>
+                <div class="mode-card-content">
+                  <div class="font-bold text-xs">📋 复制 (副本)</div>
+                  <p class="text-xs text-muted mt-0.5">原文件保持不变，在选定目标文件夹中生成一份新副本</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 同名冲突处理 -->
+            <div class="conflict-option-row mt-2.5">
+              <label class="conflict-toggle-label">
+                <input type="checkbox" v-model="transferOverwrite" class="conflict-checkbox" />
+                <span class="font-medium text-xs">目标存在同名文件时直接覆写</span>
+              </label>
+              <span class="text-xs text-muted">
+                {{ transferOverwrite ? '⚠️ 警告：同名文件将被直接覆盖' : '✅ 默认安全策略：同名时自动追加 _副本1、_副本2 序号' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 5. 目标物理路径实时预览 -->
+          <div class="transfer-preview-bar">
+            <span class="preview-icon">💾</span>
+            <span class="preview-label">目标落盘路径:</span>
+            <code class="preview-code">{{ transferTargetPreviewPath }}</code>
+          </div>
+        </div>
+
+        <!-- 弹窗 Footer -->
+        <div class="modal-footer transfer-modal-footer">
+          <button class="btn-tool" @click="showTransferModal = false">取消</button>
+          <button
+            class="btn-primary transfer-submit-btn"
+            :class="transferAction === 'move' ? 'btn-move' : 'btn-copy'"
+            :disabled="transferringFile"
+            @click="submitFileTransfer"
+          >
+            <span v-if="transferringFile" class="spinner"></span>
+            <span>{{ transferringFile ? '正在处理中…' : (transferAction === 'move' ? '🚚 立即执行移动' : '📋 立即执行复制') }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：通用新建空间文件夹 ==================== -->
+    <div v-if="showNewSpaceFolderModal" class="modal-mask" @click.self="showNewSpaceFolderModal = false">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-header">
+          <div class="space-header-title-row">
+            <span class="space-title-icon">📁</span>
+            <h3 class="modal-title">新建子文件夹</h3>
+          </div>
+          <button class="btn-close" @click="showNewSpaceFolderModal = false">✕</button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="text-xs text-muted mb-2">
+            将在【{{ targetSpaceForNewFolder === 'material' ? '材料空间 (材料仓库)' : '工作流目录空间' }}】中创建新的子目录
+          </div>
+          <div class="form-group mb-3">
+            <label class="form-label font-bold text-xs mb-1 block">文件夹名称：</label>
+            <input
+              v-model="newSpaceFolderName"
+              type="text"
+              class="form-input w-full p-2 rounded border text-sm"
+              placeholder="例如：2026年3月汇报材料、周调度数据归档…"
+              @keyup.enter="submitCreateSpaceFolder"
+            />
+          </div>
+        </div>
+        <div class="modal-footer flex justify-end gap-2 p-3 border-t">
+          <button class="btn-tool" @click="showNewSpaceFolderModal = false">取消</button>
+          <button
+            class="btn-primary"
+            :disabled="creatingSpaceFolder || !newSpaceFolderName.trim()"
+            @click="submitCreateSpaceFolder"
+          >
+            <span v-if="creatingSpaceFolder" class="spinner mr-1"></span>
+            {{ creatingSpaceFolder ? '创建中…' : '创建文件夹' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1725,7 +2159,12 @@ import {
   renameWorkflowFile,
   deleteWorkflowFile,
   createWorkflowFolder,
-  downloadWorkflowArchive
+  downloadWorkflowArchive,
+  fetchPeriodReportDisplayConfig,
+  savePeriodReportDisplayConfig,
+  fetchSpaceFolders,
+  createSpaceFolder,
+  transferPeriodReportFile
 } from '../services/api'
 import {
   REPORT_CHAPTERS as chapters,
@@ -1737,11 +2176,19 @@ import {
   getPeriodReportDefaultFilename
 } from '../composables/periodReportPresentation'
 
-// 用户与权限判定（控制台仅限 Global_admin 可用）
+// 用户与权限判定（控制台对 Global_admin 与 Group_admin 开放，其中 Group_admin 仅限材料空间管理）
 const auth = useAuthStore()
+const normalizedGroup = computed(() => {
+  return String(auth.user?.group || auth.user?.role || '').trim().toLowerCase()
+})
 const isGlobalAdmin = computed(() => {
-  const grp = String(auth.user?.group || auth.user?.role || '').trim()
-  return grp === 'Global_admin' || grp.toLowerCase() === 'global_admin'
+  return normalizedGroup.value === 'global_admin'
+})
+const isGroupAdmin = computed(() => {
+  return normalizedGroup.value === 'group_admin'
+})
+const canAccessConsole = computed(() => {
+  return isGlobalAdmin.value || isGroupAdmin.value
 })
 
 // 控制台下拉菜单状态
@@ -1775,6 +2222,20 @@ const isFullscreen = ref(false)
 const zoomLevel = ref(100)
 const showJsonModal = ref(false)
 
+// 页面默认显示配置与主舞台模式
+const displayConfig = ref({ mode: 'generated', target_file: '', updated_at: '' })
+const activeViewMode = ref('generated') // 'generated' 或 'custom_html'
+const customHtmlContent = ref('')
+const customHtmlLoading = ref(false)
+const customHtmlError = ref('')
+const customHtmlIframeRef = ref(null)
+
+// 默认显示配置设定弹窗状态
+const showDisplayConfigModal = ref(false)
+const configSettingMode = ref('generated')
+const configSettingFile = ref('')
+const savingConfig = ref(false)
+
 // 材料空间管理与播放器状态
 const showFileManagerModal = ref(false)
 const fileList = ref([])
@@ -1782,6 +2243,28 @@ const fileLoading = ref(false)
 const savingHtml = ref(false)
 const uploadingFile = ref(false)
 const fileInputRef = ref(null)
+
+// 可供选为默认展示的 HTML 文件列表
+const availableHtmlFiles = computed(() => {
+  return (fileList.value || []).filter(f => f.kind !== 'excel')
+})
+
+// 文件移动与跨空间传输弹窗状态
+const showTransferModal = ref(false)
+const transferTargetItem = ref(null)
+const transferSourceSpace = ref('material') // 'material' 或 'workflow'
+const transferTargetSpace = ref('material') // 'material' 或 'workflow'
+const transferTargetFolder = ref('')
+const transferAction = ref('move') // 'move' 或 'copy'
+const transferFolderList = ref([])
+const transferLoadingFolders = ref(false)
+const transferringFile = ref(false)
+
+// 通用新建空间子目录弹窗状态
+const showNewSpaceFolderModal = ref(false)
+const targetSpaceForNewFolder = ref('material')
+const newSpaceFolderName = ref('')
+const creatingSpaceFolder = ref(false)
 
 // 空间管理搜索与类型筛选状态
 const fileSearchKeyword = ref('')
@@ -1935,6 +2418,222 @@ function downloadReport() {
   a.download = `生产运行调度汇报讲稿_${reportState.value.meta?.start || '周期'}.txt`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// ==================== 页面默认展示配置管理方法 ====================
+
+// 加载默认展示配置
+async function loadDisplayConfig() {
+  try {
+    const res = await fetchPeriodReportDisplayConfig()
+    displayConfig.value = res || { mode: 'generated', target_file: '', updated_at: '' }
+    if (displayConfig.value.mode === 'custom_html' && displayConfig.value.target_file) {
+      activeViewMode.value = 'custom_html'
+      await loadCustomHtml(displayConfig.value.target_file)
+    } else {
+      activeViewMode.value = 'generated'
+    }
+  } catch (err) {
+    console.warn('获取默认显示配置失败', err)
+    activeViewMode.value = 'generated'
+  }
+}
+
+// 加载指定的 HTML 材料内容
+async function loadCustomHtml(filename) {
+  if (!filename) return
+  customHtmlLoading.value = true
+  customHtmlError.value = ''
+  try {
+    const res = await fetchPeriodReportContent(filename)
+    customHtmlContent.value = res.content || ''
+  } catch (err) {
+    customHtmlError.value = '读取材料文档内容失败: ' + err.message
+  } finally {
+    customHtmlLoading.value = false
+  }
+}
+
+// 在新标签页中打开当前默认展示的 HTML
+function openCustomHtmlInNewTab() {
+  if (!customHtmlContent.value) return
+  const blob = new Blob([customHtmlContent.value], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  window.open(blobUrl, '_blank')
+}
+
+// 打开默认显示设置弹窗
+async function openDisplayConfigModal() {
+  if (!fileList.value.length) {
+    await loadFiles()
+  }
+  configSettingMode.value = displayConfig.value.mode || 'generated'
+  configSettingFile.value = displayConfig.value.target_file || (availableHtmlFiles.value[0]?.rel_path || '')
+  showDisplayConfigModal.value = true
+}
+
+// 提交默认显示设定
+async function submitDisplayConfig() {
+  savingConfig.value = true
+  try {
+    const res = await savePeriodReportDisplayConfig({
+      mode: configSettingMode.value,
+      target_file: configSettingMode.value === 'custom_html' ? configSettingFile.value : ''
+    })
+    displayConfig.value = res
+    showDisplayConfigModal.value = false
+    alert(`🎉 默认显示内容已成功保存！\n当前模式：${res.mode === 'custom_html' ? '指定 HTML 材料' : '动态生成页'}${res.target_file ? '\n文件：' + res.target_file : ''}`)
+
+    // 如果设置成了 custom_html，立即加载并切换展示
+    if (res.mode === 'custom_html' && res.target_file) {
+      activeViewMode.value = 'custom_html'
+      await loadCustomHtml(res.target_file)
+    } else {
+      activeViewMode.value = 'generated'
+    }
+  } catch (err) {
+    alert('保存默认显示设置失败: ' + err.message)
+  } finally {
+    savingConfig.value = false
+  }
+}
+
+// 在材料空间列表中一键设为默认文档
+async function quickSetAsDefault(fileItem) {
+  if (!fileItem?.rel_path) return
+  const ok = confirm(`确定要将【${fileItem.name}】设定为全站访问本页面的首屏默认打开内容吗？`)
+  if (!ok) return
+  try {
+    const res = await savePeriodReportDisplayConfig({
+      mode: 'custom_html',
+      target_file: fileItem.rel_path
+    })
+    displayConfig.value = res
+    alert(`🎉 已将【${fileItem.name}】设定为页面默认展示内容！`)
+  } catch (err) {
+    alert('设定失败: ' + err.message)
+  }
+}
+
+// ==================== 跨空间与空间内文件移动/传输方法 ====================
+const transferOverwrite = ref(false)
+
+const isTemplateItem = computed(() => {
+  return !!(transferTargetItem.value?.is_template || transferTargetItem.value?.rel_path === '模版引擎.html')
+})
+
+const isSameSpaceTransfer = computed(() => {
+  return transferSourceSpace.value === transferTargetSpace.value
+})
+
+const transferTargetPreviewPath = computed(() => {
+  const spaceName = transferTargetSpace.value === 'material' ? '材料仓库' : '工作流'
+  const folder = transferTargetFolder.value ? `/${transferTargetFolder.value}` : ''
+  const filename = transferTargetItem.value?.name || '未知文件'
+  return `backend_data/projects/daily_report_25_26/period_report/${spaceName}${folder}/${filename}`
+})
+
+async function setTransferTargetSpace(space) {
+  if (transferTargetSpace.value === space) return
+  transferTargetSpace.value = space
+  await onTransferTargetSpaceChange()
+}
+
+// 打开移动/传输弹窗
+async function openTransferModal(item, sourceSpace = 'material') {
+  transferTargetItem.value = item
+  transferSourceSpace.value = sourceSpace
+  // 默认同空间移动
+  transferTargetSpace.value = sourceSpace
+  transferTargetFolder.value = ''
+  transferOverwrite.value = false
+  if (item?.is_template || item?.rel_path === '模版引擎.html') {
+    transferAction.value = 'copy'
+  } else {
+    transferAction.value = 'move'
+  }
+  showTransferModal.value = true
+  await loadTransferFolders(transferTargetSpace.value)
+}
+
+// 目标空间切换时重新加载目标空间下的所有子文件夹
+async function onTransferTargetSpaceChange() {
+  transferTargetFolder.value = ''
+  await loadTransferFolders(transferTargetSpace.value)
+}
+
+// 加载指定空间的子文件夹列表
+async function loadTransferFolders(space) {
+  transferLoadingFolders.value = true
+  try {
+    const res = await fetchSpaceFolders(space)
+    transferFolderList.value = res.folders || [{ name: space === 'material' ? '材料仓库根目录' : '工作流根目录', path: '' }]
+  } catch (err) {
+    console.error('获取文件夹列表失败', err)
+    transferFolderList.value = [{ name: space === 'material' ? '材料仓库根目录' : '工作流根目录', path: '' }]
+  } finally {
+    transferLoadingFolders.value = false
+  }
+}
+
+// 提交文件移动/传输
+async function submitFileTransfer() {
+  if (!transferTargetItem.value) return
+  transferringFile.value = true
+  try {
+    const res = await transferPeriodReportFile({
+      source_space: transferSourceSpace.value,
+      source_path: transferTargetItem.value.rel_path || transferTargetItem.value.name,
+      target_space: transferTargetSpace.value,
+      target_folder: transferTargetFolder.value,
+      action: transferAction.value,
+      overwrite: transferOverwrite.value
+    })
+    alert(`🎉 操作成功！\n${res.message}\n目标路径：${res.target_rel_path}`)
+    showTransferModal.value = false
+
+    // 联动刷新对应空间列表
+    await loadFiles()
+    if (showWorkflowModal.value) {
+      await loadWorkflowFiles(currentWorkflowFolder.value)
+    }
+  } catch (err) {
+    alert('操作失败: ' + err.message)
+  } finally {
+    transferringFile.value = false
+  }
+}
+
+// 打开通用新建文件夹弹窗
+function openNewFolderModalForSpace(space = 'material') {
+  targetSpaceForNewFolder.value = space
+  newSpaceFolderName.value = ''
+  showNewSpaceFolderModal.value = true
+}
+
+// 提交创建空间子目录
+async function submitCreateSpaceFolder() {
+  const name = newSpaceFolderName.value.trim()
+  if (!name) return
+  creatingSpaceFolder.value = true
+  try {
+    await createSpaceFolder(targetSpaceForNewFolder.value, '', name)
+    alert(`🎉 文件夹【${name}】创建成功！`)
+    showNewSpaceFolderModal.value = false
+    // 刷新两边空间文件夹并自动选中新建的文件夹
+    if (showTransferModal.value) {
+      await loadTransferFolders(transferTargetSpace.value)
+      transferTargetFolder.value = name
+    }
+    await loadFiles()
+    if (showWorkflowModal.value) {
+      await loadWorkflowFiles(currentWorkflowFolder.value)
+    }
+  } catch (err) {
+    alert('创建文件夹失败: ' + err.message)
+  } finally {
+    creatingSpaceFolder.value = false
+  }
 }
 
 // ==================== 汇报材料 HTML 空间管理与播放器方法 ====================
@@ -2899,6 +3598,10 @@ onMounted(async () => {
 
   // 默认数据初始化公文故事
   reportState.value.narrative = generateChapterNarrative(reportState.value)
+
+  // 1. 读取页面默认展示模式配置（若配置为某 HTML 则优先呈现该文档）
+  loadDisplayConfig()
+  loadFiles()
 
   try {
     const meta = await fetchPeriodReport({})
@@ -4360,9 +5063,9 @@ kbd {
 
 /* ==================== 空间管理中枢深度优化样式 ==================== */
 .modal-card-space {
-  max-width: 1100px;
-  width: 94vw;
-  max-height: 88vh;
+  max-width: 1240px;
+  width: 95vw;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   padding: 20px 24px 16px;
@@ -4540,10 +5243,12 @@ kbd {
 .space-table-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   margin: 0;
 }
 .space-table {
   width: 100%;
+  min-width: 1040px;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -4727,15 +5432,17 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 .space-btn-action {
   border: 1px solid var(--border-color);
   background: var(--bg-sub);
   color: var(--text-main);
   border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11.5px;
+  padding: 3.5px 7px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
@@ -4743,6 +5450,8 @@ kbd {
   gap: 3px;
   transition: all 0.18s;
   white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.2;
 }
 .space-btn-action:hover {
   border-color: #0284c7;
@@ -5211,5 +5920,649 @@ kbd {
   .doc-callout { font-size: 15px; padding: 16px 20px; }
   .report-table { font-size: 15px; }
   .report-table th, .report-table td { padding: 12px 18px; }
+}
+
+/* ==================== 默认材料空间 HTML 页面视口样式 ==================== */
+.custom-html-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 58px);
+  background: var(--bg-body);
+  overflow: hidden;
+}
+
+.custom-html-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  z-index: 10;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge-custom-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.dark-theme .badge-custom-tag {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.banner-filename {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.banner-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.banner-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-highlight {
+  background: #2563eb !important;
+  color: #fff !important;
+  border-color: #1d4ed8 !important;
+  font-weight: 600;
+}
+
+.btn-highlight:hover {
+  background: #1d4ed8 !important;
+}
+
+.btn-back-custom {
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+  border-color: #bbf7d0 !important;
+  font-weight: 600;
+}
+
+.dark-theme .btn-back-custom {
+  background: rgba(22, 101, 52, 0.25) !important;
+  color: #4ade80 !important;
+  border-color: rgba(74, 222, 128, 0.3) !important;
+}
+
+.custom-html-container {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+
+.dark-theme .custom-html-container {
+  background: #0f172a;
+}
+
+.custom-html-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.custom-loading-box, .custom-error-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ==================== 设定默认显示弹窗与模式选项卡 ==================== */
+.display-mode-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mode-option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--bg-card);
+  transition: all 0.18s ease;
+}
+
+.mode-option-card:hover {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.mode-option-card.selected {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.badge-default-active {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  margin-left: 4px;
+}
+
+.dark-theme .badge-default-active {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.file-folder-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  background: #f1f5f9;
+  color: #475569;
+  margin-left: 4px;
+}
+
+.dark-theme .file-folder-tag {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.action-setdefault {
+  color: #d97706 !important;
+}
+
+.action-setdefault:hover {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+}
+
+.action-transfer {
+  color: #0284c7 !important;
+}
+
+.action-transfer:hover {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+}
+
+/* ==================== 移动与传输文件弹窗专属美化样式 ==================== */
+.modal-card-transfer {
+  max-width: 660px !important;
+  width: 94vw !important;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 18px;
+  background: var(--bg-card);
+}
+
+.transfer-modal-header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.transfer-icon-badge {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #e0f2fe, #ede9fe);
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.transfer-mode-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
+}
+.transfer-mode-pill.pill-cross {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+.transfer-mode-pill.pill-internal {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.transfer-modal-body {
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 流向看板 (Transfer Flow Canvas) */
+.transfer-flow-card {
+  display: grid;
+  grid-template-columns: 1fr 68px 1fr;
+  align-items: center;
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+  gap: 8px;
+}
+
+.flow-endpoint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.endpoint-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.endpoint-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.endpoint-badge.source-tag {
+  background: #e2e8f0;
+  color: #475569;
+}
+.endpoint-badge.target-tag {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.endpoint-space-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.endpoint-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.file-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.file-icon-box.icon-html {
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+}
+.file-icon-box.icon-excel {
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+}
+.file-icon-box.icon-md {
+  background: #ede9fe;
+  border: 1px solid #ddd6fe;
+}
+.file-icon-box.icon-folder {
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+}
+.file-info-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.file-main-name {
+  font-size: 12.5px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-sub-path {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flow-arrow-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.flow-arrow-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+.flow-arrow-circle.circle-move {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.flow-arrow-circle.circle-copy {
+  background: #ede9fe;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+.flow-action-text {
+  font-size: 10px;
+  letter-spacing: 0.2px;
+}
+
+/* 分块容器与大卡片网格 */
+.transfer-section-box {
+  display: flex;
+  flex-direction: column;
+}
+.section-label {
+  color: var(--text-main);
+  letter-spacing: 0.2px;
+}
+.space-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.space-choice-card {
+  padding: 10px 12px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-card);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.space-choice-card:hover:not(.disabled) {
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.04);
+}
+.space-choice-card.active {
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.08);
+  box-shadow: 0 0 0 1px #0284c7;
+}
+.space-choice-card.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--bg-sub);
+}
+.choice-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.choice-title {
+  font-size: 12.5px;
+  color: var(--text-main);
+}
+.choice-check {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0284c7;
+  background: #e0f2fe;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.choice-lock {
+  font-size: 10.5px;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.choice-desc {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* 目标文件夹下拉与新建按钮 */
+.btn-new-folder-inline {
+  background: transparent;
+  border: none;
+  color: #0284c7;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.btn-new-folder-inline:hover {
+  background: rgba(2, 132, 199, 0.1);
+}
+.transfer-loading-folders {
+  padding: 8px 12px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.folder-select-wrap {
+  width: 100%;
+}
+.transfer-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-sub);
+  color: var(--text-main);
+  border-radius: 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.transfer-select:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+/* 操作方式选择 (移动 vs 复制) */
+.action-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.action-mode-card {
+  padding: 10px 12px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-card);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  transition: all 0.18s ease;
+}
+.action-mode-card:hover:not(.disabled) {
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.04);
+}
+.action-mode-card.active {
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.08);
+  box-shadow: 0 0 0 1px #0284c7;
+}
+.action-mode-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-sub);
+}
+.mode-card-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.action-mode-card.active .mode-card-radio {
+  border-color: #0284c7;
+}
+.radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0284c7;
+}
+.mode-card-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 冲突选项 */
+.conflict-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg-sub);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+}
+.conflict-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text-main);
+}
+.conflict-checkbox {
+  cursor: pointer;
+  accent-color: #0284c7;
+}
+
+/* 物理路径预览 */
+.transfer-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 11px;
+  overflow: hidden;
+}
+.preview-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.preview-label {
+  color: var(--text-muted);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.preview-code {
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* 底栏 */
+.transfer-modal-footer {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.transfer-submit-btn {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.transfer-submit-btn.btn-move {
+  background: #0284c7;
+  border-color: #0284c7;
+}
+.transfer-submit-btn.btn-move:hover {
+  background: #0369a1;
+  border-color: #0369a1;
+}
+.transfer-submit-btn.btn-copy {
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+.transfer-submit-btn.btn-copy:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
+}
+
+.modal-card-sm {
+  max-width: 540px !important;
+  width: 90% !important;
 }
 </style>

@@ -129,10 +129,12 @@ def list_workflow_files(folder: str = "") -> Dict[str, Any]:
                 dir_list.append({
                     "name": entry_name,
                     "rel_path": rel_p,
+                    "relative_path": rel_p,
                     "is_dir": True,
                     "kind": "folder",
                     "ext": "",
                     "item_count": sub_file_count,
+                    "file_count": sub_file_count,
                     "size": 0,
                     "size_formatted": f"{sub_file_count} 个文件",
                     "updated_at": format_beijing_time(stat.st_mtime),
@@ -143,6 +145,7 @@ def list_workflow_files(folder: str = "") -> Dict[str, Any]:
                 file_list.append({
                     "name": entry_name,
                     "rel_path": rel_p,
+                    "relative_path": rel_p,
                     "is_dir": False,
                     "kind": get_file_kind(ext),
                     "ext": ext,

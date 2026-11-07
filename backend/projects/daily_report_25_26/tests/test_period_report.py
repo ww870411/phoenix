@@ -69,14 +69,16 @@ class PeriodReportTests(TestCase):
                 self.assertEqual(client.get('/period-report').status_code, 403)
                 self.assertEqual(client.get('/period-report?start=2026-11-01&end=2026-11-04').status_code, 403)
             session.assert_not_called()
-        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Global_admin')
-        with patch('backend.projects.daily_report_25_26.api.period_report.SessionLocal') as session:
-            session.return_value.__enter__.return_value.execute.return_value.scalars.return_value.all.return_value = []
-            self.assertEqual(client.get('/period-report').status_code, 200)
-            session.reset_mock()
-            self.assertEqual(client.get('/period-report?start=2026-01-01').status_code, 422)
-            self.assertEqual(client.get('/period-report?start=2026-02-01&end=2026-01-01').status_code, 422)
-            session.assert_not_called()
+
+        for admin_group in ('Global_admin', 'Group_admin'):
+            app.dependency_overrides[get_current_session] = lambda group=admin_group: SimpleNamespace(group=group)
+            with patch('backend.projects.daily_report_25_26.api.period_report.SessionLocal') as session:
+                session.return_value.__enter__.return_value.execute.return_value.scalars.return_value.all.return_value = []
+                self.assertEqual(client.get('/period-report').status_code, 200)
+                session.reset_mock()
+                self.assertEqual(client.get('/period-report?start=2026-01-01').status_code, 422)
+                self.assertEqual(client.get('/period-report?start=2026-02-01&end=2026-01-01').status_code, 422)
+                session.assert_not_called()
 
     def test_files_management_endpoints(self):
         app = FastAPI()
@@ -87,6 +89,11 @@ class PeriodReportTests(TestCase):
         app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_viewer')
         self.assertEqual(client.get('/period-report/files').status_code, 403)
         self.assertEqual(client.post('/period-report/files/save', json={'filename': 'a.html', 'content': 'x'}).status_code, 403)
+
+        # 1.1 Group_admin 也具备材料空间访问权限
+        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_admin')
+        res_group_admin = client.get('/period-report/files')
+        self.assertEqual(res_group_admin.status_code, 200)
 
         # 2. Global_admin 正常列出文件
         app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Global_admin')
@@ -214,8 +221,10 @@ class PeriodReportTests(TestCase):
         app.include_router(router)
         client = TestClient(app)
 
-        # 1. 权限拦截测试
+        # 1. 权限拦截测试（仅限 Global_admin，拦截 Group_viewer 与 Group_admin）
         app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_viewer')
+        self.assertEqual(client.get('/period-report/workflow/files').status_code, 403)
+        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_admin')
         self.assertEqual(client.get('/period-report/workflow/files').status_code, 403)
 
         # 2. Global_admin 正常读取工作流根目录（含子目录与文件）
@@ -314,6 +323,96 @@ class PeriodReportTests(TestCase):
             # 应该包含子目录内部的模板或说明，但不应包含工作流根目录下的工作流概述.md
             self.assertTrue(any('模版引擎.html' in n or '模板引擎说明.md' in n for n in sub_namelist))
             self.assertFalse(any('工作流概述.md' in n for n in sub_namelist))
+
+    def test_display_config_and_space_transfer(self):
+        """测试页面默认展示设定与空间文件夹/跨空间文件传输能力。"""
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+
+        # 1. 默认配置读取
+        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_admin', username='group_user')
+        res_cfg = client.get('/period-report/display-config')
+        self.assertEqual(res_cfg.status_code, 200)
+        self.assertIn('mode', res_cfg.json())
+
+        # 2. 权限拦截：Group_admin 禁止修改默认展示
+        res_deny = client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': '2026_2027.html'})
+        self.assertEqual(res_deny.status_code, 403)
+
+        # 3. Global_admin 设定与校验
+        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Global_admin', username='super_admin')
+        # 非法模式
+        self.assertEqual(client.post('/period-report/display-config', json={'mode': 'invalid_mode'}).status_code, 400)
+        # 不存在的文件
+        self.assertEqual(client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': 'not_exist_file.html'}).status_code, 404)
+
+        # 正常设定为 custom_html
+        set_res = client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': '2026_2027.html'})
+        self.assertEqual(set_res.status_code, 200)
+        self.assertEqual(set_res.json()['mode'], 'custom_html')
+        self.assertEqual(set_res.json()['target_file'], '2026_2027.html')
+
+        # 还原为 generated
+        revert_res = client.post('/period-report/display-config', json={'mode': 'generated', 'target_file': ''})
+        self.assertEqual(revert_res.status_code, 200)
+        self.assertEqual(revert_res.json()['mode'], 'generated')
+
+        # 4. 获取空间文件夹列表
+        # Group_admin 读取 material
+        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_admin')
+        mat_folders = client.get('/period-report/folders?space=material')
+        self.assertEqual(mat_folders.status_code, 200)
+        self.assertTrue(any(f['path'] == '' for f in mat_folders.json()['folders']))
+
+        # Group_admin 读取 workflow 被拦截
+        self.assertEqual(client.get('/period-report/folders?space=workflow').status_code, 403)
+
+        # Global_admin 读取 workflow
+        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Global_admin')
+        wf_folders = client.get('/period-report/folders?space=workflow')
+        self.assertEqual(wf_folders.status_code, 200)
+        self.assertTrue(any(f['path'] == '1.html模板与使用说明' for f in wf_folders.json()['folders']))
+
+        # 5. 在材料空间创建测试子文件夹
+        create_folder_res = client.post('/period-report/folders/create-in-space', json={
+            'space': 'material',
+            'parent_folder': '',
+            'folder_name': 'test_material_folder'
+        })
+        self.assertEqual(create_folder_res.status_code, 200)
+
+        # 6. 跨空间复制：将材料空间已有的 2026_2027.html 复制到工作流根目录
+        copy_res = client.post('/period-report/files/transfer', json={
+            'source_space': 'material',
+            'source_path': '2026_2027.html',
+            'target_space': 'workflow',
+            'target_folder': '',
+            'action': 'copy',
+            'overwrite': True
+        })
+        self.assertEqual(copy_res.status_code, 200)
+        copied_name = copy_res.json()['target_name']
+        self.assertTrue(copied_name.startswith('2026_2027'))
+
+        # 7. 工作流空间内移动：将刚刚复制的文件移动到 1.html模板与使用说明
+        move_res = client.post('/period-report/files/transfer', json={
+            'source_space': 'workflow',
+            'source_path': copied_name,
+            'target_space': 'workflow',
+            'target_folder': '1.html模板与使用说明',
+            'action': 'move',
+            'overwrite': True
+        })
+        self.assertEqual(move_res.status_code, 200)
+        moved_rel = move_res.json()['target_rel_path']
+
+        # 8. 清理工作流测试文件与材料空间测试文件夹
+        client.delete(f'/period-report/workflow/files?path={moved_rel}')
+        from backend.projects.daily_report_25_26.services.period_report_files import STORAGE_DIR
+        test_dir_to_clean = STORAGE_DIR / 'test_material_folder'
+        if test_dir_to_clean.exists():
+            test_dir_to_clean.rmdir()
 
         # 12. 非法路径穿越打包测试
         bad_archive = client.get('/period-report/workflow/archive?folder=../../')
