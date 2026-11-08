@@ -84,6 +84,8 @@ def get_file_kind(ext: str) -> str:
         return 'excel'
     elif lower in ('.txt', '.json', '.yaml', '.yml'):
         return 'text'
+    elif lower in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'):
+        return 'image'
     return 'other'
 
 
@@ -360,7 +362,7 @@ def rename_workflow_file(rel_path: str, new_name: str) -> Dict[str, Any]:
         old_ext = old_path.suffix.lower()
         lower_new = clean_new.lower()
         if not lower_new.endswith(old_ext):
-            for ext in ('.md', '.html', '.htm', '.xlsx', '.txt', '.json'):
+            for ext in ('.md', '.html', '.htm', '.xlsx', '.txt', '.json', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'):
                 if lower_new.endswith(ext):
                     clean_new = clean_new[:-len(ext)]
                     break

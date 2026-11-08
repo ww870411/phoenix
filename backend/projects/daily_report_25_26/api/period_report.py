@@ -131,21 +131,40 @@ def get_file_content(path: str = Query(..., description='文件的相对路径')
     return get_report_html_content(path)
 
 
+def get_file_media_type(ext: str) -> str:
+    """根据文件后缀匹配精确的 media_type (含各类图片与文档)。"""
+    lower = (ext or "").lower()
+    if lower == '.xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    elif lower in ('.jpg', '.jpeg'):
+        return 'image/jpeg'
+    elif lower == '.png':
+        return 'image/png'
+    elif lower == '.gif':
+        return 'image/gif'
+    elif lower == '.webp':
+        return 'image/webp'
+    elif lower == '.svg':
+        return 'image/svg+xml'
+    elif lower == '.bmp':
+        return 'image/bmp'
+    elif lower in ('.html', '.htm'):
+        return 'text/html; charset=utf-8'
+    elif lower in ('.md', '.markdown'):
+        return 'text/markdown; charset=utf-8'
+    return 'application/octet-stream'
+
+
 @router.get('/period-report/files/download')
 def download_file(path: str = Query(..., description='文件的相对路径'),
                   session: AuthSession = Depends(get_current_session)):
-    """下载指定的文件（支持 HTML 汇报材料与 XLSX 数据文件）。"""
+    """下载指定的文件（支持 HTML 汇报材料、XLSX 数据文件与各类图片素材）。"""
     check_period_report_session(session)
     file_path = get_report_file_path(path)
-    media_type = (
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        if file_path.suffix.lower() == '.xlsx'
-        else 'text/html'
-    )
     return FileResponse(
         path=str(file_path),
         filename=file_path.name,
-        media_type=media_type
+        media_type=get_file_media_type(file_path.suffix)
     )
 
 
@@ -233,21 +252,13 @@ def get_workflow_content(path: str = Query(..., description='文件的相对路�
 @router.get('/period-report/workflow/files/download')
 def download_workflow_file(path: str = Query(..., description='文件的相对路径'),
                            session: AuthSession = Depends(get_current_session)):
-    """下载指定的工作流文件。"""
+    """下载指定的工作流文件（支持 HTML 模版、Markdown 规范、各类图片与数据）。"""
     check_workflow_admin_session(session)
     file_path = get_workflow_file_path(path)
-    ext = file_path.suffix.lower()
-    media_type = 'text/plain; charset=utf-8'
-    if ext == '.html':
-        media_type = 'text/html; charset=utf-8'
-    elif ext == '.md':
-        media_type = 'text/markdown; charset=utf-8'
-    elif ext == '.xlsx':
-        media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     return FileResponse(
         path=str(file_path),
         filename=file_path.name,
-        media_type=media_type
+        media_type=get_file_media_type(file_path.suffix)
     )
 
 

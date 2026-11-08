@@ -400,6 +400,10 @@ class PeriodReportTests(TestCase):
         app.include_router(router)
         client = TestClient(app)
 
+        from backend.projects.daily_report_25_26.services.period_report_files import STORAGE_DIR
+        test_html = STORAGE_DIR / 'test_sample_report.html'
+        test_html.write_text('<!DOCTYPE html><html><body>Test Report</body></html>', encoding='utf-8')
+
         # 1. 默认配置读取
         app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Group_admin', username='group_user')
         res_cfg = client.get('/period-report/display-config')
@@ -407,7 +411,7 @@ class PeriodReportTests(TestCase):
         self.assertIn('mode', res_cfg.json())
 
         # 2. 权限拦截：Group_admin 禁止修改默认展示
-        res_deny = client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': '2026_2027.html'})
+        res_deny = client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': 'test_sample_report.html'})
         self.assertEqual(res_deny.status_code, 403)
 
         # 3. Global_admin 设定与校验
@@ -418,10 +422,10 @@ class PeriodReportTests(TestCase):
         self.assertEqual(client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': 'not_exist_file.html'}).status_code, 404)
 
         # 正常设定为 custom_html
-        set_res = client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': '2026_2027.html'})
+        set_res = client.post('/period-report/display-config', json={'mode': 'custom_html', 'target_file': 'test_sample_report.html'})
         self.assertEqual(set_res.status_code, 200)
         self.assertEqual(set_res.json()['mode'], 'custom_html')
-        self.assertEqual(set_res.json()['target_file'], '2026_2027.html')
+        self.assertEqual(set_res.json()['target_file'], 'test_sample_report.html')
 
         # 还原为 generated
         revert_res = client.post('/period-report/display-config', json={'mode': 'generated', 'target_file': ''})
@@ -452,10 +456,10 @@ class PeriodReportTests(TestCase):
         })
         self.assertEqual(create_folder_res.status_code, 200)
 
-        # 6. 跨空间复制：将材料空间已有的 2026_2027.html 复制到工作流根目录
+        # 6. 跨空间复制：将材料空间已有的 test_sample_report.html 复制到工作流根目录
         copy_res = client.post('/period-report/files/transfer', json={
             'source_space': 'material',
-            'source_path': '2026_2027.html',
+            'source_path': 'test_sample_report.html',
             'target_space': 'workflow',
             'target_folder': '',
             'action': 'copy',
@@ -463,7 +467,7 @@ class PeriodReportTests(TestCase):
         })
         self.assertEqual(copy_res.status_code, 200)
         copied_name = copy_res.json()['target_name']
-        self.assertTrue(copied_name.startswith('2026_2027'))
+        self.assertTrue(copied_name.startswith('test_sample_report'))
 
         # 7. 工作流空间内移动：将刚刚复制的文件移动到 1.html模板与使用说明
         move_res = client.post('/period-report/files/transfer', json={
@@ -477,9 +481,10 @@ class PeriodReportTests(TestCase):
         self.assertEqual(move_res.status_code, 200)
         moved_rel = move_res.json()['target_rel_path']
 
-        # 8. 清理工作流测试文件与材料空间测试文件夹
+        # 8. 清理工作流测试文件与材料空间测试文件夹及测试文件
         client.delete(f'/period-report/workflow/files?path={moved_rel}')
-        from backend.projects.daily_report_25_26.services.period_report_files import STORAGE_DIR
+        if test_html.exists():
+            test_html.unlink()
         test_dir_to_clean = STORAGE_DIR / 'test_material_folder'
         if test_dir_to_clean.exists():
             test_dir_to_clean.rmdir()
@@ -487,3 +492,65 @@ class PeriodReportTests(TestCase):
         # 12. 非法路径穿越打包测试
         bad_archive = client.get('/period-report/workflow/archive?folder=../../')
         self.assertEqual(bad_archive.status_code, 400)
+
+    def test_image_files_support_in_spaces(self):
+        """测试材料空间与工作流空间对图片文件（PNG/JPG等）的识别、上传、下载类型与重命名支持。"""
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+        app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group='Global_admin', username='super_admin')
+
+        from backend.projects.daily_report_25_26.services.period_report_files import STORAGE_DIR
+        from backend.projects.daily_report_25_26.services.period_report_workflow import WORKFLOW_DIR
+
+        # 1. 在材料空间创建测试图片文件
+        sample_png = STORAGE_DIR / 'test_chart.png'
+        sample_png.write_bytes(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01')
+
+        # 2. 列出材料空间文件，验证识别出 kind='image'
+        files_res = client.get('/period-report/files')
+        self.assertEqual(files_res.status_code, 200)
+        items = files_res.json()['items']
+        matched = next((f for f in items if f['name'] == 'test_chart.png'), None)
+        self.assertIsNotNone(matched)
+        self.assertEqual(matched['kind'], 'image')
+        self.assertEqual(matched['ext'], '.png')
+
+        # 3. 下载材料空间图片，验证 media_type 为 image/png
+        down_res = client.get('/period-report/files/download?path=test_chart.png')
+        self.assertEqual(down_res.status_code, 200)
+        self.assertEqual(down_res.headers['content-type'], 'image/png')
+
+        # 4. 重命名图片文件，验证自动保留 .png 扩展名
+        rename_res = client.post('/period-report/files/rename', json={
+            'path': 'test_chart.png',
+            'new_name': 'renamed_chart'
+        })
+        self.assertEqual(rename_res.status_code, 200)
+        self.assertEqual(rename_res.json()['name'], 'renamed_chart.png')
+        self.assertEqual(rename_res.json()['kind'], 'image')
+
+        # 5. 在工作流空间创建测试 JPG 图片
+        sample_jpg = WORKFLOW_DIR / 'test_workflow_bg.jpg'
+        sample_jpg.write_bytes(b'\xff\xd8\xff\xe0\x00\x10JFIF')
+
+        # 6. 列出工作流空间文件，验证识别出 kind='image'
+        wf_files_res = client.get('/period-report/workflow/files')
+        self.assertEqual(wf_files_res.status_code, 200)
+        wf_items = wf_files_res.json()['items']
+        wf_matched = next((f for f in wf_items if f['name'] == 'test_workflow_bg.jpg'), None)
+        self.assertIsNotNone(wf_matched)
+        self.assertEqual(wf_matched['kind'], 'image')
+        self.assertEqual(wf_matched['ext'], '.jpg')
+
+        # 7. 下载工作流图片，验证 media_type 为 image/jpeg
+        wf_down_res = client.get('/period-report/workflow/files/download?path=test_workflow_bg.jpg')
+        self.assertEqual(wf_down_res.status_code, 200)
+        self.assertEqual(wf_down_res.headers['content-type'], 'image/jpeg')
+
+        # 8. 清理测试产生的图片文件
+        renamed_png = STORAGE_DIR / 'renamed_chart.png'
+        if renamed_png.exists():
+            renamed_png.unlink()
+        if sample_jpg.exists():
+            sample_jpg.unlink()

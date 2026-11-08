@@ -1,0 +1,2259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- [AI-SLOT: META_TITLE] 替换为当前汇报材料的完整标题 -->
+  <title>大连洁净能源集团 11月1日—11月7日生产运行情况简报</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+    :root {
+      --font-scale: 1;
+      --bg-primary: #f1f5f9;
+      --card-bg: #ffffff;
+      --brand-navy: #0f3d68;
+      --brand-blue: #1d6fa5;
+      --brand-teal: #0d9488;
+      --brand-amber: #d97706;
+      --brand-red: #dc2626;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0b2545 0%, #13315c 50%, #0f172a 100%);
+      color: var(--text-main);
+      overflow-x: hidden;
+    }
+
+    .stage-wrapper {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    body.mode-continuous .stage-wrapper {
+      height: auto;
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+
+    .top-bar {
+      height: 52px;
+      min-height: 52px;
+      background: rgba(11, 37, 69, 0.94);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 50;
+    }
+
+    .slides-viewport {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 92px);
+      perspective: 1600px;
+      overflow: hidden;
+      padding: 10px 16px;
+    }
+
+    body.mode-continuous .slides-viewport {
+      height: auto;
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+
+    .slide-page {
+      position: absolute;
+      inset: 10px 16px;
+      background: #f8fafc;
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(60px) scale(0.97);
+      transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.48s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    body.mode-continuous .slide-page {
+      position: relative;
+      inset: auto;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      transform: none !important;
+      min-height: 780px;
+    }
+
+    .slide-page.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) translateY(0) scale(1) rotateX(0deg) rotateY(0deg);
+      z-index: 10;
+    }
+
+    .fx-slide .slide-page.prev-page { transform: translateX(-80px) scale(0.96); opacity: 0; }
+    .fx-slide .slide-page.next-page { transform: translateX(80px) scale(0.96); opacity: 0; }
+
+    .fx-cube .slide-page.prev-page { transform: translateX(-45%) rotateY(-38deg) scale(0.88); opacity: 0; transform-origin: right center; }
+    .fx-cube .slide-page.next-page { transform: translateX(45%) rotateY(38deg) scale(0.88); opacity: 0; transform-origin: left center; }
+
+    .fx-flip .slide-page.prev-page { transform: translateY(-40px) rotateX(28deg) scale(0.92); opacity: 0; transform-origin: center bottom; }
+    .fx-flip .slide-page.next-page { transform: translateY(40px) rotateX(-28deg) scale(0.92); opacity: 0; transform-origin: center top; }
+
+    .fx-zoom .slide-page.prev-page { transform: scale(1.12); opacity: 0; }
+    .fx-zoom .slide-page.next-page { transform: scale(0.86); opacity: 0; }
+
+    .slide-header {
+      background: linear-gradient(90deg, #0f3d68 0%, #164e85 60%, #1e6091 100%);
+      color: #ffffff;
+      padding: 11px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #f59e0b;
+      flex-shrink: 0;
+    }
+
+    .slide-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 46% 54%;
+      gap: 14px;
+      padding: 12px 16px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    body.layout-chart-focus .slide-body { grid-template-columns: 32% 68%; }
+    body.layout-text-focus .slide-body { grid-template-columns: 58% 42%; }
+
+    .slide-body.single-col {
+      grid-template-columns: 1fr !important;
+      overflow-y: auto;
+    }
+
+    @media (max-width: 1024px) {
+      .slide-body {
+        grid-template-columns: 1fr !important;
+        overflow-y: auto;
+      }
+      .slides-viewport { height: calc(100vh - 92px); }
+    }
+
+    .script-panel {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      min-height: 0;
+    }
+
+    .panel-toolbar {
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .script-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      font-size: calc(15.5px * var(--font-scale));
+      line-height: 1.72;
+      color: #1e293b;
+    }
+
+    .reading-para {
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      border-radius: 10px;
+      border-left: 4px solid #cbd5e1;
+      background: #f8fafc;
+      transition: all 0.22s ease;
+      cursor: pointer;
+    }
+
+    .reading-para:hover {
+      border-left-color: #1d6fa5;
+      background: #f0f9ff;
+    }
+
+    .reading-para.reading-active {
+      border-left: 5px solid #d97706;
+      background: #fffbeb;
+      box-shadow: 0 4px 14px rgba(217, 119, 6, 0.14);
+      font-weight: 500;
+      color: #0f172a;
+    }
+
+    /* 语义化数值高亮标签（严格执行红增绿减规范：增加为红、减少为绿） */
+    .num-pos, .num-up, .num-inc { color: #b91c1c; font-weight: 700; background: #fee2e2; border: 1px solid #fecaca; padding: 1px 5px; border-radius: 4px; }
+    .num-down, .num-dec { color: #15803d; font-weight: 700; background: #dcfce7; border: 1px solid #bbf7d0; padding: 1px 5px; border-radius: 4px; }
+    .num-warn { color: #b45309; font-weight: 700; background: #fef3c7; border: 1px solid #fde68a; padding: 1px 5px; border-radius: 4px; }
+
+    .visual-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      min-height: 0;
+      padding-right: 2px;
+      position: relative;
+    }
+
+    .chart-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      flex: 1;
+      min-height: 240px;
+    }
+
+    .chart-title {
+      font-size: calc(15px * var(--font-scale));
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+      line-height: 1.35;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chart-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 15px;
+      background: #0f3d68;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .chart-box {
+      width: 100%;
+      flex: 1;
+      min-height: 215px;
+    }
+
+    /* 表格自适应紧凑全显 + 首列冻结锁定 */
+    .table-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      gap: 8px;
+    }
+
+    .data-table-wrap {
+      overflow-x: auto;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      position: relative;
+    }
+
+    table.report-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: calc(12.5px * var(--font-scale));
+      table-layout: auto;
+    }
+
+    table.report-table th {
+      background: #0f3d68;
+      color: #ffffff;
+      font-weight: 600;
+      padding: 6px 5px;
+      text-align: right;
+      border-bottom: 1px solid #1e4976;
+      border-right: 1px solid #1e4976;
+      line-height: 1.25;
+      white-space: normal;
+      word-break: keep-all;
+    }
+
+    table.report-table th:first-child {
+      text-align: left;
+      padding-left: 8px;
+      position: sticky;
+      left: 0;
+      z-index: 4;
+      background: #0f3d68;
+      white-space: nowrap;
+      box-shadow: 2px 0 5px rgba(15, 23, 42, 0.18);
+    }
+
+    table.report-table td {
+      padding: 5px 5px;
+      border-bottom: 1px solid #e2e8f0;
+      border-right: 1px solid #e2e8f0;
+      text-align: right;
+      color: #1e293b;
+      white-space: nowrap;
+      background: #ffffff;
+    }
+
+    table.report-table td:first-child {
+      text-align: left;
+      padding-left: 8px;
+      font-weight: 700;
+      color: #0f3d68;
+      background: #f8fafc;
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      box-shadow: 2px 0 5px rgba(15, 23, 42, 0.08);
+    }
+
+    table.report-table tr.row-total td {
+      background: #fef3c7;
+      font-weight: 700;
+      color: #92400e;
+    }
+
+    table.report-table tr.row-total td:first-child {
+      background: #fde68a;
+      color: #78350f;
+    }
+
+    table.report-table tr:hover td { background: #e0f2fe; }
+    table.report-table tr:hover td:first-child { background: #bae6fd; }
+
+    /* 右侧大屏表格放大覆盖层（引擎自动为每页附表注入） */
+    .expanded-table-overlay {
+      position: absolute;
+      inset: 0;
+      background: #ffffff;
+      border: 2px solid #0f3d68;
+      border-radius: 12px;
+      z-index: 30;
+      display: none;
+      flex-direction: column;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+      overflow: hidden;
+    }
+
+    .expanded-table-overlay.active {
+      display: flex;
+    }
+
+    .expanded-table-overlay table.report-table {
+      font-size: calc(15px * var(--font-scale));
+    }
+
+    .expanded-table-overlay table.report-table th,
+    .expanded-table-overlay table.report-table td {
+      padding: 10px 12px;
+    }
+
+    .bottom-bar {
+      height: 40px;
+      min-height: 40px;
+      background: rgba(11, 37, 69, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 50;
+      font-size: 13px;
+    }
+
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.6);
+      z-index: 90;
+      display: none;
+    }
+    .drawer-backdrop.open { display: block; }
+
+    .toc-drawer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 360px;
+      max-width: 85vw;
+      background: #0f172a;
+      color: #f8fafc;
+      z-index: 100;
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid rgba(255,255,255,0.15);
+    }
+    .toc-drawer.open { transform: translateX(0); }
+
+    /* ==================== 8:3 异形大屏投影模式 (反向变形预挤压 Anamorphic Squeeze 8:3) ==================== */
+    body.screen-8-3 .slides-viewport {
+      width: 150% !important;
+      max-width: 150% !important;
+      transform-origin: 0 0 !important;
+      transform: scaleX(0.6666667) !important;
+      transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    body.screen-8-3.mode-continuous .slides-viewport {
+      max-width: none !important;
+      width: 150% !important;
+    }
+
+    /* 全屏表格放大层在 8:3 模式下同步预压 */
+    body.screen-8-3 .expanded-table-overlay {
+      width: 150% !important;
+      transform-origin: 0 0 !important;
+      transform: scaleX(0.6666667) !important;
+    }
+
+    /* ==================== 在线文字编辑与保存状态样式 ==================== */
+    body.is-editing [data-editable="true"],
+    body.is-editing .reading-para,
+    body.is-editing .script-scroll h2,
+    body.is-editing .script-scroll h3,
+    body.is-editing .script-scroll p,
+    body.is-editing .slide-header h2,
+    body.is-editing .editable-text {
+      outline: 2px dashed rgba(245, 158, 11, 0.75) !important;
+      outline-offset: 3px !important;
+      border-radius: 6px !important;
+      background-color: rgba(254, 243, 199, 0.35) !important;
+      transition: background-color 0.2s, outline-color 0.2s !important;
+      cursor: text !important;
+    }
+
+    body.is-editing [data-editable="true"]:focus,
+    body.is-editing .reading-para:focus,
+    body.is-editing .script-scroll p:focus,
+    body.is-editing .slide-header h2:focus,
+    body.is-editing .editable-text:focus {
+      outline: 2.5px solid #d97706 !important;
+      background-color: rgba(254, 243, 199, 0.75) !important;
+      box-shadow: 0 0 12px rgba(217, 119, 6, 0.35) !important;
+    }
+
+    /* 编辑模式状态浮动提示条 */
+    .edit-mode-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(245, 158, 11, 0.6);
+      color: #fef3c7;
+      padding: 10px 20px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 15px rgba(245, 158, 11, 0.25);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 1000;
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+      animation: toastBounce 0.3s ease-out;
+    }
+
+    @keyframes toastBounce {
+      0% { transform: translate(-50%, 20px); opacity: 0; }
+      100% { transform: translate(-50%, 0); opacity: 1; }
+    }
+
+    /* 保存中或保存成功提示 Toast */
+    .save-alert-toast {
+      position: fixed;
+      top: 64px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #ffffff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: alertSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .save-alert-toast.success { background: linear-gradient(135deg, #059669 0%, #10b981 100%); border: 1px solid #34d399; }
+    .save-alert-toast.info { background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%); border: 1px solid #38bdf8; }
+    .save-alert-toast.error { background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); border: 1px solid #f87171; }
+
+    @keyframes alertSlideIn {
+      0% { transform: translateY(-20px); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="fx-cube">
+  <!-- ==================== 全局固定外壳：侧边章节导航抽屉 ==================== -->
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+  <aside id="tocDrawer" class="toc-drawer">
+    <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+      <div>
+        <div class="text-xs text-amber-400 font-semibold tracking-wider">章节与页码导航</div>
+        <!-- [AI-SLOT: DRAWER_REPORT_SHORT_TITLE] 替换为汇报简称 -->
+        <div id="drawerReportTitle" class="text-base font-bold text-white">大连洁净能源集团 · 11月1日—11月7日简报</div>
+      </div>
+      <button id="closeTocBtn" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm">关闭 ✕</button>
+    </div>
+    <div id="tocList" class="flex-1 overflow-y-auto p-3 space-y-1.5 text-sm"></div>
+  </aside>
+
+  <div class="stage-wrapper">
+    <!-- ==================== 全局固定外壳：顶部投屏控制栏 ==================== -->
+    <header class="top-bar">
+      <div class="flex items-center gap-3">
+        <button id="openTocBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-800/80 hover:bg-sky-700 text-white text-xs font-semibold border border-sky-500/40 transition">
+          <span>☰ 章节目录</span>
+          <span id="pageIndicatorTop" class="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold">1 / 8</span>
+        </button>
+        <div class="hidden md:block">
+          <!-- [AI-SLOT: TOPBAR_REPORT_TITLE] 替换为汇报全称 -->
+          <h1 id="topBarReportTitle" class="text-base font-bold tracking-wide text-white">大连洁净能源集团 11月1日—11月7日生产运行情况简报</h1>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- 翻页特效选择 -->
+        <div class="hidden sm:flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-700 text-xs">
+          <span class="text-slate-400">翻页特效:</span>
+          <select id="fxSelector" class="bg-transparent text-amber-300 font-semibold focus:outline-none cursor-pointer">
+            <option value="fx-cube" class="bg-slate-900">3D 立体魔方</option>
+            <option value="fx-slide" class="bg-slate-900">平滑推拉画卷</option>
+            <option value="fx-flip" class="bg-slate-900">纵深卡片翻转</option>
+            <option value="fx-zoom" class="bg-slate-900">聚焦缩放渐变</option>
+          </select>
+        </div>
+
+        <!-- 分屏比例切换 -->
+        <div class="hidden lg:flex items-center bg-slate-900/80 p-0.5 rounded-lg border border-slate-700 text-xs">
+          <button id="layoutBalancedBtn" class="px-2 py-1 rounded bg-sky-700 text-white font-medium">标准同屏</button>
+          <button id="layoutChartBtn" class="px-2 py-1 rounded text-slate-300 hover:text-white">图表放大</button>
+          <button id="layoutTextBtn" class="px-2 py-1 rounded text-slate-300 hover:text-white">念稿放大</button>
+          <button id="layoutScrollBtn" class="px-2 py-1 rounded text-slate-300 hover:text-white">长卷连读</button>
+        </div>
+
+        <!-- 屏幕比例切换 (16:9 标准 ⇋ 8:3 巨幕预压) -->
+        <div class="flex items-center bg-slate-900/80 p-0.5 rounded-lg border border-slate-700 text-xs">
+          <button id="ratio16x9Btn" class="px-2 py-1 rounded bg-sky-700 text-white font-medium transition" title="标准 16:9 电脑与常规投影仪比例 (默认)">📺 16:9</button>
+          <button id="ratio8x3Btn" class="px-2 py-1 rounded text-slate-300 hover:text-white transition" title="8:3 异形大屏投影矫正：按 8:3 超宽排版并反向预挤压至 16:9，投上大屏拉伸后呈现完美 1:1 满屏巨幕 (快捷键: 8)">🖥️ 8:3 预压</button>
+        </div>
+        <span id="squeezeBadge" class="hidden px-2 py-0.5 rounded text-[11px] font-bold bg-amber-400 text-slate-950 border border-amber-300 shadow-sm animate-pulse" title="已开启 8:3 异形大屏反向预挤压投影模式">
+          ⚡ 8:3 预压中
+        </span>
+
+        <!-- 字号缩放 -->
+        <div class="flex items-center bg-slate-900/80 rounded-lg border border-slate-700 text-xs overflow-hidden">
+          <button id="fontDecBtn" class="px-2 py-1 hover:bg-slate-800 text-slate-200" title="缩小字号">A-</button>
+          <span id="fontScaleLabel" class="px-1.5 text-amber-300 font-mono">100%</span>
+          <button id="fontIncBtn" class="px-2 py-1 hover:bg-slate-800 text-slate-200" title="放大字号">A+</button>
+        </div>
+
+        <!-- 在线编辑与保存控制组 (支持修改每一页文字并持久化保存) -->
+        <div class="flex items-center bg-slate-900/80 p-0.5 rounded-lg border border-slate-700 text-xs">
+          <button id="editToggleBtn" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold border border-amber-400/40 transition flex items-center gap-1.5" title="开启/退出讲稿文字在线编辑模式 (快捷键: E)">
+            <span id="editIcon">✏️</span>
+            <span id="editText">编辑</span>
+          </button>
+          <button id="saveDocBtn" class="hidden px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md transition flex items-center gap-1.5 animate-pulse" title="保存所有修改至文件 (快捷键: Ctrl+S)">
+            <span>💾</span>
+            <span>保存</span>
+          </button>
+        </div>
+
+        <!-- 上下页与全屏 -->
+        <div class="flex items-center gap-1">
+          <button id="prevSlideBtn" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold border border-slate-600">◀ 上一页</button>
+          <button id="nextSlideBtn" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold">下一页 ▶</button>
+          <button id="fullscreenBtn" class="px-2.5 py-1.5 rounded-lg bg-sky-900/80 hover:bg-sky-800 text-sky-100 text-xs border border-sky-600/40" title="全屏投影">⛶ 全屏</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ==================== 16:9 幻灯片主视口（AI Agent 动态生成区） ==================== -->
+    <main id="slidesViewport" class="slides-viewport">
+
+      <!-- P1: 版式 A · L1 决策总览封面页 -->
+      <section class="slide-page active" id="section-overview" data-slide-index="0" data-title="01. 首页总览与期间气温对比">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 01 / 08 页 · 决策总览</span>
+            <h2 class="text-lg font-bold tracking-wide">大连洁净能源集团 11月1日—11月7日生产运行情况简报</h2>
+          </div>
+          <span class="text-xs text-sky-200">统计周期：2026-11-01 至 2026-11-07 · 键盘 ← / → 翻页 · 快捷键 8 切换巨幕</span>
+        </div>
+
+        <div class="slide-body single-col bg-slate-100/90 !p-4">
+          <div class="w-full h-full flex flex-col justify-between gap-3">
+            <div class="bg-gradient-to-r from-[#0f3d68] via-[#164e85] to-[#0d9488] rounded-2xl p-4 text-white shadow-md grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch shrink-0">
+              <div class="lg:col-span-5 flex flex-col justify-between">
+                <div>
+                  <div class="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 text-xs font-semibold mb-1.5">
+                    <span>大连洁净能源集团 · 经济运行部</span>
+                  </div>
+                  <h1 class="text-xl lg:text-2xl font-extrabold tracking-tight leading-snug">大连洁净能源集团<br/><span class="text-lg lg:text-xl font-bold tracking-normal text-sky-200">11月1日—11月7日生产运行情况简报</span></h1>
+                </div>
+                <p class="mt-2 text-sm text-sky-50 leading-relaxed reading-para !bg-white/10 !border-amber-400 !text-white !mb-0 !py-2 !px-3">
+                  <strong>【核心定性总纲】</strong>供暖首周前暖后冷，各单位平稳完成供暖启动与周末降温提负荷工作。集团汇总供热量同比增加4.33%，标煤耗量同比减少1.68%，庄河环海外购热量同比减少15.57%，可比煤价边际利润同比增加5.17%，考核净投诉量同比减少64.89%，生产经营总体平稳受控。
+                </p>
+              </div>
+
+              <div class="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-2.5 items-stretch">
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-3 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-sky-100">主城区平均气温</span>
+                    <span class="px-2 py-0.5 rounded bg-red-500/30 border border-red-300/50 text-red-100 text-xs font-bold">HDD20 +0.86%</span>
+                  </div>
+                  <div class="text-2xl font-extrabold text-white my-0.5 tracking-tight">11.13<span class="text-xs font-medium text-sky-200 ml-1">℃</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1">
+                    <span>同期: 11.21℃</span>
+                    <span class="text-emerald-300 font-semibold">同比 -0.08℃</span>
+                  </div>
+                </div>
+
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-3 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-sky-100">集团汇总供热量</span>
+                    <span class="px-2 py-0.5 rounded bg-red-500/30 border border-red-300/50 text-red-100 text-xs font-bold">+4.33%</span>
+                  </div>
+                  <div class="text-2xl font-extrabold text-white my-0.5 tracking-tight">353,287<span class="text-xs font-medium text-sky-200 ml-1">GJ</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1">
+                    <span>同期: 338,622</span>
+                    <span class="text-amber-300 font-semibold">同比 +14,665 GJ</span>
+                  </div>
+                </div>
+
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-3 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-sky-100">标煤耗量 / 庄河外购热</span>
+                    <span class="px-2 py-0.5 rounded bg-emerald-400/25 border border-emerald-300/50 text-emerald-200 text-xs font-bold">-1.68% / -15.57%</span>
+                  </div>
+                  <div class="text-xl font-extrabold text-white my-0.5 tracking-tight">14,879<span class="text-xs font-medium text-sky-200 mx-0.5">吨</span>/ 13,940<span class="text-xs font-medium text-sky-200 ml-0.5">GJ</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1">
+                    <span>标煤同比 -254吨</span>
+                    <span class="text-emerald-300 font-semibold">外购热 -2,571 GJ</span>
+                  </div>
+                </div>
+
+                <div class="bg-amber-500/25 backdrop-blur-md rounded-xl p-3 border-2 border-amber-300/70 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-amber-200">可比煤价边际利润</span>
+                    <span class="px-2 py-0.5 rounded bg-red-500/40 border border-red-300 text-white text-xs font-extrabold">+5.17%</span>
+                  </div>
+                  <div class="text-2xl font-extrabold text-amber-300 my-0.5 tracking-tight">2,595.02<span class="text-xs font-medium text-amber-100 ml-1">万元</span></div>
+                  <div class="text-xs text-amber-100 flex items-center justify-between border-t border-amber-300/30 pt-1">
+                    <span>同期: 2,467.42万</span>
+                    <span class="text-white font-bold">同比 +127.60万</span>
+                  </div>
+                </div>
+
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-3 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-sky-100">省市平台投诉量</span>
+                    <span class="px-2 py-0.5 rounded bg-red-500/30 border border-red-300/50 text-red-100 text-xs font-bold">+52.48%</span>
+                  </div>
+                  <div class="text-2xl font-extrabold text-white my-0.5 tracking-tight">1,383<span class="text-xs font-medium text-sky-200 ml-1">件</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1">
+                    <span>同期: 907件</span>
+                    <span class="text-amber-300 font-semibold">同比 +476件</span>
+                  </div>
+                </div>
+
+                <div class="bg-white/14 backdrop-blur-md rounded-xl p-3 border border-white/25 flex flex-col justify-between shadow-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-sky-100">住建局考核净投诉量</span>
+                    <span class="px-2 py-0.5 rounded bg-emerald-400/25 border border-emerald-300/50 text-emerald-200 text-xs font-bold">-64.89%</span>
+                  </div>
+                  <div class="text-2xl font-extrabold text-white my-0.5 tracking-tight">125<span class="text-xs font-medium text-sky-200 ml-1">件</span></div>
+                  <div class="text-xs text-sky-100/90 flex items-center justify-between border-t border-white/15 pt-1">
+                    <span>同期: 356件</span>
+                    <span class="text-emerald-300 font-semibold">同比 -231件</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 底部：左5列（2x2四张核心结论卡）+ 右7列（高纵横比饱满气象走势图1，带数据标签） -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-3.5 flex-1 min-h-0 items-stretch">
+              <div class="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-stretch">
+                <div class="reading-para reading-active bg-white shadow-sm border border-slate-200 !mb-0 flex flex-col justify-between !p-3">
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="px-2 py-0.5 rounded bg-sky-900 text-white text-xs font-bold">要点 01 · 煤耗与外购热</span>
+                      <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">标煤 -1.68%</span>
+                    </div>
+                    <p class="text-xs lg:text-[13px] leading-relaxed">
+                      <strong>1. 标煤与庄河外购热双降。</strong>全集团标煤耗量14,879吨，同比减少254吨，降幅1.68%；庄河环海外购热量13,940 GJ，同比减少2,571 GJ，降幅15.57%。
+                    </p>
+                  </div>
+                  <div class="mt-1.5 pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>标煤完成率 83.86%</span>
+                    <span class="font-semibold text-sky-800">详见 第04页</span>
+                  </div>
+                </div>
+
+                <div class="reading-para bg-white shadow-sm border border-slate-200 !mb-0 flex flex-col justify-between !p-3">
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="px-2 py-0.5 rounded bg-sky-900 text-white text-xs font-bold">要点 02 · 现货与调峰</span>
+                      <span class="text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">发电 +4.21%</span>
+                    </div>
+                    <p class="text-xs lg:text-[13px] leading-relaxed">
+                      <strong>2. 响应负电价信号压出力。</strong>期间实时负电价208点（占30.95%），香海投运#2高减压器旁路供热规避亏损，售电量275万kWh，同比减少97万kWh。
+                    </p>
+                  </div>
+                  <div class="mt-1.5 pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>实时均价 237.25 元/MWh</span>
+                    <span class="font-semibold text-sky-800">详见 第05页</span>
+                  </div>
+                </div>
+
+                <div class="reading-para bg-white shadow-sm border border-slate-200 !mb-0 flex flex-col justify-between !p-3">
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="px-2 py-0.5 rounded bg-sky-900 text-white text-xs font-bold">要点 03 · 利润与成本</span>
+                      <span class="text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">可比 +127.60万</span>
+                    </div>
+                    <p class="text-xs lg:text-[13px] leading-relaxed">
+                      <strong>3. 可比煤价边际利润增长。</strong>供暖与蒸汽增收叠加煤、外购热、水、外购电、辅材节支，带动可比煤价边际利润同比增加127.60万元，增幅5.17%。
+                    </p>
+                  </div>
+                  <div class="mt-1.5 pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>边际利润 2,292.62 万元</span>
+                    <span class="font-semibold text-sky-800">详见 第06页</span>
+                  </div>
+                </div>
+
+                <div class="reading-para bg-white shadow-sm border border-slate-200 !mb-0 flex flex-col justify-between !p-3">
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="px-2 py-0.5 rounded bg-sky-900 text-white text-xs font-bold">要点 04 · 单耗与服务</span>
+                      <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">考核净诉 -64.89%</span>
+                    </div>
+                    <p class="text-xs lg:text-[13px] leading-relaxed">
+                      <strong>4. 水电单耗与考核净诉下降。</strong>集团电单耗降8.80%、水单耗降9.12%，完成北斗街高温水管抢修；考核净投诉量125件，同比减少231件。
+                    </p>
+                  </div>
+                  <div class="mt-1.5 pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>下周降温需精准控负荷</span>
+                    <span class="font-semibold text-sky-800">详见 第07-08页</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="chart-card bg-white shadow-sm border border-slate-200 !mb-0 lg:col-span-7 flex flex-col justify-between p-3.5">
+                <div class="flex items-center justify-between mb-1 border-b border-slate-100 pb-1.5 shrink-0">
+                  <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded bg-sky-900 text-white text-xs font-bold">图1 气象走势</span>
+                    <span class="text-xs lg:text-sm font-bold text-slate-800">统计周期（11月1日—11月7日）主城区每日平均气温与同期对比曲线图</span>
+                  </div>
+                  <span class="text-[11px] text-slate-500">单位: ℃ · 含每日数据标签</span>
+                </div>
+                <div id="chart_p1_temp" class="chart-box flex-1 !min-h-[260px]" style="height: 100%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P2: 版式 B · 一、基本概况与全局指标谱系 -->
+      <section class="slide-page" data-slide-index="1" data-title="02. 一、基本概况与核心指标谱系">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 02 / 08 页 · 基本概况</span>
+            <h2 class="text-lg font-bold">一、基本概况 —— 气象复盘与全集团核心指标同比变化率谱系</h2>
+          </div>
+          <span class="text-xs text-sky-200">左栏：DOCX 第一章同款完整讲稿 · 右栏：指标同比谱系（红增绿减）与耗水量/外购电量对比</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 第一章宣讲念稿（与呈批版 DOCX 原文一致）</span>
+              <span class="text-[11px] text-sky-700 font-semibold">段落 1 / 11</span>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【一、基本概况 · 段落 1】</strong>11月1日—11月7日为供暖首周，主城区日均气温11.13℃，同比偏低0.08℃，前5日最高18.10℃，周末降温后最低2.30℃。集团汇总供热量353,287 GJ，<span class="num-pos">同比增加14,665 GJ，增幅4.33%</span>；标煤耗量14,879吨，<span class="num-down">同比减少254吨，降幅1.68%</span>；庄河环海外购热量13,940 GJ，<span class="num-down">同比减少2,571 GJ，降幅15.57%</span>；可比煤价边际利润2,595.02万元，<span class="num-pos">同比增加127.60万元，增幅5.17%</span>；省市平台投诉量1,383件，<span class="num-pos">同比增加476件，增幅52.48%</span>；考核净投诉量125件，<span class="num-down">同比减少231件，降幅64.89%</span>。
+              </div>
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表1-0 统计周期（11月1日—11月7日）主城区每日气温与HDD20明细表</span>
+                <span class="text-[11px] text-slate-500">数据来源：《每日气温明细》</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>日期</th><th>最高温<br/>(℃)</th><th>最低温<br/>(℃)</th><th>本期日均温<br/>(℃)</th><th>同期日均温<br/>(℃)</th><th>日均温同比<br/>(℃)</th><th>本期HDD20<br/>(℃·日)</th><th>同期HDD20<br/>(℃·日)</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>11月1日</td><td>15.60</td><td>8.50</td><td>13.22</td><td>12.69</td><td class="text-red-700 font-bold">+0.53</td><td>6.78</td><td>7.31</td></tr>
+                    <tr><td>11月2日</td><td>15.40</td><td>5.20</td><td>10.52</td><td>6.47</td><td class="text-red-700 font-bold">+4.05</td><td>9.48</td><td>13.53</td></tr>
+                    <tr><td>11月3日</td><td>17.80</td><td>9.40</td><td>14.03</td><td>8.01</td><td class="text-red-700 font-bold">+6.01</td><td>5.98</td><td>11.99</td></tr>
+                    <tr><td>11月4日</td><td>18.10</td><td>14.30</td><td>16.05</td><td>13.11</td><td class="text-red-700 font-bold">+2.93</td><td>3.95</td><td>6.89</td></tr>
+                    <tr><td>11月5日</td><td>15.90</td><td>5.90</td><td>12.90</td><td>13.71</td><td class="text-teal-700 font-bold">-0.80</td><td>7.10</td><td>6.29</td></tr>
+                    <tr><td>11月6日</td><td>10.00</td><td>2.30</td><td>6.09</td><td>12.78</td><td class="text-teal-700 font-bold">-6.69</td><td>13.91</td><td>7.23</td></tr>
+                    <tr><td>11月7日</td><td>6.90</td><td>2.30</td><td>5.13</td><td>11.70</td><td class="text-teal-700 font-bold">-6.57</td><td>14.87</td><td>8.30</td></tr>
+                    <tr class="row-total"><td>期间均值/累计</td><td>18.10(极值)</td><td>2.30(极值)</td><td>11.13</td><td>11.21</td><td>-0.08</td><td>62.07</td><td>61.54 (+0.86%)</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图1-1 集团汇总核心指标同比变化率排序分布图（红色为同比增加 / 绿色为同比减少）</div>
+              <div id="chart_p2_spectrum" class="chart-box"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" style="flex: 1; min-height: 230px;">
+              <div class="chart-card !min-h-[210px]">
+                <div class="chart-title">图1-2(a) 各单位耗水量本期与同期对比 (吨)</div>
+                <div id="chart_p2_water" class="chart-box !min-h-[180px]"></div>
+              </div>
+              <div class="chart-card !min-h-[210px]">
+                <div class="chart-title">图1-2(b) 各单位外购电量本期与同期对比 (万kWh)</div>
+                <div id="chart_p2_power" class="chart-box !min-h-[180px]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P3: 版式 C · 集团汇总全集团数据底座 -->
+      <section class="slide-page" data-slide-index="2" data-title="03. 集团汇总全量指标全景表">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 03 / 08 页 · 全量数据底座</span>
+            <h2 class="text-lg font-bold">集团汇总全量指标全景表（2026年11月1日—11月7日）</h2>
+          </div>
+          <span class="text-xs text-sky-200">支持顶部分类高亮筛选 · 左右双栏一屏完整呈现</span>
+        </div>
+
+        <div class="slide-body single-col">
+          <div class="flex flex-col gap-3 h-full">
+            <div class="reading-para reading-active !mb-0 bg-white shadow-sm border border-slate-200">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-bold text-sky-900 bg-sky-100 px-2.5 py-0.5 rounded">📊 集团汇总 26 项核心指标一源底座（点击右侧按钮按分类高亮筛选）</span>
+                <div class="flex items-center gap-1.5 text-xs flex-wrap" data-table-filter>
+                  <span class="text-slate-500">分类筛选：</span>
+                  <button type="button" class="cat-filter-btn px-2.5 py-0.5 rounded bg-sky-800 text-white font-semibold" data-filter-cat="all">全部指标 (26项)</button>
+                  <button type="button" class="cat-filter-btn px-2.5 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" data-filter-cat="prod">生产指标 (11项)</button>
+                  <button type="button" class="cat-filter-btn px-2.5 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" data-filter-cat="eco">经营指标 (11项)</button>
+                  <button type="button" class="cat-filter-btn px-2.5 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" data-filter-cat="eff">单耗与服务质量 (6项)</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto">
+              <div class="data-table-wrap !mt-0">
+                <div class="bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-800 border-b border-slate-200">表1-1（左栏） 集团汇总生产运行与资源消耗指标（较大指标四舍五入至整数）</div>
+                <table class="report-table">
+                  <thead>
+                    <tr><th>指标名称</th><th>单位</th><th>本期实际</th><th>期间计划测算</th><th>计划完成率</th><th>同期实际</th><th>同比增减</th><th>同比增幅</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr data-cat="prod" class="row-total"><td>供热量</td><td>GJ</td><td>353,287</td><td>402,663</td><td>87.74%</td><td>338,622</td><td class="text-red-700 font-bold">+14,665</td><td class="text-red-700 font-bold">+4.33%</td></tr>
+                    <tr data-cat="prod"><td>发电量</td><td>万kWh</td><td>1,102</td><td>1,918</td><td>57.43%</td><td>1,057</td><td class="text-red-700 font-bold">+44</td><td class="text-red-700 font-bold">+4.21%</td></tr>
+                    <tr data-cat="prod"><td>售电量</td><td>万kWh</td><td>607</td><td>1,299</td><td>46.68%</td><td>633</td><td class="text-teal-700 font-bold">-27</td><td class="text-teal-700 font-bold">-4.23%</td></tr>
+                    <tr data-cat="prod"><td>高温水销售量</td><td>GJ</td><td>16,452</td><td>34,640</td><td>47.49%</td><td>19,635</td><td class="text-teal-700 font-bold">-3,183</td><td class="text-teal-700 font-bold">-16.21%</td></tr>
+                    <tr data-cat="prod"><td>售汽量</td><td>吨</td><td>825</td><td>2,228</td><td>37.02%</td><td>671</td><td class="text-red-700 font-bold">+154</td><td class="text-red-700 font-bold">+22.95%</td></tr>
+                    <tr data-cat="prod" class="row-total"><td>标煤耗量</td><td>吨</td><td>14,879</td><td>17,742</td><td>83.86%</td><td>15,133</td><td class="text-teal-700 font-bold">-254</td><td class="text-teal-700 font-bold">-1.68%</td></tr>
+                    <tr data-cat="prod"><td>原煤耗量</td><td>吨</td><td>21,332</td><td>25,562</td><td>83.45%</td><td>21,384</td><td class="text-teal-700 font-bold">-52</td><td class="text-teal-700 font-bold">-0.25%</td></tr>
+                    <tr data-cat="prod"><td>耗水量</td><td>吨</td><td>176,859</td><td>132,333</td><td>133.65%</td><td>185,177</td><td class="text-teal-700 font-bold">-8,318</td><td class="text-teal-700 font-bold">-4.49%</td></tr>
+                    <tr data-cat="prod"><td>外购电量</td><td>万kWh</td><td>275</td><td>228</td><td>120.43%</td><td>292</td><td class="text-teal-700 font-bold">-17</td><td class="text-teal-700 font-bold">-5.80%</td></tr>
+                    <tr data-cat="prod" class="row-total"><td>外购热量（庄河环海）</td><td>GJ</td><td>13,940</td><td>27,471</td><td>50.74%</td><td>16,511</td><td class="text-teal-700 font-bold">-2,571</td><td class="text-teal-700 font-bold">-15.57%</td></tr>
+                    <tr data-cat="prod"><td>站内耗热量</td><td>GJ</td><td>265,387</td><td>139,370</td><td>190.42%</td><td>260,913</td><td class="text-red-700 font-bold">+4,474</td><td class="text-red-700 font-bold">+1.71%</td></tr>
+                    <tr data-cat="eff"><td>主城区平均气温</td><td>℃</td><td>11.13</td><td>-</td><td>-</td><td>11.21</td><td class="text-teal-700 font-bold">-0.08</td><td>-</td></tr>
+                    <tr data-cat="eff"><td>累计HDD20</td><td>℃·日</td><td>62.07</td><td>-</td><td>-</td><td>61.54</td><td class="text-red-700 font-bold">+0.53</td><td class="text-red-700 font-bold">+0.86%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="data-table-wrap !mt-0">
+                <div class="bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-800 border-b border-slate-200">表1-1（右栏） 集团汇总经营效益、单耗与服务质量指标</div>
+                <table class="report-table">
+                  <thead>
+                    <tr><th>指标名称</th><th>单位</th><th>本期实际</th><th>同期实际</th><th>同比增减</th><th>同比增幅</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr data-cat="eco" class="row-total"><td>直接收入</td><td>万元</td><td>4,429.87</td><td>4,422.74</td><td class="text-red-700 font-bold">+7.13</td><td class="text-red-700 font-bold">+0.16%</td></tr>
+                    <tr data-cat="eco" class="row-total"><td>可比煤价边际利润</td><td>万元</td><td>2,595.02</td><td>2,467.42</td><td class="text-red-700 font-bold">+127.60</td><td class="text-red-700 font-bold">+5.17%</td></tr>
+                    <tr data-cat="eco"><td>边际利润</td><td>万元</td><td>2,292.62</td><td>2,698.80</td><td class="text-teal-700 font-bold">-406.18</td><td class="text-teal-700 font-bold">-15.05%</td></tr>
+                    <tr data-cat="eco"><td>供暖收入</td><td>万元</td><td>4,064.76</td><td>4,027.21</td><td class="text-red-700 font-bold">+37.55</td><td class="text-red-700 font-bold">+0.93%</td></tr>
+                    <tr data-cat="eco"><td>售电收入</td><td>万元</td><td>200.18</td><td>209.02</td><td class="text-teal-700 font-bold">-8.84</td><td class="text-teal-700 font-bold">-4.23%</td></tr>
+                    <tr data-cat="eco"><td>售高温水收入</td><td>万元</td><td>139.93</td><td>166.31</td><td class="text-teal-700 font-bold">-26.38</td><td class="text-teal-700 font-bold">-15.86%</td></tr>
+                    <tr data-cat="eco"><td>售汽收入</td><td>万元</td><td>25.00</td><td>20.20</td><td class="text-red-700 font-bold">+4.80</td><td class="text-red-700 font-bold">+23.78%</td></tr>
+                    <tr data-cat="eco"><td>煤成本</td><td>万元</td><td>1,790.28</td><td>1,281.88</td><td class="text-red-700 font-bold">+508.40</td><td class="text-red-700 font-bold">+39.66%</td></tr>
+                    <tr data-cat="eco"><td>外购电成本</td><td>万元</td><td>165.21</td><td>189.51</td><td class="text-teal-700 font-bold">-24.30</td><td class="text-teal-700 font-bold">-12.82%</td></tr>
+                    <tr data-cat="eco"><td>购水成本</td><td>万元</td><td>80.18</td><td>81.90</td><td class="text-teal-700 font-bold">-1.72</td><td class="text-teal-700 font-bold">-2.10%</td></tr>
+                    <tr data-cat="eco"><td>可计量辅材成本</td><td>万元</td><td>35.08</td><td>91.88</td><td class="text-teal-700 font-bold">-56.80</td><td class="text-teal-700 font-bold">-61.82%</td></tr>
+                    <tr data-cat="eff"><td>供暖热单耗 / 电单耗 / 水单耗</td><td>万㎡单耗</td><td>72.46 / 510.23 / 31.55</td><td>71.72 / 559.48 / 34.71</td><td>+0.74 / -49.25 / -3.17</td><td>+1.04% / -8.80% / -9.12%</td></tr>
+                    <tr data-cat="eff" class="row-total"><td>省市平台投诉量 / 考核净投诉量</td><td>件</td><td>1,383 / 125</td><td>907 / 356</td><td>+476 / -231</td><td>+52.48% / -64.89%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P4: 版式 D1 · 二、标煤耗量、外购热与运行调度情况 -->
+      <section class="slide-page" id="section-production" data-slide-index="3" data-title="04. 二、标煤耗量、外购热与运行调度">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 04 / 08 页 · 煤耗与运行调度</span>
+            <h2 class="text-lg font-bold">二、标煤耗量、外购热与运行调度情况</h2>
+          </div>
+          <span class="text-xs text-sky-200">左栏：DOCX 第二章同款讲稿 & 表2-1 · 右栏：标煤增减分解与标煤/外购热计划完成率对比</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 第二章宣讲念稿 & 表2-1（与 DOCX 原文一致）</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大表2-1</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【二、标煤耗量、外购热与运行调度 · 段落 2】</strong>集团汇总标煤耗量14,879吨，<span class="num-down">同比减少254吨，降幅1.68%</span>，为期间测算值的83.86%。金州热电暖温期压减开机，2日投2机2炉、5日并#1炉转2机3炉，标煤耗量2,175吨，<span class="num-down">同比减少564吨，降幅20.58%</span>；主城区标煤耗量10,820吨，<span class="num-pos">同比增加205吨，增幅1.93%</span>，北海周末降温增开水炉及#3汽炉、#2机，香海1日#3机消缺改启#4机、2日恢复2机2炉；庄河环海本期无燃煤消耗，外购热量13,940 GJ，<span class="num-down">同比减少2,571 GJ，降幅15.57%</span>，为期间测算值的50.74%。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表2-1 各单位标煤耗量（吨）与庄河环海外购热量（GJ）完成情况表</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>单位名称</th><th>本期实际</th><th>月度计划</th><th>期间测算</th><th>计划完成率</th><th>同期实际</th><th>同比增减</th><th>同比增幅</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团汇总(吨)</td><td>14,879</td><td>76,036</td><td>17,742</td><td>83.86%</td><td>15,133</td><td class="text-teal-700 font-bold">-254</td><td class="text-teal-700 font-bold">-1.68%</td></tr>
+                    <tr><td>主城区(吨)</td><td>10,820</td><td>53,056</td><td>12,380</td><td>87.40%</td><td>10,614</td><td class="text-red-700 font-bold">+205</td><td class="text-red-700 font-bold">+1.93%</td></tr>
+                    <tr><td>　北海热电(吨)</td><td>5,988</td><td>29,908</td><td>6,979</td><td>85.81%</td><td>5,623</td><td class="text-red-700 font-bold">+366</td><td class="text-red-700 font-bold">+6.50%</td></tr>
+                    <tr><td>　香海热电(吨)</td><td>4,831</td><td>23,148</td><td>5,401</td><td>89.45%</td><td>4,992</td><td class="text-teal-700 font-bold">-160</td><td class="text-teal-700 font-bold">-3.21%</td></tr>
+                    <tr><td>金州热电(吨)</td><td>2,175</td><td>13,430</td><td>3,134</td><td>69.41%</td><td>2,739</td><td class="text-teal-700 font-bold">-564</td><td class="text-teal-700 font-bold">-20.58%</td></tr>
+                    <tr><td>北方热电(吨)</td><td>1,293</td><td>5,990</td><td>1,398</td><td>92.54%</td><td>1,137</td><td class="text-red-700 font-bold">+157</td><td class="text-red-700 font-bold">+13.79%</td></tr>
+                    <tr><td>金普公司(吨)</td><td>591</td><td>3,560</td><td>831</td><td>71.12%</td><td>615</td><td class="text-teal-700 font-bold">-24</td><td class="text-teal-700 font-bold">-3.95%</td></tr>
+                    <tr><td>庄河环海标煤(吨)</td><td>0</td><td>0</td><td>0</td><td>-</td><td>28</td><td class="text-teal-700 font-bold">-28</td><td class="text-teal-700 font-bold">-100.00%</td></tr>
+                    <tr class="row-total"><td>庄河外购热(GJ)</td><td>13,940</td><td>117,735</td><td>27,471</td><td>50.74%</td><td>16,511</td><td class="text-teal-700 font-bold">-2,571</td><td class="text-teal-700 font-bold">-15.57%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图2-1 集团汇总标煤耗量同比减少254吨（-1.68%）各单位增减分解瀑布图（吨）</div>
+              <div id="chart_p4_wf" class="chart-box"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">图2-2 各单位标煤耗量及庄河环海外购热量期间计划完成率与同比增幅对比图 (%)</div>
+              <div id="chart_p4_synergy" class="chart-box"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P5: 版式 D1 · 三、发电量与电力现货市场情况 -->
+      <section class="slide-page" id="section-power" data-slide-index="4" data-title="05. 三、发电量与电力现货市场">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 05 / 08 页 · 发电与电力现货</span>
+            <h2 class="text-lg font-bold">三、发电量与电力现货市场情况</h2>
+          </div>
+          <span class="text-xs text-sky-200">左栏：DOCX 第三章同款讲稿 & 表3-1 · 右栏：672点实时出清电价走势图 & 发售电对比图</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 第三章宣讲念稿 & 表3-1（与 DOCX 原文一致）</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大表3-1</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【三、发电量与电力现货市场情况 · 段落 3】</strong>集团汇总发电量1,102万kWh，<span class="num-pos">同比增加44万kWh，增幅4.21%</span>；售电量607万kWh，<span class="num-down">同比减少27万kWh，降幅4.23%</span>。期间现货672个时点实时电价平均237.25元/MWh，最高910.00元/MWh，最低-100.00元/MWh，负电价208点、占比30.95%。香海热电在负电价时段投运#2高减压器旁路供热规避亏损，售电量275万kWh，<span class="num-down">同比减少97万kWh，降幅26.10%</span>；其余电厂稳发。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表3-1 各热电厂发电量与售电量完成情况表（单位：万kWh）</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>单位名称</th><th>本期发电量</th><th>同期发电量</th><th>发电增减</th><th>发电增幅</th><th>本期售电量</th><th>同期售电量</th><th>售电增减</th><th>售电增幅</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团汇总</td><td>1,102</td><td>1,057</td><td class="text-red-700 font-bold">+44</td><td class="text-red-700 font-bold">+4.21%</td><td>607</td><td>633</td><td class="text-teal-700 font-bold">-27</td><td class="text-teal-700 font-bold">-4.23%</td></tr>
+                    <tr><td>主城区</td><td>805</td><td>815</td><td class="text-teal-700 font-bold">-10</td><td class="text-teal-700 font-bold">-1.22%</td><td>447</td><td>510</td><td class="text-teal-700 font-bold">-63</td><td class="text-teal-700 font-bold">-12.30%</td></tr>
+                    <tr><td>　北海热电</td><td>343</td><td>269</td><td class="text-red-700 font-bold">+74</td><td class="text-red-700 font-bold">+27.73%</td><td>172</td><td>137</td><td class="text-red-700 font-bold">+35</td><td class="text-red-700 font-bold">+25.17%</td></tr>
+                    <tr><td>　香海热电</td><td>462</td><td>547</td><td class="text-teal-700 font-bold">-84</td><td class="text-teal-700 font-bold">-15.46%</td><td>275</td><td>373</td><td class="text-teal-700 font-bold">-97</td><td class="text-teal-700 font-bold">-26.10%</td></tr>
+                    <tr><td>金州热电</td><td>194</td><td>149</td><td class="text-red-700 font-bold">+45</td><td class="text-red-700 font-bold">+30.10%</td><td>112</td><td>78</td><td class="text-red-700 font-bold">+34</td><td class="text-red-700 font-bold">+43.81%</td></tr>
+                    <tr><td>北方热电</td><td>103</td><td>93</td><td class="text-red-700 font-bold">+10</td><td class="text-red-700 font-bold">+10.37%</td><td>48</td><td>46</td><td class="text-red-700 font-bold">+2</td><td class="text-red-700 font-bold">+4.07%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图3-1 期间辽宁电力现货每日96点（共672点）实时出清电价走势图（元/MWh）</div>
+              <div id="chart_p5_spot" class="chart-box"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">图3-2 各热电厂本期与同期发电量、售电量对比图（万kWh）</div>
+              <div id="chart_p5_power" class="chart-box"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P6: 版式 D2 · 四、产销边际利润与成本归因分析 -->
+      <section class="slide-page" id="section-financials" data-slide-index="5" data-title="06. 四、产销边际利润与成本归因">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 06 / 08 页 · 经营利润与成本归因</span>
+            <h2 class="text-lg font-bold">四、产销边际利润与成本归因分析</h2>
+          </div>
+          <span class="text-xs text-sky-200">左栏：DOCX 第四章 3 段同款讲稿 & 表4-1 · 右栏：可比利润驱动分解与各单位对比</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 第四章宣讲念稿（段落 4、5、6）& 表4-1</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大表4-1</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【直接收入拆解 · 段落 4】</strong>集团汇总直接收入4,429.87万元，<span class="num-pos">同比增加7.13万元，增幅0.16%</span>。其中，供暖收入4,064.76万元，<span class="num-pos">同比增加37.55万元，增幅0.93%</span>；工商业蒸汽随造船支线及兴工线暖管送汽，售汽量825吨，<span class="num-pos">同比增加154吨，增幅22.95%</span>，售汽收入25.00万元，<span class="num-pos">同比增加4.80万元，增幅23.78%</span>；高温水销售量16,452 GJ，<span class="num-down">同比减少3,183 GJ，降幅16.21%</span>；售电收入受负电价压出力影响为200.18万元，<span class="num-down">同比减少8.84万元，降幅4.23%</span>。
+              </div>
+              <div class="reading-para">
+                <strong>【可比煤价边际利润与成本归因 · 段落 5】</strong>集团汇总可比煤价边际利润2,595.02万元，<span class="num-pos">同比增加127.60万元，增幅5.17%</span>。成本端：一是按可比煤价测算煤与外购热同比节约37.65万元，其中庄河环海外购热成本66.52万元，<span class="num-down">同比减少12.26万元，降幅15.57%</span>，按结算煤价核算集团煤成本1,790.28万元，<span class="num-pos">同比增加508.40万元，增幅39.66%</span>；二是耗水量176,859吨，<span class="num-down">同比减少8,318吨，降幅4.49%</span>，购水成本80.18万元，<span class="num-down">同比减少1.72万元，降幅2.10%</span>；三是外购电量275万kWh，<span class="num-down">同比减少17万kWh，降幅5.80%</span>，外购电成本165.21万元，<span class="num-down">同比减少24.30万元，降幅12.82%</span>；四是可计量辅材成本35.08万元，<span class="num-down">同比减少56.80万元，降幅61.82%</span>，金普公司<span class="num-pos">同比增加0.81万元，增幅116.99%</span>，需核查单耗。
+              </div>
+              <div class="reading-para">
+                <strong>【各单位可比煤价边际利润与全集团边际利润 · 段落 6】</strong>分单位看，主城区可比煤价边际利润1,631.57万元，<span class="num-pos">同比增加40.20万元，增幅2.53%</span>；金州热电493.96万元，<span class="num-pos">同比增加75.60万元，增幅18.07%</span>；庄河环海172.28万元，<span class="num-pos">同比增加32.13万元，增幅22.92%</span>，其余单位详见下表。受当期入炉综合结算煤价变动影响，本周期集团汇总实现边际利润2,292.62万元，<span class="num-down">同比减少406.18万元，降幅15.05%</span>。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表4-1 各单位产销边际利润与直接成本明细表（单位：万元）</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>单位名称</th><th>直接收入</th><th>煤成本</th><th>外购电成本</th><th>购水成本</th><th>辅材成本</th><th>可比煤价边际利润</th><th>可比同比增减</th><th>边际利润</th><th>同比增减</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团汇总</td><td>4,429.87</td><td>1,790.28</td><td>165.21</td><td>80.18</td><td>35.08</td><td>2,595.02</td><td class="text-red-700 font-bold">+127.60</td><td>2,292.62</td><td class="text-teal-700 font-bold">-406.18</td></tr>
+                    <tr><td>主城区</td><td>2,901.29</td><td>1,279.29</td><td>109.76</td><td>51.92</td><td>26.07</td><td>1,631.57</td><td class="text-red-700 font-bold">+40.20</td><td>1,434.25</td><td class="text-teal-700 font-bold">-319.76</td></tr>
+                    <tr><td>　北海热电</td><td>773.00</td><td>682.13</td><td>32.08</td><td>3.25</td><td>13.33</td><td>125.52</td><td class="text-red-700 font-bold">+141.31</td><td>42.22</td><td class="text-teal-700 font-bold">-35.90</td></tr>
+                    <tr><td>　香海热电</td><td>613.79</td><td>597.16</td><td>8.25</td><td>16.96</td><td>12.74</td><td>92.69</td><td class="text-red-700 font-bold">+10.47</td><td>-21.32</td><td class="text-teal-700 font-bold">-172.29</td></tr>
+                    <tr><td>　供热公司</td><td>2,753.70</td><td>0.00</td><td>69.43</td><td>31.72</td><td>0.00</td><td>1,413.35</td><td class="text-teal-700 font-bold">-111.59</td><td>1,413.35</td><td class="text-teal-700 font-bold">-111.59</td></tr>
+                    <tr><td>金州热电</td><td>744.02</td><td>269.16</td><td>16.29</td><td>10.19</td><td>6.08</td><td>493.96</td><td class="text-red-700 font-bold">+75.60</td><td>442.30</td><td class="text-teal-700 font-bold">-23.86</td></tr>
+                    <tr><td>北方热电</td><td>328.59</td><td>163.17</td><td>12.08</td><td>6.57</td><td>1.43</td><td>179.17</td><td class="text-teal-700 font-bold">-23.09</td><td>145.33</td><td class="text-teal-700 font-bold">-70.60</td></tr>
+                    <tr><td>金普公司</td><td>192.07</td><td>78.67</td><td>15.31</td><td>2.70</td><td>1.50</td><td>113.48</td><td class="text-red-700 font-bold">+3.19</td><td>93.90</td><td class="text-teal-700 font-bold">-23.47</td></tr>
+                    <tr><td>庄河环海</td><td>255.15</td><td>0.00</td><td>7.60</td><td>8.75</td><td>0.00</td><td>172.28</td><td class="text-red-700 font-bold">+32.13</td><td>172.28</td><td class="text-red-700 font-bold">+31.94</td></tr>
+                    <tr><td>研究院</td><td>8.76</td><td>0.00</td><td>4.17</td><td>0.04</td><td>0.00</td><td>4.55</td><td class="text-teal-700 font-bold">-0.43</td><td>4.55</td><td class="text-teal-700 font-bold">-0.43</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图4-1 集团汇总可比煤价边际利润同比增加127.60万元驱动因素分解图（万元）</div>
+              <div id="chart_p6_drivers" class="chart-box"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">图4-2 各单位可比煤价边际利润本期与同期对比图（万元）</div>
+              <div id="chart_p6_units" class="chart-box"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P7: 版式 E · 五、供暖单耗与服务质量对标分析 -->
+      <section class="slide-page" id="section-efficiency" data-slide-index="6" data-title="07. 五、供暖单耗与服务质量对标">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 07 / 08 页 · 单耗与服务对标</span>
+            <h2 class="text-lg font-bold">五、供暖单耗与服务质量对标分析</h2>
+          </div>
+          <span class="text-xs text-sky-200">左栏：DOCX 第五章 4 段同款讲稿 & 表5-1 · 右栏：四宫格单耗均值红线与投诉对标切换</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 第五章宣讲念稿（段落 7、8、9、10）& 表5-1</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大表5-1</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【供暖热单耗对标 · 段落 7】</strong>集团汇总供暖热单耗72.46 GJ/万㎡，<span class="num-pos">同比增加0.74 GJ/万㎡，增幅1.04%</span>。庄河环海随气温控负荷，外购热量同比减少15.57%，供暖热单耗94.00 GJ/万㎡，<span class="num-down">同比减少30.97 GJ/万㎡，降幅24.78%</span>，研究院、金州热电同步下降；主城区应对降温提前蓄热，热单耗69.08 GJ/万㎡，<span class="num-pos">同比增加6.49 GJ/万㎡，增幅10.38%</span>。
+              </div>
+              <div class="reading-para">
+                <strong>【供暖电单耗对标 · 段落 8】</strong>集团汇总供暖电单耗510.23 kWh/万㎡，<span class="num-down">同比减少49.25 kWh/万㎡，降幅8.80%</span>，庄河环海、金州热电、主城区均低于同期。北方热电供暖电单耗641.44 kWh/万㎡，<span class="num-pos">同比增加169.35 kWh/万㎡，增幅35.87%</span>；研究院供暖电单耗16,115.28 kWh/万㎡，<span class="num-pos">同比增加2,102.43 kWh/万㎡，增幅15.00%</span>，请两家单位核查原因。
+              </div>
+              <div class="reading-para">
+                <strong>【供暖水单耗与管网抢修 · 段落 9】</strong>集团汇总供暖水单耗31.55吨/万㎡，<span class="num-down">同比减少3.17吨/万㎡，降幅9.12%</span>。除主城区外各单位水单耗均低于同期，但庄河环海仍达85.40吨/万㎡，为集团均值的2.71倍。主城区水单耗30.28吨/万㎡，<span class="num-pos">同比增加4.38吨/万㎡，增幅16.90%</span>，期间完成万众里支线消缺及北斗街交港湾街西侧高温水管道抢修。各单位要把查漏工作贯穿供暖期始终，关注一次网安全。
+              </div>
+              <div class="reading-para">
+                <strong>【服务质量与投诉量对标 · 段落 10】</strong>集团汇总受理省市平台投诉量1,383件，<span class="num-pos">同比增加476件，增幅52.48%</span>；计入住建局考核的净投诉量125件，<span class="num-down">同比减少231件，降幅64.89%</span>。研究院实现零投诉，北方热电、金普公司、金州热电、主城区考核净投诉均大幅减少；主城区、庄河环海及金州热电诉求较多，需持续加强末端排气与回访。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表5-1 各单位供暖热、电、水单耗及服务质量投诉对标表</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>单位名称</th><th>热单耗<br/>(GJ/万㎡)</th><th>热单耗<br/>同比</th><th>电单耗<br/>(kWh/万㎡)</th><th>电单耗<br/>同比</th><th>水单耗<br/>(吨/万㎡)</th><th>水单耗<br/>同比</th><th>省市平台<br/>投诉(件)</th><th>考核净<br/>投诉(件)</th><th>净投诉<br/>同比</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团汇总</td><td>72.46</td><td class="text-red-700 font-bold">+1.04%</td><td>510.23</td><td class="text-teal-700 font-bold">-8.80%</td><td>31.55</td><td class="text-teal-700 font-bold">-9.12%</td><td>1,383</td><td>125</td><td class="text-teal-700 font-bold">-64.89%</td></tr>
+                    <tr><td>主城区</td><td>69.08</td><td class="text-red-700 font-bold">+10.38%</td><td>459.78</td><td class="text-teal-700 font-bold">-9.63%</td><td>30.28</td><td class="text-red-700 font-bold">+16.90%</td><td>1,084</td><td>41</td><td class="text-teal-700 font-bold">-56.84%</td></tr>
+                    <tr><td>金州热电</td><td>71.73</td><td class="text-teal-700 font-bold">-10.27%</td><td>384.20</td><td class="text-teal-700 font-bold">-12.41%</td><td>23.63</td><td class="text-teal-700 font-bold">-30.75%</td><td>91</td><td>53</td><td class="text-teal-700 font-bold">-64.67%</td></tr>
+                    <tr><td>北方热电</td><td>83.27</td><td class="text-teal-700 font-bold">-0.20%</td><td>641.44</td><td class="text-red-700 font-bold">+35.87%</td><td>15.90</td><td class="text-teal-700 font-bold">-32.92%</td><td>6</td><td>6</td><td class="text-teal-700 font-bold">-90.77%</td></tr>
+                    <tr><td>金普公司</td><td>74.66</td><td class="text-red-700 font-bold">+3.50%</td><td>1,418.59</td><td class="text-red-700 font-bold">+0.02%</td><td>34.90</td><td class="text-teal-700 font-bold">-11.70%</td><td>19</td><td>19</td><td class="text-teal-700 font-bold">-58.70%</td></tr>
+                    <tr><td>庄河环海</td><td>94.00</td><td class="text-teal-700 font-bold">-24.78%</td><td>518.74</td><td class="text-teal-700 font-bold">-40.40%</td><td class="text-red-700 font-bold">85.40</td><td class="text-teal-700 font-bold">-36.44%</td><td>183</td><td>6</td><td class="text-red-700 font-bold">+6件</td></tr>
+                    <tr><td>研究院</td><td>48.47</td><td class="text-teal-700 font-bold">-11.80%</td><td class="text-red-700 font-bold">16,115.28</td><td class="text-red-700 font-bold">+15.00%</td><td>11.04</td><td class="text-teal-700 font-bold">-75.04%</td><td>0</td><td>0</td><td>0件</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-panel" data-view-switch-container>
+            <div class="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
+              <span class="text-xs font-bold text-slate-700">📊 单耗与投诉四宫格视图切换：</span>
+              <div class="flex gap-1.5 text-xs flex-wrap" data-view-switch>
+                <button type="button" class="view-switch-btn px-2.5 py-1 rounded bg-sky-800 text-white font-semibold" data-view-mode="all">四图同屏总览</button>
+                <button type="button" class="view-switch-btn px-2.5 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300" data-view-mode="unit">放大：热单耗与电单耗 (图5-1/5-2)</button>
+                <button type="button" class="view-switch-btn px-2.5 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300" data-view-mode="month">放大：水单耗与投诉量 (图5-3/5-4)</button>
+              </div>
+            </div>
+
+            <div class="view-switch-grid grid grid-cols-1 md:grid-cols-2 gap-2.5 flex-1 min-h-0">
+              <div class="chart-card !min-h-[190px]" data-chart-group="unit">
+                <div class="chart-title">图5-1 供暖热单耗对标 (集团均值 72.46 GJ/万㎡)</div>
+                <div id="chart_p7_heat" class="chart-box !min-h-[165px]"></div>
+              </div>
+              <div class="chart-card !min-h-[190px]" data-chart-group="unit">
+                <div class="chart-title">图5-2 供暖电单耗对标 (集团均值 510.23 kWh/万㎡)</div>
+                <div id="chart_p7_power" class="chart-box !min-h-[165px]"></div>
+              </div>
+              <div class="chart-card !min-h-[190px]" data-chart-group="month">
+                <div class="chart-title">图5-3 供暖水单耗对标 (集团均值 31.55 吨/万㎡)</div>
+                <div id="chart_p7_water" class="chart-box !min-h-[165px]"></div>
+              </div>
+              <div class="chart-card !min-h-[190px]" data-chart-group="month">
+                <div class="chart-title">图5-4 省市平台投诉量与考核净投诉量双轨对标 (件)</div>
+                <div id="chart_p7_comp" class="chart-box !min-h-[165px]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P8: 版式 D1 · 六、计划完成情况与下步工作要求 -->
+      <section class="slide-page" id="section-outlook" data-slide-index="7" data-title="08. 六、计划完成情况与下步要求">
+        <div class="slide-header">
+          <div class="flex items-center gap-3">
+            <span class="slide-badge px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-xs">第 08 / 08 页 · 计划进度与展望</span>
+            <h2 class="text-lg font-bold">六、计划完成情况与下步工作要求</h2>
+          </div>
+          <span class="text-xs text-sky-200">左栏：DOCX 第六章同款讲稿 & 表6-1 · 右栏：标煤及庄河外购热计划完成对比 & 下周气温预测走势</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="script-panel">
+            <div class="panel-toolbar">
+              <span class="text-xs font-bold text-slate-700">📄 第六章宣讲念稿（段落 11）& 表6-1</span>
+              <button type="button" class="expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition">🔍 右侧宽屏放大表6-1</button>
+            </div>
+            <div class="script-scroll">
+              <div class="reading-para reading-active">
+                <strong>【六、计划完成情况与下步工作要求 · 段落 11】</strong>集团汇总标煤耗量为期间测算值的83.86%，月度剩余日均可用2,659吨/日，控煤有裕度；庄河环海外购热量为期间测算值的50.74%，月度剩余日均可用4,513 GJ/日；集团耗水量、外购电量分别为测算值的133.65%和120.43%，庄河、北方、供热公司水耗超进度。11月8日—14日主城区日均温降至8.76℃，8日—9日最低-0.90℃，累计HDD20达78.68℃·日，<span class="num-pos">同比增加17.78℃·日，增幅29.19%</span>。下步要求：一是跟踪降温回暖，依托动态模型控负荷防超供；二是热电厂紧盯负电价投高减及水炉调峰；三是北方、研究院、金普核查单耗与辅材异常，强化查漏及回访。
+              </div>
+
+              <div class="table-header-bar">
+                <span class="text-xs font-bold text-slate-800">表6-1 月度及期间标煤耗量（吨）与庄河环海外购热量（GJ）计划完成情况表</span>
+                <span class="text-[11px] text-slate-500">首列已锁定 · 支持右侧宽屏放大</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="report-table">
+                  <thead>
+                    <tr><th>单位及指标</th><th>月度计划</th><th>期间测算</th><th>本期实际</th><th>期间完成率</th><th>进度偏差</th><th>剩余23天<br/>日均可用</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-total"><td>集团汇总标煤(吨)</td><td>76,036</td><td>17,742</td><td>14,879</td><td>83.86%</td><td class="text-teal-700 font-bold">-2,863</td><td>2,659</td></tr>
+                    <tr><td>主城区标煤(吨)</td><td>53,056</td><td>12,380</td><td>10,820</td><td>87.40%</td><td class="text-teal-700 font-bold">-1,560</td><td>1,836</td></tr>
+                    <tr><td>　北海热电标煤(吨)</td><td>29,908</td><td>6,979</td><td>5,988</td><td>85.81%</td><td class="text-teal-700 font-bold">-990</td><td>1,040</td></tr>
+                    <tr><td>　香海热电标煤(吨)</td><td>23,148</td><td>5,401</td><td>4,831</td><td>89.45%</td><td class="text-teal-700 font-bold">-570</td><td>796</td></tr>
+                    <tr><td>金州热电标煤(吨)</td><td>13,430</td><td>3,134</td><td>2,175</td><td>69.41%</td><td class="text-teal-700 font-bold">-959</td><td>489</td></tr>
+                    <tr><td>北方热电标煤(吨)</td><td>5,990</td><td>1,398</td><td>1,293</td><td>92.54%</td><td class="text-teal-700 font-bold">-104</td><td>204</td></tr>
+                    <tr><td>金普公司标煤(吨)</td><td>3,560</td><td>831</td><td>591</td><td>71.12%</td><td class="text-teal-700 font-bold">-240</td><td>129</td></tr>
+                    <tr class="row-total"><td>庄河环海外购热(GJ)</td><td>117,735</td><td>27,471</td><td>13,940</td><td>50.74%</td><td class="text-teal-700 font-bold">-13,531</td><td>4,513</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="mt-2 text-right text-xs font-bold text-slate-600 pr-2">经济运行部 · 2026年11月8日</div>
+            </div>
+          </div>
+
+          <div class="visual-panel">
+            <div class="chart-card">
+              <div class="chart-title">图6-1 各单位期间标煤耗量（吨）及庄河外购热（GJ）实际完成与分解测算对比图</div>
+              <div id="chart_p8_plan" class="chart-box"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">图6-2 未来7天（11月8日—14日）主城区日均气温预测与同期对比走势图（℃）</div>
+              <div id="chart_p8_forecast" class="chart-box"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==================== 全局固定外壳：底部页码进度条与快捷跳页 ==================== -->
+    <footer class="bottom-bar">
+      <div class="flex items-center gap-2">
+        <span class="font-semibold text-amber-300" id="bottomSlideTitle">01. 封面与总体情况</span>
+        <span class="hidden sm:inline text-slate-400">| 快捷键：← 上一页 · → 下一页 · 点击段落高亮导读</span>
+      </div>
+      <div id="pageDots" class="flex items-center gap-1 flex-wrap"></div>
+    </footer>
+  </div>
+
+  <!-- ========================================================================================
+       通用汇报演示内核引擎 (Universal Presentation Runtime Engine v2.0)
+       说明：前半部分为固定交互内核（无需修改），后半部分 CHART_REGISTRY 为图表配置注册区。
+       ======================================================================================== -->
+  <script>
+    (function() {
+      // 1. 标准品牌视觉色板常量（供所有 ECharts 图表统一调用，严格执行“红增绿减”）
+      const THEME = {
+        NAVY: '#14446b',       // 本期基准、主轴标题色（深海蓝）
+        BLUE: '#2678b2',       // 科技蓝
+        GOLD: '#f3c677',       // 同期基期填充色（暖金黄）
+        GOLD_BORDER: '#b45309',// 同期完成边框与折线色（深琥珀）
+        GREEN: '#16a34a',      // 减少为绿色、负增长、能耗节支（标准绿）
+        GREEN_DARK: '#15803d', // 减少边框与深色（深绿）
+        GREEN_LIGHT: '#86efac',// 浅绿
+        TEAL: '#0f766e',       // 深青绿
+        RED: '#dc2626',        // 增加为红色、正增长、超标预警、均值红线（标准红）
+        RED_DARK: '#991b1b',   // 增加边框与深色（深暗红）
+        RED_LIGHT: '#fca5a5',  // 浅珊瑚红
+        GRAY: '#64748b'        // 辅助基准或次要折线（中性灰）
+      };
+
+      const slides = Array.from(document.querySelectorAll('.slide-page'));
+      const totalSlides = slides.length;
+      let currentSlide = 0;
+      let fontScale = 1.0;
+      const chartInstances = {};
+
+      // 2. 自动修正每页顶部徽章的页码总数 & 生成目录抽屉与底部页码点
+      const tocList = document.getElementById('tocList');
+      const pageDots = document.getElementById('pageDots');
+
+      slides.forEach((sec, idx) => {
+        sec.setAttribute('data-slide-index', idx);
+        const title = sec.getAttribute('data-title') || ('第 ' + (idx + 1) + ' 页');
+
+        // 侧边目录项
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full text-left px-3 py-2 rounded-lg transition flex items-center justify-between ' +
+          (idx === 0 ? 'bg-amber-500 text-slate-950 font-bold' : 'hover:bg-slate-800 text-slate-200');
+        btn.innerHTML = '<span class="truncate pr-2">' + title + '</span><span class="text-xs opacity-75 shrink-0">P' + (idx + 1) + '</span>';
+        btn.addEventListener('click', () => {
+          goToSlide(idx);
+          closeToc();
+        });
+        tocList.appendChild(btn);
+
+        // 底部快捷页码点
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'w-6 h-5 rounded text-[11px] font-bold transition ' +
+          (idx === 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700');
+        dot.textContent = idx + 1;
+        dot.title = title;
+        dot.addEventListener('click', () => goToSlide(idx));
+        pageDots.appendChild(dot);
+      });
+
+      // 3. 自动为所有带 .expand-table-btn 的分屏页生成右侧宽屏大字表格放大层
+      slides.forEach((sec) => {
+        const expandBtn = sec.querySelector('.expand-table-btn');
+        const tableWrap = sec.querySelector('.data-table-wrap');
+        const visualPanel = sec.querySelector('.visual-panel');
+        const titleEl = sec.querySelector('.table-header-bar span');
+        if (!expandBtn || !tableWrap || !visualPanel) return;
+
+        const origLabel = expandBtn.textContent;
+        const tableTitle = titleEl ? titleEl.textContent : '附表数据宽屏展示';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'expanded-table-overlay';
+        overlay.innerHTML =
+          '<div class="bg-[#0f3d68] text-white px-4 py-2.5 flex items-center justify-between shrink-0">' +
+            '<div class="font-bold text-sm lg:text-base">📋 ' + tableTitle + '（宽屏大字投屏视图）</div>' +
+            '<button type="button" class="close-expand-btn px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition">📊 返回 ECharts 图表视图</button>' +
+          '</div>' +
+          '<div class="p-4 overflow-auto flex-1 bg-slate-50 flex flex-col justify-center">' +
+            '<div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-x-auto">' +
+              tableWrap.innerHTML +
+            '</div>' +
+          '</div>';
+        visualPanel.appendChild(overlay);
+
+        function toggleTableOverlay(forceState) {
+          const isNowOpen = typeof forceState === 'boolean' ? forceState : !overlay.classList.contains('active');
+          if (isNowOpen) {
+            overlay.classList.add('active');
+            expandBtn.textContent = '📊 返回图表视图';
+            expandBtn.className = 'expand-table-btn px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition';
+          } else {
+            overlay.classList.remove('active');
+            expandBtn.textContent = origLabel;
+            expandBtn.className = 'expand-table-btn px-2.5 py-1 rounded bg-sky-800 hover:bg-sky-700 text-white text-xs font-semibold transition';
+            setTimeout(resizeAllCharts, 50);
+          }
+        }
+
+        expandBtn.addEventListener('click', () => toggleTableOverlay());
+        overlay.querySelector('.close-expand-btn').addEventListener('click', () => toggleTableOverlay(false));
+      });
+
+      // 4. 通用分类表格高亮筛选器（支持任意页使用 [data-table-filter] 与 [data-filter-cat]）
+      document.querySelectorAll('[data-table-filter]').forEach(filterBar => {
+        const parentSlide = filterBar.closest('.slide-page');
+        if (!parentSlide) return;
+        const buttons = Array.from(filterBar.querySelectorAll('[data-filter-cat]'));
+        buttons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const cat = btn.getAttribute('data-filter-cat');
+            buttons.forEach(b => {
+              b.className = (b === btn)
+                ? 'cat-filter-btn px-2 py-0.5 rounded bg-sky-800 text-white font-semibold'
+                : 'cat-filter-btn px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700';
+            });
+            parentSlide.querySelectorAll('tbody tr[data-cat]').forEach(tr => {
+              if (cat === 'all' || tr.getAttribute('data-cat') === cat) {
+                tr.style.opacity = '1';
+                tr.style.backgroundColor = (cat !== 'all') ? '#f0f9ff' : '';
+              } else {
+                tr.style.opacity = '0.28';
+                tr.style.backgroundColor = '';
+              }
+            });
+          });
+        });
+      });
+
+      // 5. 通用多图视图切换器（支持任意页使用 [data-view-switch-container] 与 [data-view-mode]）
+      document.querySelectorAll('[data-view-switch-container]').forEach(container => {
+        const switchBar = container.querySelector('[data-view-switch]');
+        const grid = container.querySelector('.view-switch-grid');
+        if (!switchBar || !grid) return;
+        const buttons = Array.from(switchBar.querySelectorAll('[data-view-mode]'));
+        const cards = Array.from(grid.querySelectorAll('[data-chart-group]'));
+
+        buttons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const mode = btn.getAttribute('data-view-mode');
+            buttons.forEach(b => {
+              b.className = (b === btn)
+                ? 'view-switch-btn px-2.5 py-1 rounded bg-sky-800 text-white font-semibold'
+                : 'view-switch-btn px-2.5 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300';
+            });
+            if (mode === 'all') {
+              grid.className = 'view-switch-grid grid grid-cols-1 md:grid-cols-2 gap-2.5 flex-1 min-h-0';
+              cards.forEach(c => { c.style.display = 'flex'; });
+            } else {
+              grid.className = 'view-switch-grid grid grid-cols-1 gap-3 flex-1 min-h-0';
+              cards.forEach(c => {
+                c.style.display = (c.getAttribute('data-chart-group') === mode) ? 'flex' : 'none';
+              });
+            }
+            setTimeout(resizeAllCharts, 60);
+          });
+        });
+      });
+
+      // 6. 导航状态更新与翻页控制
+      function updateNavUI() {
+        document.getElementById('pageIndicatorTop').textContent = (currentSlide + 1) + ' / ' + totalSlides;
+        const activeTitle = slides[currentSlide].getAttribute('data-title') || '';
+        document.getElementById('bottomSlideTitle').textContent = activeTitle;
+
+        Array.from(tocList.children).forEach((btn, idx) => {
+          btn.className = 'w-full text-left px-3 py-2 rounded-lg transition flex items-center justify-between ' +
+            (idx === currentSlide ? 'bg-amber-500 text-slate-950 font-bold' : 'hover:bg-slate-800 text-slate-200');
+        });
+
+        Array.from(pageDots.children).forEach((dot, idx) => {
+          dot.className = 'w-6 h-5 rounded text-[11px] font-bold transition ' +
+            (idx === currentSlide ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700');
+        });
+      }
+
+      function goToSlide(targetIdx) {
+        if (targetIdx < 0 || targetIdx >= totalSlides) return;
+        currentSlide = targetIdx;
+
+        if (document.body.classList.contains('mode-continuous')) {
+          slides[currentSlide].scrollIntoView({ behavior: 'smooth', block: 'start' });
+          updateNavUI();
+          resizeAllCharts();
+          return;
+        }
+
+        slides.forEach((sec, idx) => {
+          sec.classList.remove('active', 'prev-page', 'next-page');
+          if (idx === currentSlide) {
+            sec.classList.add('active');
+          } else if (idx < currentSlide) {
+            sec.classList.add('prev-page');
+          } else {
+            sec.classList.add('next-page');
+          }
+        });
+
+        updateNavUI();
+        setTimeout(() => {
+          initChartsForSlide(currentSlide);
+          resizeAllCharts();
+        }, 60);
+      }
+
+      // 侧边目录抽屉开关
+      const tocDrawer = document.getElementById('tocDrawer');
+      const drawerBackdrop = document.getElementById('drawerBackdrop');
+      function openToc() { tocDrawer.classList.add('open'); drawerBackdrop.classList.add('open'); }
+      function closeToc() { tocDrawer.classList.remove('open'); drawerBackdrop.classList.remove('open'); }
+      document.getElementById('openTocBtn').addEventListener('click', openToc);
+      document.getElementById('closeTocBtn').addEventListener('click', closeToc);
+      drawerBackdrop.addEventListener('click', closeToc);
+
+      // 上下页按钮与键盘方向键
+      document.getElementById('prevSlideBtn').addEventListener('click', () => goToSlide(currentSlide - 1));
+      document.getElementById('nextSlideBtn').addEventListener('click', () => goToSlide(currentSlide + 1));
+      document.addEventListener('keydown', (e) => {
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); goToSlide(currentSlide + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goToSlide(currentSlide - 1); }
+      });
+
+      // 3D 翻页特效切换
+      document.getElementById('fxSelector').addEventListener('change', (e) => {
+        document.body.classList.remove('fx-cube', 'fx-slide', 'fx-flip', 'fx-zoom');
+        document.body.classList.add(e.target.value);
+      });
+
+      // 四种分屏与长卷模式切换
+      const layoutBtns = [
+        { id: 'layoutBalancedBtn', cls: '' },
+        { id: 'layoutChartBtn', cls: 'layout-chart-focus' },
+        { id: 'layoutTextBtn', cls: 'layout-text-focus' },
+        { id: 'layoutScrollBtn', cls: 'mode-continuous' }
+      ];
+      layoutBtns.forEach(item => {
+        document.getElementById(item.id).addEventListener('click', () => {
+          document.body.classList.remove('layout-chart-focus', 'layout-text-focus', 'mode-continuous');
+          if (item.cls) document.body.classList.add(item.cls);
+          layoutBtns.forEach(b => {
+            const el = document.getElementById(b.id);
+            el.className = (b.id === item.id)
+              ? 'px-2 py-1 rounded bg-sky-700 text-white font-medium'
+              : 'px-2 py-1 rounded text-slate-300 hover:text-white';
+          });
+          if (item.cls === 'mode-continuous') {
+            for (let i = 0; i < totalSlides; i++) initChartsForSlide(i);
+          }
+          setTimeout(resizeAllCharts, 120);
+        });
+      });
+
+      // 屏幕比例切换 (16:9 标准 ⇋ 8:3 异形大屏预挤压投影)
+      const ratio16x9Btn = document.getElementById('ratio16x9Btn');
+      const ratio8x3Btn = document.getElementById('ratio8x3Btn');
+      const squeezeBadge = document.getElementById('squeezeBadge');
+
+      function setScreenRatio(ratio) {
+        if (ratio === '8:3') {
+          document.body.classList.add('screen-8-3');
+          if (ratio8x3Btn) ratio8x3Btn.className = 'px-2 py-1 rounded bg-amber-500 text-slate-950 font-bold shadow-sm transition';
+          if (ratio16x9Btn) ratio16x9Btn.className = 'px-2 py-1 rounded text-slate-300 hover:text-white transition';
+          if (squeezeBadge) squeezeBadge.classList.remove('hidden');
+          try { localStorage.setItem('report_screen_ratio', '8:3'); } catch (e) {}
+        } else {
+          document.body.classList.remove('screen-8-3');
+          if (ratio16x9Btn) ratio16x9Btn.className = 'px-2 py-1 rounded bg-sky-700 text-white font-medium transition';
+          if (ratio8x3Btn) ratio8x3Btn.className = 'px-2 py-1 rounded text-slate-300 hover:text-white transition';
+          if (squeezeBadge) squeezeBadge.classList.add('hidden');
+          try { localStorage.setItem('report_screen_ratio', '16:9'); } catch (e) {}
+        }
+        // 延时重算所有图表，自适应新排版尺寸
+        setTimeout(resizeAllCharts, 80);
+      }
+
+      if (ratio16x9Btn) ratio16x9Btn.addEventListener('click', () => setScreenRatio('16:9'));
+      if (ratio8x3Btn) ratio8x3Btn.addEventListener('click', () => setScreenRatio('8:3'));
+
+      // 快捷键支持：按键盘 '8' 一键切换 16:9 / 8:3 比例
+      document.addEventListener('keydown', (e) => {
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+        if (e.key === '8') {
+          const is83 = document.body.classList.contains('screen-8-3');
+          setScreenRatio(is83 ? '16:9' : '8:3');
+        }
+      });
+
+      // 读取历史偏好（默认 16:9）
+      try {
+        const savedRatio = localStorage.getItem('report_screen_ratio') || '16:9';
+        if (savedRatio === '8:3') setScreenRatio('8:3');
+      } catch (e) {}
+
+      // 全局字号无级缩放
+      function updateFontScale(delta) {
+        fontScale = Math.min(1.35, Math.max(0.85, +(fontScale + delta).toFixed(2)));
+        document.documentElement.style.setProperty('--font-scale', fontScale);
+        document.getElementById('fontScaleLabel').textContent = Math.round(fontScale * 100) + '%';
+      }
+      document.getElementById('fontDecBtn').addEventListener('click', () => updateFontScale(-0.08));
+      document.getElementById('fontIncBtn').addEventListener('click', () => updateFontScale(0.08));
+
+      // 全屏投影切换
+      document.getElementById('fullscreenBtn').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+
+      // 念稿段落点击高亮导读
+      document.querySelectorAll('.reading-para').forEach(para => {
+        para.addEventListener('click', () => {
+          const parentSlide = para.closest('.slide-page');
+          if (parentSlide) {
+            parentSlide.querySelectorAll('.reading-para').forEach(p => p.classList.remove('reading-active'));
+          }
+          para.classList.add('reading-active');
+        });
+      });
+
+      // 7. ECharts 实例生命周期管理与标准图表预设工厂 (ChartPresets)
+      function getOrCreateChart(domId) {
+        const el = document.getElementById(domId);
+        if (!el || typeof echarts === 'undefined') return null;
+        if (chartInstances[domId]) return chartInstances[domId];
+        const inst = echarts.init(el);
+        chartInstances[domId] = inst;
+        return inst;
+      }
+
+      function resizeAllCharts() {
+        Object.values(chartInstances).forEach(inst => {
+          if (inst && typeof inst.resize === 'function') inst.resize();
+        });
+      }
+      window.addEventListener('resize', resizeAllCharts);
+
+      // 标准图表快速构建器（AI Agent 可直接调用，也可传入原生 ECharts Option）
+      const ChartPresets = {
+        // 预设1：正负分化排序柱状图（严格执行红增绿减规范：增加为红、减少为绿）
+        divergingBar: function(categories, values, yName, minVal, maxVal) {
+          return {
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 }, formatter: '{b}: <b>{c}%</b>' },
+            grid: { left: 56, right: 24, top: 32, bottom: 64 },
+            xAxis: { type: 'category', data: categories, axisLabel: { rotate: 28, fontSize: 12, fontWeight: 600, color: '#0f172a', interval: 0 } },
+            yAxis: { type: 'value', name: yName || '同比变化率 (%)', nameTextStyle: { fontSize: 12.5, fontWeight: 'bold' }, min: minVal, max: maxVal, axisLabel: { formatter: '{value}%', fontSize: 12 }, splitLine: { lineStyle: { type: 'dashed' } } },
+            series: [{
+              type: 'bar', barWidth: '58%',
+              data: values.map(v => ({
+                value: v,
+                itemStyle: {
+                  color: v >= 0 ? THEME.RED : THEME.GREEN,
+                  borderColor: v >= 0 ? THEME.RED_DARK : THEME.GREEN_DARK,
+                  borderWidth: 1.5,
+                  decal: v < 0 ? { symbol: 'rect', dashArrayX: [1, 0], dashArrayY: [2, 4], rotation: -Math.PI / 4, color: 'rgba(21,128,61,0.35)' } : undefined
+                },
+                label: {
+                  show: true, position: v >= 0 ? 'top' : 'bottom',
+                  formatter: (v >= 0 ? '+' : '') + v.toFixed(2) + '%',
+                  fontSize: 11.5, fontWeight: 'bold',
+                  color: v >= 0 ? THEME.RED : THEME.GREEN_DARK
+                }
+              }))
+            }]
+          };
+        },
+
+        // 预设2：本期vs同期双柱对比图（支持可选均值基准线 markLineValue）
+        groupedComparisonBar: function(categories, currentData, priorData, yName, currentName, priorName, markLineValue, markLineLabel) {
+          const markLineObj = (typeof markLineValue === 'number') ? {
+            symbol: 'none',
+            lineStyle: { color: THEME.RED, type: 'dashed', width: 1.5 },
+            label: { formatter: markLineLabel || ('均值 ' + markLineValue), position: 'insideEndTop', fontSize: 11, fontWeight: 'bold', color: THEME.RED },
+            data: [{ yAxis: markLineValue }]
+          } : undefined;
+
+          return {
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, textStyle: { fontSize: 13 } },
+            legend: { top: 0, right: 8, itemWidth: 15, itemHeight: 10, textStyle: { fontSize: 12, fontWeight: 600 } },
+            grid: { left: 52, right: 16, top: 34, bottom: 42 },
+            xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a', interval: 0 } },
+            yAxis: { type: 'value', name: yName || '', nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, axisLabel: { fontSize: 11.5 }, splitLine: { lineStyle: { type: 'dashed' } } },
+            series: [
+              {
+                name: currentName || '本期计划', type: 'bar', barGap: '8%',
+                itemStyle: { color: THEME.NAVY },
+                label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY },
+                data: currentData,
+                markLine: markLineObj
+              },
+              {
+                name: priorName || '同期完成', type: 'bar',
+                itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 },
+                label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold', color: '#92400e' },
+                data: priorData
+              }
+            ]
+          };
+        },
+
+        // 预设3：期间每日气温对比走势图（HTML 首页与 DOCX 概述必配，仅展示本期与同期日均温双线对比）
+        temperatureCurve: function(dates, avgTemps, priorAvgTemps) {
+          return {
+            tooltip: { trigger: 'axis', textStyle: { fontSize: 12 } },
+            legend: { top: 0, right: 6, itemWidth: 14, itemHeight: 9, textStyle: { fontSize: 11, fontWeight: 600 } },
+            grid: { left: 38, right: 16, top: 30, bottom: 24 },
+            xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 11, fontWeight: 600, color: '#0f172a' } },
+            yAxis: { type: 'value', name: '℃', nameTextStyle: { fontSize: 11, fontWeight: 'bold' }, axisLabel: { fontSize: 10.5 }, splitLine: { lineStyle: { type: 'dashed' } } },
+            series: [
+              {
+                name: '本期日均温', type: 'line', symbolSize: 6,
+                itemStyle: { color: THEME.NAVY }, lineStyle: { width: 2.2 },
+                data: avgTemps
+              },
+              {
+                name: '同期日均温', type: 'line', symbol: 'rect', symbolSize: 5,
+                itemStyle: { color: THEME.GOLD_BORDER }, lineStyle: { width: 1.8, type: 'dashed' },
+                data: priorAvgTemps
+              }
+            ]
+          };
+        }
+      };
+
+      // ========================================================================================
+      // [AI-SLOT: CHART_REGISTRY] 按页码索引 (0-based) 注册每页的 ECharts 初始化函数
+      // ========================================================================================
+            // 覆盖升级 ChartPresets.temperatureCurve：显式开启本期与同期日均温双线数据标签
+      ChartPresets.temperatureCurve = function(dates, avgTemps, priorAvgTemps) {
+        return {
+          tooltip: { trigger: 'axis', textStyle: { fontSize: 12.5 } },
+          legend: { top: 2, right: 8, itemWidth: 15, itemHeight: 10, textStyle: { fontSize: 11.5, fontWeight: 600 } },
+          grid: { left: 44, right: 24, top: 38, bottom: 28 },
+          xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a' } },
+          yAxis: {
+            type: 'value', name: '℃',
+            nameTextStyle: { fontSize: 11.5, fontWeight: 'bold' },
+            min: function(val) { return Math.floor(val.min - 2.2); },
+            max: function(val) { return Math.ceil(val.max + 2.5); },
+            axisLabel: { fontSize: 11 },
+            splitLine: { lineStyle: { type: 'dashed' } }
+          },
+          series: [
+            {
+              name: '本期日均温', type: 'line', symbolSize: 7,
+              itemStyle: { color: THEME.NAVY }, lineStyle: { width: 2.5 },
+              label: { show: true, position: 'top', formatter: '{c}℃', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY },
+              data: avgTemps
+            },
+            {
+              name: '同期日均温', type: 'line', symbol: 'rect', symbolSize: 6,
+              itemStyle: { color: THEME.GOLD_BORDER }, lineStyle: { width: 2.0, type: 'dashed' },
+              label: { show: true, position: 'bottom', formatter: '{c}℃', fontSize: 10.5, fontWeight: 'bold', color: '#92400e' },
+              data: priorAvgTemps
+            }
+          ]
+        };
+      };
+
+      const CHART_REGISTRY = {
+        0: function() {
+          const c0 = getOrCreateChart('chart_p1_temp');
+          if (c0) {
+            c0.setOption(ChartPresets.temperatureCurve(
+              ["11-01", "11-02", "11-03", "11-04", "11-05", "11-06", "11-07"],
+              [13.22, 10.52, 14.03, 16.05, 12.9, 6.09, 5.13],
+              [12.69, 6.47, 8.01, 13.11, 13.71, 12.78, 11.7]
+            ));
+          }
+        },
+
+        1: function() {
+          const c21 = getOrCreateChart('chart_p2_spectrum');
+          if (c21) {
+            const labels = ['考核净投诉','辅材成本','高温水销量','庄河外购热量','外购电成本','供暖水单耗','供暖电单耗','外购电量','耗水量','售电量','供热标煤单耗','标煤耗量','原煤耗量','直接收入','供暖收入','供暖热单耗','发电量','供热量','可比煤价利润','售汽量','煤成本','省市平台投诉'];
+            const vals = [-64.89, -61.82, -16.21, -15.57, -12.82, -9.12, -8.80, -5.80, -4.49, -4.23, -2.33, -1.68, -0.25, 0.16, 0.93, 1.04, 4.21, 4.33, 5.17, 22.95, 39.66, 52.48];
+            c21.setOption(ChartPresets.divergingBar(labels, vals, '同比增幅 (%)', -75, 65));
+          }
+
+          const c22a = getOrCreateChart('chart_p2_water');
+          if (c22a) {
+            c22a.setOption(ChartPresets.groupedComparisonBar(
+              ['供热公司', '香海热电', '金州热电', '庄河环海', '北方热电', '北海热电', '金普公司'],
+              [70335, 36620, 22612, 19409, 14608, 7201, 5990],
+              [59437, 26929, 27012, 31025, 10683, 22978, 6776],
+              '吨', '本期耗水量', '同期耗水量'
+            ));
+          }
+
+          const c22b = getOrCreateChart('chart_p2_power');
+          if (c22b) {
+            c22b.setOption(ChartPresets.groupedComparisonBar(
+              ['供热公司', '北海热电', '金州热电', '金普公司', '北方热电', '香海热电', '研究院', '庄河环海'],
+              [107, 61, 24, 24, 19, 16, 12, 12],
+              [117, 63, 28, 24, 14, 15, 11, 20],
+              '万kWh', '本期外购电量', '同期外购电量'
+            ));
+          }
+        },
+
+        3: function() {
+          const c41 = getOrCreateChart('chart_p4_wf');
+          if (c41) {
+            const xLabels = ['同期标煤\n(15,133吨)', '北海热电\n(+6.50%)', '北方热电\n(+13.79%)', '金州热电\n(-20.58%)', '香海热电\n(-3.21%)', '庄河及金普\n(节煤减量)', '本期标煤\n(14,879吨)'];
+            const baseVals = [14000, 15133, 15499, 15092, 14932, 14879, 14000];
+            const barVals = [1133, 366, 157, 564, 160, 52, 879];
+            const dispText = ['15,133吨', '+366吨', '+157吨', '-564吨', '-160吨', '-52吨', '14,879吨'];
+            const barColors = [THEME.GOLD, THEME.RED, THEME.RED, THEME.GREEN, THEME.GREEN, THEME.GREEN, THEME.NAVY];
+            c41.setOption({
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+              grid: { left: 56, right: 20, top: 32, bottom: 42 },
+              xAxis: { type: 'category', data: xLabels, axisLabel: { fontSize: 11, fontWeight: 600, color: '#0f172a', interval: 0 } },
+              yAxis: { type: 'value', name: '吨 (局部放大)', min: 14000, max: 15950, splitLine: { lineStyle: { type: 'dashed' } } },
+              series: [
+                { type: 'bar', stack: 'wf', silent: true, itemStyle: { color: 'transparent' }, data: baseVals },
+                {
+                  type: 'bar', stack: 'wf', barWidth: 38,
+                  data: barVals.map((v, i) => ({
+                    value: v,
+                    itemStyle: { color: barColors[i], borderColor: '#0f172a', borderWidth: 1 },
+                    label: {
+                      show: true, position: (i >= 3 && i <= 5) ? 'bottom' : 'top',
+                      formatter: dispText[i], fontSize: 11, fontWeight: 'bold',
+                      color: (i === 1 || i === 2) ? THEME.RED : ((i >= 3 && i <= 5) ? THEME.GREEN_DARK : THEME.NAVY)
+                    }
+                  }))
+                }
+              ]
+            });
+          }
+
+          const c42 = getOrCreateChart('chart_p4_synergy');
+          if (c42) {
+            const uNames = ['集团汇总\n(标煤)', '主城区\n(标煤)', '北海热电\n(标煤)', '香海热电\n(标煤)', '金州热电\n(标煤)', '北方热电\n(标煤)', '金普公司\n(标煤)', '庄河环海\n(外购热)'];
+            const planRates = [83.86, 87.40, 85.81, 89.45, 69.41, 92.54, 71.12, 50.74];
+            const yoyRates = [-1.68, 1.93, 6.50, -3.21, -20.58, 13.79, -3.95, -15.57];
+            c42.setOption({
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+              legend: { top: 0, textStyle: { fontSize: 11.5, fontWeight: 600 } },
+              grid: { left: 52, right: 20, top: 34, bottom: 42 },
+              xAxis: { type: 'category', data: uNames, axisLabel: { fontSize: 10.5, fontWeight: 600, color: '#0f172a', interval: 0 } },
+              yAxis: { type: 'value', name: '百分比 (%)', min: -30, max: 115, splitLine: { lineStyle: { type: 'dashed' } } },
+              series: [
+                {
+                  name: '期间计划完成率 (%)', type: 'bar', barGap: '10%',
+                  itemStyle: { color: THEME.NAVY },
+                  label: { show: true, position: 'top', formatter: '{c}%', fontSize: 10.5, fontWeight: 'bold', color: THEME.NAVY },
+                  data: planRates,
+                  markLine: {
+                    symbol: 'none', lineStyle: { color: THEME.RED, type: 'dashed', width: 1.5 },
+                    label: { formatter: '计划基准 100%', fontSize: 10.5, fontWeight: 'bold', color: THEME.RED },
+                    data: [{ yAxis: 100 }]
+                  }
+                },
+                {
+                  name: '同比增幅 (%) [红增绿减]', type: 'bar',
+                  data: yoyRates.map(v => ({
+                    value: v,
+                    itemStyle: { color: v >= 0 ? THEME.RED : THEME.GREEN },
+                    label: {
+                      show: true, position: v >= 0 ? 'top' : 'bottom',
+                      formatter: (v >= 0 ? '+' : '') + v.toFixed(2) + '%',
+                      fontSize: 10.5, fontWeight: 'bold',
+                      color: v >= 0 ? THEME.RED : THEME.GREEN_DARK
+                    }
+                  }))
+                }
+              ]
+            });
+          }
+        },
+
+        4: function() {
+          const c51 = getOrCreateChart('chart_p5_spot');
+          if (c51) {
+            c51.setOption({
+              tooltip: { trigger: 'axis' },
+              legend: { top: 0, right: 10, textStyle: { fontSize: 11.5, fontWeight: 600 } },
+              grid: { left: 54, right: 24, top: 36, bottom: 32 },
+              xAxis: { type: 'category', data: ["11-01 00:15", "11-01 00:30", "11-01 00:45", "11-01 01:00", "11-01 01:15", "11-01 01:30", "11-01 01:45", "11-01 02:00", "11-01 02:15", "11-01 02:30", "11-01 02:45", "11-01 03:00", "11-01 03:15", "11-01 03:30", "11-01 03:45", "11-01 04:00", "11-01 04:15", "11-01 04:30", "11-01 04:45", "11-01 05:00", "11-01 05:15", "11-01 05:30", "11-01 05:45", "11-01 06:00", "11-01 06:15", "11-01 06:30", "11-01 06:45", "11-01 07:00", "11-01 07:15", "11-01 07:30", "11-01 07:45", "11-01 08:00", "11-01 08:15", "11-01 08:30", "11-01 08:45", "11-01 09:00", "11-01 09:15", "11-01 09:30", "11-01 09:45", "11-01 10:00", "11-01 10:15", "11-01 10:30", "11-01 10:45", "11-01 11:00", "11-01 11:15", "11-01 11:30", "11-01 11:45", "11-01 12:00", "11-01 12:15", "11-01 12:30", "11-01 12:45", "11-01 13:00", "11-01 13:15", "11-01 13:30", "11-01 13:45", "11-01 14:00", "11-01 14:15", "11-01 14:30", "11-01 14:45", "11-01 15:00", "11-01 15:15", "11-01 15:30", "11-01 15:45", "11-01 16:00", "11-01 16:15", "11-01 16:30", "11-01 16:45", "11-01 17:00", "11-01 17:15", "11-01 17:30", "11-01 17:45", "11-01 18:00", "11-01 18:15", "11-01 18:30", "11-01 18:45", "11-01 19:00", "11-01 19:15", "11-01 19:30", "11-01 19:45", "11-01 20:00", "11-01 20:15", "11-01 20:30", "11-01 20:45", "11-01 21:00", "11-01 21:15", "11-01 21:30", "11-01 21:45", "11-01 22:00", "11-01 22:15", "11-01 22:30", "11-01 22:45", "11-01 23:00", "11-01 23:15", "11-01 23:30", "11-01 23:45", "11-01 24:00", "11-02 00:15", "11-02 00:30", "11-02 00:45", "11-02 01:00", "11-02 01:15", "11-02 01:30", "11-02 01:45", "11-02 02:00", "11-02 02:15", "11-02 02:30", "11-02 02:45", "11-02 03:00", "11-02 03:15", "11-02 03:30", "11-02 03:45", "11-02 04:00", "11-02 04:15", "11-02 04:30", "11-02 04:45", "11-02 05:00", "11-02 05:15", "11-02 05:30", "11-02 05:45", "11-02 06:00", "11-02 06:15", "11-02 06:30", "11-02 06:45", "11-02 07:00", "11-02 07:15", "11-02 07:30", "11-02 07:45", "11-02 08:00", "11-02 08:15", "11-02 08:30", "11-02 08:45", "11-02 09:00", "11-02 09:15", "11-02 09:30", "11-02 09:45", "11-02 10:00", "11-02 10:15", "11-02 10:30", "11-02 10:45", "11-02 11:00", "11-02 11:15", "11-02 11:30", "11-02 11:45", "11-02 12:00", "11-02 12:15", "11-02 12:30", "11-02 12:45", "11-02 13:00", "11-02 13:15", "11-02 13:30", "11-02 13:45", "11-02 14:00", "11-02 14:15", "11-02 14:30", "11-02 14:45", "11-02 15:00", "11-02 15:15", "11-02 15:30", "11-02 15:45", "11-02 16:00", "11-02 16:15", "11-02 16:30", "11-02 16:45", "11-02 17:00", "11-02 17:15", "11-02 17:30", "11-02 17:45", "11-02 18:00", "11-02 18:15", "11-02 18:30", "11-02 18:45", "11-02 19:00", "11-02 19:15", "11-02 19:30", "11-02 19:45", "11-02 20:00", "11-02 20:15", "11-02 20:30", "11-02 20:45", "11-02 21:00", "11-02 21:15", "11-02 21:30", "11-02 21:45", "11-02 22:00", "11-02 22:15", "11-02 22:30", "11-02 22:45", "11-02 23:00", "11-02 23:15", "11-02 23:30", "11-02 23:45", "11-02 24:00", "11-03 00:15", "11-03 00:30", "11-03 00:45", "11-03 01:00", "11-03 01:15", "11-03 01:30", "11-03 01:45", "11-03 02:00", "11-03 02:15", "11-03 02:30", "11-03 02:45", "11-03 03:00", "11-03 03:15", "11-03 03:30", "11-03 03:45", "11-03 04:00", "11-03 04:15", "11-03 04:30", "11-03 04:45", "11-03 05:00", "11-03 05:15", "11-03 05:30", "11-03 05:45", "11-03 06:00", "11-03 06:15", "11-03 06:30", "11-03 06:45", "11-03 07:00", "11-03 07:15", "11-03 07:30", "11-03 07:45", "11-03 08:00", "11-03 08:15", "11-03 08:30", "11-03 08:45", "11-03 09:00", "11-03 09:15", "11-03 09:30", "11-03 09:45", "11-03 10:00", "11-03 10:15", "11-03 10:30", "11-03 10:45", "11-03 11:00", "11-03 11:15", "11-03 11:30", "11-03 11:45", "11-03 12:00", "11-03 12:15", "11-03 12:30", "11-03 12:45", "11-03 13:00", "11-03 13:15", "11-03 13:30", "11-03 13:45", "11-03 14:00", "11-03 14:15", "11-03 14:30", "11-03 14:45", "11-03 15:00", "11-03 15:15", "11-03 15:30", "11-03 15:45", "11-03 16:00", "11-03 16:15", "11-03 16:30", "11-03 16:45", "11-03 17:00", "11-03 17:15", "11-03 17:30", "11-03 17:45", "11-03 18:00", "11-03 18:15", "11-03 18:30", "11-03 18:45", "11-03 19:00", "11-03 19:15", "11-03 19:30", "11-03 19:45", "11-03 20:00", "11-03 20:15", "11-03 20:30", "11-03 20:45", "11-03 21:00", "11-03 21:15", "11-03 21:30", "11-03 21:45", "11-03 22:00", "11-03 22:15", "11-03 22:30", "11-03 22:45", "11-03 23:00", "11-03 23:15", "11-03 23:30", "11-03 23:45", "11-03 24:00", "11-04 00:15", "11-04 00:30", "11-04 00:45", "11-04 01:00", "11-04 01:15", "11-04 01:30", "11-04 01:45", "11-04 02:00", "11-04 02:15", "11-04 02:30", "11-04 02:45", "11-04 03:00", "11-04 03:15", "11-04 03:30", "11-04 03:45", "11-04 04:00", "11-04 04:15", "11-04 04:30", "11-04 04:45", "11-04 05:00", "11-04 05:15", "11-04 05:30", "11-04 05:45", "11-04 06:00", "11-04 06:15", "11-04 06:30", "11-04 06:45", "11-04 07:00", "11-04 07:15", "11-04 07:30", "11-04 07:45", "11-04 08:00", "11-04 08:15", "11-04 08:30", "11-04 08:45", "11-04 09:00", "11-04 09:15", "11-04 09:30", "11-04 09:45", "11-04 10:00", "11-04 10:15", "11-04 10:30", "11-04 10:45", "11-04 11:00", "11-04 11:15", "11-04 11:30", "11-04 11:45", "11-04 12:00", "11-04 12:15", "11-04 12:30", "11-04 12:45", "11-04 13:00", "11-04 13:15", "11-04 13:30", "11-04 13:45", "11-04 14:00", "11-04 14:15", "11-04 14:30", "11-04 14:45", "11-04 15:00", "11-04 15:15", "11-04 15:30", "11-04 15:45", "11-04 16:00", "11-04 16:15", "11-04 16:30", "11-04 16:45", "11-04 17:00", "11-04 17:15", "11-04 17:30", "11-04 17:45", "11-04 18:00", "11-04 18:15", "11-04 18:30", "11-04 18:45", "11-04 19:00", "11-04 19:15", "11-04 19:30", "11-04 19:45", "11-04 20:00", "11-04 20:15", "11-04 20:30", "11-04 20:45", "11-04 21:00", "11-04 21:15", "11-04 21:30", "11-04 21:45", "11-04 22:00", "11-04 22:15", "11-04 22:30", "11-04 22:45", "11-04 23:00", "11-04 23:15", "11-04 23:30", "11-04 23:45", "11-04 24:00", "11-05 00:15", "11-05 00:30", "11-05 00:45", "11-05 01:00", "11-05 01:15", "11-05 01:30", "11-05 01:45", "11-05 02:00", "11-05 02:15", "11-05 02:30", "11-05 02:45", "11-05 03:00", "11-05 03:15", "11-05 03:30", "11-05 03:45", "11-05 04:00", "11-05 04:15", "11-05 04:30", "11-05 04:45", "11-05 05:00", "11-05 05:15", "11-05 05:30", "11-05 05:45", "11-05 06:00", "11-05 06:15", "11-05 06:30", "11-05 06:45", "11-05 07:00", "11-05 07:15", "11-05 07:30", "11-05 07:45", "11-05 08:00", "11-05 08:15", "11-05 08:30", "11-05 08:45", "11-05 09:00", "11-05 09:15", "11-05 09:30", "11-05 09:45", "11-05 10:00", "11-05 10:15", "11-05 10:30", "11-05 10:45", "11-05 11:00", "11-05 11:15", "11-05 11:30", "11-05 11:45", "11-05 12:00", "11-05 12:15", "11-05 12:30", "11-05 12:45", "11-05 13:00", "11-05 13:15", "11-05 13:30", "11-05 13:45", "11-05 14:00", "11-05 14:15", "11-05 14:30", "11-05 14:45", "11-05 15:00", "11-05 15:15", "11-05 15:30", "11-05 15:45", "11-05 16:00", "11-05 16:15", "11-05 16:30", "11-05 16:45", "11-05 17:00", "11-05 17:15", "11-05 17:30", "11-05 17:45", "11-05 18:00", "11-05 18:15", "11-05 18:30", "11-05 18:45", "11-05 19:00", "11-05 19:15", "11-05 19:30", "11-05 19:45", "11-05 20:00", "11-05 20:15", "11-05 20:30", "11-05 20:45", "11-05 21:00", "11-05 21:15", "11-05 21:30", "11-05 21:45", "11-05 22:00", "11-05 22:15", "11-05 22:30", "11-05 22:45", "11-05 23:00", "11-05 23:15", "11-05 23:30", "11-05 23:45", "11-05 24:00", "11-06 00:15", "11-06 00:30", "11-06 00:45", "11-06 01:00", "11-06 01:15", "11-06 01:30", "11-06 01:45", "11-06 02:00", "11-06 02:15", "11-06 02:30", "11-06 02:45", "11-06 03:00", "11-06 03:15", "11-06 03:30", "11-06 03:45", "11-06 04:00", "11-06 04:15", "11-06 04:30", "11-06 04:45", "11-06 05:00", "11-06 05:15", "11-06 05:30", "11-06 05:45", "11-06 06:00", "11-06 06:15", "11-06 06:30", "11-06 06:45", "11-06 07:00", "11-06 07:15", "11-06 07:30", "11-06 07:45", "11-06 08:00", "11-06 08:15", "11-06 08:30", "11-06 08:45", "11-06 09:00", "11-06 09:15", "11-06 09:30", "11-06 09:45", "11-06 10:00", "11-06 10:15", "11-06 10:30", "11-06 10:45", "11-06 11:00", "11-06 11:15", "11-06 11:30", "11-06 11:45", "11-06 12:00", "11-06 12:15", "11-06 12:30", "11-06 12:45", "11-06 13:00", "11-06 13:15", "11-06 13:30", "11-06 13:45", "11-06 14:00", "11-06 14:15", "11-06 14:30", "11-06 14:45", "11-06 15:00", "11-06 15:15", "11-06 15:30", "11-06 15:45", "11-06 16:00", "11-06 16:15", "11-06 16:30", "11-06 16:45", "11-06 17:00", "11-06 17:15", "11-06 17:30", "11-06 17:45", "11-06 18:00", "11-06 18:15", "11-06 18:30", "11-06 18:45", "11-06 19:00", "11-06 19:15", "11-06 19:30", "11-06 19:45", "11-06 20:00", "11-06 20:15", "11-06 20:30", "11-06 20:45", "11-06 21:00", "11-06 21:15", "11-06 21:30", "11-06 21:45", "11-06 22:00", "11-06 22:15", "11-06 22:30", "11-06 22:45", "11-06 23:00", "11-06 23:15", "11-06 23:30", "11-06 23:45", "11-06 24:00", "11-07 00:15", "11-07 00:30", "11-07 00:45", "11-07 01:00", "11-07 01:15", "11-07 01:30", "11-07 01:45", "11-07 02:00", "11-07 02:15", "11-07 02:30", "11-07 02:45", "11-07 03:00", "11-07 03:15", "11-07 03:30", "11-07 03:45", "11-07 04:00", "11-07 04:15", "11-07 04:30", "11-07 04:45", "11-07 05:00", "11-07 05:15", "11-07 05:30", "11-07 05:45", "11-07 06:00", "11-07 06:15", "11-07 06:30", "11-07 06:45", "11-07 07:00", "11-07 07:15", "11-07 07:30", "11-07 07:45", "11-07 08:00", "11-07 08:15", "11-07 08:30", "11-07 08:45", "11-07 09:00", "11-07 09:15", "11-07 09:30", "11-07 09:45", "11-07 10:00", "11-07 10:15", "11-07 10:30", "11-07 10:45", "11-07 11:00", "11-07 11:15", "11-07 11:30", "11-07 11:45", "11-07 12:00", "11-07 12:15", "11-07 12:30", "11-07 12:45", "11-07 13:00", "11-07 13:15", "11-07 13:30", "11-07 13:45", "11-07 14:00", "11-07 14:15", "11-07 14:30", "11-07 14:45", "11-07 15:00", "11-07 15:15", "11-07 15:30", "11-07 15:45", "11-07 16:00", "11-07 16:15", "11-07 16:30", "11-07 16:45", "11-07 17:00", "11-07 17:15", "11-07 17:30", "11-07 17:45", "11-07 18:00", "11-07 18:15", "11-07 18:30", "11-07 18:45", "11-07 19:00", "11-07 19:15", "11-07 19:30", "11-07 19:45", "11-07 20:00", "11-07 20:15", "11-07 20:30", "11-07 20:45", "11-07 21:00", "11-07 21:15", "11-07 21:30", "11-07 21:45", "11-07 22:00", "11-07 22:15", "11-07 22:30", "11-07 22:45", "11-07 23:00", "11-07 23:15", "11-07 23:30", "11-07 23:45", "11-07 24:00"], axisLabel: { fontSize: 10.5, interval: 95, fontWeight: 600, color: '#0f172a' } },
+              yAxis: { type: 'value', name: '元/MWh', min: -140, max: 980, splitLine: { lineStyle: { type: 'dashed' } } },
+              series: [
+                {
+                  name: '实时出清电价 (均值237.25元/MWh)', type: 'line', showSymbol: false,
+                  itemStyle: { color: THEME.NAVY },
+                  lineStyle: { width: 1.8, color: THEME.NAVY },
+                  areaStyle: { color: 'rgba(20, 68, 107, 0.14)' },
+                  markLine: {
+                    symbol: 'none',
+                    data: [
+                      { yAxis: 0, lineStyle: { color: THEME.RED, type: 'solid', width: 1.2 }, label: { formatter: '0 元/MWh 负电价分界线', position: 'insideEndTop', color: THEME.RED, fontSize: 10.5, fontWeight: 'bold' } },
+                      { yAxis: 237.25, lineStyle: { color: THEME.TEAL, type: 'dashed', width: 1.2 }, label: { formatter: '实时均价 237.25', position: 'insideStartTop', color: THEME.TEAL, fontSize: 10.5, fontWeight: 'bold' } }
+                    ]
+                  },
+                  markPoint: {
+                    symbolSize: 44,
+                    label: { fontSize: 10, fontWeight: 'bold' },
+                    data: [
+                      { type: 'max', name: '最高电价', itemStyle: { color: THEME.RED } },
+                      { type: 'min', name: '最低负电价', itemStyle: { color: THEME.GREEN_DARK } }
+                    ]
+                  },
+                  data: [290.91, 290.88, 281.91, -4.49, -4.44, 234.75, 273.27, 296.16, 286.2, 244.09, 272.81, 263.22, 282.58, 282.67, 282.93, 282.73, 296.14, 296.15, 295.15, 296.5, 317.18, 298.94, 350.0, 330.0, 330.0, 350.0, 340.0, 350.0, 380.0, 360.0, 350.0, 340.0, 340.0, 330.0, 330.0, 350.0, 340.0, 330.0, 330.0, 330.0, 340.0, 330.0, 350.0, 311.67, 292.29, 311.72, 238.95, 230.0, 230.55, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -84.73, 316.88, 318.39, 328.32, 357.33, 405.57, 400.0, 346.91, 365.3, 346.02, 344.16, 353.8, 421.87, 480.0, 470.0, 420.0, 420.0, 600.0, 590.0, 570.0, 590.0, 420.0, 420.0, 600.0, 600.0, 600.0, 700.0, 710.0, 710.0, 900.0, 830.34, 825.27, 825.04, 710.0, 770.0, 760.0, 710.0, 710.0, 700.0, 710.0, 710.0, 620.0, 620.0, 600.0, 420.0, 300.0, 310.0, 330.0, 350.0, 400.0, 420.0, 400.0, 530.0, 700.0, 700.0, 710.0, 740.0, 710.0, 700.0, 430.0, 710.0, 568.94, 569.41, 570.08, 710.0, 350.0, 335.1, 330.0, 330.0, 400.0, 344.77, 357.6, 357.24, 383.7, 310.0, 310.0, 218.91, 244.1, 274.05, 245.23, 0.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, 260.0, 260.0, 0.0, 330.0, 400.0, 420.0, 610.0, 850.0, 900.0, 900.0, 900.0, 910.0, 910.0, 910.0, 910.0, 910.0, 910.0, 900.0, 850.0, 770.0, 710.0, 700.0, 710.0, 655.06, 418.8, 361.79, 371.27, 285.81, 304.87, 275.94, 276.12, 276.13, 276.1, 257.0, 266.56, 266.41, -6.19, -6.33, -6.4, -6.39, 3.0, 256.34, 256.63, 266.34, 266.18, 260.7, 260.7, 284.3, 290.0, 277.69, 277.53, 284.14, 284.16, 290.0, 254.8, 270.0, 260.0, 260.0, 270.0, 280.0, 270.0, 300.0, 290.0, 290.0, 300.0, 310.0, 340.0, 330.0, 330.0, 350.0, 360.0, 500.0, 500.0, 470.0, 350.0, 340.0, 340.0, 350.0, 500.0, 500.0, 500.0, 360.0, 350.0, 350.0, 320.0, 320.0, 340.0, 330.0, 330.0, 330.0, 310.0, 300.0, 300.0, 300.0, 290.0, 280.0, 290.0, 280.0, 290.0, 300.0, 300.0, 330.0, 340.0, 710.0, 713.97, 505.87, 590.23, 568.33, 510.27, 353.4, 342.9, 353.19, 342.79, 342.32, 301.35, 295.04, 295.38, 285.19, 304.18, 290.0, 290.0, 290.0, 300.0, 267.51, 265.26, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -89.9, -89.96, -90.16, -90.41, -90.66, -85.61, -90.2, -99.74, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -99.98, 72.67, 142.71, 143.51, -91.58, 233.13, 243.29, 227.55, 151.19, 150.17, -76.64, -82.16, -82.19, -82.81, -82.15, -84.3, -83.86, -84.77, -85.14, -91.18, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, 260.0, 260.0, 280.0, -100.0, 260.0, 260.0, 270.0, 260.0, 280.0, 290.0, 310.0, 310.0, 320.0, 360.0, 380.0, 350.0, 350.0, 350.0, 350.0, 350.0, 370.0, 360.0, 380.0, 380.0, 400.0, 390.0, 350.0, 322.51, 320.97, 304.66, 284.23, -0.76, 252.83, -9.65, 235.24, -100.0, -100.0, -100.0, -90.08, -90.17, -89.56, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -90.32, -100.0, -3.61, -89.56, -88.19, -87.86, -85.82, -86.09, 278.38, 278.56, 278.55, -83.77, 228.45, 254.27, 263.09, 281.66, 296.88, 296.43, 267.08, 272.25, 257.38, 256.54, 267.91, 267.8, 3.59, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -6.93, -100.0, -7.18, -7.28, 240.0, 280.0, 270.0, 290.0, 310.0, 320.0, 320.0, 330.0, 330.0, 350.0, 340.0, 330.0, 330.0, 330.0, 350.0, 360.0, 300.0, 330.0, 310.0, 310.0, 320.0, 330.0, 290.0, 310.0, 310.0, 323.05, 323.19, 333.2, 323.58, 284.0, 285.2, 304.88, 281.5, 256.33, -78.79, -77.94, -80.62, -79.65, -80.33, -79.65, -78.76, -78.83, -78.85, -78.31, -79.63, -86.0, -86.92, -87.41, -87.67, -88.59, -87.73, -86.98, -86.61, -81.67, -86.7, -86.26, -86.27, -86.43, -86.67, -86.59, -81.93, -82.63, -82.09, -81.37, -75.54, 215.41, 293.24, 293.79, 217.23, 309.97, 311.05, 311.86, -65.92, 36.39, 264.61, 227.62, 227.71, 304.05, 304.93, 295.54, 38.29, 256.5, 30.86, 211.92, 298.08, 270.0, 200.0, 240.0, 240.0, 200.0, 330.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 280.0, 270.0, 270.0, 240.0, 240.0, 270.0, 270.0, 280.0, 280.0, 280.0, 280.0, 280.0, 280.0, 280.0, 280.0, 270.0, 280.0, 280.0, 280.0, 290.0, 300.0, 360.0, 380.0, 500.0, 400.0, 400.0, 500.0, 420.0, 400.0, 400.0, 390.0, 370.0, 380.0, 370.0, 360.0, 290.0, 300.0, 330.0, 310.0, 300.0, 350.0, 390.0, 360.0, 340.0, 350.0, 350.0, 370.0, 360.0, 350.0, 390.0, 360.0, 350.0, 360.0, 350.0, 360.0, 390.0, 390.0, 400.0, 500.0, 550.0, 568.33, 655.75, 650.47, 750.91, 743.67, 743.66, 766.28, 762.24, 762.39, 740.0, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 420.0, 550.0, 500.0, 500.0, 440.0, 410.0, 400.0, 390.0, 390.0, 390.0, 390.0, 390.0, 370.0, 370.0, 350.0, 350.0]
+                },
+                {
+                  name: '日前出清电价 (均值251.39元/MWh)', type: 'line', showSymbol: false,
+                  itemStyle: { color: THEME.GOLD_BORDER },
+                  lineStyle: { width: 1.3, type: 'dashed', color: THEME.GOLD_BORDER },
+                  data: [273.79, 7.5, 25.8, 237.17, 7.35, 16.49, 16.44, 7.19, 274.58, 7.1, -85.04, -84.96, -85.1, -85.05, -85.04, -85.02, -85.08, -85.17, -85.22, 11.22, 301.0, 300.99, 300.99, 310.66, 310.66, 320.33, 340.0, 340.0, 450.0, 380.0, 360.0, 340.0, 340.0, 330.0, 330.0, 320.34, 303.99, 294.47, 294.48, 247.04, 256.49, -84.62, 267.88, 5.53, -84.66, -84.85, -84.85, -84.48, -84.44, -84.52, -84.47, -84.47, -84.73, -84.7, -84.77, -85.03, -84.82, -85.25, -85.46, -85.7, -85.96, -86.34, 10.38, 252.51, 291.25, 305.18, 305.79, 307.24, 308.75, 309.97, 310.11, 310.13, 310.09, 319.56, 338.3, 347.35, 366.54, 405.25, 423.73, 432.52, 550.0, 600.0, 600.0, 600.0, 600.0, 600.0, 530.0, 430.0, 570.0, 590.0, 590.0, 600.0, 650.0, 670.0, 710.0, 710.0, 770.0, 710.0, 710.0, 720.0, 710.0, 710.0, 710.0, 710.0, 710.0, 710.0, 710.0, 710.0, 710.0, 710.0, 710.0, 710.0, 700.0, 620.0, 620.0, 700.0, 710.0, 760.0, 850.0, 900.0, 850.0, 900.0, 900.0, 900.0, 850.0, 790.0, 710.0, 850.0, 800.0, 710.0, 700.0, 393.3, 321.62, 312.29, 312.11, 308.75, 304.93, 305.0, 303.18, 303.19, 303.29, 303.32, 303.45, 293.69, 303.85, 303.92, 294.17, 284.27, 284.23, 195.37, -100.0, -100.0, -100.0, -100.0, -100.0, 0.0, 290.0, 320.0, 344.36, 403.01, 640.0, 710.0, 760.0, 770.0, 800.0, 850.0, 760.0, 770.0, 760.0, 810.0, 800.0, 760.0, 760.0, 710.0, 700.0, 700.0, 710.0, 710.0, 710.0, 610.0, 850.0, 710.0, 440.0, 360.0, 340.0, 340.0, 320.0, 310.0, 320.0, 310.0, 300.0, 280.0, -100.0, 0.0, 10.0, 250.0, 270.0, 270.0, 280.0, 290.0, 280.0, 280.0, 280.0, 280.0, 290.0, 290.0, 290.0, 290.0, 290.0, 280.0, 280.0, 280.0, 290.0, 300.0, 310.0, 370.0, 340.0, 480.0, 710.0, 710.0, 540.0, 500.0, 500.0, 500.0, 350.0, 400.0, 350.0, 320.0, 302.17, 302.29, 302.44, 302.53, 332.33, 332.33, 342.19, 332.26, 332.25, 322.38, 322.44, 322.51, 352.31, 342.51, 342.6, 332.62, 332.52, 322.42, 312.33, 302.24, 292.28, 300.0, 310.0, 320.0, 410.0, 360.0, 514.07, 710.0, 710.0, 780.0, 781.96, 713.4, 561.7, 561.92, 537.33, 516.09, 504.8, 504.83, 500.0, 420.0, 420.0, 350.0, 500.0, 350.0, 330.0, 320.0, 310.0, 300.0, 300.0, 284.82, 265.14, 34.36, -9.87, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -95.19, -93.2, -93.06, -92.69, -92.71, -92.84, -92.98, -93.25, -93.1, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -95.14, -100.0, -100.0, -100.0, -100.0, -100.0, -95.26, -95.31, -100.0, -100.0, -72.97, -17.1, -69.11, -100.0, -11.15, 154.51, 91.31, 9.78, 63.21, 63.36, -76.12, -76.81, -77.17, -81.85, -91.84, -92.25, -92.61, -94.15, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, 260.0, 290.0, 300.0, 330.0, 350.0, 360.0, 360.0, 340.0, 320.0, 300.0, 300.0, 291.2, 252.55, -97.34, -96.95, 3.01, 2.93, 2.21, -97.12, -97.09, -96.99, -97.11, -97.93, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -99.75, 246.81, 257.73, 276.68, 286.19, 305.81, 286.95, 287.09, 296.87, 306.23, 306.28, 306.21, 321.34, 350.33, 360.0, 380.0, 400.0, 400.0, 410.0, 410.0, 400.0, 400.0, 400.0, 390.0, 400.0, 360.0, 320.0, 320.0, 350.0, 330.0, 320.0, 320.0, 330.0, 330.0, 320.0, 320.0, 310.0, 300.0, 300.0, 290.0, 290.0, 300.0, 300.0, 300.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 300.0, 310.0, 300.0, 300.0, 310.0, 300.0, 290.0, 290.0, 290.0, 267.17, 267.38, 226.78, -81.48, -80.6, -80.1, -79.29, -79.03, -79.25, -78.69, -78.5, -78.37, -79.21, -82.12, -87.37, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -84.68, -84.83, -82.12, 268.34, 317.85, 320.58, 340.53, 302.8, 309.75, 310.0, 309.95, 310.01, 310.68, 303.95, 313.53, 313.38, 313.42, 313.12, 322.53, 312.63, 321.95, 328.76, 317.86, 315.05, 334.01, 300.0, 310.0, 290.0, 330.0, 310.0, 310.0, 300.0, 300.0, 310.0, 300.0, 290.0, 300.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 290.0, 300.0, 300.0, 300.0, 300.0, 300.0, 300.0, 300.0, 330.0, 350.0, 360.0, 360.0, 370.0, 390.0, 400.0, 550.0, 550.0, 550.0, 530.0, 410.0, 400.0, 390.0, 390.0, 390.0, 360.0, 320.0, 310.0, 300.0, 300.0, 290.0, 290.0, 300.0, 300.0, 300.0, 300.0, 300.0, 300.0, 330.0, 330.0, 350.0, 350.0, 360.0, 360.0, 370.0, 360.0, 390.0, 390.0, 400.0, 420.0, 440.0, 561.48, 605.48, 655.28, 742.89, 737.33, 737.19, 741.66, 741.02, 730.0, 736.94, 736.27, 735.81, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 730.0, 640.0, 640.0, 640.0, 640.0, 590.0, 550.0, 550.0, 550.0, 500.0, 430.0, 400.0, 400.0, 390.0, 390.0]
+                }
+              ]
+            });
+          }
+
+          const c52 = getOrCreateChart('chart_p5_power');
+          if (c52) {
+            c52.setOption(ChartPresets.groupedComparisonBar(
+              ['北海热电(发电)', '香海热电(发电)', '金州热电(发电)', '北方热电(发电)', '北海热电(售电)', '香海热电(售电)', '金州热电(售电)', '北方热电(售电)'],
+              [343, 462, 194, 103, 172, 275, 112, 48],
+              [269, 547, 149, 93, 137, 373, 78, 46],
+              '万kWh', '本期实际 (万kWh)', '同期实际 (万kWh)'
+            ));
+          }
+        },
+
+        5: function() {
+          const c61 = getOrCreateChart('chart_p6_drivers');
+          if (c61) {
+            const drivers = ['购水成本节约', '直接收入增加', '外购电成本节约', '煤与外购热可比节约', '可计量辅材节约', '可比煤价边际利润净增'];
+            const vals = [1.72, 7.13, 24.30, 37.65, 56.80, 127.60];
+            c61.setOption({
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+              grid: { left: 130, right: 56, top: 20, bottom: 28 },
+              xAxis: { type: 'value', name: '同比增利贡献 (万元)', min: 0, max: 150, splitLine: { lineStyle: { type: 'dashed' } } },
+              yAxis: { type: 'category', data: drivers, axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a' } },
+              series: [{
+                type: 'bar', barWidth: 18,
+                data: vals.map((v, i) => ({
+                  value: v,
+                  itemStyle: { color: i === 5 ? THEME.NAVY : THEME.RED },
+                  label: { show: true, position: 'right', formatter: '+' + v.toFixed(2) + '万', fontSize: 11, fontWeight: 'bold', color: i === 5 ? THEME.NAVY : THEME.RED }
+                }))
+              }]
+            });
+          }
+
+          const c62 = getOrCreateChart('chart_p6_units');
+          if (c62) {
+            c62.setOption(ChartPresets.groupedComparisonBar(
+              ['主城区', '金州热电', '北方热电', '庄河环海', '金普公司', '研究院'],
+              [1631.57, 493.96, 179.17, 172.28, 113.48, 4.55],
+              [1591.37, 418.36, 202.26, 140.16, 110.29, 4.98],
+              '万元', '本期可比煤价边际利润', '同期可比煤价边际利润'
+            ));
+          }
+        },
+
+        6: function() {
+          const units = ['主城区', '金州热电', '北方热电', '金普公司', '庄河环海', '研究院'];
+          const c71 = getOrCreateChart('chart_p7_heat');
+          if (c71) {
+            c71.setOption(ChartPresets.groupedComparisonBar(
+              units, [69.08, 71.73, 83.27, 74.66, 94.00, 48.47], [62.59, 79.94, 83.44, 72.14, 124.97, 54.96],
+              'GJ/万㎡', '本期热单耗', '同期热单耗', 72.46, '集团均值 72.46'
+            ));
+          }
+
+          const c72 = getOrCreateChart('chart_p7_power');
+          if (c72) {
+            c72.setOption(ChartPresets.groupedComparisonBar(
+              ['主城区', '金州热电', '北方热电', '金普公司', '庄河环海'],
+              [459.78, 384.20, 641.44, 1418.59, 518.74],
+              [508.79, 438.64, 472.09, 1418.34, 870.42],
+              'kWh/万㎡', '本期电单耗', '同期电单耗', 510.23, '集团均值 510.23'
+            ));
+          }
+
+          const c73 = getOrCreateChart('chart_p7_water');
+          if (c73) {
+            c73.setOption(ChartPresets.groupedComparisonBar(
+              units, [30.28, 23.63, 15.90, 34.90, 85.40, 11.04], [25.90, 34.12, 23.70, 39.52, 134.35, 44.23],
+              '吨/万㎡', '本期水单耗', '同期水单耗', 31.55, '集团均值 31.55'
+            ));
+          }
+
+          const c74 = getOrCreateChart('chart_p7_comp');
+          if (c74) {
+            c74.setOption(ChartPresets.groupedComparisonBar(
+              ['主城区', '庄河环海', '金州热电', '金普公司', '北方热电', '研究院'],
+              [1084, 183, 91, 19, 6, 0],
+              [41, 6, 53, 19, 6, 0],
+              '件', '省市平台投诉量', '住建局考核净投诉量'
+            ));
+          }
+        },
+
+        7: function() {
+          const c81 = getOrCreateChart('chart_p8_plan');
+          if (c81) {
+            c81.setOption(ChartPresets.groupedComparisonBar(
+              ['集团标煤(吨)', '主城标煤(吨)', '北海标煤(吨)', '香海标煤(吨)', '金州标煤(吨)', '北方标煤(吨)', '金普标煤(吨)', '庄河外购热(GJ)'],
+              [14879, 10820, 5988, 4831, 2175, 1293, 591, 13940],
+              [17742, 12380, 6979, 5401, 3134, 1398, 831, 27471],
+              '吨 / GJ', '本期实际完成', '期间分解测算值'
+            ));
+          }
+
+          const c82 = getOrCreateChart('chart_p8_forecast');
+          if (c82) {
+            c82.setOption(ChartPresets.temperatureCurve(
+              ["11-08", "11-09", "11-10", "11-11", "11-12", "11-13", "11-14"],
+              [1.63, 2.73, 9.38, 11.66, 11.61, 11.03, 13.29],
+              [11.92, 11.25, 9.8, 11.6, 13.14, 10.53, 10.87]
+            ));
+          }
+        }
+      };
+
+      function initChartsForSlide(idx) {
+        if (typeof CHART_REGISTRY[idx] === 'function') {
+          CHART_REGISTRY[idx]();
+        }
+      }
+
+      // 初始渲染首页
+      goToSlide(0);
+
+      // ========================================================================================
+      // 8. 汇报文字在线编辑与持久化保存中枢 (WYSIWYG Live Editor & Persistence Hub)
+      // ========================================================================================
+      const editToggleBtn = document.getElementById('editToggleBtn');
+      const saveDocBtn = document.getElementById('saveDocBtn');
+      const editIcon = document.getElementById('editIcon');
+      const editText = document.getElementById('editText');
+      let isEditing = false;
+
+      // 提取汇报文件名（优先支持全局声明、URL参数、或路径探测）
+      function getCurrentReportFilename() {
+        if (window.__REPORT_FILENAME__) return window.__REPORT_FILENAME__;
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('file')) return urlParams.get('file');
+        if (urlParams.get('path')) {
+          const p = urlParams.get('path');
+          return p.substring(p.lastIndexOf('/') + 1);
+        }
+        const pathname = window.location.pathname;
+        const lastSeg = pathname.substring(pathname.lastIndexOf('/') + 1);
+        if (lastSeg && (lastSeg.endsWith('.html') || lastSeg.endsWith('.htm'))) {
+          return decodeURIComponent(lastSeg);
+        }
+        return '2026_2027.html';
+      }
+
+      function showNoticeToast(msg, type = 'success', duration = 3000) {
+        const oldToast = document.querySelector('.save-alert-toast');
+        if (oldToast) oldToast.remove();
+        const toast = document.createElement('div');
+        toast.className = `save-alert-toast ${type}`;
+        const iconMap = { success: '✅', info: 'ℹ️', error: '⚠️' };
+        toast.innerHTML = `<span>${iconMap[type] || 'ℹ️'}</span><span>${msg}</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateY(-15px)';
+          setTimeout(() => toast.remove(), 400);
+        }, duration);
+      }
+
+      let editFloatToast = null;
+      function showEditFloatingTip() {
+        if (!editFloatToast) {
+          editFloatToast = document.createElement('div');
+          editFloatToast.className = 'edit-mode-toast';
+          editFloatToast.innerHTML = `<span>✏️ 正在编辑讲稿文字中…</span><span class="text-xs text-amber-300">点击页面内任意高亮段落即可修改，修改后点击顶栏【💾 保存】(或按 Ctrl+S)</span>`;
+          document.body.appendChild(editFloatToast);
+        }
+      }
+      function hideEditFloatingTip() {
+        if (editFloatToast) {
+          editFloatToast.remove();
+          editFloatToast = null;
+        }
+      }
+
+      // 获取所有允许编辑的文字容器（白名单保障：只开放讲稿文本与标题，严禁改动图表与大表）
+      function getEditableElements() {
+        return document.querySelectorAll(
+          '.reading-para, .script-scroll h2, .script-scroll h3, .script-scroll p, .slide-header h2, .editable-text, [data-editable="true"]'
+        );
+      }
+
+      function toggleEditMode(forceState) {
+        isEditing = (typeof forceState === 'boolean') ? forceState : !isEditing;
+        const editables = getEditableElements();
+
+        if (isEditing) {
+          document.body.classList.add('is-editing');
+          editables.forEach(el => {
+            el.setAttribute('contenteditable', 'true');
+            el.setAttribute('spellcheck', 'false');
+          });
+          if (editToggleBtn) {
+            editToggleBtn.className = 'px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-bold border border-amber-300 shadow-sm transition flex items-center gap-1.5';
+            if (editIcon) editIcon.textContent = '👁️';
+            if (editText) editText.textContent = '退出编辑';
+          }
+          if (saveDocBtn) saveDocBtn.classList.remove('hidden');
+          showEditFloatingTip();
+        } else {
+          document.body.classList.remove('is-editing');
+          editables.forEach(el => {
+            el.removeAttribute('contenteditable');
+            el.removeAttribute('spellcheck');
+          });
+          if (editToggleBtn) {
+            editToggleBtn.className = 'px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold border border-amber-400/40 transition flex items-center gap-1.5';
+            if (editIcon) editIcon.textContent = '✏️';
+            if (editText) editText.textContent = '编辑';
+          }
+          if (saveDocBtn) saveDocBtn.classList.add('hidden');
+          hideEditFloatingTip();
+        }
+      }
+
+      if (editToggleBtn) {
+        editToggleBtn.addEventListener('click', () => toggleEditMode());
+      }
+
+      // 执行持久化保存（直接覆盖保存当前文件，绝不另存）
+      async function executeSave() {
+        // 1. 临时脱水清理编辑态
+        const wasEditing = isEditing;
+        if (isEditing) toggleEditMode(false);
+
+        const filename = getCurrentReportFilename();
+        showNoticeToast('正在直接原位覆盖保存当前文件…', 'info', 1800);
+
+        // 2. 提取干净脱水的 HTML
+        const cleanHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+        let saveSuccess = false;
+
+        // 策略 1：若处于 Phoenix 系统 iframe 中，优先通过 postMessage 委托父窗口原位保存（自带鉴权，100% 成功）
+        if (window.parent && window.parent !== window) {
+          try {
+            saveSuccess = await new Promise((resolve) => {
+              const timer = setTimeout(() => resolve(false), 2500);
+              const onMsg = (event) => {
+                if (event.data?.type === 'phoenix-save-success') {
+                  clearTimeout(timer);
+                  window.removeEventListener('message', onMsg);
+                  resolve(true);
+                } else if (event.data?.type === 'phoenix-save-error') {
+                  clearTimeout(timer);
+                  window.removeEventListener('message', onMsg);
+                  resolve(false);
+                }
+              };
+              window.addEventListener('message', onMsg);
+              window.parent.postMessage({
+                type: 'phoenix-save-report',
+                filename: filename,
+                content: cleanHtml
+              }, '*');
+            });
+          } catch (e) {
+            saveSuccess = false;
+          }
+        }
+
+        // 策略 2：若不在 iframe 或 postMessage 未响应，尝试带 Token 直接调用后端 API 原位覆盖当前物理文件
+        if (!saveSuccess) {
+          try {
+            const token = window.__REPORT_AUTH_TOKEN__ || localStorage.getItem('token') || '';
+            const authHeader = token ? (token.startsWith('Bearer ') ? token : 'Bearer ' + token) : '';
+            const apiEndpoints = [
+              '/api/v1/projects/daily_report_25_26/period-report/files/save',
+              'http://localhost:5173/api/v1/projects/daily_report_25_26/period-report/files/save',
+              'http://127.0.0.1:8000/api/v1/projects/daily_report_25_26/period-report/files/save'
+            ];
+
+            for (const ep of apiEndpoints) {
+              try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (authHeader) headers['Authorization'] = authHeader;
+
+                const res = await fetch(ep, {
+                  method: 'POST',
+                  headers: headers,
+                  body: JSON.stringify({ filename: filename, content: cleanHtml })
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.ok || data.name) {
+                    saveSuccess = true;
+                    break;
+                  }
+                }
+              } catch (err) {
+                // 尝试下一个端点
+              }
+            }
+          } catch (e) {
+            console.warn('API 保存失败', e);
+          }
+        }
+
+        // 策略 3：若处于纯脱网本地环境 (file:/// 协议)，尝试调用现代浏览器 File System Access API 原位写回本地文件
+        if (!saveSuccess && window.showSaveFilePicker) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: filename,
+              types: [{ description: 'HTML Document', accept: { 'text/html': ['.html', '.htm'] } }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(cleanHtml);
+            await writable.close();
+            saveSuccess = true;
+            showNoticeToast(`本地原位覆盖保存成功！已直接更新当前文件【${filename}】`, 'success', 3500);
+          } catch (e) {
+            if (e.name !== 'AbortError') console.warn('File System API 失败', e);
+          }
+        }
+
+        // 策略 4：仅当无后端且用户取消文件授权时，才保底触发下载并自愈缓存
+        if (!saveSuccess) {
+          try {
+            localStorage.setItem('offline_saved_report_' + filename, cleanHtml);
+            const blob = new Blob([cleanHtml], { type: 'text/html;charset=utf-8' });
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+            showNoticeToast(`脱网环境受浏览器沙箱限制，已下载更新文件【${filename}】覆盖原文件`, 'info', 4000);
+          } catch (e) {
+            showNoticeToast('保存失败：' + (e.message || '未知错误'), 'error', 4000);
+          }
+        } else {
+          showNoticeToast(`✅ 保存成功！已直接原位覆盖当前文件【${filename}】，无需另存！`, 'success', 3500);
+        }
+
+        // 若之前在编辑，保存完成后自动恢复编辑态（方便继续调整）
+        if (wasEditing) {
+          setTimeout(() => toggleEditMode(true), 300);
+        }
+      }
+
+      if (saveDocBtn) {
+        saveDocBtn.addEventListener('click', executeSave);
+      }
+
+      // 快捷键监听：按 'E' 切换编辑（非输入时），按 Ctrl+S / Cmd+S 随时保存
+      document.addEventListener('keydown', (e) => {
+        // Ctrl+S / Cmd+S 快捷键保存
+        if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
+          executeSave();
+          return;
+        }
+
+        // 处于输入框中不触发单键快捷键
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) {
+          return;
+        }
+
+        // 按 'E' 键一键切换编辑模式
+        if (e.key === 'e' || e.key === 'E') {
+          e.preventDefault();
+          toggleEditMode();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

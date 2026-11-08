@@ -855,7 +855,7 @@
             <input
               ref="fileInputRef"
               type="file"
-              accept=".html,.htm"
+              accept=".html,.htm,.png,.jpg,.jpeg,.gif,.webp,.svg,.bmp"
               style="display: none"
               @change="handleFileUpload"
             />
@@ -896,6 +896,13 @@
                 @click="fileTypeFilter === 'report'"
               >
                 📄 汇报讲稿 <span class="pill-count">({{ fileStats.report }})</span>
+              </button>
+              <button
+                class="filter-pill pill-image"
+                :class="{ active: fileTypeFilter === 'image' }"
+                @click="fileTypeFilter === 'image'"
+              >
+                🖼️ 图片素材 <span class="pill-count">({{ fileStats.image || 0 }})</span>
               </button>
               <button
                 class="filter-pill pill-template"
@@ -970,19 +977,19 @@
                   <!-- 1. 文件名称列 -->
                   <td>
                     <div class="space-file-title-cell">
-                      <div class="space-file-avatar" :class="item.kind === 'excel' ? 'avatar-excel' : (item.is_template ? 'avatar-template' : 'avatar-html')">
-                        <span>{{ item.kind === 'excel' ? '📊' : (item.is_template ? '⚙️' : '📄') }}</span>
+                      <div class="space-file-avatar" :class="item.kind === 'excel' ? 'avatar-excel' : (item.kind === 'image' ? 'avatar-image' : (item.is_template ? 'avatar-template' : 'avatar-html'))">
+                        <span>{{ item.kind === 'excel' ? '📊' : (item.kind === 'image' ? '🖼️' : (item.is_template ? '⚙️' : '📄')) }}</span>
                       </div>
                       <div class="space-file-name-meta">
                         <span
                           class="space-file-name"
-                          :title="item.kind === 'excel' ? '点击直接下载此表格' : '点击在此窗口中打开播放'"
-                          @click="item.kind === 'excel' ? downloadFile(item.rel_path) : openPlayer(item)"
+                          :title="item.kind === 'excel' ? '点击直接下载此表格' : (item.kind === 'image' ? '点击在此窗口中打开播放图片' : '点击在此窗口中打开播放')"
+                          @click="item.kind === 'excel' ? downloadFile(item.rel_path) : openPlayer(item, 'material')"
                         >
                           {{ item.name }}
                         </span>
                         <div class="space-file-sub-tags">
-                          <span class="file-ext-tag">{{ item.ext || (item.kind === 'excel' ? '.xlsx' : '.html') }}</span>
+                          <span class="file-ext-tag">{{ item.ext || (item.kind === 'excel' ? '.xlsx' : (item.kind === 'image' ? '.png' : '.html')) }}</span>
                           <span v-if="item.folder" class="file-folder-tag" title="所在子文件夹">📁 {{ item.folder }}</span>
                           <span v-if="displayConfig.mode === 'custom_html' && (displayConfig.target_file === item.rel_path || displayConfig.target_file === item.name)" class="badge-default-active" title="当前设定的页面默认打开文档">📌 默认打开</span>
                           <span v-if="item.is_template" class="file-sub-note">只读母版</span>
@@ -996,6 +1003,9 @@
                   <td>
                     <span v-if="item.kind === 'excel'" class="space-badge badge-excel">
                       <span class="badge-dot"></span>数据明细 (XLSX)
+                    </span>
+                    <span v-else-if="item.kind === 'image'" class="space-badge badge-image">
+                      <span class="badge-dot"></span>图片素材 ({{ item.ext ? item.ext.toUpperCase().replace('.', '') : 'IMG' }})
                     </span>
                     <span v-else-if="item.is_template" class="space-badge badge-template">
                       <span class="badge-dot"></span>系统演示模板
@@ -1033,8 +1043,8 @@
                       <button
                         v-if="item.kind !== 'excel'"
                         class="space-btn-action action-play"
-                        title="在当前窗口中打开沉浸式播放"
-                        @click="openPlayer(item)"
+                        :title="item.kind === 'image' ? '在页面上打开图片预览播放' : '在当前窗口中打开沉浸式播放'"
+                        @click="openPlayer(item, 'material')"
                       >
                         <span>▶</span> 播放
                       </button>
@@ -1046,7 +1056,7 @@
                         <span>📥</span> 下载
                       </button>
                       <button
-                        v-if="isGlobalAdmin && item.kind !== 'excel'"
+                        v-if="isGlobalAdmin && item.kind === 'html'"
                         class="space-btn-action action-setdefault"
                         title="将此文档设为进入页面的默认打开内容"
                         @click="quickSetAsDefault(item)"
@@ -1351,16 +1361,17 @@
                         :class="{
                           'avatar-md': item.kind === 'markdown',
                           'avatar-html': item.kind === 'html',
-                          'avatar-excel': item.kind === 'excel'
+                          'avatar-excel': item.kind === 'excel',
+                          'avatar-image': item.kind === 'image'
                         }"
                       >
-                        <span>{{ item.kind === 'markdown' ? '📑' : (item.kind === 'html' ? '🌐' : (item.kind === 'excel' ? '📊' : '📄')) }}</span>
+                        <span>{{ item.kind === 'markdown' ? '📑' : (item.kind === 'html' ? '🌐' : (item.kind === 'excel' ? '📊' : (item.kind === 'image' ? '🖼️' : '📄'))) }}</span>
                       </div>
                       <div class="space-file-name-meta">
                         <span
                           class="space-file-name"
-                          :title="item.kind === 'markdown' ? '点击在线阅览 Markdown 文档' : (item.kind === 'html' ? '点击在线播放 HTML 演示' : '点击下载此文件')"
-                          @click="item.kind === 'markdown' ? openDocReader(item) : (item.kind === 'html' ? openPlayer(item) : downloadWorkflow(item))"
+                          :title="item.kind === 'markdown' ? '点击在线阅览 Markdown 文档' : (item.kind === 'html' ? '点击在线播放 HTML 演示' : (item.kind === 'image' ? '点击在线播放图片' : '点击下载此文件'))"
+                          @click="item.kind === 'markdown' ? openDocReader(item) : ((item.kind === 'html' || item.kind === 'image') ? openPlayer(item, 'workflow') : downloadWorkflow(item))"
                         >
                           {{ item.name }}
                         </span>
@@ -1383,6 +1394,9 @@
                       </span>
                       <span v-else-if="item.kind === 'excel'" class="space-badge badge-excel">
                         <span class="badge-dot"></span>XLSX 生产数据
+                      </span>
+                      <span v-else-if="item.kind === 'image'" class="space-badge badge-image">
+                        <span class="badge-dot"></span>图片素材 ({{ item.ext ? item.ext.toUpperCase().replace('.', '') : 'IMG' }})
                       </span>
                       <span v-else class="space-badge badge-doc">
                         <span class="badge-dot"></span>{{ item.ext ? item.ext.toUpperCase().replace('.', '') : '文件' }}
@@ -1412,10 +1426,10 @@
                         <span>👁️</span> 阅读
                       </button>
                       <button
-                        v-else-if="item.kind === 'html'"
+                        v-else-if="item.kind === 'html' || item.kind === 'image'"
                         class="space-btn-action action-play"
-                        title="在当前窗口中打开模版引擎演示播放"
-                        @click="openPlayer(item)"
+                        :title="item.kind === 'image' ? '在页面上打开图片预览播放' : '在当前窗口中打开模版引擎演示播放'"
+                        @click="openPlayer(item, 'workflow')"
                       >
                         <span>▶</span> 播放
                       </button>
@@ -1769,20 +1783,49 @@
       </div>
     </div>
 
-    <!-- ==================== 弹窗：HTML 汇报播放窗口 ==================== -->
+    <!-- ==================== 弹窗：材料与图片媒体播放窗口 ==================== -->
     <div v-if="showPlayerModal" class="player-overlay">
       <div class="player-header">
         <div class="player-title-box">
-          <span class="badge-tag badge-tag-emerald">正在播放</span>
-          <h2 class="player-title">{{ currentPlayingFile?.name || 'HTML 汇报材料' }}</h2>
+          <span class="badge-tag" :class="isImagePlaying ? 'badge-tag-indigo' : 'badge-tag-emerald'">
+            {{ isImagePlaying ? '🖼️ 图片展示' : '正在播放' }}
+          </span>
+          <h2 class="player-title">{{ currentPlayingFile?.name || (isImagePlaying ? '图片材料' : 'HTML 汇报材料') }}</h2>
           <span class="text-xs text-slate-300">({{ currentPlayingFile?.size_formatted }})</span>
+          <span v-if="isImagePlaying && imageNaturalSize.width" class="image-res-tag">
+            {{ imageNaturalSize.width }} × {{ imageNaturalSize.height }} px
+          </span>
         </div>
         <div class="player-actions">
+          <!-- 图片专用工具栏：缩放与旋转 -->
+          <div v-if="isImagePlaying" class="image-toolbar-pills">
+            <button class="btn-img-tool" @click="changeImageZoom(-0.15)" title="缩小图片 (快捷键: 鼠标滚轮下滚)">−</button>
+            <span class="img-zoom-label" title="当前缩放比，点击恢复100%" @click="resetImageZoom">{{ Math.round(imageScale * 100) }}%</span>
+            <button class="btn-img-tool" @click="changeImageZoom(0.15)" title="放大图片 (快捷键: 鼠标滚轮上滚)">+</button>
+            <button class="btn-img-tool" @click="fitImageToScreen" title="自适应窗口大小（保持宽高比）">适应</button>
+            <button class="btn-img-tool" :class="{ active: isForceFill }" @click="toggleForceFill" title="强制拉缩铺满窗口（不留黑边）">
+              {{ isForceFill ? '✓ 强制铺满中' : '强制铺满' }}
+            </button>
+            <button class="btn-img-tool" @click="rotateImage(-90)" title="逆时针旋转 90°">↺</button>
+            <button class="btn-img-tool" @click="rotateImage(90)" title="顺时针旋转 90°">↻</button>
+            <button class="btn-img-tool" @click="resetImageTransform" title="重置位置与比例 (快捷键: 双击图片)">重置</button>
+          </div>
+
           <button class="btn-tool-dark" @click="openPlayerInNewTab" title="在新浏览器标签页中全尺寸打开">
             <span>🔗 新标签页打开</span>
           </button>
-          <button class="btn-tool-dark" @click="toggleIframeFullscreen" title="全屏沉浸播放">
-            <span>⛶ 全屏播放</span>
+          <button class="btn-tool-dark btn-fullscreen-toggle" @click="togglePlayerFullscreen" :title="isImagePlaying ? '使图片全屏展示在页面上' : '全屏播放 HTML 汇报'">
+            <span>{{ isPlayerFullscreen ? '✕ 退出全屏' : '⛶ 全屏展示' }}</span>
+          </button>
+          <!-- 强制全屏按钮：全屏并将图片强制拉缩铺满整个屏幕窗口 -->
+          <button
+            v-if="isImagePlaying"
+            class="btn-tool-dark btn-force-fullscreen"
+            :class="{ active: isForceFill && isPlayerFullscreen }"
+            @click="triggerForceFullscreen"
+            title="进入全屏并将图片强制拉缩铺满整个当前显示窗口（不留黑边）"
+          >
+            <span>⚡ 强制全屏</span>
           </button>
           <button class="btn-tool-dark btn-close-player" @click="closePlayer" title="关闭播放器">
             <span>✕ 关闭返回</span>
@@ -1793,15 +1836,45 @@
       <div class="player-body">
         <div v-if="playerLoading" class="player-loading">
           <div class="spinner spinner-lg"></div>
-          <p class="mt-3 text-sm">正在加载汇报材料内容…</p>
+          <p class="mt-3 text-sm">{{ isImagePlaying ? '正在加载图片内容…' : '正在加载汇报材料内容…' }}</p>
         </div>
+
+        <!-- 1. HTML 模式展示 -->
         <iframe
-          v-show="!playerLoading"
+          v-if="!isImagePlaying && !playerLoading"
           ref="playerIframeRef"
           :srcdoc="playerHtmlContent"
           class="player-iframe"
           sandbox="allow-scripts allow-same-origin allow-popups"
         ></iframe>
+
+        <!-- 2. 图片模式展示与全屏舞台 -->
+        <div
+          v-else-if="isImagePlaying && !playerLoading"
+          ref="imageViewerStageRef"
+          class="image-viewer-stage"
+          :class="{ 'is-fullscreen': isPlayerFullscreen, 'is-force-fill': isForceFill }"
+          @wheel.prevent="handleImageWheel"
+          @mousedown="handleImageMouseDown"
+          @dblclick="resetImageTransform"
+        >
+          <div
+            class="image-canvas-layer"
+            :style="imageCanvasStyle"
+          >
+            <img
+              :src="playerImageBlobUrl"
+              :alt="currentPlayingFile?.name"
+              class="image-viewer-img"
+              draggable="false"
+              @load="onImageLoaded"
+            />
+          </div>
+          <!-- 底部操作提示浮层（全屏下自动隐藏，保持大屏画面纯净） -->
+          <div v-if="!isPlayerFullscreen" class="image-viewer-tips">
+            <span>🖱️ 鼠标滚轮缩放 · 按住左键拖拽平移 · 双击重置 · 点击顶部【⚡ 强制全屏】拉缩铺满窗口</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2155,12 +2228,14 @@ import {
   savePeriodReportHtml,
   uploadPeriodReportFile,
   fetchPeriodReportContent,
+  fetchPeriodReportFileBlob,
   downloadPeriodReportFile,
   deletePeriodReportFile,
   renamePeriodReportFile,
   exportPeriodReportXlsx,
   fetchWorkflowFiles,
   fetchWorkflowFileContent,
+  fetchWorkflowFileBlob,
   downloadWorkflowFile,
   uploadWorkflowFile,
   renameWorkflowFile,
@@ -2275,17 +2350,19 @@ const creatingSpaceFolder = ref(false)
 
 // 空间管理搜索与类型筛选状态
 const fileSearchKeyword = ref('')
-const fileTypeFilter = ref('all') // 'all' | 'excel' | 'report' | 'template'
+const fileTypeFilter = ref('all') // 'all' | 'excel' | 'report' | 'image' | 'template'
 
 // 空间材料统计计算
 const fileStats = computed(() => {
   const list = fileList.value || []
   const excelCount = list.filter(f => f.kind === 'excel').length
+  const imageCount = list.filter(f => f.kind === 'image').length
   const tplCount = list.filter(f => f.is_template).length
-  const reportCount = list.length - excelCount - tplCount
+  const reportCount = list.filter(f => f.kind === 'html' && !f.is_template).length
   return {
     total: list.length,
     excel: excelCount,
+    image: imageCount,
     report: reportCount,
     template: tplCount
   }
@@ -2296,8 +2373,10 @@ const filteredFileList = computed(() => {
   let list = fileList.value || []
   if (fileTypeFilter.value === 'excel') {
     list = list.filter(f => f.kind === 'excel')
+  } else if (fileTypeFilter.value === 'image') {
+    list = list.filter(f => f.kind === 'image')
   } else if (fileTypeFilter.value === 'report') {
-    list = list.filter(f => f.kind !== 'excel' && !f.is_template)
+    list = list.filter(f => f.kind === 'html' && !f.is_template)
   } else if (fileTypeFilter.value === 'template') {
     list = list.filter(f => f.is_template)
   }
@@ -2317,9 +2396,46 @@ function copyStoragePath() {
 
 const showPlayerModal = ref(false)
 const currentPlayingFile = ref(null)
+const currentPlayingSpace = ref('material')
 const playerHtmlContent = ref('')
+const playerImageBlobUrl = ref('')
 const playerLoading = ref(false)
 const playerIframeRef = ref(null)
+const imageViewerStageRef = ref(null)
+const isPlayerFullscreen = ref(false)
+const isForceFill = ref(false)
+const imageScale = ref(1)
+const imageRotate = ref(0)
+const imageTranslate = ref({ x: 0, y: 0 })
+const isDraggingImage = ref(false)
+const dragStartPos = ref({ x: 0, y: 0 })
+const imageNaturalSize = ref({ width: 0, height: 0 })
+
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp']
+const isImagePlaying = computed(() => {
+  if (!currentPlayingFile.value) return false
+  if (currentPlayingFile.value.kind === 'image') return true
+  const name = (currentPlayingFile.value.name || currentPlayingFile.value.rel_path || '').toLowerCase()
+  return IMAGE_EXTENSIONS.some(ext => name.endsWith(ext))
+})
+
+const imageCanvasStyle = computed(() => {
+  if (isForceFill.value) {
+    const hasTransform = imageScale.value !== 1 || imageRotate.value !== 0 || imageTranslate.value.x !== 0 || imageTranslate.value.y !== 0
+    return {
+      width: '100%',
+      height: '100%',
+      transform: hasTransform ? `translate(${imageTranslate.value.x}px, ${imageTranslate.value.y}px) scale(${imageScale.value}) rotate(${imageRotate.value}deg)` : 'none',
+      cursor: isDraggingImage.value ? 'grabbing' : (imageScale.value > 1 ? 'grab' : 'default'),
+      transition: isDraggingImage.value ? 'none' : 'transform 0.15s ease-out'
+    }
+  }
+  return {
+    transform: `translate(${imageTranslate.value.x}px, ${imageTranslate.value.y}px) scale(${imageScale.value}) rotate(${imageRotate.value}deg)`,
+    cursor: isDraggingImage.value ? 'grabbing' : (imageScale.value > 1 ? 'grab' : 'default'),
+    transition: isDraggingImage.value ? 'none' : 'transform 0.15s ease-out'
+  }
+})
 
 // 导出生产运行数据 (XLSX) 弹窗状态
 const showExportXlsxModal = ref(false)
@@ -2390,6 +2506,7 @@ async function toggleFullscreen() {
 
 function handleFullscreenChange() {
   isFullscreen.value = Boolean(document.fullscreenElement)
+  isPlayerFullscreen.value = Boolean(document.fullscreenElement)
   nextTick(() => {
     handleResize()
   })
@@ -2762,12 +2879,14 @@ function triggerUpload() {
   fileInputRef.value?.click()
 }
 
-// 处理文件上传
+// 处理文件上传 (支持 HTML 与各类图片格式)
 async function handleFileUpload(event) {
   const file = event.target.files?.[0]
   if (!file) return
-  if (!file.name.toLowerCase().endsWith('.html') && !file.name.toLowerCase().endsWith('.htm')) {
-    alert('仅支持上传 .html 或 .htm 格式的分析汇报文件')
+  const lowerName = file.name.toLowerCase()
+  const allowed = ['.html', '.htm', ...IMAGE_EXTENSIONS]
+  if (!allowed.some(ext => lowerName.endsWith(ext))) {
+    alert('仅支持上传 HTML 分析汇报与图片材料 (.jpg, .jpeg, .png, .gif, .webp, .svg, .bmp)')
     event.target.value = ''
     return
   }
@@ -2784,17 +2903,127 @@ async function handleFileUpload(event) {
   }
 }
 
-// 在当前窗口打开播放器播放指定 HTML 文件
-async function openPlayer(fileItem) {
+// 图片交互与控制方法
+function changeImageZoom(delta) {
+  imageScale.value = Math.min(Math.max(0.1, Number((imageScale.value + delta).toFixed(2))), 5.0)
+}
+
+function resetImageZoom() {
+  imageScale.value = 1
+  imageTranslate.value = { x: 0, y: 0 }
+}
+
+function resetImageTransform() {
+  isForceFill.value = false
+  imageScale.value = 1
+  imageRotate.value = 0
+  imageTranslate.value = { x: 0, y: 0 }
+}
+
+function fitImageToScreen() {
+  isForceFill.value = false
+  resetImageTransform()
+}
+
+// 切换强制拉缩铺满窗口（不留黑边）
+function toggleForceFill() {
+  isForceFill.value = !isForceFill.value
+  imageScale.value = 1
+  imageRotate.value = 0
+  imageTranslate.value = { x: 0, y: 0 }
+}
+
+// 触发强制全屏（同时进入全屏并强制拉缩铺满整个屏幕窗口）
+function triggerForceFullscreen() {
+  isForceFill.value = true
+  imageScale.value = 1
+  imageRotate.value = 0
+  imageTranslate.value = { x: 0, y: 0 }
+  if (!document.fullscreenElement) {
+    if (imageViewerStageRef.value?.requestFullscreen) {
+      imageViewerStageRef.value.requestFullscreen().catch(() => {})
+    }
+  }
+}
+
+function rotateImage(deg) {
+  imageRotate.value = (imageRotate.value + deg) % 360
+}
+
+function onImageLoaded(event) {
+  if (event.target) {
+    imageNaturalSize.value = {
+      width: event.target.naturalWidth || 0,
+      height: event.target.naturalHeight || 0
+    }
+  }
+}
+
+function handleImageWheel(e) {
+  const delta = e.deltaY < 0 ? 0.15 : -0.15
+  changeImageZoom(delta)
+}
+
+function handleImageMouseDown(e) {
+  if (e.button !== 0) return
+  isDraggingImage.value = true
+  dragStartPos.value = {
+    x: e.clientX - imageTranslate.value.x,
+    y: e.clientY - imageTranslate.value.y
+  }
+  window.addEventListener('mousemove', onImageMouseMove)
+  window.addEventListener('mouseup', onImageMouseUp)
+}
+
+function onImageMouseMove(e) {
+  if (!isDraggingImage.value) return
+  imageTranslate.value = {
+    x: e.clientX - dragStartPos.value.x,
+    y: e.clientY - dragStartPos.value.y
+  }
+}
+
+function onImageMouseUp() {
+  isDraggingImage.value = false
+  window.removeEventListener('mousemove', onImageMouseMove)
+  window.removeEventListener('mouseup', onImageMouseUp)
+}
+
+// 在当前窗口打开播放器播放指定文件（HTML 或各类图片格式）
+async function openPlayer(fileItem, space = 'material') {
   currentPlayingFile.value = fileItem
+  currentPlayingSpace.value = space
   showPlayerModal.value = true
   playerLoading.value = true
   playerHtmlContent.value = ''
+  if (playerImageBlobUrl.value) {
+    URL.revokeObjectURL(playerImageBlobUrl.value)
+    playerImageBlobUrl.value = ''
+  }
+  resetImageTransform()
+  imageNaturalSize.value = { width: 0, height: 0 }
+
   try {
-    const res = await fetchPeriodReportContent(fileItem.rel_path)
-    playerHtmlContent.value = injectMetaIntoHtml(res.content || '', fileItem.rel_path, auth.token)
+    const isImg = fileItem.kind === 'image' || IMAGE_EXTENSIONS.some(ext => (fileItem.name || '').toLowerCase().endsWith(ext))
+    if (isImg) {
+      let blob
+      if (space === 'workflow') {
+        blob = await fetchWorkflowFileBlob(fileItem.rel_path)
+      } else {
+        blob = await fetchPeriodReportFileBlob(fileItem.rel_path)
+      }
+      playerImageBlobUrl.value = URL.createObjectURL(blob)
+    } else {
+      let res
+      if (space === 'workflow') {
+        res = await fetchWorkflowFileContent(fileItem.rel_path)
+      } else {
+        res = await fetchPeriodReportContent(fileItem.rel_path)
+      }
+      playerHtmlContent.value = injectMetaIntoHtml(res.content || '', fileItem.rel_path, auth.token)
+    }
   } catch (err) {
-    alert('读取汇报内容失败: ' + err.message)
+    alert('读取内容失败: ' + err.message)
     showPlayerModal.value = false
   } finally {
     playerLoading.value = false
@@ -2803,13 +3032,27 @@ async function openPlayer(fileItem) {
 
 // 关闭播放器
 function closePlayer() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {})
+  }
   showPlayerModal.value = false
   playerHtmlContent.value = ''
+  if (playerImageBlobUrl.value) {
+    URL.revokeObjectURL(playerImageBlobUrl.value)
+    playerImageBlobUrl.value = ''
+  }
   currentPlayingFile.value = null
+  resetImageTransform()
 }
 
 // 在新标签页中打开播放
 function openPlayerInNewTab() {
+  if (isImagePlaying.value) {
+    if (playerImageBlobUrl.value) {
+      window.open(playerImageBlobUrl.value, '_blank')
+    }
+    return
+  }
   if (!playerHtmlContent.value) return
   const relPath = currentPlayingFile.value?.rel_path || displayConfig.value.target_file || ''
   const injected = injectMetaIntoHtml(playerHtmlContent.value, relPath, auth.token)
@@ -2818,11 +3061,23 @@ function openPlayerInNewTab() {
   window.open(blobUrl, '_blank')
 }
 
-// 全屏播放 iframe
-function toggleIframeFullscreen() {
-  if (playerIframeRef.value) {
-    if (playerIframeRef.value.requestFullscreen) {
-      playerIframeRef.value.requestFullscreen()
+// 全屏展示切换（支持图片全屏和 HTML 全屏）
+function togglePlayerFullscreen() {
+  if (isImagePlaying.value) {
+    if (!document.fullscreenElement) {
+      if (imageViewerStageRef.value?.requestFullscreen) {
+        imageViewerStageRef.value.requestFullscreen().catch(() => {})
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {})
+      }
+    }
+  } else {
+    if (playerIframeRef.value) {
+      if (playerIframeRef.value.requestFullscreen) {
+        playerIframeRef.value.requestFullscreen().catch(() => {})
+      }
     }
   }
 }
@@ -5363,6 +5618,11 @@ kbd {
   color: #b45309;
   border: 1px solid #fde68a;
 }
+.avatar-image {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
 .space-file-name-meta {
   display: flex;
   flex-direction: column;
@@ -5437,6 +5697,11 @@ kbd {
   color: #0369a1;
 }
 .badge-report .badge-dot { background: #0284c7; }
+.badge-image {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+.badge-image .badge-dot { background: #9333ea; }
 .badge-doc {
   background: var(--bg-sub);
   color: var(--text-sub);
@@ -5869,6 +6134,66 @@ kbd {
   gap: 10px;
 }
 
+.badge-tag-indigo {
+  background: #6366f1;
+  color: #fff;
+}
+
+.image-res-tag {
+  font-family: monospace;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.image-toolbar-pills {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  padding: 2px 4px;
+  gap: 3px;
+  margin-right: 6px;
+}
+
+.btn-img-tool {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-img-tool:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.img-zoom-label {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  padding: 0 4px;
+  cursor: pointer;
+  min-width: 40px;
+  text-align: center;
+}
+
+.btn-fullscreen-toggle {
+  background: #0284c7;
+  border-color: #0369a1;
+}
+.btn-fullscreen-toggle:hover {
+  background: #0369a1;
+}
+
 .player-title {
   font-size: 14px;
   font-weight: 700;
@@ -5917,6 +6242,106 @@ kbd {
   height: 100%;
   border: none;
   background: #fff;
+}
+
+/* 图片播放与大屏全屏舞台 */
+.image-viewer-stage {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  background-color: #090d16;
+  background-image: 
+    linear-gradient(45deg, #0f172a 25%, transparent 25%), 
+    linear-gradient(-45deg, #0f172a 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #0f172a 75%), 
+    linear-gradient(-45deg, transparent 75%, #0f172a 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+}
+.image-viewer-stage.is-fullscreen,
+.image-viewer-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background-color: #000;
+}
+.image-canvas-layer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 96%;
+  max-height: 96%;
+  will-change: transform;
+}
+.image-viewer-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* 强制全屏 / 强制拉缩铺满窗口模式 */
+.image-viewer-stage.is-force-fill .image-canvas-layer {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.image-viewer-stage.is-force-fill .image-viewer-img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: fill !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.btn-force-fullscreen {
+  background: #7c3aed;
+  border-color: #8b5cf6;
+  font-weight: 700;
+}
+.btn-force-fullscreen:hover {
+  background: #6d28d9;
+}
+.btn-force-fullscreen.active {
+  background: #f59e0b;
+  border-color: #fbbf24;
+  color: #0f172a;
+}
+.btn-img-tool.active {
+  background: #38bdf8;
+  color: #0f172a;
+  font-weight: 700;
+}
+.image-viewer-tips {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  font-size: 11.5px;
+  padding: 5px 16px;
+  border-radius: 20px;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.image-viewer-stage.is-fullscreen .image-viewer-tips,
+.image-viewer-stage:fullscreen .image-viewer-tips {
+  display: none !important;
 }
 
 .player-loading {

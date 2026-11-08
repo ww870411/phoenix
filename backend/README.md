@@ -1,3 +1,22 @@
+## 2026-11-08 生产运行汇报两个空间支持图片文件（JPG/PNG等）识别、下载与管理
+
+- **模块与接口变更**：
+  - 更新 `projects/daily_report_25_26/services/period_report_files.py`：
+    - 新增图片格式常量 `IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')`；
+    - `list_report_files()` 支持扫描图片格式，返回 `kind: "image"` 和真实的后缀扩展名；
+    - `sanitize_filename()` 与 `rename_report_file()` 支持图片格式，防止错误强行补齐 `.html`；
+    - `upload_report_html` 放宽支持上传常见图片文件。
+  - 更新 `projects/daily_report_25_26/services/period_report_workflow.py`：
+    - `get_file_kind()` 增加对图片扩展名的识别，标记为 `image`；
+    - `rename_workflow_file()` 增加图片后缀保留保护。
+  - 更新 `projects/daily_report_25_26/api/period_report.py`：
+    - 统一提供 `get_file_media_type` 工具函数，`download_file` 与 `download_workflow_file` 返回对应精确实时 MIME 类型（`image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, `image/bmp` 等）。
+  - 更新 `projects/daily_report_25_26/tests/test_period_report.py`：
+    - 新增 `test_image_files_support_in_spaces` 针对性测试用例，覆盖材料空间与工作流空间的图片识别、下载类型、重命名保护；
+    - 修复 `test_display_config_and_space_transfer` 的前置样本依赖。
+- **验证结果**：
+  - `projects/daily_report_25_26/tests/test_period_report.py` 14 项测试用例全部 100% 通过（9.37s）。
+
 ## 2026-11-07 气温导出延伸结束日期后 7 日
 
 - `projects/daily_report_25_26/services/period_report_export.py` 的 `generate_period_report_xlsx` 单独将气温查询及输出范围扩展至 `end + 7日`；同期结束日期由扩展后的日期经 `get_peer_date` 映射，沿用逐日气温引擎。表内标题注明原查询结束日期和延伸范围，其他工作表仍按原统计区间生成。

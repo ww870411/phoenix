@@ -22,6 +22,9 @@ from backend.config import DATA_DIRECTORY
 # 东八区（北京时间 UTC+8）时区定义
 BEIJING_TZ = timezone(timedelta(hours=8))
 
+# 支持的图片扩展名集合
+IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp')
+
 
 def format_beijing_time(timestamp: float) -> str:
     """
@@ -145,9 +148,9 @@ def sanitize_filename(filename: str) -> str:
     if not name or name in ('.', '..'):
         raise HTTPException(400, "文件名不合法")
     
-    # 支持 .html, .htm 与 .xlsx
+    # 支持 .html, .htm, .xlsx 与各类常见图片格式
     lower_name = name.lower()
-    if lower_name.endswith(".xlsx"):
+    if lower_name.endswith(".xlsx") or any(lower_name.endswith(ext) for ext in IMAGE_EXTS):
         pass
     elif not (lower_name.endswith(".html") or lower_name.endswith(".htm")):
         name += ".html"
@@ -189,13 +192,13 @@ def resolve_safe_path(rel_path: str, must_exist: bool = True, for_write: bool = 
 
 def list_report_files() -> List[Dict[str, Any]]:
     """
-    列出空间中的所有 HTML 报告文件与 XLSX 数据文件。
+    列出空间中的所有 HTML 报告文件、XLSX 数据文件与各类图片文件。
     1. 递归扫描材料仓库中的所有汇报与明细文件（is_template=False），包含子文件夹识别；
     2. 兼容扫描工作流模板目录中的演示引擎母版（is_template=True）。
     """
     store_dir = ensure_storage_dir()
     file_list: List[Dict[str, Any]] = []
-    allowed_exts = ('.html', '.htm', '.xlsx')
+    allowed_exts = ('.html', '.htm', '.xlsx', *IMAGE_EXTS)
 
     # 1. 递归扫描材料仓库目录
     if store_dir.exists():
@@ -215,6 +218,8 @@ def list_report_files() -> List[Dict[str, Any]]:
                             parent_rel = full_path.parent.relative_to(store_dir).as_posix()
                             folder_name = "" if parent_rel == "." else parent_rel
                             is_excel = lower_f.endswith('.xlsx')
+                            is_img = any(lower_f.endswith(ext) for ext in IMAGE_EXTS)
+                            file_kind = "excel" if is_excel else ("image" if is_img else "html")
                             file_list.append({
                                 "name": f,
                                 "rel_path": rel_to_store,
@@ -224,8 +229,8 @@ def list_report_files() -> List[Dict[str, Any]]:
                                 "updated_at": format_beijing_time(stat.st_mtime),
                                 "created_at": format_beijing_time(stat.st_ctime),
                                 "is_template": False,
-                                "kind": "excel" if is_excel else "html",
-                                "ext": ".xlsx" if is_excel else ".html",
+                                "kind": file_kind,
+                                "ext": full_path.suffix.lower(),
                             })
                         except Exception:
                             continue
@@ -247,6 +252,8 @@ def list_report_files() -> List[Dict[str, Any]]:
                             parent_rel = full_path.parent.relative_to(WORKFLOW_DIR).as_posix()
                             folder_name = "" if parent_rel == "." else parent_rel
                             is_excel = lower_f.endswith('.xlsx')
+                            is_img = any(lower_f.endswith(ext) for ext in IMAGE_EXTS)
+                            file_kind = "excel" if is_excel else ("image" if is_img else "html")
                             file_list.append({
                                 "name": f,
                                 "rel_path": rel_to_root,
@@ -256,8 +263,8 @@ def list_report_files() -> List[Dict[str, Any]]:
                                 "updated_at": format_beijing_time(stat.st_mtime),
                                 "created_at": format_beijing_time(stat.st_ctime),
                                 "is_template": True,
-                                "kind": "excel" if is_excel else "html",
-                                "ext": ".xlsx" if is_excel else ".html",
+                                "kind": file_kind,
+                                "ext": full_path.suffix.lower(),
                             })
                         except Exception:
                             continue
@@ -297,14 +304,15 @@ def save_report_html(filename: str, content: str) -> Dict[str, Any]:
 
 async def upload_report_html(file: UploadFile) -> Dict[str, Any]:
     """
-    上传外部 HTML 报告文件并保存至【材料仓库】。
+    上传外部 HTML 报告或图片材料文件并保存至【材料仓库】。
     """
     if not file.filename:
         raise HTTPException(400, "未选择上传文件")
         
     safe_name = sanitize_filename(file.filename)
-    if not (safe_name.lower().endswith(".html") or safe_name.lower().endswith(".htm")):
-        raise HTTPException(400, "仅支持上传 .html 或 .htm 格式的分析汇报文件")
+    allowed_upload_exts = ('.html', '.htm', *IMAGE_EXTS)
+    if not any(safe_name.lower().endswith(ext) for ext in allowed_upload_exts):
+        raise HTTPException(400, "仅支持上传 HTML 分析汇报与图片文件 (.jpg, .jpeg, .png, .gif, .webp, .svg, .bmp)")
 
     target_path = resolve_safe_path(safe_name, must_exist=False, for_write=True)
     
@@ -312,6 +320,7 @@ async def upload_report_html(file: UploadFile) -> Dict[str, Any]:
         data = await file.read()
         target_path.write_bytes(data)
         stat = target_path.stat()
+        is_img = any(safe_name.lower().endswith(ext) for ext in IMAGE_EXTS)
         return {
             "ok": True,
             "name": safe_name,
@@ -321,6 +330,8 @@ async def upload_report_html(file: UploadFile) -> Dict[str, Any]:
             "created_at": format_beijing_time(stat.st_ctime),
             "updated_at": format_beijing_time(stat.st_mtime),
             "is_template": False,
+            "kind": "image" if is_img else "html",
+            "ext": target_path.suffix.lower(),
             "message": "已上传至材料仓库"
         }
     except Exception as exc:
@@ -398,7 +409,7 @@ def rename_report_file(rel_path: str, new_name: str) -> Dict[str, Any]:
     # 1. 如果用户未提供扩展名，自动追加原扩展名 old_ext；
     # 2. 如果用户提供了已知扩展名但与原扩展名不一致，自动纠正剥离并补回原扩展名，防止误将 xlsx 改为 html
     lower_new = clean_new.lower()
-    for ext in ('.xlsx', '.html', '.htm'):
+    for ext in ('.xlsx', '.html', '.htm', *IMAGE_EXTS):
         if lower_new.endswith(ext):
             clean_new = clean_new[:-len(ext)]
             break
@@ -415,6 +426,8 @@ def rename_report_file(rel_path: str, new_name: str) -> Dict[str, Any]:
     # 如果新文件名与旧文件名完全相同，直接返回成功元数据
     if new_path == old_path:
         stat = new_path.stat()
+        is_excel = safe_new_name.lower().endswith('.xlsx')
+        is_img = any(safe_new_name.lower().endswith(ext) for ext in IMAGE_EXTS)
         return {
             "ok": True,
             "old_path": rel_path,
@@ -424,6 +437,8 @@ def rename_report_file(rel_path: str, new_name: str) -> Dict[str, Any]:
             "size_formatted": format_file_size(stat.st_size),
             "created_at": format_beijing_time(stat.st_ctime),
             "updated_at": format_beijing_time(stat.st_mtime),
+            "kind": "excel" if is_excel else ("image" if is_img else "html"),
+            "ext": new_path.suffix.lower(),
             "message": "文件名未发生变更"
         }
 
@@ -434,6 +449,7 @@ def rename_report_file(rel_path: str, new_name: str) -> Dict[str, Any]:
         old_path.rename(new_path)
         stat = new_path.stat()
         is_excel = safe_new_name.lower().endswith('.xlsx')
+        is_img = any(safe_new_name.lower().endswith(ext) for ext in IMAGE_EXTS)
         return {
             "ok": True,
             "old_path": rel_path,
@@ -443,7 +459,8 @@ def rename_report_file(rel_path: str, new_name: str) -> Dict[str, Any]:
             "size_formatted": format_file_size(stat.st_size),
             "created_at": format_beijing_time(stat.st_ctime),
             "updated_at": format_beijing_time(stat.st_mtime),
-            "kind": "excel" if is_excel else "html",
+            "kind": "excel" if is_excel else ("image" if is_img else "html"),
+            "ext": new_path.suffix.lower(),
             "message": f"文件已成功重命名为【{new_path.name}】"
         }
     except Exception as exc:

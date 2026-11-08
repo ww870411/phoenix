@@ -1,5 +1,47 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-08 图片展示新增“强制全屏”与“强制铺满”功能（无黑边拉缩填满当前窗口）
+
+- **需求背景**：
+  在周期生产运行汇报页面中播放图片时，为满足大屏汇报场景下需要消除四周黑边/网格留白、让图片 100% 紧密贴合充满屏幕的视觉需求，增加“强制全屏”与“强制铺满”功能，将图片强制拉缩铺满当前显示窗口。
+- **改动范围与实现细节**：
+  - `frontend/src/projects/daily_report_25_26/pages/PeriodReportView.vue`：
+    1. **专属【⚡ 强制全屏】快捷动作**：
+       - 顶栏操作区新增【⚡ 强制全屏】高质感紫色高亮胶囊；
+       - 点击触发 `triggerForceFullscreen()`，一键激活强制拉缩填充模式（`isForceFill = true`），并联动原生 Fullscreen API 进入全屏，使图片无黑边完整铺满整个物理屏幕窗口；
+    2. **工具栏【强制铺满】切换开关**：
+       - 工具栏增加【强制铺满】药丸切换按钮，支持随时在“自适应比例（contain）”与“强制拉缩铺满（`object-fit: fill`）”之间无缝切换；
+    3. **CSS 渲染与层级控制**：
+       - 激活 `.is-force-fill` 状态下，画布层与图片均设为 `width: 100% !important; height: 100% !important; object-fit: fill !important`，移除圆角和投影，彻底消除视口缝隙；
+       - 双击图片、点击【适应】或退出播放时自动重置回原比例展示；
+    4. **全屏纯净画质体验**：
+       - 在全屏展示状态下，底部操作提示浮层（“鼠标滚轮缩放...”）自动彻底隐藏（Vue 条件与 CSS `:fullscreen` 双重隐藏），大屏画面极致纯净无遮挡。
+- **构建验证**：
+  - `npm run build` 1062 模块编译通过（17.90s，0 错误）。
+
+## 2026-11-08 生产运行汇报两个空间支持图片文件（JPG/PNG等）点击播放与全屏大屏展示
+
+- **需求背景**：
+  在周期生产运行汇报页面（`/projects/daily_report_25_26/pages/period_report`）中，“材料空间”（材料仓库）与“工作流空间”（工作流目录）两个空间中若存在图片文件（如 jpg, png, gif, webp, svg, bmp 等），支持点击播放并在页面上自适应展示，并支持一键全屏沉浸式铺满大屏展示。
+- **改动范围与主要工作**：
+  1. **后端服务与接口扩展**：
+     - `backend/projects/daily_report_25_26/services/period_report_files.py`：定义常见图片扩展名集合 `IMAGE_EXTS`；`list_report_files()` 扩展支持扫描图片，返回 `kind: "image"` 及准确的扩展名；`sanitize_filename()` 与 `rename_report_file()` 增加图片后缀保护，防止错误补全 `.html`；`upload_report_html` 扩展支持上传图片。
+     - `backend/projects/daily_report_25_26/services/period_report_workflow.py`：`get_file_kind(ext)` 增加图片识别映射；`rename_workflow_file()` 增加图片后缀保留。
+     - `backend/projects/daily_report_25_26/api/period_report.py`：`download_file` 与 `download_workflow_file` 统一切换为精准 MIME 类型映射（`image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, `image/bmp` 等）。
+  2. **前端 API 与状态层增强**：
+     - `frontend/src/projects/daily_report_25_26/services/api.js`：新增带鉴权头的二进制获取方法 `fetchPeriodReportFileBlob` 与 `fetchWorkflowFileBlob`。
+  3. **前端视图与多媒体播放器升级**：
+     - `frontend/src/projects/daily_report_25_26/pages/PeriodReportView.vue`：
+       - 材料空间弹窗：分类 Tab 新增“🖼️ 图片素材”筛选与计数；文件上传 input accept 扩展支持常见图片；列表行渲染图片专属头像（`avatar-image`）、属性标签（`badge-image`），点击文件名或操作列【▶ 播放】均可触发 `openPlayer(item, 'material')`。
+       - 工作流空间弹窗：文件列表渲染图片专属头像与徽章，操作列开放【▶ 播放】按钮，触发 `openPlayer(item, 'workflow')`。
+       - 播放器窗口升级为“多媒体播放窗口”：区分 HTML 与图片展示；图片模式下采用暗黑微网格大屏舞台，居中自适应渲染，支持鼠标滚轮平滑缩放（10%~500%）、按住左键拖拽平移、双击重置、顶栏旋转（↺/↻）与缩放比例标签、图片原始分辨率（如 1920×1080 px）展示；
+       - 全屏展示能力：点击【⛶ 全屏展示】调用 HTML5 Fullscreen API 将图片舞台撑满整块物理屏幕，大屏播放效果极佳；支持 ESC 或点击退出。
+  4. **自动化测试覆盖**：
+     - `backend/projects/daily_report_25_26/tests/test_period_report.py`：新增 `test_image_files_support_in_spaces` 测试用例，覆盖材料空间与工作流空间对 PNG/JPG 图片的列表识别、下载 MIME 类型与重命名后缀保留；修复 `test_display_config_and_space_transfer` 的前置样本依赖。
+- **验证结论**：
+  - 前端静态构建 `npm run build` 1062 模块全部成功通过（23.25s，0 错误）；
+  - 后端单元测试 `pytest backend/projects/daily_report_25_26/tests/test_period_report.py` 14 项测试全部 100% 通过（9.37s）。
+
 ## 2026-11-07 气温子表追加查询结束日期后 7 日本期及同期数据
 
 - 需求解释：将“查询日期后7日”按查询结束日期次日起连续 7 日处理；例如 11 月 1—5 日查询，气温表延伸至 11 月 12 日。

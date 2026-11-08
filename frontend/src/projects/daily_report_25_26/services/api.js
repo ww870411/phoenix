@@ -177,6 +177,17 @@ export async function fetchPeriodReportContent(relPath, { signal } = {}) {
   return response.json()
 }
 
+export async function fetchPeriodReportFileBlob(relPath, { signal } = {}) {
+  const query = new URLSearchParams({ path: relPath })
+  const url = `${projectPath('daily_report_25_26')}/period-report/files/download?${query}`
+  const response = await authAwareFetch(url, {
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '获取材料文件失败'))
+  return response.blob()
+}
+
 export async function downloadPeriodReportFile(relPath) {
   const query = new URLSearchParams({ path: relPath })
   const url = `${projectPath('daily_report_25_26')}/period-report/files/download?${query}`
@@ -249,6 +260,17 @@ export async function fetchWorkflowFileContent(relPath, { signal } = {}) {
   })
   if (!response.ok) throw new Error(await parseErrorDetail(response, '读取工作流文档内容失败'))
   return response.json()
+}
+
+export async function fetchWorkflowFileBlob(relPath, { signal } = {}) {
+  const query = new URLSearchParams({ path: relPath })
+  const url = `${projectPath('daily_report_25_26')}/period-report/workflow/files/download?${query}`
+  const response = await authAwareFetch(url, {
+    headers: attachAuthHeaders(),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '获取工作流文件失败'))
+  return response.blob()
 }
 
 export async function downloadWorkflowFile(relPath) {
