@@ -838,6 +838,7 @@
       <!-- 各单位热网耗水量对比情况（置于供暖单耗对比上方） -->
       <section class="dashboard-grid__item dashboard-grid__item--water">
         <NetworkWaterDumbbellCard
+          ref="networkWaterCardRef"
           :project-key="projectKey"
           :biz-date="pushDateValue || dashboardData.meta.pushDate"
         />
@@ -5023,6 +5024,7 @@ const injectPdfSafeSummaryIcons = (clonedDocument) => {
   })
 }
 
+const networkWaterCardRef = ref(null)
 const isExportingPdf = ref(false)
 const EXPORT_STANDARD_WIDTH = 1800
 
@@ -5052,6 +5054,11 @@ const downloadPDF = async () => {
     document.body.classList.add('body--export-pdf-locked')
     await nextTick()
 
+    // 显式触发热网耗水量图表按 1800px 宽屏双栏Option进行精确重绘
+    if (networkWaterCardRef.value?.renderBothCharts) {
+      networkWaterCardRef.value.renderBothCharts()
+    }
+
     // 3. 驱动页面上所有 ECharts 图表按 1800px 桌面宽度重新计算与重绘
     window.dispatchEvent(new Event('resize'))
     // 留足 ECharts 动画、重新计算与 DOM 渲染时间
@@ -5069,6 +5076,9 @@ const downloadPDF = async () => {
         const clonedDashboard = clonedDocument.querySelector('.dashboard-page')
         if (clonedDashboard) {
           clonedDashboard.classList.add('dashboard-page--export-standard')
+        }
+        if (clonedDocument.body) {
+          clonedDocument.body.classList.add('body--export-pdf-locked')
         }
         // 隐藏下载按钮、缓存发布工具条、折叠按钮等交互控件
         const hideSelectors = [
@@ -5115,6 +5125,9 @@ const downloadPDF = async () => {
     await releaseFold()
     isExportingPdf.value = false
     await nextTick()
+    if (networkWaterCardRef.value?.renderBothCharts) {
+      networkWaterCardRef.value.renderBothCharts()
+    }
     // 再次触发 resize，使界面图表平滑恢复适配当前设备的真实屏幕尺寸
     window.dispatchEvent(new Event('resize'))
   }
@@ -8524,12 +8537,114 @@ watch(
   min-height: 320px !important;
 }
 
+/* 主城区供热服务中心单耗明细：强制左图右表水平并排排布 */
+.dashboard-page--export-standard .center-card__content {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 24px !important;
+}
+
+.dashboard-page--export-standard .center-card__content .dashboard-chart {
+  flex: 0 0 50% !important;
+  width: 50% !important;
+  min-width: 0 !important;
+}
+
+.dashboard-page--export-standard .center-card__table {
+  flex: 1 1 50% !important;
+  width: 50% !important;
+  min-width: 0 !important;
+  padding: 0 8px 0 0 !important;
+  height: 100% !important;
+}
+
+/* 气温概览四宫格卡片 */
+.dashboard-page--export-standard .temp-summary-grid {
+  display: grid !important;
+  grid-template-columns: 1.4fr 1fr 1fr 1.2fr !important;
+  gap: 12px !important;
+}
+
+/* 投诉图表卡片 */
+.dashboard-page--export-standard .complaint-charts {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+}
+
+/* 日趋势工具栏 */
+.dashboard-page--export-standard .daily-trend-toolbar {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+/* 热网耗水量组件深层穿透排版锁定 (双栏桌面并排) */
+.dashboard-page--export-standard :deep(.water-dumbbell-header) {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.dashboard-page--export-standard :deep(.water-global-summary-bar) {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  align-items: center !important;
+  gap: 24px !important;
+  padding: 16px 22px !important;
+}
+
+.dashboard-page--export-standard :deep(.water-global-metric__val) {
+  font-size: 24px !important;
+}
+
+.dashboard-page--export-standard :deep(.water-global-metric__compare) {
+  font-size: 13.5px !important;
+}
+
+.dashboard-page--export-standard :deep(.water-global-metric__divider) {
+  display: block !important;
+  width: 1px !important;
+  height: 44px !important;
+  background: #cbd5e1 !important;
+}
+
+.dashboard-page--export-standard :deep(.water-columns-grid) {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+}
+
+.dashboard-page--export-standard :deep(.water-columns-divider) {
+  display: block !important;
+  width: 1px !important;
+  background: #e2e8f0 !important;
+  margin: 4px 0 !important;
+}
+
+.dashboard-page--export-standard :deep(.water-column) {
+  min-width: 0 !important;
+}
+
+.dashboard-page--export-standard :deep(.water-dumbbell-card) {
+  padding: 20px 24px !important;
+  border-radius: 16px !important;
+  gap: 16px !important;
+}
+
+.dashboard-page--export-standard :deep(.water-dumbbell-title) {
+  font-size: 20px !important;
+}
+
 /* ============================================================
    📱 窄屏手机模式精细化响应式排版适配 (max-width: 767px)
+   （限定仅在非 PDF 导出锁定状态下生效，杜绝导出时样式污染）
    ============================================================ */
 @media (max-width: 767px) {
   /* 1. 页面容器边距与溢出防撑破 */
-  .dashboard-page {
+  .dashboard-page:not(.dashboard-page--export-standard) {
     padding: 12px 10px !important;
     overflow-x: hidden !important;
     width: 100% !important;
@@ -8537,55 +8652,55 @@ watch(
   }
 
   /* 核心容器防撑爆规则：确保所有网格项和卡片不被内部宽表格撑破横向视口 */
-  .dashboard-grid,
-  .dashboard-grid__item,
-  .dashboard-card,
-  .dashboard-card__body,
-  .dashboard-summary,
-  .summary-card,
-  .dashboard-table-wrapper {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-grid,
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-grid__item,
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-card,
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-card__body,
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-summary,
+  .dashboard-page:not(.dashboard-page--export-standard) .summary-card,
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-table-wrapper {
     min-width: 0 !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
 
   /* 表格横向平滑触控滚动 */
-  .dashboard-table-wrapper,
-  .dashboard-table {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-table-wrapper,
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-table {
     width: 100% !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
   }
 
   /* 2. 页面头部 Header */
-  .dashboard-header {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-header {
     gap: 12px;
     margin-bottom: 16px;
   }
 
-  .dashboard-header__title {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-header__title {
     font-size: 20px !important;
   }
 
-  .dashboard-header__subtitle {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-header__subtitle {
     font-size: 12px;
   }
 
-  .dashboard-header__actions {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-header__actions {
     width: 100%;
     padding: 10px 12px;
     gap: 10px;
     box-sizing: border-box;
   }
 
-  .dashboard-header__date-group {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-header__date-group {
     width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
 
-  .dashboard-header__date-group input[type='date'] {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-header__date-group input[type='date'] {
     flex: 1;
     min-width: 0;
     padding: 6px 8px;
@@ -8593,7 +8708,7 @@ watch(
     box-sizing: border-box;
   }
 
-  .pdf-download-btn {
+  .dashboard-page:not(.dashboard-page--export-standard) .pdf-download-btn {
     width: 100%;
     padding: 8px;
     font-size: 13px;
@@ -8601,12 +8716,12 @@ watch(
     justify-content: center;
   }
 
-  .dashboard-cache-controls {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-cache-controls {
     width: 100%;
     min-width: 0;
   }
 
-  .dashboard-cache-buttons {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-cache-buttons {
     width: 100%;
     display: flex;
     justify-content: space-between;
@@ -8614,66 +8729,66 @@ watch(
   }
 
   /* 3. 核心指标卡 (summary-card) */
-  .dashboard-summary {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-summary {
     gap: 10px;
     margin-bottom: 16px;
   }
 
-  .summary-card {
+  .dashboard-page:not(.dashboard-page--export-standard) .summary-card {
     padding: 14px 12px;
     gap: 10px;
     border-radius: 12px;
   }
 
-  .summary-card__icon {
+  .dashboard-page:not(.dashboard-page--export-standard) .summary-card__icon {
     width: 38px;
     height: 38px;
     flex-shrink: 0;
     border-radius: 10px;
   }
 
-  .summary-card__icon::before {
+  .dashboard-page:not(.dashboard-page--export-standard) .summary-card__icon::before {
     width: 24px;
     height: 24px;
   }
 
-  .summary-card__value {
+  .dashboard-page:not(.dashboard-page--export-standard) .summary-card__value {
     font-size: 20px;
   }
 
-  .summary-card__value--paired {
+  .dashboard-page:not(.dashboard-page--export-standard) .summary-card__value--paired {
     font-size: 16px;
     gap: 6px;
     flex-wrap: wrap;
   }
 
-  .summary-card__delta {
+  .dashboard-page:not(.dashboard-page--export-standard) .summary-card__delta {
     font-size: 12px;
     margin-left: 2px;
   }
 
   /* 4. 通用卡片内部样式 */
-  .dashboard-card {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-card {
     padding: 14px 12px;
     border-radius: 12px;
     gap: 12px;
   }
 
-  .dashboard-card__header {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-card__header {
     gap: 6px;
   }
 
-  .dashboard-card__title {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-card__title {
     font-size: 16px;
     line-height: 1.4;
   }
 
-  .dashboard-card__extra {
+  .dashboard-page:not(.dashboard-page--export-standard) .dashboard-card__extra {
     font-size: 11px;
   }
 
   /* 5. 单耗切换栏与工具条 */
-  .unit-phase-toggle {
+  .dashboard-page:not(.dashboard-page--export-standard) .unit-phase-toggle {
     width: 100%;
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.7);
@@ -8681,51 +8796,51 @@ watch(
     box-sizing: border-box;
   }
 
-  .unit-phase-toggle__btn {
+  .dashboard-page:not(.dashboard-page--export-standard) .unit-phase-toggle__btn {
     padding: 4px 10px;
     font-size: 12px;
   }
 
-  .coal-phase-toggle {
+  .dashboard-page:not(.dashboard-page--export-standard) .coal-phase-toggle {
     flex-wrap: wrap;
   }
 
-  .daily-trend-toolbar {
+  .dashboard-page:not(.dashboard-page--export-standard) .daily-trend-toolbar {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
 
   /* 6. 电力现货与调度卡片 */
-  .spot-kpi-bar {
+  .dashboard-page:not(.dashboard-page--export-standard) .spot-kpi-bar {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px;
   }
 
-  .spot-kpi-item {
+  .dashboard-page:not(.dashboard-page--export-standard) .spot-kpi-item {
     padding: 8px 10px;
   }
 
-  .spot-kpi-item__label {
+  .dashboard-page:not(.dashboard-page--export-standard) .spot-kpi-item__label {
     font-size: 11px;
   }
 
-  .spot-kpi-item__value {
+  .dashboard-page:not(.dashboard-page--export-standard) .spot-kpi-item__value {
     font-size: 18px;
   }
 
-  .dispatch-event-row {
+  .dashboard-page:not(.dashboard-page--export-standard) .dispatch-event-row {
     grid-template-columns: 46px 1fr;
     gap: 6px 8px;
   }
 
   /* 7. 主城区服务中心指标选择器 */
-  .center-card__controls {
+  .dashboard-page:not(.dashboard-page--export-standard) .center-card__controls {
     flex-wrap: wrap;
     gap: 6px;
   }
 
-  .center-card__metric-btn {
+  .dashboard-page:not(.dashboard-page--export-standard) .center-card__metric-btn {
     padding: 4px 10px;
     font-size: 12px;
   }

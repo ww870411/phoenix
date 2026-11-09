@@ -669,6 +669,8 @@ const buildDumbbellOption = (dimData, isSeason = false) => {
   }
 }
 
+let lastRenderedWidth = 0
+
 const renderBothCharts = () => {
   if (!hasData.value) return
   const echarts = window.echarts
@@ -677,6 +679,8 @@ const renderBothCharts = () => {
     setTimeout(renderBothCharts, 200)
     return
   }
+
+  lastRenderedWidth = dayChartRef.value?.clientWidth || 0
 
   // 1. 渲染左侧：本日（主城区 + 外围五单位双标尺）
   if (dayChartRef.value) {
@@ -697,6 +701,21 @@ const renderBothCharts = () => {
   }
 }
 
+const handleResize = () => {
+  if (!hasData.value) return
+  const currentWidth = dayChartRef.value?.clientWidth || 0
+  const wasNarrow = lastRenderedWidth > 0 && lastRenderedWidth < 500
+  const isNarrowNow = currentWidth > 0 && currentWidth < 500
+
+  // 跨越窄屏/宽屏阈值，或宽度变动超过 50px（如切入/退出 1800px PDF 导出状态），重算 Option 并重绘
+  if (Math.abs(currentWidth - lastRenderedWidth) > 50 || wasNarrow !== isNarrowNow) {
+    renderBothCharts()
+  } else {
+    dayChartInstance?.resize()
+    seasonChartInstance?.resize()
+  }
+}
+
 watch(
   () => [props.projectKey, props.bizDate],
   () => {
@@ -707,18 +726,19 @@ watch(
 
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => {
-    dayChartInstance?.resize()
-    seasonChartInstance?.resize()
+    handleResize()
   })
 
   if (dayChartRef.value) resizeObserver.observe(dayChartRef.value)
   if (seasonChartRef.value) resizeObserver.observe(seasonChartRef.value)
+  window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
   abortController?.abort()
   abortController = null
   resizeObserver?.disconnect()
+  window.removeEventListener('resize', handleResize)
   if (dayChartInstance) {
     dayChartInstance.dispose()
     dayChartInstance = null
@@ -727,6 +747,11 @@ onBeforeUnmount(() => {
     seasonChartInstance.dispose()
     seasonChartInstance = null
   }
+})
+
+defineExpose({
+  renderBothCharts,
+  resize: handleResize,
 })
 </script>
 
@@ -1140,5 +1165,65 @@ onBeforeUnmount(() => {
   .water-global-metric__divider {
     display: none !important;
   }
+}
+
+/* ============================================================
+   📄 PDF 导出标准版式锁定样式 (消除手机端小视口双栏折叠与画布错位)
+   ============================================================ */
+:global(.dashboard-page--export-standard) .water-dumbbell-header {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+:global(.dashboard-page--export-standard) .water-global-summary-bar {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  align-items: center !important;
+  gap: 24px !important;
+  padding: 16px 22px !important;
+}
+
+:global(.dashboard-page--export-standard) .water-global-metric__val {
+  font-size: 24px !important;
+}
+
+:global(.dashboard-page--export-standard) .water-global-metric__compare {
+  font-size: 13.5px !important;
+}
+
+:global(.dashboard-page--export-standard) .water-global-metric__divider {
+  display: block !important;
+  width: 1px !important;
+  height: 44px !important;
+  background: #cbd5e1 !important;
+}
+
+:global(.dashboard-page--export-standard) .water-columns-grid {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+}
+
+:global(.dashboard-page--export-standard) .water-columns-divider {
+  display: block !important;
+  width: 1px !important;
+  background: #e2e8f0 !important;
+  margin: 4px 0 !important;
+}
+
+:global(.dashboard-page--export-standard) .water-column {
+  min-width: 0 !important;
+}
+
+:global(.dashboard-page--export-standard) .water-dumbbell-card {
+  padding: 20px 24px !important;
+  border-radius: 16px !important;
+  gap: 16px !important;
+}
+
+:global(.dashboard-page--export-standard) .water-dumbbell-title {
+  font-size: 20px !important;
 }
 </style>

@@ -26,10 +26,11 @@ test('真实模板严格匹配两张表的 67 个本期指标', () => {
   assert.deepEqual(sheets, before)
 })
 
-test('不完整统计、重复行、日期不一致均中止', () => {
+test('统计存在疑似问题时容错通过，重复行与日期不一致均中止', () => {
   const { stats, sheets } = fixture()
-  assert.throws(() => prepareComplaintFill({ ...stats, complete: false }, sheets, stats.business_date))
-  assert.throws(() => prepareComplaintFill(stats, sheets, '2026-11-03'))
+  const plan = prepareComplaintFill({ ...stats, complete: false, issues: [{ sheet: '明细（直办）', row: 614, reason: '无日期' }] }, sheets, stats.business_date)
+  assert.equal(plan.length, 67)
+  assert.throws(() => prepareComplaintFill(stats, sheets, '2026-11-03'), /业务日期已变化/)
   sheets[keys[0]].rows.push([...sheets[keys[0]].rows.find(row => row[0] === '当日净投诉量')])
   assert.throws(() => prepareComplaintFill(stats, sheets, stats.business_date), /匹配到 2 行/)
 })

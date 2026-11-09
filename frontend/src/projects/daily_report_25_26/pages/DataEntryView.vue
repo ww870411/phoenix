@@ -296,7 +296,7 @@
             <button
               class="btn primary complaint-modal-fill-btn"
               type="button"
-              :disabled="complaintFilling || entryLocked || !entryDataReady || !complaintStats.complete || complaintStats.business_date !== bizDate"
+              :disabled="complaintFilling || entryLocked || !entryDataReady || complaintStats.business_date !== bizDate"
               @click="fillComplaintData"
             >
               <span v-if="complaintFilling">⏳ 正在填入…</span>
@@ -2793,7 +2793,8 @@ async function fillComplaintData() {
     if (validationEnabled.value && templateType.value === 'standard') runFullValidation()
     saveCurrentSheetToCache(expectedSheet)
     isComplaintModalOpen.value = false
-    showSubmitFeedback('success', `🎉 已成功填入供热公司两张表的 ${plan.length} 个本期指标！已为您激活暖金高亮标记，请核对各行数值后自行提交。`, { autoHide: false })
+    const issueHint = statistics.issues?.length ? `（已容错忽略 ${statistics.issues.length} 条无有效日期/异常明细）` : ''
+    showSubmitFeedback('success', `🎉 已成功填入供热公司两张表的 ${plan.length} 个本期指标${issueHint}！已为您激活暖金高亮标记，请核对各行数值后自行提交。`, { autoHide: false })
   } catch (err) {
     showSubmitFeedback('error', `投诉数据填入失败：${err.message || String(err)}`, { autoHide: false })
   } finally {

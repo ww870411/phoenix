@@ -124,7 +124,7 @@ def calculate(data, business_date):
                     continue
                 date_value = record_date(values[0], epoch)
                 if date_value is None:
-                    issues.append({'sheet': sheet.name, 'row': row_number, 'reason': '编号存在，但日期为空、无效或公式没有保存计算结果'})
+                    issues.append({'sheet': sheet.name, 'row': row_number, 'reason': '编号存在，但日期为空、无效或公式没有保存计算结果，已自动忽略'})
                     continue
                 name = str(values[8] or '').strip()
                 records.append({'sheet': sheet.name, 'row': row_number, 'source': source, 'date': date_value.isoformat(), 'identifier': identifier, 'type': str(values[2] or '').strip(), 'category': str(values[7] or '').strip(), 'center_original': name, 'center': center_name(name), 'status': normalize(values[11])})

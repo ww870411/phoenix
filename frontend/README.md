@@ -1,3 +1,40 @@
+## 2026-11-09 数据看板手机端导出 PDF 排版错乱修复（热网耗水量与主城区单耗双栏锁定与重绘机制优化）
+
+- **模块位置**：
+  - `src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`
+  - `src/projects/daily_report_25_26/pages/DashBoard.vue`
+- **主要新增与增强特性**：
+  1. **热网耗水量组件标准导出态锁定与重绘**：
+     - 在 `NetworkWaterDumbbellCard.vue` 中新增 `:global(.dashboard-page--export-standard)` 样式规则，强制 `.water-columns-grid` 使用 `1fr auto 1fr` 桌面双栏并排排版，避免移动端小视口下媒体查询失效导致单列 1700px 满宽拉伸；
+     - 增加 `handleResize` 与 `lastRenderedWidth` 追踪机制，在进入/退出导出状态或视口大幅变化时重新计算 Option 并执行 `renderBothCharts()`；
+     - 对外暴露 `renderBothCharts` 与 `resize` 实例方法。
+  2. **主城区单耗明细及核心卡片标准排版锁定**：
+     - 在 `DashBoard.vue` 的 `.dashboard-page--export-standard` 样式块中补充 `.center-card__content` 强制 `flex-direction: row !important`，左侧图表与右侧表格各占 50%，消除柱状图横跨插入表格的问题；
+     - 补齐气温概览四宫格、投诉双列、趋势工具栏水平布局以及深层穿透热网耗水量组件的双重保障；
+     - 将页面底部的 `@media (max-width: 767px)` 选择器限定在 `.dashboard-page:not(.dashboard-page--export-standard)` 下，杜绝移动端小字号与容器压缩规则污染 1800px 导出标准版式。
+  3. **PDF 导出流程时序优化**：
+     - 在 `downloadPDF` 中挂载 `networkWaterCardRef`，在锁定 1800px 样式后显式调用 `networkWaterCardRef.value?.renderBothCharts()`，并驱动全局 resize；导出完成后平滑恢复设备屏幕自适应。
+- **构建验证**：
+  - `npm run build` 1062 模块编译通过（21.46s，0 错误）。
+
+## 2026-11-09 投诉报表自动拉取与填入容错升级（解绑强阻断门禁并提示已忽略记录）
+
+- **模块位置**：
+  - `src/projects/daily_report_25_26/composables/complaintFill.js`
+  - `src/projects/daily_report_25_26/composables/complaintFill.test.js`
+  - `src/projects/daily_report_25_26/pages/DataEntryView.vue`
+- **主要新增与增强特性**：
+  1. **取消 `!stats.complete` 硬阻断**：
+     - `prepareComplaintFill` 函数移除针对 `!stats?.complete` 的异常抛出，允许底表存在未填写日期等非关键 issue 时继续生成 67 项本期指标填入计划；保留业务日期核验与 10 个服务中心完整性核对。
+  2. **弹窗填入按钮可用性提升**：
+     - 模态框底部【✨ 一键填入供热公司两张表（67项）】按钮解绑 `!complaintStats.complete` 禁用判断，允许用户在查看被忽略明细提示的同时完成一键填入。
+  3. **友好的用户反馈**：
+     - 执行填入成功后，反馈提示中动态增加“（已容错忽略 X 条无有效日期/异常明细）”提示；
+     - 模态框上方黄色警示条继续完整显示具体被忽略的明细工作表、行号及原因，兼顾便捷性与数据透明度。
+- **构建与测试验证**：
+  - `node --test src/projects/daily_report_25_26/composables/complaintFill.test.js` 3 项测试全部通过；
+  - `npm run build` 1062 模块编译通过（17.66s，0 错误）。
+
 ## 2026-11-08 图片展示新增“强制全屏”与“强制铺满”功能（无黑边拉缩填满窗口）
 
 - **模块位置**：

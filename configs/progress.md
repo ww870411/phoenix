@@ -1,5 +1,56 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-09 数据看板手机端导出 PDF 排版错乱修复（热网耗水量与主城区单耗双栏锁定与重绘机制优化）
+
+- **需求背景**：
+  在生产日报数据看板页面点击【下载 PDF】时，电脑端导出排版正常，但在移动端/手机端操作导出的 PDF 中，部分模块排版存在严重重叠与错乱现象（参考 `phoenix/configs/2026.11.08 洁净能源集团生产日报数据看板.pdf`），尤其是“各单位热网耗水量对比情况”中条形图横穿右侧卡片与右边界，以及“主城区供热服务中心单耗明细”中柱状图插入并覆盖右侧表格。
+- **根因分析**：
+  1. **视口与媒体查询生效机制错位**：手机真实视口通常仅为 375~430px。导出时虽然给看板容器添加了 `dashboard-page--export-standard` 并设定宽度为 1800px，但 CSS 中的 `@media (min-width: 1024px)` 依然无法在手机真实视口下命中，导致宿主 DOM 中“热网耗水量”的双栏容器 `.water-columns-grid` 和“主城区单耗”的 `.center-card__content` 仍保持手机单列堆叠布局（子容器占满 100% 约 1700px 宽）。
+  2. **ECharts 画布与 html2canvas 克隆容器尺寸错配**：执行导出触发 `resize` 时，宿主页面的 ECharts 按照单列满宽（约 1700px）计算并绘制了 canvas 画布；而随后的 `html2canvas` 带着 `windowWidth: 1800` 在沙箱 iframe 中克隆渲染，iframe 视口为 1800px 命中了 `@media (min-width: 1024px)`，将 DOM 容器恢复为双栏并排（各占 50% 约 850px 宽）。而 html2canvas 对 canvas 的克隆是直接拷贝宿主位图，导致 1700px 的柱状图/条形图被强行放置在 850px 宽的容器中，横向穿透覆盖到右侧卡片与表格上。
+  3. **移动端媒体查询样式污染**：页面底部的 `@media (max-width: 767px)` 压缩规则在手机视口下命中且带有 `!important`，导致导出状态下的部分 padding、图标与卡片被缩小。
+  4. **组件 Option 未重新适配重绘**：`NetworkWaterDumbbellCard.vue` 内部的 `buildDumbbellOption` 依赖 `containerWidth < 500` 判断 `isNarrow`，原 ResizeObserver 仅调用 `resize()` 未重新执行 Option 计算。
+- **改动范围与主要工作**：
+  1. **热网耗水量组件标准导出态深度适配与自适应重绘**：
+     - `frontend/src/projects/daily_report_25_26/components/NetworkWaterDumbbellCard.vue`：
+       - CSS 深度锁定：增加 `:global(.dashboard-page--export-standard)` 规则，强行将 `.water-columns-grid` 锁定为双栏（`grid-template-columns: 1fr auto 1fr !important`），`.water-columns-divider` 强制显示，`.water-global-summary-bar` 锁定为三栏，消除视口依赖；
+       - JS 重绘增强：增加 `handleResize` 监听与 `lastRenderedWidth` 追踪，在容器宽度跨越阈值或发生较大变动时重新计算 Option 并调用 `renderBothCharts()`；
+       - 组件能力暴露：通过 `defineExpose` 暴露 `renderBothCharts` 和 `resize` 方法。
+  2. **看板核心容器导出样式锁定与移动端样式隔离**：
+     - `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`：
+       - 主城区单耗水平并排锁定：在 `.dashboard-page--export-standard` 下强行设置 `.center-card__content` 为 `flex-direction: row !important`，左侧图表与右侧表格各占 50%（`flex: 0 0 50% !important; width: 50% !important`）；
+       - 补齐气温四宫格（`temp-summary-grid`）、投诉双列（`complaint-charts`）、日趋势工具栏等桌面级规则；
+       - 深层穿透适配：为 `.dashboard-page--export-standard` 增加针对 `:deep(.water-columns-grid)` 等热网耗水量组件的双重保障；
+       - 移动端媒体查询防污染：将 `@media (max-width: 767px)` 的选择器统一增加 `.dashboard-page:not(.dashboard-page--export-standard)` 作用域限定，防止手机窄屏规则污染 1800px 标准版式；
+       - 导出时序精准驱动：给 `NetworkWaterDumbbellCard` 挂载 ref，在 `downloadPDF` 进入导出锁定时先触发 `networkWaterCardRef.value?.renderBothCharts()`，再触发全局 resize，导出完成后平滑恢复自适应。
+- **验证结论**：
+  - 前端生产打包 `npm run build` 1062 模块编译通过（21.46s，0 错误）；
+  - 彻底消除了手机端导出 PDF 时“热网耗水量”条形图横穿右侧卡片和“主城区供热服务中心”柱状图插入右侧表格的排版错位问题。
+
+## 2026-11-09 投诉报表自动拉取与填入容错优化（取消强阻断并自动忽略无日期异常记录）
+
+- **需求背景**：
+  在每日数据填报页面（供热公司 `GongRe_Sheet`）点击【⚡ 自动拉取投诉量】时，因金山文档在线底表末尾存在他人协同录入未完成的半截数据（如直办明细表第 614 行仅填写诉求编号与电话，日期为空），系统检测到底表存在 1 项疑似未计入异常（`issues`），导致 `complete` 为 `false`，原前端强校验抛出“统计结果不完整或业务日期已变化，请重新上传并核对”并硬阻断了自动填入。用户要求进行容错处理：取消当前的强阻断限制，如果底表存在类似的无日期记录，则自动忽略该记录并允许正常填报。
+- **改动范围与主要工作**：
+  1. **前端自动填入计划与校验解耦**：
+     - `frontend/src/projects/daily_report_25_26/composables/complaintFill.js`：
+       - 在 `prepareComplaintFill` 中移除 `!stats?.complete` 强阻断校验，保留业务日期匹配（`stats.business_date === date`）及 10 个服务中心完整性底线校验；底表存在可忽略项时不影响 67 个本期指标的生成。
+     - `frontend/src/projects/daily_report_25_26/composables/complaintFill.test.js`：
+       - 更新测试用例，断言即使 `complete: false` 且包含 issue 项时依然能容错生成 67 项填报计划，而业务日期不符及服务中心缺失依然严格中止。
+  2. **填报视图体验与容错反馈**：
+     - `frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`：
+       - 弹窗底部【✨ 一键填入供热公司两张表（67项）】按钮解绑 `!complaintStats.complete` 禁用条件；
+       - `fillComplaintData` 成功反馈中增加容错提示：“（已容错忽略 X 条无有效日期/异常明细）”；
+       - 弹窗上方的黄色警示框继续保留展示具体的被忽略行及原因，保持数据审计完全透明。
+  3. **后端解析服务优化**：
+     - `backend/projects/daily_report_25_26/services/complaint_statistics.py`：
+       - 完善 `calculate` 循环中 `date_value is None` 时的异常说明，明确记录为“编号存在，但日期为空、无效或公式没有保存计算结果，已自动忽略”，继续跳过（`continue`），不计入 `records`。
+- **验证结论**：
+  - 后端回归测试 `pytest backend/projects/daily_report_25_26/tests/test_complaint_statistics.py` 4 项测试 100% 通过（1.28s）；
+  - 前端单元测试 `node --test frontend/src/projects/daily_report_25_26/composables/complaintFill.test.js` 3 项测试 100% 通过（103ms）；
+  - 前端生产打包 `npm --prefix frontend run build` 1062 模块编译通过（17.66s，0 错误）；
+  - 真实金山文档在线底表端到端模拟测试成功生成 67 项指标填报 plan，第 614 行无日期半截数据被安全忽略。
+
+
 ## 2026-11-08 图片展示新增“强制全屏”与“强制铺满”功能（无黑边拉缩填满当前窗口）
 
 - **需求背景**：

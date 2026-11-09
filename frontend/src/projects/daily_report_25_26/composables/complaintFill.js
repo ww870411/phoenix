@@ -16,7 +16,7 @@ export const gongreCompanyExtraMetrics = [
 export const complaintFillCenters = ['华乐中心', '东港中心', '春海中心', '中山中心', '北岗中心', '双兴中心', '香炉礁中心', '兴工中心', '大纺中心', '管网中心']
 
 export function prepareComplaintFill(stats, sheets, date) {
-  if (!stats?.complete || stats.business_date !== date) throw new Error('统计结果不完整或业务日期已变化，请重新上传并核对。')
+  if (!stats || stats.business_date !== date) throw new Error('业务日期已变化或未获取到统计结果，请重新核对。')
   const names = new Map((stats.centers || []).map(center => [center.name, center.metrics]))
   if (stats.centers?.length !== complaintFillCenters.length || names.size !== complaintFillCenters.length || complaintFillCenters.some(name => !names.has(name))) throw new Error('服务中心统计结果不完整，未填入数据。')
   const plans = []
