@@ -303,6 +303,205 @@
         </div>
       </section>
 
+      <!-- 现货单价区间 · 上网电量分布分析下拉信息窗 (当两厂机组有数据时显示) -->
+      <section v-if="hasPlantSalesData" class="card elevated price-dist-window">
+        <!-- 信息窗顶栏操作栏 -->
+        <div class="dist-header" @click="isDistributionWindowOpen = !isDistributionWindowOpen">
+          <div class="dist-title-group">
+            <span class="dist-icon">⚡</span>
+            <div>
+              <div class="dist-title-row">
+                <h4 class="dist-title">现货单价区间 · 上网电量分布分析</h4>
+                <span class="dist-badge">供分析参考</span>
+              </div>
+              <p class="dist-subtitle">
+                按现货单价区间透视所选期间发电机组在负电价、低谷、常规平段及顶峰高价期的上网电量分布与占比结构
+              </p>
+            </div>
+          </div>
+
+          <!-- 控制区：电厂切换胶囊与折叠开关 -->
+          <div class="dist-controls" @click.stop>
+            <div class="dist-capsule-tabs">
+              <button
+                type="button"
+                class="capsule-btn"
+                :class="{ active: selectedDistributionPlant === 'all' }"
+                @click="selectedDistributionPlant = 'all'"
+              >
+                两厂总计
+              </button>
+              <button
+                type="button"
+                class="capsule-btn"
+                :class="{ active: selectedDistributionPlant === 'xianghai' }"
+                @click="selectedDistributionPlant = 'xianghai'"
+              >
+                香海热电厂 (4台机)
+              </button>
+              <button
+                type="button"
+                class="capsule-btn"
+                :class="{ active: selectedDistributionPlant === 'beihai' }"
+                @click="selectedDistributionPlant = 'beihai'"
+              >
+                北海热电厂 (3台机)
+              </button>
+            </div>
+
+            <button
+              type="button"
+              class="dist-toggle-btn"
+              :title="isDistributionWindowOpen ? '收起分析窗' : '展开分析窗'"
+              @click="isDistributionWindowOpen = !isDistributionWindowOpen"
+            >
+              <span>{{ isDistributionWindowOpen ? '收起分析窗' : '展开分析窗' }}</span>
+              <span class="chevron" :class="{ 'is-open': isDistributionWindowOpen }">▼</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 折叠状态下的单行摘要小横条 -->
+        <div v-if="!isDistributionWindowOpen" class="dist-summary-strip" @click="isDistributionWindowOpen = true">
+          <span class="summary-prefix">当前电量分布概览：</span>
+          <div class="summary-chips">
+            <span
+              v-for="item in plantDistributionStats.intervals"
+              :key="item.key"
+              class="summary-chip"
+              :style="{ backgroundColor: item.bgColor, borderColor: item.borderColor, color: item.textColor }"
+            >
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.ratioFormatted }}</span>
+              <span class="chip-mwh">({{ item.salesFormatted }} MWh)</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- 展开内容区域 -->
+        <div v-show="isDistributionWindowOpen" class="dist-body">
+          <!-- 1. 多色连续堆叠电量占比可视化条 -->
+          <div class="stacked-bar-container">
+            <div class="stacked-bar-meta">
+              <span class="meta-label">
+                <strong>{{ selectedDistributionPlant === 'all' ? '两厂总计' : selectedDistributionPlant === 'xianghai' ? '香海热电厂' : '北海热电厂' }}</strong>
+                期间总上网电量：<strong>{{ plantDistributionStats.totalSalesFormatted }} MWh</strong>
+                <span class="meta-points">({{ plantDistributionStats.totalPoints }} 时点)</span>
+              </span>
+              <span class="meta-legend">
+                <span v-for="item in plantDistributionStats.intervals" :key="item.key" class="legend-dot-item">
+                  <span class="legend-dot" :style="{ backgroundColor: item.color }"></span>
+                  {{ item.label }}: {{ item.ratioFormatted }}
+                </span>
+              </span>
+            </div>
+
+            <!-- 堆叠分布横条 -->
+            <div class="stacked-bar">
+              <div
+                v-for="item in plantDistributionStats.intervals"
+                :key="item.key"
+                class="bar-segment"
+                :style="{
+                  width: `${Math.max(item.ratio, item.sales > 0 ? 0.8 : 0)}%`,
+                  backgroundColor: item.color,
+                }"
+                :title="`${item.name} ${item.label}：电量 ${item.salesFormatted} MWh，占比 ${item.ratioFormatted}，时段 ${item.pointCount} 点`"
+              >
+                <span v-if="item.ratio >= 8" class="segment-text">
+                  {{ item.label }} · {{ item.ratioFormatted }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. 四宫格区间指标卡 -->
+          <div class="interval-cards-grid">
+            <div
+              v-for="item in plantDistributionStats.intervals"
+              :key="item.key"
+              class="interval-card"
+              :style="{ borderTopColor: item.color, backgroundColor: item.bgColor }"
+            >
+              <div class="card-head">
+                <span class="range-badge" :style="{ backgroundColor: item.color }">{{ item.label }} {{ item.unit }}</span>
+                <span class="range-tag">{{ item.desc }}</span>
+              </div>
+              <div class="card-ratio" :style="{ color: item.color }">
+                {{ item.ratioFormatted }}
+              </div>
+              <div class="card-metric-list">
+                <div class="metric-row">
+                  <span class="m-label">上网电量:</span>
+                  <strong class="m-val">{{ item.salesFormatted }} MWh</strong>
+                </div>
+                <div class="metric-row">
+                  <span class="m-label">覆盖时段:</span>
+                  <span class="m-val">{{ item.pointCount }} 点 ({{ item.pointRatioFormatted }})</span>
+                </div>
+                <div class="metric-row">
+                  <span class="m-label">加权结算均价:</span>
+                  <span class="m-val">{{ item.avgPriceFormatted }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. 机组明细穿透折叠抽屉 -->
+          <div class="unit-breakdown-section">
+            <button
+              type="button"
+              class="breakdown-toggle-btn"
+              @click="showUnitBreakdown = !showUnitBreakdown"
+            >
+              <span>{{ showUnitBreakdown ? '▼ 收起各机组区间电量明细' : '▶ 查看各机组区间电量穿透明细' }}</span>
+              <span class="breakdown-hint">包含各机组在不同电价区间的具体发电出力与占比</span>
+            </button>
+
+            <div v-if="showUnitBreakdown" class="unit-breakdown-table-wrap">
+              <table class="unit-breakdown-table">
+                <thead>
+                  <tr>
+                    <th style="width: 140px;">机组名称</th>
+                    <th style="width: 120px;">总上网电量</th>
+                    <th style="width: 130px;">综合加权均价</th>
+                    <th>[-100, 0) 负电价</th>
+                    <th>[0, 200) 低电价</th>
+                    <th>[200, 400) 常规基准</th>
+                    <th>>= 400 高电价</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="unit in plantDistributionStats.unitStats" :key="unit.key">
+                    <td class="unit-name-cell">
+                      <strong>{{ unit.name }}</strong>
+                    </td>
+                    <td class="unit-total-cell">{{ unit.totalSalesFormatted }} MWh</td>
+                    <td class="unit-avg-cell">{{ unit.avgPriceFormatted }}</td>
+                    <td class="cell-neg">
+                      {{ unit.intervals.neg.salesFormatted }} MWh
+                      <span class="cell-ratio">({{ unit.intervals.neg.ratio }})</span>
+                    </td>
+                    <td class="cell-low">
+                      {{ unit.intervals.low.salesFormatted }} MWh
+                      <span class="cell-ratio">({{ unit.intervals.low.ratio }})</span>
+                    </td>
+                    <td class="cell-mid">
+                      {{ unit.intervals.mid.salesFormatted }} MWh
+                      <span class="cell-ratio">({{ unit.intervals.mid.ratio }})</span>
+                    </td>
+                    <td class="cell-high">
+                      {{ unit.intervals.high.salesFormatted }} MWh
+                      <span class="cell-ratio">({{ unit.intervals.high.ratio }})</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- 可视化图表区 -->
       <section class="card elevated chart-container-card">
         <div class="chart-header">
@@ -1354,17 +1553,28 @@ const meta = ref({
   total_points: 0,
 })
 
-const summary = ref(null)
-const showPlantSales = ref(false)
-const hasPlantSalesData = computed(() => summary.value?.has_plant_sales_data === true)
-const canShowPlantSales = computed(() => hasPlantSalesData.value && !loading.value && !loadError.value)
-watch(showPlantSales, () => { if (!loading.value) renderChart() })
-watch(hasPlantSalesData, available => { if (!available) showPlantSales.value = false })
 // 纯展示批量时序数据使用 shallowRef，避免 Vue 深度递归对 10,000+ 个对象进行 Proxy 包装，大幅节省内存与消除 GC 卡顿
 const points = shallowRef([])
 const dailyTrends = shallowRef([])
 const periodTrends = shallowRef([])
 const monthlyTrends = shallowRef([])
+
+const summary = ref(null)
+const showPlantSales = ref(false)
+const hasPlantSalesData = computed(() => {
+  if (summary.value?.has_plant_sales_data === true) return true
+  const pts = points.value
+  if (!pts || !pts.length) return false
+  return pts.some(pt => (
+    (pt.xianghai_total_sales ?? 0) > 0 ||
+    (pt.beihai_total_sales ?? 0) > 0 ||
+    pt.xianghai_unit1_sales != null ||
+    pt.beihai_unit1_sales != null
+  ))
+})
+const canShowPlantSales = computed(() => hasPlantSalesData.value && !loading.value && !loadError.value)
+watch(showPlantSales, () => { if (!loading.value) renderChart() })
+watch(hasPlantSalesData, available => { if (!available) showPlantSales.value = false })
 
 const totalQueryPoints = computed(() => {
   return summary.value?.point_count || points.value?.length || 0
@@ -1515,6 +1725,220 @@ const spotPriceRateFormatter = new Intl.NumberFormat('zh-CN', { minimumFractionD
 function formatSpotPriceRate(value) {
   return value == null ? '—' : `${spotPriceRateFormatter.format(value)}%`
 }
+
+// ==========================================
+// 现货单价区间上网电量分布分析模块（响应式状态与统计计算）
+// ==========================================
+const isDistributionWindowOpen = ref(true)
+const selectedDistributionPlant = ref('all') // 'all' | 'xianghai' | 'beihai'
+const showUnitBreakdown = ref(false)
+
+const PRICE_INTERVAL_CONFIGS = [
+  {
+    key: 'neg',
+    label: '[-100, 0)',
+    unit: '元/MWh',
+    name: '负电价',
+    desc: '极度供大于求 / 弃电调峰',
+    color: '#2563eb', // 蓝色
+    bgColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    textColor: '#1d4ed8',
+  },
+  {
+    key: 'low',
+    label: '[0, 200)',
+    unit: '元/MWh',
+    name: '低电价',
+    desc: '低谷消纳 / 边际承压',
+    color: '#10b981', // 浅绿色
+    bgColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+    textColor: '#047857',
+  },
+  {
+    key: 'mid',
+    label: '[200, 400)',
+    unit: '元/MWh',
+    name: '常规基准',
+    desc: '燃煤基准价区间 (374.9)',
+    color: '#f97316', // 浅橙色
+    bgColor: '#fff7ed',
+    borderColor: '#fed7aa',
+    textColor: '#c2410c',
+  },
+  {
+    key: 'high',
+    label: '>= 400',
+    unit: '元/MWh',
+    name: '高电价',
+    desc: '负荷高峰 / 高收益时段',
+    color: '#ef4444', // 浅红色
+    bgColor: '#fef2f2',
+    borderColor: '#fecaca',
+    textColor: '#b91c1c',
+  },
+]
+
+// 电量区间分布核心计算属性
+const plantDistributionStats = computed(() => {
+  const pts = points.value || []
+  const plantMode = selectedDistributionPlant.value // 'all' | 'xianghai' | 'beihai'
+
+  const allUnits = [
+    { key: 'xianghai_unit1', name: '香海 #1 机组', plant: 'xianghai', prop: 'xianghai_unit1_sales' },
+    { key: 'xianghai_unit2', name: '香海 #2 机组', plant: 'xianghai', prop: 'xianghai_unit2_sales' },
+    { key: 'xianghai_unit3', name: '香海 #3 机组', plant: 'xianghai', prop: 'xianghai_unit3_sales' },
+    { key: 'xianghai_unit4', name: '香海 #4 机组', plant: 'xianghai', prop: 'xianghai_unit4_sales' },
+    { key: 'beihai_unit1', name: '北海 #1 机组', plant: 'beihai', prop: 'beihai_unit1_sales' },
+    { key: 'beihai_unit2', name: '北海 #2 机组', plant: 'beihai', prop: 'beihai_unit2_sales' },
+    { key: 'beihai_unit3', name: '北海 #3 机组', plant: 'beihai', prop: 'beihai_unit3_sales' },
+  ]
+
+  const targetUnits = plantMode === 'all'
+    ? allUnits
+    : allUnits.filter(u => u.plant === plantMode)
+
+  const intervalMap = {}
+  PRICE_INTERVAL_CONFIGS.forEach(cfg => {
+    intervalMap[cfg.key] = {
+      ...cfg,
+      sales: 0,
+      revenue: 0,
+      pointCount: 0,
+    }
+  })
+
+  const unitMap = {}
+  targetUnits.forEach(u => {
+    unitMap[u.key] = {
+      key: u.key,
+      name: u.name,
+      plant: u.plant,
+      totalSales: 0,
+      totalRevenue: 0,
+      intervals: {
+        neg: { sales: 0, revenue: 0 },
+        low: { sales: 0, revenue: 0 },
+        mid: { sales: 0, revenue: 0 },
+        high: { sales: 0, revenue: 0 },
+      },
+    }
+  })
+
+  let totalSales = 0
+  let totalRevenue = 0
+  const totalPoints = pts.length
+
+  pts.forEach(pt => {
+    const price = pt.bill_real_time_price ?? pt.real_time_price
+    if (price == null) return
+
+    let targetIntervalKey = 'mid'
+    if (price < 0) {
+      targetIntervalKey = 'neg'
+    } else if (price < 200) {
+      targetIntervalKey = 'low'
+    } else if (price < 400) {
+      targetIntervalKey = 'mid'
+    } else {
+      targetIntervalKey = 'high'
+    }
+
+    intervalMap[targetIntervalKey].pointCount++
+
+    let ptPlantSales = 0
+    targetUnits.forEach(u => {
+      const uSales = Number(pt[u.prop]) || 0
+      if (uSales > 0) {
+        ptPlantSales += uSales
+        unitMap[u.key].totalSales += uSales
+        unitMap[u.key].totalRevenue += uSales * price
+        unitMap[u.key].intervals[targetIntervalKey].sales += uSales
+        unitMap[u.key].intervals[targetIntervalKey].revenue += uSales * price
+      }
+    })
+
+    if (ptPlantSales === 0) {
+      if (plantMode === 'all') {
+        const xTot = Number(pt.xianghai_total_sales) || 0
+        const bTot = Number(pt.beihai_total_sales) || 0
+        ptPlantSales = xTot + bTot
+      } else if (plantMode === 'xianghai') {
+        ptPlantSales = Number(pt.xianghai_total_sales) || 0
+      } else if (plantMode === 'beihai') {
+        ptPlantSales = Number(pt.beihai_total_sales) || 0
+      }
+    }
+
+    if (ptPlantSales > 0) {
+      totalSales += ptPlantSales
+      totalRevenue += ptPlantSales * price
+      intervalMap[targetIntervalKey].sales += ptPlantSales
+      intervalMap[targetIntervalKey].revenue += ptPlantSales * price
+    }
+  })
+
+  const intervals = PRICE_INTERVAL_CONFIGS.map(cfg => {
+    const data = intervalMap[cfg.key]
+    const ratio = totalSales > 0 ? (data.sales / totalSales) * 100 : 0
+    const pointRatio = totalPoints > 0 ? (data.pointCount / totalPoints) * 100 : 0
+    const avgPrice = data.sales > 0 ? (data.revenue / data.sales) : null
+
+    return {
+      key: cfg.key,
+      label: cfg.label,
+      unit: cfg.unit,
+      name: cfg.name,
+      desc: cfg.desc,
+      color: cfg.color,
+      bgColor: cfg.bgColor,
+      borderColor: cfg.borderColor,
+      textColor: cfg.textColor,
+      sales: data.sales,
+      salesFormatted: data.sales.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      ratio: ratio,
+      ratioFormatted: `${ratio.toFixed(2)}%`,
+      pointCount: data.pointCount,
+      pointRatioFormatted: `${pointRatio.toFixed(1)}%`,
+      avgPriceFormatted: avgPrice != null ? `${avgPrice.toFixed(2)} 元/MWh` : '—',
+    }
+  })
+
+  const unitStats = targetUnits.map(u => {
+    const uData = unitMap[u.key]
+    const uTotal = uData.totalSales
+    const uAvg = uTotal > 0 ? (uData.totalRevenue / uTotal) : null
+
+    const formattedIntervals = {}
+    PRICE_INTERVAL_CONFIGS.forEach(cfg => {
+      const iData = uData.intervals[cfg.key]
+      const ratio = uTotal > 0 ? (iData.sales / uTotal) * 100 : 0
+      formattedIntervals[cfg.key] = {
+        sales: iData.sales,
+        salesFormatted: iData.sales.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        ratio: `${ratio.toFixed(2)}%`,
+      }
+    })
+
+    return {
+      key: u.key,
+      name: u.name,
+      totalSales: uTotal,
+      totalSalesFormatted: uTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      avgPriceFormatted: uAvg != null ? `${uAvg.toFixed(2)} 元/MWh` : '—',
+      intervals: formattedIntervals,
+    }
+  })
+
+  return {
+    totalSales,
+    totalSalesFormatted: totalSales.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    totalPoints,
+    intervals,
+    unitStats,
+  }
+})
 
 // 价差文本色彩辅助函数（国内统一红涨绿跌规范：正数显红，负数显绿，零为中性灰）
 function getSpreadColorClass(val) {
@@ -3295,6 +3719,494 @@ onBeforeUnmount(() => {
 @media (max-width: 480px) {
   .plant-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
   .plant-metrics > div:nth-child(odd) { border-left: 0; padding-left: 0; }
+}
+
+/* =========================================================
+   现货单价区间 · 上网电量分布分析下拉信息窗
+   ========================================================= */
+.price-dist-window {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-top: 3px solid #2563eb;
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.dist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+  user-select: none;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dist-header:hover {
+  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+}
+
+.dist-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 260px;
+}
+
+.dist-icon {
+  font-size: 24px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15);
+  flex-shrink: 0;
+}
+
+.dist-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dist-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.dist-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #dbeafe;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.dist-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+.dist-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dist-capsule-tabs {
+  display: inline-flex;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9999px;
+  padding: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.capsule-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.capsule-btn:hover {
+  color: #1e293b;
+  background: #f1f5f9;
+}
+
+.capsule-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.35);
+}
+
+.dist-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dist-toggle-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.chevron {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.25s ease;
+  color: #64748b;
+}
+
+.chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* 折叠小横条摘要 */
+.dist-summary-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px 18px;
+  background: #fafafa;
+  cursor: pointer;
+  border-top: 1px dashed #e2e8f0;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dist-summary-strip:hover {
+  background: #f1f5f9;
+}
+
+.summary-prefix {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.summary-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.chip-mwh {
+  opacity: 0.85;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* 展开主体区 */
+.dist-body {
+  padding: 18px 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #ffffff;
+}
+
+/* 1. 堆叠条 */
+.stacked-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stacked-bar-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #334155;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-points {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.meta-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+
+.legend-dot-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.stacked-bar {
+  display: flex;
+  width: 100%;
+  height: 24px;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.bar-segment {
+  height: 100%;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-width: 0;
+}
+
+.segment-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+/* 2. 四宫格指标卡 */
+.interval-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 992px) {
+  .interval-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .interval-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.interval-card {
+  border: 1px solid #e2e8f0;
+  border-top-width: 3px;
+  border-radius: 10px;
+  padding: 14px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.interval-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.range-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.range-tag {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-ratio {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin: 4px 0 2px;
+}
+
+.card-metric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.m-label {
+  color: #64748b;
+}
+
+.m-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #1e293b;
+}
+
+/* 3. 机组明细折叠穿透 */
+.unit-breakdown-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 10px;
+}
+
+.breakdown-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.breakdown-toggle-btn:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.breakdown-hint {
+  font-size: 11.5px;
+  font-weight: normal;
+  color: #94a3b8;
+}
+
+.unit-breakdown-table-wrap {
+  margin-top: 10px;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.unit-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.unit-breakdown-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.unit-breakdown-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+}
+
+.unit-breakdown-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.unit-name-cell {
+  color: #1e293b;
+}
+
+.unit-total-cell,
+.unit-avg-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  color: #334155;
+}
+
+.cell-neg {
+  color: #2563eb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.cell-low {
+  color: #059669;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.cell-mid {
+  color: #ea580c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.cell-high {
+  color: #dc2626;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.cell-ratio {
+  font-weight: 700;
+  margin-left: 2px;
 }
 
 .kpi-sub {

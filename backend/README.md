@@ -1,3 +1,13 @@
+## 2026-11-10 电力现货点位接口输出日账单真实结算单价与类型保护增强
+
+- **模块与接口变更**：
+  1. **现货点位明细接口 `projects/daily_report_25_26/api/spot_electricity.py`**：
+     - 在 `get_spot_electricity_points` 的 SQL 查询投影中增加真实日账单结算单价 `bill_real_time_price`，并安全映射到返回项；
+     - 增加直接函数调用传参时的类型安全保护：对 `limit` 及 `only_negative` 进行实例类型判定（避免将 FastAPI 的 `Query` 依赖对象直接参与数学比较引发 TypeError）。
+- **验证结果**：
+  - 针对真实入库日期 `2026-11-05` 验证：96 个时点数据顺利返回，`bill_real_time_price` 字段精准提取；
+  - 单元与回归测试套件 `test_spot_settlement_import.py` 与 `test_spot_bill_fees.py` 22 项测试全部通过（19 passed, 3 skipped, 0 failed）。
+
 ## 2026-11-10 电力现货日账单导入多维容错与标准化解析服务升级
 
 - **模块与接口变更**：

@@ -225,7 +225,7 @@ def get_spot_electricity_points(
             e_date = latest
 
         where_clauses = ["trade_date BETWEEN :start_date AND :end_date"]
-        if only_negative:
+        if only_negative is True:
             where_clauses.append("(day_ahead_price < 0 OR real_time_price < 0)")
 
         query_params: Dict[str, Any] = {
@@ -234,7 +234,7 @@ def get_spot_electricity_points(
         }
 
         limit_clause = ""
-        if limit is not None and limit > 0:
+        if isinstance(limit, int) and limit > 0:
             limit_clause = "LIMIT :limit"
             query_params["limit"] = limit
 
@@ -248,6 +248,7 @@ def get_spot_electricity_points(
                 period_end_time,
                 day_ahead_price,
                 real_time_price,
+                bill_real_time_price,
                 price_spread,
                 beihai_unit1_sales,
                 beihai_unit2_sales,
@@ -280,6 +281,7 @@ def get_spot_electricity_points(
                 "period_end_time": r.period_end_time,
                 "day_ahead_price": _to_float(r.day_ahead_price),
                 "real_time_price": _to_float(r.real_time_price),
+                "bill_real_time_price": _to_float(r.bill_real_time_price),
                 "price_spread": _to_float(r.price_spread),
                 "beihai_unit1_sales": _to_float(r.beihai_unit1_sales),
                 "beihai_unit2_sales": _to_float(r.beihai_unit2_sales),
