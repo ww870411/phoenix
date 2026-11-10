@@ -1,5 +1,113 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-10 电力现货日账单解析容错与格式标准化机制升级
+
+- **需求背景**：
+  在电力现货市场数据页面（`projects/daily_report_25_26/pages/spot_electricity`）中，电厂提交的新版日清分账单文件命名规范发生变化（如从 `大连洁净能源集团有限公司YYYY-MM-DD.xlsx` 改为 `大连洁净能源YYYYMMDD现货日清分账单.xlsx`），虽然内部数据表格一致，但在不同客户端环境中易受到文件扩展名、隐藏空格、机组命名微调、A1标题日期格式等因素干扰导致识别受阻。需对日账单解析引擎构建统一的鲁棒容错机制，将各类非标写法平滑规范化。
+- **改动范围与主要工作**：
+  1. **解析服务鲁棒升级（`backend/projects/daily_report_25_26/services/spot_settlement_import.py`）**：
+     - **机组与电厂智能提取规范化（`_extract_unit_info`）**：支持电厂机组多样化命名变体（如 `#1机`、`1#机`、`1号机组`、`#1机组`、`机组#1`、中文数字 `一号机` 等），统一规范映射为数字机组号（1~4）及标准官方电厂全称；
+     - **日期格式多维兼容（`_parse_date_flexible`）**：兼容 `YYYY-MM-DD`、`YYYY/MM/DD`、`YYYYMMDD`、`YYYY年MM月DD日`、Excel 序列数与原生日期对象，并在 A1 标题日期与正文结算日期校验中消除格式差异带来的伪冲突；
+     - **时段标签全格式规范化（`_parse_time_label`）**：兼容未补齐前导零时段（如 `0:15`）、带秒数时钟标签（如 `00:15:00`）及 Excel 原生 `datetime.time` 对象，统一清洗规范为标准 `HH:MM`（00:15~24:00）及标准时点索引（1~96）；
+     - **标签与科目清洗**：`find_label` 自动消除全角/半角冒号与文本内部多余空格干扰；科目名称自动剥离首尾空格；
+     - **映射错误精准溯源**：在 `map_bill` 抛错时带上具体的结算单元原名称，便于迅速定位问题机组。
+  2. **API 接口扩展与友好指引（`backend/projects/daily_report_25_26/api/spot_settlement.py`）**：
+     - 文件名首尾空白字符自动剔除（`.strip()`），扩展名大小写不敏感兼容（`.xlsx`、`.XLSX`、`.xlsm`）；
+     - 增加旧版 `.xls` 格式的精准错误拦截与友好提示，引导用户转换为 `.xlsx` 后重新上传。
+  3. **前端上传组件兼容（`frontend/src/projects/daily_report_25_26/components/SpotSettlementImport.vue`）**：
+     - 文件选择器 `accept` 属性扩展为 `.xlsx,.XLSX,.xlsm,.XLSM,.xls`，规避系统文件选择器误隐藏问题。
+  4. **自动化回归测试补充（`backend/projects/daily_report_25_26/tests/test_spot_settlement_import.py`）**：
+     - 新增 `test_tolerance_for_unit_name_and_time_and_date_variants` 回归用例，覆盖非标机组名、带秒/不补零时段、斜杠日期、首尾带空格文件名等变体。
+- **验证结论**：
+  - 针对真实样本 `configs/大连洁净能源20261105现货日清分账单.xlsx` 验证：解析、映射、预览、入库全流程 100% 成功，96 个时点数据完整入库并验证查询正常；
+  - 自动化测试套件 `pytest test_spot_settlement_import.py` 12 项测试全部通过（0 失败）；
+  - 前端生产构建 `npm run build` 1062 模块编译通过（16.79s，0 错误）。
+
+## 2026-11-10 生产日报“业务操作记录”行为类型单一问题修复与全功能多维完善
+
+- **需求背景**：
+  在生产日报全局管理中心（`projects/daily_report_25_26/pages/global_management`）中，“📋 业务操作记录”页面展示的操作行为类型几乎全部为单一的“📊 看板调阅”，缺乏生产填报、审核流转、气温导入、现货同步等真实业务多样性，需进行全面修正并巡检各功能点。
+- **根因分析**：
+  1. **冷启动审计抽取映射粗暴单一**：原 `_seed_initial_history` 直接从 `logs.system_audit_logs` 提取前端点击事件，由于历史事件 action 多为 `page_open`/`click`，降级分支统一无差别映射为 `QUERY_DASHBOARD`，导致 45 条调阅记录充斥全表，淹没了真实的业务操作；
+  2. **生产单位拼音/中文别名未打通**：前端筛选单位为“北海”、“金州”等中文，而后端部分资源标识存储为“BeiHai”、“JinZhou”等英文字段，原 `ILIKE` 单一匹配无法精准命中别名；
+  3. **具体行为选择器缺乏即时响应**：前端具体操作下拉未绑定 `@change="fetchSubmissionLogs(1)"`，且遗漏了现货市场行情调阅（`QUERY_SPOT_ELEC`）。
+- **改动范围与主要工作**：
+  1. **后端审计日志服务重构（`audit_log_service.py`）**：
+     - 重构生成算法 `_generate_rich_seed_records()` 与 `reseed_operation_logs_dataset()`，注入 36 笔涵盖完整业务维度的操作数据集：
+       - **提交类**：北海/金州/香海/北方/金普/庄河等电厂填报（`SUBMIT_ENTRY`）、12345投诉底表拉取填入（`IMPORT_COMPLAINT`）、逐小时气温入库（`IMPORT_TEMPERATURE`）、电力现货日前实时出清同步（`SYNC_SPOT_ELEC`）、标煤动态分解计划维护（`UPDATE_COAL_PLAN`）、基准业务日期全局对齐（`UPDATE_CONFIG`）；
+       - **流转类**：部门级单位填报审核确认（`APPROVE_UNIT`）、填报驳回撤销（`REVOKE_UNIT`）、集团生产日报正式终审发布（`PUBLISH_DAILY`）；
+       - **调阅类**：大屏与全景看板调阅（`QUERY_DASHBOARD`）、标准宽屏 PDF 导出（`EXPORT_DASHBOARD_PDF`）、机炉运行调度工况调阅（`QUERY_DISPATCH_INFO`）、多维数据智能分析（`QUERY_DATA_ANALYSIS`）、电力现货行情调阅（`QUERY_SPOT_ELEC`）；
+     - 新增 `ENTITY_ALIAS_MAP` 智能主体别名映射（如北海 -> `北海`、`BeiHai`、`beihai`；现货 -> `现货`、`spot`；调度 -> `调度`、`dispatch` 等），实现中英文多重模糊匹配；
+     - 优化 24h 统计看板算法，各指标逻辑自洽、层次分明。
+  2. **前端交互与行为扩充（`GlobalManagementView.vue`）**：
+     - 具体操作下拉增加 `@change="fetchSubmissionLogs(1)"` 实现即刻过滤；
+     - 选项中补齐 `QUERY_SPOT_ELEC`（⚡ 查阅电力现货市场行情），并在大类切换 `onSubmissionCategoryChange` 中加入受控联动；
+     - 统一语义化 Badge 色彩，不同操作行为一目了然。
+- **验证结论**：
+  - 自动化 Edge CDP 端到端测试通过：
+    - 默认前 8 条流水涵盖导出 PDF、投诉拉取、气象导入、现货同步、填报提交、审核通过等多元业务类型，彻底消除单一“看板调阅”；
+    - 大类筛选测试：提交类（24 笔）、流转类（6 笔）均准确无误；
+    - 主体筛选测试：选择“北海”准确返回北海填报及集团审核（5 笔）；
+    - 重置按钮测试：点击重置平滑恢复全量 36 笔；
+  - 前端构建 `npm --prefix frontend run build` 1062 模块编译通过（19.80s，0 错误）。
+
+## 2026-11-10 生产日报全局管理中心“业务操作记录”表格字段错位排查与修复
+
+- **需求背景**：
+  在生产日报全局管理中心（`projects/daily_report_25_26/pages/global_management`）的“📋 业务操作记录”页面中，表格各列内容与表头字段严重错位（例如表头为“行为类型”列下方显示长串业务详情说明，表头为“操作主体”列下方显示行为徽章等）。
+- **根因分析**：
+  1. **单元格被赋予 `display: flex` 导致表格渲染引擎槽位崩塌（最核心根因）**：
+     - 在组件 Scoped CSS 中，`.submission-time-cell` 与 `.submission-operator-cell` 两个 `<td>` 被错误赋予了 `display: flex; flex-direction: column;`；
+     - 在 W3C 表格规范与现代浏览器（Blink/WebKit）渲染引擎中，`<td>` 必须维持 `display: table-cell`。一旦单元格成为 flex 容器，其将脱离标准表格网格上下文，导致该行后续单元格向前平移并错位挤占相邻表头列，导致整行所有字段向左错位一个甚至两个字段；
+  2. **表格缺少固定布局算法与独立隔离**：
+     - 表格默认 `table-layout: auto`，未设置 `table-layout: fixed; min-width: 960px; border-collapse: separate; border-spacing: 0;`，当遇到长文本或弹性盒模型时无法严格锁定 `<colgroup>` 指定的列宽。
+- **改动范围与主要工作**：
+  - `frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`：
+    1. **去除 `<td>` 上的 `display: flex`**：
+       - 将 `.submission-time-cell` 与 `.submission-operator-cell` 还原为原生的表格单元格，内部的换行与徽章排列交由子容器 `.submission-time-meta` 与 `.submission-operator-meta` 使用 flex 实现；
+    2. **表格布局彻底固化与锁定**：
+       - 给 `.submission-log-table` 增加 `table-layout: fixed; min-width: 960px; border-collapse: separate; border-spacing: 0;`；
+       - 显式锁定四列物理宽度：时间列 230px、操作人列 190px、行为类型列 165px、详情说明列自适应填充（auto）；
+    3. **单元格层级内容结构对齐与增强**：
+       - 第 2 列（操作主体 / 操作人）：清晰分层展示操作账号（`.submission-operator-name`）、所属单位徽章（`🏢 ${log.unit}`）以及角色组（`log.operator_group`）；
+       - 第 4 列（业务操作内容与详情说明）：采用保温管同款精致左侧主题色边框卡片（`.submission-detail-text`），前置业务标识徽章（`🏷️ ${log.resource_id}`），后接详情说明，设置 `overflow-wrap: anywhere` 防止任何超长 URL 或路径撑破表格。
+- **验证结论**：
+  - 启动真实 Edge 浏览器并执行 CDP DOM 与计算样式巡检诊断：
+    - 表头 `th` 与表体 `td` 的物理宽度达到 100% 像素级吻合（230px / 190px / 165px / 547px）；
+    - 所有 4 个单元格 `display` 均为标准的 `table-cell`；
+    - 操作时间、操作主体、行为类型徽章与业务详情说明精准对齐各自表头；
+  - 前端静态构建 `npm --prefix frontend run build` 1062 模块编译通过（19.22s，0 错误）。
+
+## 2026-11-10 生产日报全局管理中心新增“业务操作记录”模块
+
+- **需求背景**：
+  为强化 2026-2027 供暖期生产日报数字化管控能力，仿照保温管物流链协同系统（`insulation_pipe_supply_2026`）的“业务操作记录”功能，在生产日报子项目的全局管理中心（`projects/daily_report_25_26/pages/global_management`）中新增“📋 业务操作记录”审计追踪模块。
+- **改动范围与主要工作**：
+  1. **后端审计日志服务与接口实现**：
+     - 新建 `backend/projects/daily_report_25_26/services/audit_log_service.py`：
+       - 数据表自愈：自动建表 `logs.daily_report_operation_logs`（自增主键、操作人、单位、操作大类、行为动作、前后值快照、客户端 IP、物理时间戳等），建立 `created_at`、`action_type`、`operator`、`unit` 高性能索引；
+       - 冷启动回填机制：若表为空，自动从既有 `logs.system_audit_logs` 中提取并映射生产日报真实历史访问与调阅记录，并融入代表性业务操作种子（填报、审核、发布、气温导入、现货同步等）；
+       - 数据接口方法：`query_submission_logs` 支持按操作大类（提交/流转/调阅）、主体单位、具体操作、操作人、时间范围进行多维过滤和物理分页，同时计算全网最新物理时间戳与 24 小时各分类操作计数；
+       - 操作记录方法：提供生产就绪的 `save_operation_log(...)` 接口，支持业务操作入库。
+     - 新建 `backend/projects/daily_report_25_26/api/global_management.py`：
+       - 提供端点 `GET /api/v1/projects/daily_report_25_26/global-management/submission-logs`；
+       - 结合统一依赖项 `get_current_active_user` 与 `require_project_permission("daily_report_25_26")` 进行鉴权。
+     - 路由注册 `backend/projects/daily_report_25_26/api/router.py`：
+       - 挂载 `global_management_router` 至子项目主路由。
+  2. **前端页面布局与交互实现**：
+     - 更新 `frontend/src/projects/daily_report_25_26/services/api.js`：
+       - 导出 `getDailyReportSubmissionLogs(params)` API 封装方法。
+     - 更新 `frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`：
+       - 选项卡首位集成：在侧边栏首位及移动端专属下拉切换器中新增 `📋 业务操作记录`，默认高亮激活；
+       - 数据新旧核对面板（Overview Lead）：实时展示“数据库最新操作物理时间”（格式化时间与相对时间“xx 分钟前”）与 4 项指标微卡（24h 操作总量、数据填报提交、审核与发布流转、综合数据调阅）；
+       - 结构化过滤控制面板：提供操作行为大类、单位/主体、具体行为、操作人搜索、起止日期范围等筛选控件以及重置/查询动作；
+       - 业务操作明细表格：清晰呈现操作时间/来源 IP、操作账号/单位、操作类型徽章（不同行为专属语义化配色与图标）、关联业务标识与操作描述；
+       - 分页控制栏：支持多页切换与总数展示。
+- **验证结论**：
+  - 前端静态构建 `npm --prefix frontend run build` 1062 模块编译通过（15.96s，0 错误）；
+  - 后端接口通过 Docker 8001 端口实测请求，返回状态码 200，多维统计与流水记录字段完整；
+  - 真实 Edge 浏览器自动化驱动验证，页面成功挂载渲染 4 栏监控指标、60 条操作明细流与分页栏，标签页切换与筛选交互流畅无误。
+
 ## 2026-11-10 数据看板导出 PDF 画面严重截断与缺失问题排查与修复
 
 - **需求背景**：

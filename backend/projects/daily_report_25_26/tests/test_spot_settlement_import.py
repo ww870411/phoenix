@@ -174,6 +174,27 @@ class BillAccessTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(len(stage.call_args.args[0]), 25)
 
+    def test_tolerance_for_unit_name_and_time_and_date_variants(self):
+        def variants(book):
+            ws = book.active
+            ws['A1'] = '2026/01/12大连洁净能源现货日清分账单'
+            ws.cell(5, 1).value = '结算单元名称：香海热电厂#1机组'
+            ws.cell(299, 1).value = '结算单元名称：香海热电厂2#机'
+            ws.cell(593, 1).value = '结算单元名称：香海热电厂3号机组'
+            ws.cell(887, 1).value = '结算单元名称：大连洁净能源集团机组#4'
+            ws.cell(11, 1).value = '0:15'
+            ws.cell(14, 1).value = '00:30:00'
+        raw = edited(fixtures()[NAMES[0]], variants)
+        report = service.parse_bill(raw, '  带空格和中文的文件名.xlsx  ')
+        self.assertEqual(len(report['units']), 4)
+        numbers = [u['unit_number'] for u in report['units']]
+        self.assertEqual(numbers, [1, 2, 3, 4])
+        for u in report['units']:
+            self.assertEqual(u['plant_key'], 'XiangHai')
+            self.assertEqual(u['plant_name'], '大连市热电集团有限公司香海热电厂')
+        mapped = service.map_bill(report)
+        self.assertEqual(len(mapped), 96)
+
 
 class BillDatabaseTests(unittest.TestCase):
     def setUp(self):

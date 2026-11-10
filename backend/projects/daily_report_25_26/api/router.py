@@ -30,6 +30,7 @@ from .complaint_optimizer import router as complaint_optimizer_router
 from .complaint_optimizer import public_router as complaint_optimizer_public_router
 from .smart_heating import router as smart_heating_router
 from .smart_heating import public_router as smart_heating_public_router
+from .global_management import router as global_management_router
 
 router = APIRouter()
 router.include_router(legacy_router)
@@ -42,6 +43,7 @@ router.include_router(daily_brief_router)
 router.include_router(period_report_router)
 router.include_router(complaint_optimizer_router)
 router.include_router(smart_heating_router)
+router.include_router(global_management_router)
 
 public_router = APIRouter()
 public_router.include_router(legacy_public_router)

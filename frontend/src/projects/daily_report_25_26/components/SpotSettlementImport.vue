@@ -4,7 +4,7 @@
     <div class="bill-body">
       <p class="hint">提取各机组计量电量、中长期合约电量和电价，省内实时价共用一份。保留零值与空白；原始Excel完整归档，其他科目、电费及日合计不写入15分钟表。</p>
       <div class="actions">
-        <label class="file-picker">选择日账单（可多选）<input ref="fileInput" type="file" accept=".xlsx" multiple :disabled="busy" @change="chooseFiles" /></label>
+        <label class="file-picker">选择日账单（可多选）<input ref="fileInput" type="file" accept=".xlsx,.XLSX,.xlsm,.XLSM,.xls" multiple :disabled="busy" @change="chooseFiles" /></label>
         <button type="button" :disabled="busy || !files.length" @click="preview">{{ busy && phase === 'preview' ? '正在读取…' : '读取并预览' }}</button>
         <button v-if="previewData" type="button" :disabled="busy" @click="confirm">{{ busy && phase === 'confirm' ? '正在入库…' : overwriteRequired ? '确认覆盖该厂同日数据' : '确认入库' }}</button>
       </div>

@@ -953,6 +953,8 @@ export async function getTubeSubmissionLogs(projectKey, params = {}) {
   return response.json()
 }
 
+export const getDailyReportSubmissionLogs = getTubeSubmissionLogs
+
 export async function getTubeIpLocation(projectKey, ip) {
   const query = new URLSearchParams()
   query.append('ip', ip)

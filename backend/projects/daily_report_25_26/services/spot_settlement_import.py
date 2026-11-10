@@ -5,9 +5,10 @@ import hashlib
 import io
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, time as dt_time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any, Optional
 from uuid import UUID, uuid4
 
 from openpyxl import load_workbook
@@ -20,6 +21,7 @@ from backend.db.database_daily_report_25_26 import SessionLocal
 IMPORT_ROOT = DATA_DIRECTORY / 'projects' / 'daily_report_25_26' / 'imports' / 'spot_settlement'
 TABLE = 'public.spot_electricity_15min_data'
 PLANTS = {'BeiHai': ('beihai', 3), 'XiangHai': ('xianghai', 4)}
+CN_NUM_MAP = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9}
 
 
 def _text(value):
@@ -28,6 +30,92 @@ def _text(value):
 
 def _json_value(value):
     return value.isoformat() if isinstance(value, (date, datetime)) else str(value) if isinstance(value, Decimal) else value
+
+
+def _parse_date_flexible(val: Any) -> Optional[date]:
+    """灵活解析日期：支持 date/datetime/数值/各种字符串格式 (YYYY-MM-DD, YYYY/MM/DD, YYYYMMDD, YYYY年MM月DD日)"""
+    if val is None or val == '':
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    s = str(val).strip()
+    m = re.search(r'(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?', s)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+    m = re.search(r'(?<!\d)(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?!\d)', s)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_unit_info(raw_unit_name: str) -> tuple[Optional[int], str, str]:
+    """从结算单元名称中解析规范化的机组序号、电厂中文全称和 plant_key。
+    支持变体：
+    - '大连市热电集团有限公司香海热电厂1号机'
+    - '香海热电厂#1机' / '香海热电厂1#机组' / '香海1号机组' / '#1机组'
+    - '大连热电股份有限公司北海热电厂1号机'
+    返回: (unit_number, normalized_plant_name, plant_key)
+    """
+    clean = _text(raw_unit_name)
+    unit_num = None
+    m = re.search(r'#?\s*([1-9]|一|二|三|四)\s*(?:#|号)?\s*机(?:组)?', clean)
+    if m:
+        matched = m.group(1)
+        unit_num = CN_NUM_MAP.get(matched, int(matched) if matched.isdigit() else None)
+    else:
+        m2 = re.search(r'机组\s*#?\s*([1-9]|一|二|三|四)', clean)
+        if m2:
+            matched = m2.group(1)
+            unit_num = CN_NUM_MAP.get(matched, int(matched) if matched.isdigit() else None)
+
+    if '北海' in clean:
+        plant_key = 'BeiHai'
+        plant_name = '大连热电股份有限公司北海热电厂'
+    elif '香海' in clean or '洁净能源' in clean:
+        plant_key = 'XiangHai'
+        plant_name = '大连市热电集团有限公司香海热电厂'
+    else:
+        stripped = re.sub(r'#?\s*[1-9一二三四]\s*(?:#|号)?\s*机(?:组)?.*$', '', clean).strip()
+        plant_name = stripped or clean
+        plant_key = plant_name
+
+    return unit_num, plant_name, plant_key
+
+
+def _parse_time_label(val: Any) -> tuple[Optional[int], Optional[str]]:
+    """解析时段标签并规范化为标准 96 时点 (1..96) 和标准格式字符串 (00:15..24:00)。
+    若为 '合计' 则返回 (0, '合计')。
+    支持原生 datetime.time、'00:15'、'0:15'、'00:15:00' 等。
+    """
+    if val is None or val == '':
+        return None, None
+    if isinstance(val, dt_time):
+        hour, minute = val.hour, val.minute
+        if hour == 0 and minute == 0:
+            hour = 24
+        total = hour * 60 + minute
+        if minute not in (0, 15, 30, 45) or not 15 <= total <= 1440 or hour > 24:
+            return None, None
+        return total // 15, f"{hour:02d}:{minute:02d}"
+    s = str(val).strip()
+    if s == '合计':
+        return 0, '合计'
+    m = re.fullmatch(r'(\d{1,2}):(\d{2})(?::\d{2})?', s)
+    if m:
+        hour, minute = int(m.group(1)), int(m.group(2))
+        total = hour * 60 + minute
+        if minute not in (0, 15, 30, 45) or not 15 <= total <= 1440 or hour > 24 or (hour == 24 and minute):
+            return None, None
+        return total // 15, f"{hour:02d}:{minute:02d}"
+    return None, None
 
 
 def parse_bill(content: bytes, filename: str) -> dict:
@@ -64,9 +152,11 @@ def parse_bill(content: bytes, filename: str) -> dict:
                     return None
 
             def find_label(label, rows):
+                target = re.sub(r'[\s：:]', '', label)
                 for row in rows:
                     for col in range(1, sheet.max_column + 1):
-                        if _text(sheet.cell(row, col).value).rstrip('：: ') == label:
+                        val = _text(sheet.cell(row, col).value)
+                        if re.sub(r'[\s：:]', '', val) == target:
                             for nxt in range(col + 1, sheet.max_column + 1):
                                 if sheet.cell(row, nxt).value is not None:
                                     return row, nxt
@@ -76,15 +166,14 @@ def parse_bill(content: bytes, filename: str) -> dict:
                 row, col = find_label(label, range(1, min(sheet.max_row, 4) + 1))
                 return values.cell(row, col).value
 
-            settlement_date = header('结算日期')
-            if isinstance(settlement_date, (int, float)):
-                settlement_date = from_excel(settlement_date, formula_book.epoch)
-            if isinstance(settlement_date, datetime):
-                settlement_date = settlement_date.date()
-            elif not isinstance(settlement_date, date):
-                settlement_date = date.fromisoformat(_text(settlement_date)[:10])
-            title_date = re.search(r'\d{4}-\d{2}-\d{2}', _text(sheet.cell(1, 1).value))
-            if title_date and title_date[0] != settlement_date.isoformat():
+            raw_date = header('结算日期')
+            if isinstance(raw_date, (int, float)):
+                raw_date = from_excel(raw_date, formula_book.epoch)
+            settlement_date = _parse_date_flexible(raw_date)
+            if not settlement_date:
+                raise ValueError(f'{sheet.title} 缺少或无法解析结算日期')
+            title_date = _parse_date_flexible(sheet.cell(1, 1).value)
+            if title_date and title_date != settlement_date:
                 raise ValueError(f'{sheet.title} 标题日期与结算日期不一致')
             member, bill = _text(header('市场成员名称')), _text(header('账单编号'))
             if not member or not bill:
@@ -109,14 +198,12 @@ def parse_bill(content: bytes, filename: str) -> dict:
                 if not ids or not ids[0] or ids[0] in identities:
                     raise ValueError(f'{sheet.title} 结算单元编号缺失或重复')
                 identities.add(ids[0])
-                number = re.search(r'(\d+)号机', unit_name)
-                plant_name = re.sub(r'\d+号机.*$', '', unit_name).strip()
-                plant_key = 'BeiHai' if '北海' in plant_name else 'XiangHai' if '香海' in plant_name else plant_name
+                unit_number, plant_name, plant_key = _extract_unit_info(unit_name)
                 unit_qty = find_label('结算单元计量电量', [start])
                 unit_fee = find_label('结算单元小计电费', [start])
                 base = dict(common, plant_key=plant_key, plant_name=plant_name,
                             settlement_unit_id=ids[0], settlement_unit_name=unit_name,
-                            unit_number=int(number[1]) if number else None,
+                            unit_number=unit_number,
                             unit_metered_quantity=numeric(*unit_qty), unit_total_fee=numeric(*unit_fee))
                 code_rows = [r for r in range(start + 1, end) if _text(sheet.cell(r, 2).value) == '科目编码']
                 if len(code_rows) != 1:
@@ -129,7 +216,7 @@ def parse_bill(content: bytes, filename: str) -> dict:
                     code = str(int(raw_code)) if isinstance(raw_code, (int, float)) and not isinstance(raw_code, bool) and raw_code == int(raw_code) else _text(raw_code)
                     if not code:
                         continue
-                    subject_name = _text(sheet.cell(code_row + 1, col).value)
+                    subject_name = _text(sheet.cell(code_row + 1, col).value).strip()
                     if not subject_name or code in [item[1] for item in subjects]:
                         raise ValueError(f'{unit_name} 科目名称缺失或编码重复')
                     subjects.append((col, code, subject_name))
@@ -137,19 +224,14 @@ def parse_bill(content: bytes, filename: str) -> dict:
                     raise ValueError(f'{unit_name} 未识别到科目')
                 point_rows, current_point = {}, None
                 for row in range(code_row + 2, end):
-                    label = _text(sheet.cell(row, 1).value)
-                    if label == '合计':
-                        current_point = 0
-                    elif re.fullmatch(r'\d{2}:\d{2}', label):
-                        hour, minute = map(int, label.split(':'))
-                        total = hour * 60 + minute
-                        if minute not in (0, 15, 30, 45) or not 15 <= total <= 1440 or hour > 24 or (hour == 24 and minute):
-                            raise ValueError(f'{unit_name} 非法时段 {label}')
-                        current_point = total // 15
+                    raw_label = sheet.cell(row, 1).value
+                    point, norm_label = _parse_time_label(raw_label)
+                    if point is not None:
+                        current_point = point
                         if current_point in point_rows:
-                            raise ValueError(f'{unit_name} 重复时段 {label}')
-                    elif label:
-                        raise ValueError(f'{unit_name} 无法识别的时段标签：{label}')
+                            raise ValueError(f'{unit_name} 重复时段 {norm_label}')
+                    elif _text(raw_label):
+                        raise ValueError(f'{unit_name} 无法识别的时段标签：{_text(raw_label)}')
                     metric = _text(sheet.cell(row, 2).value)
                     if metric not in ('电量', '电价', '电费'):
                         if any(sheet.cell(row, c).value is not None for c in range(1, sheet.max_column + 1)):
@@ -189,7 +271,8 @@ def parse_bill(content: bytes, filename: str) -> dict:
 def stage_uploads(files, owner, root=None):
     """预览只归档原文件，不写业务表；确认时从原文件重新解析。"""
     root = Path(root or IMPORT_ROOT)
-    parsed = [parse_bill(content, name) for name, content in files]
+    normalized_files = [(Path(str(name).strip().replace('\\', '/')).name, content) for name, content in files]
+    parsed = [parse_bill(content, name) for name, content in normalized_files]
     for report in parsed:
         map_bill(report)
     token = str(uuid4())
@@ -197,7 +280,7 @@ def stage_uploads(files, owner, root=None):
     folder.mkdir(parents=True, exist_ok=False)
     entries = []
     seen = set()
-    for (name, content), result in zip(files, parsed):
+    for (name, content), result in zip(normalized_files, parsed):
         digest = result['file_sha256']
         if digest in seen:
             continue
@@ -220,7 +303,7 @@ def map_bill(report):
         plant = PLANTS.get(unit['plant_key'])
         identity = (unit['settlement_date'], unit['plant_key'], unit['unit_number'])
         if not plant or unit['unit_number'] not in range(1, plant[1] + 1) or identity in identities:
-            raise ValueError('电厂或机组无法映射到目标表，或文件内机组重复')
+            raise ValueError(f'结算单元“{unit.get("settlement_unit_name")}”无法映射到目标电厂或机组，或文件内机组重复')
         identities.add(identity)
     # 批次标识按电厂保存，因此每份文件必须覆盖该厂全部机组。
     for day, plant, _ in identities:

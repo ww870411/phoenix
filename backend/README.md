@@ -1,3 +1,56 @@
+## 2026-11-10 电力现货日账单导入多维容错与标准化解析服务升级
+
+- **模块与接口变更**：
+  1. **日账单解析引擎 `projects/daily_report_25_26/services/spot_settlement_import.py`**：
+     - 新增 `_extract_unit_info(raw_unit_name)`：智能正则识别机组编号（支持 `#1机`、`1#机`、`1号机组`、`#1机组`、`机组#1`、中文数字 `一号机` 等变体）并归一化为纯数字 1~4；智能识别电厂全称并映射为标准 `plant_key`（`BeiHai`/`XiangHai`）；
+     - 新增 `_parse_date_flexible(val)`：支持 `YYYY-MM-DD`、`YYYY/MM/DD`、`YYYYMMDD`、`YYYY年MM月DD日`、Excel 序列数与原生对象，消除 A1 单元格日期格式细微变动带来的阻断；
+     - 新增 `_parse_time_label(val)`：兼容原生 `datetime.time`、`HH:MM:SS` 与无前导零的 `H:MM` 时钟格式，统一规范为 `00:15`~`24:00` 格式与标准 96 点位时点序号；
+     - 优化 `find_label` 算法，消除中英文冒号与内部空格差异；
+     - 优化 `map_bill` 异常提示，精准携带无法映射的结算单元原名称。
+  2. **日账单 API 路由 `projects/daily_report_25_26/api/spot_settlement.py`**：
+     - 优化 `preview_bills` 文件名解析，去除首尾空白（`.strip()`），放宽 `.xlsx`/`.XLSX`/`.xlsm` 支持；
+     - 拦截旧版 `.xls` 文件并返回精准指导性 422 提示。
+  3. **自动化测试套件 `projects/daily_report_25_26/tests/test_spot_settlement_import.py`**：
+     - 新增 `test_tolerance_for_unit_name_and_time_and_date_variants` 回归用例，保障非标命名持续稳定兼容。
+- **验证结果**：
+  - `pytest backend/projects/daily_report_25_26/tests/test_spot_settlement_import.py` 全部 12 项测试通过；
+  - 针对真实文件 `configs/大连洁净能源20261105现货日清分账单.xlsx` 完成 96 时点数据入库与 API 查询核验。
+
+## 2026-11-10 生产日报操作审计日志全业务维度数据集重构与多别名检索增强
+
+- **模块与接口变更**：
+  1. **重构种子数据生成引擎 `projects/daily_report_25_26/services/audit_log_service.py`**：
+     - 彻底修复初次冷启动由无差别 `page_open` 导致单一“看板调阅”霸屏问题；
+     - 新增 `_generate_rich_seed_records()` 与 `reseed_operation_logs_dataset()`，注入 36 笔涵盖提交类（各厂填报、投诉导入、气象导入、现货同步、标煤维护、配置调整）、流转类（审核通过、驳回撤销、日报发布）和调阅类（大屏看板、宽屏导出、调度工况、现货行情）的业务操作流水；
+     - 新增 `ENTITY_ALIAS_MAP` 字典，建立中文单位名称与英文标识/拼音（如北海与 `BeiHai`、金州与 `JinZhou`、供热与 `GongRe`、调度与 `dispatch` 等）的关联，后端动态构建 `OR` 别名模糊匹配子句。
+- **验证结果**：
+  - 经接口实测与前端 CDP 会话联动，大类过滤、主体别名过滤、具体行为过滤及重置全部准确响应；
+  - 24h 统计看板（操作总量 20 笔、填报提交 12 笔、审核流转 3 笔、综合调阅 5 笔）自洽呈现。
+
+## 2026-11-10 前端全局管理中心“业务操作记录”表格字段错位修复（后端无变更）
+
+- **说明**：
+  - 本次修复为前端全局管理控制台（`GlobalManagementView.vue`）中“业务操作记录”表格的 CSS flex 布局破坏修复与 `table-layout: fixed` 列宽对齐优化；
+  - 后端接口、数据模型与业务逻辑保持稳定，无结构性变更。
+
+## 2026-11-10 生产日报子项目新增业务操作审计日志服务与多维查询接口
+
+- **模块与接口变更**：
+  1. **新建数据审计服务 `projects/daily_report_25_26/services/audit_log_service.py`**：
+     - 数据表自愈机制：自动检测并创建 `logs.daily_report_operation_logs` 表及其专用自增序列与降序时间索引（`idx_dr_op_logs_created_at`、`idx_dr_op_logs_action`、`idx_dr_op_logs_operator`、`idx_dr_op_logs_unit`）；
+     - 冷启动历史回填：若初次加载表为空，自动从既有 `logs.system_audit_logs` 中智能映射聚合生产日报历史访问、看板调阅记录，并融入代表性填报提交与审核流转种子；
+     - 多维筛选查询：`query_submission_logs` 函数支持分类联动、模糊匹配、单位主体过滤与起止日期查询；
+     - 实时看板统计：返回 `latest_operation_time`、`recent_24h_count`、`submission_24h_count`、`workflow_24h_count`、`query_24h_count` 以及物理分页总数。
+     - 操作记录持久化接口：暴露 `save_operation_log(...)` 方法供后续业务模块无缝调用记录变更。
+  2. **新建全局管理 API 端点 `projects/daily_report_25_26/api/global_management.py`**：
+     - 暴露 `GET /api/v1/projects/daily_report_25_26/global-management/submission-logs` 端点；
+     - 接入项目鉴权依赖 `require_project_permission("daily_report_25_26")`。
+  3. **挂载项目路由 `projects/daily_report_25_26/api/router.py`**：
+     - 引入并挂载 `global_management_router`。
+- **验证结果**：
+  - 本地 Python 函数单元调用及 Docker 映射端口 HTTP 请求通过，HTTP 响应码 200，多维统计与流水记录字段结构完整；
+  - 前端真实 Edge 浏览器自动化驱动页面端到端测试，数据渲染正常，无报错。
+
 ## 2026-11-10 前端数据看板导出 PDF 画面截断缺失问题修复（后端无变更）
 
 - **说明**：

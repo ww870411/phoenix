@@ -39,12 +39,16 @@ async def preview_bills(files: List[UploadFile] = File(...), session=Depends(_im
         raise HTTPException(422, '请至少选择一份xlsx日账单')
     uploaded = []
     for file in files:
-        if not (file.filename or '').lower().endswith('.xlsx'):
-            raise HTTPException(422, '仅支持xlsx日账单')
+        raw_name = (file.filename or '').strip()
+        lower_name = raw_name.lower()
+        if not (lower_name.endswith('.xlsx') or lower_name.endswith('.xlsm')):
+            if lower_name.endswith('.xls'):
+                raise HTTPException(422, f'文件“{raw_name}”为旧版Excel(.xls)格式，系统仅支持.xlsx，请在Excel中另存为.xlsx后重新上传')
+            raise HTTPException(422, f'文件“{raw_name}”格式不支持，仅支持 .xlsx 日账单')
         content = await file.read(25 * 1024 * 1024 + 1)
         if len(content) > 25 * 1024 * 1024:
-            raise HTTPException(422, '单个文件不能超过25MB')
-        uploaded.append((file.filename, content))
+            raise HTTPException(422, f'文件“{raw_name}”不能超过25MB')
+        uploaded.append((raw_name, content))
     try:
         result = await run_in_threadpool(stage_uploads, uploaded, session.username)
         allowed = _allowed(session)
