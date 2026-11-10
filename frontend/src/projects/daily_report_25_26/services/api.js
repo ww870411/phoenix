@@ -118,6 +118,15 @@ const normalized = (path) => `${API_BASE}${path}`
 
 const projectPath = (projectKey) => normalized(`/projects/${encodeURIComponent(projectKey)}`)
 
+export async function dataCorrectionRequest(path = '', { method = 'GET', body } = {}) {
+  const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/data-corrections${path}`, {
+    method, headers: attachAuthHeaders(JSON_HEADERS),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '数据修正操作失败'))
+  return response.json()
+}
+
 export async function fetchDailyBrief(showDate = '', { signal } = {}) {
   const query = showDate ? `?${new URLSearchParams({ show_date: showDate })}` : ''
   const response = await authAwareFetch(`${projectPath('daily_report_25_26')}/daily-brief${query}`, {

@@ -5,7 +5,7 @@
   "max_retries_per_day": 30,
   "target_date_rule": "yesterday",
   "last_sync_date": "2026-11-09",
-  "last_run_time": "2026-11-10 08:40:09",
+  "last_run_time": "2026-11-10 18:50:19",
   "last_run_status": "SUCCESS",
   "last_run_message": "成功入库【2026-11-09】电力现货数据，共写入 96 个 15 分钟时点！",
   "next_run_time": "2026-11-11 07:40:00"

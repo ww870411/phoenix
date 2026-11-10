@@ -1,3 +1,34 @@
+## 2026-11-10 修正申请记录页面排版优化同步
+
+- 本轮仅对前端 `DataCorrectionsView.vue` 进行视觉层级、卡片阴影、空状态与变更对比表的排版美化，后端接口、服务逻辑、数据表结构与权限保持原样。
+- 最后验证日期：2026-11-10。后端修正生命周期测试 18 项全部通过；前端生产构建与 26 项回归测试全通过。
+
+## 2026-11-10 修正页面导航与展示状态复核同步
+
+- 本轮修复前端面包屑层级、主题变量、零值/空值展示、单位与列名、加载/错误/分页状态及处理弹窗上下文；后端接口、权限、数据和表结构无改动，无迁移需求。
+- 最后验证日期：2026-11-10。前端实际 Vue 服务端渲染/页面函数测试和填报回归共 26 项通过，生产构建通过；核查证据与回滚范围见 `configs/progress.md`。
+
+## 2026-11-10 修正页面排版复核同步
+
+- 本轮调整 `DataCorrectionsView.vue` 和 `DataEntryView.vue` 的页面结构、工具栏换行、明细表及弹窗尺寸；后端接口、权限、事务与数据库均无改动，无迁移需求。
+- 最后验证日期：2026-11-10。前端生产构建及 19 项填报回归通过，静态核查依据与回滚范围见 `configs/progress.md` 的“修正页面排版静态核查与修复”。
+
+## 2026-11-10 日报数据修正申请
+
+- 新增 `projects/daily_report_25_26/services/data_correction.py`、`api/data_correction.py`，项目 `api/router.py` 注册。申请和单元格占用分别持久化到 `daily_data_correction`、`daily_data_correction_cell`，不沿用保温管的联合投票机制。
+- 接口前缀 `/api/v1/projects/daily_report_25_26/data-corrections`：
+  - `GET /snapshot?sheet_key=…&biz_date=YYYY-MM-DD`：返回模板映射的数值格、正式值、版本、待审申请编号及普通提交只读状态。
+  - `GET ?status=…&offset=0&limit=50`：按既有填报表格权限返回记录；Global_admin 查看全部。
+  - `POST`：提交 `sheet_key`、`biz_date`、必填 `reason`、`changes[{row_index,col_index,old_value,new_value,version}]`，原值及版本必须匹配。数字最多四位小数，可申请清空或补录空值。
+  - `POST /{request_id}/resolve`：`action=approve|reject|cancel`、可选 `note`。只有 Global_admin 能确认/驳回，只有原申请人能取消，已关闭记录不能再次处理。
+- `build_cells` 只读取服务端基本指标模板；标准表映射 `company/sheet_name/item/date`，分中心以中心作为 company，库存以 `company/coal_type/storage_type/date` 定位。去年同日遇闰日回退到 2 月 28 日。一次整表查询避免分中心轮询产生逐格数据库请求。
+- `create_request` 以真实单元格唯一键防止重复待审；`resolve_request` 锁定申请和目标记录，在同一事务中检查原值/版本、更新全部申请格、追加备注并关闭申请。发生数据冲突则整单回滚并保持待审，提示驳回后重新申请；不执行自动覆盖。
+- 审批备注保留申请编号、业务日/数据日期、申请人/时间、原因、修改前后值、确认人/时间及审批说明。`api/legacy_full.py` 的标准 UPSERT 和库存重新提交均保留已确认修正流水。
+- 普通基本指标提交经 `validate_regular_submission` 检查业务日、单位表格范围、模板行列、同期未变以及单位尚未审批；客户端字典被服务端模板映射替换。`services/workflow_status.py::is_unit_approved` 只读查询审批状态，不生成新状态文件。Global_admin 的直接修改方式、常量等其他页面协议保持原样。
+- 迁移：新增 `sql/migrate_daily_data_correction.sql`，仅增量建表及索引，应用首次调用也可幂等创建；本地已建表。其他部署环境可在维护窗口先执行 SQL 再发布代码，无现有业务数据迁移。
+- 最后验证日期：2026-11-10。PostgreSQL 隔离 schema 测试与授权/只读回归共 29 项通过；新修正服务/API 用标准库 trace 测得可执行行位置覆盖约 96.2%（330/343，非分支覆盖）。运行中四个接口已加载，实际业务日 2026-11-09 的 12 张表快照均可查询。没有在真实业务表中提交测试修正。
+- 回滚：还原本轮服务、普通提交接入及路由注册，保留申请表、占用表和备注。已确认业务值不自动回退，按记录复核后发起反向修正；详情及浏览器验收限制见 `configs/progress.md`。
+
 ## 2026-11-10 电力现货点位接口输出日账单真实结算单价与类型保护增强
 
 - **模块与接口变更**：

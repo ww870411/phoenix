@@ -205,6 +205,12 @@ function withAdminExclusivePages(pageList, pKey, user) {
       page_url: `/projects/${pKey}/pages/smart_heating`,
     })
   }
+  if (pKey === 'daily_report_25_26' && (isGlobalAdmin || auth.hasPageAccess(pKey, 'data_entry'))) {
+    list = list.filter(p => p.page_key !== 'data_corrections')
+    list.push({ page_key: 'data_corrections', page_name: '数据修正申请记录',
+      page_description: '查看修正明细、确认、驳回或取消申请',
+      page_url: `/projects/${pKey}/pages/data_corrections` })
+  }
   return list
 }
 const canApproveUnit = (unit) => auth.canApproveUnit(unit, projectKey)
@@ -280,7 +286,7 @@ const GROUP_DEFINITIONS = [
     key: 'entry_approval',
     title: '报表填报与审批',
     description: '日常数据上报、分级审核与指标基准维护',
-    pageKeys: ['data_entry', 'data_approval', 'constant_data'],
+    pageKeys: ['data_entry', 'data_approval', 'constant_data', 'data_corrections'],
   },
   {
     key: 'monitoring_dashboard',

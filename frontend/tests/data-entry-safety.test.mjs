@@ -13,6 +13,9 @@ function snippet(name) {
   return source.slice(node.start, node.end)
 }
 function functions(state, names) {
+  state.correctionMode ??= { value: false }
+  state.correctionBusy ??= { value: false }
+  state.correctionCellMap ??= { value: new Map() }
   return new Function('state', `with(state) { ${names.map(snippet).join(';\n')}; return { ${names.join(',')} }; }`)(state)
 }
 const ref = value => ({ value })
@@ -22,6 +25,30 @@ function deferred() {
   return { promise, resolve, reject }
 }
 const tick = () => new Promise(resolve => setImmediate(resolve))
+
+test('修正模式仅允许授权数值格且阻断待审批单元格及混合粘贴', () => {
+  const state = { correctionMode: ref(true), correctionBusy: ref(false),
+    correctionCellMap: ref(new Map([['0:2', {}], ['0:3', { pending_request_id: 5 }]])) }
+  const view = functions(state, ['correctionWritable', 'guardCorrectionEdit', 'guardCorrectionRangeEdit'])
+  assert.equal(view.correctionWritable(0, 'c2'), true)
+  assert.equal(view.correctionWritable(0, 'c3'), false)
+  assert.equal(view.correctionWritable(0, 'c0'), false)
+  for (const detail of [{ rowIndex: 0, prop: 'c3' }, { rowIndex: 0, prop: 'c0' }]) {
+    let prevented = false
+    view.guardCorrectionEdit({ detail, preventDefault() { prevented = true } })
+    assert.equal(prevented, true)
+  }
+  let prevented = false
+  view.guardCorrectionRangeEdit({ detail: { data: { 0: { c2: 1, c3: 2 } } }, preventDefault() { prevented = true } })
+  assert.equal(prevented, true)
+})
+
+test('修正草稿期间禁止普通提交和一并提交', async () => {
+  const state = { correctionMode: ref(true) }
+  const view = functions(state, ['onSubmit', 'onSubmitAll'])
+  await view.onSubmit()
+  await view.onSubmitAll()
+})
 
 test('只读账号加载完成仍锁定所有列，授权编辑账号保持可编辑列', () => {
   const state = {

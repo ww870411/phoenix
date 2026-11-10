@@ -4,6 +4,11 @@ import { canAccessDailyBrief, canAccessPeriodReport } from '../projects/daily_re
 
 const routes = [
   {
+    path: '/projects/daily_report_25_26/pages/data_corrections',
+    component: () => import('../projects/daily_report_25_26/pages/DataCorrectionsView.vue'),
+    meta: { title: '数据修正申请记录' },
+  },
+  {
     path: '/projects/daily_report_25_26/pages/period_report',
     component: () => import('../projects/daily_report_25_26/pages/PeriodReportView.vue'),
     meta: { title: '生产运行汇报' },
@@ -174,6 +179,13 @@ router.beforeEach(async (to) => {
   if (to.path === '/projects/daily_report_25_26/pages/period_report') {
     return canAccessPeriodReport('daily_report_25_26', auth.user)
       ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'period_report')
+  }
+
+  // 2. 全局管理后台权限校验
+  if (to.path === '/projects/daily_report_25_26/pages/data_corrections') {
+    return auth.hasProjectAccess('daily_report_25_26') &&
+      (auth.user?.group === 'Global_admin' || auth.hasPageAccess('daily_report_25_26', 'data_entry'))
+      ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'data_entry')
   }
 
   // 2. 全局管理后台权限校验

@@ -23,7 +23,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Un
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import bindparam, delete, text, or_, and_
+from sqlalchemy import bindparam, delete, text, or_, and_, case, func
 
 from backend.projects.daily_report_25_26.services.beihai_efficiency_parser import (
     parse_beihai_efficiency_excel,
@@ -1047,6 +1047,16 @@ def _persist_daily_basic(
             return 0
 
         stmt = pg_insert(DailyBasicData.__table__).values(upserts)
+        # 已确认的修正流水属于业务备注，普通表单提交（含同期空备注）不得抹去。
+        old_note = func.coalesce(DailyBasicData.note, "")
+        new_note = func.coalesce(stmt.excluded.note, "")
+        audit_start = func.strpos(old_note, "【数据修正申请 #")
+        audit_tail = func.substr(old_note, audit_start)
+        preserved_note = case(
+            (and_(audit_start > 0, func.strpos(new_note, audit_tail) == 0),
+             case((new_note == "", audit_tail), else_=new_note + "\n" + audit_tail)),
+            else_=stmt.excluded.note,
+        )
         # 冲突时覆盖可变字段，并以最新提交的 operation_time 为准
         stmt = stmt.on_conflict_do_update(
             index_elements=["company", "sheet_name", "item", "date"],
@@ -1055,7 +1065,7 @@ def _persist_daily_basic(
                 "item_cn": stmt.excluded.item_cn,
                 "value": stmt.excluded.value,
                 "unit": stmt.excluded.unit,
-                "note": stmt.excluded.note,
+                "note": preserved_note,
                 "status": stmt.excluded.status,
                 "operation_time": stmt.excluded.operation_time,
             },
@@ -2621,6 +2631,8 @@ async def submit_debug(
     payload = await request.json()
 
     # 根据 sheet_key 进行路由分发
+    from backend.projects.daily_report_25_26.services.data_correction import validate_regular_submission
+    payload = validate_regular_submission(session, sheet_key, payload)
     if _is_gongre_sheet(sheet_key):
         return await handle_gongre_branches_detail_submission(payload)
 
@@ -5347,6 +5359,14 @@ def _persist_coal_inventory(records: List[Dict[str, Any]]) -> int:
             return 0
 
         for company, coal_type, storage_type, row_date in delete_keys:
+            from backend.projects.daily_report_25_26.services.data_correction import preserve_audit_note
+            previous = session.query(CoalInventoryData).filter_by(
+                company=company, coal_type=coal_type, storage_type=storage_type, date=row_date,
+            ).with_for_update().all()
+            for model in models:
+                if (model.company, model.coal_type, model.storage_type, model.date) == (company, coal_type, storage_type, row_date):
+                    for old in previous:
+                        model.note = preserve_audit_note(old.note, model.note)
             session.execute(
                 delete(CoalInventoryData).where(
                     CoalInventoryData.company == company,

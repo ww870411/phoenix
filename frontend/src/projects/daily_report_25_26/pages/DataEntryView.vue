@@ -54,15 +54,15 @@
         <div class="topbar__action-row">
           <label v-if="isDailyPage" class="date-group topbar__date" title="业务日期">
             <span>业务日期：</span>
-            <input type="date" :value="bizDate" :disabled="isPreparingSubmission || isSubmitting || efficiencyUploading" @change="onBizDateChanged" />
+            <input type="date" :value="bizDate" :disabled="correctionBusy || isPreparingSubmission || isSubmitting || efficiencyUploading" @change="onBizDateChanged" />
           </label>
           <div class="topbar__buttons">
-            <button class="btn ghost" type="button" :disabled="isPreparingSubmission || isSubmitting || efficiencyUploading" @click="reloadTemplate().catch(() => {})">重载模板</button>
+            <button class="btn ghost" type="button" :disabled="correctionMode || correctionBusy || isPreparingSubmission || isSubmitting || efficiencyUploading" @click="reloadTemplate().catch(() => {})">重载模板</button>
             <button
               v-if="canUploadEfficiency"
               class="btn secondary efficiency-upload-btn"
               type="button"
-              :disabled="entryLocked"
+              :disabled="correctionMode || correctionBusy || entryLocked"
               :title="efficiencyUploadTitle"
               @click="triggerEfficiencyUpload"
             >
@@ -90,7 +90,7 @@
               v-if="canUploadComplaint"
               class="btn primary complaint-auto-pull-btn"
               type="button"
-              :disabled="entryLocked || complaintAutoPulling"
+              :disabled="correctionMode || correctionBusy || entryLocked || complaintAutoPulling"
               title="自动从金山文档共享链接下载最新底表并自动计算填入表格对应单元格"
               @click="triggerAutoPullComplaint"
             >
@@ -296,7 +296,7 @@
             <button
               class="btn primary complaint-modal-fill-btn"
               type="button"
-              :disabled="complaintFilling || entryLocked || !entryDataReady || complaintStats.business_date !== bizDate"
+              :disabled="correctionMode || correctionBusy || complaintFilling || entryLocked || !entryDataReady || complaintStats.business_date !== bizDate"
               @click="fillComplaintData"
             >
               <span v-if="complaintFilling">⏳ 正在填入…</span>
@@ -355,6 +355,32 @@
       </ul>
     </section>
 
+    <section v-if="correctionAvailable" class="correction-status" role="status">
+      <div class="correction-status__copy">
+        <strong>{{ correctionMode ? '正在编辑修正申请' : '数据修正' }}</strong>
+        <p v-if="correctionMode">修改所需数值后提交申请，审批通过后生效。</p>
+        <p v-else>{{ ordinaryCorrectionReadonly ? '所选日期或已审批数据仅支持申请修正。' : '需要修正数据时，可在此发起申请。' }}蓝框表示已有待审批申请。</p>
+      </div>
+      <div class="correction-status__actions">
+        <router-link class="correction-records-link" to="/projects/daily_report_25_26/pages/data_corrections">修正申请记录</router-link>
+        <button v-if="correctionMode" class="btn ghost" type="button" :disabled="correctionBusy" @click="cancelCorrectionDraft">放弃修正</button>
+        <button :class="['btn', correctionMode ? 'primary' : 'light']" type="button" :disabled="entryLocked || correctionBusy" @click="onCorrectionButton">
+          {{ correctionBusy ? '处理中…' : correctionMode ? '提交修正' : '申请修正' }}
+        </button>
+      </div>
+      <p v-if="correctionError && !correctionConfirmOpen" class="correction-error" role="alert">{{ correctionError }}</p>
+    </section>
+    <div v-if="correctionConfirmOpen" class="correction-modal" role="dialog" aria-modal="true" aria-labelledby="correction-title">
+      <section class="correction-modal__panel"><h2 id="correction-title">提交修正申请 · {{ bizDate }}</h2>
+        <p class="correction-modal__description">{{ sheetDisplayName }}，共 {{ correctionChanges.length }} 个单元格。确认后原数据保持不变。</p>
+        <div class="correction-preview"><table><thead><tr><th>数据项</th><th>数据日期</th><th>原值</th><th>申请值</th></tr></thead>
+          <tbody><tr v-for="cell in correctionChanges" :key="cell.cell_key"><td>{{ cell.label }}</td><td>{{ cell.date }}</td><td>{{ correctionValue(cell.old_value) }}</td><td>{{ correctionValue(cell.new_value) }}</td></tr></tbody>
+        </table></div>
+        <label class="correction-modal__field">修正原因（必填）<textarea v-model="correctionReason" maxlength="2000" rows="3" /></label>
+        <p v-if="correctionError" class="correction-error" role="alert">{{ correctionError }}</p>
+        <div class="correction-modal__actions"><button class="btn ghost" :disabled="correctionBusy" @click="correctionConfirmOpen = false">继续修改</button><button class="btn primary" :disabled="correctionBusy || !correctionReason.trim()" @click="submitCorrection">{{ correctionBusy ? '提交中…' : '确认提交申请' }}</button></div>
+      </section>
+    </div>
     <div class="table-wrap card" v-if="columns.length" v-show="entryDataReady">
       <RevoGrid
         ref="gridRef"
@@ -372,6 +398,8 @@
         style="height: 70vh; width: 100%;"
         @afteredit="handleAfterEdit"
         @afterEdit="handleAfterEdit"
+        @beforeedit="guardCorrectionEdit"
+        @beforerangeedit="guardCorrectionRangeEdit"
       />
     </div>
     <div v-if="!entryDataReady" class="placeholder" role="status">
@@ -402,6 +430,7 @@ import UnitAnalysisLite from '../components/UnitAnalysisLite.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
+  dataCorrectionRequest,
   getTemplate,
   queryData,
   submitData,
@@ -421,6 +450,7 @@ import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
 import { useAuthStore } from '../store/auth'
 import { entryContextKey, requireEntryQuery, requireSubmissionSuccess } from '../composables/entrySubmissionGuard'
 import { prepareComplaintFill } from '../composables/complaintFill'
+import { correctionValue } from '../composables/dataCorrectionPresentation'
 
 // --- 基本路由和状态 --- 
 const route = useRoute()
@@ -707,6 +737,106 @@ const refreshCountdown = ref(0);
 const linkageMap = ref(new Map());
 let isApplyingLinkage = false;
 const isSubmitting = ref(false);
+// 修正草稿与正式提交分离，仅将服务端授权的数值单元格组成申请。
+const correctionMode = ref(false), correctionBusy = ref(false), correctionCells = ref([]);
+const ordinaryCorrectionReadonly = ref(false);
+const correctionError = ref(''), correctionReason = ref(''), correctionConfirmOpen = ref(false);
+let correctionBaseline = null;
+const correctionAvailable = computed(() => projectKey === 'daily_report_25_26' && pageKey === 'data_entry' && canSubmitCurrentProject.value);
+const correctionCellMap = computed(() => new Map(correctionCells.value.map(c => [`${c.row_index}:${c.col_index}`, c])));
+const correctionChanges = computed(() => correctionCells.value.filter(c => {
+  const raw = gridSource.value[c.row_index]?.[`c${c.col_index}`];
+  const normalized = raw == null || String(raw).trim() === '' ? null : String(raw).trim();
+  return normalized === null ? c.old_value !== null : c.old_value === null || Number(normalized) !== Number(c.old_value);
+}).map(c => ({ ...c, new_value: gridSource.value[c.row_index]?.[`c${c.col_index}`] ?? null })));
+
+async function refreshCorrectionCells() {
+  if (!correctionAvailable.value || !entryDataReady.value || correctionBusy.value) return;
+  const context = currentEntryContext.value;
+  try {
+    const result = await dataCorrectionRequest(`/snapshot?${new URLSearchParams({ sheet_key: activeSheetKey.value, biz_date: bizDate.value })}`);
+    if (context !== currentEntryContext.value || !entryDataReady.value) return;
+    ordinaryCorrectionReadonly.value = result.ordinary_readonly;
+    const pendingClosed = correctionCells.value.some(c => c.pending_request_id && !result.cells.some(n => n.cell_key === c.cell_key && n.pending_request_id));
+    if (!correctionMode.value) correctionCells.value = result.cells;
+    else {
+      const pending = new Map(result.cells.map(c => [c.cell_key, c.pending_request_id]));
+      correctionCells.value = correctionCells.value.map(c => ({ ...c, pending_request_id: pending.get(c.cell_key) }));
+    }
+    correctionError.value = '';
+    applyReadonlyToColumns();
+    if (pendingClosed && !correctionMode.value && !dirtySheets.size) {
+      sheetCache.clear();
+      await loadTemplate(null, { preserveDate: true });
+    }
+  } catch (e) { if (context === currentEntryContext.value) correctionError.value = e.message; }
+}
+
+async function onCorrectionButton() {
+  if (correctionBusy.value || entryLocked.value) return;
+  if (correctionMode.value) {
+    if (!correctionChanges.value.length) { correctionError.value = '请先修改需要修正的数值单元格。'; return; }
+    correctionError.value = ''; correctionConfirmOpen.value = true; return;
+  }
+  if (dirtySheets.size && !window.confirm('进入修正模式将重新读取当前表格，放弃未提交的普通修改。是否继续？')) return;
+  correctionBusy.value = true;
+  try {
+    if (!await loadTemplate(null, { preserveDate: true })) return;
+    const context = currentEntryContext.value;
+    const result = await dataCorrectionRequest(`/snapshot?${new URLSearchParams({ sheet_key: activeSheetKey.value, biz_date: bizDate.value })}`);
+    if (context !== currentEntryContext.value || !entryDataReady.value) return;
+    correctionCells.value = result.cells;
+    ordinaryCorrectionReadonly.value = result.ordinary_readonly;
+    // 数值和版本取同一次服务端快照，审批时再检查版本。
+    for (const c of result.cells) {
+      if (gridSource.value[c.row_index]) gridSource.value[c.row_index][`c${c.col_index}`] = c.old_value ?? '';
+    }
+    correctionBaseline = JSON.parse(JSON.stringify(gridSource.value));
+    correctionMode.value = true; correctionReason.value = ''; correctionError.value = '';
+    dirtySheets.delete(activeSheetKey.value);
+    applyReadonlyToColumns();
+  } catch (e) { correctionError.value = e.message; } finally { correctionBusy.value = false; }
+}
+
+function cancelCorrectionDraft() {
+  if (correctionBusy.value) return;
+  if (correctionBaseline) gridSource.value = correctionBaseline;
+  correctionBaseline = null; correctionMode.value = false; correctionConfirmOpen.value = false;
+  dirtySheets.delete(activeSheetKey.value); applyReadonlyToColumns();
+}
+
+async function submitCorrection() {
+  if (correctionBusy.value || !correctionReason.value.trim()) return;
+  const body = { sheet_key: activeSheetKey.value, biz_date: bizDate.value, reason: correctionReason.value,
+    changes: correctionChanges.value.map(c => ({ row_index: c.row_index, col_index: c.col_index, old_value: c.old_value, new_value: c.new_value, version: c.version })) };
+  correctionBusy.value = true;
+  try {
+    const record = await dataCorrectionRequest('', { method: 'POST', body });
+    correctionMode.value = false; correctionConfirmOpen.value = false; correctionBaseline = null;
+    sheetCache.clear(); dirtySheets.delete(activeSheetKey.value);
+    await loadTemplate(null, { preserveDate: true });
+    showSubmitFeedback('success', `修正申请 #${record.id} 已提交，原数据保持不变，等待 Global_admin 确认。`, { autoHide: false });
+  } catch (e) { correctionError.value = e.message; } finally { correctionBusy.value = false; }
+  await refreshCorrectionCells();
+}
+
+function correctionWritable(rowIndex, prop) {
+  const cell = correctionCellMap.value.get(`${rowIndex}:${String(prop).replace(/^c/, '')}`);
+  return !!cell && !cell.pending_request_id;
+}
+function guardCorrectionEdit(event) {
+  if (!correctionMode.value) return;
+  const d = event.detail || {};
+  if (correctionBusy.value || !correctionWritable(d.rowIndex, d.prop)) event.preventDefault();
+}
+function guardCorrectionRangeEdit(event) {
+  if (!correctionMode.value) return;
+  for (const [ri, values] of Object.entries(event.detail?.data || {})) {
+    for (const prop of Object.keys(values)) {
+      if (correctionBusy.value || !correctionWritable(Number(ri), prop)) { event.preventDefault(); return; }
+    }
+  }
+}
 const submitFeedback = reactive({
   visible: false,
   type: 'success',
@@ -831,12 +961,12 @@ const sheetValidationToggleDisabled = computed(
     sheetValidationSaving.value,
 );
 
-const isReadOnlyForDate = computed(() => isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value);
+const isReadOnlyForDate = computed(() => (isDailyPage.value && isUnitScopedEditor.value && bizDate.value !== canonicalBizDate.value) || (!isGlobalAdmin.value && ordinaryCorrectionReadonly.value));
 const submitDisabled = computed(() => !canSubmitCurrentProject.value || isReadOnlyForDate.value);
-const submitButtonDisabled = computed(() => submitDisabled.value || entryLocked.value || hasBlockingValidation.value);
+const submitButtonDisabled = computed(() => correctionMode.value || correctionBusy.value || submitDisabled.value || entryLocked.value || hasBlockingValidation.value);
 
 watch(
-  () => [isReadOnlyForDate.value, entryLocked.value, isGlobalAdmin.value],
+  () => [isReadOnlyForDate.value, entryLocked.value, isGlobalAdmin.value, correctionMode.value],
   () => applyReadonlyToColumns()
 );
 
@@ -1786,20 +1916,28 @@ function isPeerColumnIndex(index, colName = null) {
 
 function applyReadonlyToColumns() {
   if (!Array.isArray(gridColumns.value)) return;
-  const shouldLockAll = isReadOnlyForDate.value || entryLocked.value;
+  const shouldLockAll = (!correctionMode.value && isReadOnlyForDate.value) || entryLocked.value;
   gridColumns.value = gridColumns.value.map((def, index) => {
     const isBaseLocked = index <= readOnlyThreshold.value;
     let locked = isBaseLocked || shouldLockAll;
     // 同期值字段权限控制：除 Global_admin 之外，全量强制设为只读不可修改
-    if (!isGlobalAdmin.value && isPeerColumnIndex(index, def.name)) {
+    if (!correctionMode.value && !isGlobalAdmin.value && isPeerColumnIndex(index, def.name)) {
       locked = true;
     }
+    const originalProperties = Object.prototype.hasOwnProperty.call(def, '__correctionProperties') ? def.__correctionProperties : def.cellProperties;
+    const decorated = { ...def, __correctionProperties: originalProperties,
+      cellProperties: props => {
+        const original = originalProperties?.(props) || {};
+        const pending = correctionCellMap.value.get(`${props.rowIndex}:${index}`)?.pending_request_id;
+        return pending ? { ...original, style: { ...(original.style || {}), boxShadow: 'inset 0 0 0 2px #2563eb' }, title: `修正申请 #${pending} 待审批` } : original;
+      } };
+    if (correctionMode.value) return { ...decorated, readonly: props => shouldLockAll || !correctionWritable(props.rowIndex, `c${index}`), __locked: isBaseLocked };
     const currentReadonly = def.readonly === undefined ? false : def.readonly;
     const currentLocked = def.__locked === undefined ? false : def.__locked;
     if (currentReadonly === locked && currentLocked === isBaseLocked) {
-      return def;
+      return decorated;
     }
-    return { ...def, readonly: locked, __locked: isBaseLocked };
+    return { ...decorated, readonly: locked, __locked: isBaseLocked };
   });
 }
 
@@ -2217,6 +2355,7 @@ function handleSubmitCrosstab() {
 }
 
 async function onSubmit() {
+  if (correctionMode.value || correctionBusy.value) return;
   if (entryLocked.value) {
     showSubmitFeedback('error', '请等待当前表格和日期的数据完整加载后再提交。');
     return;
@@ -2446,6 +2585,9 @@ function restoreSheetFromCache(targetKey) {
 }
 
 async function onSwitchSheetTab(targetKey, { preparing = false } = {}) {
+  if (correctionMode.value || correctionBusy.value) {
+    showSubmitFeedback('error', '请先提交或放弃当前修正草稿，再切换表格。'); return false;
+  }
   if (!targetKey || isSubmitting.value || efficiencyUploading.value || (isPreparingSubmission.value && !preparing)) {
     return false
   }
@@ -2555,6 +2697,7 @@ function buildPayloadForCachedState(targetSheetKey, cached, currentSubmitTime) {
 }
 
 async function onSubmitAll() {
+  if (correctionMode.value || correctionBusy.value) return;
   if (!canSubmitCurrentProject.value || submitDisabled.value || entryLocked.value) return
   const originalKey = activeSheetKey.value
   const expectedDate = bizDate.value
@@ -3118,6 +3261,7 @@ async function applyEfficiencyDataToSheets(sheetsData) {
 
 // --- RevoGrid 事件处理 ---
 function handleAfterEdit(evt) {
+  if (correctionMode.value) { gridSource.value = [...gridSource.value]; return; }
   if (entryLocked.value) return;
   dirtySheets.add(activeSheetKey.value);
   if (isReadOnlyForDate.value) {
@@ -3285,9 +3429,13 @@ function onBizDateChanged(event) {
   const input = event.target
   const nextDate = input.value
   if (nextDate === bizDate.value) return
-  if (!nextDate || isPreparingSubmission.value || isSubmitting.value || efficiencyUploading.value) {
+  if (!nextDate || correctionBusy.value || isPreparingSubmission.value || isSubmitting.value || efficiencyUploading.value) {
     input.value = bizDate.value
     return
+  }
+  if (correctionMode.value) {
+    if (!window.confirm('切换日期将放弃当前修正草稿，是否继续？')) { input.value = bizDate.value; return; }
+    cancelCorrectionDraft();
   }
   if (dirtySheets.size && !window.confirm('当前日期有未提交的修改，切换日期将放弃这些修改。是否继续？')) {
     input.value = bizDate.value
@@ -3355,7 +3503,14 @@ watch(
   { immediate: true },
 )
 
+watch(() => [currentEntryContext.value, entryDataReady.value], () => {
+  if (!entryDataReady.value) { correctionCells.value = []; return; }
+  refreshCorrectionCells();
+}, { flush: 'post' });
+const correctionRefreshTimer = window.setInterval(refreshCorrectionCells, 15000);
+
 onBeforeUnmount(() => {
+  window.clearInterval(correctionRefreshTimer);
   loadGeneration += 1;
   if (submitFeedbackTimer !== null) {
     clearTimeout(submitFeedbackTimer);
@@ -3366,6 +3521,33 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 修正操作独立成行，避免挤占日期、普通提交和上传入口。 */
+.correction-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 16px; background: #eff6ff; color: #1d4ed8; margin-bottom: 12px; border: 1px solid #bfdbfe; border-radius: 10px; }
+.correction-status__copy { flex: 1 1 300px; min-width: 0; font-size: 14px; }
+.correction-status__copy p { margin: 6px 0 0; font-size: 13px; line-height: 1.7; color: #475569; overflow-wrap: anywhere; }
+.correction-status__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.correction-records-link { color: var(--primary-700); font-size: 13px; text-underline-offset: 3px; padding: 8px 0; }
+.correction-status__actions .btn { white-space: nowrap; }
+.correction-error { color: #b91c1c; margin: 0; line-height: 1.7; overflow-wrap: anywhere; }
+.correction-status > .correction-error { flex-basis: 100%; }
+.correction-modal { position: fixed; inset: 0; z-index: 1200; box-sizing: border-box; background: #0f172a88; display: grid; place-items: center; padding: 20px; overflow-y: auto; }
+.correction-modal__panel { box-sizing: border-box; background: white; border-radius: 16px; padding: 24px; width: min(900px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; min-width: 0; }
+.correction-modal__panel h2 { margin: 0; font-size: 20px; line-height: 1.5; }
+.correction-modal__description { font-size: 14px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
+.correction-preview { max-height: 40dvh; max-width: 100%; overflow: auto; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 8px; }
+.correction-preview table { border-collapse: collapse; width: 100%; min-width: 540px; text-align: left; font-size: 13px; }
+.correction-preview th, .correction-preview td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; line-height: 1.6; }
+.correction-preview th { background: #f4f7fb; }
+.correction-preview th:nth-child(n+3), .correction-preview td:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
+.correction-modal__field { display: block; font-size: 14px; }
+.correction-modal__field textarea { display: block; width: 100%; min-height: 90px; margin: 10px 0 20px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font: inherit; resize: vertical; }
+.correction-modal__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+@media (max-width: 640px) {
+  .correction-status__actions { width: 100%; justify-content: flex-start; }
+  .correction-modal { padding: 12px; }
+  .correction-modal__panel { padding: 16px; max-height: calc(100dvh - 24px); }
+  .correction-modal__panel h2 { font-size: 18px; }
+}
 .topbar {
   display: flex;
   flex-wrap: wrap;
@@ -3378,14 +3560,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 0 0 auto;
+  flex: 1 1 260px;
 }
 .topbar__actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
   align-items: flex-end;
-  flex: 1 1 auto;
+  flex: 2 1 640px;
   min-width: 0;
 }
 .topbar__status-row {
@@ -3398,22 +3580,22 @@ onBeforeUnmount(() => {
 }
 .topbar__action-row {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   width: 100%;
-  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 2px;
 }
 .topbar__buttons {
   display: inline-flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 .topbar__buttons .btn {
   min-width: auto;

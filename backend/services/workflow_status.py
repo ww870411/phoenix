@@ -110,6 +110,14 @@ class WorkflowStatusManager:
                 if project == project_key and snapshot.publish.status == "published"
             }, reverse=True)
 
+    def is_unit_approved(self, project_key: str, biz_date: datetime, unit: str) -> bool:
+        """只读判断指定业务日的单位审批状态，不创建或持久化新状态。"""
+        with self._lock:
+            self._ensure_loaded_locked()
+            snapshot = self._storage.get((project_key, biz_date))
+            state = snapshot.units.get(unit) if snapshot else None
+            return bool(state and state.status == "approved")
+
     def mark_approved(
         self,
         project_key: str,
