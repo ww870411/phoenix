@@ -5044,10 +5044,19 @@ const downloadPDF = async () => {
   isExportingPdf.value = true
   await nextTick()
 
+  // 记录原始滚动位置，并在导出前将页面平滑置顶，彻底根除 html2canvas 滚动偏移截断
+  const prevScrollX = window.scrollX || window.pageXOffset || 0
+  const prevScrollY = window.scrollY || window.pageYOffset || 0
+  window.scrollTo(0, 0)
+
   let releaseFold = async () => {}
+  const prevDailyTrendCollapsed = dailyTrendCollapsed.value
   try {
-    // 1. 展开累计明细表格，确保数据完整呈现
+    // 1. 展开累计明细表格与趋势图折叠卡片，确保全部数据完整呈现
     releaseFold = await ensureCumulativeTableVisibleForExport()
+    if (dailyTrendCollapsed.value) {
+      dailyTrendCollapsed.value = false
+    }
 
     // 2. 锁定 1800px 桌面宽屏版式，消除移动端视口响应式折行与变形
     dashboard.classList.add('dashboard-page--export-standard')
@@ -5064,21 +5073,42 @@ const downloadPDF = async () => {
     // 留足 ECharts 动画、重新计算与 DOM 渲染时间
     await delay(480)
 
-    // 4. 使用 html2canvas 执行 2 倍渲染，布局与截屏宽度均为 1800px
+    // 精确获取展开后的完整内容高度（消除 offsetHeight 被视口高度锁死导致的截断）
+    const targetHeight = Math.ceil(Math.max(
+      dashboard.scrollHeight,
+      dashboard.offsetHeight,
+      dashboard.getBoundingClientRect().height
+    ))
+
+    // 动态计算安全像素比率，防止超长画布触发浏览器 Canvas 单边与总面积上限
+    const safeScale = Math.min(2, Math.sqrt(48000000 / (EXPORT_STANDARD_WIDTH * targetHeight)))
+
+    // 4. 使用 html2canvas 执行高清渲染，明确指定目标高度与视口高度一致
     const canvas = await html2canvas(dashboard, {
       useCORS: true,
-      scale: 2,
+      scale: safeScale,
       width: EXPORT_STANDARD_WIDTH,
       windowWidth: EXPORT_STANDARD_WIDTH,
+      height: targetHeight,
+      windowHeight: targetHeight,
       scrollX: 0,
       scrollY: 0,
+      x: 0,
+      y: 0,
       onclone: (clonedDocument) => {
+        if (clonedDocument.defaultView) {
+          clonedDocument.defaultView.scrollTo(0, 0)
+        }
         const clonedDashboard = clonedDocument.querySelector('.dashboard-page')
         if (clonedDashboard) {
           clonedDashboard.classList.add('dashboard-page--export-standard')
+          clonedDashboard.style.height = `${targetHeight}px`
+          clonedDashboard.style.minHeight = `${targetHeight}px`
         }
         if (clonedDocument.body) {
           clonedDocument.body.classList.add('body--export-pdf-locked')
+          clonedDocument.body.style.height = `${targetHeight}px`
+          clonedDocument.body.style.minHeight = `${targetHeight}px`
         }
         // 隐藏下载按钮、缓存发布工具条、折叠按钮等交互控件
         const hideSelectors = [
@@ -5123,7 +5153,9 @@ const downloadPDF = async () => {
     dashboard.classList.remove('dashboard-page--export-standard')
     document.body.classList.remove('body--export-pdf-locked')
     await releaseFold()
+    dailyTrendCollapsed.value = prevDailyTrendCollapsed
     isExportingPdf.value = false
+    window.scrollTo(prevScrollX, prevScrollY)
     await nextTick()
     if (networkWaterCardRef.value?.renderBothCharts) {
       networkWaterCardRef.value.renderBothCharts()

@@ -1,5 +1,34 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-10 数据看板导出 PDF 画面严重截断与缺失问题排查与修复
+
+- **需求背景**：
+  在生产日报数据看板页面（`projects/daily_report_25_26/pages/dashboard/dashboard`）点击【下载 PDF】时，下载生成的 PDF 文件只显示了部分看板画面（仅第一屏顶部约 15%~20% 的内容），后续绝大部分业务指标卡片、明细图表与分析表格全部缺失丢失。
+- **根因分析**：
+  1. **html2canvas 缺失 `height` 与 `windowHeight` 参数（最核心根因）**：
+     - 原 `downloadPDF` 中仅传入了 `width: 1800` 和 `windowWidth: 1800`，未配置 `height` 与 `windowHeight`；
+     - html2canvas 在未收到明确目标高度时，会降级读取宿主容器的 `offsetHeight`（受限于浏览器当前视口通常仅为 800~900px）并在视口高度沙箱中初始化渲染；
+     - 经 CDP 真实浏览器环境诊断，展开后包含全部 16 个分析卡片的看板整页实际高度（`scrollHeight`）高达 **6457px~6850px**，但原配置生成的 canvas 高度被直接截断死在视口高度对应的 **1616px**（808px × scale 2），整整 80% 的下半截看板内容（约 5000px+）被物理丢弃。
+  2. **页面滚动条偏移（Scroll Offset）导致画面顶部/底部偏移截断**：
+     - 用户在浏览长页面看板后点击导出，`window.scrollY` 大于 0；html2canvas 解析目标元素绝对定位 `getBoundingClientRect().top` 时会带有负向位移，若未在截屏前将页面置顶归零，会导致画布顶部出现大面积空白或画面被推出可见区域。
+  3. **克隆 DOM 与视口滚动未隔离**：
+     - 克隆文档内没有显式将视口滚动归零并锁定容器高度为 `targetHeight`。
+  4. **趋势图等折叠卡片未强制展开**：
+     - 标煤与气温趋势图若处于收起折叠态，导出时无法自适应完整展开呈现。
+- **改动范围与主要工作**：
+  - `frontend/src/projects/daily_report_25_26/pages/DashBoard.vue`：
+    1. **滚动位置安全保护与平滑置顶**：在导出前记录 `prevScrollX` 与 `prevScrollY`，强制执行 `window.scrollTo(0, 0)` 归零，彻底根除 html2canvas 滚动偏移导致的截断与白边；在 `finally` 阶段平滑还原用户原先浏览位置；
+    2. **折叠态卡片全展开保护**：除已有累计表格外，新增对趋势图 `dailyTrendCollapsed` 的状态捕获与临时展开，导出完成后恢复用户折叠习惯；
+    3. **整页完整高度动态精确计算**：动态计算目标高度 `targetHeight = Math.ceil(Math.max(scrollHeight, offsetHeight, getBoundingClientRect().height))`（达到 6800px+）；
+    4. **安全像素比率（safeScale）动态调控**：通过 `Math.min(2, Math.sqrt(48000000 / (EXPORT_STANDARD_WIDTH * targetHeight)))` 动态控制总像素在 4800 万像素安全红线内，既保持极致高清，又防止超长长图击穿浏览器 Canvas 单边与显存上限；
+    5. **html2canvas 配置与克隆节点加固**：
+       - 显式传入 `height: targetHeight`、`windowHeight: targetHeight`、`x: 0`、`y: 0`；
+       - 在 `onclone` 中强制 `clonedDocument.defaultView.scrollTo(0, 0)` 并锁定克隆节点容器与其 body 高度均为 `targetHeight`。
+- **验证结论**：
+  - 启动真实浏览器自动化无头环境与 CDP 注入会话诊断，模拟用户在滚动 1500px 后点击【下载 PDF】按钮；
+  - 实测 canvas 渲染尺寸从 `1800x808` 成功恢复为完整的 `1800x6850`，缩放 scale 为 1.973，渲染耗时仅 593ms，导出的 PDF 包含 16 个分析卡片与完整焦点指标详表，画面完整率 100%；
+  - 前端生产构建 `npm --prefix frontend run build` 1062 模块编译通过（16.75s，0 错误）。
+
 ## 2026-11-09 数据看板手机端导出 PDF 排版错乱修复（热网耗水量与主城区单耗双栏锁定与重绘机制优化）
 
 - **需求背景**：
