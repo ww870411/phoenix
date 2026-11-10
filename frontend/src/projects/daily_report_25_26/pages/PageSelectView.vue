@@ -286,7 +286,7 @@ const GROUP_DEFINITIONS = [
     key: 'entry_approval',
     title: '报表填报与审批',
     description: '日常数据上报、分级审核与指标基准维护',
-    pageKeys: ['data_entry', 'data_approval', 'constant_data', 'data_corrections'],
+    pageKeys: ['data_entry', 'data_approval', 'constant_data'],
   },
   {
     key: 'monitoring_dashboard',
@@ -298,7 +298,7 @@ const GROUP_DEFINITIONS = [
     key: 'analysis_management',
     title: '分析与系统管理',
     description: '每日简报、多维计划图谱、自由分析与算法字典',
-    pageKeys: ['daily_brief', 'period_report', 'dynamic_plan', 'data_analysis', 'global_management'],
+    pageKeys: ['daily_brief', 'period_report', 'dynamic_plan', 'data_analysis', 'data_corrections', 'global_management'],
   },
 ]
 

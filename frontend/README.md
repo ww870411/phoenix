@@ -1,3 +1,10 @@
+## 2026-11-10 数据修正申请记录入口调整至“分析与系统管理”板块
+
+- `src/projects/daily_report_25_26/pages/PageSelectView.vue`：
+  - 将【数据修正申请记录】（`data_corrections`）卡片从【报表填报与审批】（`entry_approval`）板块移入【分析与系统管理】（`analysis_management`）板块；
+  - 排序精准置于【全局管理中心】（`global_management`）正前方，顺序为：每日简报、生产运行汇报、计划情景分解、自由数据分析、数据修正申请记录、全局管理中心。
+- 最后验证日期：2026-11-10。生产打包成功（17.67s，0 错误），26 项自动化测试通过。
+
 ## 2026-11-10 修正申请记录页面视觉排版与交互体验深度优化
 
 - `src/projects/daily_report_25_26/pages/DataCorrectionsView.vue`：

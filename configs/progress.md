@@ -1,5 +1,20 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-10 数据修正申请记录入口调整至“分析与系统管理”板块
+
+- **优化背景与调整需求**：根据用户指令“请将该页面挪到‘分析与系统管理’板块的全局管理中心前面”；调整报表选择页（`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`）中【数据修正申请记录】卡片的归属分类与顺序。最后验证日期：2026-11-10。
+- **改动范围与生效逻辑**：
+  - 修改 `PageSelectView.vue` 中的分组配置常量 `GROUP_DEFINITIONS`：
+    1. 从第一板块 `entry_approval`（报表填报与审批）中移除 `data_corrections`；
+    2. 将 `data_corrections` 移入第三板块 `analysis_management`（分析与系统管理），并精准插入在 `global_management`（全局管理中心）正前方：`['daily_brief', 'period_report', 'dynamic_plan', 'data_analysis', 'data_corrections', 'global_management']`；
+    3. 卡片自定义样式自动匹配该板块风格，与板块内其他分析管理卡片保持高度统合。
+- **验证结论**：
+  - 前端自动化 SSR 导航与展示测试 `node --test frontend/tests/data-corrections-presentation.test.mjs` 7 项全通过；
+  - 填报安全测试 `node --test frontend/tests/data-entry-safety.test.mjs` 19 项全通过；
+  - 生产构建 `npm --prefix frontend run build` 1065 模块编译通过（17.67s，0 错误）。
+- **边界与回滚**：仅修改 `PageSelectView.vue` 的分组 key 数组排序，无后端或数据库变更；回滚仅需恢复 `PageSelectView.vue`。
+
+
 ## 2026-11-10 修正申请记录页面视觉排版与交互体验深度优化
 
 - **优化背景与核查范围**：用户明确提出“排版方面要是有不足，帮我完善优化”；针对 `frontend/src/projects/daily_report_25_26/pages/DataCorrectionsView.vue` 开展深度排版优化，全面对齐集团管理系统商务蓝设计规范与信息架构层级。最后验证日期：2026-11-10。
