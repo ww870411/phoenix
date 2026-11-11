@@ -279,8 +279,8 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     const slugKey = rawKey.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase()
     if (pageSet.has(slugKey)) return true
 
-    // 针对“电力现货市场数据”、“计划动态分解模块”与“调度信息”板块：凡是有权访问 daily_report_25_26 项目的所有人员均直接放行
-    if ((slugKey === 'spot_electricity' || slugKey === 'dynamic_plan' || slugKey === 'dispatch_info') && hasProjectAccess(projectKey)) {
+    // 针对“电力现货市场数据”、“计划动态分解模块”、“调度信息”与“供暖期指标竞赛专题”板块：凡是有权访问对应项目的所有人员均直接放行
+    if ((slugKey === 'spot_electricity' || slugKey === 'dynamic_plan' || slugKey === 'dispatch_info' || slugKey === 'competition' || slugKey === 'projects_monthly_data_show_competition') && hasProjectAccess(projectKey)) {
       return true
     }
 

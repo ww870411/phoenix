@@ -42,6 +42,11 @@ const routes = [
     component: () => import('../projects/monthly_data_show/pages/MonthlyDataShowQueryToolView.vue'),
   },
   {
+    path: '/projects/monthly_data_show/competition',
+    component: () => import('../projects/monthly_data_show/pages/HeatingCompetitionView.vue'),
+    meta: { title: '供暖期指标竞赛专题' },
+  },
+  {
     path: '/projects/:projectKey/spring-dashboard',
     component: () => import('../projects/daily_report_spring_festval_2026/pages/SpringFestivalDashboardView.vue'),
   },
@@ -200,6 +205,7 @@ router.beforeEach(async (to) => {
   if (to.path.startsWith('/projects/monthly_data_show/')) {
     const isImportWorkspace = to.path === '/projects/monthly_data_show/import-workspace'
     const isQueryTool = to.path === '/projects/monthly_data_show/query-tool'
+    const isCompetition = to.path === '/projects/monthly_data_show/competition'
 
     if (isImportWorkspace) {
       if (!auth.hasPageAccess('monthly_data_show', 'projects_monthly_data_show_import_workspace')) {
@@ -211,6 +217,13 @@ router.beforeEach(async (to) => {
     if (isQueryTool) {
       if (!auth.hasPageAccess('monthly_data_show', 'projects_monthly_data_show_query_tool')) {
         return makeForbiddenRedirect(to, 'monthly_data_show', 'projects_monthly_data_show_query_tool')
+      }
+      return true
+    }
+
+    if (isCompetition) {
+      if (!auth.hasPageAccess('monthly_data_show', 'competition')) {
+        return makeForbiddenRedirect(to, 'monthly_data_show', 'competition')
       }
       return true
     }

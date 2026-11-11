@@ -1,3 +1,48 @@
+## 2026-11-11 供暖期指标竞赛取数服务重构：月报计算引擎对接与进行中月份日报双轨穿透
+
+- **服务与业务逻辑 `projects/monthly_data_show/services/competition_service.py` 升级**：
+  - **对接月报官方动态计算引擎**：引入 `query_month_data_show`，对“全厂热效率”、“供暖热/电/水单耗”等非静态单行存储项执行月报官方动态公式解析，计划值与月报查询工具 100% 精确对齐；
+  - **构建智能双轨机制**：
+    - 针对历史已出月报月份（如 2026-01、2026-02 等）：计划值与实际完成值 100% 严格来自月报表 (`monthly_data_show`)；
+    - 针对进行中当月（如 2026-11，现实中月报尚未月末结账）：月计划值对接月报表，实际完成值自动穿透日报表（`daily_basic_data`）与运行分析（`analysis_company_sum`），实时汇总当月累计值（截至最新日报 11月10日）；
+  - **修复庄河与供热公司单耗覆盖与缺失缺陷**：
+    - 移除庄河后置覆盖逻辑，支持外购热量、电单耗、水单耗与热单耗从日报及收费面积折算；
+    - 供热公司单耗从日报当月换热站外购电、补水量与网口/站内耗热量直接折算；
+    - 确保 7 家参评单位所有指标的计划值与实际完成值均完整有值（无 `None`）；
+  - **响应字段扩充**：返回结构新增 `is_historical`（是否历史已结账月份）与 `latest_daily_date`（日报数据截止日期），指标结构增加清晰的 `source` 来源说明标签。
+- **验证结果**：
+  - Python 独立测试 2026-01（月报已出月）与 2026-11（进行中当期月）取数接口，7 家单位全部指标无漏项，计划与实际完成值全量具备。
+
+## 2026-11-11 供暖期指标竞赛全链路数据链接：月报/日报自动抽取服务与测算持久化表
+
+- **数据模型与数据库变更**：
+  - 新增表 `competition_monthly_records`：
+    - 主键 `id BIGSERIAL PRIMARY KEY`；
+    - 联合唯一约束 `(project_key, report_month)` 确保每月仅有一条权威归档记录，支持 UPSERT 幂等更新；
+    - 字段：`project_key TEXT`、`report_month DATE`、`status TEXT`、`total_reward NUMERIC(14, 2)`、`disqualified_count INT`、`data_payload JSONB`（各单位指标打分与奖金明细）、`summary_payload JSONB`（汇总排名与投诉排名）、`created_at/updated_at TIMESTAMPTZ`；
+    - 索引：`idx_competition_report_month`。
+- **服务与业务逻辑**：
+  - 新增服务 `projects/monthly_data_show/services/competition_service.py`：
+    - `ensure_competition_table()`：服务自动保障归档表结构就绪；
+    - `get_auto_fetch_competition_data(month_str)`：
+      - 从 `monthly_data_show` 提取 7 家参评单位计划值与完成值（耗标煤总量、厂内水耗量、供暖热/电/水单耗、外购热量、全厂热效率），严格限定 `report_month = :start_d AND date = :start_d AND period = 'month'` 消除同期值干扰，并精准折算单位（热效率 ×100 为百分比、耗率 ×10000 为万平米单耗、水耗率 ×10 为吨/万平米）；
+      - 从 `daily_basic_data` 提取 5 家供热单位月末累计净投诉量（`sum_month_total_net_complaints`），结合 `constant_data` 供暖收费面积折算万平米投诉率；
+      - 预置非停（0次）、断管率（100%）、安全文明（10分）基准缺省值；
+    - `save_competition_record` 与 `get_competition_record`：提供月度完整测算状态的持久化写入与读取回显。
+- **接口端点注册 (`projects/monthly_data_show/api/workspace.py`)**：
+  - `GET /monthly-data-show/competition/auto-fetch?month=YYYY-MM`：一键系统自动抽取指标；
+  - `GET /monthly-data-show/competition/record?month=YYYY-MM`：获取已存归档记录；
+  - `POST /monthly-data-show/competition/save`：持久化保存当前测算记录；
+  - 均注册至 `router` 与 `public_router`。
+- 最后验证日期：2026-11-11。Python 逻辑单元测试与 FastAPI 路由载入测试全量通过，向后兼容。
+
+## 2026-11-11 供暖期指标竞赛专题路由与权限放行同步
+
+- **配置与路由变更**：
+  - `backend_data/shared/项目列表.json`：在 `monthly_data_show.pages` 尾部注册 `/projects/monthly_data_show/competition`（供暖期指标竞赛专题）；
+  - `backend/api/v1/routes.py`：在 `special_pages` 中增加放行白名单，确保具备月报项目权限的角色可读取该页面卡片元数据。
+- 最后验证日期：2026-11-11。向后兼容无数据库迁移需求。
+
 ## 2026-11-11 调度信息机炉设备智能纠偏与消缺事件解析优化同步
 
 - **模块与逻辑变更**：

@@ -49,6 +49,7 @@ from backend.projects.monthly_data_show.services.indicator_config import (
     order_items_by_config,
 )
 from backend.services import ai_chat_service, ai_runtime, data_analysis_ai_report
+from backend.projects.monthly_data_show.services import competition_service
 
 PROJECT_KEY = "monthly_data_show"
 CHAT_SESSION_TTL_SECONDS = 30 * 60
@@ -3225,3 +3226,87 @@ def chat_monthly_data_show_debug(payload: ai_chat_service.AiChatRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # pylint: disable=broad-except
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# =====================================================================
+# 供暖期指标竞赛：自动取数与持久化接口
+# =====================================================================
+
+class SaveCompetitionRecordRequest(BaseModel):
+    month: str
+    total_reward: float = 0.0
+    disqualified_count: int = 0
+    data_payload: List[Dict[str, Any]] = []
+    summary_payload: Dict[str, Any] = {}
+
+
+@router.get(
+    "/monthly-data-show/competition/auto-fetch",
+    summary="供暖期指标竞赛一键从系统自动提取月度指标",
+)
+@public_router.get(
+    "/monthly-data-show/competition/auto-fetch",
+    summary="供暖期指标竞赛一键从系统自动提取月度指标（公开通道）",
+)
+def get_competition_auto_fetch(month: str):
+    """
+    一键提取月度竞赛指标：
+    - 标煤耗量、厂内水耗、供暖单耗、外购热量、全厂热效率：从 monthly_data_show（月报）提取计划与完成值；
+    - 服务投诉率：从 daily_basic_data（日报）与 constant_data 提取月末累计净投诉量与收费面积并折算；
+    - 非停、断管率、安全文明：预置标准填报缺省值。
+    """
+    try:
+        return competition_service.get_auto_fetch_competition_data(month)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"自动提取指标数据失败: {exc}") from exc
+
+
+@router.get(
+    "/monthly-data-show/competition/record",
+    summary="获取月度指标竞赛已保存打分测算记录",
+)
+@public_router.get(
+    "/monthly-data-show/competition/record",
+    summary="获取月度指标竞赛已保存打分测算记录（公开通道）",
+)
+def get_competition_monthly_record(month: str):
+    """
+    从 PostgreSQL 查询指定月份已归档保存的指标打分测算记录。
+    """
+    try:
+        return competition_service.get_competition_record(month)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"读取竞赛测算记录失败: {exc}") from exc
+
+
+@router.post(
+    "/monthly-data-show/competition/save",
+    summary="持久化保存月度指标竞赛打分测算结果",
+)
+@public_router.post(
+    "/monthly-data-show/competition/save",
+    summary="持久化保存月度指标竞赛打分测算结果（公开通道）",
+)
+def post_competition_save_record(payload: SaveCompetitionRecordRequest):
+    """
+    将当前月份的 7 家单位指标测算结果持久化写入 PostgreSQL 表 competition_monthly_records。
+    """
+    try:
+        return competition_service.save_competition_record(
+            month_str=payload.month,
+            payload={
+                "total_reward": payload.total_reward,
+                "disqualified_count": payload.disqualified_count,
+                "data_payload": payload.data_payload,
+                "summary_payload": payload.summary_payload,
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"保存竞赛测算记录失败: {exc}") from exc
+

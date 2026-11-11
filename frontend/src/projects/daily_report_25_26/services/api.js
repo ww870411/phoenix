@@ -4003,3 +4003,59 @@ export async function syncSmartHeatingFromRemote(projectKey = 'daily_report_25_2
   return response.json()
 }
 
+// 供暖期指标竞赛：一键系统自动取数
+export async function fetchCompetitionAutoData(month, projectKey = 'monthly_data_show') {
+  const query = `?month=${encodeURIComponent(month)}`
+  const url = `${projectPath(projectKey)}/monthly-data-show/competition/auto-fetch${query}`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '从系统自动提取竞赛指标数据失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+// 供暖期指标竞赛：读取已存测算记录
+export async function getCompetitionRecord(month, projectKey = 'monthly_data_show') {
+  const query = `?month=${encodeURIComponent(month)}`
+  const url = `${projectPath(projectKey)}/monthly-data-show/competition/record${query}`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '读取已保存竞赛记录失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+// 供暖期指标竞赛：持久化保存打分测算记录
+export async function saveCompetitionRecord(month, payload = {}, projectKey = 'monthly_data_show') {
+  const url = `${projectPath(projectKey)}/monthly-data-show/competition/save`
+  const body = {
+    month,
+    total_reward: payload.totalReward ?? payload.total_reward ?? 0,
+    disqualified_count: payload.disqualifiedCount ?? payload.disqualified_count ?? 0,
+    data_payload: payload.dataPayload ?? payload.data_payload ?? [],
+    summary_payload: payload.summaryPayload ?? payload.summary_payload ?? {},
+  }
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    }),
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '持久化保存竞赛测算记录失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+
