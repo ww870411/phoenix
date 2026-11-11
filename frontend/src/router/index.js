@@ -113,6 +113,11 @@ const routes = [
     meta: { title: '智慧供热实时工况' },
   },
   {
+    path: '/projects/:projectKey/pages/smart_heating_tunnel',
+    component: () => import('../projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue'),
+    meta: { title: '智慧供热内网直通' },
+  },
+  {
     path: '/admin-console',
     component: () => import('../projects/daily_report_25_26/pages/AdminConsoleView.vue'),
   },
@@ -291,11 +296,12 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // 5.3 智慧供热实时工况专属路由校验：仅限 Global_admin 访问
-  if (to.path.endsWith('/pages/smart_heating')) {
+  // 5.3 智慧供热实时工况与内网直通专属路由校验：仅限 Global_admin 访问
+  if (to.path.endsWith('/pages/smart_heating') || to.path.endsWith('/pages/smart_heating_tunnel')) {
     const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
+    const targetKey = to.path.endsWith('/pages/smart_heating_tunnel') ? 'smart_heating_tunnel' : 'smart_heating'
     if (!auth.hasProjectAccess(pKey) || auth.user?.group !== 'Global_admin') {
-      return makeForbiddenRedirect(to, pKey, 'smart_heating')
+      return makeForbiddenRedirect(to, pKey, targetKey)
     }
     return true
   }

@@ -1,3 +1,25 @@
+## 2026-11-12 生产监控与看板新增“智慧供热内网直通”工作台
+
+- **新增直通页面 `src/projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue`**：
+  - **反向代理嵌入**：通过全屏自适应 `iframe` 无缝嵌入反向代理网关，将内网 `192.168.1.206:6688/vindex/` 页面呈现在外网 Phoenix 平台中；
+  - **实时中继状态条**：智能展示办公电脑中继连接状态（在线/离线）、客户端出网 IP 及心跳更新时效；
+  - **离线引导向导**：当中继未启动时，展示 3 步操作引导卡片，指导用户下载并运行客户端；
+  - **动态客户端脚本下载**：提供【📥 下载 Win7 中继客户端】按钮，一键下载预注入当前服务器域名与中继参数的单文件脚本；
+  - **平台账号与中继设置弹窗**：支持在线维护并持久化保存内网平台的登录用户名、密码（掩码保护）、目标 Base URL 及自动登录选项。
+- **页面选择入口更新 `src/projects/daily_report_25_26/pages/PageSelectView.vue`**：
+  - 在“生产监控与看板”卡片组（`monitoring_dashboard`）下挂载 `smart_heating_tunnel` 卡片（仅限 Global_admin 可见）。
+- **路由与权限守卫更新 `src/router/index.js`**：
+  - 注册 `/projects/:projectKey/pages/smart_heating_tunnel`；
+  - 在全局路由守卫中强化权限拦截，要求必须具备 Global_admin 权限，防止工业内网外网裸奔。
+- **服务层扩展 `src/projects/daily_report_25_26/services/api.js`**：
+  - 封装并导出 `fetchTunnelStatus`、`fetchTunnelConfig`、`updateTunnelConfig`、`downloadTunnelClientScript` 及 `getTunnelGatewayUrl`。
+- **权限严格限定 (仅限 Global_admin)**：
+  - 前端路由守卫（`router/index.js`）拦截非管理员直接跳转 403 页面；
+  - 页面组件内（`SmartHeatingTunnelView.vue`）挂载时若非 Global_admin 则直接呈现 `.forbidden-card` 拦截卡片并终止轮询；
+  - `gatewayUrl` 自动向网关附加管理员 `phoenix_token`；
+  - 报表选择页卡片仅在 `user.group === 'Global_admin'` 时注入。
+- **构建验证**：运行 `npm run build`，1069 模块构建通过（耗时 23.37s，0 错误）。
+
 ## 2026-11-11 供暖期指标竞赛计划与实际值全量联动与无感自动加载
 
 - **页面 `src/projects/monthly_data_show/pages/HeatingCompetitionView.vue` 体验与联动升级**：

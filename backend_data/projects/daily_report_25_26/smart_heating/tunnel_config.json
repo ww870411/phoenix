@@ -1,0 +1,10 @@
+{
+  "target_base_url": "http://192.168.1.206:6688",
+  "portal_path": "/vindex/",
+  "login_path": "/vindex/login",
+  "auth_username": "",
+  "auth_password": "",
+  "tunnel_secret": "phoenix_tunnel_secret_2026",
+  "auto_login_enabled": true,
+  "persisted_cookies": {}
+}

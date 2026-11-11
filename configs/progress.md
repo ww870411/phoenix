@@ -1,5 +1,44 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-12 智慧供热内网平台直通反向中继系统 (Phoenix Tunnel) 全栈落地与客户端自动打包分发
+
+- **需求背景与痛点**：
+  - 用户希望在外网通过 Phoenix 平台无感直接操作访问运行在局域网办公电脑内网中的“智慧供热平台” (`http://192.168.1.206:6688/vindex/`)，免去针对每一个具体业务页面与接口的逐一逆向开发。
+  - 由于办公电脑处于局域网（无公网 IP、Win7 + Python 3.8），且内网平台具有账号密码登录鉴权，需要在“生产监控与看板”板块下提供嵌入式直通页面，支持持久化配置平台账号密码，并提供开箱即用、免安装依赖的 Win7 Python 客户端脚本下载。
+- **具体改动与技术落地**：
+  1. **后端反向代理隧道与网关引擎 (`smart_heating_tunnel.py`)**：
+     - **反向长轮询调度器 (`TunnelManager`)**：实现外部 HTTP 请求排队挂起机制，办公电脑客户端通过并发多线程发起 `/poll` 长轮询接收任务，执行后通过 `/respond` 回传；
+     - **全功能反向代理网关 (`/gateway/{subpath:path}`)**：接收前端 `iframe` 发起的对内网资源的所有请求，智能识别 `text/html` 并动态注入 `<base href="...">` 标签与根路径代理劫持脚本；深度结合 HAR 真实报文数据，实施 HTML 绝对路径 (`href="/static/..."` / `src="/static/..."`) 深度正则改写与 CSS 内部 `url(...)` 改写，重写 302 `Location` 跳转头并剥离 `X-Frame-Options` 嵌入限制，彻底杜绝外网样式丢失、静态资源 404 与跨域嵌入白屏；
+     - **平台账号与中继持久化配置 (`tunnel_config.json`)**：支持在线维护内网目标地址、入口路径、平台登录用户名、密码（脱敏保护）与中继密钥；
+     - **客户端脚本动态打包服务 (`/client-script`)**：根据当前服务器实际域名与用户配置，动态生成预注入参数的 Python 客户端脚本供一键下载。
+  2. **办公电脑 Win7 纯标准库客户端 (`smart_heating_tunnel_win7.py`)**：
+     - **100% Python 3.8 纯标准库**：采用 `urllib.request`、`threading` 与 `json` 编写，零第三方库依赖，Win7 双击即跑；
+     - **多线程并发隧道**：支持 6 路并发工作线程拉取并转发请求，内置网络断线自愈与心跳保持。
+  3. **前端生产监控看板直通工作台 (`SmartHeatingTunnelView.vue` & `PageSelectView.vue`)**：
+     - 在“生产监控与看板”板块中配置专属卡片 `smart_heating_tunnel`；
+     - **智能状态条**：呈现中继在线/离线、客户端 IP 与最新心跳；
+     - **离线连接向导**：中继未启动时展示清晰的 3 步使用指引并提供大号下载按钮；
+     - **无感全屏嵌入**：中继在线时自适应全屏嵌入内网控制台 `iframe`，支持新窗口打开与强制刷新；
+     - **平台账号设置弹窗**：支持在线维护并持久化保存内网平台的用户名与密码。
+  4. **四重防线严格限定仅限 Global_admin (`SmartHeatingTunnelView.vue`、`index.js`、`smart_heating_tunnel.py`、`PageSelectView.vue`)**：
+     - **第一重（入口卡片）**：`PageSelectView.vue` 仅当 `user.group === 'Global_admin'` 时注入卡片；
+     - **第二重（路由守卫）**：`router/index.js` 全局拦截非 `Global_admin` 直接重定向至 403 页面；
+     - **第三重（页面生命周期）**：`SmartHeatingTunnelView.vue` 挂载时校验 `isGlobalAdmin`，非管理员呈现权限阻断卡片且拒绝发起任何中继轮询；
+     - **第四重（后端全网关鉴权）**：`smart_heating_tunnel.py` 中对 `/gateway/`、`/status`、`/config`、`/client-script` 统一强制执行 `verify_global_admin_access` 拦截，非管理员无论通过何种路径均无法穿透访问内网任何数据。
+- **修改文件**：
+  - `backend/projects/daily_report_25_26/api/smart_heating_tunnel.py` (新建)
+  - `backend/projects/daily_report_25_26/smart_heating_tunnel_win7.py` (新建)
+  - `backend/projects/daily_report_25_26/api/router.py`
+  - `frontend/src/projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue` (新建)
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+  - `frontend/src/projects/daily_report_25_26/services/api.js`
+  - `frontend/src/router/index.js`
+  - `backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py` (新建)
+- **构建与测试验证**：
+  - 前端运行 `npm --prefix frontend run build`，1069 个模块构建通过（耗时 18.53s，0 错误）；
+  - 后端执行 `test_smart_heating_tunnel.py`，配置管理、状态查询、客户端动态下载、长轮询任务往返、HTML Base 注入全链路自动化测试 100% 通过。
+
+
 ## 2026-11-11 供暖期指标竞赛计划与实际值全量联动深度修复：月报计算引擎对接、进行中月份日报双轨穿透与无感自动加载
 
 - **需求背景与痛点排查**：

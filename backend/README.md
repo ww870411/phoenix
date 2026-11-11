@@ -1,3 +1,29 @@
+## 2026-11-12 智慧供热内网平台直通反向代理隧道 (Tunnel & Gateway) 上线
+
+- **核心服务与网关 `projects/daily_report_25_26/api/smart_heating_tunnel.py`**：
+  - **反向长轮询调度器 (`TunnelManager`)**：
+    - 外部请求进入后封装为带有唯一 `request_id` 的任务推入 `asyncio.Queue`；
+    - 办公电脑中继客户端通过 `POST /poll` 维持并发长轮询，拉取待转发任务；
+    - 办公电脑执行内网请求后通过 `POST /respond` 回传响应结果，调度器唤醒对应的 `asyncio.Future`。
+  - **反向代理网关 (`/gateway/{subpath:path}`)**：
+    - 全量转发外部浏览器或 iframe 的各种 HTTP 方法请求；
+    - 拦截 `text/html` 类型响应，动态注入 `<base href="...">` 标签与根路径请求代理劫持脚本；深度结合 HAR 实际报文，完成 HTML 绝对路径 (`href="/static/..."` / `src="/static/..."`) 与 CSS 内部 `url(...)` 正则安全重写，重写 302 `Location` 跳转头并剥离 `X-Frame-Options` 嵌入限制，彻底杜绝外网样式丢失、静态资源 404 与跨域嵌入白屏；
+    - 针对中继离线情况返回友好的状态卡片与重新连接引导。
+  - **平台账号与中继持久化配置 (`tunnel_config.json`)**：
+    - 提供 `GET /config` 与 `POST /config`，支持持久化配置内网 Base URL、入口路径、平台登录用户名、密码（掩码加密展示）以及自动登录维持开关。
+  - **中继客户端动态打包与分发 (`GET /client-script`)**：
+    - 服务端自动检测请求来源，将当前服务器公网域名、中继密钥及配置预填注入到 `smart_heating_tunnel_win7.py` 中，提供一键下载。
+  - **权限强拦截 (`verify_global_admin_access`)**：
+    - 对 `/gateway/`、`/status`、`/config`、`/client-script` 统一实施全方位鉴权拦截；
+    - 支持从 Authorization Header、Query 参数及 Cookie 中多维度提取并校验 Session；
+    - 非 Global_admin 角色直接阻断并返回 403 页面/状态码，彻底杜绝工业调度内网向非管理人员泄露。
+- **Win7 办公机中继程序 `projects/daily_report_25_26/smart_heating_tunnel_win7.py`**：
+  - 100% 纯 Python 3.8 标准库（`urllib.request` / `threading` / `json`），零第三方外部依赖；
+  - 具备 6 路并发工作线程长轮询能力与自动断线自愈重试机制。
+- **单元与集成测试 `projects/daily_report_25_26/tests/test_smart_heating_tunnel.py`**：
+  - 涵盖配置读取、状态心跳、动态客户端下载、长轮询任务排队转发及 HTML Base 标签注入全链路测试。
+- **验证结论**：Python 3.8 / 3.12 单元回归测试 100% 通过（ALL TESTS PASSED SUCCESSFULLY!），向后兼容。
+
 ## 2026-11-11 供暖期指标竞赛取数服务重构：月报计算引擎对接与进行中月份日报双轨穿透
 
 - **服务与业务逻辑 `projects/monthly_data_show/services/competition_service.py` 升级**：

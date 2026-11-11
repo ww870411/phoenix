@@ -4058,4 +4058,83 @@ export async function saveCompetitionRecord(month, payload = {}, projectKey = 'm
   return response.json()
 }
 
+// =============================================================================
+// 智慧供热平台内网反向直通隧道 API (Smart Heating Tunnel)
+// =============================================================================
+
+// 查询中继客户端实时在线状态
+export async function fetchTunnelStatus(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating-tunnel/status`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '获取智慧供热直通中继状态失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+// 查询中继与内网账号配置
+export async function fetchTunnelConfig(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating-tunnel/config`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '获取直通隧道配置失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+// 更新中继与内网账号持久化配置
+export async function updateTunnelConfig(payload, projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating-tunnel/config`
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    }),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '更新直通隧道配置失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+// 下载预填配置的 Win7 Python 3.8 中继客户端脚本
+export async function downloadTunnelClientScript(projectKey = 'daily_report_25_26') {
+  const url = `${projectPath(projectKey)}/smart-heating-tunnel/client-script`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '下载中继客户端脚本失败')
+    throw new Error(errorMsg)
+  }
+  const blob = await response.blob()
+  const blobUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = 'smart_heating_tunnel_win7.py'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(blobUrl)
+}
+
+// 获取反向代理网关 URL
+export function getTunnelGatewayUrl(projectKey = 'daily_report_25_26', subpath = 'vindex/') {
+  const cleanSub = String(subpath || '').replace(/^\/+/, '')
+  return `${projectPath(projectKey)}/smart-heating-tunnel/gateway/${cleanSub}`
+}
+
+
 
