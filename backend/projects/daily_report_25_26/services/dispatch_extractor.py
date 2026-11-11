@@ -395,6 +395,106 @@ class UnifiedDispatchExtractor:
 
         return res
 
+    def _resolve_ambiguous_device_cell(
+        self,
+        content: str,
+        raw_cat: str,
+        std_unit: str,
+        status_name: str,
+        row_cells: List[str],
+        status_cols: Dict[str, int]
+    ) -> Tuple[str, str]:
+        """
+        针对缺少‘机’或‘炉’明确后缀的模糊单元格（如'#2'），
+        结合同主体拓扑互斥、硬件拓扑边界以及生产日志上下文进行智能纠偏判定。
+        返回: (m_part, b_part)
+        """
+        if raw_cat in ["水炉", "燃气炉"]:
+            return "", content
+
+        dev_nums = self.expand_device_numbers(content)
+        if not dev_nums:
+            return "", ""
+
+        # 1. 扫描本行中其它单元格已明确标注的机组和锅炉编号
+        explicit_turbines = set()
+        explicit_boilers = set()
+        for s_name, c_idx in status_cols.items():
+            if c_idx >= len(row_cells):
+                continue
+            c_text = row_cells[c_idx]
+            if not c_text or c_text in ["-", "--", "/", "无"]:
+                continue
+            if "机" in c_text and "炉" in c_text:
+                parts = c_text.split("机")
+                explicit_turbines.update(self.expand_device_numbers(parts[0]))
+                explicit_boilers.update(self.expand_device_numbers(parts[1]))
+            elif "机" in c_text:
+                explicit_turbines.update(self.expand_device_numbers(c_text))
+            elif "炉" in c_text:
+                explicit_boilers.update(self.expand_device_numbers(c_text))
+
+        # 2. 拓扑互斥与缺位嗅探：
+        # 若该编号已在机组中明确定义（如 #2机 处于备用），且锅炉中该编号尚缺位，则绝不可能重复归为机组（同一天同一设备不可能既备用又检修）
+        has_turbines = any(d in explicit_turbines for d in dev_nums)
+        has_boilers = any(d in explicit_boilers for d in dev_nums)
+        if has_turbines and not has_boilers:
+            logger.info("设备智能纠偏: [%s] 单元格 '%s' 缺后缀，机组已存在 %s，判定为锅炉", std_unit, content, dev_nums)
+            return "", content
+        if has_boilers and not has_turbines:
+            logger.info("设备智能纠偏: [%s] 单元格 '%s' 缺后缀，锅炉已存在 %s，判定为汽机", std_unit, content, dev_nums)
+            return content, ""
+
+        # 3. 生产运行日志文本与事件记录交叉印证
+        full_text = " ".join(self.paragraphs)
+        if self.table_event_logs:
+            full_text += " " + " ".join([self.clean_text(c) for r in self.table_event_logs for c in r])
+
+        for d in dev_nums:
+            num = d.replace("#", "")
+            # 优先在包含该厂名称的上下文中搜索
+            org_aliases = [raw_cat, std_unit]
+            for std_name, aliases in self.KNOWN_ORGS:
+                if std_name == std_unit or any(a in raw_cat for a in aliases):
+                    org_aliases.extend(aliases)
+                    break
+            org_pat = "|".join(re.escape(a) for a in set(org_aliases) if a)
+
+            # 检查是否有明确的 "金州...#2炉" 或全局 "#2炉停炉/消缺/并汽" 等操作
+            boiler_patterns = [
+                rf"(?:{org_pat})[^\n。；;]*?#?{num}\s*炉",
+                rf"#?{num}\s*炉\s*(?:停炉|消缺|点火|点炉|检修|停运|并汽|并热网|启动)",
+            ]
+            turbine_patterns = [
+                rf"(?:{org_pat})[^\n。；;]*?#?{num}\s*机",
+                rf"#?{num}\s*机\s*(?:打闸|停机|冲转|并网|并列|解列|消缺|检修|启动)",
+            ]
+
+            is_boiler_event = any(re.search(pat, full_text) for pat in boiler_patterns)
+            is_turbine_event = any(re.search(pat, full_text) for pat in turbine_patterns)
+
+            if is_boiler_event and not is_turbine_event:
+                logger.info("设备智能纠偏: [%s] 单元格 '%s' 经生产运行日志交叉印证判定为锅炉", std_unit, content)
+                return "", content
+            if is_turbine_event and not is_boiler_event:
+                logger.info("设备智能纠偏: [%s] 单元格 '%s' 经生产运行日志交叉印证判定为汽机", std_unit, content)
+                return content, ""
+
+        # 4. 电厂已知硬件物理上限边界过滤
+        max_turbines_map = {
+            "北海": 3, "北海热电联产": 3,
+            "香海": 4, "香海电厂": 4,
+            "金州": 3, "金州热电": 3,
+            "北方": 2, "北方热电": 2,
+        }
+        max_turbines = max_turbines_map.get(raw_cat) or max_turbines_map.get(std_unit)
+        if max_turbines is not None:
+            if any(int(d.replace("#", "")) > max_turbines for d in dev_nums if d.replace("#", "").isdigit()):
+                return "", content
+
+        # 5. 兜底回退
+        return content, ""
+
     def extract_boiler_turbine_status(self) -> Dict[str, Any]:
         """提取机炉运行情况并执行拓扑深度归一"""
         if not self.table_boiler_turbine:
@@ -452,10 +552,9 @@ class UnifiedDispatchExtractor:
                 elif "炉" in content:
                     b_part = content
                 else:
-                    if raw_cat in ["水炉", "燃气炉"]:
-                        b_part = content
-                    else:
-                        m_part = content
+                    m_part, b_part = self._resolve_ambiguous_device_cell(
+                        content, raw_cat, std_unit, status_name, cells, status_cols
+                    )
 
                 m_list = self.expand_device_numbers(m_part)
                 b_list = self.expand_device_numbers(b_part)

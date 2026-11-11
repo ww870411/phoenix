@@ -12,7 +12,7 @@ DATE_PREFIX = r'(?:(?:\d{1,2}月)?\d{1,2}日|次日|翌日|当日)'
 TIME_RE = re.compile(rf'(?<!\d)(?P<time>(?:{DATE_PREFIX}\s*)?\d{{1,2}}[:：]\d{{2}})(?!\d)')
 NON_FACT = re.compile(r'计划|拟|预计|待|未|禁止|取消|若|如需|失败|试验|准备|不成功')
 CONTINUATION = re.compile(r'^(?:随后|然后|后|已|开始|与系统|与电网|粉仓烧空|煤仓烧空|因故|故障|保护动作|\s)*$')
-TAIL = re.compile(r'^(?:成功|完成|正常|后|\s)*$')
+TAIL = re.compile(r'^(?:成功|完成|正常|后|消缺|检修|备用|保养|\s)*$')
 
 
 def action_status(action):

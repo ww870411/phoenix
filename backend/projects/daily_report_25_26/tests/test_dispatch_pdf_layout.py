@@ -114,6 +114,61 @@ class DispatchPdfLayoutTests(unittest.TestCase):
         base['operations_and_tickets'].insert(0, dict(responsible_org='香海电厂', time='10:00', raw_description='#3炉并汽。'))
         self.assertEqual(reconcile_report(base)['boiler_turbine_status'][0]['status'], '运行')
 
+    def test_ambiguous_device_suffix_infers_boiler_by_topology_and_events(self):
+        # 模拟金州热电表格中检修列漏写“炉”字（写成“#2”）的场景
+        extractor = UnifiedDispatchExtractor([], [
+            [['分类', '运行', '备用', '检修'],
+             ['金州', '#1、3机\n#1、3、4炉', '#2机\n#6炉', '#2']],
+            [['时间', '生产运行情况'],
+             ['', '金州电厂：'],
+             ['9:22', '#2炉停炉消缺。'],
+             ['17:48', '#3炉并汽。']]
+        ])
+        report = extractor.extract_all()
+        jz_facilities = [f for f in report['boiler_turbine_status'] if f['unit_or_plant'] == '金州热电']
+        turbines = [f for f in jz_facilities if f['facility_type'] == '汽机']
+        boilers = [f for f in jz_facilities if f['facility_type'] == '锅炉']
+
+        # 汽机应为 #1、#3（运行），#2（备用），不应存在重复的 #2汽机
+        self.assertEqual(len(turbines), 3)
+        self.assertEqual({f['standard_name']: f['status'] for f in turbines}, {
+            '#1汽机': '运行',
+            '#2汽机': '备用',
+            '#3汽机': '运行'
+        })
+
+        # 锅炉中 #2 应被正确推导为 #2汽炉，且状态为检修
+        self.assertEqual(len(boilers), 5)
+        boiler_dict = {f['standard_name']: f['status'] for f in boilers}
+        self.assertEqual(boiler_dict['#2汽炉'], '检修')
+        self.assertEqual(boiler_dict['#6水炉'], '备用')
+        self.assertEqual(boiler_dict['#1汽炉'], '运行')
+        self.assertEqual(boiler_dict['#3汽炉'], '运行')
+        self.assertEqual(boiler_dict['#4汽炉'], '运行')
+
+        # 检查 #2汽炉的事件是否关联到 9:22 停炉
+        b2 = next(f for f in boilers if f['standard_name'] == '#2汽炉')
+        self.assertEqual(len(b2['main_events']), 1)
+        self.assertEqual(b2['main_events'][0]['action'], '停炉')
+        self.assertEqual(b2['main_events'][0]['time'], '9:22')
+
+    def test_november_10_pdf_when_available(self):
+        source = Path(__file__).resolve().parents[4] / 'configs/2026年11月10日生产信息.pdf'
+        if not source.exists():
+            self.skipTest('2026年11月10日生产信息.pdf 未在 configs 目录下找到')
+        report = extract_single_file(str(source))
+        self.assertEqual(report['biz_date'], '2026-11-10')
+        jz_facilities = [f for f in report['boiler_turbine_status'] if f['unit_or_plant'] == '金州热电']
+        turbines = [f for f in jz_facilities if f['facility_type'] == '汽机']
+        boilers = [f for f in jz_facilities if f['facility_type'] == '锅炉']
+        self.assertEqual(len(turbines), 3)
+        self.assertEqual({f['standard_name']: f['status'] for f in turbines}, {
+            '#1汽机': '运行', '#2汽机': '备用', '#3汽机': '运行'
+        })
+        b2 = next(f for f in boilers if f['standard_name'] == '#2汽炉')
+        self.assertEqual(b2['table_status'], '检修')
+        self.assertEqual(b2['main_events'][0]['time'], '9:22')
+
 
 if __name__ == '__main__':
     unittest.main()
