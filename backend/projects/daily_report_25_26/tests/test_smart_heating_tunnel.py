@@ -213,6 +213,7 @@ async def run_async_gateway_tests():
                     "request_id": req_id,
                     "status_code": 302,
                     "headers": {"Location": "/vindex/login"},
+                    "cookies": ["session=.eJx123mocksession; Path=/; HttpOnly"],
                     "body_b64": "",
                 },
             )
@@ -224,7 +225,10 @@ async def run_async_gateway_tests():
         assert "/smart-heating-tunnel/gateway/vindex/login" in loc
         # 验证必须携带 phoenix_token 避免后续跳转 403 / 空白
         assert f"phoenix_token={ADMIN_TOKEN}" in loc
-        assert "phoenix_tunnel_admin_token=" in res_redir.headers.get("set-cookie", "")
+        # 验证两套 Set-Cookie 共存：内网 session Cookie 与 Phoenix 网关 Cookie 均成功透传
+        set_cookies_joined = " | ".join(res_redir.headers.get_list("set-cookie"))
+        assert "session=.eJx123mocksession" in set_cookies_joined
+        assert "phoenix_tunnel_admin_token=" in set_cookies_joined
 
 
 def test_tunnel_gateway_roundtrip_with_worker():

@@ -82,9 +82,18 @@ def load_config():
 CONFIG = load_config()
 
 # 全局 Cookie 容器与持久化会话
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """
+    禁止 urllib 自动跟随 301/302 重定向。
+    作为反向代理网关，必须将 302 重定向和 Location 头及 Set-Cookie 完整保留并传回给外网浏览器，
+    由浏览器保存 Cookie 并执行跳转，确保 Session Cookie 不丢失。
+    """
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
 COOKIE_JAR = CookieJar()
 COOKIE_HANDLER = urllib.request.HTTPCookieProcessor(COOKIE_JAR)
-INTRANET_OPENER = urllib.request.build_opener(COOKIE_HANDLER)
+INTRANET_OPENER = urllib.request.build_opener(NoRedirectHandler(), COOKIE_HANDLER)
 
 # 停止事件
 STOP_EVENT = threading.Event()
@@ -155,6 +164,7 @@ def execute_intranet_request(task: dict) -> dict:
     start_time = time.time()
     status_code = 502
     resp_headers = {}
+    set_cookies = []
     body_out_b64 = ""
 
     try:
@@ -162,6 +172,8 @@ def execute_intranet_request(task: dict) -> dict:
             status_code = resp.getcode()
             for header_key, header_val in resp.headers.items():
                 resp_headers[header_key] = header_val
+            if hasattr(resp, "headers"):
+                set_cookies = resp.headers.get_all("Set-Cookie") or []
             raw_body = resp.read()
             body_out_b64 = base64.b64encode(raw_body).decode("ascii")
 
@@ -169,6 +181,8 @@ def execute_intranet_request(task: dict) -> dict:
         status_code = e.code
         for header_key, header_val in e.headers.items():
             resp_headers[header_key] = header_val
+        if hasattr(e, "headers"):
+            set_cookies = e.headers.get_all("Set-Cookie") or []
         raw_body = e.read()
         body_out_b64 = base64.b64encode(raw_body).decode("ascii")
 
@@ -186,6 +200,7 @@ def execute_intranet_request(task: dict) -> dict:
         "request_id": request_id,
         "status_code": status_code,
         "headers": resp_headers,
+        "cookies": set_cookies,
         "body_b64": body_out_b64,
         "duration_ms": duration_ms,
     }

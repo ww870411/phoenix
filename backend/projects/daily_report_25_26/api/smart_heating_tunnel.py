@@ -171,6 +171,7 @@ class TunnelResponsePayload(BaseModel):
     request_id: str = Field(..., description="请求 ID")
     status_code: int = Field(200, description="HTTP 状态码")
     headers: Dict[str, str] = Field(default_factory=dict, description="响应头字典")
+    cookies: Optional[List[str]] = Field(default_factory=list, description="内网返回的所有 Set-Cookie 列表")
     body_b64: Optional[str] = Field("", description="Base64 编码的响应体")
     duration_ms: Optional[int] = Field(0, description="内网执行耗时")
 
@@ -333,6 +334,22 @@ async def gateway_reverse_proxy(
         if k.lower() not in {"host", "content-length", "connection"}:
             headers_dict[k] = v
 
+    # 清洗请求 Cookie：过滤掉仅供 Phoenix 网关使用的内部 token，仅透传属于内网平台的会话 cookie (如 session=...)
+    raw_cookie_header = headers_dict.get("cookie") or headers_dict.get("Cookie")
+    if raw_cookie_header:
+        parts = [c.strip() for c in raw_cookie_header.split(";") if c.strip()]
+        forward_cookies = [
+            c for c in parts
+            if not c.startswith("phoenix_tunnel_admin_token=")
+            and not c.startswith("phoenix_token=")
+            and not c.startswith("token=")
+        ]
+        if forward_cookies:
+            headers_dict["cookie"] = "; ".join(forward_cookies)
+        else:
+            headers_dict.pop("cookie", None)
+            headers_dict.pop("Cookie", None)
+
     full_path = f"/{subpath}" if not subpath.startswith("/") else subpath
     # 提取 query string 并清理内部鉴权参数，避免内网平台收到无关参数
     token = getattr(request.state, "admin_token", None) or getattr(session, "token", "")
@@ -393,6 +410,7 @@ async def gateway_reverse_proxy(
         "content-encoding",
         "connection",
         "x-frame-options",  # 剥离 X-Frame-Options 确保 Phoenix 前端 iframe 可正常嵌入
+        "set-cookie",       # Set-Cookie 统一在下方通过 response.raw_headers / set_cookie 注入，避免覆盖
     }
 
     for k, v in result_payload.headers.items():
@@ -434,7 +452,12 @@ async def gateway_reverse_proxy(
                 attr = match.group(1)
                 quote = match.group(2)
                 path_part = match.group(3)
-                return f"{attr}={quote}{gateway_base_clean}/{path_part}{quote}"
+                extra_token = ""
+                # 如果是表单提交 action，自动附加 phoenix_token 避免跨域 iframe 提交时丢失凭证直接 403
+                if attr.lower() == "action" and token and "phoenix_token=" not in path_part:
+                    delim = "&" if "?" in path_part else "?"
+                    extra_token = f"{delim}phoenix_token={token}"
+                return f"{attr}={quote}{gateway_base_clean}/{path_part}{extra_token}{quote}"
 
             html_text = re.sub(
                 r'\b(href|src|action)=([\'"])/(?!(?:api/|projects/|#|data:|javascript:))([^\'"]*)[\'"]',
@@ -480,6 +503,17 @@ async def gateway_reverse_proxy(
             return origFetch(input, init);
         }};
     }}
+    // 全局表单提交拦截：为所有动态表单补齐 phoenix_token 凭证
+    document.addEventListener('submit', function(e) {{
+        var form = e.target;
+        if (form && gToken) {{
+            var action = form.getAttribute('action') || window.location.href;
+            if (action.indexOf('phoenix_token=') === -1) {{
+                var d = action.indexOf('?') === -1 ? '?' : '&';
+                form.setAttribute('action', action + d + 'phoenix_token=' + encodeURIComponent(gToken));
+            }}
+        }}
+    }}, true);
 }})();
 </script>"""
 
@@ -508,18 +542,42 @@ async def gateway_reverse_proxy(
         except Exception as e:
             logger.warning("CSS 内部 url 路径重写失败: %s", e)
 
-    # 携带管理员凭据 Cookie，使 iframe 子资源、新标签页与异步请求全域无感鉴权
-    if token:
-        resp_headers["Set-Cookie"] = (
-            f"phoenix_tunnel_admin_token={token}; "
-            f"Path=/; SameSite=Lax; Max-Age=2592000"
-        )
-
-    return Response(
+    # 构造响应对象
+    response = Response(
         content=body_bytes,
         status_code=result_payload.status_code,
         headers=resp_headers,
     )
+
+    # 1. 忠实透传内网平台返回的所有 Set-Cookie 会话 Cookie（如 session=...，支持多条），彻底解决无法登录问题
+    raw_cookie_sources = list(result_payload.cookies or [])
+    for hk, hv in result_payload.headers.items():
+        if hk.lower() == "set-cookie" and hv not in raw_cookie_sources:
+            raw_cookie_sources.append(hv)
+
+    for c_raw in raw_cookie_sources:
+        if not c_raw or not isinstance(c_raw, str):
+            continue
+        # 清洗 Cookie 属性：移除 Domain 限制，重写 Path 为 / 确保全直通子路由皆可正常携带
+        cleaned = re.sub(r'Domain=[^;]+;?\s*', '', c_raw, flags=re.IGNORECASE)
+        cleaned = re.sub(r'Path=[^;]+;?\s*', 'Path=/; ', cleaned, flags=re.IGNORECASE)
+        if 'Path=/' not in cleaned:
+            cleaned = cleaned.rstrip('; ') + '; Path=/'
+        # 去除 Secure 标记以兼容外网非 HTTPS / 中继局域网环境
+        cleaned = re.sub(r'Secure;?\s*', '', cleaned, flags=re.IGNORECASE)
+        response.raw_headers.append((b"set-cookie", cleaned.encode("latin-1")))
+
+    # 2. 携带管理员凭据 Cookie，使 iframe 子资源、新标签页与异步请求全域无感鉴权
+    if token:
+        response.set_cookie(
+            key="phoenix_tunnel_admin_token",
+            value=token,
+            path="/",
+            samesite="lax",
+            max_age=2592000,
+        )
+
+    return response
 
 
 # ==============================================================================

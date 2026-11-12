@@ -1,5 +1,36 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-12 智慧供热中继登录失败修复（302 重定向拦截、会话 Cookie 透传）与保温管通知 403 误报消除
+
+- **需求背景与痛点排查**：
+  - 用户反馈：“关于那个智慧供热平台的完全中继服务页面，我无法登录，显示‘phoenix_backend | INFO: 172.19.0.1:51530 - "GET /api/v1/projects/insulation_pipe_supply_2026/joint-reviews/notifications HTTP/1.1" 403 Forbidden’”。
+  - 经深入排查，发现用户看到的后台日志与实际登录失败是由两个不同链路引发的问题：
+    1. **为什么日志中出现 403 Forbidden（噪音与干扰）**：
+       - `DailyReviewNoticeModal.vue` 是全局会审通知弹窗，挂载在根组件 `App.vue` 中；
+       - 组件挂载后，内部每隔 60 秒轮询调用 `GET /api/v1/projects/insulation_pipe_supply_2026/joint-reviews/notifications`；
+       - 原代码仅检查了是否处于 `/login`，**未检查当前登录用户是否具备 `insulation_pipe_supply_2026` 项目的权限**；
+       - 当用户以普通填报员（如 `beihai_filler`）或没有保温管项目授权的账户登录时，后端权限守卫拦截并正常返回 403 Forbidden，打印在 Docker 容器日志中，导致用户误以为是智慧供热中继的 403 拦截报错。
+    2. **智慧供热平台实际无法登录的真实根因**：
+       - **根因 A（Win7 客户端 urllib 自动跟随 302 吞没 Cookie）**：内网智慧供热平台（192.168.1.206）在提交登录表单后，会下发 `Set-Cookie: session=...` 并返回 302 Found 重定向到 `/vindex/`。由于 `smart_heating_tunnel_win7.py` 原先使用 Python `urllib` 默认的重定向处理器，客户端自动跟随了 302 跳转，在内网办公机本地的 `CookieJar` 里悄悄保存了 session，却向外网 Phoenix 网关返回了重定向后的 200 OK 页面，外网浏览器从未收到内网的 `session` Cookie！
+       - **根因 B（网关响应头单键字典覆盖多重 Set-Cookie）**：在 `smart_heating_tunnel.py` 中，网关在组装 HTTP 响应时执行了 `resp_headers["Set-Cookie"] = f"phoenix_tunnel_admin_token={token}; ..."`，直接冲掉了内网原本下发的任何 `Set-Cookie`（字典单 key 覆盖），浏览器接收不到内网会话凭证。
+       - **根因 C（子页面原生 Form 提交凭据缺失）**：在跨域 iframe 或嵌套视窗中，表单 `<form action="/vindex/login">` 提交若依赖第三方 Cookie 可能被现代浏览器 Lax 策略限制，原注入脚本未对原生动态 form 提交事件追加 `phoenix_token` 参数。
+- **具体改动与落地措施**：
+  1. **前端静默全局通知 403 噪音 (`frontend/src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue`)**：
+     - 在 `checkPendingReviews` 中增加项目权限前置检查：`if (!auth.hasProjectAccess('insulation_pipe_supply_2026')) { visible.value = false; return; }`，彻底阻断无权账号对保温管通知接口的无效轮询，控制台与 Docker 日志恢复清爽。
+  2. **Win7 中继客户端禁用自动跟随 302 并提取全部 Set-Cookie (`smart_heating_tunnel_win7.py`)**：
+     - 同步更新 `backend/projects/daily_report_25_26/` 与 `backend_data/projects/daily_report_25_26/` 中的客户端脚本；
+     - 引入自定义 `NoRedirectHandler` 拦截 301/302 重定向，将 302 状态码与 `Location` 原样返回给网关；
+     - 使用 `resp.headers.get_all("Set-Cookie")` 完整抓取内网返回的全部会话 Cookie（包括 `session` 等），放入回传载荷 `cookies` 数组。
+  3. **网关支持多重 Set-Cookie 原生透传与 Form 提交拦截 (`smart_heating_tunnel.py`)**：
+     - `TunnelResponsePayload` 扩充 `cookies: Optional[List[str]]` 字段；
+     - 转发内网请求前清理请求头中的内部 token，仅向内网透传真实业务 Cookie；
+     - 收到内网响应后，清洗并重写内网 Cookie 的 Path 与 Domain，使用 Starlette `response.raw_headers.append((b"set-cookie", ...))` 将内网 Session Cookie 完整透传给浏览器；
+     - 随后使用 `response.set_cookie` 独立注入 Phoenix 管理员凭据 `phoenix_tunnel_admin_token`，两套 Cookie 独立共存；
+     - 在注入的代理脚本中增加 `document.addEventListener('submit', ...)` 全局表单拦截，为所有内网 Form 提交自动附加 `phoenix_token`。
+- **验证与测试**：
+  - 后端自动化测试 (`pytest backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py`)：3 项测试 100% 通过，成功验证内网 `session=.eJx...` 与网关 `phoenix_tunnel_admin_token` 双 Cookie 正确透传与共存；
+  - 前端生产构建 (`npm --prefix frontend run build`)：1069 个模块编译打包全部通过（耗时 20.33s，0 错误）。
+
 ## 2026-11-12 北海热电厂水炉表填报提交 422 报错排查与彻底修复
 
 - **需求背景与痛点排查**：

@@ -219,8 +219,12 @@ function recordSuppressedIds(ids) {
  */
 async function checkPendingReviews() {
   if (isPolling) return
-  // 未登录、当前处于登录页或已进入会审大厅，均不弹出打扰
+  // 未登录、当前处于登录页、已进入会审大厅，或当前账号无保温管供货项目权限，均不发起轮询
   if (!auth.isLoggedIn && !auth.user && !auth.token) {
+    visible.value = false
+    return
+  }
+  if (!auth.hasProjectAccess('insulation_pipe_supply_2026')) {
     visible.value = false
     return
   }

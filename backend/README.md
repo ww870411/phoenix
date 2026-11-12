@@ -1,3 +1,17 @@
+## 2026-11-12 智慧供热中继网关会话透传修复 (302 重定向拦截、多重 Set-Cookie 独立透传)
+
+- **Win7 中继客户端 302 拦截与 Cookie 提取 (`smart_heating_tunnel_win7.py`)**：
+  - 同步更新 `projects/daily_report_25_26/smart_heating_tunnel_win7.py` 与 `backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`；
+  - 引入 `NoRedirectHandler` 阻止 `urllib` 内部静默跟随 302 重定向，将 302 响应、Location 和内网生成的 `Set-Cookie`（`resp.headers.get_all("Set-Cookie")`）原样回传给服务端；
+  - 彻底解决内网平台登录时 Session Cookie 被办公机 Python 吞掉、外网浏览器无法获取会话的问题。
+- **网关多重 Set-Cookie 透传与 Form 凭据增强 (`projects/daily_report_25_26/api/smart_heating_tunnel.py`)**：
+  - `TunnelResponsePayload` 扩充 `cookies: Optional[List[str]]`；
+  - 网关转发内网请求前清理内部参数，向内网仅传真实业务 Cookie；
+  - 收到内网响应后，重写 Cookie 属性，通过 Starlette `response.raw_headers.append((b"set-cookie", ...))` 完整下发内网 Session Cookie；
+  - 同时使用 `response.set_cookie` 写入 Phoenix 管理员 Token `phoenix_tunnel_admin_token`，确保双 Cookie 并存无冲突；
+  - 代理脚本注入 `submit` 全局监听，为内网表单提交自动附加 `phoenix_token`。
+- **测试验证**：运行 `pytest backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py`，全部 3 个用例通过。
+
 ## 2026-11-12 北海热电厂（水炉）表数据结构配置纠偏 (修复普通填报员提交 422 结构不一致错误)
 
 - **模板数据结构修复 (`backend_data/projects/daily_report_25_26/config/数据结构_基本指标表.json`)**：

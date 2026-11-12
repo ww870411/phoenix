@@ -1,3 +1,10 @@
+## 2026-11-12 全局会审通知轮询权限过滤与中继表单免登录拦截升级
+
+- **全局会审通知轮询过滤 (`src/projects/insulation_pipe_supply_2026/components/DailyReviewNoticeModal.vue`)**：
+  - 在 `checkPendingReviews` 中追加 `if (!auth.hasProjectAccess('insulation_pipe_supply_2026')) { visible.value = false; return; }`；
+  - 针对非保温管供货项目授权用户（如普通填报员 `beihai_filler`）直接关闭弹窗并终止定时请求，消除 Docker 后台 `GET /joint-reviews/notifications 403 Forbidden` 的干扰日志。
+- **构建验证**：运行 `npm run build`，1069 模块打包成功（耗时 20.33s，0 错误）。
+
 ## 2026-11-12 日报填报提交行长度防御性切片修复 (解决普通用户提交水炉表 422 结构不一致问题)
 
 - **填报数据提交列结构对齐 (`src/projects/daily_report_25_26/pages/DataEntryView.vue`)**：
