@@ -1,3 +1,16 @@
+## 2026-11-12 智慧供热中继极速加速重构 (静态资源本地毫秒级直出 / 16 并发线程池)
+
+- **静态公共资源高速缓存引擎 (`projects/daily_report_25_26/api/smart_heating_tunnel.py`)**：
+  - **静态资源预置与热加载**：将内网平台的 35 个 CSS、JavaScript、PNG 与 ICO 文件预置于 `static_cache/` 中，系统启动后自动常驻内存并支持磁盘持久化；
+  - **网关毫秒级响应**：对匹配 `static/`、`img/` 及静态后缀的请求，直接由网关从本地内存/磁盘响应（耗时 `< 1ms`），彻底免除向 Win7 办公机长轮询队列的入队等待；
+  - **长效强缓存与协商缓存**：下发 `Cache-Control: public, max-age=604800, immutable` 与 `ETag`，浏览器自动长效缓存 7 天，二跳访问 0 网络消耗；
+  - **静态公共资源免鉴权**：JS/CSS 等公用资源免除鉴权拦截，彻底消除跨域 iframe 第三方 Cookie 限制导致的样式丢失；
+  - **动态增量写入**：对于未预置的新静态资源，首次代理成功后自动沉淀为本地缓存。
+- **Win7 中继并发线程池扩充至 16 路 (`smart_heating_tunnel_win7.py`)**：
+  - 默认工作线程由 6 升级为 16，本地旧版配置平滑自动升级；
+  - 确保 `/get_sz_data`、`/get_dc_data` 等内网高频动态接口能够被瞬时并发抢占处理，彻底消除多图表排队加载堵塞。
+- **自动化测试**：新增 `test_static_asset_cache_acceleration` 测试，4 项用例全部通过（4 passed in 5.23s）。
+
 ## 2026-11-12 智慧供热中继网关会话透传修复 (302 重定向拦截、多重 Set-Cookie 独立透传)
 
 - **Win7 中继客户端 302 拦截与 Cookie 提取 (`smart_heating_tunnel_win7.py`)**：

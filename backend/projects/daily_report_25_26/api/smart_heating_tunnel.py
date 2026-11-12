@@ -12,14 +12,16 @@
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
+import mimetypes
 import re
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -32,6 +34,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/smart-heating-tunnel", tags=["smart_heating_tunnel"])
 public_router = APIRouter(prefix="/smart-heating-tunnel", tags=["smart_heating_tunnel"])
+
+# 注册静态资源常见 MIME 类型
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("image/png", ".png")
+mimetypes.add_type("image/x-icon", ".ico")
+mimetypes.add_type("font/woff", ".woff")
+mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("font/ttf", ".ttf")
+mimetypes.add_type("application/font-woff", ".woff")
 
 
 def is_global_admin_user_session(session: AuthSession) -> bool:
@@ -91,6 +103,58 @@ def verify_global_admin_access(request: Request) -> AuthSession:
 DATA_DIR = (Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26" / "smart_heating").resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 TUNNEL_CONFIG_FILE = DATA_DIR / "tunnel_config.json"
+
+# 静态资源极速加速缓存目录（优先使用 Docker 数据卷持久化目录，备选代码源码内置缓存）
+STATIC_CACHE_DIR = (DATA_DIR / "static_cache").resolve()
+STATIC_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+FALLBACK_STATIC_CACHE_DIR = (Path(__file__).parent.parent / "smart_heating_static_cache").resolve()
+
+# 静态资源内存高速缓存字典：clean_path -> (body_bytes, mime, etag)
+STATIC_MEMORY_CACHE: Dict[str, Tuple[bytes, str, str]] = {}
+
+
+def get_static_asset_from_cache(clean_path: str) -> Optional[Tuple[bytes, str, str]]:
+    """从内存或本地磁盘高速加载静态资源"""
+    # 1. 内存字典秒查
+    if clean_path in STATIC_MEMORY_CACHE:
+        return STATIC_MEMORY_CACHE[clean_path]
+
+    # 2. 检查主数据卷与备选代码目录
+    p_primary = STATIC_CACHE_DIR / clean_path
+    p_fallback = FALLBACK_STATIC_CACHE_DIR / clean_path
+    target_p = None
+    if p_primary.is_file():
+        target_p = p_primary
+    elif p_fallback.is_file():
+        target_p = p_fallback
+
+    if target_p and target_p.is_file():
+        try:
+            body = target_p.read_bytes()
+            mime, _ = mimetypes.guess_type(target_p.name)
+            mime = mime or "application/octet-stream"
+            etag = f'"{hashlib.md5(body).hexdigest()}"'
+            STATIC_MEMORY_CACHE[clean_path] = (body, mime, etag)
+            return (body, mime, etag)
+        except Exception as e:
+            logger.warning("读取静态资源缓存失败 [%s]: %s", clean_path, e)
+    return None
+
+
+def put_static_asset_to_cache(clean_path: str, body: bytes, content_type: str = ""):
+    """持久化并保存静态资源到本地缓存"""
+    try:
+        target_p = STATIC_CACHE_DIR / clean_path
+        target_p.parent.mkdir(parents=True, exist_ok=True)
+        target_p.write_bytes(body)
+        mime = content_type.split(";")[0].strip() if content_type else None
+        if not mime or mime == "application/octet-stream":
+            guessed, _ = mimetypes.guess_type(target_p.name)
+            mime = guessed or "application/octet-stream"
+        etag = f'"{hashlib.md5(body).hexdigest()}"'
+        STATIC_MEMORY_CACHE[clean_path] = (body, mime, etag)
+    except Exception as e:
+        logger.warning("写入静态资源缓存失败 [%s]: %s", clean_path, e)
 
 DEFAULT_TUNNEL_CONFIG = {
     "target_base_url": "http://192.168.1.206:6688",
@@ -262,13 +326,63 @@ async def gateway_reverse_proxy(
     对于 HTML 内容，自动注入 <base> 标签和 URL 代理劫持脚本，防止相对路径与根路径资源 404。
     【安全红线】：严格仅限 Global_admin 用户访问。
     """
-    # 严格校验 Global_admin 权限
-    try:
-        session = verify_global_admin_access(request)
-    except HTTPException as e:
-        accept = request.headers.get("accept", "").lower()
-        if "text/html" in accept or subpath.endswith(".html") or subpath.endswith("/") or not subpath:
-            forbidden_html = f"""<!DOCTYPE html>
+    clean_sub = subpath.lstrip("/").split("?")[0]
+    # 判断是否为静态公共资源（JS、CSS、图片、字体、图标）
+    is_static = (
+        clean_sub.startswith("static/")
+        or clean_sub.startswith("img/")
+        or any(clean_sub.lower().endswith(ext) for ext in [
+            ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot"
+        ])
+    )
+
+    # 路径容错重写：如果是 img/textures/grid.png 等相对路径回退，智能尝试 static/img/...
+    if is_static and not clean_sub.startswith("static/"):
+        candidate_static = f"static/{clean_sub}"
+        if (
+            candidate_static in STATIC_MEMORY_CACHE
+            or (STATIC_CACHE_DIR / candidate_static).is_file()
+            or (FALLBACK_STATIC_CACHE_DIR / candidate_static).is_file()
+        ):
+            clean_sub = candidate_static
+
+    # 1. 静态资源本地极速缓存直出（0ms 响应，完全不占用中继通道与并发队列）
+    if is_static and request.method in ("GET", "HEAD"):
+        cached = get_static_asset_from_cache(clean_sub)
+        if cached:
+            cached_bytes, cached_mime, cached_etag = cached
+            if_none_match = request.headers.get("if-none-match")
+            if if_none_match and if_none_match == cached_etag:
+                return Response(
+                    status_code=304,
+                    headers={
+                        "ETag": cached_etag,
+                        "Cache-Control": "public, max-age=604800, immutable",
+                        "Access-Control-Allow-Origin": "*",
+                    },
+                )
+            return Response(
+                content=cached_bytes,
+                status_code=200,
+                media_type=cached_mime,
+                headers={
+                    "Content-Type": f"{cached_mime}; charset=utf-8" if "text" in cached_mime or "javascript" in cached_mime else cached_mime,
+                    "Cache-Control": "public, max-age=604800, immutable",
+                    "ETag": cached_etag,
+                    "Access-Control-Allow-Origin": "*",
+                    "X-Accel-Cache": "HIT",
+                },
+            )
+
+    # 2. 权限校验：动态业务请求、HTML 页面与表单提交严格仅限 Global_admin；未命中的静态公共资源放行至中继通道抓取
+    session = None
+    if not is_static:
+        try:
+            session = verify_global_admin_access(request)
+        except HTTPException as e:
+            accept = request.headers.get("accept", "").lower()
+            if "text/html" in accept or subpath.endswith(".html") or subpath.endswith("/") or not subpath:
+                forbidden_html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -291,8 +405,8 @@ async def gateway_reverse_proxy(
     </div>
 </body>
 </html>"""
-            return Response(content=forbidden_html, status_code=403, media_type="text/html")
-        raise e
+                return Response(content=forbidden_html, status_code=403, media_type="text/html")
+            raise e
 
     # 检查中继是否在线
     if not TUNNEL.is_online():
@@ -542,6 +656,12 @@ async def gateway_reverse_proxy(
         except Exception as e:
             logger.warning("CSS 内部 url 路径重写失败: %s", e)
 
+    # 动态写入静态资源极速缓存，供后续秒级直出
+    if is_static and result_payload.status_code == 200 and body_bytes:
+        put_static_asset_to_cache(clean_sub, body_bytes, content_type)
+        resp_headers["Cache-Control"] = "public, max-age=604800, immutable"
+        resp_headers["X-Accel-Cache"] = "MISS-STORED"
+
     # 构造响应对象
     response = Response(
         content=body_bytes,
@@ -715,7 +835,7 @@ async def download_client_script(
         "intranet_base_url": cfg.get("target_base_url") or DEFAULT_TUNNEL_CONFIG["target_base_url"],
         "auth_username": cfg.get("auth_username") or "",
         "auth_password": cfg.get("auth_password") or "",
-        "concurrency": 6,
+        "concurrency": 16,
         "poll_timeout": 25,
     }
 

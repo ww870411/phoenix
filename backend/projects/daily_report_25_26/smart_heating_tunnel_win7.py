@@ -52,8 +52,8 @@ DEFAULT_CONFIG = {
     # 内网登录账号与密码（为空时使用网页端持久化配置）
     "auth_username": "",
     "auth_password": "",
-    # 并发轮询工作线程数 (推荐 4~8)
-    "concurrency": 6,
+    # 并发轮询工作线程数 (推荐 12~16 高速并发)
+    "concurrency": 16,
     # 轮询挂起超时秒数
     "poll_timeout": 25,
 }
@@ -67,6 +67,9 @@ def load_config():
                 saved = json.load(f)
                 cfg = dict(DEFAULT_CONFIG)
                 cfg.update(saved)
+                # 性能优化：自动将旧版本配置的并发数平滑升级至 16
+                if int(cfg.get("concurrency") or 0) < 12:
+                    cfg["concurrency"] = 16
                 return cfg
         except Exception as e:
             logger.warning("读取配置文件失败，使用内置配置: %s", e)

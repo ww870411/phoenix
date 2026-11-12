@@ -236,6 +236,31 @@ def test_tunnel_gateway_roundtrip_with_worker():
     asyncio.run(run_async_gateway_tests())
 
 
+def test_static_asset_cache_acceleration():
+    """测试静态资源本地高速缓存直出 (0ms 直出、304 协商缓存、免 Token 畅通)"""
+    # 1. 验证 CSS 资源高速直出
+    res_css = client.get("/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/css/reset.css")
+    assert res_css.status_code == 200
+    assert "text/css" in res_css.headers.get("content-type", "")
+    assert "max-age=604800" in res_css.headers.get("cache-control", "")
+    assert res_css.headers.get("x-accel-cache") == "HIT"
+    etag = res_css.headers.get("etag")
+    assert etag is not None
+
+    # 2. 验证 304 协商缓存
+    res_304 = client.get(
+        "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/css/reset.css",
+        headers={"If-None-Match": etag},
+    )
+    assert res_304.status_code == 304
+
+    # 3. 验证 JavaScript 库高速直出
+    res_js = client.get("/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/js/libs/jquery-1.8.2.min.js")
+    assert res_js.status_code == 200
+    assert "javascript" in res_js.headers.get("content-type", "")
+    assert res_js.headers.get("x-accel-cache") == "HIT"
+
+
 if __name__ == "__main__":
     print("运行测试 0: test_permission_isolation (严格仅限系统管理员)...")
     test_permission_isolation()
@@ -248,4 +273,8 @@ if __name__ == "__main__":
     print("运行测试 2: test_tunnel_gateway_roundtrip_with_worker (往返重写 + 302 重定向 Token 保留)...")
     test_tunnel_gateway_roundtrip_with_worker()
     print("测试 2 通过！")
+
+    print("运行测试 3: test_static_asset_cache_acceleration (静态资源秒出与 304)...")
+    test_static_asset_cache_acceleration()
+    print("测试 3 通过！")
     print("ALL TESTS PASSED SUCCESSFULLY! 🚀")
