@@ -1,3 +1,23 @@
+## 2026-11-12 智慧供热中继 JSON 格式保护 (杜绝 base 标签污染) 与全局 Canvas 兜底
+
+- **网关 HTML 注入安全屏障 (`projects/daily_report_25_26/api/smart_heating_tunnel.py`)**：
+  - **隔离 AJAX 与 JSON 接口**：严格检测 `X-Requested-With: XMLHttpRequest`、`Accept: application/json` 与响应体特征（`b"{"` / `b"["`），确保只有真正的 HTML 网页文档（含 `<!DOCTYPE` / `<html` / `<head`）才执行 `<base>` 和脚本注入；
+  - **解决 `Unexpected token '<', "<base href"... is not valid JSON`**：防止内网旧服务端返回 `Content-Type: text/html` 的动态 JSON 数据被强行拼接 `<base href>` 导致前端 `JSON.parse` 报错；
+  - **自动修正 JSON 响应类型**：对实质为 JSON 的数据修正 `Content-Type: application/json; charset=utf-8`。
+- **持久化全局 Canvas 兜底与子页面兼容 (`smart_heating_tunnel.py`)**：
+  - 注入单例持久缓存的 `_dummyCanvas` 元素与 Getter/Setter，兼容在 `document.body` 挂载前后的调用，彻底杜绝 `index.html:402` 报 `canvas is not defined`。
+- **自动化测试**：新增针对 JSON 接口保护测试用例，4 项自动化测试全部通过（4 passed in 5.00s）。
+
+## 2026-11-12 智慧供热中继 504 消除、jQuery 置顶预载与 canvas 兼容兜底
+
+- **网关 HTML 注入置顶 jQuery 核心与 canvas 属性兜底 (`projects/daily_report_25_26/api/smart_heating_tunnel.py`)**：
+  - 在 `<head>` 第一位同步注入 `<script src="{gateway_base}/static/js/libs/jquery-1.8.2.min.js"></script>`，确保在页面第 67 行内联脚本及 `cpjscsxb_js.js` 执行前 `$` 100% 准备就绪，彻底消除 11 个定时器反复触发的 `$ is not defined` 报错；
+  - 注入 `window.canvas` 动态 Getter 兜底，防止 `2index.html` 与 `index.html` 在 402 行直接访问未声明全局变量 `canvas` 导致报错。
+- **网关与客户端双端超时阈值扩容 (`smart_heating_tunnel.py` & `smart_heating_tunnel_win7.py`)**：
+  - 网关等待中继回传的超时时间由 35 秒放宽至 60 秒 (`timeout=60.0`)，彻底杜绝并发高峰期误报 504 Gateway Timeout；
+  - 客户端回传响应超时时间由 15 秒放宽至 35 秒。
+- **自动化测试**：4 项测试用例全部通过（4 passed in 4.26s）。
+
 ## 2026-11-12 智慧供热中继极速加速重构 (静态资源本地毫秒级直出 / 16 并发线程池)
 
 - **静态公共资源高速缓存引擎 (`projects/daily_report_25_26/api/smart_heating_tunnel.py`)**：

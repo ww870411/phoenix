@@ -187,6 +187,50 @@ async def run_async_gateway_tests():
         assert 'src="/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/img/logo.png"' in res_gw.text
         # 验证关键修复：Cookie 全域注入
         assert "phoenix_tunnel_admin_token=" in res_gw.headers.get("set-cookie", "")
+        # 验证全局 canvas 安全兜底已注入
+        assert "getSafeCanvas" in res_gw.text
+
+        # 1.1 测试 AJAX / JSON 接口坚决不注入 HTML 标签 (防止 JSON.parse 崩溃)
+        async def do_ajax_json_call():
+            return await ac.get(
+                f"/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/get_sz_data/2?_t=1794481959188&phoenix_token={ADMIN_TOKEN}",
+                headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json, text/javascript, */*; q=0.01"},
+            )
+
+        async def do_ajax_worker_call():
+            await asyncio.sleep(0.05)
+            poll_res = await ac.post(
+                "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/poll",
+                headers={"X-Tunnel-Secret": secret},
+                json={"worker_id": 1, "timeout": 5},
+            )
+            assert poll_res.status_code == 200
+            task = poll_res.json()["task"]
+            req_id = task["request_id"]
+            mock_json = json.dumps([{"id": "2", "name": "燃气炉", "FUHE": 10.5}])
+            mock_b64 = base64.b64encode(mock_json.encode("utf-8")).decode("ascii")
+
+            resp_res = await ac.post(
+                "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/respond",
+                headers={"X-Tunnel-Secret": secret},
+                json={
+                    "request_id": req_id,
+                    "status_code": 200,
+                    # 模拟内网某些旧框架将 JSON 错误返回为 text/html 的情况
+                    "headers": {"Content-Type": "text/html; charset=utf-8"},
+                    "body_b64": mock_b64,
+                },
+            )
+            assert resp_res.status_code == 200
+
+        res_ajax, _ = await asyncio.gather(do_ajax_json_call(), do_ajax_worker_call())
+        assert res_ajax.status_code == 200
+        # 核心断言：绝对不能含有 <base href 或 <script 标签，必须是可正常解析的 JSON
+        assert "<base href" not in res_ajax.text
+        assert "<script" not in res_ajax.text
+        parsed = json.loads(res_ajax.text)
+        assert len(parsed) == 1
+        assert parsed[0]["name"] == "燃气炉"
 
         # 2. 测试 302 重定向保留 phoenix_token 参数
         async def do_redirect_gateway_call():

@@ -1,5 +1,61 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-12 智慧供热中继 JSON 解析报错 (Unexpected token '<' / base href) 与 canvas 引用彻底修复
+
+- **需求背景与痛点排查**：
+  - 用户反馈：“似乎还有一些错误：`Uncaught SyntaxError: Unexpected token '<', "<base href"... is not valid JSON`；`2/api/v1/projects/.../1/js/index.html:402 Uncaught ReferenceError: canvas is not defined`；`sprites.png: 504`；`ry_ssxx/: 504`”。
+  - 经深入排查，发现以下根因：
+    1. **为什么 JSON 解析会报 `Unexpected token '<', "<base href"...`**：
+       - 内网服务端（旧版 Flask/Werkzeug）返回某些动态 API 数据（如 `/get_sz_data/2?_t=...`、`/ry_ssxx/`）时，HTTP 响应头中的 `Content-Type` 默认返回了 `text/html; charset=utf-8`；
+       - 原网关盲目检查 `if "text/html" in content_type:`，并因响应体中没有 `<head>` 标签而直接进入 `else:` 分支，将 `<base href="...">` 及脚本标签强行拼接在 JSON 数据最前端；
+       - 浏览器 jQuery 的 `$.getJSON` 或 `$.ajax({ dataType: 'json' })` 在执行 `JSON.parse` 时，解析到以 `<base href...` 开头的字符串，当场崩溃抛出 `Uncaught SyntaxError: Unexpected token '<'`。
+       - 并且，由于页面内 `cpjscsxb_js.js` 绑定了 11 个定时器不断重试拉取数据，JSON 崩溃阻断了回调执行，进而导致数百个 AJAX 请求在 1~2 秒内狂暴塞满中继长轮询队列，造成雪崩排队，引发后续 `sprites.png`、`ry_ssxx/` 发生 504 超时。
+    2. **为什么 `index.html:402` 报 `canvas is not defined`**：
+       - `...1/js/index.html` 子页面在加载时，第 402 行直接调用全局变量 `canvas.getContext('2d')`，若此时 DOM 尚未完成渲染或 ID 为 canvas 的节点不存在，旧式浏览器自动映射机制失效；
+       - 且如果 HTML 文档未携带标准 `<head>` 标签，原注入无法生效。
+- **具体改动与落地措施**：
+  1. **网关 HTML 注入强力安全屏障 (`smart_heating_tunnel.py`)**：
+     - **严格隔离 AJAX 与 JSON**：检查请求头 `X-Requested-With: XMLHttpRequest`、`Accept: application/json` 以及响应体首字节 `stripped_body.startswith((b"{", b"["))`；
+     - **真实 HTML 文档判别**：仅在响应体首部确实包含 `<!DOCTYPE`、`<html` 或 `<head` 且非 JSON/XHR 时，才允许注入 `<base>` 标签与劫持脚本；
+     - **JSON 响应类型自动校正**：对实际返回 JSON 结构的数据，统一纠正为 `application/json; charset=utf-8`，100% 杜绝 `<base href` 污染 JSON 数据。
+  2. **完善全局 Canvas 模拟与持久兜底 (`smart_heating_tunnel.py`)**：
+     - 注入单例持久缓存的 `_dummyCanvas` 元素与 Getter/Setter，兼容在 `document.body` 挂载前后的调用，彻底杜绝 `canvas is not defined`。
+  3. **中继并发调度提升 (`smart_heating_tunnel_win7.py`)**：
+     - Win7 客户端本地配置并发数平滑升级至 16 并发线程，消除请求积压与超时。
+- **验证与测试**：
+  - 后端自动化测试新增针对 AJAX/JSON 接口绝不注入 HTML 标签的断言，4 项测试全部通过（`python -m pytest`）；
+  - 前端生产环境构建验证通过（`npm run build`）。
+
+## 2026-11-12 智慧供热中继 504 超时与 $ is not defined / canvas 报错彻底修复
+
+- **需求背景与痛点排查**：
+  - 用户反馈：“在我的服务器上，显示了这些错误：`Failed to load resource: the server responded with a status of 504 ()`；`vindex/...:67 Uncaught ReferenceError: $ is not defined`；`cpjscsxb_js.js:13 Uncaught ReferenceError: $ is not defined`；`2index.html:402 Uncaught ReferenceError: canvas is not defined`；以及 `tsl_Data`、`rxjrlr_Data` 等 11 个定时器函数反复报 `$ is not defined`”。
+  - 经深入排查，准确定位四大根因：
+    1. **为什么出现 504 超时 (`Failed to load resource: status of 504`)**：
+       - 当用户打开 `vindex/` 主门户时，页面同时嵌套了 `2index.html` 与 `index.html` 两个内嵌页面，并加载了 `cpjscsxb_js.js`；
+       - 旧网关超时阈值仅为 35 秒，在并发请求洪峰或公网网络稍有抖动时，排在队列末尾的资源超过 35 秒即被网关直接掐断并向浏览器返回 HTTP 504 Gateway Timeout；
+       - 客户端回传响应给 Phoenix 的上传超时时间原仅为 15 秒，大数据包在弱网环境下容易触发异常。
+    2. **为什么出现 `$ is not defined` 级联雪崩**：
+       - 内网原始模板的 jQuery 脚本标签位于页面底部的第 1760 行；
+       - 但在页面头部的第 67 行处、以及 `cpjscsxb_js.js` 内部，过早调用了 `$` 与 `$.ajax`；
+       - 并且当底部的 jQuery 脚本碰巧因队列排队超时返回 504 时，整个页面的全局 `$` 完全未定义；
+       - 进而导致 `cpjscsxb_js.js` 内部绑定的 11 个定时轮询函数（`tsl_Data`、`rxjrlr_Data` 等）每隔 2 秒就疯狂报错一次 `$ is not defined`。
+    3. **为什么出现 `canvas is not defined`**：
+       - 在 `2index.html` 与 `index.html` 的第 402 行，代码采用了直接访问全局变量 `canvas.getContext('2d')` 的旧式写法（期望直接命中元素 ID 为 `canvas` 的 DOM 节点）；
+       - 在现代严格模式或跨域 iframe 渲染时，若 DOM 尚未挂载完毕，直接访问未声明的全局变量 `canvas` 会直接抛出 `Uncaught ReferenceError: canvas is not defined`。
+- **具体改动与落地措施**：
+  1. **网关 HTML 注入升级：`<head>` 同步置顶 jQuery 预加载与 canvas 全局兜底 (`smart_heating_tunnel.py`)**：
+     - 在网关向 HTML 页面注入的内容中，将 `<script src="{gateway_base}/static/js/libs/jquery-1.8.2.min.js"></script>` 置顶插入 `<head>` 第一位；
+     - 由于该资源已被本地静态引擎缓存（< 1ms 直出），确保在执行任何内联脚本、`cpjscsxb_js.js` 或定时函数前，全局 `$` 与 `jQuery` 100% 准备就绪，彻底杜绝 `$ is not defined`；
+     - 注入全局 `window.canvas` 动态 Getter 兜底：`Object.defineProperty(window, 'canvas', { get: () => document.getElementById('canvas') || document.querySelector('canvas') || document.createElement('canvas') })`，彻底解决 402 行 `canvas is not defined` 报错。
+  2. **延长超时容限杜绝 504 误掐断 (`smart_heating_tunnel.py` & `smart_heating_tunnel_win7.py`)**：
+     - 网关长轮询等待 Future 结果的超时阈值由 35 秒提升至 60 秒 (`timeout=60.0`)，从根本上防止高并发多子页面嵌套时误报 504；
+     - Win7 客户端回传响应给 Phoenix 端的 HTTP 超时时间由 15 秒放宽至 35 秒，增强公网传输稳健性。
+- **验证与测试**：
+  - 后端自动化测试全部通过（4 passed in 4.26s）；
+  - 生产容器在线验证：HTML 注入片段完整包含置顶 jQuery 与 canvas 兜底脚本；
+  - 前端生产构建 `npm run build` 成功。
+
 ## 2026-11-12 智慧供热中继访问极端缓慢排查修复：上线静态公共资源本地极速缓存引擎与 16 线程高速并发调度
 
 - **需求背景与痛点排查**：

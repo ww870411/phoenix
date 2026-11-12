@@ -495,9 +495,9 @@ async def gateway_reverse_proxy(
     # 推入排队队列
     await TUNNEL.request_queue.put(task_payload)
 
-    # 等待中继响应（最长等待 35 秒）
+    # 等待中继响应（最长等待 60 秒，防止高并发时超时 504）
     try:
-        result_payload: TunnelResponsePayload = await asyncio.wait_for(future, timeout=35.0)
+        result_payload: TunnelResponsePayload = await asyncio.wait_for(future, timeout=60.0)
     except asyncio.TimeoutError:
         TUNNEL.pending_futures.pop(req_id, None)
         return Response(
@@ -556,7 +556,30 @@ async def gateway_reverse_proxy(
     resp_headers["X-Frame-Options"] = "ALLOWALL"
 
     # 关键路径重写：HTML 内容正则重写 + Base 标签注入 + Ajax 全局拦截脚本
-    if "text/html" in content_type.lower():
+    # 核心安全屏障：严禁向 AJAX、JSON 数据接口或局部片段注入 HTML 标签，防止 JSON.parse 崩溃
+    stripped_body = body_bytes.strip()
+    is_json_body = stripped_body.startswith(b"{") or stripped_body.startswith(b"[")
+    is_xhr = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
+    is_json_accept = "application/json" in request.headers.get("accept", "").lower()
+
+    # 1. 如果响应体实质是 JSON，规范纠正 Content-Type 并绝对避免 HTML 注入
+    if is_json_body:
+        resp_headers["Content-Type"] = "application/json; charset=utf-8"
+
+    # 2. 判断是否为真正的完整 HTML 网页文档（必须具有 DOCTYPE、<html 或 <head，且非 AJAX/JSON）
+    is_html_type = (
+        "text/html" in content_type.lower()
+        or clean_sub.endswith(".html")
+        or clean_sub.endswith(".htm")
+    )
+    head_bytes = stripped_body[:512].lower()
+    has_html_doc = (
+        b"<!doctype" in head_bytes
+        or b"<html" in head_bytes
+        or b"<head" in head_bytes
+    )
+
+    if is_html_type and not is_json_body and not is_xhr and not is_json_accept and has_html_doc:
         try:
             html_text = body_bytes.decode("utf-8", errors="replace")
 
@@ -579,10 +602,40 @@ async def gateway_reverse_proxy(
                 html_text,
             )
 
-            # 2. 注入 base 标签与绝对路径全局 Ajax 拦截脚本（自动补全凭证）
+            # 2. 注入 base 标签、jQuery 核心预加载与全局脚本拦截劫持
             injection = f"""<base href="{gateway_prefix}">
+<script src="{gateway_base_clean}/static/js/libs/jquery-1.8.2.min.js"></script>
 <script>
 (function() {{
+    // 1. 全局 canvas 安全兜底：解决 2index.html / index.html 各类子页面未挂载 canvas 对象报 ReferenceError
+    var _dummyCanvas = null;
+    function getSafeCanvas() {{
+        var el = document.getElementById('canvas') || document.querySelector('canvas');
+        if (el) return el;
+        if (!_dummyCanvas) {{
+            _dummyCanvas = document.createElement('canvas');
+            _dummyCanvas.id = 'canvas';
+            _dummyCanvas.width = 300;
+            _dummyCanvas.height = 150;
+            _dummyCanvas.style.display = 'none';
+            if (document.body) {{
+                try {{ document.body.appendChild(_dummyCanvas); }} catch(e) {{}}
+            }}
+        }}
+        return _dummyCanvas;
+    }}
+    try {{
+        if (!('canvas' in window) || typeof window.canvas === 'undefined') {{
+            Object.defineProperty(window, 'canvas', {{
+                get: getSafeCanvas,
+                set: function(val) {{ _dummyCanvas = val; }},
+                configurable: true,
+                enumerable: true
+            }});
+        }}
+    }} catch(e) {{}}
+
+    // 2. 全局 Ajax 拦截：自动补充网关前缀与 phoenix_token 凭证
     var gBase = '{gateway_base_clean}';
     var gToken = '{token or ""}';
     var origOpen = XMLHttpRequest.prototype.open;
@@ -631,12 +684,18 @@ async def gateway_reverse_proxy(
 }})();
 </script>"""
 
-            if "<head>" in html_text:
-                html_text = html_text.replace("<head>", f"<head>\n{injection}\n", 1)
-            elif "<HEAD>" in html_text:
-                html_text = html_text.replace("<HEAD>", f"<HEAD>\n{injection}\n", 1)
+            # 3. 精准定位 <head> 或 <html> 标签进行注入，避免对非标准结构产生破坏
+            head_match = re.search(r"<head\b[^>]*>", html_text, re.IGNORECASE)
+            if head_match:
+                idx = head_match.end()
+                html_text = html_text[:idx] + "\n" + injection + "\n" + html_text[idx:]
             else:
-                html_text = f"{injection}\n{html_text}"
+                html_match = re.search(r"<html\b[^>]*>", html_text, re.IGNORECASE)
+                if html_match:
+                    idx = html_match.end()
+                    html_text = html_text[:idx] + "\n<head>\n" + injection + "\n</head>\n" + html_text[idx:]
+                else:
+                    html_text = f"{injection}\n{html_text}"
 
             body_bytes = html_text.encode("utf-8")
             resp_headers["Content-Type"] = "text/html; charset=utf-8"

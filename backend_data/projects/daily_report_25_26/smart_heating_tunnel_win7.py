@@ -68,7 +68,7 @@ def load_config():
                 cfg = dict(DEFAULT_CONFIG)
                 cfg.update(saved)
                 # 性能优化：自动将旧版本配置的并发数平滑升级至 16
-                if int(cfg.get("concurrency") or 0) < 12:
+                if int(cfg.get("concurrency") or 0) < 16:
                     cfg["concurrency"] = 16
                 return cfg
         except Exception as e:
@@ -226,7 +226,7 @@ def send_response_to_phoenix(result: dict):
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=35) as resp:
             pass
     except Exception as e:
         logger.error("回传响应到 Phoenix 失败 [%s]: %s", result.get("request_id"), e)
