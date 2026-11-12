@@ -34,9 +34,25 @@ router = APIRouter(prefix="/smart-heating-tunnel", tags=["smart_heating_tunnel"]
 public_router = APIRouter(prefix="/smart-heating-tunnel", tags=["smart_heating_tunnel"])
 
 
+def is_global_admin_user_session(session: AuthSession) -> bool:
+    """
+    【安全红线】：严格仅限 Global_admin / 超级管理员本人 (ww870411) 访问。
+    坚决排除 Group_admin、Unit_admin 以及其他任何角色。
+    """
+    if getattr(session, "username", "") == "ww870411":
+        return True
+    if getattr(session, "group", None) == "Global_admin":
+        return True
+    # 检查兼职组中是否包含 Global_admin
+    user_record = auth_manager._users_by_name.get(getattr(session, "username", ""))
+    if user_record and "Global_admin" in getattr(user_record, "groups", []):
+        return True
+    return False
+
+
 def verify_global_admin_access(request: Request) -> AuthSession:
     """
-    全链路强制仅限 Global_admin 访问：
+    全链路强制严格仅限 Global_admin (超级管理员本人) 访问：
     支持从 Header (Authorization: Bearer)、Query (?phoenix_token= 或 ?token=)、
     以及 Cookie (phoenix_tunnel_admin_token / token) 中提取身份凭据。
     非 Global_admin 或无凭据时直接抛出 HTTPException 403 阻断访问。
@@ -57,16 +73,18 @@ def verify_global_admin_access(request: Request) -> AuthSession:
         )
 
     if not token:
-        raise HTTPException(status_code=403, detail="智慧供热内网直通仅限 Global_admin 访问 (未提供身份凭证)")
+        raise HTTPException(status_code=403, detail="智慧供热内网直通严格仅限 Global_admin 访问 (未提供身份凭证)")
 
     try:
         session = auth_manager.require_session(token)
     except Exception:
         raise HTTPException(status_code=403, detail="身份认证已过期，请重新登录 Phoenix 后访问")
 
-    if getattr(session, "group", None) != "Global_admin":
-        raise HTTPException(status_code=403, detail="权限不足：智慧供热内网直通功能严格仅限 Global_admin 访问")
+    if not is_global_admin_user_session(session):
+        raise HTTPException(status_code=403, detail="权限不足：智慧供热内网直通功能严格仅限 Global_admin 本人访问")
 
+    # 存入 request.state 便于后续流程（如写回 Cookie 和 Location 保持）使用
+    request.state.admin_token = token
     return session
 
 # 数据持久化目录与配置文件
@@ -316,8 +334,18 @@ async def gateway_reverse_proxy(
             headers_dict[k] = v
 
     full_path = f"/{subpath}" if not subpath.startswith("/") else subpath
-    # 提取 query string
-    query_str = str(request.url.query)
+    # 提取 query string 并清理内部鉴权参数，避免内网平台收到无关参数
+    token = getattr(request.state, "admin_token", None) or getattr(session, "token", "")
+    raw_query = str(request.url.query)
+    clean_pairs = []
+    if raw_query:
+        for p in raw_query.split("&"):
+            if not p:
+                continue
+            k = p.split("=")[0].strip()
+            if k not in ("phoenix_token", "token", "_t"):
+                clean_pairs.append(p)
+    query_str = "&".join(clean_pairs)
 
     task_payload = {
         "request_id": req_id,
@@ -353,6 +381,7 @@ async def gateway_reverse_proxy(
     body_bytes = base64.b64decode(result_payload.body_b64) if result_payload.body_b64 else b""
 
     # 处理响应头
+    config = load_tunnel_config()
     resp_headers = {}
     content_type = ""
     gateway_prefix = "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/"
@@ -378,9 +407,12 @@ async def gateway_reverse_proxy(
             if loc.startswith(target_base):
                 loc = loc[len(target_base):]
             if loc.startswith("/"):
-                resp_headers[k] = f"{gateway_base_clean}/{loc.lstrip('/')}"
-            else:
-                resp_headers[k] = loc
+                loc = f"{gateway_base_clean}/{loc.lstrip('/')}"
+            # 关键修复：重定向时附带 phoenix_token，防止后续跳转请求丢失凭证导致 403 / 空白
+            if token and "phoenix_token=" not in loc:
+                delim = "&" if "?" in loc else "?"
+                loc = f"{loc}{delim}phoenix_token={token}"
+            resp_headers[k] = loc
         elif lk == "content-security-policy":
             # 清理 CSP 中的 frame-ancestors 避免阻断 iframe 呈现
             clean_csp = re.sub(r"frame-ancestors\s+[^;]+;?", "", v, flags=re.IGNORECASE)
@@ -410,11 +442,12 @@ async def gateway_reverse_proxy(
                 html_text,
             )
 
-            # 2. 注入 base 标签与绝对路径全局 Ajax 拦截脚本
+            # 2. 注入 base 标签与绝对路径全局 Ajax 拦截脚本（自动补全凭证）
             injection = f"""<base href="{gateway_prefix}">
 <script>
 (function() {{
     var gBase = '{gateway_base_clean}';
+    var gToken = '{token or ""}';
     var origOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url, async, user, password) {{
         if (typeof url === 'string') {{
@@ -422,6 +455,10 @@ async def gateway_reverse_proxy(
                 url = url.replace(/https?:\\/\\/192\\.168\\.1\\.206:6688/, gBase);
             }} else if (url.startsWith('/') && !url.startsWith(gBase)) {{
                 url = gBase + url;
+            }}
+            if (gToken && url.indexOf('phoenix_token=') === -1) {{
+                var d = url.indexOf('?') === -1 ? '?' : '&';
+                url = url + d + 'phoenix_token=' + encodeURIComponent(gToken);
             }}
         }}
         return origOpen.apply(this, arguments);
@@ -434,6 +471,10 @@ async def gateway_reverse_proxy(
                     input = input.replace(/https?:\\/\\/192\\.168\\.1\\.206:6688/, gBase);
                 }} else if (input.startsWith('/') && !input.startsWith(gBase)) {{
                     input = gBase + input;
+                }}
+                if (gToken && input.indexOf('phoenix_token=') === -1) {{
+                    var d = input.indexOf('?') === -1 ? '?' : '&';
+                    input = input + d + 'phoenix_token=' + encodeURIComponent(gToken);
                 }}
             }}
             return origFetch(input, init);
@@ -467,11 +508,11 @@ async def gateway_reverse_proxy(
         except Exception as e:
             logger.warning("CSS 内部 url 路径重写失败: %s", e)
 
-    # 携带管理员凭据 Cookie，使 iframe 子资源与异步请求无感鉴权
-    if getattr(session, "token", None):
+    # 携带管理员凭据 Cookie，使 iframe 子资源、新标签页与异步请求全域无感鉴权
+    if token:
         resp_headers["Set-Cookie"] = (
-            f"phoenix_tunnel_admin_token={session.token}; "
-            f"Path={gateway_base_clean}/; SameSite=Lax; HttpOnly"
+            f"phoenix_tunnel_admin_token={token}; "
+            f"Path=/; SameSite=Lax; Max-Age=2592000"
         )
 
     return Response(
@@ -548,18 +589,55 @@ async def get_tunnel_status(
     }
 
 
+def _get_client_script_template_path() -> Optional[Path]:
+    """
+    多路径探测中继客户端脚本模板位置：
+    1. 优先读取挂载数据卷目录中的客户端脚本：
+       phoenix/backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py (容器内为 /app/data/...)
+       确保宿主机挂载目录下修改后直接生效，无需重建 Docker 镜像。
+    2. 若挂载文件不存在，自动尝试从源码目录同步初始化一份至挂载数据卷并返回。
+    """
+    mounted_dir = (Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26").resolve()
+    mounted_file = mounted_dir / "smart_heating_tunnel_win7.py"
+
+    source_candidates = [
+        Path(__file__).resolve().parent.parent / "smart_heating_tunnel_win7.py",
+        Path(__file__).resolve().parent / "smart_heating_tunnel_win7.py",
+        Path("/app/backend/projects/daily_report_25_26/smart_heating_tunnel_win7.py"),
+    ]
+
+    # 1. 优先使用挂载文件夹下的脚本
+    if mounted_file.exists() and mounted_file.is_file():
+        return mounted_file
+
+    # 2. 若挂载文件不存在，尝试从源码中提取并自动写入挂载目录
+    for src in source_candidates:
+        if src.exists() and src.is_file():
+            try:
+                mounted_dir.mkdir(parents=True, exist_ok=True)
+                with open(src, "r", encoding="utf-8") as f_in, open(mounted_file, "w", encoding="utf-8") as f_out:
+                    f_out.write(f_in.read())
+                logger.info("已自动将中继客户端脚本初始化至挂载目录: %s", mounted_file)
+                return mounted_file
+            except Exception as e:
+                logger.warning("复制脚本至挂载目录失败: %s，直接使用源码模板", e)
+            return src
+
+    return None
+
+
 @public_router.get("/client-script", summary="动态生成并下载中继客户端脚本")
 async def download_client_script(
     request: Request,
 ):
     """
     根据当前系统的配置与请求域名，动态生成预填好配置的 smart_heating_tunnel_win7.py 客户端，
-    严格仅限 Global_admin 下载。
+    优先读取挂载目录 (backend_data/projects/daily_report_25_26/) 下的文件，严格仅限 Global_admin 下载。
     """
     verify_global_admin_access(request)
-    template_path = Path(__file__).resolve().parent.parent / "smart_heating_tunnel_win7.py"
-    if not template_path.exists():
-        raise HTTPException(status_code=404, detail="客户端模板文件不存在")
+    template_path = _get_client_script_template_path()
+    if not template_path or not template_path.exists():
+        raise HTTPException(status_code=404, detail="客户端脚本文件在挂载目录与源码中均不存在")
 
     with open(template_path, "r", encoding="utf-8") as f:
         script_content = f.read()

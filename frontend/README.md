@@ -1,3 +1,26 @@
+## 2026-11-12 日报填报提交行长度防御性切片修复 (解决普通用户提交水炉表 422 结构不一致问题)
+
+- **填报数据提交列结构对齐 (`src/projects/daily_report_25_26/pages/DataEntryView.vue`)**：
+  - 在 `handleSubmitStandard` 与 `buildPayloadForCachedState` 中，对最终构造的 `filledRows` 增加防御性切片处理：`newRow.slice(0, columns.length)`；
+  - 彻底杜绝模板源数据或前端缓存行长度超出表头列数时导致后端校验抛出 422 `表格单位、指标或列结构与模板不一致` 错误。
+- **构建验证**：运行 `npm run build`，1069 模块编译打包通过（耗时 23.96s，0 错误）。
+
+## 2026-11-12 智慧供热内网直通工作台体验与权限深度修复 (排版重构 / 全屏独立工作台 / 403 消除)
+
+- **权限严格收紧：仅限用户本人 Global_admin / ww870411 访问 (坚决排除 Group_admin 等其他角色)**：
+  - **Auth Store 精确校验 (`src/projects/daily_report_25_26/store/auth.js`)**：导出精确计算属性 `isGlobalAdmin`，精确比对 `user.username === 'ww870411' || user.group === 'Global_admin' || groups.includes('Global_admin')`，将 `Group_admin` 与其他角色坚决排除在外；
+  - **路由守卫拦截 (`src/router/index.js`)**：直通路由严格校验 `auth.isGlobalAdmin`，非用户本人直接阻断并重定向至 `/forbidden`；
+  - **入口大厅卡片隐藏 (`src/projects/daily_report_25_26/pages/PageSelectView.vue`)**：仅当 `auth.isGlobalAdmin` 时才渲染直通卡片，其他角色完全不可见。
+- **页面排版深度重构与双滚动条消除 (`SmartHeatingTunnelView.vue`)**：
+  - **视窗高度锁定与弹性自适应**：容器采用 `height: 100vh; overflow: hidden;`，移除了硬编码的大高度限制（`min-height: 780px` / `800px`），iframe 弹性填充剩余视口，彻底杜绝外层与内层双滚动条；
+  - **紧凑型现代控制栏 (52px)**：采用高质感深色玻璃拟态设计，左侧展示平台入口芯片与目标 Base URL，右侧收拢发光状态胶囊与紧凑型操作按钮组；
+  - **全新独立全屏工作台模式 (`?fullscreen=true`)**：
+    - 点击“↗ 新窗口打开”将以全屏工作台形式在新标签页中打开 Vue 页面；
+    - 全屏模式自动隐藏常规 `AppHeader` 与面包屑，提供 38px 极简悬浮工具条（包含返回常规模式、在线状态、一键刷新、平台设置及客户端下载）；
+    - 运行在已鉴权的 Phoenix 容器内，继承用户会话 Token，彻底解决新标签页直接打开后端网关因 302 重定向丢 Token 导致的白屏与 403 问题。
+  - **离线网络拓扑引导**：在中继离线时展示“外网平台 ── 办公电脑中继 ── 192.168.1.206”链路拓扑图与横向三步快速指引。
+- **构建验证**：运行 `npm run build`，1069 模块构建通过（耗时 20.94s，0 错误）。
+
 ## 2026-11-12 生产监控与看板新增“智慧供热内网直通”工作台
 
 - **新增直通页面 `src/projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue`**：

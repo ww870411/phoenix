@@ -255,17 +255,17 @@ class AuthSession:
 
 
     def to_user_payload(self) -> Dict[str, object]:
-
+        groups = (
+            [g.strip() for g in self.permissions.name.split(",") if g.strip()]
+            if getattr(self, "permissions", None) and self.permissions.name
+            else [self.group]
+        )
         return {
-
             "username": self.username,
-
             "group": self.group,
-
+            "groups": groups,
             "unit": self.unit,
-
             "hierarchy": self.hierarchy,
-
         }
 
 

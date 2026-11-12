@@ -196,7 +196,9 @@ function filterVisiblePages(list) {
 
 function withAdminExclusivePages(pageList, pKey, user) {
   let list = withDailyBriefPage(pageList, pKey, user)
-  const isGlobalAdmin = pKey === 'daily_report_25_26' && user?.group === 'Global_admin'
+  const isGlobalAdmin =
+    pKey === 'daily_report_25_26' &&
+    (auth.isGlobalAdmin || user?.group === 'Global_admin' || user?.username === 'ww870411')
   list = (Array.isArray(list) ? list : []).filter((p) => p.page_key !== 'smart_heating' && p.page_key !== 'smart_heating_tunnel')
   if (isGlobalAdmin) {
     list.push({

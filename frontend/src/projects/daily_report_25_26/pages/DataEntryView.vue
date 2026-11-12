@@ -2336,7 +2336,7 @@ function handleSubmitStandard() {
         newRow[ci] = record[key];
       }
     }
-    return newRow;
+    return newRow.slice(0, columns.value.length);
   });
 
   return {
@@ -2661,7 +2661,7 @@ function buildPayloadForCachedState(targetSheetKey, cached, currentSubmitTime) {
           newRow[ci] = record[key]
         }
       }
-      return newRow
+      return newRow.slice(0, cached.columns.length)
     })
     submissionData = {
       columns: cached.columns,

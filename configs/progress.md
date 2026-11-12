@@ -1,5 +1,75 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-12 北海热电厂水炉表填报提交 422 报错排查与彻底修复
+
+- **需求背景与痛点排查**：
+  - 用户反馈：“用户 `beihai_filler` 在提交每日数据时，可以上传能效报表，也能正确识别，但是再点击提交三张表时，显示‘提交完成：成功 2/3 张。失败：2.北海热电厂（水炉）表：{"detail":"表格单位、指标或列结构与模板不一致"}。成功表已入库，失败表内容已保留，请核对后重试。’而作为 `ww870411` 账户，就没有这个错误，你帮我排查一下”。
+  - 经深入全链路排查，定位三大核心根因：
+    1. **为什么 `ww870411` 没有报错**：
+       - `ww870411` 属于超级管理员组 `Global_admin`；
+       - 在后端普通数据提交校验方法 `validate_regular_submission`（`backend/projects/daily_report_25_26/services/data_correction.py`）中，首行代码为 `if actor.group == "Global_admin": return payload`，超管账户直接豁免了表格结构校验；而在入库阶段采用 `min(len(columns), len(row))` 切片，因此超管提交完全不受影响；
+    2. **为什么 `beihai_filler` 必定触发 422 错误**：
+       - `beihai_filler` 是北海单位填报员（`unit_filler`），必须经过 `validate_regular_submission` 的严格校验；
+       - 该校验会执行：`if not isinstance(row, list) or len(row) != len(headers) or row[:first_data] != expected[:first_data]: raise HTTPException(422, "表格单位、指标或列结构与模板不一致")`；
+       - 在模板配置文件 `backend_data/projects/daily_report_25_26/config/数据结构_基本指标表.json` 中，`BeiHai_water_boiler_Sheet`（2.北海热电厂（水炉）表）的列头共有 5 列：`["项目", "计量单位", "(本期日)", "(同期日)", "解释说明"]`（`len(headers) == 5`）；
+       - 然而，该表在历史配置时，第 0 行 `["供热量", "GJ", "", "", "", ""]` 误填了 4 个占位空串，元素总长度为 6（其余第 1~14 行均为 5 个元素）；
+       - 前端在向后端提交水炉表数据时，第 0 行也是 6 个元素，校验函数判定 `len(row) != len(headers)`（6 != 5），直接抛出 422 异常；
+    3. **前端缺少对行尾冗余元素的安全切片防御**：
+       - 前端 `DataEntryView.vue` 中的 `handleSubmitStandard` 与 `buildPayloadForCachedState` 在基于 `row` 构建提交数据时，直接浅拷贝 `[...row]`，未强制限制行长度等于当前有效列数 `columns.length`。
+- **具体改动与落地措施**：
+  1. **修正模板配置 (`backend_data/projects/daily_report_25_26/config/数据结构_基本指标表.json`)**：
+     - 将 `BeiHai_water_boiler_Sheet` 的第 0 行由 `["供热量", "GJ", "", "", "", ""]` 纠正为 `["供热量", "GJ", "", "", ""]`（长度恢复为 5），与列头及其他行完全一致；
+  2. **前端提交防御性列对齐 (`frontend/src/projects/daily_report_25_26/pages/DataEntryView.vue`)**：
+     - 在 `handleSubmitStandard` 与 `buildPayloadForCachedState` 中，对返回的每一行统一执行 `.slice(0, columns.length)`，确保提交给后端的数据行长度严格与列头一致，避免任何由于模板历史残留或脏数据导致的越界报错。
+- **验证与测试**：
+  - 后端 Python 模拟测试：使用 `beihai_filler` 与 `ww870411` 分别模拟提交，更新前 `beihai_filler` 100% 触发 422 异常，更新后两个用户全部校验成功（SUCCESS）；
+  - 数据修正单元测试 `pytest backend/projects/daily_report_25_26/tests/test_data_correction.py`：18 项全部通过（18 passed）；
+  - 前端生产构建 `npm --prefix frontend run build`：1069 个模块编译打包全部通过（耗时 23.96s，0 错误）。
+
+
+## 2026-11-12 智慧供热内网直通反向中继系统修复：解决系统管理员 403 误拦截、重定向丢失凭证导致的空白页及排版全面重构
+
+- **需求背景与痛点排查**：
+  - 用户反馈：“我是系统管理员，为何显示 403？另外，页面排版很差，新窗口打开也是空白，严肃修复”。
+  - 经深入全链路排查，定位三大核心根因：
+    1. **系统管理员身份判定过窄引发 403 误拦截**：
+       - 用户 `ww870411` 的所属单位为 `"系统管理员"`，角色为 `Global_admin`；同时系统中存在 `Group_admin` 等系统级管理角色；
+       - 原代码中后端 `verify_global_admin_access` 严格判定 `session.group == "Global_admin"`，忽略了 `Group_admin`、所属单位为 `"系统管理员"`、指定系统管理员账号以及兼职多角色组别列表；
+       - 前端 `SmartHeatingTunnelView.vue`、`PageSelectView.vue` 与 `router/index.js` 在本地 Hydration 期间或多角色并存时存在单一字符串对比，导致系统管理员进入时被路由守卫直接重定向至 `/forbidden` 或渲染 403 阻断视图；
+    2. **网关重定向与次级资源丢失凭证导致新窗口空白页**：
+       - 当用户点击“新窗口打开”直接访问 `/gateway/vindex/` 时，内网智慧供热平台通常会返回 302 Found 重定向到 `/vindex/login`；
+       - 旧网关在重写 `Location` 头时，**未保留 URL 中的 `phoenix_token` 参数**，且未在域名全域注入持久化 `Cookie: phoenix_tunnel_admin_token`；
+       - 导致浏览器跟随重定向或加载子页面内嵌的 `<script src="/vindex/static/js/app.js">` 等次级资源时，因缺失认证凭证全部触发 403 被阻断，单页面应用 (SPA) 无法挂载，呈现完全空白白屏；
+    3. **页面布局硬编码导致排版差与双滚动条**：
+       - 视窗与 iframe 硬编码固定最小高度（`min-height: 780px` / `800px`），导致外部视窗与内部 iframe 出现两层滚动条；
+       - 顶部控制栏按钮与状态胶囊在常规分辨率下折行混乱，离线引导区占位过大。
+- **具体改动与落地措施**：
+  1. **全链路严格锁定仅限用户本人 Global_admin / ww870411 访问 (`smart_heating_tunnel.py`、`auth_manager.py`、`auth.js`、`router/index.js`、`PageSelectView.vue`)**：
+     - 用户明确指示：“Global_admin 是我，仅限我”，坚决排除 `Group_admin`、`Unit_admin` 等其他角色；
+     - 后端引入 `is_global_admin_user_session`，严格精确锁定 `ww870411` 以及 `Global_admin` 角色，坚决排除 `Group_admin` 等其他管理员；
+     - `auth_manager.py` 的 `to_user_payload` 同步返回用户多角色 `groups` 列表；
+     - 前端 `auth` store 增加全局 `isGlobalAdmin` 统一计算属性（精确判定 `user.username === 'ww870411' || user.group === 'Global_admin' || groups.includes('Global_admin')`），路由守卫与看板卡片入口全面锁定，仅限用户本人可见与进入，彻底杜绝 403 误判与权限溢出；
+  2. **网关重定向凭证保持与全域 Cookie 注入 (`smart_heating_tunnel.py`)**：
+     - **302 Location 凭据无损继承**：在网关重写重定向地址时，自动补全 `phoenix_token` query 参数；
+     - **全域鉴权 Cookie 植入**：网关在返回响应时，统一注入 `phoenix_tunnel_admin_token={token}; Path=/; SameSite=Lax` Cookie，确保 CSS、JS、图片及 Ajax 请求全自动无感鉴权；
+     - **HTML 全局 Ajax / Fetch 自动拦截注入**：注入代码自动在所有异步调用中维持网关前缀与 `phoenix_token` 令牌，确保内网应用的所有子接口顺利穿透；
+  3. **页面排版重构与全屏独立工作台 (`SmartHeatingTunnelView.vue`)**：
+     - **彻底消除双滚动条**：采用现代工业看板自适应 Flex 布局（`height: 100vh; overflow: hidden;`），iframe 弹性填充剩余视口，无冗余外层滚动条；
+     - **紧凑型现代工具栏**：高度统一为 52px，左侧聚合入口信息与目标平台芯片，右侧整合发光脉冲状态胶囊与高精简按钮组；
+     - **支持独立全屏工作台模式 (`?fullscreen=true`)**：点击“↗ 新窗口打开”直接在新标签页启动全屏工作台，隐藏常规顶栏，提供极简 38px 悬浮控制条（含退出全屏、刷新、设置、客户端下载），满屏沉浸式呈现内网系统；
+     - **离线拓扑向导精细化**：设计“外网平台 ── 办公电脑中继 ── 内网系统”可视化链路拓扑，配以横向三步快速启动指引。
+- **修改文件**：
+  - `backend/projects/daily_report_25_26/api/smart_heating_tunnel.py`
+  - `backend/services/auth_manager.py`
+  - `backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py`
+  - `frontend/src/projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue`
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`
+  - `frontend/src/projects/daily_report_25_26/store/auth.js`
+  - `frontend/src/router/index.js`
+- **构建与测试验证**：
+  - 后端自动化测试 `python -m backend.projects.daily_report_25_26.tests.test_smart_heating_tunnel`：系统管理员鉴权隔离、配置与状态、任务长轮询往返、HTML 深度改写、Cookie 注入以及 302 重定向 Token 保持全部 100% 通过（0 错误）；
+  - 前端生产构建 `npm --prefix frontend run build`：1069 个模块编译打包全部通过，无任何语法或打包异常。
+
 ## 2026-11-12 智慧供热内网平台直通反向中继系统 (Phoenix Tunnel) 全栈落地与客户端自动打包分发
 
 - **需求背景与痛点**：
@@ -11,7 +81,9 @@
      - **全功能反向代理网关 (`/gateway/{subpath:path}`)**：接收前端 `iframe` 发起的对内网资源的所有请求，智能识别 `text/html` 并动态注入 `<base href="...">` 标签与根路径代理劫持脚本；深度结合 HAR 真实报文数据，实施 HTML 绝对路径 (`href="/static/..."` / `src="/static/..."`) 深度正则改写与 CSS 内部 `url(...)` 改写，重写 302 `Location` 跳转头并剥离 `X-Frame-Options` 嵌入限制，彻底杜绝外网样式丢失、静态资源 404 与跨域嵌入白屏；
      - **平台账号与中继持久化配置 (`tunnel_config.json`)**：支持在线维护内网目标地址、入口路径、平台登录用户名、密码（脱敏保护）与中继密钥；
      - **客户端脚本动态打包服务 (`/client-script`)**：根据当前服务器实际域名与用户配置，动态生成预注入参数的 Python 客户端脚本供一键下载。
-  2. **办公电脑 Win7 纯标准库客户端 (`smart_heating_tunnel_win7.py`)**：
+  2. **办公电脑 Win7 纯标准库客户端与 Docker 挂载数据卷存储 (`smart_heating_tunnel_win7.py`)**：
+     - **挂载文件夹维护**：将脚本存放于 Docker 绑定挂载目录 `backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`（容器内为 `/app/data/...`），宿主机用户无需进入容器或重建镜像即可实时维护脚本；
+     - **挂载优先探测与自动同步 (`_get_client_script_template_path`)**：服务端下载脚本时，优先读取挂载数据卷中的物理脚本；若全新部署时数据卷缺失该文件，自动将源码模板无感初始化复制至挂载目录，形成闭环自愈；
      - **100% Python 3.8 纯标准库**：采用 `urllib.request`、`threading` 与 `json` 编写，零第三方库依赖，Win7 双击即跑；
      - **多线程并发隧道**：支持 6 路并发工作线程拉取并转发请求，内置网络断线自愈与心跳保持。
   3. **前端生产监控看板直通工作台 (`SmartHeatingTunnelView.vue` & `PageSelectView.vue`)**：

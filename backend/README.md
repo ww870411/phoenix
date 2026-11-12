@@ -1,3 +1,28 @@
+## 2026-11-12 北海热电厂（水炉）表数据结构配置纠偏 (修复普通填报员提交 422 结构不一致错误)
+
+- **模板数据结构修复 (`backend_data/projects/daily_report_25_26/config/数据结构_基本指标表.json`)**：
+  - 排查定位 `BeiHai_water_boiler_Sheet`（2.北海热电厂（水炉）表）的第 0 行 `供热量` 误包含 6 个元素 `["供热量", "GJ", "", "", "", ""]`，而表头列只有 5 列（`len(headers) == 5`）；
+  - 将多余的空占位符剔除，纠偏为 5 个元素 `["供热量", "GJ", "", "", ""]`，与表头列数完全对齐；
+  - 彻底解决普通角色 `unit_filler` 提交时触发 `validate_regular_submission` 抛出 `HTTPException(422, "表格单位、指标或列结构与模板不一致")` 的问题；超管账户因具有豁免校验逻辑此前不受影响，修复后各角色提交表现统一规范。
+- **单元测试验证**：运行 `pytest backend/projects/daily_report_25_26/tests/test_data_correction.py`，18 个测试用例全部通过。
+
+## 2026-11-12 智慧供热内网直通反向代理网关深度修复 (仅限用户本人 Global_admin / 302 重定向 Token 保留 / 全域 Cookie 注入)
+
+- **权限严格锁定仅限用户本人 Global_admin / ww870411 (`projects/daily_report_25_26/api/smart_heating_tunnel.py`)**：
+  - **引入 `is_global_admin_user_session`**：严格锁定仅允许 `ww870411` 与组别为 `Global_admin` 的会话访问；
+  - **坚决排除其他管理员**：严防 `Group_admin`（集团管理员）、`Unit_admin`（单位管理员）或普通操作人员越权访问内网工业调度平台；
+  - 既保障了用户本人（`ww870411`）正常畅通访问，又彻底锁死权限红线。
+- **网关 302 重定向 Token 无损继承与全域 Cookie 注入 (`gateway_reverse_proxy`)**：
+  - **重定向 Location 补全 Token**：内网系统在未登录时常返回 302 跳转至 `/vindex/login`。网关重写 Location 地址时，自动继承请求中的 `phoenix_token` 参数（`?phoenix_token={token}`），避免后续跳转请求因缺失凭据导致 403 拒绝与空白白屏；
+  - **全域 `phoenix_tunnel_admin_token` Cookie 注入**：网关在返回响应时，统一注入全站 Cookie（`Path=/; SameSite=Lax; Max-Age=2592000`），确保浏览器加载 HTML 内嵌的 JS、CSS、图片、字体及 Ajax 异步请求时均自动携带管理员凭证，实现内网子页面与全功能无感直通；
+  - **清洗转发参数**：在转发给内网系统前，清理 query string 中的内部鉴权参数（如 `phoenix_token`、`token`、`_t`），避免内网平台收到无关参数。
+- **会话模型同步返回多角色 (`services/auth_manager.py`)**：
+  - 在 `AuthSession.to_user_payload()` 中新增 `groups` 列表字段，便于前后端统一准确识别多角色身份。
+- **自动化测试升级 (`projects/daily_report_25_26/tests/test_smart_heating_tunnel.py`)**：
+  - 引入 `httpx.AsyncClient` 进行并发异步网关测试，彻底消除跨线程队列死锁；
+  - 新增测试用例：系统管理员权限放行、非管理员 403 隔离、网关往返 HTML 重写与 Cookie 注入、302 重定向 Location Token 继承；
+  - 验证结果：全部测试 100% 通过（ALL TESTS PASSED SUCCESSFULLY! 🚀）。
+
 ## 2026-11-12 智慧供热内网平台直通反向代理隧道 (Tunnel & Gateway) 上线
 
 - **核心服务与网关 `projects/daily_report_25_26/api/smart_heating_tunnel.py`**：
@@ -18,6 +43,8 @@
     - 支持从 Authorization Header、Query 参数及 Cookie 中多维度提取并校验 Session；
     - 非 Global_admin 角色直接阻断并返回 403 页面/状态码，彻底杜绝工业调度内网向非管理人员泄露。
 - **Win7 办公机中继程序 `projects/daily_report_25_26/smart_heating_tunnel_win7.py`**：
+  - **存放于 Docker 挂载数据卷目录**：`backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`（映射至容器内 `/app/data/...`），宿主机用户无需进入容器或重建镜像即可实时维护脚本；
+  - **服务端挂载优先探测与自愈同步机制 (`_get_client_script_template_path`)**：动态下载时优先从挂载目录读取模板，缺失时自动复制初始化；
   - 100% 纯 Python 3.8 标准库（`urllib.request` / `threading` / `json`），零第三方外部依赖；
   - 具备 6 路并发工作线程长轮询能力与自动断线自愈重试机制。
 - **单元与集成测试 `projects/daily_report_25_26/tests/test_smart_heating_tunnel.py`**：

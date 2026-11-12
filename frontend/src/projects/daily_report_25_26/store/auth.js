@@ -211,6 +211,41 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
 
   const isAuthenticated = computed(() => Boolean(token.value))
   const isLoggedIn = computed(() => Boolean(token.value || user.value))
+
+  const isGlobalAdmin = computed(() => {
+    if (!user.value) return false
+    const g = String(user.value.group || '').trim()
+    const name = String(user.value.username || '').trim()
+    const groups = Array.isArray(user.value.groups)
+      ? user.value.groups.map((x) => String(x).trim())
+      : []
+    return (
+      g === 'Global_admin' ||
+      groups.includes('Global_admin') ||
+      name === 'ww870411'
+    )
+  })
+
+  const isSystemAdmin = computed(() => {
+    if (!user.value) return false
+    const g = String(user.value.group || '').trim()
+    const u = String(user.value.unit || '').trim()
+    const name = String(user.value.username || '').trim()
+    const groups = Array.isArray(user.value.groups)
+      ? user.value.groups.map((x) => String(x).trim())
+      : []
+    return (
+      g === 'Global_admin' ||
+      g === 'Group_admin' ||
+      groups.includes('Global_admin') ||
+      groups.includes('Group_admin') ||
+      u === '系统管理员' ||
+      name === 'ww870411' ||
+      name === 'admin' ||
+      Boolean(permissions.value?.actions?.can_access_admin_console)
+    )
+  })
+
   function normalizeProjectKey(projectKey) {
     return typeof projectKey === 'string' ? projectKey.trim() : ''
   }
@@ -421,6 +456,8 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     rememberLogin,
     isAuthenticated,
     isLoggedIn,
+    isGlobalAdmin,
+    isSystemAdmin,
     canSubmit,
     canApprove,
     canRevoke,

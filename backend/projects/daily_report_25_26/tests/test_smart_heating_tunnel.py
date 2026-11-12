@@ -51,9 +51,20 @@ auth_manager._sessions[NORMAL_USER_TOKEN] = auth_manager._build_session(
     persistent=False,
 )
 
+group_admin_record = auth_manager._users_by_name["group_admin"]
+GROUP_ADMIN_TOKEN = "mock_test_group_admin_token_2026"
+auth_manager._sessions[GROUP_ADMIN_TOKEN] = auth_manager._build_session(
+    record=group_admin_record,
+    group_permissions=auth_manager._groups[group_admin_record.group],
+    token=GROUP_ADMIN_TOKEN,
+    issued_at=auth_manager._now(),
+    expires_at=None,
+    persistent=False,
+)
+
 
 def test_permission_isolation():
-    """测试 Global_admin 权限强隔离"""
+    """测试 Global_admin 权限强隔离：严格仅限 Global_admin / ww870411 访问"""
     # 1. 未登录/无 Token 访问：一律 403
     res_no_auth = client.get("/api/v1/projects/daily_report_25_26/smart-heating-tunnel/status")
     assert res_no_auth.status_code == 403
@@ -77,6 +88,14 @@ def test_permission_isolation():
     )
     assert res_normal_gw.status_code == 403
 
+    # 3. Group_admin (集团管理员) 访问：一律 403 阻断（严格仅限 Global_admin / ww870411 本人）
+    res_group_admin = client.get(
+        "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/status",
+        headers={"Authorization": f"Bearer {GROUP_ADMIN_TOKEN}"},
+    )
+    assert res_group_admin.status_code == 403
+    assert "Global_admin" in res_group_admin.text
+
 
 def test_tunnel_config_and_status():
     """测试 Global_admin 正常读取状态、配置与下载脚本"""
@@ -99,36 +118,25 @@ def test_tunnel_config_and_status():
     assert "intranet_base_url" in script_text
 
 
-def test_tunnel_gateway_roundtrip_with_worker():
-    """
-    模拟测试：
-    1. 办公机 Worker 进行长轮询
-    2. Global_admin 请求网关
-    3. Worker 成功拉取请求并回传 HTML 响应
-    4. 网关拦截并成功注入 <base> 标签与绝对路径重写
-    """
-    secret = DEFAULT_TUNNEL_CONFIG["tunnel_secret"]
+import httpx
 
-    # 1. 模拟中继心跳
+async def run_async_gateway_tests():
+    """使用 httpx.AsyncClient 异步并发测试网关往返与 302 重定向 Token 保留"""
+    secret = DEFAULT_TUNNEL_CONFIG["tunnel_secret"]
     TUNNEL.record_heartbeat("192.168.1.100", worker_id=1)
     assert TUNNEL.is_online() is True
 
-    # 2. 模拟并发协程发送网关请求，另一个协程拉取并响应
-    async def run_roundtrip():
-        # 外部浏览器携带 Admin Token 请求网关
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        # 1. 测试往返 HTML 重写与 Cookie 注入
         async def do_gateway_call():
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(
-                None,
-                lambda: client.get(
-                    f"/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/vindex/index.html?phoenix_token={ADMIN_TOKEN}"
-                ),
+            return await ac.get(
+                f"/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/vindex/index.html?phoenix_token={ADMIN_TOKEN}"
             )
 
-        # 办公电脑 Worker 轮询并响应
-        async def do_worker_loop():
-            await asyncio.sleep(0.1)
-            poll_res = client.post(
+        async def do_worker_call():
+            await asyncio.sleep(0.05)
+            poll_res = await ac.post(
                 "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/poll",
                 headers={"X-Tunnel-Secret": secret},
                 json={"worker_id": 1, "timeout": 5},
@@ -153,7 +161,7 @@ def test_tunnel_gateway_roundtrip_with_worker():
 </html>"""
             mock_b64 = base64.b64encode(mock_html.encode("utf-8")).decode("ascii")
 
-            resp_res = client.post(
+            resp_res = await ac.post(
                 "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/respond",
                 headers={"X-Tunnel-Secret": secret},
                 json={
@@ -166,10 +174,7 @@ def test_tunnel_gateway_roundtrip_with_worker():
             assert resp_res.status_code == 200
             assert resp_res.json().get("ok") is True
 
-        gateway_task = asyncio.create_task(do_gateway_call())
-        worker_task = asyncio.create_task(do_worker_loop())
-
-        res_gw, _ = await asyncio.gather(gateway_task, worker_task)
+        res_gw, _ = await asyncio.gather(do_gateway_call(), do_worker_call())
         assert res_gw.status_code == 200
         assert "text/html" in res_gw.headers.get("content-type", "")
         # 验证是否成功注入了 <base href="...">
@@ -180,20 +185,63 @@ def test_tunnel_gateway_roundtrip_with_worker():
         assert 'href="/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/css/reset.css?v=1"' in res_gw.text
         assert 'src="/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/js/app.js"' in res_gw.text
         assert 'src="/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/img/logo.png"' in res_gw.text
+        # 验证关键修复：Cookie 全域注入
+        assert "phoenix_tunnel_admin_token=" in res_gw.headers.get("set-cookie", "")
 
-    asyncio.run(run_roundtrip())
+        # 2. 测试 302 重定向保留 phoenix_token 参数
+        async def do_redirect_gateway_call():
+            return await ac.get(
+                f"/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/vindex/?phoenix_token={ADMIN_TOKEN}",
+                follow_redirects=False,
+            )
+
+        async def do_redirect_worker_call():
+            await asyncio.sleep(0.05)
+            poll_res = await ac.post(
+                "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/poll",
+                headers={"X-Tunnel-Secret": secret},
+                json={"worker_id": 1, "timeout": 5},
+            )
+            assert poll_res.status_code == 200
+            task = poll_res.json()["task"]
+            req_id = task["request_id"]
+
+            resp_res = await ac.post(
+                "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/respond",
+                headers={"X-Tunnel-Secret": secret},
+                json={
+                    "request_id": req_id,
+                    "status_code": 302,
+                    "headers": {"Location": "/vindex/login"},
+                    "body_b64": "",
+                },
+            )
+            assert resp_res.status_code == 200
+
+        res_redir, _ = await asyncio.gather(do_redirect_gateway_call(), do_redirect_worker_call())
+        assert res_redir.status_code == 302
+        loc = res_redir.headers.get("location", "")
+        assert "/smart-heating-tunnel/gateway/vindex/login" in loc
+        # 验证必须携带 phoenix_token 避免后续跳转 403 / 空白
+        assert f"phoenix_token={ADMIN_TOKEN}" in loc
+        assert "phoenix_tunnel_admin_token=" in res_redir.headers.get("set-cookie", "")
+
+
+def test_tunnel_gateway_roundtrip_with_worker():
+    """包装为同步测试函数"""
+    asyncio.run(run_async_gateway_tests())
 
 
 if __name__ == "__main__":
-    print("运行测试 0: test_permission_isolation (严格仅限 Global_admin)...")
+    print("运行测试 0: test_permission_isolation (严格仅限系统管理员)...")
     test_permission_isolation()
-    print("测试 0 通过！非 Global_admin 访问 100% 被 403 阻断！")
+    print("测试 0 通过！非系统管理员访问 100% 被 403 阻断！")
 
     print("运行测试 1: test_tunnel_config_and_status...")
     test_tunnel_config_and_status()
     print("测试 1 通过！")
 
-    print("运行测试 2: test_tunnel_gateway_roundtrip_with_worker...")
+    print("运行测试 2: test_tunnel_gateway_roundtrip_with_worker (往返重写 + 302 重定向 Token 保留)...")
     test_tunnel_gateway_roundtrip_with_worker()
     print("测试 2 通过！")
     print("ALL TESTS PASSED SUCCESSFULLY! 🚀")
