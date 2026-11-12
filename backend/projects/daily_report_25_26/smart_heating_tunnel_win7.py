@@ -100,6 +100,36 @@ INTRANET_OPENER = urllib.request.build_opener(NoRedirectHandler(), COOKIE_HANDLE
 
 # 停止事件
 STOP_EVENT = threading.Event()
+PHOENIX_CONNECTION = threading.local()
+
+
+def post_phoenix_json(endpoint, payload, timeout):
+    """每个工作线程复用一条公网连接，poll/respond 不再重复建立 TCP/TLS。"""
+    parsed = urllib.parse.urlsplit(CONFIG["phoenix_server_url"])
+    connection = getattr(PHOENIX_CONNECTION, "connection", None)
+    if connection is None:
+        connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+        connection = connection_type(parsed.hostname, parsed.port, timeout=timeout)
+        PHOENIX_CONNECTION.connection = connection
+    connection.timeout = timeout
+    if connection.sock is not None:
+        connection.sock.settimeout(timeout)
+    path = parsed.path.rstrip("/") + "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/" + endpoint
+    try:
+        connection.request("POST", path, body=payload, headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "X-Tunnel-Secret": CONFIG["tunnel_secret"],
+        })
+        response = connection.getresponse()
+        body = response.read()
+        if response.status != 200:
+            raise urllib.error.HTTPError(path, response.status, response.reason, response.headers, None)
+        return json.loads(body.decode("utf-8"))
+    except Exception:
+        # 失败连接释放后交由现有工作循环处理，不自动重发业务请求。
+        connection.close()
+        PHOENIX_CONNECTION.connection = None
+        raise
 
 
 def make_full_intranet_url(path_or_url: str) -> str:
@@ -211,23 +241,11 @@ def execute_intranet_request(task: dict) -> dict:
 
 def send_response_to_phoenix(result: dict):
     """将内网响应结果回传给 Phoenix 云端隧道"""
-    server_base = CONFIG["phoenix_server_url"].rstrip("/")
-    respond_url = f"{server_base}/api/v1/projects/daily_report_25_26/smart-heating-tunnel/respond"
-
     payload_bytes = json.dumps(result, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
-        url=respond_url,
-        data=payload_bytes,
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "X-Tunnel-Secret": CONFIG["tunnel_secret"],
-        },
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=35) as resp:
-            pass
+        reply = post_phoenix_json("respond", payload_bytes, timeout=35)
+        if not reply["ok"]:
+            logger.info("请求已结束，丢弃迟到响应 [%s]", result["request_id"])
     except Exception as e:
         logger.error("回传响应到 Phoenix 失败 [%s]: %s", result.get("request_id"), e)
 
@@ -236,7 +254,6 @@ def poll_worker_loop(worker_id: int):
     """单个并发轮询工作线程"""
     logger.info("中继工作线程 #%d 已启动", worker_id)
     server_base = CONFIG["phoenix_server_url"].rstrip("/")
-    poll_url = f"{server_base}/api/v1/projects/daily_report_25_26/smart-heating-tunnel/poll"
 
     poll_payload = json.dumps(
         {
@@ -251,34 +268,12 @@ def poll_worker_loop(worker_id: int):
 
     while not STOP_EVENT.is_set():
         try:
-            req = urllib.request.Request(
-                url=poll_url,
-                data=poll_payload,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "X-Tunnel-Secret": CONFIG["tunnel_secret"],
-                },
-                method="POST",
-            )
-
-            # 超时时间比服务端的挂起时间长 5 秒
-            with urllib.request.urlopen(req, timeout=CONFIG["poll_timeout"] + 5) as resp:
-                resp_bytes = resp.read()
-                fail_count = 0  # 成功连通重置失败计数
-
-                if not resp_bytes:
-                    continue
-
-                data = json.loads(resp_bytes.decode("utf-8"))
-                if not data.get("has_task"):
-                    # 正常无任务长轮询返回，继续下一轮
-                    continue
-
-                task = data.get("task")
-                if task and task.get("request_id"):
-                    # 收到外网转发任务，立即在局域网内请求并回传
-                    result = execute_intranet_request(task)
-                    send_response_to_phoenix(result)
+            data = post_phoenix_json("poll", poll_payload, timeout=CONFIG["poll_timeout"] + 5)
+            fail_count = 0
+            if not data["has_task"]:
+                continue
+            result = execute_intranet_request(data["task"])
+            send_response_to_phoenix(result)
 
         except urllib.error.HTTPError as e:
             fail_count += 1
@@ -287,12 +282,12 @@ def poll_worker_loop(worker_id: int):
                 time.sleep(10)
             else:
                 logger.warning("轮询服务异常 (HTTP %s): %s", e.code, e.reason)
-                time.sleep(3)
+                time.sleep(20 if e.code == 429 else 2)
         except urllib.error.URLError as e:
             fail_count += 1
             if fail_count <= 3 or fail_count % 10 == 0:
                 logger.warning("无法连接 Phoenix 服务器 (%s): %s (将自动重试)", server_base, e.reason)
-            time.sleep(3)
+            time.sleep(2)
         except Exception as e:
             fail_count += 1
             logger.error("轮询异常 (线程 #%d): %s", worker_id, e)
@@ -323,6 +318,7 @@ def main():
     print(f" 目标内网系统: {CONFIG['intranet_base_url']}")
     print(f" 云端中继地址: {CONFIG['phoenix_server_url']}")
     print(f" 并发轮询通道: {CONFIG['concurrency']} 个线程")
+    print(f" 配置来源: {CONFIG_FILE}（存在时覆盖脚本内置配置）")
     print("=" * 70)
 
     # 1. 测试内网平台连通

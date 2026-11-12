@@ -286,7 +286,7 @@ def test_static_asset_cache_acceleration():
     res_css = client.get("/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/static/css/reset.css")
     assert res_css.status_code == 200
     assert "text/css" in res_css.headers.get("content-type", "")
-    assert "max-age=604800" in res_css.headers.get("cache-control", "")
+    assert "max-age=3600" in res_css.headers.get("cache-control", "")
     assert res_css.headers.get("x-accel-cache") == "HIT"
     etag = res_css.headers.get("etag")
     assert etag is not None

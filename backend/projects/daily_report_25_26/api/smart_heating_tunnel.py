@@ -16,12 +16,14 @@ import hashlib
 import json
 import logging
 import mimetypes
+import os
 import re
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -111,30 +113,40 @@ FALLBACK_STATIC_CACHE_DIR = (Path(__file__).parent.parent / "smart_heating_stati
 
 # 静态资源内存高速缓存字典：clean_path -> (body_bytes, mime, etag)
 STATIC_MEMORY_CACHE: Dict[str, Tuple[bytes, str, str]] = {}
+STATIC_CACHE_TIMES: Dict[str, float] = {}
+STATIC_CACHE_TTL = 3600
+STATIC_BROWSER_CACHE = "public, max-age=3600"
+TUNNEL_REQUEST_TIMEOUT = 60.0
 
 
-def get_static_asset_from_cache(clean_path: str) -> Optional[Tuple[bytes, str, str]]:
+def get_static_asset_from_cache(clean_path: str, allow_fallback: bool = True, fallback_path: Optional[str] = None) -> Optional[Tuple[bytes, str, str]]:
     """从内存或本地磁盘高速加载静态资源"""
     # 1. 内存字典秒查
     if clean_path in STATIC_MEMORY_CACHE:
-        return STATIC_MEMORY_CACHE[clean_path]
+        if time.time() - STATIC_CACHE_TIMES[clean_path] < STATIC_CACHE_TTL:
+            return STATIC_MEMORY_CACHE[clean_path]
+        return None
 
     # 2. 检查主数据卷与备选代码目录
     p_primary = STATIC_CACHE_DIR / clean_path
-    p_fallback = FALLBACK_STATIC_CACHE_DIR / clean_path
+    p_fallback = FALLBACK_STATIC_CACHE_DIR / (fallback_path or clean_path)
     target_p = None
     if p_primary.is_file():
         target_p = p_primary
-    elif p_fallback.is_file():
+    elif allow_fallback and p_fallback.is_file():
         target_p = p_fallback
 
     if target_p and target_p.is_file():
+        cached_at = target_p.stat().st_mtime if target_p == p_primary else time.time()
+        if time.time() - cached_at >= STATIC_CACHE_TTL:
+            return None
         try:
             body = target_p.read_bytes()
             mime, _ = mimetypes.guess_type(target_p.name)
             mime = mime or "application/octet-stream"
             etag = f'"{hashlib.md5(body).hexdigest()}"'
             STATIC_MEMORY_CACHE[clean_path] = (body, mime, etag)
+            STATIC_CACHE_TIMES[clean_path] = cached_at
             return (body, mime, etag)
         except Exception as e:
             logger.warning("读取静态资源缓存失败 [%s]: %s", clean_path, e)
@@ -153,6 +165,7 @@ def put_static_asset_to_cache(clean_path: str, body: bytes, content_type: str = 
             mime = guessed or "application/octet-stream"
         etag = f'"{hashlib.md5(body).hexdigest()}"'
         STATIC_MEMORY_CACHE[clean_path] = (body, mime, etag)
+        STATIC_CACHE_TIMES[clean_path] = time.time()
     except Exception as e:
         logger.warning("写入静态资源缓存失败 [%s]: %s", clean_path, e)
 
@@ -206,6 +219,41 @@ class TunnelManager:
         self.last_heartbeat: Optional[float] = None
         self.client_ip: Optional[str] = None
         self.active_workers: Dict[int, float] = {}
+        self.static_inflight: Dict[str, asyncio.Task] = {}
+        self.dispatched_at: Dict[str, float] = {}
+        self.queue_times: Dict[str, float] = {}
+
+    async def dispatch(self, task: dict, static_key: Optional[str] = None):
+        """同一静态资源只回源一次；每个浏览器请求独立等待共享结果。"""
+        if not static_key:
+            return await self._dispatch(task)
+        shared = self.static_inflight.get(static_key)
+        if shared is None:
+            shared = asyncio.create_task(self._dispatch(task))
+            self.static_inflight[static_key] = shared
+
+            def finished(done):
+                self.static_inflight.pop(static_key)
+                if not done.cancelled():
+                    done.exception()  # 所有浏览器均离开时，仍完成任务异常的回收。
+
+            shared.add_done_callback(finished)
+        return await asyncio.shield(shared)
+
+    async def _dispatch(self, task: dict):
+        """请求生命周期只由队列任务管理，静态请求的单个调用者取消不影响其他等待者。"""
+        request_id = task["request_id"]
+        future = asyncio.get_running_loop().create_future()
+        self.pending_futures[request_id] = future
+        await self.request_queue.put(task)
+        try:
+            return await asyncio.wait_for(future, timeout=TUNNEL_REQUEST_TIMEOUT)
+        finally:
+            self.pending_futures.pop(request_id, None)
+            self.dispatched_at.pop(request_id, None)
+            self.queue_times.pop(request_id, None)
+            if not future.done():
+                future.cancel()
 
     def record_heartbeat(self, client_ip: str, worker_id: int = 1):
         self.last_heartbeat = time.time()
@@ -238,6 +286,8 @@ class TunnelResponsePayload(BaseModel):
     cookies: Optional[List[str]] = Field(default_factory=list, description="内网返回的所有 Set-Cookie 列表")
     body_b64: Optional[str] = Field("", description="Base64 编码的响应体")
     duration_ms: Optional[int] = Field(0, description="内网执行耗时")
+    queue_ms: float = Field(0, description="服务端排队耗时")
+    relay_ms: float = Field(0, description="任务派发至回传耗时，包含内网请求")
 
 
 class TunnelConfigUpdateRequest(BaseModel):
@@ -279,8 +329,19 @@ async def poll_tunnel_task(
     timeout = min(max(payload.timeout or 25, 5), 30)
 
     try:
-        task = await asyncio.wait_for(TUNNEL.request_queue.get(), timeout=float(timeout))
-        return {"has_task": True, "task": task}
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return {"has_task": False, "task": None}
+            task = await asyncio.wait_for(TUNNEL.request_queue.get(), timeout=remaining)
+            future = TUNNEL.pending_futures.get(task["request_id"])
+            # 已取消或超时的浏览器请求不再占用办公电脑执行通道。
+            if future is not None and not future.done():
+                TUNNEL.dispatched_at[task["request_id"]] = time.time()
+                task["queue_ms"] = (time.time() - task["created_at"]) * 1000
+                TUNNEL.queue_times[task["request_id"]] = task["queue_ms"]
+                return {"has_task": True, "task": task}
     except asyncio.TimeoutError:
         return {"has_task": False, "task": None}
 
@@ -300,6 +361,9 @@ async def respond_tunnel_task(
     req_id = payload.request_id
     future = TUNNEL.pending_futures.get(req_id)
     if future and not future.done():
+        dispatched = TUNNEL.dispatched_at[req_id]
+        payload.queue_ms = TUNNEL.queue_times[req_id]
+        payload.relay_ms = (time.time() - dispatched) * 1000
         future.set_result(payload)
         return {"ok": True, "message": "响应已分发"}
 
@@ -326,6 +390,8 @@ async def gateway_reverse_proxy(
     对于 HTML 内容，自动注入 <base> 标签和 URL 代理劫持脚本，防止相对路径与根路径资源 404。
     【安全红线】：严格仅限 Global_admin 用户访问。
     """
+    started_at = time.perf_counter()
+    config = load_tunnel_config()
     clean_sub = subpath.lstrip("/").split("?")[0]
     # 判断是否为静态公共资源（JS、CSS、图片、字体、图标）
     is_static = (
@@ -346,9 +412,22 @@ async def gateway_reverse_proxy(
         ):
             clean_sub = candidate_static
 
-    # 1. 静态资源本地极速缓存直出（0ms 响应，完全不占用中继通道与并发队列）
+    # 按目标平台与资源版本隔离缓存；查询顺序不影响命中，认证参数不参与资源标识。
+    asset_query = urlencode(sorted(
+        (k, v) for k, v in request.query_params.multi_items()
+        if k not in ("phoenix_token", "token")
+    ))
+    namespace = hashlib.sha256(
+        f"{config['target_base_url']}?{asset_query}".encode("utf-8")
+    ).hexdigest()[:24]
+    cache_key = f"v2/{namespace}/{clean_sub}"
+    # 仓库预置资源来自 configs/192.168.1.206(工况一览).har，CSS 的已知版本为 v=1。
+    allow_seed = config["target_base_url"] == DEFAULT_TUNNEL_CONFIG["target_base_url"] and asset_query in ("", "v=1")
+    static_get = is_static and request.method == "GET"
+
+    # 1. 静态资源命中时跳过中继；HEAD 不传输正文。
     if is_static and request.method in ("GET", "HEAD"):
-        cached = get_static_asset_from_cache(clean_sub)
+        cached = get_static_asset_from_cache(cache_key, allow_seed, clean_sub)
         if cached:
             cached_bytes, cached_mime, cached_etag = cached
             if_none_match = request.headers.get("if-none-match")
@@ -357,20 +436,22 @@ async def gateway_reverse_proxy(
                     status_code=304,
                     headers={
                         "ETag": cached_etag,
-                        "Cache-Control": "public, max-age=604800, immutable",
+                        "Cache-Control": STATIC_BROWSER_CACHE,
                         "Access-Control-Allow-Origin": "*",
                     },
                 )
             return Response(
-                content=cached_bytes,
+                content=cached_bytes if request.method == "GET" else b"",
                 status_code=200,
                 media_type=cached_mime,
                 headers={
                     "Content-Type": f"{cached_mime}; charset=utf-8" if "text" in cached_mime or "javascript" in cached_mime else cached_mime,
-                    "Cache-Control": "public, max-age=604800, immutable",
+                    "Cache-Control": STATIC_BROWSER_CACHE,
                     "ETag": cached_etag,
                     "Access-Control-Allow-Origin": "*",
                     "X-Accel-Cache": "HIT",
+                    "Content-Length": str(len(cached_bytes)),
+                    "Server-Timing": f"cache;dur={(time.perf_counter() - started_at) * 1000:.1f}",
                 },
             )
 
@@ -446,6 +527,8 @@ async def gateway_reverse_proxy(
     headers_dict = {}
     for k, v in request.headers.items():
         if k.lower() not in {"host", "content-length", "connection"}:
+            if static_get and k.lower() in {"if-none-match", "if-modified-since"}:
+                continue  # 缓存过期后完整取回一次，避免 304 无正文使缓存无法更新。
             headers_dict[k] = v
 
     # 清洗请求 Cookie：过滤掉仅供 Phoenix 网关使用的内部 token，仅透传属于内网平台的会话 cookie (如 session=...)
@@ -488,31 +571,21 @@ async def gateway_reverse_proxy(
         "created_at": time.time(),
     }
 
-    loop = asyncio.get_running_loop()
-    future = loop.create_future()
-    TUNNEL.pending_futures[req_id] = future
-
-    # 推入排队队列
-    await TUNNEL.request_queue.put(task_payload)
-
-    # 等待中继响应（最长等待 60 秒，防止高并发时超时 504）
     try:
-        result_payload: TunnelResponsePayload = await asyncio.wait_for(future, timeout=60.0)
+        result_payload: TunnelResponsePayload = await TUNNEL.dispatch(
+            task_payload, cache_key if static_get else None,
+        )
     except asyncio.TimeoutError:
-        TUNNEL.pending_futures.pop(req_id, None)
         return Response(
             content="Tunnel Relay Gateway Timeout (办公电脑请求内网响应超时)".encode("utf-8"),
             status_code=504,
             media_type="text/plain; charset=utf-8",
         )
-    finally:
-        TUNNEL.pending_futures.pop(req_id, None)
 
     # 处理二进制响应
     body_bytes = base64.b64decode(result_payload.body_b64) if result_payload.body_b64 else b""
 
     # 处理响应头
-    config = load_tunnel_config()
     resp_headers = {}
     content_type = ""
     gateway_prefix = "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/"
@@ -602,8 +675,16 @@ async def gateway_reverse_proxy(
                 html_text,
             )
 
-            # 2. 注入 base 标签、jQuery 核心预加载与全局脚本拦截劫持
-            injection = f"""<base href="{gateway_prefix}">
+            # 同一文档只加载一次此版本 jQuery，保留置顶顺序满足旧页面内联脚本依赖。
+            html_text = re.sub(
+                r'<script\b[^>]*\bsrc\s*=\s*[\'"][^\'"]*/jquery-1\.8\.2\.min\.js(?:\?[^\'"]*)?[\'"][^>]*>\s*</script\s*>',
+                '', html_text, flags=re.IGNORECASE,
+            )
+            page_directory = subpath if subpath.endswith('/') else subpath.rpartition('/')[0] + '/'
+            document_base = gateway_prefix + page_directory.lstrip('/')
+            # 替换原有 base，维持子页面的相对路径语义。
+            html_text = re.sub(r'<base\b[^>]*>', '', html_text, flags=re.IGNORECASE)
+            injection = f"""<base href="{document_base}">
 <script src="{gateway_base_clean}/static/js/libs/jquery-1.8.2.min.js"></script>
 <script>
 (function() {{
@@ -716,10 +797,20 @@ async def gateway_reverse_proxy(
             logger.warning("CSS 内部 url 路径重写失败: %s", e)
 
     # 动态写入静态资源极速缓存，供后续秒级直出
-    if is_static and result_payload.status_code == 200 and body_bytes:
-        put_static_asset_to_cache(clean_sub, body_bytes, content_type)
-        resp_headers["Cache-Control"] = "public, max-age=604800, immutable"
+    if static_get and result_payload.status_code == 200 and body_bytes:
+        if cache_key not in STATIC_MEMORY_CACHE or time.time() - STATIC_CACHE_TIMES[cache_key] >= STATIC_CACHE_TTL:
+            put_static_asset_to_cache(cache_key, body_bytes, content_type)
+        resp_headers["Cache-Control"] = STATIC_BROWSER_CACHE
         resp_headers["X-Accel-Cache"] = "MISS-STORED"
+        resp_headers = {k: v for k, v in resp_headers.items() if k.lower() != "etag"}
+        resp_headers["ETag"] = f'"{hashlib.md5(body_bytes).hexdigest()}"'
+
+    total_ms = (time.perf_counter() - started_at) * 1000
+    intranet_ms = result_payload.duration_ms or 0
+    resp_headers["Server-Timing"] = (
+        f"queue;dur={result_payload.queue_ms:.1f}, intranet;dur={intranet_ms}, "
+        f"transport;dur={max(0, result_payload.relay_ms - intranet_ms):.1f}, total;dur={total_ms:.1f}"
+    )
 
     # 构造响应对象
     response = Response(
@@ -795,7 +886,7 @@ async def update_tunnel_configuration(
         config["login_path"] = payload.login_path
     if payload.auth_username is not None:
         config["auth_username"] = payload.auth_username
-    if payload.auth_password is not None and payload.auth_password != "******":
+    if payload.auth_password and payload.auth_password != "******":
         config["auth_password"] = payload.auth_password
     if payload.tunnel_secret is not None:
         config["tunnel_secret"] = payload.tunnel_secret
@@ -812,6 +903,7 @@ async def get_tunnel_status(
 ):
     """获取办公电脑中继连接状态、心跳、IP 及活跃连接数（仅限 Global_admin）"""
     verify_global_admin_access(request)
+    TUNNEL.clean_stale_workers()
     is_online = TUNNEL.is_online()
     last_hb_str = ""
     if TUNNEL.last_heartbeat:
@@ -822,45 +914,14 @@ async def get_tunnel_status(
         "last_heartbeat": last_hb_str,
         "client_ip": TUNNEL.client_ip or "未连接",
         "active_workers": len(TUNNEL.active_workers),
-        "pending_requests": TUNNEL.request_queue.qsize(),
+        "pending_requests": len(TUNNEL.pending_futures) - len(TUNNEL.dispatched_at),
+        "inflight_requests": len(TUNNEL.pending_futures),
     }
 
 
-def _get_client_script_template_path() -> Optional[Path]:
-    """
-    多路径探测中继客户端脚本模板位置：
-    1. 优先读取挂载数据卷目录中的客户端脚本：
-       phoenix/backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py (容器内为 /app/data/...)
-       确保宿主机挂载目录下修改后直接生效，无需重建 Docker 镜像。
-    2. 若挂载文件不存在，自动尝试从源码目录同步初始化一份至挂载数据卷并返回。
-    """
-    mounted_dir = (Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26").resolve()
-    mounted_file = mounted_dir / "smart_heating_tunnel_win7.py"
-
-    source_candidates = [
-        Path(__file__).resolve().parent.parent / "smart_heating_tunnel_win7.py",
-        Path(__file__).resolve().parent / "smart_heating_tunnel_win7.py",
-        Path("/app/backend/projects/daily_report_25_26/smart_heating_tunnel_win7.py"),
-    ]
-
-    # 1. 优先使用挂载文件夹下的脚本
-    if mounted_file.exists() and mounted_file.is_file():
-        return mounted_file
-
-    # 2. 若挂载文件不存在，尝试从源码中提取并自动写入挂载目录
-    for src in source_candidates:
-        if src.exists() and src.is_file():
-            try:
-                mounted_dir.mkdir(parents=True, exist_ok=True)
-                with open(src, "r", encoding="utf-8") as f_in, open(mounted_file, "w", encoding="utf-8") as f_out:
-                    f_out.write(f_in.read())
-                logger.info("已自动将中继客户端脚本初始化至挂载目录: %s", mounted_file)
-                return mounted_file
-            except Exception as e:
-                logger.warning("复制脚本至挂载目录失败: %s，直接使用源码模板", e)
-            return src
-
-    return None
+def _get_client_script_template_path() -> Path:
+    """直接使用项目源码模板，避免数据卷旧脚本遮蔽新版本。"""
+    return Path(__file__).resolve().parent.parent / "smart_heating_tunnel_win7.py"
 
 
 @public_router.get("/client-script", summary="动态生成并下载中继客户端脚本")
@@ -869,12 +930,12 @@ async def download_client_script(
 ):
     """
     根据当前系统的配置与请求域名，动态生成预填好配置的 smart_heating_tunnel_win7.py 客户端，
-    优先读取挂载目录 (backend_data/projects/daily_report_25_26/) 下的文件，严格仅限 Global_admin 下载。
+    使用项目源码中的客户端模板，严格仅限 Global_admin 下载。
     """
     verify_global_admin_access(request)
     template_path = _get_client_script_template_path()
-    if not template_path or not template_path.exists():
-        raise HTTPException(status_code=404, detail="客户端脚本文件在挂载目录与源码中均不存在")
+    if not template_path.exists():
+        raise HTTPException(status_code=404, detail="项目客户端脚本模板不存在")
 
     with open(template_path, "r", encoding="utf-8") as f:
         script_content = f.read()
@@ -882,7 +943,10 @@ async def download_client_script(
     # 动态推断服务器根地址
     cfg = load_tunnel_config()
     base_url = str(request.base_url).rstrip("/")
-    if "127.0.0.1" in base_url or "localhost" in base_url:
+    public_url = os.environ.get("PHOENIX_TUNNEL_PUBLIC_URL")
+    if public_url:
+        server_url = public_url.rstrip("/")
+    elif urlsplit(base_url).hostname in ("127.0.0.1", "localhost", "backend"):
         server_url = "https://platform.smartview.top"
     else:
         server_url = base_url
@@ -903,7 +967,7 @@ async def download_client_script(
     replacement = f"DEFAULT_CONFIG = {config_repr}"
     script_content = re.sub(
         r"DEFAULT_CONFIG\s*=\s*\{[\s\S]*?\}",
-        replacement,
+        lambda match: replacement,
         script_content,
         count=1,
     )

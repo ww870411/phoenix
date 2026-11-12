@@ -1,3 +1,15 @@
+## 2026-11-12 智慧供热中继连接复用、静态请求合并与分段计时
+
+- `TunnelManager.dispatch/_dispatch` 合并相同目标、版本及路径的并发静态 GET；`poll_tunnel_task` 在派发时跳过超时/取消任务。状态的 pending_requests 为实际待派发请求数，inflight_requests 为全部在途请求数，查询时清理过期 worker。
+- 静态缓存采用 `static_cache/v2/<目标与查询参数摘要>/<路径>`，内存、磁盘和浏览器缓存有效期为 1 小时；支持 ETag/304、无正文 HEAD，过期后完整回源。预置快照仅用于默认平台的无查询参数或 HAR 已知 `v=1` 请求，不覆盖新版本。旧目录无需迁移或删除。
+- 网关在 Server-Timing 返回 queue（排队）、intranet（内网执行）、transport（派发至回传减去内网执行）、total（网关总耗时）；HIT 返回 cache（缓存处理）。可用浏览器 F12 网络面板查看，无需部署额外观测系统。
+- Win7 客户端 `post_phoenix_json` 用标准库 `http.client` 按线程复用公网连接；每条连接用于该线程的 poll 和 respond，没有额外依赖、业务请求重发或线程数扩张。源码和数据卷客户端已同步。公网连接直接访问服务地址，不使用 urllib 的系统代理自动发现；依赖系统 HTTP 代理的办公网络需在切换前验证可达性。
+- 下载直接使用源码模板；内部 Docker Host/localhost 默认生成线上地址 `https://platform.smartview.top`。自定义部署可设置后端环境变量 `PHOENIX_TUNNEL_PUBLIC_URL`，不需要修改基础 Docker 编排。客户端已有本地 JSON 优先于下载脚本内置配置，更新后须核对并重启办公电脑中继。
+- 修复空密码覆盖；下载配置使用函数形式替换以保留字符串中的反斜杠。自动登录协议未实现，本轮仅纠正开关和文案，保留原有平台 Cookie 透传。
+- 本地验证命令（仓库根目录）：`python -m pytest backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py -q -s --basetemp=backend/.pytest_cache/tunnel-final`，结果 **14 passed**。临时测试配置和缓存保存在仓库内，不向实际中继派发测试任务。
+- 20 个相同资源并发仅回源 1 次；真实 HTTP 测试 10 次请求只建 1 条连接，基线为 10 条。模拟单次建连 20 ms 的测试耗时 252.0 → 28.8 ms，仅证明对应场景的效率收益，不等同于线上加载时间。
+- Python 3.8 语法检查通过；真实 Win7、线上浏览器冷/热启动和公网 TLS 链路尚待部署后回归。原客户端仍兼容新网关；无需数据库迁移。回滚恢复本轮代码和客户端即可，v2 缓存可保留。历史 7 天 immutable 缓存需由浏览器首次强制刷新清除。
+
 ## 2026-11-12 智慧供热中继 JSON 格式保护 (杜绝 base 标签污染) 与全局 Canvas 兜底
 
 - **网关 HTML 注入安全屏障 (`projects/daily_report_25_26/api/smart_heating_tunnel.py`)**：

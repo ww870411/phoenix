@@ -1,5 +1,19 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-12 智慧供热中继连接复用与重复回源优化
+
+- **需求与证据**：用户确认内网页面慢、中继连接线上，并要求直接优化、禁止增加防御性编程。此前线上缓存 HIT 的 jQuery/CSS 仍需约 2.4–3.8 秒；这不是办公电脑执行耗时的证明，不能承诺未经线上复测的首屏提速比例。
+- **客户端**：`backend/projects/daily_report_25_26/smart_heating_tunnel_win7.py` 及数据卷同名脚本新增 `post_phoenix_json`，每个工作线程通过标准库 `http.client` 复用一条公网 HTTP/TLS 连接，poll/respond 串行使用；不新增 pip 依赖、不自动重发业务请求。启动明确显示本地 JSON 配置覆盖关系。
+- **网关**：`api/smart_heating_tunnel.py` 的 `TunnelManager.dispatch` 合并同一静态资源的并发回源；单个等待者取消不取消共享任务。`poll_tunnel_task` 跳过超时/取消任务。缓存按目标平台及资源查询参数隔离，服务端与浏览器有效期为 1 小时，保留预置无版本及 HAR 已知 v=1 资源的快速命中，其他版本完整回源；返回一致 ETag 并支持 304/HEAD。
+- **页面**：`SmartHeatingTunnelView.vue` 初始化并行读取状态和配置，配置完成后才挂载 iframe；日常仅查状态，上轮完成后安排下一轮。刷新状态由 iframe load 结束，移除固定 600 ms 假完成计时器，显示状态查询错误。保持旧页面 jQuery 置顶依赖并去除文档内重复的同版本引用，按子页面目录注入 base。
+- **配置修复**：空密码保持已有值；下载直接使用源码模板，避免旧数据卷模板遮蔽更新；Docker 内部 Host 不再写进下载脚本。可选环境变量 `PHOENIX_TUNNEL_PUBLIC_URL` 指定可达服务地址，现有线上域名不需要额外配置。未实现的自动代登开关禁用并修正文案，不模拟登录成功。
+- **计时**：网关 `Server-Timing` 输出 queue/intranet/transport/total；缓存命中输出 cache。服务端生成排队及回传时间，不依赖办公电脑时钟同步。这里的 transport 包含派发和回传链路，无法进一步等同于纯网络 RTT。
+- **验证（2026-11-12）**：后端原有及新增回归共 **14 passed**；前端组件行为测试通过；`npm run build` 成功（1069 模块）。20 个相同静态资源并发请求只派发 **1** 个中继任务。真实 HTTP 测试 10 次请求连接数 **10 → 1**，模拟每次建连 20 ms 的最后一轮耗时 **252.0 → 28.8 ms**；这不是线上首屏实测。客户端下载内容通过 Python 3.8 语法解析；未在真实 Win7 系统运行。现有 Python 弃用警告及 Vite 大分块告警不影响本次通过结果。
+- **本地服务检查**：前端代理下载脚本 HTTP 200、地址为 `https://platform.smartview.top`，且包含连接复用代码；`reset.css?v=1` HTTP 200/HIT（23 ms）。本地中继离线，与中继连接线上一致。
+- **文件清单**：上述网关、两份客户端、Vue 页面；`tests/test_smart_heating_tunnel.py`、新增 `tests/test_smart_heating_tunnel_performance.py`、新增前端 `tests/smartHeatingTunnel.test.mjs`；本文件、前后端 README；检查报告 `configs/smart-heating-tunnel-audit-20261112.md`。
+- **发布与回滚**：没有数据库迁移，原客户端协议兼容。线上需更新前后端，办公电脑需替换脚本并重启；已有本地 JSON 仍优先，应核对其服务地址和密钥。浏览器首次更新后强制刷新一次，以清除原 7 天 immutable 缓存。回滚仅恢复上述代码和客户端文件到本轮前版本，v2 缓存可保留，旧代码不会读取；不要回滚数据库运行文件。未部署线上，未更改 Docker 编排。
+- **复盘**：以请求数、连接数和分段耗时作为验证依据；历史文档中的“0 ms”“首屏 1 秒以内”不作为本轮验收结论。
+
 ## 2026-11-12 智慧供热中继 JSON 解析报错 (Unexpected token '<' / base href) 与 canvas 引用彻底修复
 
 - **需求背景与痛点排查**：

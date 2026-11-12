@@ -154,10 +154,15 @@
           </div>
         </section>
 
+        <p v-if="statusError" class="connection-message" role="alert">
+          {{ statusError }}
+          <button class="btn secondary btn-sm" @click="fetchStatusAndConfig(true)">重试连接</button>
+        </p>
         <!-- 主视窗容器：充满剩余高度，无双滚动条 -->
         <section class="viewport-card" :class="{ 'fullscreen-viewport': isFullscreen }">
+          <div v-if="initializing" class="offline-guide-panel">正在读取中继状态与平台入口…</div>
           <!-- 场景 1：中继离线引导与状态诊断向导 -->
-          <div v-if="!isRelayOnline" class="offline-guide-panel">
+          <div v-else-if="!isRelayOnline" class="offline-guide-panel">
             <div class="guide-header">
               <div class="guide-hero-icon">🔌</div>
               <h3 class="guide-title">智慧供热内网直通链路未连接</h3>
@@ -233,6 +238,7 @@
 
           <!-- 场景 2：中继在线时，高清晰满屏无缝嵌入内网 iframe -->
           <div v-else class="iframe-container">
+            <div v-if="refreshing" class="frame-loading" role="status">正在加载内网页面…</div>
             <iframe
               ref="portalIframe"
               :src="gatewayUrl"
@@ -257,7 +263,7 @@
 
             <div class="modal-body">
               <p class="modal-hint">
-                配置将持久化保存在 Phoenix 数据卷中。下载的中继脚本会自动注入此配置；若开启自动代登，外网直通即可实现免密无感登录。
+                配置保存在 Phoenix 数据卷中。修改目标地址或密钥后，请重新下载并替换办公电脑脚本；已有本地 JSON 配置优先。内网登录仍由平台登录页完成。
               </p>
 
               <div class="form-group">
@@ -314,8 +320,8 @@
 
               <div class="form-group checkbox-group">
                 <label class="checkbox-label">
-                  <input v-model="editConfig.auto_login_enabled" type="checkbox" />
-                  <span>启用内网账号自动代登与 Session 会话长效保持</span>
+                  <input v-model="editConfig.auto_login_enabled" type="checkbox" disabled />
+                  <span>自动代登暂未实现，请在内网页面登录</span>
                 </label>
               </div>
 
@@ -412,7 +418,10 @@ const downloading = ref(false)
 const refreshing = ref(false)
 const showConfigModal = ref(false)
 const savingConfig = ref(false)
+const initializing = ref(true)
+const statusError = ref('')
 let pollTimer = null
+let disposed = false
 
 // 计算网关 URL (自动附加管理员的会话 token，支持新窗口与跨域嵌入)
 const gatewayUrl = computed(() => {
@@ -429,18 +438,30 @@ const formattedHeartbeat = computed(() => {
 })
 
 // 获取中继状态与持久化配置
-async function fetchStatusAndConfig() {
+async function fetchStatusAndConfig(refreshConfig = true) {
   if (!isAllowed.value) return
   try {
-    const statusData = await fetchTunnelStatus(projectKey.value)
+    const [statusData, cfgData] = await Promise.all([
+      fetchTunnelStatus(projectKey.value),
+      refreshConfig ? fetchTunnelConfig(projectKey.value) : Promise.resolve(null),
+    ])
+    if (disposed) return
+    if (cfgData) tunnelConfig.value = cfgData
     tunnelStatus.value = statusData
+    if (!isRelayOnline.value && statusData.online) refreshing.value = true
     isRelayOnline.value = Boolean(statusData.online)
-
-    const cfgData = await fetchTunnelConfig(projectKey.value)
-    tunnelConfig.value = cfgData
+    statusError.value = ''
   } catch (err) {
-    console.warn('获取中继状态失败:', err)
+    statusError.value = `中继状态读取失败：${err.message}`
+  } finally {
+    initializing.value = false
   }
+}
+
+// 上一轮完成后再安排下一轮，慢请求不会叠加；定期只读状态。
+async function pollStatus() {
+  await fetchStatusAndConfig(false)
+  if (!disposed) pollTimer = setTimeout(pollStatus, 8000)
 }
 
 // 打开配置弹窗
@@ -464,7 +485,7 @@ async function handleSaveConfig() {
     await updateTunnelConfig(editConfig.value, projectKey.value)
     showConfigModal.value = false
     await fetchStatusAndConfig()
-    alert('持久化配置已成功保存！配置已同步生效。')
+    alert('配置已保存。修改地址或密钥后，请更新办公电脑脚本及其本地 JSON 配置并重启中继。')
   } catch (err) {
     alert(`保存配置失败: ${err.message || err}`)
   } finally {
@@ -487,18 +508,13 @@ async function handleDownloadClient() {
 // 刷新 iframe 视窗
 function handleReloadFrame() {
   refreshing.value = true
-  fetchStatusAndConfig()
+  fetchStatusAndConfig(false)
   if (portalIframe.value) {
-    try {
-      const glue = gatewayUrl.value.includes('?') ? '&' : '?'
-      portalIframe.value.src = `${gatewayUrl.value}${glue}_t=${Date.now()}`
-    } catch {
-      // 忽略跨域重载警告
-    }
-  }
-  setTimeout(() => {
+    const glue = gatewayUrl.value.includes('?') ? '&' : '?'
+    portalIframe.value.src = `${gatewayUrl.value}${glue}_t=${Date.now()}`
+  } else {
     refreshing.value = false
-  }, 600)
+  }
 }
 
 // 退出全屏工作台
@@ -522,24 +538,26 @@ function openRawGatewayInTab() {
 }
 
 function onIframeLoad() {
-  // iframe 加载成功回调
+  refreshing.value = false
 }
 
-onMounted(() => {
-  fetchStatusAndConfig()
-  // 每 8 秒自动轮询心跳与状态
-  pollTimer = setInterval(fetchStatusAndConfig, 8000)
+onMounted(async () => {
+  await fetchStatusAndConfig(true)
+  if (!disposed) pollTimer = setTimeout(pollStatus, 8000)
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   if (pollTimer) {
-    clearInterval(pollTimer)
+    clearTimeout(pollTimer)
     pollTimer = null
   }
 })
 </script>
 
 <style scoped>
+.connection-message { margin: 0 16px 8px; color: #fbbf24; }
+.frame-loading { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 2; padding: 8px 16px; background: #1e293b; color: #fff; border-radius: 6px; }
 /* 全局页面容器：锁定视口高度，杜绝双滚动条 */
 .smart-heating-tunnel-view {
   height: 100vh;
