@@ -117,6 +117,43 @@ class BillFeeTests(unittest.TestCase):
         # 合约数据不代表上网电量存在；真实零值代表存在，即使其他机组暂缺。
         self.assertTrue(self.summary()['has_plant_sales_data'])
 
+    def test_day_ahead_reference_fee_and_weighted_price(self):
+        # 为奇数/偶数时段设置不同日前电价：奇数点(电量3倍)为100，偶数点为200
+        self.connection.execute(text(
+            "UPDATE public.spot_electricity_15min_data "
+            "SET day_ahead_price = CASE WHEN point_index % 2 = 1 THEN 100 ELSE 200 END "
+            "WHERE trade_date=:day"
+        ), {'day': self.day})
+        result = self.summary()
+        # 北海每日总电量 = (1+0+3)*(3+1)*48 = 768；奇数点576*100 + 偶数点192*200 = 96000，加权均价=125，算术均值=150
+        self.assertEqual(result['sum_beihai_da_spot_fee'], 96000)
+        self.assertEqual(result['sum_xianghai_da_spot_fee'], 192000)
+        # 较实时电价现货电费差额 = 日前测算现货电费 - 账单实时现货电费
+        self.assertEqual(result['sum_beihai_da_spot_fee_diff'], 96000 - (-1920))
+        self.assertEqual(result['sum_xianghai_da_spot_fee_diff'], 192000 - (-3840))
+        # 合约差价电费保持不变，收入 = 日前测算现货电费 + 合约差价电费
+        self.assertEqual(result['sum_beihai_da_revenue_fee'], 96000 - 1920)
+        self.assertEqual(result['sum_xianghai_da_revenue_fee'], 192000 + 5760)
+        self.assertEqual(result['avg_beihai_da_spot_price'], 125)
+        self.assertEqual(result['avg_xianghai_da_spot_price'], 125)
+        self.assertEqual(result['avg_beihai_da_spot_price_diff'], 125 - (-2.5))
+        self.assertEqual(result['avg_xianghai_da_spot_price_diff'], 125 - (-2.5))
+        self.assertAlmostEqual(result['beihai_da_spot_price_diff_rate'], (125 - 150) / 150 * 100)
+
+        # 缺失任意一点日前电价时不返回部分求和
+        self.connection.execute(text(
+            "UPDATE public.spot_electricity_15min_data SET day_ahead_price=NULL WHERE trade_date=:day AND point_index=1"
+        ), {'day': self.day})
+        partial = self.summary()
+        self.assertIsNone(partial['sum_beihai_da_spot_fee'])
+        self.assertIsNone(partial['sum_beihai_da_spot_fee_diff'])
+        self.assertIsNone(partial['sum_beihai_da_revenue_fee'])
+        self.assertIsNone(partial['avg_beihai_da_spot_price'])
+        self.assertIsNone(partial['avg_beihai_da_spot_price_diff'])
+        self.assertIsNone(partial['beihai_da_spot_price_diff_rate'])
+        # 实时账单计算不受日前电价缺失影响
+        self.assertEqual(partial['sum_beihai_spot_fee'], -1920)
+
 
 if __name__ == '__main__':
     unittest.main()

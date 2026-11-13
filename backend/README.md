@@ -1,3 +1,66 @@
+## 2026-11-13 电力现货 `/summary` 新增日前测算加权单价较实时差额字段
+
+- **`projects/daily_report_25_26/api/spot_electricity.py`**：
+  - `get_spot_electricity_summary()` 在未舍入阶段计算两厂 `da_avg - rt_avg`，新增返回 `avg_beihai_da_spot_price_diff` 与 `avg_xianghai_da_spot_price_diff`（同时保留既有 `*_da_spot_price_diff_rate` 以兼容历史契约）。
+- **测试 (`projects/daily_report_25_26/tests/test_spot_bill_fees.py`)**：补充加权单价差额及缺失返回 `None` 断言；`python -m pytest backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py -v`：**8 passed**。
+
+## 2026-11-13 电力现货 `/summary` 新增日前测算现货电费较实时电费差额字段
+
+- **`projects/daily_report_25_26/api/spot_electricity.py`**：
+  - `get_spot_electricity_summary()` 在未舍入阶段直接计算 `sum_{plant}_da_spot_fee - sum_{plant}_spot_fee`，新增返回 `sum_beihai_da_spot_fee_diff` 与 `sum_xianghai_da_spot_fee_diff`。
+- **测试 (`projects/daily_report_25_26/tests/test_spot_bill_fees.py`)**：补充差额及缺失返回 `None` 的回归断言；`python -m pytest backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py -v`：**8 passed**。
+
+## 2026-11-13 电力现货 `/summary` 接口新增基于“日前电价”的两厂电费与均价参考测算字段
+
+- **`projects/daily_report_25_26/api/spot_electricity.py`**：
+  - `_bill_fee_summary_columns()` 新增 `da_spot`（`{plant}_total_sales * day_ahead_price` 逐点乘积求和，同样要求完整覆盖查询日期 96 点且非空）与 `da_revenue`（`da_spot + contract`，合约差价保持原样不变）；
+  - `get_spot_electricity_summary()` 新增返回 `sum_{plant}_da_spot_fee`、`sum_{plant}_da_revenue_fee`、`avg_{plant}_da_spot_price` 及相对同区间日前均价 `avg_da` 的 `{plant}_da_spot_price_diff_rate`。
+- **测试 (`projects/daily_report_25_26/tests/test_spot_bill_fees.py`)**：
+  - 新增 `test_day_ahead_reference_fee_and_weighted_price`；`python -m pytest backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py -v`：**8 passed**。
+
+## 2026-11-13 供暖期指标竞赛 Excel 导出同步“人工调整完成值”着色标记
+
+- **`projects/monthly_data_show/services/competition_export_service.py`**：
+  - Sheet 3《计算过程明细》新增第 3 行浅琥珀色着色说明，对 `isManualActual=True` 的运营指标、安全文明生产及底部 5 家供热单位投诉率排名附表的实际完成值单元格应用 `_FILL_MANUAL`（`#FEF3C7`）与 `_FONT_TD_MANUAL`，并在第 11 列“数据来源”自动追加 `【人工调整】` 标记。
+- **测试 (`projects/monthly_data_show/tests/test_competition_export.py`)**：
+  - 新增 `test_manual_actual_coloring_and_annotation`；`python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`：**10 passed**。
+
+## 2026-11-13 供暖期指标竞赛双状态定稿 (`saved`/`final`) 与供暖期兑现记录接口
+
+- **`projects/monthly_data_show/services/competition_service.py`**：
+  - `ensure_competition_table()` 在 `competition_monthly_records` 新增 `base_reward`、`extra_reward`、`published_at` 三列（已实库验证创建成功）。
+  - `save_competition_record()` 支持 `status='saved'`（暂存）与 `status='final'`（发布定稿，自动写入 `published_at`），同步拆解入库 `base_reward` / `extra_reward` / `total_reward`。
+  - 新增 `get_competition_records_summary()`，汇总 `2026-11` 至 `2027-03` 各月定稿状态、奖金构成及 7 家单位分月明细，区分 `final_summary` 与 `all_saved_summary`。
+- **`projects/monthly_data_show/api/workspace.py`**：
+  - 新增 `GET /monthly-data-show/competition/records`（`get_competition_season_records`）；`SaveCompetitionRecordRequest` 支持 `status`、`base_reward`、`extra_reward`。
+- **测试 (`projects/monthly_data_show/tests/test_competition_service.py`)**：
+  - 新增 `test_save_invalid_status_rejected_and_season_summary_distinguishes_final` 并升级契约测试；`python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`：**9 passed**。
+
+## 2026-11-13 供暖期指标竞赛 Excel 导出同步各单位“额外嘉奖”明细
+
+- **`projects/monthly_data_show/services/competition_export_service.py`**：
+  - 新增 `_get_unit_extra_rewards` 与 `_normalize_excel_money`，自动读取各单位 `extraRewards` 列表并汇总写入 Sheet 1《考评兑现汇总》F 列（`其他嘉奖`）与页脚明细说明；在 Sheet 3《计算过程明细》末尾新增《附表二：各单位额外嘉奖项目及金额明细（手动认定）》及 `=SUM(...)` 合计行。
+- **回归测试 (`projects/monthly_data_show/tests/test_competition_export.py`)**：
+  - 新增 `test_extra_rewards_populate_summary_and_detail_sheet`；`python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`：**8 passed**。
+
+## 2026-11-13 供暖期指标竞赛 3-Sheet Excel 考评报表导出
+
+- **新增导出服务 (`projects/monthly_data_show/services/competition_export_service.py`)**：
+  - 提供 `generate_competition_excel(payload) -> Tuple[bytes, str]`，基于 `openpyxl` 生成 3 张跨表公式联动工作表：`考评兑现汇总`（含 `ROUND((基数*指标结果/100)/5, 0)*5` 五元倍数取整与否决归零公式）、`指标得分矩阵`（7 家单位横向双列项目/分值矩阵，复刻《考评意见报告》附图版式）、`计算过程明细`（含 7 家单位逐项计划/完成/达成率/算式说明及底部 5 家供热单位投诉率横向排名依据）。
+- **新增接口 (`projects/monthly_data_show/api/workspace.py`)**：
+  - 在 `router` 与 `public_router` 挂载 `POST /monthly-data-show/competition/export`（`post_competition_export_excel`，请求体 `ExportCompetitionExcelRequest`），返回 `.xlsx` `StreamingResponse`。
+- **测试 (`projects/monthly_data_show/tests/test_competition_export.py`)**：
+  - 与 `test_competition_service.py` 联跑 `python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`，共 **7 passed**。
+
+## 2026-11-13 供暖期指标竞赛取数口径重构（月报实值留空 + 电力现货动态加权取数）
+
+- **`projects/monthly_data_show/services/competition_service.py`**：
+  - 月报指标（耗标煤总量、厂内水耗量、全厂热效率、主城区耗标煤总量、供暖热/电/水单耗、外购热量）仅从 `monthly_data_show` 取计划与实际值；月报未出数前不再降级回退日报累计，`actualValue` 保持 `None`。
+  - 新增 `_fetch_spot_price_metrics`，按 `spot_electricity_15min_data` 表与 `spot_electricity.py` 一致口径计算当月 `AVG(real_time_price) * 1.05` 与完整 96 点账单日电量加权电价（北海/香海）。
+  - 服务投诉率仍取 `daily_basic_data` 净投诉累计与 `constant_data` 收费面积；非停、断管率、安全文明保持手工缺省值。
+- **回归测试 (`projects/monthly_data_show/tests/test_competition_service.py`)**：
+  - `python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py -v`：3 passed。
+
 ## 2026-11-12 智慧供热中继连接复用、静态请求合并与分段计时
 
 - `TunnelManager.dispatch/_dispatch` 合并相同目标、版本及路径的并发静态 GET；`poll_tunnel_task` 在派发时跳过超时/取消任务。状态的 pending_requests 为实际待派发请求数，inflight_requests 为全部在途请求数，查询时清理过期 worker。

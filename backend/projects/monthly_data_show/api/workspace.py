@@ -6,6 +6,7 @@ monthly_data_show 工作台接口。
 from __future__ import annotations
 
 import csv
+import io
 import json
 import tempfile
 import calendar
@@ -14,7 +15,7 @@ import re
 import threading
 import uuid
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from datetime import date
 from datetime import datetime
@@ -23,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import bindparam, text
 from starlette.background import BackgroundTask
@@ -49,7 +50,7 @@ from backend.projects.monthly_data_show.services.indicator_config import (
     order_items_by_config,
 )
 from backend.services import ai_chat_service, ai_runtime, data_analysis_ai_report
-from backend.projects.monthly_data_show.services import competition_service
+from backend.projects.monthly_data_show.services import competition_export_service, competition_service
 
 PROJECT_KEY = "monthly_data_show"
 CHAT_SESSION_TTL_SECONDS = 30 * 60
@@ -3234,6 +3235,9 @@ def chat_monthly_data_show_debug(payload: ai_chat_service.AiChatRequest):
 
 class SaveCompetitionRecordRequest(BaseModel):
     month: str
+    status: str = "saved"
+    base_reward: Optional[float] = None
+    extra_reward: Optional[float] = None
     total_reward: float = 0.0
     disqualified_count: int = 0
     data_payload: List[Dict[str, Any]] = []
@@ -3283,6 +3287,29 @@ def get_competition_monthly_record(month: str):
         raise HTTPException(status_code=500, detail=f"读取竞赛测算记录失败: {exc}") from exc
 
 
+@router.get(
+    "/monthly-data-show/competition/records",
+    summary="汇总供暖期各月指标竞赛定稿与兑现记录",
+)
+@public_router.get(
+    "/monthly-data-show/competition/records",
+    summary="汇总供暖期各月指标竞赛定稿与兑现记录（公开通道）",
+)
+def get_competition_season_records(
+    months: str = "2026-11,2026-12,2027-01,2027-02,2027-03",
+):
+    """
+    查询 2026-11 至 2027-03（或指定月份逗号列表）的竞赛归档记录、定稿状态与奖金拆解明细。
+    """
+    try:
+        month_list = [m.strip() for m in str(months or "").split(",") if m.strip()]
+        return competition_service.get_competition_records_summary(month_list or None)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"查询供暖期兑现汇总失败: {exc}") from exc
+
+
 @router.post(
     "/monthly-data-show/competition/save",
     summary="持久化保存月度指标竞赛打分测算结果",
@@ -3294,11 +3321,15 @@ def get_competition_monthly_record(month: str):
 def post_competition_save_record(payload: SaveCompetitionRecordRequest):
     """
     将当前月份的 7 家单位指标测算结果持久化写入 PostgreSQL 表 competition_monthly_records。
+    支持 status='saved'（暂存）与 status='final'（发布定稿）。
     """
     try:
         return competition_service.save_competition_record(
             month_str=payload.month,
             payload={
+                "status": payload.status,
+                "base_reward": payload.base_reward,
+                "extra_reward": payload.extra_reward,
                 "total_reward": payload.total_reward,
                 "disqualified_count": payload.disqualified_count,
                 "data_payload": payload.data_payload,
@@ -3309,4 +3340,45 @@ def post_competition_save_record(payload: SaveCompetitionRecordRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"保存竞赛测算记录失败: {exc}") from exc
+
+
+class ExportCompetitionExcelRequest(BaseModel):
+    month: str
+    month_label: str = ""
+    status_note: str = ""
+    units_data: List[Dict[str, Any]] = []
+
+
+@router.post(
+    "/monthly-data-show/competition/export",
+    summary="导出供暖期指标竞赛 Excel 考评报表（3张联动工作表）",
+)
+@public_router.post(
+    "/monthly-data-show/competition/export",
+    summary="导出供暖期指标竞赛 Excel 考评报表（公开通道）",
+)
+def post_competition_export_excel(payload: ExportCompetitionExcelRequest):
+    """
+    接收前端当前月度竞赛测算结果，生成包含《考评兑现汇总》《指标得分矩阵》《计算过程明细》
+    的 3-Sheet 联动 .xlsx 报表流并下载。
+    """
+    try:
+        xlsx_bytes, filename = competition_export_service.generate_competition_excel(
+            payload.model_dump()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"导出竞赛考评报表失败: {exc}") from exc
+
+    quoted_name = quote(filename)
+    return StreamingResponse(
+        io.BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"competition_report.xlsx\"; filename*=UTF-8''{quoted_name}"
+            ),
+        },
+    )
 

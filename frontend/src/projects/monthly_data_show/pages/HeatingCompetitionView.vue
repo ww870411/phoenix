@@ -51,7 +51,7 @@
               type="button"
               class="btn-hero btn-secondary"
               title="重置当前月份为初始标准基准值"
-              :disabled="isFetchingAuto || isSavingRecord"
+              :disabled="isFetchingAuto || isSavingRecord || isExportingExcel"
               @click="resetToDefaultData"
             >
               🔄 重置基准
@@ -60,7 +60,7 @@
               type="button"
               class="btn-hero btn-auto-fetch"
               title="从系统数据库自动提取月报计划与完成值、日报服务投诉累计量"
-              :disabled="isFetchingAuto || isSavingRecord"
+              :disabled="isFetchingAuto || isSavingRecord || isExportingExcel"
               @click="handleAutoFetchData"
             >
               <span v-if="isFetchingAuto">⚡ 取数中...</span>
@@ -69,26 +69,45 @@
             </button>
             <button
               type="button"
+              class="btn-hero btn-export"
+              title="导出含考评兑现汇总、指标得分矩阵、计算过程明细的 3-Sheet Excel 汇报文件"
+              :disabled="isFetchingAuto || isSavingRecord || isExportingExcel"
+              @click="handleExportExcel"
+            >
+              <span v-if="isExportingExcel">📥 导出中...</span>
+              <span v-else>📥 导出竞赛报表</span>
+            </button>
+            <button
+              type="button"
               class="btn-hero btn-primary"
-              title="将当前 7 家参评单位测算明细与奖金正式持久化保存到数据库"
-              :disabled="isFetchingAuto || isSavingRecord"
+              title="将当前 7 家参评单位测算明细与奖金暂存保存到数据库（状态：saved）"
+              :disabled="isFetchingAuto || isSavingRecord || isPublishingFinal || isExportingExcel"
               @click="handleSaveRecord"
             >
               <span v-if="isSavingRecord">💾 保存中...</span>
               <span v-else>💾 保存至系统数据库</span>
+            </button>
+            <button
+              type="button"
+              class="btn-hero btn-publish"
+              title="重新保存当前数据并标记为正式定稿（状态：final），计入供暖期定稿兑现汇总"
+              :disabled="isFetchingAuto || isSavingRecord || isPublishingFinal || isExportingExcel"
+              @click="handlePublishFinal"
+            >
+              <span v-if="isPublishingFinal">📢 发布中...</span>
+              <span v-else>📢 发布结果</span>
             </button>
           </div>
         </div>
       </header>
 
       <!-- 数据状态提示条 -->
-      <div v-if="recordStatusNote" class="status-ribbon-bar">
+      <div v-if="recordStatusNote" class="status-ribbon-bar" :class="{ 'is-final': recordStatus === 'final' }">
         <div class="status-ribbon-inner">
           <span class="status-dot" :class="recordStatusClass">●</span>
+          <span v-if="recordStatus === 'final'" class="ribbon-state-badge badge-final">FINAL · 已定稿</span>
+          <span v-else-if="recordStatus === 'saved'" class="ribbon-state-badge badge-saved">SAVED · 已保存</span>
           <span class="status-text">{{ recordStatusNote }}</span>
-        </div>
-        <div class="status-ribbon-tip">
-          <span>权威数据源：月报表 (monthly_data_show) · 日报表 (daily_basic_data) · 归档表 (competition_monthly_records)</span>
         </div>
       </div>
 
@@ -104,12 +123,19 @@
         </button>
         <button
           type="button"
+          :class="['tab-btn', { active: activeTab === 'season_records' }]"
+          @click="openSeasonRecordsTab"
+        >
+          <span class="tab-icon">📜</span>
+          <span class="tab-title">供暖期兑现记录</span>
+        </button>
+        <button
+          type="button"
           :class="['tab-btn', { active: activeTab === 'calculation' }]"
           @click="activeTab = 'calculation'"
         >
           <span class="tab-icon">📊</span>
           <span class="tab-title">指标评分测算台</span>
-          <span class="tab-pill">在线打分</span>
         </button>
         <button
           type="button"
@@ -118,7 +144,14 @@
         >
           <span class="tab-icon">📢</span>
           <span class="tab-title">投诉率排名</span>
-          <span class="tab-pill pill-complaints">5 家供热</span>
+        </button>
+        <button
+          type="button"
+          :class="['tab-btn', { active: activeTab === 'extra_rewards' }]"
+          @click="activeTab = 'extra_rewards'"
+        >
+          <span class="tab-icon">🏅</span>
+          <span class="tab-title">额外嘉奖</span>
         </button>
         <button
           type="button"
@@ -205,7 +238,6 @@
               class="base-reward-card"
             >
               <div class="brc-top">
-                <span class="unit-type-tag" :class="getUnitTypeClass(unit.type)">{{ unit.type }}</span>
                 <span class="unit-share-pill">{{ ((unit.baseAmount / 280000) * 100).toFixed(1) }}% 份额</span>
               </div>
               <div class="unit-name">{{ unit.name }}</div>
@@ -521,7 +553,14 @@
                   :style="{ width: `${Math.min(100, (totalSimulatedReward / 280000) * 100)}%` }"
                 ></div>
               </div>
-              <div class="kpi-sub">全网兑现率 {{ ((totalSimulatedReward / 280000) * 100).toFixed(1) }}%</div>
+              <div class="kpi-sub">
+                <template v-if="totalExtraReward !== 0">
+                  竞赛 ¥{{ Math.round(totalBaseReward).toLocaleString() }} + 嘉奖 ¥{{ Math.round(totalExtraReward).toLocaleString() }}
+                </template>
+                <template v-else>
+                  全网兑现率 {{ ((totalSimulatedReward / 280000) * 100).toFixed(1) }}%
+                </template>
+              </div>
             </div>
           </div>
 
@@ -580,7 +619,6 @@
               <div class="uvc-header-left">
                 <span class="uvc-seq-badge">#{{ unitIdx + 1 }}</span>
                 <h3 class="uvc-title">{{ unit.name }}</h3>
-                <span class="unit-type-pill" :class="getUnitTypeClass(unit.type)">{{ unit.type }}</span>
                 <span class="uvc-count-tag">{{ getOperationalIndicators(unit).length + 2 }} 项考评指标</span>
               </div>
 
@@ -601,7 +639,10 @@
                 </div>
 
                 <div class="uvc-stat-pill uvc-status-pill">
-                  <span v-if="unit.eligible" class="status-badge status-ok">✓ 资格有效</span>
+                  <span v-if="unit.eligible && (unit.pendingCount || 0) === 0" class="status-badge status-ok">✓ 资格有效</span>
+                  <span v-else-if="unit.eligible && (unit.pendingCount || 0) > 0" class="status-badge status-pending">
+                    ⏳ 待月报({{ unit.pendingCount }}项)
+                  </span>
                   <span v-else class="status-badge status-fail" :title="unit.disqualifyReason">
                     ✕ {{ unit.disqualifyReason }}
                   </span>
@@ -611,9 +652,12 @@
                   <span class="usp-label">拟兑现奖金</span>
                   <span
                     class="usp-reward-val font-mono font-bold"
-                    :class="unit.eligible ? 'text-green' : 'text-muted strike'"
+                    :class="unit.eligible || (unit.extraRewardTotal || 0) > 0 ? 'text-green' : 'text-muted strike'"
                   >
                     ¥{{ Math.round(unit.calculatedReward || 0).toLocaleString() }}
+                  </span>
+                  <span v-if="unit.extraRewardTotal" class="usp-extra-hint font-mono">
+                    含嘉奖 {{ unit.extraRewardTotal >= 0 ? '+' : '' }}¥{{ Math.round(unit.extraRewardTotal).toLocaleString() }}
                   </span>
                 </div>
 
@@ -638,7 +682,13 @@
                     <span class="sst-icon">⚡</span>
                     <span class="sst-name">生产能耗与运营指标（权重合计 {{ getOperationalIndicators(unit).reduce((s, i) => s + (i.weight || 0), 0) }} 分）</span>
                   </div>
-                  <span class="sst-hint">计划值与实际完成值均可微调编辑，系统依据集团方案实时联动核算</span>
+                  <div class="sst-hint-group">
+                    <span class="sst-hint">计划值与实际完成值均可微调编辑</span>
+                    <span class="sst-manual-legend" title="手动填报或修改的完成值将高亮着色，二次自动取数时自动保留">
+                      <span class="manual-swatch"></span>
+                      <span>琥珀色着色 = 人工调整/手填完成值</span>
+                    </span>
+                  </div>
                 </div>
 
                 <div class="table-responsive">
@@ -657,12 +707,23 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(ind, indIdx) in getOperationalIndicators(unit)" :key="`${unit.code}-ind-${indIdx}`">
+                      <tr
+                        v-for="(ind, indIdx) in getOperationalIndicators(unit)"
+                        :key="`${unit.code}-ind-${indIdx}`"
+                        :class="{ 'row-manual-actual': ind.isManualActual }"
+                      >
                         <td class="text-center font-mono">{{ indIdx + 1 }}</td>
                         <td>
                           <div class="ind-name-box">
                             <span class="ind-main-name font-bold">{{ ind.name }}</span>
-                            <span v-if="showSourceTags" class="ind-source-tag">{{ ind.sourceLabel }}</span>
+                            <div class="ind-tag-row" v-if="showSourceTags || ind.isManualActual">
+                              <span v-if="showSourceTags" class="ind-source-tag">{{ ind.sourceLabel }}</span>
+                              <span
+                                v-if="ind.isManualActual"
+                                class="ind-manual-tag"
+                                :title="getManualTooltip(ind)"
+                              >人工调整</span>
+                            </div>
                           </div>
                         </td>
                         <td class="text-center font-mono font-bold">{{ ind.weight }} 分</td>
@@ -683,17 +744,32 @@
                             <span v-if="ind.calcType === 'complaint_rank'" class="ind-fixed-tag">横向排名</span>
                           </div>
                         </td>
-                        <!-- 实际完成值（支持编辑） -->
+                        <!-- 实际完成值（支持编辑，手工调整后着色标记） -->
                         <td>
-                          <div class="ind-input-cell">
+                          <div
+                            class="ind-input-cell"
+                            :class="{ 'ind-manual-cell': ind.isManualActual }"
+                          >
+                            <span
+                              v-if="ind.isManualActual"
+                              class="manual-dot-badge"
+                              :title="getManualTooltip(ind)"
+                            >手调</span>
                             <input
                               type="number"
                               step="any"
                               class="ind-input"
                               v-model.number="ind.actualValue"
                               placeholder="实际值"
-                              @input="recalculateAllScores"
+                              @input="onActualValueInput(ind)"
                             />
+                            <button
+                              v-if="ind.isManualActual"
+                              type="button"
+                              class="manual-reset-btn"
+                              :title="getRestoreTooltip(ind)"
+                              @click="restoreSystemActualValue(ind)"
+                            >↺</button>
                           </div>
                         </td>
                         <td class="text-center text-muted font-mono">{{ ind.unit }}</td>
@@ -705,10 +781,18 @@
                         </td>
                         <td class="text-center">
                           <span
-                            class="ind-score-badge font-mono"
-                            :class="(ind.score ?? 0) >= (ind.weight ?? 0) ? 'score-win' : 'score-loss'"
+                            v-if="ind.score === null || ind.score === undefined"
+                            class="ind-score-badge score-pending font-mono"
+                            title="实际完成值尚未出数，暂不计分"
                           >
-                            {{ (ind.score ?? 0).toFixed(2) }} 分
+                            待出数
+                          </span>
+                          <span
+                            v-else
+                            class="ind-score-badge font-mono"
+                            :class="ind.score >= (ind.weight ?? 0) ? 'score-win' : 'score-loss'"
+                          >
+                            {{ ind.score.toFixed(2) }} 分
                           </span>
                         </td>
                       </tr>
@@ -736,7 +820,15 @@
                     </p>
                     <div class="civic-input-row">
                       <span class="cir-label">现场评定实际得分：</span>
-                      <div class="cir-input-box">
+                      <div
+                        class="cir-input-box"
+                        :class="{ 'cir-manual-box': getCivicIndicator(unit).isManualActual }"
+                      >
+                        <span
+                          v-if="getCivicIndicator(unit).isManualActual"
+                          class="manual-dot-badge"
+                          title="安全文明生产得分已由默认满分 10 分调整"
+                        >手调</span>
                         <input
                           type="number"
                           min="0"
@@ -745,9 +837,16 @@
                           class="civic-score-input"
                           v-model.number="getCivicIndicator(unit).actualValue"
                           placeholder="0~10"
-                          @input="recalculateAllScores"
+                          @input="onActualValueInput(getCivicIndicator(unit))"
                         />
                         <span class="cir-unit">分</span>
+                        <button
+                          v-if="getCivicIndicator(unit).isManualActual"
+                          type="button"
+                          class="manual-reset-btn"
+                          title="恢复默认满分 10 分"
+                          @click="restoreSystemActualValue(getCivicIndicator(unit))"
+                        >↺</button>
                       </div>
                       <span class="cir-hint">（支持步进 0.5 分，满分 10 分）</span>
                     </div>
@@ -909,7 +1008,6 @@
                 <tr>
                   <th class="th-crank">排名</th>
                   <th class="th-cunit">参评供热单位</th>
-                  <th class="th-ctype">类型</th>
                   <th class="th-cactual">投诉率实际完成值</th>
                   <th class="th-cunit-label">计量单位</th>
                   <th class="th-cweight">权重分</th>
@@ -927,6 +1025,7 @@
                   :class="{
                     'tr-gold': item.rank === 1,
                     'tr-blacklisted': item.isBlackListed,
+                    'tr-manual-actual': item.rawItem?.isManualActual,
                   }"
                 >
                   <!-- 排名 -->
@@ -942,17 +1041,25 @@
                     <div class="unit-name-cell">
                       <span class="unc-name font-bold">{{ item.unitName }}</span>
                       <span v-if="item.rank === 1" class="best-badge">全网最优</span>
+                      <span
+                        v-if="item.rawItem?.isManualActual"
+                        class="ind-manual-tag"
+                        :title="getManualTooltip(item.rawItem)"
+                      >人工调整</span>
                     </div>
                   </td>
 
-                  <!-- 类型 -->
+                  <!-- 投诉率实际完成值（支持编辑，手工调整着色标记） -->
                   <td>
-                    <span class="unit-type-pill" :class="getUnitTypeClass(item.unitType)">{{ item.unitType }}</span>
-                  </td>
-
-                  <!-- 投诉率实际完成值（支持编辑） -->
-                  <td>
-                    <div class="ind-input-cell c-input-cell">
+                    <div
+                      class="ind-input-cell c-input-cell"
+                      :class="{ 'ind-manual-cell': item.rawItem?.isManualActual }"
+                    >
+                      <span
+                        v-if="item.rawItem?.isManualActual"
+                        class="manual-dot-badge"
+                        :title="getManualTooltip(item.rawItem)"
+                      >手调</span>
                       <input
                         type="number"
                         step="any"
@@ -960,8 +1067,15 @@
                         class="ind-input"
                         v-model.number="item.rawItem.actualValue"
                         placeholder="实际投诉率"
-                        @input="recalculateAllScores"
+                        @input="onActualValueInput(item.rawItem)"
                       />
+                      <button
+                        v-if="item.rawItem?.isManualActual"
+                        type="button"
+                        class="manual-reset-btn"
+                        :title="getRestoreTooltip(item.rawItem)"
+                        @click="restoreSystemActualValue(item.rawItem)"
+                      >↺</button>
                     </div>
                   </td>
 
@@ -1034,13 +1148,6 @@
               </tbody>
             </table>
           </div>
-
-          <div class="complaints-notice-bar">
-            <span class="notice-icon">💡</span>
-            <span class="notice-text">
-              <strong>非直供电厂说明：</strong>北海热电厂、香海热电厂为纯热源电厂，不直接承担社会民生管网供暖及民心网投诉考核，故不计入投诉率横向排名；供热公司、金州热电、北方热电、金普公司、庄河环海等 5 家供热管网及分公司全额参评。
-            </span>
-          </div>
         </div>
 
         <!-- 可视化横向比拼条形图 -->
@@ -1072,6 +1179,173 @@
               </div>
               <div class="cbar-score-pill font-mono">
                 得分：<strong :class="item.isBlackListed ? 'text-red' : 'text-blue'">{{ item.isBlackListed ? '0' : item.finalScore }} 分</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 标签页 3.5：额外嘉奖（按单位手动填报项目与金额） ================= -->
+      <section v-else-if="activeTab === 'extra_rewards'" class="tab-content extra-rewards-section">
+        <div class="calc-kpi-grid extra-kpi-grid">
+          <div class="calc-kpi-card kpi-month">
+            <div class="kpi-icon">📅</div>
+            <div class="kpi-content">
+              <div class="kpi-label">考核测算月份</div>
+              <div class="kpi-val text-brand">{{ selectedMonthLabel }}</div>
+              <div class="kpi-sub">额外嘉奖与月度绩效联动</div>
+            </div>
+          </div>
+
+          <div class="calc-kpi-card kpi-units">
+            <div class="kpi-icon">🏅</div>
+            <div class="kpi-content">
+              <div class="kpi-label">已申报嘉奖单位 / 项数</div>
+              <div class="kpi-val font-mono">
+                {{ extraRewardUnitCount }} <span class="unit-text">家 · {{ extraRewardItemCount }} 项</span>
+              </div>
+              <div class="kpi-sub">支持每家单位配置多项嘉奖</div>
+            </div>
+          </div>
+
+          <div class="calc-kpi-card kpi-budget">
+            <div class="kpi-icon">🎁</div>
+            <div class="kpi-content">
+              <div class="kpi-label">额外嘉奖合计总额</div>
+              <div class="kpi-val text-amber font-mono">
+                {{ totalExtraReward >= 0 ? '+' : '' }}¥{{ Math.round(totalExtraReward).toLocaleString() }}
+              </div>
+              <div class="kpi-sub">同步写入“考评兑现汇总”F列（其他嘉奖）</div>
+            </div>
+          </div>
+
+          <div class="calc-kpi-card kpi-reward">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-content">
+              <div class="kpi-label">全网拟兑现总奖金</div>
+              <div class="kpi-val text-green font-mono">¥{{ Math.round(totalSimulatedReward).toLocaleString() }}</div>
+              <div class="kpi-sub">
+                竞赛 ¥{{ Math.round(totalBaseReward).toLocaleString() }} + 嘉奖 ¥{{ Math.round(totalExtraReward).toLocaleString() }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="extra-notice-bar">
+          <span class="notice-icon">💡</span>
+          <span class="notice-text">
+            <strong>填写说明：</strong>针对各参评单位在月度常规指标之外的专项表彰（如：创新奖励、应急抢险、专项保供嘉奖等），请在此按单位手动录入<strong>嘉奖项目名称</strong>与<strong>金额（元）</strong>。系统将实时累加至各单位“拟兑现奖金”及“结果总览”，并在保存数据库与导出 Excel 报表（《考评兑现汇总》“其他嘉奖”列及《计算过程明细》附表二）中自动体现。
+          </span>
+        </div>
+
+        <div class="extra-units-grid">
+          <div
+            v-for="unit in unitsData"
+            :key="`extra-${unit.code}`"
+            class="content-block extra-unit-card"
+          >
+            <div class="extra-unit-head">
+              <div class="euh-left">
+                <h4 class="euh-name">{{ unit.name }}</h4>
+                <span v-if="!unit.eligible" class="status-badge status-fail" :title="unit.disqualifyReason">
+                  竞赛奖金否决(¥0)
+                </span>
+              </div>
+              <div class="euh-right">
+                <div class="euh-stat">
+                  <span class="euh-label">竞赛指标奖金</span>
+                  <strong class="font-mono text-blue">¥{{ Math.round(unit.baseReward || 0).toLocaleString() }}</strong>
+                </div>
+                <div class="euh-stat">
+                  <span class="euh-label">额外嘉奖小计</span>
+                  <strong class="font-mono text-amber">
+                    {{ (unit.extraRewardTotal || 0) >= 0 ? '+' : '' }}¥{{ Math.round(unit.extraRewardTotal || 0).toLocaleString() }}
+                  </strong>
+                </div>
+                <div class="euh-stat euh-stat-total">
+                  <span class="euh-label">单位最终奖金</span>
+                  <strong class="font-mono text-green">¥{{ Math.round(unit.calculatedReward || 0).toLocaleString() }}</strong>
+                </div>
+                <button
+                  type="button"
+                  class="btn-add-extra"
+                  @click="addExtraRewardItem(unit)"
+                >
+                  ＋ 添加嘉奖项目
+                </button>
+              </div>
+            </div>
+
+            <div class="extra-unit-body">
+              <div v-if="!unit.extraRewards || unit.extraRewards.length === 0" class="extra-empty-row">
+                <span class="extra-empty-text">暂无额外嘉奖项目（默认 ¥0）</span>
+                <button
+                  type="button"
+                  class="btn-add-extra-inline"
+                  @click="addExtraRewardItem(unit)"
+                >
+                  点击录入嘉奖项目与金额
+                </button>
+              </div>
+
+              <div v-else class="extra-items-table-wrap">
+                <table class="extra-items-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 52px;">序号</th>
+                      <th style="min-width: 220px;">嘉奖项目名称</th>
+                      <th style="width: 170px;">嘉奖金额（元）</th>
+                      <th style="min-width: 220px;">备注 / 认定依据（选填）</th>
+                      <th style="width: 82px;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, rIdx) in unit.extraRewards" :key="`${unit.code}-er-${rIdx}`">
+                      <td class="text-center font-mono text-muted">{{ rIdx + 1 }}</td>
+                      <td>
+                        <input
+                          v-model.trim="item.title"
+                          type="text"
+                          class="extra-input"
+                          placeholder="例如：寒潮保供专项嘉奖 / 管理创新奖"
+                          @input="onExtraRewardChange"
+                        />
+                      </td>
+                      <td>
+                        <div class="extra-amount-wrap">
+                          <span class="extra-currency">¥</span>
+                          <input
+                            v-model.number="item.amount"
+                            type="number"
+                            step="5"
+                            class="extra-input extra-input-num font-mono"
+                            placeholder="0"
+                            @input="onExtraRewardChange"
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <input
+                          v-model.trim="item.remark"
+                          type="text"
+                          class="extra-input"
+                          placeholder="会议纪要号 / 审批说明"
+                          @input="onExtraRewardChange"
+                        />
+                      </td>
+                      <td class="text-center">
+                        <button
+                          type="button"
+                          class="btn-del-extra"
+                          title="删除该条嘉奖"
+                          @click="removeExtraRewardItem(unit, rIdx)"
+                        >
+                          删除
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1120,7 +1394,14 @@
                   :style="{ width: `${Math.min(100, (totalSimulatedReward / 280000) * 100)}%` }"
                 ></div>
               </div>
-              <div class="kpi-sub">全网兑现率 {{ ((totalSimulatedReward / 280000) * 100).toFixed(1) }}%</div>
+              <div class="kpi-sub">
+                <template v-if="totalExtraReward !== 0">
+                  竞赛 ¥{{ Math.round(totalBaseReward).toLocaleString() }} + 嘉奖 ¥{{ Math.round(totalExtraReward).toLocaleString() }}
+                </template>
+                <template v-else>
+                  全网兑现率 {{ ((totalSimulatedReward / 280000) * 100).toFixed(1) }}%
+                </template>
+              </div>
             </div>
           </div>
 
@@ -1162,12 +1443,11 @@
                 <tr>
                   <th class="th-rank">排名</th>
                   <th class="th-unit-name">参评单位</th>
-                  <th class="th-type">类型</th>
                   <th class="th-base">奖励基数</th>
                   <th class="th-score-bar">考核综合得分</th>
                   <th class="th-status">兑现资格</th>
+                  <th class="th-extra">额外嘉奖</th>
                   <th class="th-reward">测算拟兑现奖金</th>
-                  <th class="th-rate">基数达成率</th>
                   <th class="th-action">快速操作</th>
                 </tr>
               </thead>
@@ -1194,9 +1474,6 @@
                       <strong class="lb-unit-name">{{ unit.name }}</strong>
                     </div>
                   </td>
-                  <td class="text-center">
-                    <span class="unit-type-pill" :class="getUnitTypeClass(unit.type)">{{ unit.type }}</span>
-                  </td>
                   <td class="text-center font-mono font-bold text-blue">
                     ¥{{ (unit.baseAmount ?? 0).toLocaleString() }}
                   </td>
@@ -1221,26 +1498,35 @@
                     </div>
                   </td>
                   <td class="text-center">
-                    <span v-if="unit.eligible" class="status-badge status-ok">
+                    <span v-if="unit.eligible && (unit.pendingCount || 0) === 0" class="status-badge status-ok">
                       ✓ 正常兑现
+                    </span>
+                    <span v-else-if="unit.eligible && (unit.pendingCount || 0) > 0" class="status-badge status-pending">
+                      ⏳ 待月报({{ unit.pendingCount }}项)
                     </span>
                     <span v-else class="status-badge status-fail" :title="unit.disqualifyReason">
                       ✕ {{ unit.disqualifyReason }}
+                    </span>
+                  </td>
+                  <td class="text-center font-mono">
+                    <span :class="(unit.extraRewardTotal || 0) !== 0 ? 'text-amber font-bold' : 'text-muted'">
+                      ¥{{ Math.round(unit.extraRewardTotal || 0).toLocaleString() }}
                     </span>
                   </td>
                   <td class="text-center">
                     <div class="calculated-reward-box">
                       <strong
                         class="reward-num font-mono"
-                        :class="unit.eligible ? 'text-green' : 'text-muted strike'"
+                        :class="unit.eligible || (unit.extraRewardTotal || 0) > 0 ? 'text-green' : 'text-muted strike'"
                       >
                         ¥{{ Math.round(unit.calculatedReward || 0).toLocaleString() }}
                       </strong>
-                      <span v-if="!unit.eligible" class="text-disqualified-hint">取消资格(¥0)</span>
+                      <span v-if="unit.extraRewardTotal" class="reward-extra-tag font-mono">
+                        竞赛 ¥{{ Math.round(unit.baseReward || 0).toLocaleString() }} + 嘉奖 ¥{{ Math.round(unit.extraRewardTotal || 0).toLocaleString() }}
+                      </span>
+                      <span v-if="!unit.eligible && !unit.extraRewardTotal" class="text-disqualified-hint">取消资格(¥0)</span>
+                      <span v-else-if="!unit.eligible && unit.extraRewardTotal" class="text-disqualified-hint">竞赛资格取消(¥0)</span>
                     </div>
-                  </td>
-                  <td class="text-center font-mono font-bold" :class="unit.eligible ? 'text-green' : 'text-muted'">
-                    {{ unit.eligible ? `${(unit.score ?? 0).toFixed(1)}%` : '0.0%' }}
                   </td>
                   <td class="text-center">
                     <button
@@ -1255,7 +1541,7 @@
               </tbody>
               <tfoot>
                 <tr class="lb-tfoot-row">
-                  <td colspan="3" class="text-center font-bold">全网 7 家参评单位总计</td>
+                  <td colspan="2" class="text-center font-bold">全网 7 家参评单位总计</td>
                   <td class="text-center font-mono font-bold text-blue">¥280,000</td>
                   <td class="text-center text-muted font-mono">
                     全网平均 {{ (leaderboardUnits.reduce((s, u) => s + (u.score || 0), 0) / 7).toFixed(2) }} 分
@@ -1265,11 +1551,11 @@
                       {{ disqualifiedCount > 0 ? `${disqualifiedCount} 家否决` : '全员合格' }}
                     </span>
                   </td>
+                  <td class="text-center font-mono font-bold text-amber">
+                    ¥{{ Math.round(totalExtraReward).toLocaleString() }}
+                  </td>
                   <td class="text-center font-mono font-bold text-green lb-sum-reward">
                     ¥{{ Math.round(totalSimulatedReward).toLocaleString() }}
-                  </td>
-                  <td class="text-center font-mono font-bold text-green">
-                    {{ ((totalSimulatedReward / 280000) * 100).toFixed(1) }}%
                   </td>
                   <td></td>
                 </tr>
@@ -1336,6 +1622,230 @@
           </div>
         </div>
       </section>
+
+      <!-- ================= 标签页 5：供暖期兑现记录（2026.11 - 2027.03 定稿与发放汇总） ================= -->
+      <section v-else-if="activeTab === 'season_records'" class="tab-content season-records-section">
+        <div class="calc-kpi-grid extra-kpi-grid">
+          <div class="calc-kpi-card kpi-month">
+            <div class="kpi-icon">📅</div>
+            <div class="kpi-content">
+              <div class="kpi-label">供暖期定稿进度（26.11 - 27.03）</div>
+              <div class="kpi-val text-brand font-mono">
+                {{ seasonFinalSummary.count }} <span class="unit-text">/ 5 个月已定稿</span>
+              </div>
+              <div class="kpi-sub">另有 {{ seasonSavedPendingCount }} 个月已保存待发布定稿</div>
+            </div>
+          </div>
+
+          <div class="calc-kpi-card kpi-reward">
+            <div class="kpi-icon">✅</div>
+            <div class="kpi-content">
+              <div class="kpi-label">已定稿累计发放总奖金</div>
+              <div class="kpi-val text-green font-mono">¥{{ Math.round(seasonFinalSummary.total_reward || 0).toLocaleString() }}</div>
+              <div class="kpi-sub">仅计入状态为 FINAL 的正式定稿月份</div>
+            </div>
+          </div>
+
+          <div class="calc-kpi-card kpi-budget">
+            <div class="kpi-icon">🏅</div>
+            <div class="kpi-content">
+              <div class="kpi-label">已定稿构成（竞赛奖 + 嘉奖）</div>
+              <div class="kpi-val text-blue font-mono" style="font-size: 1.05rem;">
+                ¥{{ Math.round(seasonFinalSummary.base_reward || 0).toLocaleString() }}
+                <span class="text-amber">+ ¥{{ Math.round(seasonFinalSummary.extra_reward || 0).toLocaleString() }}</span>
+              </div>
+              <div class="kpi-sub">指标竞赛奖金 + 额外专项嘉奖</div>
+            </div>
+          </div>
+
+          <div class="calc-kpi-card kpi-units">
+            <div class="kpi-icon">🗂️</div>
+            <div class="kpi-content">
+              <div class="kpi-label">全口径存档参考（含未定稿）</div>
+              <div class="kpi-val font-mono">¥{{ Math.round(seasonAllSavedSummary.total_reward || 0).toLocaleString() }}</div>
+              <div class="kpi-sub">共 {{ seasonAllSavedSummary.count }} 个月已在数据库归档</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 表一：月度定稿与兑现总账 -->
+        <div class="content-block">
+          <div class="block-header table-control-header">
+            <div class="tch-left">
+              <h4>📜 2026.11–2027.03 月度指标竞赛定稿与奖金汇总台账</h4>
+              <span class="sub-hint">
+                * “保存至系统数据库”记录为 <strong>SAVED（暂存）</strong>，“发布结果”记录为 <strong>FINAL（正式定稿）</strong>；点击进入对应月份可继续调整或重新发布定稿
+              </span>
+            </div>
+            <div class="tch-right-controls">
+              <button
+                type="button"
+                class="btn-tool-mini"
+                :disabled="isLoadingSeasonRecords"
+                @click="loadSeasonRecords"
+              >
+                {{ isLoadingSeasonRecords ? '刷新中...' : '🔄 刷新台账' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="leaderboard-table modern-table season-table">
+              <thead>
+                <tr>
+                  <th style="width: 140px;">考核月份</th>
+                  <th style="width: 165px;">归档定稿状态</th>
+                  <th style="width: 150px;">竞赛指标奖金</th>
+                  <th style="width: 130px;">额外嘉奖</th>
+                  <th style="width: 160px;">当月兑现总额</th>
+                  <th style="width: 110px;">否决单位数</th>
+                  <th style="width: 185px;">定稿 / 最近更新时间</th>
+                  <th style="width: 130px;">快速跳转</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="rec in seasonMonthRecords"
+                  :key="`sr-${rec.month}`"
+                  :class="{ 'tr-season-final': rec.status === 'final' }"
+                >
+                  <td class="text-center font-mono font-bold">{{ formatSeasonMonthName(rec.month) }}</td>
+                  <td class="text-center">
+                    <span v-if="rec.status === 'final'" class="season-status-pill pill-final">
+                      ✅ 已发布定稿 (FINAL)
+                    </span>
+                    <span v-else-if="rec.status === 'saved'" class="season-status-pill pill-saved">
+                      💾 已保存暂存 (SAVED)
+                    </span>
+                    <span v-else class="season-status-pill pill-empty">
+                      ⏳ 尚未保存记录
+                    </span>
+                  </td>
+                  <td class="text-center font-mono">
+                    {{ rec.exists ? `¥${Math.round(rec.base_reward || 0).toLocaleString()}` : '-' }}
+                  </td>
+                  <td class="text-center font-mono" :class="rec.exists && (rec.extra_reward || 0) !== 0 ? 'text-amber font-bold' : ''">
+                    {{ rec.exists ? `¥${Math.round(rec.extra_reward || 0).toLocaleString()}` : '-' }}
+                  </td>
+                  <td class="text-center font-mono font-bold" :class="rec.status === 'final' ? 'text-green' : 'text-blue'">
+                    {{ rec.exists ? `¥${Math.round(rec.total_reward || 0).toLocaleString()}` : '-' }}
+                  </td>
+                  <td class="text-center font-mono">
+                    <span v-if="!rec.exists">-</span>
+                    <span v-else-if="rec.disqualified_count > 0" class="text-red font-bold">{{ rec.disqualified_count }} 家</span>
+                    <span v-else class="text-green">0 家</span>
+                  </td>
+                  <td class="text-center font-mono text-muted" style="font-size: 0.78rem;">
+                    <template v-if="rec.status === 'final' && rec.published_at">
+                      定稿：{{ formatDateTimeShort(rec.published_at) }}
+                    </template>
+                    <template v-else-if="rec.updated_at">
+                      更新：{{ formatDateTimeShort(rec.updated_at) }}
+                    </template>
+                    <template v-else>-</template>
+                  </td>
+                  <td class="text-center">
+                    <button
+                      type="button"
+                      class="btn-lb-jump"
+                      @click="jumpToSeasonMonth(rec.month)"
+                    >
+                      {{ rec.exists ? '查看 / 修改' : '去填报测算' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="lb-tfoot-row season-tfoot-final">
+                  <td colspan="2" class="text-center font-bold">✅ 已定稿（FINAL）累计合计（{{ seasonFinalSummary.count }} 个月）</td>
+                  <td class="text-center font-mono font-bold text-blue">¥{{ Math.round(seasonFinalSummary.base_reward || 0).toLocaleString() }}</td>
+                  <td class="text-center font-mono font-bold text-amber">¥{{ Math.round(seasonFinalSummary.extra_reward || 0).toLocaleString() }}</td>
+                  <td class="text-center font-mono font-bold text-green lb-sum-reward">¥{{ Math.round(seasonFinalSummary.total_reward || 0).toLocaleString() }}</td>
+                  <td colspan="3" class="text-center text-muted" style="font-size: 0.8rem;">正式纳入供暖期兑现总账</td>
+                </tr>
+                <tr class="lb-tfoot-row">
+                  <td colspan="2" class="text-center text-muted font-bold">全口径参考合计（含 SAVED 暂存，共 {{ seasonAllSavedSummary.count }} 个月）</td>
+                  <td class="text-center font-mono text-muted">¥{{ Math.round(seasonAllSavedSummary.base_reward || 0).toLocaleString() }}</td>
+                  <td class="text-center font-mono text-muted">¥{{ Math.round(seasonAllSavedSummary.extra_reward || 0).toLocaleString() }}</td>
+                  <td class="text-center font-mono font-bold text-muted">¥{{ Math.round(seasonAllSavedSummary.total_reward || 0).toLocaleString() }}</td>
+                  <td colspan="3" class="text-center text-muted" style="font-size: 0.8rem;">包含尚未正式定稿的暂存测算</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <!-- 表二：7 家参评单位分月兑现矩阵 -->
+        <div class="content-block">
+          <div class="block-header">
+            <div class="bh-left">
+              <h4>🏢 7 家参评单位 2026.11–2027.03 分月奖金发放明细（供暖期累计）</h4>
+              <span class="bh-sub">绿色加粗表示该月已定稿（FINAL）；灰色标注“(未定稿)”表示已保存（SAVED）但尚未点击“发布结果”</span>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="leaderboard-table modern-table season-matrix-table">
+              <thead>
+                <tr>
+                  <th style="width: 130px;">参评单位</th>
+                  <th v-for="rec in seasonMonthRecords" :key="`smh-${rec.month}`">
+                    {{ rec.month }}
+                    <div class="smh-sub">
+                      {{ rec.status === 'final' ? '已定稿' : rec.status === 'saved' ? '未定稿' : '未存档' }}
+                    </div>
+                  </th>
+                  <th style="width: 150px;">已定稿累计 (元)</th>
+                  <th style="width: 150px;">全口径参考累计</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="uRow in seasonUnitMatrix" :key="`smr-${uRow.code}`">
+                  <td class="font-bold text-center">{{ uRow.name }}</td>
+                  <td
+                    v-for="cell in uRow.cells"
+                    :key="`smc-${uRow.code}-${cell.month}`"
+                    class="text-center font-mono"
+                  >
+                    <template v-if="!cell.exists">-</template>
+                    <template v-else-if="cell.status === 'final'">
+                      <strong class="text-green">¥{{ Math.round(cell.reward).toLocaleString() }}</strong>
+                      <div v-if="cell.extraReward" class="smc-sub text-amber">含嘉奖 ¥{{ Math.round(cell.extraReward).toLocaleString() }}</div>
+                    </template>
+                    <template v-else>
+                      <span class="text-muted">¥{{ Math.round(cell.reward).toLocaleString() }}</span>
+                      <div class="smc-sub text-muted">(未定稿)</div>
+                    </template>
+                  </td>
+                  <td class="text-center font-mono font-bold text-green">
+                    ¥{{ Math.round(uRow.finalTotal).toLocaleString() }}
+                  </td>
+                  <td class="text-center font-mono text-muted">
+                    ¥{{ Math.round(uRow.allSavedTotal).toLocaleString() }}
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="lb-tfoot-row season-tfoot-final">
+                  <td class="text-center font-bold">各月合计</td>
+                  <td v-for="rec in seasonMonthRecords" :key="`smf-${rec.month}`" class="text-center font-mono font-bold">
+                    <span v-if="!rec.exists">-</span>
+                    <span v-else :class="rec.status === 'final' ? 'text-green' : 'text-muted'">
+                      ¥{{ Math.round(rec.total_reward || 0).toLocaleString() }}
+                    </span>
+                  </td>
+                  <td class="text-center font-mono font-bold text-green lb-sum-reward">
+                    ¥{{ Math.round(seasonFinalSummary.total_reward || 0).toLocaleString() }}
+                  </td>
+                  <td class="text-center font-mono font-bold text-muted">
+                    ¥{{ Math.round(seasonAllSavedSummary.total_reward || 0).toLocaleString() }}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 </template>
@@ -1345,7 +1855,9 @@ import { ref, computed, onMounted } from 'vue'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import {
+  exportCompetitionExcel,
   fetchCompetitionAutoData,
+  fetchCompetitionSeasonRecords,
   getCompetitionRecord,
   saveCompetitionRecord,
 } from '../../daily_report_25_26/services/api.js'
@@ -1380,7 +1892,7 @@ const selectedMonth = ref(computeDefaultMonth())
 const showSourceTags = ref(true)
 
 const availableMonths = [
-  { value: '2026-11', label: '2026年11月（含启动考评）' },
+  { value: '2026-11', label: '2026年11月' },
   { value: '2026-12', label: '2026年12月' },
   { value: '2027-01', label: '2027年01月' },
   { value: '2027-02', label: '2027年02月' },
@@ -1388,7 +1900,7 @@ const availableMonths = [
   { value: '2026-01', label: '2026年01月（历史库验证）' },
   { value: '2026-02', label: '2026年02月（历史库验证）' },
   { value: '2026-03', label: '2026年03月（历史库验证）' },
-  { value: '2026-2027', label: '2026-2027供暖期（总评）' },
+  { value: '2026-2027', label: '2026-2027供暖期（总评 · 暂未启用）' },
 ]
 
 const selectedMonthLabel = computed(() => {
@@ -1414,7 +1926,7 @@ function getUnitTypeClass(type) {
   return 'type-branch'
 }
 
-// 5. 生成各单位默认指标模板工厂函数（严格对齐对照表顺序与口径）
+// 5. 生成各单位默认指标模板工厂函数（系统自动取数项置空，手工认定项预置标准基准）
 function buildInitialUnitData() {
   return [
     {
@@ -1422,21 +1934,23 @@ function buildInitialUnitData() {
       name: '北海热电厂',
       type: '热电厂',
       baseAmount: 70000,
-      score: 100,
+      score: 0,
+      pendingCount: 0,
       eligible: true,
       disqualifyReason: '',
       isBlackListed: false,
       isRedListed: false,
       hasMajorAccident: false,
       hasGeneralAccident: false,
+      extraRewards: [],
       indicators: [
-        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: 32000, actualValue: 31500, calcType: 'energy_saving', sourceLabel: '日报月末累计', sourceType: 'src-daily' },
-        { name: '厂内水耗量', weight: 10, unit: 't', hasTarget: true, targetValue: 18000, actualValue: 17800, calcType: 'consumption', sourceLabel: '日报水耗累计', sourceType: 'src-daily' },
-        { name: '现货电价', weight: 20, unit: '元/MWh', hasTarget: true, targetValue: 385.0, actualValue: 392.5, calcType: 'spot_price', sourceLabel: '现货月度账单', sourceType: 'src-spot' },
-        { name: '全厂热效率', weight: 20, unit: '%', hasTarget: true, targetValue: 88.5, actualValue: 89.1, calcType: 'efficiency', sourceLabel: '技术月报表', sourceType: 'src-month' },
-        { name: '非计划停炉停机', weight: 10, unit: '次', hasTarget: false, targetValue: 0, actualValue: 0, calcType: 'shutdown', sourceLabel: '调度日志', sourceType: 'src-dispatch' },
+        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '厂内水耗量', weight: 10, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '现货电价', weight: 20, unit: '元/MWh', hasTarget: true, targetValue: null, actualValue: null, calcType: 'spot_price', sourceLabel: '电力现货市场', sourceType: 'src-spot' },
+        { name: '全厂热效率', weight: 20, unit: '%', hasTarget: true, targetValue: null, actualValue: null, calcType: 'efficiency', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '非计划停炉停机', weight: 10, unit: '次', hasTarget: false, targetValue: 0, actualValue: 0, calcType: 'shutdown', sourceLabel: '手动填报 (默认0次)', sourceType: 'src-manual' },
         null, // 第 6 个插槽留空
-        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '检查评定', sourceType: 'src-manual' },
+        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '手动填报 (基准满分10分)', sourceType: 'src-manual' },
       ],
     },
     {
@@ -1444,21 +1958,23 @@ function buildInitialUnitData() {
       name: '香海热电厂',
       type: '热电厂',
       baseAmount: 50000,
-      score: 100,
+      score: 0,
+      pendingCount: 0,
       eligible: true,
       disqualifyReason: '',
       isBlackListed: false,
       isRedListed: false,
       hasMajorAccident: false,
       hasGeneralAccident: false,
+      extraRewards: [],
       indicators: [
-        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: 24000, actualValue: 23600, calcType: 'energy_saving', sourceLabel: '日报月末累计', sourceType: 'src-daily' },
-        { name: '厂内水耗量', weight: 10, unit: 't', hasTarget: true, targetValue: 12000, actualValue: 11900, calcType: 'consumption', sourceLabel: '日报水耗累计', sourceType: 'src-daily' },
-        { name: '现货电价', weight: 20, unit: '元/MWh', hasTarget: true, targetValue: 385.0, actualValue: 388.0, calcType: 'spot_price', sourceLabel: '现货月度账单', sourceType: 'src-spot' },
-        { name: '全厂热效率', weight: 20, unit: '%', hasTarget: true, targetValue: 86.0, actualValue: 86.4, calcType: 'efficiency', sourceLabel: '技术月报表', sourceType: 'src-month' },
-        { name: '非计划停炉停机', weight: 10, unit: '次', hasTarget: false, targetValue: 0, actualValue: 0, calcType: 'shutdown', sourceLabel: '调度日志', sourceType: 'src-dispatch' },
+        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '厂内水耗量', weight: 10, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '现货电价', weight: 20, unit: '元/MWh', hasTarget: true, targetValue: null, actualValue: null, calcType: 'spot_price', sourceLabel: '电力现货市场', sourceType: 'src-spot' },
+        { name: '全厂热效率', weight: 20, unit: '%', hasTarget: true, targetValue: null, actualValue: null, calcType: 'efficiency', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '非计划停炉停机', weight: 10, unit: '次', hasTarget: false, targetValue: 0, actualValue: 0, calcType: 'shutdown', sourceLabel: '手动填报 (默认0次)', sourceType: 'src-manual' },
         null,
-        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '检查评定', sourceType: 'src-manual' },
+        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '手动填报 (基准满分10分)', sourceType: 'src-manual' },
       ],
     },
     {
@@ -1466,21 +1982,23 @@ function buildInitialUnitData() {
       name: '供热公司',
       type: '供热管网',
       baseAmount: 60000,
-      score: 100,
+      score: 0,
+      pendingCount: 0,
       eligible: true,
       disqualifyReason: '',
       isBlackListed: false,
       isRedListed: false,
       hasMajorAccident: false,
       hasGeneralAccident: false,
+      extraRewards: [],
       indicators: [
-        { name: '主城区耗标煤总量', weight: 15, unit: '吨', hasTarget: true, targetValue: 56000, actualValue: 55100, calcType: 'energy_saving_half', sourceLabel: '全网标煤累计', sourceType: 'src-daily' },
-        { name: '供暖热单耗', weight: 15, unit: 'GJ/万㎡', hasTarget: true, targetValue: 1650, actualValue: 1630, calcType: 'energy_saving_half', sourceLabel: '日报热耗统计', sourceType: 'src-daily' },
-        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: 4200, actualValue: 4150, calcType: 'consumption', sourceLabel: '日报电量统计', sourceType: 'src-daily' },
-        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: 280, actualValue: 275, calcType: 'consumption', sourceLabel: '日报补水统计', sourceType: 'src-daily' },
-        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: 0.12, calcType: 'complaint_rank', sourceLabel: '投诉系统统计', sourceType: 'src-complaint' },
-        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 99.2, calcType: 'pipe_cutoff', sourceLabel: '抽检数据录入', sourceType: 'src-manual' },
-        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '检查评定', sourceType: 'src-manual' },
+        { name: '主城区耗标煤总量', weight: 15, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving_half', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖热单耗', weight: 15, unit: 'GJ/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving_half', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: null, calcType: 'complaint_rank', sourceLabel: '日报表', sourceType: 'src-complaint' },
+        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 100, calcType: 'pipe_cutoff', sourceLabel: '手动填报 (默认100%)', sourceType: 'src-manual' },
+        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '手动填报 (基准满分10分)', sourceType: 'src-manual' },
       ],
     },
     {
@@ -1488,21 +2006,23 @@ function buildInitialUnitData() {
       name: '金州热电',
       type: '热电分公司',
       baseAmount: 50000,
-      score: 100,
+      score: 0,
+      pendingCount: 0,
       eligible: true,
       disqualifyReason: '',
       isBlackListed: false,
       isRedListed: false,
       hasMajorAccident: false,
       hasGeneralAccident: false,
+      extraRewards: [],
       indicators: [
-        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: 16000, actualValue: 15800, calcType: 'energy_saving', sourceLabel: '日报月末累计', sourceType: 'src-daily' },
-        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: 4100, actualValue: 4050, calcType: 'consumption', sourceLabel: '日报电量统计', sourceType: 'src-daily' },
-        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: 260, actualValue: 255, calcType: 'consumption', sourceLabel: '日报补水统计', sourceType: 'src-daily' },
-        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: 0.15, calcType: 'complaint_rank', sourceLabel: '投诉系统统计', sourceType: 'src-complaint' },
-        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 98.8, calcType: 'pipe_cutoff', sourceLabel: '抽检数据录入', sourceType: 'src-manual' },
+        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: null, calcType: 'complaint_rank', sourceLabel: '日报表', sourceType: 'src-complaint' },
+        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 100, calcType: 'pipe_cutoff', sourceLabel: '手动填报 (默认100%)', sourceType: 'src-manual' },
         null,
-        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '检查评定', sourceType: 'src-manual' },
+        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '手动填报 (基准满分10分)', sourceType: 'src-manual' },
       ],
     },
     {
@@ -1510,21 +2030,23 @@ function buildInitialUnitData() {
       name: '北方热电',
       type: '热电分公司',
       baseAmount: 30000,
-      score: 100,
+      score: 0,
+      pendingCount: 0,
       eligible: true,
       disqualifyReason: '',
       isBlackListed: false,
       isRedListed: false,
       hasMajorAccident: false,
       hasGeneralAccident: false,
+      extraRewards: [],
       indicators: [
-        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: 9800, actualValue: 9700, calcType: 'energy_saving', sourceLabel: '日报月末累计', sourceType: 'src-daily' },
-        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: 4300, actualValue: 4250, calcType: 'consumption', sourceLabel: '日报电量统计', sourceType: 'src-daily' },
-        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: 270, actualValue: 268, calcType: 'consumption', sourceLabel: '日报补水统计', sourceType: 'src-daily' },
-        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: 0.18, calcType: 'complaint_rank', sourceLabel: '投诉系统统计', sourceType: 'src-complaint' },
-        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 99.0, calcType: 'pipe_cutoff', sourceLabel: '抽检数据录入', sourceType: 'src-manual' },
+        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: null, calcType: 'complaint_rank', sourceLabel: '日报表', sourceType: 'src-complaint' },
+        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 100, calcType: 'pipe_cutoff', sourceLabel: '手动填报 (默认100%)', sourceType: 'src-manual' },
         null,
-        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '检查评定', sourceType: 'src-manual' },
+        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '手动填报 (基准满分10分)', sourceType: 'src-manual' },
       ],
     },
     {
@@ -1532,21 +2054,23 @@ function buildInitialUnitData() {
       name: '金普公司',
       type: '供热分公司',
       baseAmount: 10000,
-      score: 100,
+      score: 0,
+      pendingCount: 0,
       eligible: true,
       disqualifyReason: '',
       isBlackListed: false,
       isRedListed: false,
       hasMajorAccident: false,
       hasGeneralAccident: false,
+      extraRewards: [],
       indicators: [
-        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: 4500, actualValue: 4420, calcType: 'energy_saving', sourceLabel: '日报月末累计', sourceType: 'src-daily' },
-        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: 4000, actualValue: 3950, calcType: 'consumption', sourceLabel: '日报电量统计', sourceType: 'src-daily' },
-        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: 250, actualValue: 245, calcType: 'consumption', sourceLabel: '日报补水统计', sourceType: 'src-daily' },
-        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: 0.20, calcType: 'complaint_rank', sourceLabel: '投诉系统统计', sourceType: 'src-complaint' },
-        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 99.5, calcType: 'pipe_cutoff', sourceLabel: '抽检数据录入', sourceType: 'src-manual' },
+        { name: '耗标煤总量', weight: 30, unit: '吨', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: null, calcType: 'complaint_rank', sourceLabel: '日报表', sourceType: 'src-complaint' },
+        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 100, calcType: 'pipe_cutoff', sourceLabel: '手动填报 (默认100%)', sourceType: 'src-manual' },
         null,
-        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '检查评定', sourceType: 'src-manual' },
+        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '手动填报 (基准满分10分)', sourceType: 'src-manual' },
       ],
     },
     {
@@ -1554,21 +2078,23 @@ function buildInitialUnitData() {
       name: '庄河环海',
       type: '外购热供热',
       baseAmount: 10000,
-      score: 100,
+      score: 0,
+      pendingCount: 0,
       eligible: true,
       disqualifyReason: '',
       isBlackListed: false,
       isRedListed: false,
       hasMajorAccident: false,
       hasGeneralAccident: false,
+      extraRewards: [],
       indicators: [
-        { name: '外购热量', weight: 30, unit: 'GJ', hasTarget: true, targetValue: 125000, actualValue: 123000, calcType: 'energy_saving', sourceLabel: '外购热计量', sourceType: 'src-daily' },
-        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: 3900, actualValue: 3860, calcType: 'consumption', sourceLabel: '日报电量统计', sourceType: 'src-daily' },
-        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: 240, actualValue: 235, calcType: 'consumption', sourceLabel: '日报补水统计', sourceType: 'src-daily' },
-        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: 0.10, calcType: 'complaint_rank', sourceLabel: '投诉系统统计', sourceType: 'src-complaint' },
-        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 99.1, calcType: 'pipe_cutoff', sourceLabel: '抽检数据录入', sourceType: 'src-manual' },
+        { name: '外购热量', weight: 30, unit: 'GJ', hasTarget: true, targetValue: null, actualValue: null, calcType: 'energy_saving', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖电单耗', weight: 10, unit: 'kWh/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '供暖水单耗', weight: 20, unit: 't/万㎡', hasTarget: true, targetValue: null, actualValue: null, calcType: 'consumption', sourceLabel: '月报表', sourceType: 'src-month' },
+        { name: '服务投诉率', weight: 20, unit: '件/万㎡', hasTarget: false, targetValue: 0, actualValue: null, calcType: 'complaint_rank', sourceLabel: '日报表', sourceType: 'src-complaint' },
+        { name: '停供断管率', weight: 10, unit: '%', hasTarget: true, targetValue: 100, actualValue: 100, calcType: 'pipe_cutoff', sourceLabel: '手动填报 (默认100%)', sourceType: 'src-manual' },
         null,
-        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '检查评定', sourceType: 'src-manual' },
+        { name: '安全文明生产', weight: 10, unit: '分', hasTarget: false, targetValue: 10, actualValue: 10, calcType: 'civic', sourceLabel: '手动填报 (基准满分10分)', sourceType: 'src-manual' },
       ],
     },
   ]
@@ -1600,83 +2126,143 @@ function getCivicIndicator(unit) {
   return civic
 }
 
-// 7. 严格按方案公式计算单个指标得分
+function isBlankMetric(val) {
+  return val === null || val === undefined || val === '' || Number.isNaN(Number(val))
+}
+
+const MANUAL_DEFAULT_CALC_TYPES = new Set(['shutdown', 'pipe_cutoff', 'civic'])
+
+function getIndicatorDefaultValue(ind) {
+  if (!ind) return null
+  if (ind.calcType === 'shutdown') return 0
+  if (ind.calcType === 'pipe_cutoff') return 100
+  if (ind.calcType === 'civic') return 10
+  return null
+}
+
+function onActualValueInput(ind) {
+  if (!ind) return
+  if (MANUAL_DEFAULT_CALC_TYPES.has(ind.calcType)) {
+    const defVal = getIndicatorDefaultValue(ind)
+    ind.isManualActual = isBlankMetric(ind.actualValue) || Number(ind.actualValue) !== defVal
+  } else {
+    // 非原生手工项（月报、现货、投诉率）：清空且无系统原值时恢复待出数状态，否则标为人工调整
+    if (isBlankMetric(ind.actualValue) && isBlankMetric(ind.autoActualValue)) {
+      ind.isManualActual = false
+    } else {
+      ind.isManualActual = true
+    }
+  }
+  recalculateAllScores()
+}
+
+function restoreSystemActualValue(ind) {
+  if (!ind) return
+  if (MANUAL_DEFAULT_CALC_TYPES.has(ind.calcType)) {
+    ind.actualValue = getIndicatorDefaultValue(ind)
+  } else {
+    ind.actualValue = ind.autoActualValue !== undefined ? ind.autoActualValue : null
+  }
+  ind.isManualActual = false
+  recalculateAllScores()
+}
+
+function getManualTooltip(ind) {
+  if (!ind) return '已完成人工调整'
+  if (MANUAL_DEFAULT_CALC_TYPES.has(ind.calcType)) {
+    const defVal = getIndicatorDefaultValue(ind)
+    return `人工认定调整（默认基准：${defVal}${ind.unit || ''}）`
+  }
+  if (!isBlankMetric(ind.autoActualValue)) {
+    return `人工调整覆盖（系统取数原值：${ind.autoActualValue}${ind.unit || ''}）`
+  }
+  return '由人工手工填写实际完成值（系统暂未出数）'
+}
+
+function getRestoreTooltip(ind) {
+  if (!ind) return '恢复默认/系统值'
+  if (MANUAL_DEFAULT_CALC_TYPES.has(ind.calcType)) {
+    return `恢复默认基准值（${getIndicatorDefaultValue(ind)}${ind.unit || ''}）`
+  }
+  if (!isBlankMetric(ind.autoActualValue)) {
+    return `还原为系统自动取数原值（${ind.autoActualValue}）`
+  }
+  return '清除手工填报并恢复待出数状态'
+}
+
+// 7. 严格按方案公式计算单个指标得分；实际值（或带目标项的计划值）未出数时返回 null
 function calculateSingleIndicatorScore(item) {
-  if (!item) return 0
+  if (!item) return null
+  const weight = Number(item.weight)
+
+  if (item.calcType === 'complaint_rank') {
+    if (isBlankMetric(item.actualValue)) {
+      item.score = null
+      return null
+    }
+    const score = item.score != null ? Number(item.score) : 20.0
+    item.score = score
+    return score
+  }
+
+  if (isBlankMetric(item.actualValue)) {
+    item.score = null
+    return null
+  }
+
+  if (item.hasTarget && (isBlankMetric(item.targetValue) || Number(item.targetValue) <= 0)) {
+    item.score = null
+    return null
+  }
+
   const target = Number(item.targetValue)
   const actual = Number(item.actualValue)
-  const weight = Number(item.weight)
   let score = 0
 
   switch (item.calcType) {
     case 'energy_saving': {
       // 完成率 = 1 + (目标值 - 完成值) / 目标值；超出/降低 1 个百分点加减 1 分；上限 120%
-      if (target > 0) {
-        const rate = 1 + (target - actual) / target
-        const diffPercent = (rate - 1.0) * 100
-        score = weight + diffPercent * 1.0
-        score = Math.max(0, Math.min(weight * 1.2, score))
-      } else {
-        score = weight
-      }
+      const rate = 1 + (target - actual) / target
+      const diffPercent = (rate - 1.0) * 100
+      score = Math.max(0, Math.min(weight * 1.2, weight + diffPercent * 1.0))
       break
     }
     case 'energy_saving_half': {
       // 供热公司主城区耗标煤总量、热单耗：完成率超出/降低 1 个百分点按 0.5 分加减；上限 120%
-      if (target > 0) {
-        const rate = 1 + (target - actual) / target
-        const diffPercent = (rate - 1.0) * 100
-        score = weight + diffPercent * 0.5
-        score = Math.max(0, Math.min(weight * 1.2, score))
-      } else {
-        score = weight
-      }
+      const rate = 1 + (target - actual) / target
+      const diffPercent = (rate - 1.0) * 100
+      score = Math.max(0, Math.min(weight * 1.2, weight + diffPercent * 0.5))
       break
     }
     case 'consumption': {
       // 单耗/水耗：得分 = 完成率 × 权重分；完成率 = 1 + (目标 - 完成) / 目标；上限 120%
-      if (target > 0) {
-        const rate = 1 + (target - actual) / target
-        score = rate * weight
-        score = Math.max(0, Math.min(weight * 1.2, score))
-      } else {
-        score = weight
-      }
+      const rate = 1 + (target - actual) / target
+      score = Math.max(0, Math.min(weight * 1.2, rate * weight))
       break
     }
     case 'spot_price': {
       // 现货电价：完成率 = 现货均价 / (统一结算点 × 1.05)；每超减 3 个百分点加减 1 分；上限 120%
-      if (target > 0) {
-        const rate = actual / target
-        const diffPercent = (rate - 1.0) * 100
-        score = weight + (diffPercent / 3.0) * 1.0
-        score = Math.max(0, Math.min(weight * 1.2, score))
-      } else {
-        score = weight
-      }
+      const rate = actual / target
+      const diffPercent = (rate - 1.0) * 100
+      score = Math.max(0, Math.min(weight * 1.2, weight + (diffPercent / 3.0) * 1.0))
       break
     }
     case 'efficiency': {
       // 全厂热效率：完成率 = 1 + (完成 - 目标) / 目标；每超减 1 个百分点加减 2 分；上限 110%
-      if (target > 0) {
-        const rate = 1 + (actual - target) / target
-        const diffPercent = (rate - 1.0) * 100
-        score = weight + diffPercent * 2.0
-        score = Math.max(0, Math.min(weight * 1.1, score))
-      } else {
-        score = weight
-      }
+      const rate = 1 + (actual - target) / target
+      const diffPercent = (rate - 1.0) * 100
+      score = Math.max(0, Math.min(weight * 1.1, weight + diffPercent * 2.0))
       break
     }
     case 'shutdown': {
       // 非计划停机停炉：目标 0 次得 10 分，发生 1 次扣 5 分
-      const times = Math.max(0, actual || 0)
+      const times = Math.max(0, actual)
       score = Math.max(0, weight - times * 5)
       break
     }
     case 'civic': {
-      // 【重点调整】安全文明生产：完成值直接为“实际评定得分”，满分 10 分（0~10分）
-      score = Math.max(0, Math.min(weight, actual != null && !Number.isNaN(actual) ? actual : weight))
+      // 安全文明生产：完成值直接为“实际评定得分”，满分 10 分（0~10分）
+      score = Math.max(0, Math.min(weight, actual))
       break
     }
     case 'pipe_cutoff': {
@@ -1688,10 +2274,6 @@ function calculateSingleIndicatorScore(item) {
         const gap = Math.max(0, baseTarget - actual)
         score = Math.max(0, weight - gap * 1.0)
       }
-      break
-    }
-    case 'complaint_rank': {
-      score = item.score != null ? item.score : 20.0
       break
     }
     default:
@@ -1707,12 +2289,16 @@ function recalculateAllScores() {
   if (!unitsData.value || !Array.isArray(unitsData.value)) return
 
   // 1) 投诉率动态横向排名赋分：第1名20分，每降1名扣2分
-  // 仅针对具备投诉率指标的单位排序（排除北海、香海等纯热源电厂）
+  // 仅针对具备有效投诉率实际值的参评单位排序（排除北海、香海等纯热源电厂）
   const unitsWithComplaints = unitsData.value
-    .filter((u) => u.indicators && u.indicators.some((i) => i && i.calcType === 'complaint_rank'))
+    .filter((u) => {
+      if (!u || !u.indicators) return false
+      const cItem = u.indicators.find((i) => i && i.calcType === 'complaint_rank')
+      return cItem && !isBlankMetric(cItem.actualValue)
+    })
     .map((u) => {
       const cItem = u.indicators.find((i) => i && i.calcType === 'complaint_rank')
-      return { code: u.code, val: cItem ? Number(cItem.actualValue || 0) : 0 }
+      return { code: u.code, val: Number(cItem.actualValue) }
     })
     .sort((a, b) => a.val - b.val)
 
@@ -1729,10 +2315,16 @@ function recalculateAllScores() {
   // 2) 逐个单位汇总计算
   unitsData.value.forEach((unit) => {
     let total = 0
+    let pendingCount = 0
     if (unit.indicators) {
       unit.indicators.forEach((ind) => {
         if (ind) {
-          total += calculateSingleIndicatorScore(ind)
+          const indScore = calculateSingleIndicatorScore(ind)
+          if (indScore === null) {
+            pendingCount += 1
+          } else {
+            total += indScore
+          }
         }
       })
     }
@@ -1740,8 +2332,12 @@ function recalculateAllScores() {
     // 联动同步安全文明生产实际得分
     const civic = getCivicIndicator(unit)
     if (civic) {
-      const val = Number(civic.actualValue)
-      civic.score = Math.max(0, Math.min(10, !Number.isNaN(val) ? val : 10))
+      if (isBlankMetric(civic.actualValue)) {
+        civic.score = null
+      } else {
+        const val = Number(civic.actualValue)
+        civic.score = Math.max(0, Math.min(10, val))
+      }
     }
 
     // 考虑红榜加分与事故扣分
@@ -1752,10 +2348,12 @@ function recalculateAllScores() {
       total -= 10.0
     }
 
+    unit.pendingCount = pendingCount
     unit.score = Math.max(0, total)
   })
 
-  // 3) 按照分数进行初步排名，判定“末位且低于85分”以及一票否决红线
+  // 3) 按照分数进行初步排名；仅当全网所有单位指标均已出数时，才判定“末位且低于85分”淘汰
+  const allComplete = unitsData.value.every((u) => (u.pendingCount || 0) === 0)
   const sortedByScore = [...unitsData.value].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
   const lastUnit = sortedByScore[sortedByScore.length - 1]
 
@@ -1769,15 +2367,78 @@ function recalculateAllScores() {
     } else if (unit.isBlackListed) {
       isEligible = false
       reason = '投诉黑榜(取消资格)'
-    } else if (lastUnit && unit.code === lastUnit.code && (unit.score ?? 0) < 85.0) {
+    } else if (allComplete && lastUnit && unit.code === lastUnit.code && (unit.score ?? 0) < 85.0) {
       isEligible = false
       reason = '末位且<85分(淘汰)'
     }
 
+    const baseReward = isEligible
+      ? Math.round(((unit.baseAmount ?? 0) * ((unit.score ?? 0) / 100.0)) / 5) * 5
+      : 0
+    if (!Array.isArray(unit.extraRewards)) {
+      unit.extraRewards = []
+    }
+    const extraRewardTotal = unit.extraRewards.reduce((sum, item) => {
+      if (!item || isBlankMetric(item.amount)) return sum
+      return sum + Number(item.amount)
+    }, 0)
+
     unit.eligible = isEligible
     unit.disqualifyReason = reason
-    unit.calculatedReward = isEligible ? (unit.baseAmount ?? 0) * ((unit.score ?? 0) / 100.0) : 0
+    unit.baseReward = baseReward
+    unit.extraRewardTotal = extraRewardTotal
+    unit.calculatedReward = baseReward + extraRewardTotal
   })
+}
+
+function normalizeLoadedUnits(list) {
+  if (!Array.isArray(list)) return
+  list.forEach((u) => {
+    if (!u) return
+    if (!Array.isArray(u.extraRewards)) {
+      u.extraRewards = []
+    }
+    if (Array.isArray(u.indicators)) {
+      u.indicators.forEach((ind) => {
+        if (!ind) return
+        ind.isManualActual = Boolean(ind.isManualActual)
+      })
+    }
+  })
+}
+
+function addExtraRewardItem(unit) {
+  if (!unit) return
+  if (!Array.isArray(unit.extraRewards)) {
+    unit.extraRewards = []
+  }
+  unit.extraRewards.push({
+    title: '',
+    amount: null,
+    remark: '',
+  })
+  onExtraRewardChange()
+}
+
+function removeExtraRewardItem(unit, idx) {
+  if (!unit || !Array.isArray(unit.extraRewards)) return
+  unit.extraRewards.splice(idx, 1)
+  onExtraRewardChange()
+}
+
+function onExtraRewardChange() {
+  recalculateAllScores()
+  if (/^\d{4}-\d{2}$/.test(String(selectedMonth.value || ''))) {
+    try {
+      localStorage.setItem(`competition_draft_${selectedMonth.value}`, JSON.stringify(unitsData.value))
+      if (recordStatus.value !== 'saved') {
+        recordStatus.value = 'draft'
+        recordStatusNote.value = '已更新额外嘉奖项目并暂存本地草稿 (请记得点击保存至系统数据库)'
+      }
+    } catch {
+      // ignore localStorage quota error
+    }
+  }
 }
 
 // 9. 获取特定单位当前名次
@@ -1843,10 +2504,10 @@ function getOperationalIndicators(unit) {
 
 // 9.4 计算运营指标达成率文本
 function getIndicatorRate(item) {
-  if (!item || !item.hasTarget || !item.targetValue) return '-'
+  if (!item || !item.hasTarget || isBlankMetric(item.targetValue) || isBlankMetric(item.actualValue)) return '-'
   const target = Number(item.targetValue)
   const actual = Number(item.actualValue)
-  if (target === 0 || Number.isNaN(actual)) return '-'
+  if (target <= 0) return '-'
   if (item.calcType === 'energy_saving' || item.calcType === 'energy_saving_half' || item.calcType === 'consumption') {
     const rate = (1 + (target - actual) / target) * 100
     return `${rate.toFixed(1)}%`
@@ -1889,6 +2550,24 @@ function getIndicatorRuleSummary(item) {
       return '依方案标准核算'
   }
 }
+
+const totalBaseReward = computed(() => {
+  return unitsData.value.reduce((acc, u) => acc + (u.baseReward || 0), 0)
+})
+
+const totalExtraReward = computed(() => {
+  return unitsData.value.reduce((acc, u) => acc + (u.extraRewardTotal || 0), 0)
+})
+
+const extraRewardUnitCount = computed(() => {
+  return unitsData.value.filter(
+    (u) => Array.isArray(u.extraRewards) && u.extraRewards.some((r) => r && ((r.title && r.title.trim()) || !isBlankMetric(r.amount))),
+  ).length
+})
+
+const extraRewardItemCount = computed(() => {
+  return unitsData.value.reduce((acc, u) => acc + (Array.isArray(u.extraRewards) ? u.extraRewards.length : 0), 0)
+})
 
 const totalSimulatedReward = computed(() => {
   return unitsData.value.reduce((acc, u) => acc + (u.calculatedReward || 0), 0)
@@ -1957,11 +2636,34 @@ const complaintRedListCount = computed(() => {
 // 10. 操作与持久化（系统数据库直连 + 本地兜底）
 const isFetchingAuto = ref(false)
 const isSavingRecord = ref(false)
-const recordStatus = ref('default') // 'default' | 'fetched' | 'saved' | 'draft'
+const isPublishingFinal = ref(false)
+const isExportingExcel = ref(false)
+const isLoadingSeasonRecords = ref(false)
+const recordStatus = ref('default') // 'default' | 'fetched' | 'saved' | 'final' | 'draft'
 const recordStatusNote = ref('')
+
+const SEASON_MONTHS = ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03']
+const seasonRecordsPayload = ref({
+  months: SEASON_MONTHS,
+  records: SEASON_MONTHS.map((m) => ({
+    month: m,
+    exists: false,
+    status: 'unrecorded',
+    base_reward: 0,
+    extra_reward: 0,
+    total_reward: 0,
+    disqualified_count: 0,
+    published_at: null,
+    updated_at: null,
+    units: [],
+  })),
+  final_summary: { count: 0, base_reward: 0, extra_reward: 0, total_reward: 0 },
+  all_saved_summary: { count: 0, base_reward: 0, extra_reward: 0, total_reward: 0 },
+})
 
 const recordStatusClass = computed(() => {
   switch (recordStatus.value) {
+    case 'final': return 'status-final'
     case 'saved': return 'status-saved'
     case 'fetched': return 'status-fetched'
     case 'draft': return 'status-draft'
@@ -1970,9 +2672,9 @@ const recordStatusClass = computed(() => {
 })
 
 async function applyAutoFetchData(monthVal, showSummaryModal = true) {
-  if (monthVal.includes('总评') || monthVal.split('-').length !== 2) {
+  if (!/^\d{4}-\d{2}$/.test(String(monthVal || ''))) {
     if (showSummaryModal) {
-      alert('总评周期暂不支持月度单月自动取数，请选择具体月份进行自动抽取。')
+      alert('供暖期总评暂未启用，请选择具体考核月份（YYYY-MM）进行取数。')
     }
     return
   }
@@ -1986,6 +2688,7 @@ async function applyAutoFetchData(monthVal, showSummaryModal = true) {
 
     const fetchedUnits = res.units || {}
     let matchedIndicatorCount = 0
+    let preservedManualCount = 0
 
     // 更新 7 家单位的数据
     unitsData.value.forEach((unit) => {
@@ -1999,6 +2702,7 @@ async function applyAutoFetchData(monthVal, showSummaryModal = true) {
         // 统一按指标名称智能对齐
         if (ind.name.includes('标煤')) extItem = uExt.coal_consumption
         else if (ind.name === '厂内水耗量') extItem = uExt.water_consumption
+        else if (ind.name === '现货电价') extItem = uExt.spot_price
         else if (ind.name === '全厂热效率') extItem = uExt.heat_efficiency
         else if (ind.name === '外购热量') extItem = uExt.purchased_heat
         else if (ind.name === '供暖热单耗') extItem = uExt.heat_unit_consumption
@@ -2010,11 +2714,24 @@ async function applyAutoFetchData(monthVal, showSummaryModal = true) {
         else if (ind.name === '安全文明生产') extItem = uExt.safety_production
 
         if (extItem) {
-          if (extItem.targetValue !== null && extItem.targetValue !== undefined) {
-            ind.targetValue = extItem.targetValue
-          }
-          if (extItem.actualValue !== null && extItem.actualValue !== undefined) {
-            ind.actualValue = extItem.actualValue
+          if (MANUAL_DEFAULT_CALC_TYPES.has(ind.calcType)) {
+            // 手动认定项仅在当前为空时填充默认值，避免覆盖已录入或已归档的事实认定数据
+            if (isBlankMetric(ind.actualValue) && !isBlankMetric(extItem.actualValue)) {
+              ind.actualValue = extItem.actualValue
+              ind.isManualActual = false
+            }
+          } else {
+            if (ind.hasTarget) {
+              ind.targetValue = extItem.targetValue ?? null
+            }
+            ind.autoActualValue = extItem.actualValue ?? null
+            // 已标记人工调整的完成值不被二次自动取数覆盖
+            if (ind.isManualActual && !isBlankMetric(ind.actualValue)) {
+              preservedManualCount++
+            } else {
+              ind.actualValue = extItem.actualValue ?? null
+              ind.isManualActual = false
+            }
           }
           if (extItem.source) {
             ind.sourceLabel = extItem.source
@@ -2031,10 +2748,15 @@ async function applyAutoFetchData(monthVal, showSummaryModal = true) {
     recalculateAllScores()
     recordStatus.value = 'fetched'
 
+    const spotTip = res.spot_latest_date
+      ? `现货基准至 ${res.spot_latest_date}${res.spot_bill_latest_date ? ` / 账单加权至 ${res.spot_bill_latest_date}` : ' / 账单待导入'}`
+      : '现货数据暂无'
+    const manualTip = preservedManualCount > 0 ? `；已保留 ${preservedManualCount} 项人工调整完成值` : ''
+
     if (res.is_historical) {
-      recordStatusNote.value = `【月报全面对接】：${selectedMonthLabel.value} 计划值与实际完成值 100% 严格来自 monthly_data_show`
+      recordStatusNote.value = `【月报全面对接】：${selectedMonthLabel.value} 月报计划与实际值来自 monthly_data_show；${spotTip}${manualTip}`
     } else {
-      recordStatusNote.value = `【动态双轨联动】：月计划值对接月报表，实际完成值已自动穿透日报实时累计 (截至${res.latest_daily_date || '当期'})`
+      recordStatusNote.value = `【实时项已联动 · 月报实际值待出数】：月度计划取自月报表，未结账前月报实际值留空；${spotTip}${manualTip}`
     }
 
     if (showSummaryModal) {
@@ -2043,15 +2765,17 @@ async function applyAutoFetchData(monthVal, showSummaryModal = true) {
         `【系统数据自动提取完成】`,
         `考核月份：${selectedMonthLabel.value}`,
         `月报记录匹配：${res.monthly_rows_matched || 0} 条`,
+        `电力现货口径：${spotTip}`,
         `供热投诉匹配：${res.complaint_units_matched || 0} 家单位`,
-        `指标自动回填：${matchedIndicatorCount} 项`,
+        `指标对照回填：${matchedIndicatorCount} 项`,
+        preservedManualCount > 0 ? `人工调整保留：${preservedManualCount} 项（琥珀色着色项未覆盖，如需还原可点单元格内 ↺）` : '',
         ``,
         res.is_historical
-          ? `数据口径说明：【历史已结账月】计划值与实际完成值 100% 来自 monthly_data_show（月报官方计算引擎对齐）。`
-          : `数据口径说明：【进行中当月】月度计划值严格取自月报表；因本月中旬月报尚未月末结账，实际完成值已自动无缝穿透日报系统实时累计（截至${res.latest_daily_date || '当期'}）。`,
+          ? `数据口径说明：【已结账月】月报能耗与单耗指标已从 monthly_data_show 提取计划与实际值；现货电价已按电力现货市场口径计算。`
+          : `数据口径说明：【进行中当月】月度计划值取自月报表，月报实际完成值在月末出数前保持留空（不以日报累计替代）；北海/香海现货电价及供热投诉率已实时动态更新；手工项保留已有录入不被覆盖。`,
         ``,
-        `测算台已完成打分联动，您可以直接微调编辑，随后点击【保存至系统数据库】。`,
-      ].join('\n')
+        `您可以直接补充或调整数据，随后点击【保存至系统数据库】。`,
+      ].filter((line, idx, arr) => line !== '' || arr[idx - 1] !== '').join('\n')
       alert(summaryMsg)
     }
   } catch (err) {
@@ -2071,6 +2795,16 @@ async function handleAutoFetchData() {
   await applyAutoFetchData(selectedMonth.value, true)
 }
 
+async function resetToDefaultData() {
+  if (!confirm(`确定重置【${selectedMonthLabel.value}】的手工认定项及红黑榜状态，并重新从系统拉取最新数据吗？`)) {
+    return
+  }
+  localStorage.removeItem(`competition_draft_${selectedMonth.value}`)
+  unitsData.value = buildInitialUnitData()
+  recalculateAllScores()
+  await applyAutoFetchData(selectedMonth.value, false)
+}
+
 async function onMonthChange() {
   recordStatus.value = 'default'
   recordStatusNote.value = '正在检索系统已存测算记录...'
@@ -2078,13 +2812,26 @@ async function onMonthChange() {
   // 先载入基础数据结构
   unitsData.value = buildInitialUnitData()
 
+  if (!/^\d{4}-\d{2}$/.test(String(selectedMonth.value || ''))) {
+    recordStatus.value = 'default'
+    recordStatusNote.value = '供暖期结束总评暂未启用（涉及其他综合要素，后续另行规划），请选择具体考核月份'
+    recalculateAllScores()
+    return
+  }
+
   try {
     const res = await getCompetitionRecord(selectedMonth.value)
     if (res && res.ok && res.found && Array.isArray(res.data_payload) && res.data_payload.length === 7) {
+      normalizeLoadedUnits(res.data_payload)
       unitsData.value = res.data_payload
-      recordStatus.value = 'saved'
-      const timeStr = res.updated_at ? res.updated_at.slice(0, 19).replace('T', ' ') : ''
-      recordStatusNote.value = `已加载数据库正式归档记录 (${timeStr})`
+      const dbStatus = String(res.status || 'saved').toLowerCase() === 'final' ? 'final' : 'saved'
+      recordStatus.value = dbStatus
+      const timeStr = dbStatus === 'final'
+        ? (res.published_at || res.updated_at || '').slice(0, 19).replace('T', ' ')
+        : (res.updated_at || '').slice(0, 19).replace('T', ' ')
+      recordStatusNote.value = dbStatus === 'final'
+        ? `已加载数据库正式定稿结果 (定稿时间：${timeStr})`
+        : `已加载数据库已保存记录 (更新时间：${timeStr}，尚未点击“发布结果”定稿)`
       recalculateAllScores()
       return
     }
@@ -2103,6 +2850,7 @@ async function onMonthChange() {
         parsed.every((u) => u && Array.isArray(u.indicators) && u.indicators.length >= 6)
       ) {
         unitsData.value = parsed
+        normalizeLoadedUnits(unitsData.value)
         recordStatus.value = 'draft'
         recordStatusNote.value = '已加载本地暂存草稿 (尚未持久化至系统数据库)'
         recalculateAllScores()
@@ -2113,25 +2861,42 @@ async function onMonthChange() {
     }
   }
 
-  // 若数据库无归档且无草稿，直接自动从系统真实数据库抽取月报与日报数据！
+  // 若数据库无归档且无草稿，直接自动从系统真实数据库抽取月报、电力现货与投诉数据！
   await applyAutoFetchData(selectedMonth.value, false)
 }
 
-async function handleSaveRecord() {
-  isSavingRecord.value = true
+async function persistCompetitionWithStatus(targetStatus) {
+  if (!/^\d{4}-\d{2}$/.test(String(selectedMonth.value || ''))) {
+    alert('供暖期总评暂未启用，请选择具体考核月份后再操作。')
+    return false
+  }
+  const isFinal = targetStatus === 'final'
+  if (isFinal) {
+    isPublishingFinal.value = true
+  } else {
+    isSavingRecord.value = true
+  }
   try {
+    recalculateAllScores()
     const payload = {
+      status: targetStatus,
+      baseReward: totalBaseReward.value,
+      extraReward: totalExtraReward.value,
       totalReward: totalSimulatedReward.value,
       disqualifiedCount: disqualifiedCount.value,
       dataPayload: unitsData.value,
       summaryPayload: {
         month: selectedMonth.value,
+        status: targetStatus,
         savedAt: new Date().toISOString(),
-        leaderboard: leaderboardUnits.value.map((u) => ({
-          rank: u.rank,
+        leaderboard: leaderboardUnits.value.map((u, idx) => ({
+          rank: idx + 1,
           code: u.code,
           name: u.name,
           score: u.score,
+          pendingCount: u.pendingCount || 0,
+          baseReward: u.baseReward || 0,
+          extraReward: u.extraRewardTotal || 0,
           reward: u.calculatedReward,
           eligible: u.eligible,
           disqualifyReason: u.disqualifyReason,
@@ -2148,17 +2913,171 @@ async function handleSaveRecord() {
 
     const res = await saveCompetitionRecord(selectedMonth.value, payload)
     if (res && res.ok) {
-      recordStatus.value = 'saved'
-      recordStatusNote.value = `已成功持久化保存至系统数据库 (${new Date().toLocaleTimeString()})`
+      recordStatus.value = isFinal ? 'final' : 'saved'
+      const nowLabel = new Date().toLocaleTimeString()
+      recordStatusNote.value = isFinal
+        ? `已正式发布结果并标记为定稿 FINAL (${nowLabel})`
+        : `已成功保存至系统数据库 SAVED (${nowLabel}，尚未发布定稿)`
       localStorage.setItem(`competition_draft_${selectedMonth.value}`, JSON.stringify(unitsData.value))
-      alert(`【数据库持久化保存成功】\n当前月份【${selectedMonthLabel.value}】的 7 家单位指标测算明细、综合排名与奖金已正式保存至系统数据库 (competition_monthly_records)。\n下次打开或切换月份将自动载入！`)
+      loadSeasonRecords()
+      if (isFinal) {
+        alert(`【发布定稿成功 (FINAL)】\n当前月份【${selectedMonthLabel.value}】的 7 家单位指标打分、额外嘉奖与兑现奖金已正式定稿入库！\n可在“供暖期兑现记录”标签页查看供暖期累计定稿汇总。`)
+      } else {
+        alert(`【数据库保存成功 (SAVED)】\n当前月份【${selectedMonthLabel.value}】的 7 家单位指标测算明细、额外嘉奖与综合排名已保存至系统数据库。\n后续确认无误后，可点击【📢 发布结果】正式定稿。`)
+      }
+      return true
+    }
+    throw new Error(res?.message || '保存返回异常')
+  } catch (err) {
+    alert(`${isFinal ? '发布定稿' : '保存至数据库'}失败: ${err.message || err}`)
+    return false
+  } finally {
+    if (isFinal) {
+      isPublishingFinal.value = false
     } else {
-      throw new Error(res?.message || '保存返回异常')
+      isSavingRecord.value = false
+    }
+  }
+}
+
+async function handleSaveRecord() {
+  if (recordStatus.value === 'final') {
+    const ok = confirm(
+      `当前月份【${selectedMonthLabel.value}】已处于【正式定稿 (FINAL)】状态。\n` +
+      `点击“保存至系统数据库”将更新数据并把状态改回“已保存暂存 (SAVED)”；若想更新并保持定稿，请改点【📢 发布结果】。\n\n确认按暂存状态 (SAVED) 保存吗？`
+    )
+    if (!ok) return
+  }
+  await persistCompetitionWithStatus('saved')
+}
+
+async function handlePublishFinal() {
+  if (!/^\d{4}-\d{2}$/.test(String(selectedMonth.value || ''))) {
+    alert('供暖期总评暂未启用，请选择具体考核月份后再发布。')
+    return
+  }
+  const ok = confirm(
+    `确认正式发布【${selectedMonthLabel.value}】考评结果并标记为定稿（FINAL）吗？\n\n` +
+    `定稿后将重新保存全套测算与额外嘉奖数据，并正式计入“供暖期兑现记录”已定稿统计（后续仍可修改后重新保存或再次定稿）。`
+  )
+  if (!ok) return
+  await persistCompetitionWithStatus('final')
+}
+
+const seasonMonthRecords = computed(() => seasonRecordsPayload.value?.records || [])
+const seasonFinalSummary = computed(
+  () => seasonRecordsPayload.value?.final_summary || { count: 0, base_reward: 0, extra_reward: 0, total_reward: 0 },
+)
+const seasonAllSavedSummary = computed(
+  () => seasonRecordsPayload.value?.all_saved_summary || { count: 0, base_reward: 0, extra_reward: 0, total_reward: 0 },
+)
+const seasonSavedPendingCount = computed(() => {
+  return seasonMonthRecords.value.filter((r) => r.exists && r.status !== 'final').length
+})
+
+const seasonUnitMatrix = computed(() => {
+  const recs = seasonMonthRecords.value
+  return unitBaseRewardList.map((baseUnit) => {
+    let finalTotal = 0
+    let allSavedTotal = 0
+    const cells = recs.map((rec) => {
+      if (!rec.exists) {
+        return { month: rec.month, exists: false, status: 'unrecorded', reward: 0, extraReward: 0 }
+      }
+      const matched = (rec.units || []).find((u) => u.code === baseUnit.code)
+      const reward = Number(matched?.reward || 0)
+      const extraReward = Number(matched?.extraReward || 0)
+      allSavedTotal += reward
+      if (rec.status === 'final') {
+        finalTotal += reward
+      }
+      return {
+        month: rec.month,
+        exists: true,
+        status: rec.status,
+        reward,
+        extraReward,
+      }
+    })
+    return {
+      code: baseUnit.code,
+      name: baseUnit.name,
+      cells,
+      finalTotal,
+      allSavedTotal,
+    }
+  })
+})
+
+function formatSeasonMonthName(monthStr) {
+  const [y, m] = String(monthStr || '').split('-')
+  return y && m ? `${y}年${m}月` : monthStr
+}
+
+function formatDateTimeShort(isoStr) {
+  if (!isoStr) return '-'
+  return String(isoStr).slice(0, 16).replace('T', ' ')
+}
+
+async function loadSeasonRecords() {
+  isLoadingSeasonRecords.value = true
+  try {
+    const res = await fetchCompetitionSeasonRecords(SEASON_MONTHS)
+    if (res && res.ok) {
+      seasonRecordsPayload.value = res
     }
   } catch (err) {
-    alert(`保存至数据库失败: ${err.message || err}`)
+    console.warn('加载供暖期兑现记录失败:', err)
   } finally {
-    isSavingRecord.value = false
+    isLoadingSeasonRecords.value = false
+  }
+}
+
+function openSeasonRecordsTab() {
+  activeTab.value = 'season_records'
+  loadSeasonRecords()
+}
+
+async function jumpToSeasonMonth(monthStr) {
+  if (!monthStr) return
+  selectedMonth.value = monthStr
+  activeTab.value = 'overview'
+  await onMonthChange()
+}
+
+async function handleExportExcel() {
+  if (!/^\d{4}-\d{2}$/.test(String(selectedMonth.value || ''))) {
+    alert('供暖期总评暂未启用，请选择具体考核月份后再导出报表。')
+    return
+  }
+  if (!Array.isArray(unitsData.value) || unitsData.value.length === 0) {
+    alert('当前没有可导出的竞赛测算数据。')
+    return
+  }
+
+  recalculateAllScores()
+  isExportingExcel.value = true
+  let blobUrl = ''
+  try {
+    const { blob, filename } = await exportCompetitionExcel(selectedMonth.value, {
+      monthLabel: selectedMonthLabel.value,
+      statusNote: recordStatusNote.value,
+      unitsData: unitsData.value,
+    })
+    blobUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = filename || `供暖期指标竞赛考评表_${selectedMonth.value}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (err) {
+    alert(`导出竞赛报表失败: ${err.message || err}`)
+  } finally {
+    if (blobUrl) {
+      window.URL.revokeObjectURL(blobUrl)
+    }
+    isExportingExcel.value = false
   }
 }
 
@@ -2390,6 +3309,31 @@ onMounted(() => {
   transform: translateY(-1px);
 }
 
+.btn-export {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.28) 0%, rgba(5, 150, 105, 0.42) 100%);
+  color: #ecfdf5;
+  border: 1px solid rgba(52, 211, 153, 0.55);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.btn-export:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.45) 0%, rgba(5, 150, 105, 0.6) 100%);
+  transform: translateY(-1px);
+}
+
+.btn-publish {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  border: 1px solid #34d399;
+  box-shadow: 0 2px 10px rgba(5, 150, 105, 0.4);
+}
+
+.btn-publish:hover:not(:disabled) {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.5);
+}
+
 .fetch-badge-live {
   font-size: 0.65rem;
   background: #10b981;
@@ -2427,8 +3371,37 @@ onMounted(() => {
   font-size: 0.75rem;
 }
 
+.status-dot.status-final {
+  color: #059669;
+}
+
 .status-dot.status-saved {
-  color: #10b981;
+  color: #2563eb;
+}
+
+.status-ribbon-bar.is-final {
+  border-left-color: #059669;
+  background: linear-gradient(90deg, #ecfdf5 0%, #ffffff 30%);
+}
+
+.ribbon-state-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.12rem 0.48rem;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+}
+
+.badge-final {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+
+.badge-saved {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
 }
 
 .status-dot.status-fetched {
@@ -3519,9 +4492,37 @@ onMounted(() => {
   color: #1e293b;
 }
 
+.sst-hint-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .sst-hint {
   font-size: 0.74rem;
   color: #94a3b8;
+}
+
+.sst-manual-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+}
+
+.manual-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #f59e0b;
+  display: inline-block;
 }
 
 /* 运营指标打分表 */
@@ -3582,6 +4583,13 @@ onMounted(() => {
   color: #0f172a;
 }
 
+.ind-tag-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
 .ind-source-tag {
   font-size: 0.65rem;
   background: #f1f5f9;
@@ -3590,14 +4598,83 @@ onMounted(() => {
   border-radius: 4px;
 }
 
+.ind-manual-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  padding: 0.05rem 0.38rem;
+  border-radius: 4px;
+}
+
+.row-manual-actual td {
+  background-color: #fffbeb !important;
+}
+
 .ind-input-cell {
   display: flex;
   align-items: center;
+  gap: 0.25rem;
   background: #f8fafc;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   padding: 0.2rem 0.5rem;
   transition: all 0.15s ease;
+}
+
+.ind-input-cell.ind-manual-cell {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  border-left: 3px solid #d97706;
+  padding-left: 0.35rem;
+}
+
+.ind-input-cell.ind-manual-cell .ind-input {
+  color: #92400e;
+}
+
+.ind-input-cell.ind-manual-cell:focus-within {
+  background: #fffbeb;
+  border-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.22);
+}
+
+.manual-dot-badge {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #92400e;
+  background: #fde68a;
+  border: 1px solid #f59e0b;
+  border-radius: 4px;
+  padding: 0.08rem 0.28rem;
+  white-space: nowrap;
+}
+
+.manual-reset-btn {
+  flex-shrink: 0;
+  border: none;
+  background: rgba(217, 119, 6, 0.14);
+  color: #92400e;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.manual-reset-btn:hover {
+  background: #f59e0b;
+  color: #ffffff;
 }
 
 .ind-input-cell:focus-within {
@@ -3683,6 +4760,13 @@ onMounted(() => {
   border: 1px solid #bfdbfe;
 }
 
+.score-pending {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  font-weight: 600;
+}
+
 /* ================= 4. 管理指标与安全红线核验区 ================= */
 .mgmt-grid {
   display: grid;
@@ -3766,6 +4850,18 @@ onMounted(() => {
   border: 1px solid #c4b5fd;
   border-radius: 6px;
   padding: 0.25rem 0.5rem;
+  transition: all 0.15s ease;
+}
+
+.cir-input-box.cir-manual-box {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  border-left: 3px solid #d97706;
+}
+
+.cir-input-box.cir-manual-box .civic-score-input,
+.cir-input-box.cir-manual-box .cir-unit {
+  color: #92400e;
 }
 
 .civic-score-input {
@@ -3950,6 +5046,12 @@ onMounted(() => {
   background: #fee2e2;
   color: #b91c1c;
   border: 1px solid #fecaca;
+}
+
+.status-pending {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 .calculated-reward-box {
@@ -4190,6 +5292,10 @@ onMounted(() => {
   background-color: #fff5f5 !important;
 }
 
+.tr-manual-actual td {
+  background-color: #fffbeb !important;
+}
+
 .complaints-notice-bar {
   margin-top: 1rem;
   padding: 0.75rem 1rem;
@@ -4288,6 +5394,281 @@ onMounted(() => {
   font-size: 0.84rem;
   color: #64748b;
   flex-shrink: 0;
+}
+
+/* 额外嘉奖标签页样式 */
+.pill-extra {
+  background: #fef3c7;
+  color: #b45309;
+  font-weight: 700;
+}
+
+.usp-extra-hint,
+.reward-extra-tag {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+}
+
+.extra-kpi-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.text-amber {
+  color: #d97706;
+}
+
+.extra-notice-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  margin-bottom: 1rem;
+}
+
+.extra-units-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.extra-unit-card {
+  padding: 0.95rem 1.15rem;
+}
+
+.extra-unit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.euh-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.euh-name {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.euh-right {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+}
+
+.euh-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 0.82rem;
+}
+
+.euh-label {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.euh-stat-total {
+  padding-left: 0.9rem;
+  border-left: 1px solid #e2e8f0;
+}
+
+.btn-add-extra {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 0.42rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-add-extra:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.extra-unit-body {
+  padding-top: 0.75rem;
+}
+
+.extra-empty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.83rem;
+  color: #64748b;
+}
+
+.btn-add-extra-inline {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.btn-add-extra-inline:hover {
+  text-decoration: underline;
+}
+
+.extra-items-table-wrap {
+  overflow-x: auto;
+}
+
+.extra-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.extra-items-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.extra-items-table td {
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.extra-input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.extra-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.extra-amount-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.extra-currency {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.extra-input-num {
+  text-align: right;
+}
+
+.btn-del-extra {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-del-extra:hover {
+  background: #fee2e2;
+}
+
+/* 供暖期兑现记录标签页样式 */
+.season-records-section .season-table th,
+.season-records-section .season-matrix-table th {
+  text-align: center;
+}
+
+.th-extra {
+  width: 115px;
+  text-align: center;
+}
+
+.season-status-pill {
+  display: inline-block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.pill-final {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+
+.pill-saved {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.pill-empty {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.tr-season-final {
+  background-color: #f0fdf4;
+}
+
+.season-tfoot-final td {
+  background-color: #ecfdf5 !important;
+  border-top: 2px solid #a7f3d0;
+}
+
+.smh-sub {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.smc-sub {
+  font-size: 0.68rem;
+  margin-top: 2px;
 }
 
 /* 响应式适配 */

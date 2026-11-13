@@ -1,5 +1,205 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-13 电力现货两厂卡片内嵌“波形相关系数”（移除独立契合度板块与溢价指标）
+
+- **需求背景**：
+  - 依用户进一步精简确认，去掉“加权价格溢价”以及独立折叠板块，仅保留 **波形相关系数**，并直接融入北海、香海各自既有的量价 KPI 卡片底部，减少界面层级与视觉冗余。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/utils/spotCurveAlignment.js`**：精简为纯粹的波形相关性计算模块，保留 `computePearsonCorrelation()`、`evaluateCurveAlignment()` 与 `buildPlantAlignmentReport()`，按 `byKey[plant]` 返回日前/实时全局与多日日内去均值相关系数（`correlation` / `intradayCorrelation`）。
+  - **`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+    - 移除独立 `.curve-alignment-window` 板块及矩阵表格/样式；
+    - 通过 `toCorrDisplay()` 将两厂对日前与对实时的波形相关系数直接接入 `plantCardMetrics`，在两厂 `.plant-card` 底部新增 `.plant-corr-footer` 单行对照区，左侧标注 `波形相关系数` 与 `+1完全同向 / 0无联动 / -1反向`，右侧以蓝/橙胶囊并列展示 `对日前` 与 `对实时` 相关度（多日优先显示日内去均值 `r` 并附全局 `r`）。
+  - **`frontend/tests/spot-curve-alignment.test.mjs`**：更新为 4 项聚焦相关性算法及边界条件的单元测试。
+- **验证结果**：
+  - `node --test frontend/tests/spot-curve-alignment.test.mjs`：**4 passed, 0 failed**；
+  - `node --test frontend/tests/spot-continuous-series.test.mjs`：**4 passed, 0 failed**；
+  - 过滤执行 `frontend/tests/spot-plant-sales-chart.test.mjs` 相关 4 项：**4 passed, 0 failed**；
+  - `npm --prefix frontend run build`：1071 模块编译打包通过（22.44s，0 错误）。
+
+## 2026-11-13 电力现货“日前电价测算”平均现货电价改用较实时电价加权单价差额
+
+- **需求背景**：
+  - 用户要求在“日前电价（参考测算）”模式下，两电厂卡片的“平均现货电价”去掉差异率百分比展示，改为展示相对实时电价情况下的加权单价差额（`日前测算加权均价 − 实时账单加权均价`）。
+- **前后端改动**：
+  - **`backend/projects/daily_report_25_26/api/spot_electricity.py`**：`get_spot_electricity_summary()` 在未舍入阶段计算两厂 `da_avg - rt_avg`，新增返回 `avg_beihai_da_spot_price_diff` 与 `avg_xianghai_da_spot_price_diff`（任一均价为空或电量为 0 时为 `None`；既有 `*_da_spot_price_diff_rate` 保留兼容）。
+  - **`backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py`**：在 `test_day_ahead_reference_fee_and_weighted_price` 中补充两厂 `avg_{plant}_da_spot_price_diff` 数值及日前电价缺失时 `None` 的断言。
+  - **`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：`plantCardMetrics` 在日前模式下置空 `diffRate` 并读取 `spotPriceDiff`（`avg_${plant.key}_da_spot_price_diff`），新增 `formatSignedPriceDiff()`，模板于日前模式下改显 `(较实时 ±xxx.xx 元/MWh)`（红涨绿跌）并同步更新 `avgPriceTooltip`。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py -v`：**8 passed, 1 warning in 1.50s**；
+  - `node --test frontend/tests/spot-continuous-series.test.mjs`（**4 passed, 0 failed**）及过滤后的 `frontend/tests/spot-plant-sales-chart.test.mjs`（**4 passed, 0 failed**）；
+  - `npm --prefix frontend run build`：1070 模块编译打包通过（18.14s，0 错误）。
+
+## 2026-11-13 电力现货“日前电价测算”现货电费增加较“实时电价”差异值
+
+- **需求背景**：
+  - 用户要求在“日前电价（参考测算）”模式下，两厂卡片的“当日/区间现货电费”同步展示一个相对于账单实时电价现货电费的差额（`日前测算现货电费 − 账单实时现货电费`）。
+- **前后端改动**：
+  - **`backend/projects/daily_report_25_26/api/spot_electricity.py`**：`get_spot_electricity_summary()` 使用未舍入原始 `sum_{plant}_da_spot_fee` 与 `sum_{plant}_spot_fee` 做差，新增返回 `sum_beihai_da_spot_fee_diff` 与 `sum_xianghai_da_spot_fee_diff`（任一项缺失时为 `None`）。
+  - **`backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py`**：在 `test_day_ahead_reference_fee_and_weighted_price` 中补充 `sum_{plant}_da_spot_fee_diff` 数值及缺失时 `None` 的断言。
+  - **`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：`plantCardMetrics` 透传 `spotFeeDiff`，新增 `formatSignedFeeDiff()` 与 `.spot-fee-diff`，在日前模式下于现货电费下方展示 `(较实时 ±xxx 元)` 并配红涨绿跌色彩及计算提示。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py -v`：**8 passed**（1.65s）；
+  - `node --test frontend/tests/spot-continuous-series.test.mjs`（**4 passed**）及过滤后的 `frontend/tests/spot-plant-sales-chart.test.mjs`（**4 passed**）；
+  - `npm --prefix frontend run build`：1070 模块编译打包通过（17.19s，0 错误）。
+
+## 2026-11-13 电力现货市场数据页面新增“基于日前电价测算（参考）”模式
+
+- **需求背景**：
+  - 北海、香海两厂卡片及电量分布此前仅基于账单实时电价计算；现增加“日前电价（参考测算）”切换选项，保持合约部分不变，将每时段现货电价替换为对应的日前电价进行测算，用于交易复盘参考。
+- **后端改动**：
+  - **`backend/projects/daily_report_25_26/api/spot_electricity.py`**：
+    - `_bill_fee_summary_columns()` 新增 `da_spot`（`{plant}_total_sales * day_ahead_price`）与 `da_revenue`（`da_spot + contract`），保持完整 96 点且非空的严格汇总条件。
+    - `get_spot_electricity_summary()` 通过统一循环同时计算实时账单与日前测算的加权均价和差异率（日前差异率以同查询范围 `avg_da` 为基准），新增返回 `sum_{plant}_da_spot_fee`、`sum_{plant}_da_revenue_fee`、`avg_{plant}_da_spot_price`、`{plant}_da_spot_price_diff_rate`。
+  - **`backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py`**：新增 `test_day_ahead_reference_fee_and_weighted_price`。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+    - 在两厂 KPI 卡片上方新增 `.sales-basis-bar` 切换栏（`实时电价（账单）` / `日前电价（参考测算）`）与 `plantCardMetrics` 计算映射，在日前测算模式下展示日前测算现货电费、电量电费收入、平均现货电价及差异率，并标注 `日前测算` 徽标（合约差价电费保持不变）。
+    - 下方 `plantDistributionStats` 联动 `salesPriceBasis`，按 `day_ahead_price` 统计各价格区间电量分布与加权均价，并在分布窗徽标明示当前口径。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py -v`：**8 passed**（1.30s）；
+  - `node --test frontend/tests/spot-continuous-series.test.mjs`（**4 passed**）及过滤后的 `frontend/tests/spot-plant-sales-chart.test.mjs`（**4 passed**）；
+  - `npm --prefix frontend run build`：1070 模块编译打包通过（20.11s，0 错误）。
+
+## 2026-11-13 电力现货市场数据页面“显示两厂上网电量”支持单独筛选电厂
+
+- **需求背景**：
+  - 勾选“显示两厂上网电量”后此前只能同时叠加北海与香海两条电量曲线，无法单独查看某一电厂的上网电量趋势；现新增按电厂筛选切换能力。
+- **前端改动**：
+  - **扩展图表辅助工具 (`frontend/src/projects/daily_report_25_26/utils/spotPlantSalesChart.js`)**：
+    - `addPlantSalesToOption()` 新增 `scope` 参数（`'all' | 'beihai' | 'xianghai'`，默认 `'all'`），按 `scope` 过滤要注入的电厂系列、图例及 Tooltip 提示行，保持独立右侧 MWh 轴与缺数断线逻辑不变。
+  - **主页面交互与渲染联动 (`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`)**：
+    - 在“显示两厂上网电量”复选框旁新增 `.plant-sales-scope-tabs` 胶囊选择器（勾选后展开 `两厂` / `北海` / `香海` 切换按钮，单厂按钮带对应曲线色点）。
+    - 新增 `plantSalesScope` 状态与 `watch` 监听，抽出 `applyPlantSales()` 辅助函数在单日、连续显示、日均、月均、时段均值 5 种图表模式中统一透传 `scope`。
+  - **扩展单元测试 (`frontend/tests/spot-plant-sales-chart.test.mjs`)**：新增 `支持单独筛选北海或香海电厂上网电量曲线、图例与提示` 用例。
+- **影响面与验证结果**：
+  - 仅涉及前端图表叠加层与工具栏交互，无后端改动；
+  - `node --test --test-name-pattern="支持单独筛选北海或香海电厂|开启后增加两厂曲线|关闭后保持原图|切换日期时旧响应" frontend/tests/spot-plant-sales-chart.test.mjs`：**4 passed, 0 failed**（完整运行该文件时既有正则用例 `复选框由当前范围是否有原始电量决定...` 因既有多行 `hasPlantSalesData` 声明仍报 `SyntaxError`，未作修改）；`node --test frontend/tests/spot-continuous-series.test.mjs`：**4 passed, 0 failed**；
+  - `npm --prefix frontend run build`：1070 模块编译打包通过（23.20s，0 错误）。
+
+## 2026-11-13 电力现货市场数据页面“区间走势分析”新增“连续显示”模式
+
+- **需求背景**：
+  - 用户希望在 `daily_report_25_26` 的电力现货市场数据页（`SpotElectricityView.vue`）的“区间走势分析”中增加“连续显示”选项，从区间首个时段到最后一个时段不做任何聚合或降采样统计处理，在图中完整展现每一个 15 分钟点位走势，中间若存在数据缺失则自动断开连线。
+- **前端改动**：
+  - **新增原始时序构造工具 (`frontend/src/projects/daily_report_25_26/utils/spotContinuousSeries.js`)**：
+    - 实现 `formatPointPeriod()` 与 `buildContinuousTimeline()`，从区间首个有效点位至最后一个有效点位按标准 15 分钟步长（每日 1..96 点）展开连续时间轴；缺数据时自动插入 `__missing: true` 空值占位点以便断线，并附带 `YYYY-MM-DD HH:mm` 轴标签与超大跨度兜底保护。
+  - **升级电力现货主页面 (`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`)**：
+    - 在区间子模式切换栏（`.range-submode-tabs`）新增 `〰️ 连续显示`（`rangeSubMode === 'continuous'`），并同步调整桌面与窄屏下的 `flex-wrap` 自适应排布。
+    - 抽出共享图配置构造器 `buildPointSeriesChartOption(timeline, { isContinuous })`，复用“日前电价 / 实时电价 / 价差”指标开关及 `addPlantSalesToOption` 两厂上网电量叠加，设置 `connectNulls: false` 保证缺数处断线；点数超过 1,000 点时自动关闭 `smooth`、`areaStyle` 与入场动画，保留全部原始点位（不做抽稀）并自适应按 `MM-DD HH:mm` 或间隔日 `MM-DD` 显示横轴刻度。
+    - 统一“仅负电价时段”过滤口径：`fetchData()` 始终拉取全量 `points`（`onlyNegative: false`），`onNegativeFilterChange()` 统一在前端本地维持连续/单日时间轴并按勾选指标断点展示，不再因筛选而丢点或影响“单价区间上网电量分布分析”的全区间统计口径。
+    - 联动底部明细列表与分页：新增 `showPointsPagination` 计算属性，在“连续显示”模式下默认展示完整 15 分钟分时明细表、分页器及明细 Excel 导出。
+  - **新增单元测试 (`frontend/tests/spot-continuous-series.test.mjs`)**：覆盖 `formatPointPeriod`、`buildContinuousTimeline` 连续展开、缺时段插 `null` 断线与空输入处理。
+- **影响面与验证结果**：
+  - 仅涉及前端 `daily_report_25_26` 电力现货页面及工具模块，无后端或数据库结构变更；
+  - `node --test frontend/tests/spot-continuous-series.test.mjs`：**4 passed, 0 failed**；
+  - （注：运行已有 `frontend/tests/spot-plant-sales-chart.test.mjs` 时，其中第 3 项既有用例因早期正则未适配多行 `hasPlantSalesData` 声明而报 `SyntaxError`，其余 3 项包括 `fetchData` 竞态校验全部通过）
+  - `npm --prefix frontend run build`：1070 模块编译打包通过（16.34s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛“实际完成值”人工调整着色标记、防覆盖保护与 Excel 导出联动
+
+- **需求背景**：
+  - 用户确认需要在各单位“实际完成值”被手动填写或调整后，通过页面着色与导出着色明确区分系统自动取数与人工调整数据，并防止二次自动取数误覆盖。
+- **前端改动 (`frontend/src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`)**：
+  - **手调标记与一键还原**：在指标对象维护 `isManualActual` 布尔标识与 `autoActualValue`（记录系统取数原值），新增 `onActualValueInput()`、`restoreSystemActualValue()`、`getManualTooltip()`、`getRestoreTooltip()` 与 `MANUAL_DEFAULT_CALC_TYPES` 辅助逻辑；同时在 `normalizeLoadedUnits()` 中兼容历史归档记录。
+  - **页面琥珀色高亮着色**：在 `指标评分测算台`（运营指标行与输入框、安全文明生产评定框）及 `投诉率排名` 页对 `isManualActual=true` 的完成值应用暖琥珀色底纹（`.row-manual-actual` / `.ind-manual-cell` / `.cir-manual-box` / `.tr-manual-actual`）、`手调` / `人工调整` 徽标与 `↺` 一键还原按钮，并在表头右上角补充图例说明。
+  - **二次自动取数保护**：`applyAutoFetchData()` 在拉取月报/电力现货/投诉率时同步更新 `autoActualValue`，对已标记 `isManualActual` 且非空的完成值跳过覆盖并提示已保留项数。
+- **后端导出与测试联动**：
+  - **`backend/projects/monthly_data_show/services/competition_export_service.py`**：在 Sheet 3《计算过程明细》第 3 行新增浅琥珀色着色说明，对 `isManualActual=True` 的运营指标、安全文明生产及底部投诉率排名附表对应实际完成值单元格应用 `_FILL_MANUAL`（`#FEF3C7`）与 `_FONT_TD_MANUAL`，并在第 11 列“数据来源”自动标注 `【人工调整】`。
+  - **`backend/projects/monthly_data_show/tests/test_competition_export.py`**：新增 `test_manual_actual_coloring_and_annotation` 校验图例、明细表与附表着色及来源标注。
+- **验证结果**：
+  - `npm --prefix frontend run build`：1069 模块编译打包通过（23.98s，0 错误）；
+  - `python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`：**10 passed**。
+
+## 2026-11-13 供暖期指标竞赛支持 `saved`/`final` 双状态定稿、“供暖期兑现记录”台账页及数据库表扩展
+
+- **需求背景**：
+  - 用户要求在“结果总览”中增设独立的“额外嘉奖”列（无嘉奖显示 `¥0`），新增 **“📢 发布结果”**（`final` 定稿）与 **“💾 保存至系统数据库”**（`saved` 暂存）双状态工作流，在最后增加 **“📜 供暖期兑现记录”** 标签页汇总 `2026.11–2027.03` 定稿与奖金发放情况，并检查升级底层数据库表结构。
+- **数据库与后端改动**：
+  - **表结构升级 (`competition_monthly_records`)**：在 [backend/projects/monthly_data_show/services/competition_service.py](file:///D:/编程项目/phoenix/backend/projects/monthly_data_show/services/competition_service.py) `ensure_competition_table()` 中通过幂等 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` 新增 `base_reward NUMERIC(14,2) DEFAULT 0`、`extra_reward NUMERIC(14,2) DEFAULT 0` 与 `published_at TIMESTAMPTZ`（已在实库执行并验证表列就绪；历史与新增明细仍同步存在 JSONB `data_payload`/`summary_payload`）。
+  - **双状态持久化与供暖期汇总 (`competition_service.py`)**：
+    - `save_competition_record` 接收并校验 `status`（仅允许 `saved` / `final`），自动解析并写入 `base_reward`、`extra_reward`、`total_reward`，仅当 `status='final'` 时记录 `published_at = NOW()`（保存为 `saved` 时清空 `published_at`）。
+    - 新增 `get_competition_records_summary(months)`，汇总 `2026-11` 至 `2027-03` 各月定稿状态、奖金构成及 7 家单位分月明细，分别统计 `final_summary`（仅已定稿）与 `all_saved_summary`（含暂存）。
+  - **接口扩展 (`backend/projects/monthly_data_show/api/workspace.py`)**：`SaveCompetitionRecordRequest` 支持 `status` / `base_reward` / `extra_reward`；新增 `GET /monthly-data-show/competition/records`（同时挂载至 `router` 与 `public_router`）。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/services/api.js`**：升级 `saveCompetitionRecord` 透传 `status`、`base_reward`、`extra_reward`；新增 `fetchCompetitionSeasonRecords()`。
+  - **`frontend/src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+    - 顶部操作区新增 `📢 发布结果` 按钮（`handlePublishFinal`，标记 `final`）并与 `💾 保存至系统数据库`（`saved`，覆盖 `final` 时弹窗防误操作确认）共用 `persistCompetitionWithStatus()`；状态条新增 `FINAL · 已定稿` / `SAVED · 已保存` 状态徽章。
+    - `结果总览` 新增 `额外嘉奖` 独立列（无嘉奖显示 `¥0`），表尾同步展示全网额外嘉奖合计。
+    - 调整标签顺序，将 `📜 供暖期兑现记录` 标签页（`activeTab === 'season_records'`）置于第 2 位，呈现 `2026.11–2027.03` 月度定稿进度与奖金汇总表、7 家单位分月兑现明细矩阵及一键跳转查看/修改入口。
+- **验证结果**：
+  - 实库表结构迁移验证通过：`competition_monthly_records` 已确认包含 `base_reward`、`extra_reward`、`published_at` 等 13 个字段；
+  - `python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`：**9 passed**；
+  - `npm --prefix frontend run build`：1069 模块编译打包通过（24.89s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛页面要素精简（去除多余标签徽章、单位类型分类与数据源提示）
+
+- **前端改动 (`frontend/src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`)**：
+  - **精简顶部标签页徽章**：移除 `指标评分测算台`（`在线打分`）、`投诉率排名`（`5 家供热`）、`额外嘉奖`（金额/手动填报）后方的小标签，仅保留 `结果总览` 右侧的 `拟兑现 ¥...` 汇总金额标签。
+  - **移除所有页面级单位“类型”分类展示**：删去规则总览基数卡片、测算台单位卡片头部、投诉率排名表 `类型` 列、额外嘉奖单位卡片头部及结果总览排行榜 `类型` 列（同步将结果总览表尾合计行 `colspan` 由 `3` 调整为 `2`，保持列对齐）。
+  - **精简提示文案**：删除顶部状态条右侧的 `权威数据源：月报表 (monthly_data_show) · 电力现货 (spot_electricity) · 日报表 (daily_basic_data) · 归档表 (competition_monthly_records)` 与投诉率排名表底部的 `非直供电厂说明` 提示条。
+- **验证结果**：
+  - `npm --prefix frontend run build`：1069 模块编译打包通过（24.37s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛新增“额外嘉奖”标签页与“结果总览”精简（暂不做启动期考评、移除基数达成率）
+
+- **需求背景**：
+  - 用户明确启动期考评暂不做，需要在 `/projects/monthly_data_show/competition` 为 7 家参评单位新增“额外嘉奖”标签页（手动录入嘉奖项目与金额并实时体现到单位最终奖金），并删除“结果总览”表格中的“基数达成率”列。
+- **前端改动 (`frontend/src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`)**：
+  - **新增 `额外嘉奖` 标签页 (`activeTab = 'extra_rewards'`)**：支持按单位增删多条 `{ title, amount, remark }` 额外嘉奖明细，实时汇总 `unit.extraRewardTotal` 与 `totalExtraReward`，并同步暂存本地草稿与持久化写入数据库 `dataPayload` / `summaryPayload`。
+  - **奖金联动口径**：在 `recalculateAllScores()` 中拆分 `unit.baseReward`（指标竞赛奖金，按 5 元倍数取整）与 `unit.extraRewardTotal`（额外嘉奖小计），最终 `unit.calculatedReward = baseReward + extraRewardTotal`；在测算台卡片、结果总览与 KPI 汇总条中同步展示额外嘉奖拆解。
+  - **精简结果总览与暂缓启动考评**：删除 `结果总览` 排行榜 `thead` / `tbody` / `tfoot` 中的 `基数达成率` 列；移除 `2026-11` 下拉项的 `（含启动考评）` 标识。
+- **后端联动与测试**：
+  - **`backend/projects/monthly_data_show/services/competition_export_service.py`**：新增 `_get_unit_extra_rewards` 与 `_normalize_excel_money`，将各单位 `extraRewards` 自动汇总写入 Sheet 1《考评兑现汇总》F 列（`其他嘉奖`）与注 3 明细，并在 Sheet 3《计算过程明细》末尾增加《附表二：各单位额外嘉奖项目及金额明细（手动认定）》及 `=SUM(...)` 合计。
+  - **`backend/projects/monthly_data_show/tests/test_competition_export.py`**：新增 `test_extra_rewards_populate_summary_and_detail_sheet`。
+- **验证结果**：
+  - `python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`：**8 passed**；
+  - `npm --prefix frontend run build`：1069 模块编译打包通过（17.87s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛 3-Sheet Excel 考评报表导出与绩效奖金按 5 元倍数取整
+
+- **需求背景**：
+  - 参照历史汇报文件 `configs/26.3.7.关于2月份指标竞赛活动考评意见的报告.docx`（正文兑现表与附图得分分布矩阵）及用户确认的绩效发放规则（奖金按 5 元倍数取整），为 `/projects/monthly_data_show/competition` 补齐一键导出 `.xlsx` 报表与双端奖金取整联动能力。
+- **后端改动**：
+  - **新增导出服务 (`backend/projects/monthly_data_show/services/competition_export_service.py`)**：
+    - 暴露 `generate_competition_excel(payload) -> Tuple[bytes, str]`，使用 `openpyxl` 生成 3 张跨表公式联动的工作表：
+      1. `考评兑现汇总`：按得分降序输出 7 家单位 `名次 | 单位 | 基数 | 指标结果 | 竞赛指标奖励金额 | 其他嘉奖 | 奖励合计 | 资格状态（核查参考）`，其中 `指标结果` 跨表引用 `='指标得分矩阵'!...`，`竞赛指标奖励金额` 使用 `=IF(..., 0, ROUND((C*D/100)/5, 0)*5)` 自动剔除否决单位并按 5 元倍数取整，`奖励合计 = E + F`。
+      2. `指标得分矩阵`：复刻历史报告附图结构（灰底 `#D9D9D9` 双行表头、7 家单位横向并列 `项目 | 分值`、运营指标前两行除供热公司拆分为`主城区耗标煤总量`+`供暖热单耗`外均纵向合并、管理指标含`安全文明生产 / 安全环保事故 / 红黑榜奖惩`），各分值跨表引用 `=IF('计算过程明细'!...)`，合计行 `=MAX(0, SUM(...))`。
+      3. `计算过程明细`：按标准单位顺序输出每项指标的 `权重分、计划值、实际完成值、达成率/排名、得分计算过程（算式与规则说明）、核算得分、数据来源`（未出数月报项保留 `None` 与“月报尚未出数”说明），并在底部附 `5 家参评供热单位服务投诉率横向排名计算依据`。
+  - **新增接口 (`backend/projects/monthly_data_show/api/workspace.py`)**：
+    - 定义 `ExportCompetitionExcelRequest`，并在 `router` 与 `public_router` 同步挂载 `POST /monthly-data-show/competition/export`，返回 `StreamingResponse`（`.xlsx` MIME 与 `UTF-8` 编码 `Content-Disposition` 文件名 `供暖期指标竞赛考评表_{month}.xlsx`）。
+  - **单元测试 (`backend/projects/monthly_data_show/tests/test_competition_export.py`)**：
+    - 覆盖完整 7 单位导出结构/公式/否决态、月中未结账空值留空导出、空数据 `ValueError` 校验及接口 `StreamingResponse` 响应头验证。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/services/api.js`**：新增 `exportCompetitionExcel(month, payload, projectKey)`，调用导出接口并解析 `Content-Disposition` UTF-8 文件名返回 `{ blob, filename }`。
+  - **`frontend/src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+    - 在 `recalculateAllScores()` 中将测算奖金统一按 5 元倍数四舍五入取整：`Math.round(((unit.baseAmount ?? 0) * ((unit.score ?? 0) / 100.0)) / 5) * 5`。
+    - 在顶部操作区新增 `📥 导出竞赛报表`（`btn-export`）与 `handleExportExcel()`，支持一键下载当前月份的 3-Sheet Excel 工作簿。
+- **验证结果**：
+  - `python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py backend/projects/monthly_data_show/tests/test_competition_export.py -v`：**7 passed**；
+  - `npm --prefix frontend run build`：1069 模块编译打包通过（21.31s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛取数口径重构：月报未结账实际值留空、电力现货动态取数与空值计分防误算
+
+- **需求背景**：
+  - 用户明确供暖期指标竞赛（`/projects/monthly_data_show/competition`）后续推进口径：
+    1. 核查“现货电价”规则为每 3 个百分点增减 1 分；
+    2. 耗标煤总量、厂内水耗量、全厂热效率、主城区耗标煤总量、供暖热/电/水单耗、外购热量等月报指标，在月报尚未出数前实际完成值保持留空，不用日报累计替代；
+    3. 北海、香海电厂“现货电价”按 `/pages/spot_electricity` 相同逻辑动态取数：标准值为当月累计至今辽宁省统一结算点实时电价算术平均值上浮 5%，完成值为至今本厂完整账单日电量加权现货电价；
+    4. 停供断管率、非计划停机停炉、安全文明生产保持纯手工填报，不联动其他系统表；供暖期总评暂不做。
+- **后端改动 (`backend/projects/monthly_data_show/services/competition_service.py`)**：
+  - 移除月报能耗与单耗指标在 `monthly_data_show` 无 `real` 值时的 `daily_basic_data` / `analysis_company_sum` 降级回退，月报未出数前 `actualValue` 严格返回 `None`；提取统一 helper `build_monthly_item`。
+  - 新增 `_fetch_spot_price_metrics`，按 `spot_electricity_15min_data` 表与 `spot_electricity.py` 一致口径计算当月 `AVG(real_time_price) * 1.05`（标准值）与完整 96 点账单日 `SUM(sales * bill_real_time_price) / SUM(sales)`（北海/香海完成值），并在返回体新增 `spot_latest_date` 与 `spot_bill_latest_date`。
+  - 新增单元测试 `backend/projects/monthly_data_show/tests/test_competition_service.py`。
+- **前端改动 (`frontend/src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`)**：
+  - 核查确认现货电价规则与公式均为每 3 个百分点增减 1 分（`diffPercent / 3.0`）。
+  - `buildInitialUnitData()` 将月报/现货/投诉指标默认计划与实际值改为 `null`（去除模拟假数）；`applyAutoFetchData()` 接入 `uExt.spot_price`，系统项支持写入 `null` 留空，手工认定项（非停/断管率/安全文明）在已有输入时不被自动取数覆盖；补全缺失的 `resetToDefaultData()` 函数并修正 `summaryPayload.leaderboard` 的 `rank` 字段。
+  - 新增 `isBlankMetric` 校验：`actualValue`（或带目标项 `targetValue`）为空时不再被 `Number(null)` 误算为 `0`，指标得分返回 `null` 并显示“待出数”灰色徽章；仅当 7 家单位全部指标均已出数时才判定“末位且<85分”淘汰。
+  - 标记 `2026-2027` 总评暂未启用并在 `onMonthChange()` 中前置拦截。
+- **验证结果**：
+  - 后端测试 `python -m pytest backend/projects/monthly_data_show/tests/test_competition_service.py -v`：3 passed；
+  - 实库抽样 `get_auto_fetch_competition_data('2026-01')` 与 `('2026-11')`：2026-01 现货基准 131.69、北海 130.50、香海 123.16，2026-11 月报实际值均为空、现货基准 234.63（至 2026-11-12）、北海 260.63 / 香海 245.22（账单至 2026-11-07）；
+  - 前端构建 `npm --prefix frontend run build`：1069 模块编译通过（16.18s，0 错误）。
+
 ## 2026-11-12 智慧供热中继连接复用与重复回源优化
 
 - **需求与证据**：用户确认内网页面慢、中继连接线上，并要求直接优化、禁止增加防御性编程。此前线上缓存 HIT 的 jQuery/CSS 仍需约 2.4–3.8 秒；这不是办公电脑执行耗时的证明，不能承诺未经线上复测的首屏提速比例。

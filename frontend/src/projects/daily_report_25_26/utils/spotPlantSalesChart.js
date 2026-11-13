@@ -1,10 +1,12 @@
-// 上网电量使用独立MWh轴，避免与电价、价差或负电价点数共用刻度。
-export function addPlantSalesToOption(option, rows, { enabled, fields, suffix = '', include = () => true }) {
+// 上网电量使用独立MWh轴，避免与电价、价差或负电价点数共用刻度；支持按两厂或单厂筛选展示。
+export function addPlantSalesToOption(option, rows, { enabled, fields, suffix = '', include = () => true, scope = 'all' }) {
   if (!enabled) return option
-  const plants = [
-    { name: `北海上网电量${suffix}`, field: fields[0], color: '#0891b2' },
-    { name: `香海上网电量${suffix}`, field: fields[1], color: '#8b5cf6' },
+  const allPlants = [
+    { key: 'beihai', name: `北海上网电量${suffix}`, field: fields[0], color: '#0891b2' },
+    { key: 'xianghai', name: `香海上网电量${suffix}`, field: fields[1], color: '#8b5cf6' },
   ]
+  const plants = scope === 'all' ? allPlants : allPlants.filter(p => p.key === scope)
+  if (!plants.length) return option
   const hasOtherRightAxis = Boolean(option.yAxis[1]?.show)
   if (hasOtherRightAxis) option.yAxis[1].position = 'right'
   const axisIndex = option.yAxis.length

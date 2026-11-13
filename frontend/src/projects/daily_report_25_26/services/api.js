@@ -4033,11 +4033,34 @@ export async function getCompetitionRecord(month, projectKey = 'monthly_data_sho
   return response.json()
 }
 
-// 供暖期指标竞赛：持久化保存打分测算记录
+// 供暖期指标竞赛：汇总多月份定稿与兑现台账
+export async function fetchCompetitionSeasonRecords(
+  months = ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03'],
+  projectKey = 'monthly_data_show',
+) {
+  const query = new URLSearchParams({
+    months: Array.isArray(months) ? months.join(',') : String(months || ''),
+  })
+  const url = `${projectPath(projectKey)}/monthly-data-show/competition/records?${query}`
+  const response = await authAwareFetch(url, {
+    method: 'GET',
+    headers: attachAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '获取供暖期兑现记录失败')
+    throw new Error(errorMsg)
+  }
+  return response.json()
+}
+
+// 供暖期指标竞赛：持久化保存打分测算记录（支持 saved / final）
 export async function saveCompetitionRecord(month, payload = {}, projectKey = 'monthly_data_show') {
   const url = `${projectPath(projectKey)}/monthly-data-show/competition/save`
   const body = {
     month,
+    status: payload.status ?? 'saved',
+    base_reward: payload.baseReward ?? payload.base_reward ?? null,
+    extra_reward: payload.extraReward ?? payload.extra_reward ?? null,
     total_reward: payload.totalReward ?? payload.total_reward ?? 0,
     disqualified_count: payload.disqualifiedCount ?? payload.disqualified_count ?? 0,
     data_payload: payload.dataPayload ?? payload.data_payload ?? [],
@@ -4056,6 +4079,46 @@ export async function saveCompetitionRecord(month, payload = {}, projectKey = 'm
     throw new Error(errorMsg)
   }
   return response.json()
+}
+
+// 供暖期指标竞赛：导出 3-Sheet 联动 Excel 考评报表
+export async function exportCompetitionExcel(month, payload = {}, projectKey = 'monthly_data_show') {
+  const url = `${projectPath(projectKey)}/monthly-data-show/competition/export`
+  const body = {
+    month: month || '',
+    month_label: payload.monthLabel ?? payload.month_label ?? month ?? '',
+    status_note: payload.statusNote ?? payload.status_note ?? '',
+    units_data: payload.unitsData ?? payload.units_data ?? [],
+  }
+  const response = await authAwareFetch(url, {
+    method: 'POST',
+    headers: attachAuthHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const errorMsg = await parseErrorDetail(response, '导出竞赛考评报表失败')
+    throw new Error(errorMsg)
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') || ''
+  let filename = `供暖期指标竞赛考评表_${month || 'export'}.xlsx`
+  const utf8Matched = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Matched && utf8Matched[1]) {
+    try {
+      filename = decodeURIComponent(utf8Matched[1].trim())
+    } catch {
+      // keep fallback filename
+    }
+  } else {
+    const plainMatched = disposition.match(/filename=\"?([^\";]+)\"?/i)
+    if (plainMatched && plainMatched[1]) {
+      filename = plainMatched[1].trim()
+    }
+  }
+  return { blob, filename }
 }
 
 // =============================================================================

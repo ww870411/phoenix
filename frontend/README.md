@@ -1,3 +1,96 @@
+## 2026-11-13 电力现货两厂卡片内嵌“波形相关系数”（移除独立契合度板块）
+
+- **`src/projects/daily_report_25_26/utils/spotCurveAlignment.js`**（新增）：
+  - 提供 `computePearsonCorrelation()`、`evaluateCurveAlignment()` 与 `buildPlantAlignmentReport()`，直接基于 15 分钟点位计算两厂上网电量分别与日前电价、实时电价的波形相关系数（含多日日内去均值相关度）。
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+  - 移除独立契合度折叠面板，在两厂既有 `.plant-card` 底部内嵌 `.plant-corr-footer` 单行区，直接展示 `波形相关系数` 简明意义与 `对日前` / `对实时` 相关性胶囊（多日优先展示 `日内 r` 并附 `全局 r`）。
+- **`tests/spot-curve-alignment.test.mjs`**：4 项单元测试全部通过；`npm --prefix frontend run build` 1071 模块编译通过（22.44s，0 错误）。
+
+## 2026-11-13 电力现货“日前电价测算”平均现货电价改显较实时加权单价差额
+
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+  - `plantCardMetrics` 在 `salesPriceBasis === 'day_ahead'` 时关闭差异率、透传 `avg_${plant.key}_da_spot_price_diff`，新增 `formatSignedPriceDiff()`，于“平均现货电价”后展示 `(较实时 ±xxx.xx 元/MWh)`（红涨绿跌色彩）并更新公式提示。
+- **构建验证**：`npm --prefix frontend run build` 1070 模块编译通过（18.14s，0 错误）。
+
+## 2026-11-13 电力现货“日前电价测算”现货电费增加较“实时电价”差异值
+
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+  - `plantCardMetrics` 接入 `sum_{plant}_da_spot_fee_diff`，新增 `formatSignedFeeDiff()` 与 `.spot-fee-diff`，在日前测算模式下于两厂“现货电费”下方展示 `(较实时 ±xxx 元)`（红正绿负）与差值提示。
+- **构建验证**：`npm --prefix frontend run build` 1070 模块编译通过（17.19s，0 错误）。
+
+## 2026-11-13 电力现货市场数据页面新增“基于日前电价测算（参考）”模式
+
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+  - 在北海、香海两厂量价卡片上方新增 `.sales-basis-bar` 测算基准切换栏，支持切换 **实时电价（账单）** 与 **日前电价（参考测算）**（`salesPriceBasis`）；
+  - 新增 `plantCardMetrics` 计算属性，在日前测算模式下展示基于 `day_ahead_price` 逐点乘积求和的 `sum_{plant}_da_spot_fee`、`sum_{plant}_da_revenue_fee`（合约差价电费保持不变）、`avg_{plant}_da_spot_price` 及相对日前均价的差异率 `{plant}_da_spot_price_diff_rate`，并在卡片上加注 `日前测算` 徽标与公式说明；
+  - 下方 `plantDistributionStats` 联动 `salesPriceBasis`，切至日前模式时同步按 `day_ahead_price` 统计各价格区间电量分布与加权均价。
+- **构建验证**：`npm --prefix frontend run build` 1070 模块编译打包通过（20.11s，0 错误）。
+
+## 2026-11-13 电力现货市场数据页面“显示两厂上网电量”支持单独筛选电厂
+
+- **`src/projects/daily_report_25_26/utils/spotPlantSalesChart.js`**：
+  - `addPlantSalesToOption()` 新增 `scope` 参数（`'all' | 'beihai' | 'xianghai'`），支持仅绘制单厂或两厂上网电量曲线、图例与 Tooltip。
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+  - 在“显示两厂上网电量”开关旁新增 `两厂 | 北海 | 香海` 胶囊切换条（`plantSalesScope`），并通过 `applyPlantSales()` 在单日、连续、日均、月均、时段均值 5 种模式下统一透传筛选范围。
+- **`tests/spot-plant-sales-chart.test.mjs`**：新增单厂筛选测试用例；过滤验证 4 项相关用例全部通过（既有未改动的多行正则用例仍报错）；`npm --prefix frontend run build` 1070 模块编译通过（23.20s，0 错误）。
+
+## 2026-11-13 电力现货市场数据页面“区间走势分析”新增“连续显示”模式
+
+- **`src/projects/daily_report_25_26/utils/spotContinuousSeries.js`**：
+  - 新增 `formatPointPeriod()` 与 `buildContinuousTimeline()`，按标准 15 分钟步长构造区间连续时间轴，中间缺数据时插入 `__missing: true` 空值点以断开连线，不做抽稀或统计聚合。
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+  - 在区间走势子模式中新增 `〰️ 连续显示`（`rangeSubMode === 'continuous'`）及响应式折行样式；
+  - 抽出 `buildPointSeriesChartOption()` 统一驱动单日分时与区间连续显示，支持日前/实时/价差切换、两厂上网电量叠加、缺数断线、大点数无抽稀性能优化（>1,000 点关闭平滑/阴影/动画）与跨度自适应 X 轴刻度；
+  - `fetchData()` 与 `onNegativeFilterChange()` 统一改用本地断点过滤，确保区间分布分析与连续时间轴口径一致，并同步启用连续模式下的 15 分钟明细分页与导出。
+- **`tests/spot-continuous-series.test.mjs`**：新增 4 项单元测试全部通过；`npm --prefix frontend run build` 1070 模块编译通过（16.34s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛“实际完成值”人工调整着色与防误覆盖
+
+- **`src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+  - 指标完成值输入框改由 `onActualValueInput()` 统一接管，人工修改或手填完成值后自动写入 `isManualActual: true` 并随数据库 `data_payload` 持久化，页面对应行与输入框呈现暖琥珀色高亮着色（`.row-manual-actual` / `.ind-manual-cell` / `.cir-manual-box` / `.tr-manual-actual`），显示 `手调` / `人工调整` 标识及 `↺` 恢复系统原值/默认基准值按钮。
+  - `applyAutoFetchData()` 同步记录 `autoActualValue` 系统原值，并在二次点击“从系统自动取数”时自动保留已手调完成值不被覆盖。
+- **构建验证**：`npm --prefix frontend run build` 1069 模块通过（23.98s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛“发布结果 (final)”工作流与“供暖期兑现记录”标签页
+
+- **`src/projects/daily_report_25_26/services/api.js`**：
+  - 新增 `fetchCompetitionSeasonRecords()` 调用 `GET /monthly-data-show/competition/records`；`saveCompetitionRecord()` 支持传入 `status`（`saved` / `final`）、`baseReward`、`extraReward`。
+- **`src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+  - `结果总览` 新增 `额外嘉奖` 独立列（无嘉奖显示 `¥0`）。
+  - 新增 `📢 发布结果` 按钮（标记 `final` 定稿）与 `💾 保存至系统数据库`（标记 `saved`）双状态保存机制，并在状态条展示 `FINAL · 已定稿` / `SAVED · 已保存` 徽章。
+  - 新增（第 2 位）`📜 供暖期兑现记录` 标签页（`activeTab === 'season_records'`），列出 `2026.11–2027.03` 月度定稿进度、定稿合计与全口径参考合计、7 家单位分月兑现矩阵及快速跳转。
+- **构建验证**：`npm --prefix frontend run build` 1069 模块通过（24.89s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛页面要素精简
+
+- **`src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+  - 仅保留顶部 `结果总览` 的 `拟兑现 ¥...` 标签，移除其余标签页后方小徽章；删除全页 5 处单位“类型”标签/表格列（并同步将 `结果总览` 表尾 `colspan` 修正为 `2`）；移除 `权威数据源：...` 与 `非直供电厂说明` 提示块。
+- **构建验证**：`npm --prefix frontend run build` 1069 模块通过（24.37s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛新增“额外嘉奖”标签页并移除“基数达成率”
+
+- **`src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+  - 新增 `🏅 额外嘉奖` 标签页（`activeTab === 'extra_rewards'`），支持 7 家单位按条目手动录入嘉奖项目名称、金额（元）与备注依据，自动归档至 `competition_monthly_records` 并联动计入 `unit.calculatedReward = unit.baseReward + unit.extraRewardTotal`。
+  - 删除 `结果总览` 排行榜中的 `基数达成率` 列，并移除 `2026-11` 选项中的 `（含启动考评）` 标识。
+- **构建验证**：`npm --prefix frontend run build` 1069 模块通过（17.87s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛报表导出与奖金按 5 元倍数取整
+
+- **`src/projects/daily_report_25_26/services/api.js`**：
+  - 新增 `exportCompetitionExcel(month, payload, projectKey)`，向 `POST /monthly-data-show/competition/export` 提交当前测算上下文并返回 `{ blob, filename }`（兼容解析 `Content-Disposition` UTF-8 文件名）。
+- **`src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+  - `recalculateAllScores()` 中奖金计算统一按 5 元倍数四舍五入取整：`Math.round(((unit.baseAmount ?? 0) * ((unit.score ?? 0) / 100.0)) / 5) * 5`。
+  - 顶部 `.hero-actions` 新增 `📥 导出竞赛报表` 按钮与 `handleExportExcel()`，一键导出含《考评兑现汇总》《指标得分矩阵》《计算过程明细》的 3-Sheet Excel 工作簿。
+- **构建验证**：`npm --prefix frontend run build` 1069 模块通过（21.31s，0 错误）。
+
+## 2026-11-13 供暖期指标竞赛工作台取数留空与现货电价动态联动
+
+- **`src/projects/monthly_data_show/pages/HeatingCompetitionView.vue`**：
+  - 核查确认现货电价规则为每 3 个百分点增减 1 分（`diffPercent / 3.0`）。
+  - 移除 `buildInitialUnitData()` 中的模拟假数据，系统取数项初始为 `null`；`applyAutoFetchData()` 对接 `spot_price`，月报未出数前保持实际值留空且不覆盖已录入的手工认定项；补全 `resetToDefaultData()` 与归档 `summaryPayload.leaderboard` 的 `rank`。
+  - 新增 `isBlankMetric()` 与 `.score-pending` 状态，避免空值被 `Number(null)` 误算为 `0`（虚高满分），并仅在全网指标齐备时执行“末位且<85分”淘汰判定；对 `2026-2027` 总评选项做前置拦截提示。
+- **构建验证**：`npm --prefix frontend run build` 1069 模块通过（16.18s，0 错误）。
+
 ## 2026-11-12 智慧供热直通加载与请求效率优化
 
 - `SmartHeatingTunnelView.vue` 初始化并行读取状态与配置，真实入口就绪后挂载 iframe，避免先访问默认入口再重载。日常只查询状态，每轮完成后等待 8 秒再查，减少配置请求并避免慢请求叠加。

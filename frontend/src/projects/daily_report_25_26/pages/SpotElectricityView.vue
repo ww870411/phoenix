@@ -106,7 +106,7 @@
         <!-- 第二行：聚合子模式 / 粒度提示 与 操作项（负电价过滤 + 导出数据） -->
         <div class="toolbar-row toolbar-row-bottom">
           <div class="toolbar-sub-left">
-            <!-- 区间聚合子模式切换：按每日平均值 vs 按每月平均值 vs 按时段平均值 (0:15~24:00) -->
+            <!-- 区间聚合子模式切换：按每日平均值 vs 按每月平均值 vs 按时段平均值 vs 连续显示 -->
             <div v-if="viewMode === 'range'" class="range-submode-tabs">
               <button
                 :class="['submode-btn', { active: rangeSubMode === 'daily' }]"
@@ -132,6 +132,14 @@
               >
                 ⏰ 按时段平均值 (0:15~24:00)
               </button>
+              <button
+                :class="['submode-btn', { active: rangeSubMode === 'continuous' }]"
+                type="button"
+                title="从区间首个时段至最后一个时段连续完整展现每一个15分钟点位，不做聚合统计"
+                @click="switchRangeSubMode('continuous')"
+              >
+                〰️ 连续显示
+              </button>
             </div>
             <!-- 单日模式粒度说明提示 -->
             <div v-else class="single-mode-hint">
@@ -141,11 +149,26 @@
           </div>
 
           <div class="toolbar-right">
-            <label class="checkbox-filter plant-sales-toggle" :class="{ 'is-disabled': !canShowPlantSales }"
-              :title="hasPlantSalesData ? '显示两厂上网电量曲线，缺失数据的时段断开' : '所选日期范围暂无电厂上网电量数据'">
-              <input v-model="showPlantSales" type="checkbox" :disabled="!canShowPlantSales" />
-              <span class="checkbox-label">显示两厂上网电量</span>
-            </label>
+            <div class="plant-sales-filter-group">
+              <label class="checkbox-filter plant-sales-toggle" :class="{ 'is-disabled': !canShowPlantSales }"
+                :title="hasPlantSalesData ? '显示上网电量曲线（支持全部或单厂筛选），缺失数据的时段断开' : '所选日期范围暂无电厂上网电量数据'">
+                <input v-model="showPlantSales" type="checkbox" :disabled="!canShowPlantSales" />
+                <span class="checkbox-label">显示两厂上网电量</span>
+              </label>
+              <div v-if="showPlantSales && canShowPlantSales" class="plant-sales-scope-tabs" role="group" aria-label="上网电量电厂筛选">
+                <button
+                  v-for="opt in plantSalesScopeOptions"
+                  :key="opt.key"
+                  type="button"
+                  :class="['scope-btn', { active: plantSalesScope === opt.key }]"
+                  :title="opt.title"
+                  @click="plantSalesScope = opt.key"
+                >
+                  <span v-if="opt.color" class="scope-dot" :style="{ backgroundColor: opt.color }"></span>
+                  <span>{{ opt.label }}</span>
+                </button>
+              </div>
+            </div>
             <!-- 负电价高亮过滤 -->
             <label class="checkbox-filter" title="仅展示出现负电价的时段区间（保持横轴全天刻度不变）">
               <input v-model="onlyNegative" type="checkbox" @change="onNegativeFilterChange" />
@@ -267,38 +290,116 @@
           </div>
         </div>
 
+        <!-- 两厂量价测算基准切换与卡片并排展示 -->
+        <div class="sales-basis-bar">
+          <div class="sales-basis-label">
+            <span>两厂量价测算基准：</span>
+            <span :class="['basis-status-badge', salesPriceBasis === 'day_ahead' ? 'is-da' : 'is-rt']">
+              {{ salesPriceBasis === 'day_ahead' ? '日前电价（参考测算）' : '账单实时电价' }}
+            </span>
+            <span v-if="salesPriceBasis === 'day_ahead'" class="basis-hint">
+              每时段电费 = 上网电量 × 该时段日前电价（合约差价保持不变，仅供对比参考）
+            </span>
+          </div>
+          <div class="basis-tabs" role="group" aria-label="两厂量价测算基准">
+            <button
+              type="button"
+              :class="['basis-btn', { active: salesPriceBasis === 'real_time' }]"
+              title="按日账单省内实时电价结算口径展示"
+              @click="salesPriceBasis = 'real_time'"
+            >
+              实时电价（账单）
+            </button>
+            <button
+              type="button"
+              :class="['basis-btn', { active: salesPriceBasis === 'day_ahead' }]"
+              title="将每时段单价替换为日前电价测算电费与加权均价，供复盘参考"
+              @click="salesPriceBasis = 'day_ahead'"
+            >
+              日前电价（参考测算）
+            </button>
+          </div>
+        </div>
+
         <!-- 两厂量价并排展示，缺失值弱化，电费按整数元显示。 -->
         <div class="kpi-grid kpi-grid-sales">
-          <div v-for="plant in plantCards" :key="plant.key" class="kpi-card plant-card">
+          <div
+            v-for="plant in plantCardMetrics"
+            :key="plant.key"
+            :class="['kpi-card', 'plant-card', { 'is-da-basis': salesPriceBasis === 'day_ahead' }]"
+          >
             <div class="plant-heading">
-              <strong>{{ plant.name }}</strong>
+              <div class="plant-title-wrap">
+                <strong>{{ plant.name }}</strong>
+                <span v-if="salesPriceBasis === 'day_ahead'" class="basis-ref-tag">日前测算</span>
+              </div>
               <span>{{ plant.units }}</span>
             </div>
             <dl class="plant-metrics">
               <div>
                 <dt>售电量</dt>
-                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_sales`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_sales`], 'MWh') }}</dd>
+                <dd :class="{ 'metric-empty': plant.sales == null }">{{ formatPlantMetric(plant.sales, 'MWh') }}</dd>
               </div>
-              <div title="逐15分钟汇总全部机组上网电量 × 该时段账单实时电价">
+              <div :title="plant.spotFeeTooltip">
                 <dt>{{ viewMode === 'single' ? '当日' : '区间' }}现货电费</dt>
-                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_spot_fee`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_spot_fee`], '元') }}</dd>
+                <dd :class="{ 'metric-empty': plant.spotFee == null }">
+                  {{ formatPlantMetric(plant.spotFee, '元') }}
+                  <span
+                    v-if="salesPriceBasis === 'day_ahead' && plant.spotFee != null && plant.spotFeeDiff != null"
+                    :class="['spot-fee-diff', getSpreadColorClass(plant.spotFeeDiff)]"
+                  >(较实时 {{ formatSignedFeeDiff(plant.spotFeeDiff) }})</span>
+                </dd>
               </div>
               <div title="逐机组、逐15分钟计算合约差价电量 × 合约差价电价，再求和">
                 <dt>{{ viewMode === 'single' ? '当日' : '区间' }}合约差价电费</dt>
-                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_contract_fee`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_contract_fee`], '元') }}</dd>
+                <dd :class="{ 'metric-empty': plant.contractFee == null }">{{ formatPlantMetric(plant.contractFee, '元') }}</dd>
               </div>
-              <div title="现货电费与合约差价电费之和，先求和再四舍五入">
+              <div :title="plant.revenueTooltip">
                 <dt>{{ viewMode === 'single' ? '当日' : '区间' }}电量电费收入</dt>
-                <dd :class="{ 'metric-empty': summary?.[`sum_${plant.key}_revenue_fee`] == null }">{{ formatPlantMetric(summary?.[`sum_${plant.key}_revenue_fee`], '元') }}</dd>
+                <dd :class="{ 'metric-empty': plant.revenueFee == null }">{{ formatPlantMetric(plant.revenueFee, '元') }}</dd>
               </div>
-              <div title="平均现货电价=该厂未舍入现货电费÷上网电量；差异率=(该厂均价−实时价算术均值)÷实时价算术均值。电量为0时均价不可计算，基准均价为0时差异率显示—。">
+              <div :title="plant.avgPriceTooltip">
                 <dt>平均现货电价</dt>
-                <dd :class="{ 'metric-empty': summary?.[`avg_${plant.key}_spot_price`] == null }">
-                  {{ formatPlantMetric(summary?.[`avg_${plant.key}_spot_price`], '元/MWh') }}
-                  <span v-if="summary?.[`avg_${plant.key}_spot_price`] != null" class="plant-price-difference">({{ formatSpotPriceRate(summary?.[`${plant.key}_spot_price_diff_rate`]) }})</span>
+                <dd :class="{ 'metric-empty': plant.avgSpotPrice == null }">
+                  {{ formatPlantMetric(plant.avgSpotPrice, '元/MWh') }}
+                  <span v-if="salesPriceBasis === 'real_time' && plant.avgSpotPrice != null" class="plant-price-difference">({{ formatSpotPriceRate(plant.diffRate) }})</span>
+                  <span
+                    v-else-if="salesPriceBasis === 'day_ahead' && plant.avgSpotPrice != null && plant.spotPriceDiff != null"
+                    :class="['spot-fee-diff', getSpreadColorClass(plant.spotPriceDiff)]"
+                  >(较实时 {{ formatSignedPriceDiff(plant.spotPriceDiff) }})</span>
                 </dd>
               </div>
             </dl>
+            <div
+              v-if="plant.corrDayAhead || plant.corrRealTime"
+              class="plant-corr-footer"
+              title="波形相关系数 (r)：+1完全同向随电价起伏，0无联动，-1反向；多日查询时优先展示按日去均值后的日内调峰相关度，以排除供热负荷变化干扰"
+            >
+              <div class="plant-corr-label-group">
+                <span class="plant-corr-title">波形相关系数</span>
+                <span class="plant-corr-meaning">+1完全同向 / 0无联动 / -1反向</span>
+              </div>
+              <div class="plant-corr-badges">
+                <span v-if="plant.corrDayAhead" class="plant-corr-pill is-da">
+                  <span class="pill-basis">对日前</span>
+                  <strong :class="getSpreadColorClass(plant.corrDayAhead.primary)">
+                    {{ formatPlantCorrelation(plant.corrDayAhead) }}
+                  </strong>
+                  <span v-if="plant.corrDayAhead.sub != null" class="pill-global">
+                    (全局 {{ formatCorrelationR(plant.corrDayAhead.sub, true) }})
+                  </span>
+                </span>
+                <span v-if="plant.corrRealTime" class="plant-corr-pill is-rt">
+                  <span class="pill-basis">对实时</span>
+                  <strong :class="getSpreadColorClass(plant.corrRealTime.primary)">
+                    {{ formatPlantCorrelation(plant.corrRealTime) }}
+                  </strong>
+                  <span v-if="plant.corrRealTime.sub != null" class="pill-global">
+                    (全局 {{ formatCorrelationR(plant.corrRealTime.sub, true) }})
+                  </span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -312,7 +413,7 @@
             <div>
               <div class="dist-title-row">
                 <h4 class="dist-title">现货单价区间 · 上网电量分布分析</h4>
-                <span class="dist-badge">供分析参考</span>
+                <span class="dist-badge">{{ salesPriceBasis === 'day_ahead' ? '按日前电价 · 供分析参考' : '按实时电价 · 供分析参考' }}</span>
               </div>
               <p class="dist-subtitle">
                 按现货单价区间透视所选期间发电机组在负电价、低谷、常规平段及顶峰高价期的上网电量分布与占比结构
@@ -514,7 +615,9 @@
                     ? `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（日均走势）`
                     : rangeSubMode === 'monthly'
                       ? `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（月均走势）`
-                      : `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（时段均值 00:15 ~ 24:00）`
+                      : rangeSubMode === 'continuous'
+                        ? `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（连续15分钟原始走势）`
+                        : `【${rangeStartDate} 至 ${rangeEndDate}】辽宁省统一结算点电价数据（时段均值 00:15 ~ 24:00）`
               }}
             </h3>
             <span class="chart-badge">
@@ -525,15 +628,17 @@
                     ? `按日聚合 (${dailyTrends.length} 天)`
                     : rangeSubMode === 'monthly'
                       ? `按月聚合 (${monthlyTrends.length} 个月)`
-                      : '时段聚合平均 (96 点位)'
+                      : rangeSubMode === 'continuous'
+                        ? `连续原始时序 (${points.length.toLocaleString()} 点位)`
+                        : '时段聚合平均 (96 点位)'
               }}
             </span>
           </div>
           <!-- 动态指标开关选择器：允许自由勾选显隐，默认显示日前与实时电价 -->
           <div class="chart-indicators-selector">
             <span class="selector-label">图表指标：</span>
-            <!-- 单日模式指标切换 -->
-            <template v-if="viewMode === 'single'">
+            <!-- 单日模式及区间连续显示模式指标切换 -->
+            <template v-if="viewMode === 'single' || rangeSubMode === 'continuous'">
               <button
                 :class="['indicator-chip', 'chip-blue', { active: visibleSeries.dayAhead }]"
                 type="button"
@@ -1187,9 +1292,9 @@
           </table>
         </div>
 
-        <!-- 轻量分页控制器：仅在单日分时或穿透 15 分钟分时明细视图下展示 -->
+        <!-- 轻量分页控制器：单日分时、区间连续显示或穿透 15 分钟分时明细视图下展示 -->
         <div
-          v-if="(viewMode === 'single' || dailyTableSubMode === 'pointsDetail') && displayedPoints.length > 0"
+          v-if="showPointsPagination && displayedPoints.length > 0"
           class="pagination-bar"
         >
           <div class="pagination-info">
@@ -1478,6 +1583,8 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import SpotSettlementImport from '../components/SpotSettlementImport.vue'
 import { addPlantSalesToOption } from '../utils/spotPlantSalesChart'
+import { buildContinuousTimeline } from '../utils/spotContinuousSeries'
+import { buildPlantAlignmentReport } from '../utils/spotCurveAlignment'
 import { getProjectNameById } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 import {
@@ -1515,7 +1622,7 @@ const breadcrumbItems = computed(() => [
 const loading = ref(false)
 const loadError = ref('')
 const viewMode = ref('single') // 'single' | 'range'
-const rangeSubMode = ref('daily') // 'daily' | 'monthly' | 'period' (区间下：按每日平均值 vs 按每月平均值 vs 按时段平均值)
+const rangeSubMode = ref('daily') // 'daily' | 'monthly' | 'period' | 'continuous'
 const dailyTableSubMode = ref('dailySummary') // 区间日度走势下表格展示：'dailySummary' (按日均价汇总，默认) | 'pointsDetail' (15分钟分时明细，分页)
 const mobileLayout = ref('card') // 'card' | 'table'
 const isMobileScreen = ref(false)
@@ -1561,6 +1668,12 @@ const monthlyTrends = shallowRef([])
 
 const summary = ref(null)
 const showPlantSales = ref(false)
+const plantSalesScope = ref('all') // 'all' | 'beihai' | 'xianghai'
+const plantSalesScopeOptions = [
+  { key: 'all', label: '两厂', title: '同时显示北海与香海上网电量曲线' },
+  { key: 'beihai', label: '北海', color: '#0891b2', title: '仅显示北海热电厂上网电量曲线' },
+  { key: 'xianghai', label: '香海', color: '#8b5cf6', title: '仅显示香海热电厂上网电量曲线' },
+]
 const hasPlantSalesData = computed(() => {
   if (summary.value?.has_plant_sales_data === true) return true
   const pts = points.value
@@ -1574,6 +1687,7 @@ const hasPlantSalesData = computed(() => {
 })
 const canShowPlantSales = computed(() => hasPlantSalesData.value && !loading.value && !loadError.value)
 watch(showPlantSales, () => { if (!loading.value) renderChart() })
+watch(plantSalesScope, () => { if (!loading.value && showPlantSales.value) renderChart() })
 watch(hasPlantSalesData, available => { if (!available) showPlantSales.value = false })
 
 const totalQueryPoints = computed(() => {
@@ -1696,6 +1810,8 @@ function switchRangeSubMode(subMode) {
     fetchData()
   } else if (subMode === 'monthly' && !monthlyTrends.value.length) {
     fetchData()
+  } else if (subMode === 'continuous' && !points.value.length) {
+    fetchData()
   } else {
     renderChart()
   }
@@ -1707,15 +1823,78 @@ const metaRangeText = computed(() => {
 })
 
 // 工具函数
+const salesPriceBasis = ref('real_time') // 'real_time' | 'day_ahead'
 const plantCards = [
   { key: 'beihai', name: '北海热电厂', units: '1–3号机组合计' },
   { key: 'xianghai', name: '香海热电厂', units: '1–4号机组合计' },
 ]
+function toCorrDisplay(metrics) {
+  if (!metrics || metrics.validPoints <= 0) return null
+  if (metrics.dayCount > 1) {
+    return {
+      dayCount: metrics.dayCount,
+      primary: metrics.intradayCorrelation ?? metrics.correlation,
+      sub: metrics.intradayCorrelation != null ? metrics.correlation : null,
+      isIntraday: metrics.intradayCorrelation != null,
+    }
+  }
+  return {
+    dayCount: 1,
+    primary: metrics.correlation,
+    sub: null,
+    isIntraday: false,
+  }
+}
+
+const plantAlignmentReport = computed(() => buildPlantAlignmentReport(points.value))
+const plantCardMetrics = computed(() => {
+  const s = summary.value
+  const isDa = salesPriceBasis.value === 'day_ahead'
+  const feePrefix = isDa ? 'da_' : ''
+  const corrByKey = plantAlignmentReport.value?.byKey || {}
+  return plantCards.map(plant => {
+    const plantCorr = corrByKey[plant.key]
+    return {
+      ...plant,
+      sales: s?.[`sum_${plant.key}_sales`],
+      spotFee: s?.[`sum_${plant.key}_${feePrefix}spot_fee`],
+      spotFeeDiff: isDa ? s?.[`sum_${plant.key}_da_spot_fee_diff`] : null,
+      contractFee: s?.[`sum_${plant.key}_contract_fee`],
+      revenueFee: s?.[`sum_${plant.key}_${feePrefix}revenue_fee`],
+      avgSpotPrice: s?.[`avg_${plant.key}_${feePrefix}spot_price`],
+      diffRate: isDa ? null : s?.[`${plant.key}_spot_price_diff_rate`],
+      spotPriceDiff: isDa ? s?.[`avg_${plant.key}_da_spot_price_diff`] : null,
+      corrDayAhead: toCorrDisplay(plantCorr?.dayAhead),
+      corrRealTime: toCorrDisplay(plantCorr?.realTime),
+      spotFeeTooltip: isDa
+        ? '逐15分钟汇总全部机组上网电量 × 该时段日前电价（测算参考）；较实时差异 = 日前测算现货电费 − 账单实时现货电费'
+        : '逐15分钟汇总全部机组上网电量 × 该时段账单实时电价',
+      revenueTooltip: `${isDa ? '日前测算' : ''}现货电费与合约差价电费之和，先求和再四舍五入`,
+      avgPriceTooltip: isDa
+        ? '平均现货电价=该厂未舍入日前测算现货电费÷上网电量；较实时差额 = 日前测算加权均价 − 实时账单加权均价。电量为0时均价不可计算。'
+        : '平均现货电价=该厂未舍入现货电费÷上网电量；差异率=(该厂均价−实时价算术均值)÷实时价算术均值。电量为0时均价不可计算，基准均价为0时差异率显示—。',
+    }
+  })
+})
 const feeNumberFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0, useGrouping: true })
+const signedFeeDiffFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0, useGrouping: true, signDisplay: 'exceptZero' })
+const signedPriceDiffFormatter = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false, signDisplay: 'exceptZero' })
 function formatPlantMetric(value, unit) {
   if (value == null) return '暂无数据'
   const amount = unit === '元' ? feeNumberFormatter.format(value).replace(/^-0$/, '0') : formatNum(value)
   return `${amount} ${unit}`
+}
+function formatSignedFeeDiff(value) {
+  if (value == null) return '—'
+  const rounded = Math.round(Number(value))
+  const text = Object.is(rounded, -0) || rounded === 0 ? '0' : signedFeeDiffFormatter.format(rounded)
+  return `${text} 元`
+}
+function formatSignedPriceDiff(value) {
+  if (value == null) return '—'
+  const rounded = Math.round(Number(value) * 100) / 100
+  const text = Object.is(rounded, -0) || rounded === 0 ? '0.00' : signedPriceDiffFormatter.format(rounded)
+  return `${text} 元/MWh`
 }
 function formatNum(val) {
   if (val === null || val === undefined || isNaN(val)) return '—'
@@ -1724,6 +1903,21 @@ function formatNum(val) {
 const spotPriceRateFormatter = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' })
 function formatSpotPriceRate(value) {
   return value == null ? '—' : `${spotPriceRateFormatter.format(value)}%`
+}
+
+// 波形相关系数格式化
+function formatCorrelationR(val, withSign = false) {
+  if (val == null || isNaN(val)) return '—'
+  const rounded = Math.round(Number(val) * 100) / 100
+  if (rounded === 0 || Object.is(rounded, -0)) return '0.00'
+  const sign = withSign && rounded > 0 ? '+' : ''
+  return `${sign}${rounded.toFixed(2)}`
+}
+
+function formatPlantCorrelation(corr) {
+  if (!corr || corr.primary == null) return '—'
+  const text = formatCorrelationR(corr.primary, true)
+  return corr.isIntraday ? `日内 ${text}` : text
 }
 
 // ==========================================
@@ -1831,7 +2025,9 @@ const plantDistributionStats = computed(() => {
   const totalPoints = pts.length
 
   pts.forEach(pt => {
-    const price = pt.bill_real_time_price ?? pt.real_time_price
+    const price = salesPriceBasis.value === 'day_ahead'
+      ? pt.day_ahead_price
+      : (pt.bill_real_time_price ?? pt.real_time_price)
     if (price == null) return
 
     let targetIntervalKey = 'mid'
@@ -2091,6 +2287,13 @@ const paginatedPoints = computed(() => {
   return displayedPoints.value.slice(start, start + pageSize.value)
 })
 
+const showPointsPagination = computed(() => {
+  if (viewMode.value === 'single') return true
+  if (viewMode.value !== 'range') return false
+  if (rangeSubMode.value === 'continuous') return true
+  return rangeSubMode.value === 'daily' && dailyTableSubMode.value === 'pointsDetail'
+})
+
 function goToPage(page) {
   const target = Math.max(1, Math.min(Number(page) || 1, totalPages.value))
   currentPage.value = target
@@ -2122,15 +2325,9 @@ const displayedMonthlyTrends = computed(() => {
   return monthlyTrends.value.filter(m => isMonthlyItemNegativeBySelection(m))
 })
 
-// 仅负电价时段切换事件
+// 仅负电价时段切换事件：统一在前端保留完整轴并按勾选指标断点展示，避免破坏区间分布统计与连续时间轴
 function onNegativeFilterChange() {
-  if (viewMode.value === 'single' || (viewMode.value === 'range' && (rangeSubMode.value === 'period' || rangeSubMode.value === 'monthly'))) {
-    // 单日分时、区间时段或区间月度模式下，本地维持轴并刷新断点曲线与列表
-    renderChart()
-  } else {
-    // 区间日度走势模式下触发远端请求
-    fetchData()
-  }
+  renderChart()
 }
 
 // 切换模式
@@ -2230,11 +2427,11 @@ async function fetchData() {
       summary.value = sumData.data
     }
 
-    // 2. 获取点位 Points（单日分时模式始终获取全量点位以维持横轴完整；区间模式按需后端过滤，不加条数截断以保证日期完整）
+    // 2. 获取点位 Points（始终拉取完整时序点位，保证区间连续时间轴、电量分布统计与仅负电价本地断点过滤口径一致）
     const pData = await getSpotElectricityPoints(projectKey, {
       startDate: sDate,
       endDate: eDate,
-      onlyNegative: viewMode.value === 'range' ? onlyNegative.value : false,
+      onlyNegative: false,
       limit: null,
     })
     if (request !== dataRequest) return
@@ -2284,6 +2481,214 @@ async function fetchData() {
 }
 
 // 渲染 ECharts
+/**
+ * 构造单日分时与区间“连续显示”共用的 15 分钟电价/价差 ECharts Option。
+ * 当点数较大时不进行降采样，仅关闭平滑、面积阴影和动画以保证完整呈现每一点并维持流畅交互。
+ */
+function buildPointSeriesChartOption(timeline, { isContinuous = false } = {}) {
+  const xData = timeline.map(p => (isContinuous ? (p.axisLabel || `${p.trade_date} ${p.time_label}`) : p.time_label))
+  const isLargeSeries = timeline.length > 1000
+
+  const mapMetricValue = (p, field) => {
+    if (!p || p.__missing) return null
+    if (onlyNegative.value && !isItemNegativeBySelection(p)) return null
+    return p[field]
+  }
+
+  const daPrices = timeline.map(p => mapMetricValue(p, 'day_ahead_price'))
+  const rtPrices = timeline.map(p => mapMetricValue(p, 'real_time_price'))
+  const spreads = timeline.map(p => mapMetricValue(p, 'price_spread'))
+
+  const hasPrice = visibleSeries.value.dayAhead || visibleSeries.value.realTime
+  const hasSpread = visibleSeries.value.spread
+  const series = []
+
+  if (visibleSeries.value.dayAhead) {
+    series.push({
+      name: '日前电价',
+      type: 'line',
+      yAxisIndex: 0,
+      data: daPrices,
+      smooth: !isLargeSeries,
+      connectNulls: false,
+      showSymbol: onlyNegative.value && timeline.length <= 2000,
+      symbolSize: 6,
+      lineStyle: { width: isLargeSeries ? 1.5 : 2.5, color: '#2563eb' },
+      ...(isLargeSeries ? {} : {
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(37, 99, 235, 0.18)' },
+            { offset: 1, color: 'rgba(37, 99, 235, 0.01)' },
+          ]),
+        },
+      }),
+      markPoint: createMinMaxMarkPoint('#2563eb', false),
+      markLine: {
+        silent: true,
+        symbol: 'none',
+        data: [{ yAxis: 0, lineStyle: { color: '#ef4444', type: 'dashed' } }],
+      },
+    })
+  }
+
+  if (visibleSeries.value.realTime) {
+    series.push({
+      name: '实时电价',
+      type: 'line',
+      yAxisIndex: 0,
+      data: rtPrices,
+      smooth: !isLargeSeries,
+      connectNulls: false,
+      showSymbol: onlyNegative.value && timeline.length <= 2000,
+      symbolSize: 6,
+      lineStyle: { width: isLargeSeries ? 1.5 : 2.5, color: '#f97316' },
+      ...(isLargeSeries ? {} : {
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(249, 115, 22, 0.18)' },
+            { offset: 1, color: 'rgba(249, 115, 22, 0.01)' },
+          ]),
+        },
+      }),
+      markPoint: createMinMaxMarkPoint('#ea580c', false),
+    })
+  }
+
+  if (visibleSeries.value.spread) {
+    series.push({
+      name: '价差（实时-日前）',
+      type: 'bar',
+      yAxisIndex: 1,
+      data: spreads,
+      large: isLargeSeries,
+      markPoint: createMinMaxMarkPoint('#059669', false),
+      itemStyle: {
+        color: params => (params.value >= 0 ? '#ef4444' : '#10b981'),
+      },
+    })
+  }
+
+  let axisLabelConfig = {
+    color: '#64748b',
+    interval: 7, // 单日每2小时一个刻度
+  }
+
+  if (isContinuous) {
+    if (timeline.length <= 192) {
+      axisLabelConfig = {
+        color: '#64748b',
+        interval: 7,
+        formatter: val => (typeof val === 'string' && val.length >= 16 ? val.slice(5) : val),
+      }
+    } else {
+      const dayStartIndices = []
+      let lastDate = ''
+      for (let i = 0; i < timeline.length; i++) {
+        const d = timeline[i].trade_date || ''
+        if (d !== lastDate) {
+          dayStartIndices.push(i)
+          lastDate = d
+        }
+      }
+      const dayStep = Math.max(1, Math.ceil(dayStartIndices.length / 14))
+      const visibleTickSet = new Set()
+      for (let k = 0; k < dayStartIndices.length; k += dayStep) {
+        visibleTickSet.add(dayStartIndices[k])
+      }
+      axisLabelConfig = {
+        color: '#64748b',
+        hideOverlap: true,
+        interval: index => visibleTickSet.has(index),
+        formatter: val => (typeof val === 'string' && val.length >= 10 ? val.slice(5, 10) : val),
+      }
+    }
+  }
+
+  const option = {
+    backgroundColor: 'transparent',
+    animation: !isLargeSeries,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      formatter: (params) => {
+        if (!params || !params.length) return ''
+        const idx = params[0].dataIndex
+        const item = timeline[idx] || {}
+        const titlePrefix = isContinuous && item.trade_date ? `${item.trade_date} ` : ''
+        if (item.__missing) {
+          return `<div style="font-weight: bold; margin-bottom: 2px;">#${item.point_index} ${titlePrefix}${item.time_label}</div><div style="color: #94a3b8; font-size: 12px;">（该时段暂无数据）</div>`
+        }
+        if (onlyNegative.value && !isItemNegativeBySelection(item)) {
+          return `<div style="font-weight: bold; margin-bottom: 2px;">#${item.point_index} ${titlePrefix}时刻: ${item.time_label}</div><div style="color: #94a3b8; font-size: 12px;">（当前时段非负电价）</div>`
+        }
+        let tip = `<div style="font-weight: bold; margin-bottom: 4px;">#${item.point_index} ${titlePrefix}时刻: ${item.time_label} (${item.period_start_time || ''}~${item.period_end_time || ''})</div>`
+        if (visibleSeries.value.dayAhead) {
+          tip += `<div style="color: #2563eb;">● 日前电价: <strong>${formatNum(item.day_ahead_price)}</strong> 元/MWh</div>`
+        }
+        if (visibleSeries.value.realTime) {
+          tip += `<div style="color: #ea580c;">● 实时电价: <strong>${formatNum(item.real_time_price)}</strong> 元/MWh</div>`
+        }
+        if (visibleSeries.value.spread) {
+          tip += `<div style="color: ${(item.price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 价差（实时-日前）: <strong>${(item.price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.price_spread)}</strong> 元/MWh</div>`
+        }
+        return tip
+      },
+    },
+    grid: {
+      top: 48,
+      left: '2%',
+      right: '2%',
+      bottom: 50,
+      containLabel: true,
+    },
+    legend: {
+      show: false,
+    },
+    xAxis: {
+      type: 'category',
+      data: xData,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#cbd5e1' } },
+      axisLabel: axisLabelConfig,
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: hasPrice ? '电价 (元/MWh)' : '',
+        show: hasPrice,
+        nameTextStyle: { color: '#64748b' },
+        splitLine: { lineStyle: { color: '#f1f5f9' } },
+        axisLabel: { color: '#64748b' },
+      },
+      {
+        type: 'value',
+        name: hasSpread ? '价差 (元/MWh)' : '',
+        show: hasSpread,
+        nameTextStyle: { color: '#64748b' },
+        splitLine: { show: false },
+        axisLabel: { color: '#94a3b8' },
+      },
+    ],
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', bottom: 5, height: 20, borderColor: '#e2e8f0' },
+    ],
+    series,
+  }
+
+  return { option, rows: timeline }
+}
+
+function applyPlantSales(option, rows, { fields, suffix = '', include }) {
+  return addPlantSalesToOption(option, rows, {
+    enabled: showPlantSales.value && canShowPlantSales.value,
+    scope: plantSalesScope.value,
+    fields,
+    suffix,
+    include,
+  })
+}
+
 function renderChart() {
   if (!chartRef.value) return
 
@@ -2301,160 +2706,21 @@ function renderChart() {
   }
 
   if (viewMode.value === 'single') {
-    // 单日分时曲线：无论是否开启仅负电价，横轴 xData 始终保持全天完整时刻
-    const xData = points.value.map(p => p.time_label)
-
-    // 若开启“仅负电价时段”，仅在勾选显示的指标中至少有一个是负电价的时段保留数值，其余时段设为 null 断开，横轴全天时间不变
-    const daPrices = points.value.map(p => {
-      if (onlyNegative.value && !isItemNegativeBySelection(p)) return null
-      return p.day_ahead_price
-    })
-    const rtPrices = points.value.map(p => {
-      if (onlyNegative.value && !isItemNegativeBySelection(p)) return null
-      return p.real_time_price
-    })
-    const spreads = points.value.map(p => {
-      if (onlyNegative.value && !isItemNegativeBySelection(p)) return null
-      return p.price_spread
-    })
-
-    const hasPrice = visibleSeries.value.dayAhead || visibleSeries.value.realTime
-    const hasSpread = visibleSeries.value.spread
-
-    const series = []
-
-    if (visibleSeries.value.dayAhead) {
-      series.push({
-        name: '日前电价',
-        type: 'line',
-        yAxisIndex: 0,
-        data: daPrices,
-        smooth: true,
-        showSymbol: onlyNegative.value,
-        symbolSize: 6,
-        lineStyle: { width: 2.5, color: '#2563eb' },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(37, 99, 235, 0.18)' },
-            { offset: 1, color: 'rgba(37, 99, 235, 0.01)' },
-          ]),
-        },
-        markPoint: createMinMaxMarkPoint('#2563eb', false),
-        markLine: {
-          silent: true,
-          symbol: 'none',
-          data: [{ yAxis: 0, lineStyle: { color: '#ef4444', type: 'dashed' } }],
-        },
-      })
-    }
-
-    if (visibleSeries.value.realTime) {
-      series.push({
-        name: '实时电价',
-        type: 'line',
-        yAxisIndex: 0,
-        data: rtPrices,
-        smooth: true,
-        showSymbol: onlyNegative.value,
-        symbolSize: 6,
-        lineStyle: { width: 2.5, color: '#f97316' },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(249, 115, 22, 0.18)' },
-            { offset: 1, color: 'rgba(249, 115, 22, 0.01)' },
-          ]),
-        },
-        markPoint: createMinMaxMarkPoint('#ea580c', false),
-      })
-    }
-
-    if (visibleSeries.value.spread) {
-      series.push({
-        name: '价差（实时-日前）',
-        type: 'bar',
-        yAxisIndex: 1,
-        data: spreads,
-        markPoint: createMinMaxMarkPoint('#059669', false),
-        itemStyle: {
-          color: (params) => {
-            return params.value >= 0 ? '#ef4444' : '#10b981'
-          },
-        },
-      })
-    }
-
-    const option = {
-      backgroundColor: 'transparent',
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'cross' },
-        formatter: (params) => {
-          if (!params || !params.length) return ''
-          const idx = params[0].dataIndex
-          const item = points.value[idx] || {}
-          if (onlyNegative.value && !isItemNegativeBySelection(item)) {
-            return `<div style="font-weight: bold; margin-bottom: 2px;">#${item.point_index} 时刻: ${item.time_label}</div><div style="color: #94a3b8; font-size: 12px;">（当前时段非负电价）</div>`
-          }
-          let tip = `<div style="font-weight: bold; margin-bottom: 4px;">#${item.point_index} 时刻: ${item.time_label} (${item.period_start_time || ''}~${item.period_end_time || ''})</div>`
-          if (visibleSeries.value.dayAhead) {
-            tip += `<div style="color: #2563eb;">● 日前电价: <strong>${formatNum(item.day_ahead_price)}</strong> 元/MWh</div>`
-          }
-          if (visibleSeries.value.realTime) {
-            tip += `<div style="color: #ea580c;">● 实时电价: <strong>${formatNum(item.real_time_price)}</strong> 元/MWh</div>`
-          }
-          if (visibleSeries.value.spread) {
-            tip += `<div style="color: ${(item.price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 价差（实时-日前）: <strong>${(item.price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.price_spread)}</strong> 元/MWh</div>`
-          }
-          return tip
-        },
-      },
-      grid: {
-        top: 48,
-        left: '2%',
-        right: '2%',
-        bottom: 50,
-        containLabel: true,
-      },
-      legend: {
-        show: false,
-      },
-      xAxis: {
-        type: 'category',
-        data: xData,
-        boundaryGap: false,
-        axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: {
-          color: '#64748b',
-          interval: 7, // 每2小时一个刻度
-        },
-      },
-      yAxis: [
-        {
-          type: 'value',
-          name: hasPrice ? '电价 (元/MWh)' : '',
-          show: hasPrice,
-          nameTextStyle: { color: '#64748b' },
-          splitLine: { lineStyle: { color: '#f1f5f9' } },
-          axisLabel: { color: '#64748b' },
-        },
-        {
-          type: 'value',
-          name: hasSpread ? '价差 (元/MWh)' : '',
-          show: hasSpread,
-          nameTextStyle: { color: '#64748b' },
-          splitLine: { show: false },
-          axisLabel: { color: '#94a3b8' },
-        },
-      ],
-      dataZoom: [
-        { type: 'inside', start: 0, end: 100 },
-        { type: 'slider', bottom: 5, height: 20, borderColor: '#e2e8f0' },
-      ],
-      series,
-    }
-    chartInstance.setOption(addPlantSalesToOption(option, points.value, {
-      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['beihai_total_sales', 'xianghai_total_sales'], suffix: '',
+    const { option, rows } = buildPointSeriesChartOption(points.value, { isContinuous: false })
+    chartInstance.setOption(applyPlantSales(option, rows, {
+      fields: ['beihai_total_sales', 'xianghai_total_sales'], suffix: '',
       include: item => !onlyNegative.value || isItemNegativeBySelection(item),
+    }), true)
+  } else if (rangeSubMode.value === 'continuous') {
+    const timeline = buildContinuousTimeline(points.value)
+    if (!timeline.length) {
+      chartInstance.clear()
+      return
+    }
+    const { option, rows } = buildPointSeriesChartOption(timeline, { isContinuous: true })
+    chartInstance.setOption(applyPlantSales(option, rows, {
+      fields: ['beihai_total_sales', 'xianghai_total_sales'], suffix: '',
+      include: item => !item.__missing && (!onlyNegative.value || isItemNegativeBySelection(item)),
     }), true)
   } else if (rangeSubMode.value === 'daily') {
     // 1. 区间走势：按每日平均值
@@ -2546,8 +2812,8 @@ function renderChart() {
       ],
       series,
     }
-    chartInstance.setOption(addPlantSalesToOption(option, dailyTrends.value, {
-      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['beihai_sales', 'xianghai_sales'], suffix: '（日合计）',
+    chartInstance.setOption(applyPlantSales(option, dailyTrends.value, {
+      fields: ['beihai_sales', 'xianghai_sales'], suffix: '（日合计）',
     }), true)
   } else if (rangeSubMode.value === 'monthly') {
     // 2. 区间走势：按每月平均值
@@ -2720,8 +2986,8 @@ function renderChart() {
       ],
       series,
     }
-    chartInstance.setOption(addPlantSalesToOption(option, monthlyTrends.value, {
-      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['beihai_sales', 'xianghai_sales'], suffix: '（月合计）',
+    chartInstance.setOption(applyPlantSales(option, monthlyTrends.value, {
+      fields: ['beihai_sales', 'xianghai_sales'], suffix: '（月合计）',
       include: item => !onlyNegative.value || isMonthlyItemNegativeBySelection(item),
     }), true)
   } else {
@@ -2900,8 +3166,8 @@ function renderChart() {
       ],
       series,
     }
-    chartInstance.setOption(addPlantSalesToOption(option, periodTrends.value, {
-      enabled: showPlantSales.value && canShowPlantSales.value, fields: ['avg_beihai_sales', 'avg_xianghai_sales'], suffix: '（时段均值）',
+    chartInstance.setOption(applyPlantSales(option, periodTrends.value, {
+      fields: ['avg_beihai_sales', 'avg_xianghai_sales'], suffix: '（时段均值）',
       include: item => !onlyNegative.value || isPeriodItemNegativeBySelection(item),
     }), true)
   }
@@ -3562,6 +3828,7 @@ onBeforeUnmount(() => {
 
 .range-submode-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   background: #f1f5f9;
   border-radius: 8px;
@@ -3627,6 +3894,57 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 
+.plant-sales-filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.plant-sales-scope-tabs {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.scope-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.scope-btn:hover {
+  color: #1e293b;
+}
+
+.scope-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.scope-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .btn.primary.export-btn {
   background: #2563eb;
   color: #ffffff;
@@ -3668,6 +3986,111 @@ onBeforeUnmount(() => {
 .kpi-grid-sales {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
+}
+
+.sales-basis-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 6px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+}
+
+.sales-basis-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.basis-status-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.basis-status-badge.is-rt {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.basis-status-badge.is-da {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.basis-hint {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.basis-tabs {
+  display: inline-flex;
+  align-items: center;
+  background: #e2e8f0;
+  border-radius: 7px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.basis-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 11px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.basis-btn:hover {
+  color: #1e293b;
+}
+
+.basis-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.plant-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.basis-ref-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.plant-card.is-da-basis {
+  background: #fffdf7;
+}
+
+.spot-fee-diff {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .kpi-card {
@@ -4276,6 +4699,74 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 
+/* 电厂卡片底栏：量价波形相关系数 */
+.plant-corr-footer {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px dashed #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.plant-corr-label-group {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plant-corr-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.plant-corr-meaning {
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+.plant-corr-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plant-corr-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11.5px;
+  border: 1px solid #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.plant-corr-pill.is-da {
+  background: #eff6ff;
+  border-color: #dbeafe;
+}
+
+.plant-corr-pill.is-rt {
+  background: #fff7ed;
+  border-color: #ffedd5;
+}
+
+.pill-basis {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.pill-global {
+  color: #64748b;
+  font-size: 10.5px;
+}
+
 /* 图表区 */
 .chart-container-card {
   background: #ffffff;
@@ -4879,13 +5370,14 @@ onBeforeUnmount(() => {
   .range-submode-tabs {
     width: 100%;
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     padding: 2px;
   }
   .submode-btn {
-    flex: 1;
+    flex: 1 1 auto;
     justify-content: center;
-    padding: 6px 2px;
+    padding: 6px 6px;
     font-size: 10.5px;
     white-space: nowrap;
   }

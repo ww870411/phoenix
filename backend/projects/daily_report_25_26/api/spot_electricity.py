@@ -59,16 +59,21 @@ def _to_float(val: Any) -> Optional[float]:
 
 
 def _bill_fee_summary_columns() -> str:
-    """按账单量价逐点乘积求和；完整覆盖查询日期的96点且量价非空才报告电费。"""
+    """按账单量价及日前参考电价逐点乘积求和；完整覆盖查询日期的96点且量价非空才报告电费。"""
     columns = []
     for plant, unit_count in (("beihai", 3), ("xianghai", 4)):
+        contract_expr = " + ".join(
+            f"{plant}_unit{n}_contract_quantity * {plant}_unit{n}_contract_price"
+            for n in range(1, unit_count + 1)
+        )
         expressions = {
             "spot": f"{plant}_total_sales * bill_real_time_price",
-            "contract": " + ".join(f"{plant}_unit{n}_contract_quantity * {plant}_unit{n}_contract_price"
-                                    for n in range(1, unit_count + 1)),
+            "da_spot": f"{plant}_total_sales * day_ahead_price",
+            "contract": contract_expr,
         }
         # 先合并未舍入的两项电费，金额仅由前端在展示时四舍五入。
         expressions["revenue"] = f"({expressions['spot']}) + ({expressions['contract']})"
+        expressions["da_revenue"] = f"({expressions['da_spot']}) + ({expressions['contract']})"
         for kind, expression in expressions.items():
             columns.append(f"CASE WHEN COUNT(*)=:expected_points AND COUNT({expression})=COUNT(*) "
                            f"THEN SUM({expression}) END AS sum_{plant}_{kind}_fee")
@@ -158,15 +163,28 @@ def get_spot_electricity_summary(
         if not row or row.point_count == 0:
             return {"ok": True, "data": None, "start_date": start_date, "end_date": end_date}
 
-        # 使用未舍入电费和电量计算加权均价；参考价采用同查询范围的实时价算术均值。
+        # 使用未舍入电费和电量计算加权均价；实时参考价采用实时价算术均值，日前参考价采用日前价算术均值；并补充日前测算较实时的电费与加权单价差额。
         plant_prices = {}
         for plant in ("beihai", "xianghai"):
-            fee = getattr(row, f"sum_{plant}_spot_fee")
             sales = getattr(row, f"sum_{plant}_sales")
-            average = fee / sales if fee is not None and sales is not None and sales != 0 else None
-            rate = (average - row.avg_rt) / row.avg_rt * 100 if average is not None and row.avg_rt is not None and row.avg_rt != 0 else None
-            plant_prices[f"avg_{plant}_spot_price"] = _to_float(average)
-            plant_prices[f"{plant}_spot_price_diff_rate"] = _to_float(rate)
+            rt_fee = getattr(row, f"sum_{plant}_spot_fee")
+            da_fee = getattr(row, f"sum_{plant}_da_spot_fee")
+            plant_prices[f"sum_{plant}_da_spot_fee_diff"] = _to_float(
+                da_fee - rt_fee if da_fee is not None and rt_fee is not None else None
+            )
+            mode_averages = {}
+            for mode_prefix, ref_price in (("", row.avg_rt), ("da_", row.avg_da)):
+                fee = rt_fee if mode_prefix == "" else da_fee
+                average = fee / sales if fee is not None and sales is not None and sales != 0 else None
+                rate = (average - ref_price) / ref_price * 100 if average is not None and ref_price is not None and ref_price != 0 else None
+                mode_averages[mode_prefix] = average
+                plant_prices[f"avg_{plant}_{mode_prefix}spot_price"] = _to_float(average)
+                plant_prices[f"{plant}_{mode_prefix}spot_price_diff_rate"] = _to_float(rate)
+            rt_avg = mode_averages[""]
+            da_avg = mode_averages["da_"]
+            plant_prices[f"avg_{plant}_da_spot_price_diff"] = _to_float(
+                da_avg - rt_avg if da_avg is not None and rt_avg is not None else None
+            )
 
         return {
             "ok": True,
@@ -191,11 +209,15 @@ def get_spot_electricity_summary(
                 "sum_xianghai_sales": _to_float(row.sum_xianghai_sales),
                 "sum_total_sales": _to_float(row.sum_total_sales),
                 "sum_beihai_spot_fee": _to_float(row.sum_beihai_spot_fee),
+                "sum_beihai_da_spot_fee": _to_float(row.sum_beihai_da_spot_fee),
                 "sum_beihai_contract_fee": _to_float(row.sum_beihai_contract_fee),
                 "sum_beihai_revenue_fee": _to_float(row.sum_beihai_revenue_fee),
+                "sum_beihai_da_revenue_fee": _to_float(row.sum_beihai_da_revenue_fee),
                 "sum_xianghai_spot_fee": _to_float(row.sum_xianghai_spot_fee),
+                "sum_xianghai_da_spot_fee": _to_float(row.sum_xianghai_da_spot_fee),
                 "sum_xianghai_contract_fee": _to_float(row.sum_xianghai_contract_fee),
                 "sum_xianghai_revenue_fee": _to_float(row.sum_xianghai_revenue_fee),
+                "sum_xianghai_da_revenue_fee": _to_float(row.sum_xianghai_da_revenue_fee),
                 **plant_prices,
             },
         }

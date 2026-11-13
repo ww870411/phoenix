@@ -87,3 +87,36 @@ test('切换日期时旧响应不能覆盖新范围的电量状态或提前结�
   assert.equal(deps.summary.value.has_plant_sales_data, false)
   assert.equal(deps.points.value[0].trade_date, '2026-01-13')
 })
+
+test('支持单独筛选北海或香海电厂上网电量曲线、图例与提示', () => {
+  const rows = [
+    { beihai_total_sales: 120, xianghai_total_sales: 260 },
+    { beihai_total_sales: 135, xianghai_total_sales: 280 },
+  ]
+
+  const beihaiOnly = addPlantSalesToOption(option(), rows, {
+    enabled: true,
+    fields: ['beihai_total_sales', 'xianghai_total_sales'],
+    scope: 'beihai',
+  })
+  assert.equal(beihaiOnly.series.length, 2)
+  assert.equal(beihaiOnly.series[1].name, '北海上网电量')
+  assert.deepEqual(beihaiOnly.series[1].data, [120, 135])
+  assert.deepEqual(beihaiOnly.legend.data, ['北海上网电量'])
+  const beihaiTip = beihaiOnly.tooltip.formatter([{ seriesName: '实时电价', dataIndex: 0 }])
+  assert.match(beihaiTip, /北海上网电量: 120 MWh/)
+  assert.doesNotMatch(beihaiTip, /香海上网电量/)
+
+  const xianghaiOnly = addPlantSalesToOption(option(), rows, {
+    enabled: true,
+    fields: ['beihai_total_sales', 'xianghai_total_sales'],
+    scope: 'xianghai',
+  })
+  assert.equal(xianghaiOnly.series.length, 2)
+  assert.equal(xianghaiOnly.series[1].name, '香海上网电量')
+  assert.deepEqual(xianghaiOnly.series[1].data, [260, 280])
+  assert.deepEqual(xianghaiOnly.legend.data, ['香海上网电量'])
+  const xianghaiTip = xianghaiOnly.tooltip.formatter([{ seriesName: '实时电价', dataIndex: 1 }])
+  assert.match(xianghaiTip, /香海上网电量: 280 MWh/)
+  assert.doesNotMatch(xianghaiTip, /北海上网电量/)
+})
