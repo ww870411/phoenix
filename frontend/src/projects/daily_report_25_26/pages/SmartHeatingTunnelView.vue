@@ -12,8 +12,7 @@
         <span class="topbar-divider"></span>
         <div class="topbar-brand">
           <span class="portal-mini-icon">🌐</span>
-          <span class="topbar-title">智慧供热调度平台 · 全屏工作台</span>
-          <span class="topbar-target-pill">{{ tunnelConfig.target_base_url || 'http://192.168.1.206:6688' }}</span>
+          <span class="topbar-title">智慧供热调度平台</span>
         </div>
       </div>
 
@@ -84,25 +83,14 @@
         <section v-if="!isFullscreen" class="control-toolbar">
           <div class="toolbar-left">
             <div class="portal-badge-icon">🌐</div>
-            <div class="toolbar-meta">
-              <div class="meta-title-row">
-                <h2 class="portal-title">智慧供热平台内网直通</h2>
-                <span class="badge-role">反向代理中继</span>
-                <span class="target-url-chip" title="目标内网控制台地址">
-                  {{ tunnelConfig.target_base_url || 'http://192.168.1.206:6688' }}
-                </span>
-              </div>
-              <p class="portal-desc">
-                办公电脑反向穿透中继 · 免开发直接操作内网全功能调度大屏与控制台
-              </p>
-            </div>
+            <h2 class="portal-title">智慧供热平台内网直通</h2>
           </div>
 
           <div class="toolbar-right">
             <!-- 实时连接状态胶囊 -->
             <div class="status-capsule" :class="{ online: isRelayOnline, offline: !isRelayOnline }">
               <span class="dot"></span>
-              <span class="status-label">{{ isRelayOnline ? '中继在线 (已连接内网)' : '中继未连接' }}</span>
+              <span class="status-label">{{ isRelayOnline ? '中继在线' : '中继未连接' }}</span>
               <span v-if="isRelayOnline && tunnelStatus.client_ip" class="status-extra">
                 IP: {{ tunnelStatus.client_ip }}
               </span>
@@ -120,7 +108,7 @@
                 title="下载专为 Win7 + Python 3.8 定制的免安装单文件客户端脚本"
                 @click="handleDownloadClient"
               >
-                {{ downloading ? '下载中…' : '📥 下载 Win7 客户端' }}
+                {{ downloading ? '下载中…' : '📥 下载客户端' }}
               </button>
 
               <button
@@ -165,9 +153,9 @@
           <div v-else-if="!isRelayOnline" class="offline-guide-panel">
             <div class="guide-header">
               <div class="guide-hero-icon">🔌</div>
-              <h3 class="guide-title">智慧供热内网直通链路未连接</h3>
+              <h3 class="guide-title">智慧供热内网未连接</h3>
               <p class="guide-desc">
-                本页面通过您办公电脑运行的中继程序反向直通内网系统。当前未检测到中继客户端的活跃心跳。
+                当前未检测到办公电脑中继客户端连接，启动后将自动加载内网平台。
               </p>
             </div>
 
@@ -179,20 +167,20 @@
                 <span class="topo-status">就绪</span>
               </div>
               <div class="topo-line offline">
-                <span class="topo-arrow">◄── 双向长轮询隧道 ──►</span>
+                <span class="topo-arrow">◄── 长轮询隧道 ──►</span>
               </div>
               <div class="topo-node offline">
                 <span class="topo-icon">💻</span>
-                <span class="topo-name">Win7 办公电脑中继器</span>
+                <span class="topo-name">办公电脑中继</span>
                 <span class="topo-status">等待启动</span>
               </div>
               <div class="topo-line">
-                <span class="topo-arrow">── 局域网直通 ──►</span>
+                <span class="topo-arrow">── 局域网 ──►</span>
               </div>
               <div class="topo-node ready">
                 <span class="topo-icon">🏢</span>
                 <span class="topo-name">内网智慧供热平台</span>
-                <span class="topo-status">192.168.1.206:6688</span>
+                <span class="topo-status">内网服务</span>
               </div>
             </div>
 
@@ -201,44 +189,44 @@
               <div class="step-card">
                 <div class="step-badge">1</div>
                 <div class="step-body">
-                  <h4>下载中继客户端</h4>
-                  <p>点击下方按钮，下载为 Win7 + Python 3.8 定制的免安装纯标准库脚本。</p>
+                  <h4>下载客户端</h4>
+                  <p>点击下方按钮下载免安装中继脚本（适用于 Win7 + Python 3.8）。</p>
                 </div>
               </div>
 
               <div class="step-card">
                 <div class="step-badge">2</div>
                 <div class="step-body">
-                  <h4>办公电脑双击运行</h4>
-                  <p>在能连入内网的办公电脑上运行：<code>python smart_heating_tunnel_win7.py</code></p>
+                  <h4>办公电脑运行</h4>
+                  <p>在可访问内网的办公电脑运行：<code>python smart_heating_tunnel_win7.py</code></p>
                 </div>
               </div>
 
               <div class="step-card">
                 <div class="step-badge">3</div>
                 <div class="step-body">
-                  <h4>自动直通内网</h4>
-                  <p>中继建立反向安全隧道后，本视窗将自动点亮绿灯并无感加载内网控制台。</p>
+                  <h4>自动加载平台</h4>
+                  <p>连接建立后本页面将自动点亮在线状态并加载内网控制台。</p>
                 </div>
               </div>
             </div>
 
             <div class="guide-actions">
               <button class="btn primary btn-lg" :disabled="downloading" @click="handleDownloadClient">
-                {{ downloading ? '正在打包下载…' : '📥 立即下载中继客户端 (Python 3.8 单文件)' }}
+                {{ downloading ? '正在打包下载…' : '📥 立即下载中继客户端' }}
               </button>
               <button class="btn secondary btn-lg" @click="fetchStatusAndConfig">
-                🔄 立即检测连接状态
+                🔄 刷新连接状态
               </button>
               <button class="btn outline btn-lg" @click="openConfigModal">
-                ⚙️ 平台账号与参数设置
+                ⚙️ 平台设置
               </button>
             </div>
           </div>
 
           <!-- 场景 2：中继在线时，高清晰满屏无缝嵌入内网 iframe -->
           <div v-else class="iframe-container">
-            <div v-if="refreshing" class="frame-loading" role="status">正在加载内网页面…</div>
+            <div v-if="refreshing" class="frame-loading" role="status">页面加载中…</div>
             <iframe
               ref="portalIframe"
               :src="gatewayUrl"
@@ -655,16 +643,6 @@ onBeforeUnmount(() => {
   color: #f3f4f6;
 }
 
-.topbar-target-pill {
-  font-size: 0.72rem;
-  color: #38bdf8;
-  background: rgba(14, 165, 233, 0.15);
-  border: 1px solid rgba(14, 165, 233, 0.3);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
 .topbar-right {
   display: flex;
   align-items: center;
@@ -726,49 +704,11 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.toolbar-meta {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.meta-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .portal-title {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
   color: #f8fafc;
-}
-
-.badge-role {
-  font-size: 0.68rem;
-  padding: 1px 6px;
-  background: rgba(14, 165, 233, 0.2);
-  color: #38bdf8;
-  border: 1px solid rgba(14, 165, 233, 0.35);
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-.target-url-chip {
-  font-size: 0.72rem;
-  background: rgba(15, 23, 42, 0.7);
-  color: #94a3b8;
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid #334155;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.portal-desc {
-  margin: 0;
-  font-size: 0.76rem;
-  color: #94a3b8;
 }
 
 .toolbar-right {

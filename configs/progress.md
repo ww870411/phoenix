@@ -1,5 +1,32 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-14 智慧供热中继客户端（`smart_heating_tunnel_win7.py`）迁移至绑定挂载目录并启用同目录滚动日志
+
+- **需求背景**：
+  - 用户明确要求不要将中继客户端脚本放在 `backend/` 源码目录下，而是移至 Docker 绑定挂载的数据目录中维护；同时反馈访问极慢/偶发打不开，要求在脚本同目录下默认生成中继日志文件以便排障。
+- **后端与挂载目录改动**：
+  - **`backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`**（由 `backend/projects/daily_report_25_26/smart_heating_tunnel_win7.py` 迁入，并移除 `backend/` 下旧副本）：
+    - 新增 `LOG_FILE = os.path.join(SCRIPT_DIR, "smart_heating_tunnel.log")` 与 `setup_logging()`（基于 `logging.handlers.RotatingFileHandler`，UTF-8 编码，单文件上限 5MB、保留 3 份备份），在 `main()` 启动时自动挂载文件日志并保留控制台输出，同时显式设置 `logger.setLevel(logging.INFO)` 与工作线程名 `Worker-1..N`；
+    - 为 `post_phoenix_json()` 增加 `TCP_NODELAY`（减少小包 Nagle 延迟）；在 `execute_intranet_request()`、`send_response_to_phoenix()`、`poll_worker_loop()` 中补充排队耗时（`queue_ms`）、内网耗时（`duration_ms`）、回传耗时（`respond_ms`）、负载字节数、服务端未采纳响应（`ok=false`）告警及断连恢复记录。
+  - **`backend/projects/daily_report_25_26/api/smart_heating_tunnel.py`**：
+    - 更新 `_get_client_script_template_path()`，从 `Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26" / "smart_heating_tunnel_win7.py"`（即宿主机 `backend_data/` 绑定挂载路径 / 容器 `/app/data/`）读取客户端模板。
+  - **`backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py`**：
+    - 更新 `load_relay_without_local_config()` 改用 `tunnel._get_client_script_template_path()` 读取绑定挂载目录中的脚本，并新增 `test_relay_file_logging_in_same_directory` 验证默认日志路径及临时目录 UTF-8 文件写入行为。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py -q -s --basetemp=backend/.pytest_cache/tunnel-final`：**15 passed in 5.54s**。
+
+## 2026-11-14 智慧供热内网直通页（`smart_heating_tunnel`）界面文案与顶部栏精简
+
+- **需求背景**：
+  - 用户反馈 `/projects/daily_report_25_26/pages/smart_heating_tunnel` 页面顶部技术描述、中继角色标签及内网 IP 地址展示偏冗余，且加载提示语偏长，要求精简界面信息。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue`**：
+    - **顶部控制栏与全屏条精简**：移除常规控制栏中的“反向代理中继”徽章、`target_base_url`（`http://192.168.1.206:6688`）地址标签及副标题描述“办公电脑反向穿透中继 · 免开发直接操作内网全功能调度大屏与控制台”，并同步删除对应的 `.toolbar-meta`、`.meta-title-row`、`.badge-role`、`.target-url-chip`、`.portal-desc` 无用样式；全屏顶栏移除 `.topbar-target-pill` 地址标签与标题冗余后缀，状态胶囊与下载按钮文案简化为“中继在线 / 中继未连接”与“📥 下载客户端”。
+    - **离线引导与加载提示精简**：将离线拓扑图末端节点状态由 `192.168.1.206:6688` 改为“内网服务”，简化离线引导标题、三步指引及操作按钮文案；将 iframe 加载提示 `.frame-loading` 由“正在加载内网页面…”改为“页面加载中…”。配置弹窗中的目标地址表单项保留不变，不影响管理配置功能。
+- **验证结果**：
+  - `node src/projects/daily_report_25_26/tests/smartHeatingTunnel.test.mjs`（于 `frontend/` 目录）：行为测试通过；
+  - `npm --prefix frontend run build`（实测 `Push-Location frontend; npm run build`）：1071 模块编译打包通过（26.14s，0 错误）。
+
 ## 2026-11-13 日报功能选择页（`daily_report_25_26/pages`）底部“审批进度”手机窄屏排版优化与紧凑瘦身
 
 - **需求背景**：

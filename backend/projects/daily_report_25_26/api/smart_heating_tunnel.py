@@ -920,8 +920,8 @@ async def get_tunnel_status(
 
 
 def _get_client_script_template_path() -> Path:
-    """直接使用项目源码模板，避免数据卷旧脚本遮蔽新版本。"""
-    return Path(__file__).resolve().parent.parent / "smart_heating_tunnel_win7.py"
+    """读取绑定挂载数据目录（/app/data 或 backend_data）中的中继客户端脚本模板。"""
+    return (Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26" / "smart_heating_tunnel_win7.py").resolve()
 
 
 @public_router.get("/client-script", summary="动态生成并下载中继客户端脚本")
@@ -930,12 +930,12 @@ async def download_client_script(
 ):
     """
     根据当前系统的配置与请求域名，动态生成预填好配置的 smart_heating_tunnel_win7.py 客户端，
-    使用项目源码中的客户端模板，严格仅限 Global_admin 下载。
+    从绑定挂载的数据目录读取客户端模板，严格仅限 Global_admin 下载。
     """
     verify_global_admin_access(request)
     template_path = _get_client_script_template_path()
     if not template_path.exists():
-        raise HTTPException(status_code=404, detail="项目客户端脚本模板不存在")
+        raise HTTPException(status_code=404, detail=f"客户端脚本模板不存在: {template_path}")
 
     with open(template_path, "r", encoding="utf-8") as f:
         script_content = f.read()

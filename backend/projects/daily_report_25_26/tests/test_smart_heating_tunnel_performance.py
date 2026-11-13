@@ -211,7 +211,7 @@ def test_html_relative_base_and_jquery_deduplication(gateway):
 
 def load_relay_without_local_config():
     """只替换模块初始化的配置读取，执行真实客户端函数，避免生成办公电脑配置文件。"""
-    path = Path(tunnel.__file__).parent.parent / "smart_heating_tunnel_win7.py"
+    path = tunnel._get_client_script_template_path()
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "CONFIG" for t in node.targets):
@@ -272,3 +272,25 @@ def test_real_http_connection_reuse():
         server.shutdown()
         server.server_close()
         worker.join()
+
+
+def test_relay_file_logging_in_same_directory(tmp_path):
+    relay = load_relay_without_local_config()
+    expected_default = tunnel._get_client_script_template_path().parent / "smart_heating_tunnel.log"
+    assert Path(relay["LOG_FILE"]) == expected_default
+
+    log_path = tmp_path / "smart_heating_tunnel.log"
+    relay["setup_logging"](str(log_path))
+    try:
+        relay["logger"].info("中继日志落盘测试 %s", "OK")
+        for h in relay["logger"].handlers:
+            h.flush()
+        content = log_path.read_text(encoding="utf-8")
+        assert "中继日志落盘测试 OK" in content
+    finally:
+        # 清理测试挂载的临时文件处理器，避免影响同进程其他测试
+        for h in list(relay["logger"].handlers):
+            if getattr(h, "baseFilename", None) == str(log_path):
+                relay["logger"].removeHandler(h)
+                h.close()
+        relay["logger"]._file_logging_configured = False

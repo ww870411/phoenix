@@ -21,6 +21,7 @@ import http.client
 import json
 import logging
 import os
+import socket
 import sys
 import threading
 import time
@@ -28,18 +29,51 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.cookiejar import CookieJar
+from logging.handlers import RotatingFileHandler
 
-# 设置日志格式
+# 脚本所在目录、配置文件及默认日志路径
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "smart_heating_tunnel_config.json")
+LOG_FILE = os.path.join(SCRIPT_DIR, "smart_heating_tunnel.log")
+LOG_MAX_BYTES = 5 * 1024 * 1024  # 单文件最大 5MB
+LOG_BACKUP_COUNT = 3
+
+# 设置日志对象（文件处理器在 main() 启动时按需挂载，避免测试导入时产生文件）
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("PhoenixTunnel")
+logger.setLevel(logging.INFO)
 
-# 脚本所在目录及本地持久化配置路径
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(SCRIPT_DIR, "smart_heating_tunnel_config.json")
+
+def setup_logging(log_file: str = LOG_FILE):
+    """在脚本同目录下配置默认滚动日志文件，同时保留控制台输出。"""
+    logger.setLevel(logging.INFO)
+    if getattr(logger, "_file_logging_configured", False):
+        return
+    try:
+        log_dir = os.path.dirname(os.path.abspath(log_file))
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=LOG_MAX_BYTES,
+            backupCount=LOG_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s [%(levelname)s] [%(threadName)s] %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        logger.addHandler(file_handler)
+        logger._file_logging_configured = True
+    except Exception as e:
+        logger.warning("初始化日志文件失败 (%s)，仅保留控制台日志: %s", log_file, e)
 
 # 默认出厂内置配置（可由 Phoenix 网页动态生成替换）
 DEFAULT_CONFIG = {
@@ -120,6 +154,11 @@ def post_phoenix_json(endpoint, payload, timeout):
             "Content-Type": "application/json; charset=utf-8",
             "X-Tunnel-Secret": CONFIG["tunnel_secret"],
         })
+        if connection.sock is not None:
+            try:
+                connection.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except OSError:
+                pass
         response = connection.getresponse()
         body = response.read()
         if response.status != 200:
@@ -199,6 +238,7 @@ def execute_intranet_request(task: dict) -> dict:
     resp_headers = {}
     set_cookies = []
     body_out_b64 = ""
+    raw_len = 0
 
     try:
         with INTRANET_OPENER.open(req, timeout=30) as resp:
@@ -208,6 +248,7 @@ def execute_intranet_request(task: dict) -> dict:
             if hasattr(resp, "headers"):
                 set_cookies = resp.headers.get_all("Set-Cookie") or []
             raw_body = resp.read()
+            raw_len = len(raw_body)
             body_out_b64 = base64.b64encode(raw_body).decode("ascii")
 
     except urllib.error.HTTPError as e:
@@ -217,17 +258,23 @@ def execute_intranet_request(task: dict) -> dict:
         if hasattr(e, "headers"):
             set_cookies = e.headers.get_all("Set-Cookie") or []
         raw_body = e.read()
+        raw_len = len(raw_body)
         body_out_b64 = base64.b64encode(raw_body).decode("ascii")
 
     except Exception as e:
-        logger.error("转发内网请求失败 [%s] %s %s: %s", request_id, method, target_url, e)
+        logger.error("转发内网请求失败 [%s] %s %s (%s): %s", request_id, method, target_url, type(e).__name__, e)
         status_code = 504
         error_msg = f"中继办公电脑无法连接内网目标平台: {e}".encode("utf-8")
+        raw_len = len(error_msg)
         resp_headers["Content-Type"] = "text/plain; charset=utf-8"
         body_out_b64 = base64.b64encode(error_msg).decode("ascii")
 
     duration_ms = int((time.time() - start_time) * 1000)
-    logger.info("内网响应 [%s] %s %s -> %s (%dms)", request_id, method, req_path, status_code, duration_ms)
+    queue_ms = float(task.get("queue_ms") or 0)
+    logger.info(
+        "内网响应 [%s] %s %s -> %s (队列=%.0fms, 内网=%dms, 大小=%dB)",
+        request_id, method, req_path, status_code, queue_ms, duration_ms, raw_len,
+    )
 
     return {
         "request_id": request_id,
@@ -242,12 +289,27 @@ def execute_intranet_request(task: dict) -> dict:
 def send_response_to_phoenix(result: dict):
     """将内网响应结果回传给 Phoenix 云端隧道"""
     payload_bytes = json.dumps(result, ensure_ascii=False).encode("utf-8")
+    payload_len = len(payload_bytes)
+    respond_start = time.time()
     try:
         reply = post_phoenix_json("respond", payload_bytes, timeout=35)
-        if not reply["ok"]:
-            logger.info("请求已结束，丢弃迟到响应 [%s]", result["request_id"])
+        respond_ms = int((time.time() - respond_start) * 1000)
+        if not reply.get("ok"):
+            logger.warning(
+                "响应未被服务端采纳 [%s] (回传=%dms, 负载=%dB): %s",
+                result.get("request_id"), respond_ms, payload_len, reply.get("message", ""),
+            )
+        else:
+            logger.info(
+                "回传完成 [%s] 状态=%s 回传=%dms 负载=%dB",
+                result.get("request_id"), result.get("status_code"), respond_ms, payload_len,
+            )
     except Exception as e:
-        logger.error("回传响应到 Phoenix 失败 [%s]: %s", result.get("request_id"), e)
+        respond_ms = int((time.time() - respond_start) * 1000)
+        logger.error(
+            "回传响应到 Phoenix 失败 [%s] (耗时=%dms, 负载=%dB, %s): %s",
+            result.get("request_id"), respond_ms, payload_len, type(e).__name__, e,
+        )
 
 
 def poll_worker_loop(worker_id: int):
@@ -269,7 +331,9 @@ def poll_worker_loop(worker_id: int):
     while not STOP_EVENT.is_set():
         try:
             data = post_phoenix_json("poll", poll_payload, timeout=CONFIG["poll_timeout"] + 5)
-            fail_count = 0
+            if fail_count > 0:
+                logger.info("中继工作线程 #%d 已恢复连接 (此前连续异常 %d 次)", worker_id, fail_count)
+                fail_count = 0
             if not data["has_task"]:
                 continue
             result = execute_intranet_request(data["task"])
@@ -281,7 +345,7 @@ def poll_worker_loop(worker_id: int):
                 logger.critical("中继密钥 (tunnel_secret) 错误，请检查配置！HTTP 403")
                 time.sleep(10)
             else:
-                logger.warning("轮询服务异常 (HTTP %s): %s", e.code, e.reason)
+                logger.warning("轮询服务异常 (线程 #%d, HTTP %s): %s", worker_id, e.code, e.reason)
                 time.sleep(20 if e.code == 429 else 2)
         except urllib.error.URLError as e:
             fail_count += 1
@@ -290,7 +354,7 @@ def poll_worker_loop(worker_id: int):
             time.sleep(2)
         except Exception as e:
             fail_count += 1
-            logger.error("轮询异常 (线程 #%d): %s", worker_id, e)
+            logger.error("轮询异常 (线程 #%d, %s): %s", worker_id, type(e).__name__, e)
             time.sleep(2)
 
 
@@ -312,6 +376,7 @@ def test_intranet_connectivity():
 
 
 def main():
+    setup_logging()
     print("=" * 70)
     print(" 🦅 Phoenix 智慧供热平台内网反向中继客户端 (Win7 + Python 3.8)")
     print("=" * 70)
@@ -319,7 +384,17 @@ def main():
     print(f" 云端中继地址: {CONFIG['phoenix_server_url']}")
     print(f" 并发轮询通道: {CONFIG['concurrency']} 个线程")
     print(f" 配置来源: {CONFIG_FILE}（存在时覆盖脚本内置配置）")
+    print(f" 日志文件: {LOG_FILE}（单文件上限 5MB，最多保留 {LOG_BACKUP_COUNT} 份）")
     print("=" * 70)
+
+    logger.info(
+        "启动中继客户端 | 目标内网=%s | 云端地址=%s | 并发=%s | poll_timeout=%s | 日志=%s",
+        CONFIG["intranet_base_url"],
+        CONFIG["phoenix_server_url"],
+        CONFIG["concurrency"],
+        CONFIG["poll_timeout"],
+        LOG_FILE,
+    )
 
     # 1. 测试内网平台连通
     test_intranet_connectivity()
@@ -328,7 +403,7 @@ def main():
     threads = []
     concurrency = int(CONFIG.get("concurrency") or 6)
     for i in range(1, concurrency + 1):
-        t = threading.Thread(target=poll_worker_loop, args=(i,), daemon=True)
+        t = threading.Thread(target=poll_worker_loop, args=(i,), name=f"Worker-{i}", daemon=True)
         t.start()
         threads.append(t)
         time.sleep(0.1)  # 稍微错开启动时间

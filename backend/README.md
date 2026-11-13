@@ -1,3 +1,13 @@
+## 2026-11-14 智慧供热中继客户端迁移至绑定挂载目录并启用同目录滚动日志
+
+- **`backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`**（由 `backend/projects/daily_report_25_26/smart_heating_tunnel_win7.py` 移入，并移除 `backend/` 下源码副本）：
+  - 新增 `setup_logging()` 与默认日志路径 `SCRIPT_DIR/smart_heating_tunnel.log`（`RotatingFileHandler`，UTF-8，5MB × 3 备份），记录完整日期时间与线程名（`Worker-1..N`），并保留控制台实时输出；
+  - `post_phoenix_json()` 开启 `TCP_NODELAY`；请求/回传流程补充记录服务端 `queue_ms`、内网 `duration_ms`、回传 `respond_ms`、字节大小及 `respond` 未采纳（`ok=false`）告警。
+- **`projects/daily_report_25_26/api/smart_heating_tunnel.py`**：
+  - `_get_client_script_template_path()` 改为从 `Path(DATA_DIRECTORY) / "projects" / "daily_report_25_26" / "smart_heating_tunnel_win7.py"` 读取客户端脚本模板，宿主机可直接维护绑定挂载文件无需重建镜像。
+- **测试 (`projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py`)**：
+  - 改为通过 `tunnel._get_client_script_template_path()` 加载脚本并新增 `test_relay_file_logging_in_same_directory`，执行 `python -m pytest backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py -q -s --basetemp=backend/.pytest_cache/tunnel-final`，结果 **15 passed**。
+
 ## 2026-11-13 电力现货 `/summary` 新增日前测算加权单价较实时差额字段
 
 - **`projects/daily_report_25_26/api/spot_electricity.py`**：

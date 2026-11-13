@@ -1,3 +1,10 @@
+## 2026-11-14 智慧供热内网直通页（`smart_heating_tunnel`）界面精简
+
+- **`src/projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue`**：
+  - 移除顶部控制栏的“反向代理中继”徽章、`http://192.168.1.206:6688` 地址标签及副标题“办公电脑反向穿透中继 · 免开发直接操作内网全功能调度大屏与控制台”，并同步清理全屏顶栏 `.topbar-target-pill` 及对应冗余样式；
+  - 精简在线状态胶囊、客户端下载按钮、离线拓扑引导面板文案（末端节点改显“内网服务”），并将 iframe 加载提示语由“正在加载内网页面…”改为“页面加载中…”。
+- **验证结果**：`node src/projects/daily_report_25_26/tests/smartHeatingTunnel.test.mjs` 通过；`npm run build` 1071 模块编译打包通过（26.14s，0 错误）。
+
 ## 2026-11-13 日报功能选择页“审批进度”手机窄屏紧凑响应式排版优化
 
 - **`src/projects/daily_report_25_26/pages/PageSelectView.vue`**：
