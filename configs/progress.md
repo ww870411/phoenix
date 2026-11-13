@@ -1,5 +1,18 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-13 日报功能选择页（`daily_report_25_26/pages`）底部“审批进度”手机窄屏排版优化与紧凑瘦身
+
+- **需求背景**：
+  - 用户反馈 `http://localhost:5173/projects/daily_report_25_26/pages` 页面底部的“审批进度”模块在手机窄屏下排版杂乱；首轮卡片化改造后整齐度提升，但用户进一步反馈审批框整体高度偏高、占用空间过多。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`**：
+    - 在“审批进度”头部增加已审批数量摘要胶囊（`approvedUnitsCount` / `已审批 X/Y`），并将业务日期与展示日期拆分为独立结构化节点（`.status-date-item` / `.status-date-divider`），同时新增 `hasUnitAction()` 辅助判断单行可执行操作；
+    - 为桌面/平板端表格补充 `.status-table-wrap` 横向滚动保护与单元格防折行约束；
+    - 在 `@media (max-width: 640px)` 下实施高密度紧凑排版：头部改为标题与紧凑“发布日报”按钮左右并排、日期副标题流式折行；隐藏宽表并改用 `.status-mobile-list` 紧凑双行单位卡片（首行“单位+状态徽章”，次行合并展示“审批人 · 审批时间（未审批仅显示待审批）”与右侧 `24px` 高行内操作按钮，去除多余分割线与空时间行）；底部 `.publish-state` 改为横向流式折行的紧凑圆角信息条并隐藏多余竖线分隔符。
+- **验证结果**：
+  - `npm --prefix frontend run build`：1071 模块编译打包通过（23.79s，0 错误）；
+  - `npx eslint src/projects/daily_report_25_26/pages/PageSelectView.vue`：本次新增与修改代码零报错（仅第 232 行既有的 `formatCardTitle` 正则存在预置 `no-misleading-character-class` 提示，未改动）。
+
 ## 2026-11-13 电力现货两厂卡片内嵌“波形相关系数”（移除独立契合度板块与溢价指标）
 
 - **需求背景**：

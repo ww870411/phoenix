@@ -61,14 +61,21 @@
       <section v-if="showWorkflowCardForProject" class="card elevated status-block">
         <header class="card-header status-header">
           <div class="status-heading">
-            <h3>审批进度</h3>
+            <div class="status-title-row">
+              <h3>审批进度</h3>
+              <span v-if="workflowUnits.length > 0" class="status-summary-pill">
+                已审批 {{ approvedUnitsCount }}/{{ workflowUnits.length }}
+              </span>
+            </div>
             <p class="status-subtitle">
-              当前业务日期：{{ workflowBizDateText }} ｜ 当前数据展示日期：{{ workflowDisplayDateText }}
+              <span class="status-date-item">当前业务日期：{{ workflowBizDateText }}</span>
+              <span class="status-date-divider" aria-hidden="true">｜</span>
+              <span class="status-date-item">当前数据展示日期：{{ workflowDisplayDateText }}</span>
             </p>
           </div>
           <button
             v-if="publishButtonVisible"
-            class="btn primary"
+            class="btn primary status-publish-btn"
             type="button"
             :disabled="actionPending || publishDisabled"
             @click="publishDaily"
@@ -79,28 +86,77 @@
         <div v-if="workflowLoading" class="page-state">审批进度加载中，请稍候…</div>
         <div v-else-if="workflowError" class="page-state error">{{ workflowError }}</div>
         <div v-else class="status-content">
-          <table class="status-table">
-            <thead>
-              <tr>
-                <th>单位</th>
-                <th>状态</th>
-                <th>审批人</th>
-                <th>审批时间</th>
-                <th v-if="actionsColumnVisible">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="unit in workflowUnits" :key="unit.unit">
-                <td>{{ unit.unit }}</td>
-                <td>
-                  <span :class="['status-badge', unit.status]">{{ statusLabel(unit.status) }}</span>
-                </td>
-                <td>{{ unit.approved_by || '待审批' }}</td>
-                <td>{{ formatDateTime(unit.approved_at) || '—' }}</td>
-                <td v-if="actionsColumnVisible">
+          <div v-if="workflowUnits.length > 0" class="status-table-wrap">
+            <table class="status-table">
+              <thead>
+                <tr>
+                  <th>单位</th>
+                  <th>状态</th>
+                  <th>审批人</th>
+                  <th>审批时间</th>
+                  <th v-if="actionsColumnVisible">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="unit in workflowUnits" :key="unit.unit">
+                  <td>{{ unit.unit }}</td>
+                  <td>
+                    <span :class="['status-badge', unit.status]">{{ statusLabel(unit.status) }}</span>
+                  </td>
+                  <td>{{ unit.approved_by || '待审批' }}</td>
+                  <td>{{ formatDateTime(unit.approved_at) || '—' }}</td>
+                  <td v-if="actionsColumnVisible">
+                    <button
+                      v-if="unit.status !== 'approved' && canApproveUnit(unit.unit)"
+                      class="btn ghost"
+                      type="button"
+                      :disabled="actionPending"
+                      @click="approveUnit(unit.unit)"
+                    >
+                      批准
+                    </button>
+                    <button
+                      v-else-if="unit.status === 'approved' && canRevokeUnit(unit.unit)"
+                      class="btn ghost"
+                      type="button"
+                      :disabled="actionPending"
+                      @click="revokeUnit(unit.unit)"
+                    >
+                      取消批准
+                    </button>
+                    <span v-else>—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="workflowUnits.length > 0" class="status-mobile-list">
+            <article
+              v-for="unit in workflowUnits"
+              :key="`mobile-${unit.unit}`"
+              :class="['status-unit-card', unit.status || 'pending']"
+            >
+              <div class="status-unit-card-head">
+                <span class="status-unit-name">{{ unit.unit }}</span>
+                <span :class="['status-badge', unit.status]">{{ statusLabel(unit.status) }}</span>
+              </div>
+              <div class="status-unit-card-foot">
+                <span class="status-unit-summary">
+                  <template v-if="unit.approved_by || unit.approved_at">
+                    <span class="status-unit-actor">{{ unit.approved_by || '已审批' }}</span>
+                    <span v-if="unit.approved_at" class="status-unit-time">
+                      · {{ formatDateTime(unit.approved_at) }}
+                    </span>
+                  </template>
+                  <template v-else>待审批</template>
+                </span>
+                <div
+                  v-if="actionsColumnVisible && hasUnitAction(unit)"
+                  class="status-unit-actions"
+                >
                   <button
                     v-if="unit.status !== 'approved' && canApproveUnit(unit.unit)"
-                    class="btn ghost"
+                    class="btn ghost status-unit-action-btn"
                     type="button"
                     :disabled="actionPending"
                     @click="approveUnit(unit.unit)"
@@ -109,29 +165,38 @@
                   </button>
                   <button
                     v-else-if="unit.status === 'approved' && canRevokeUnit(unit.unit)"
-                    class="btn ghost"
+                    class="btn ghost status-unit-action-btn"
                     type="button"
                     :disabled="actionPending"
                     @click="revokeUnit(unit.unit)"
                   >
                     取消批准
                   </button>
-                  <span v-else>—</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </div>
+              </div>
+            </article>
+          </div>
+          <div v-else class="status-empty">暂无单位审批记录</div>
           <div class="publish-state">
-            <span>发布状态：</span>
-            <span :class="['status-badge', publishStatus?.status || 'pending']">
-              {{ statusLabel(publishStatus?.status) }}
-            </span>
-            <span v-if="publishStatus?.published_by">
-              ｜ 发布人：{{ publishStatus.published_by }}
-            </span>
-            <span v-if="publishStatus?.published_at">
-              ｜ 时间：{{ formatDateTime(publishStatus.published_at) }}
-            </span>
+            <div class="publish-state-main">
+              <span>发布状态：</span>
+              <span :class="['status-badge', publishStatus?.status || 'pending']">
+                {{ statusLabel(publishStatus?.status) }}
+              </span>
+            </div>
+            <div
+              v-if="publishStatus?.published_by || publishStatus?.published_at"
+              class="publish-state-meta"
+            >
+              <span v-if="publishStatus?.published_by" class="publish-meta-item">
+                <span class="publish-divider" aria-hidden="true">｜</span>
+                发布人：{{ publishStatus.published_by }}
+              </span>
+              <span v-if="publishStatus?.published_at" class="publish-meta-item">
+                <span class="publish-divider" aria-hidden="true">｜</span>
+                时间：{{ formatDateTime(publishStatus.published_at) }}
+              </span>
+            </div>
           </div>
         </div>
       </section>
@@ -406,6 +471,19 @@ const workflowUnits = computed(() => {
   const blacklist = new Set(['系统管理员', 'Group'])
   return units.filter((item) => item?.unit && !blacklist.has(item.unit))
 })
+
+const approvedUnitsCount = computed(() => {
+  return workflowUnits.value.filter((item) => item?.status === 'approved').length
+})
+
+/**
+ * 判断当前登录用户在指定单位卡片上是否存在可执行审批操作。
+ */
+function hasUnitAction(unit) {
+  if (!unit?.unit) return false
+  if (unit.status !== 'approved') return canApproveUnit(unit.unit)
+  return canRevokeUnit(unit.unit)
+}
 
 const publishStatus = computed(() => workflow.value?.publish || null)
 const workflowBizDate = computed(() => workflow.value?.biz_date || '')
@@ -736,6 +814,18 @@ function openPage(page) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 0;
+}
+
+.status-heading {
+  min-width: 0;
+}
+
+.status-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .status-heading h3 {
@@ -743,16 +833,44 @@ function openPage(page) {
   font-size: 18px;
 }
 
+.status-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+  white-space: nowrap;
+}
+
 .status-subtitle {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--neutral-500);
+  color: var(--neutral-500, #64748b);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+}
+
+.status-publish-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .status-content {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.status-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .status-table {
@@ -769,9 +887,34 @@ function openPage(page) {
 }
 
 .status-table th {
-  color: var(--neutral-500);
+  color: var(--neutral-500, #64748b);
   font-weight: 600;
   background: #f9fafb;
+  white-space: nowrap;
+}
+
+.status-table td {
+  white-space: nowrap;
+}
+
+.status-table td:first-child {
+  white-space: normal;
+  min-width: 110px;
+}
+
+/* 移动端审批状态卡片列表（桌面端默认隐藏） */
+.status-mobile-list {
+  display: none;
+}
+
+.status-empty {
+  padding: 20px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--neutral-500, #64748b);
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
 }
 
 .status-badge {
@@ -780,8 +923,11 @@ function openPage(page) {
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
+  font-weight: 500;
   background: #e5e7eb;
   color: #374151;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .status-badge.approved,
@@ -797,11 +943,25 @@ function openPage(page) {
 
 .publish-state {
   font-size: 13px;
-  color: var(--neutral-600);
+  color: var(--neutral-600, #475569);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+.publish-state-main,
+.publish-state-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.publish-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .btn.ghost {
@@ -953,5 +1113,178 @@ function openPage(page) {
 
 .page-card.card-primary-dashboard .page-card-desc {
   color: rgba(255, 255, 255, 0.94);
+}
+
+/* 手机窄屏响应式优化：审批状态与页面容器紧凑排版 */
+@media (max-width: 640px) {
+  .page-select-main {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .page-block {
+    padding: 14px;
+  }
+
+  .status-block {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .status-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .status-heading {
+    flex: 1;
+  }
+
+  .status-heading h3 {
+    font-size: 15px;
+  }
+
+  .status-summary-pill {
+    padding: 1px 7px;
+    font-size: 11px;
+  }
+
+  .status-subtitle {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 10px;
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .status-date-divider {
+    display: none;
+  }
+
+  .status-publish-btn {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 7px;
+  }
+
+  .status-content {
+    gap: 8px;
+  }
+
+  .status-table-wrap {
+    display: none;
+  }
+
+  .status-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .status-unit-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 7px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .status-unit-card.approved {
+    border-left-color: #10b981;
+    background: #fbfefc;
+  }
+
+  .status-unit-card.pending {
+    border-left-color: #f59e0b;
+  }
+
+  .status-unit-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .status-unit-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.3;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  .status-unit-card .status-badge {
+    padding: 1px 7px;
+    font-size: 11px;
+  }
+
+  .status-unit-card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 20px;
+  }
+
+  .status-unit-summary {
+    font-size: 11.5px;
+    color: #64748b;
+    line-height: 1.35;
+    min-width: 0;
+    flex: 1;
+    word-break: break-word;
+  }
+
+  .status-unit-actor {
+    color: #334155;
+  }
+
+  .status-unit-time {
+    font-variant-numeric: tabular-nums;
+    color: #64748b;
+  }
+
+  .status-unit-actions {
+    flex-shrink: 0;
+  }
+
+  .status-unit-action-btn {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 11.5px;
+    font-weight: 500;
+    border-radius: 6px;
+  }
+
+  .publish-state {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 7px 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 11.5px;
+  }
+
+  .publish-divider {
+    display: none;
+  }
+
+  .publish-state-meta {
+    gap: 4px 10px;
+    color: #475569;
+  }
 }
 </style>

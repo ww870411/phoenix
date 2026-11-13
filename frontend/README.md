@@ -1,3 +1,10 @@
+## 2026-11-13 日报功能选择页“审批进度”手机窄屏紧凑响应式排版优化
+
+- **`src/projects/daily_report_25_26/pages/PageSelectView.vue`**：
+  - 审批进度头部补充 `approvedUnitsCount`（`已审批 X/Y` 摘要胶囊）并将业务日期/展示日期拆分为结构化元素，在 `@media (max-width: 640px)` 下保持头部标题与紧凑发布按钮左右并排、隐藏竖线分隔符；
+  - 桌面端表格外包 `.status-table-wrap` 防止平板宽度溢出；手机窄屏（`<= 640px`）自动切换为 `.status-mobile-list` 紧凑双行单位卡片（首行单位与状态徽章，次行合并展示审批人/时间及 `hasUnitAction()` 控制的右侧行内紧凑操作按钮），底部 `.publish-state` 改用横向流式折行的紧凑信息条。
+- **构建验证**：`npm --prefix frontend run build` 1071 模块编译打包通过（23.79s，0 错误）。
+
 ## 2026-11-13 电力现货两厂卡片内嵌“波形相关系数”（移除独立契合度板块）
 
 - **`src/projects/daily_report_25_26/utils/spotCurveAlignment.js`**（新增）：
