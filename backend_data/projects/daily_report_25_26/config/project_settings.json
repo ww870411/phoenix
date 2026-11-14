@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-14T10:17:21.822493+00:00",
+  "updated_at": "2026-11-14T11:16:14.777960+00:00",
   "biz_date": {
     "set_biz_date": "2026-11-12"
   },
@@ -38,6 +38,7 @@
     ]
   },
   "weather_ensemble": {
+    "api_url": "https://ensemble-api.open-meteo.com/v1/ensemble?latitude=38.875&longitude=121.625&hourly=temperature_2m&models=gfs05&forecast_days=35&timezone=Asia%2FSingapore",
     "enabled": true,
     "schedule_times": [
       "06:30",
@@ -46,8 +47,8 @@
     ]
   },
   "kdocs_complaint": {
-    "share_link": "https://www.kdocs.cn/l/cj8e1PTQW0uN",
-    "share_id": "cj8e1PTQW0uN",
+    "share_link": "https://www.kdocs.cn/l/cjpt5GSmUPDH",
+    "share_id": "cjpt5GSmUPDH",
     "wps_sid": "V02SdZ9VTFSbBK9yGbjfj93LeD4okis00ab8df8f0012fc69e2",
     "description": "2026-2027年度市12345诉求件统计底表（金山文档共享）",
     "auto_sync_enabled": false
