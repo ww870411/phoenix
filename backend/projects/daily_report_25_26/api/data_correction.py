@@ -1,10 +1,13 @@
 """日报修正申请 API，不改变原有普通填报权限。"""
 from datetime import date
 from typing import Any, Literal, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from backend.services.auth_manager import AuthSession, get_current_session
 from backend.projects.daily_report_25_26.services import data_correction as service
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_session_operation,
+)
 
 router = APIRouter(prefix="/data-corrections", tags=["数据修正申请"])
 
@@ -49,10 +52,32 @@ def get_records(status: Optional[Literal["pending", "approved", "rejected", "can
 
 
 @router.post("")
-def create(payload: CorrectionPayload, actor: AuthSession = Depends(get_current_session)):
-    return service.create_request(actor, payload)
+def create(payload: CorrectionPayload, request: Request, actor: AuthSession = Depends(get_current_session)):
+    res = service.create_request(actor, payload)
+    log_session_operation(
+        actor,
+        "SUBMIT_CORRECTION",
+        f"提交日报数据修正申请 #{res.get('id')}（{res.get('sheet_name') or payload.sheet_key}，业务日 {payload.biz_date.isoformat()}，原因：{payload.reason}）",
+        request=request,
+        unit=res.get("unit_id") or getattr(actor, "unit", None),
+        resource_id=f"correction:{res.get('id')}",
+        after_value={"sheet_key": payload.sheet_key, "biz_date": payload.biz_date.isoformat(), "changes_count": len(res.get("changes") or [])},
+    )
+    return res
 
 
 @router.post("/{request_id}/resolve")
-def resolve(request_id: int, payload: ResolutionPayload, actor: AuthSession = Depends(get_current_session)):
-    return service.resolve_request(actor, request_id, payload.action, payload.note.strip())
+def resolve(request_id: int, payload: ResolutionPayload, request: Request, actor: AuthSession = Depends(get_current_session)):
+    res = service.resolve_request(actor, request_id, payload.action, payload.note.strip())
+    action_type = "APPROVE_CORRECTION" if payload.action == "approve" else "REJECT_CORRECTION"
+    verb = {"approve": "确认并执行", "reject": "驳回", "cancel": "取消"}[payload.action]
+    log_session_operation(
+        actor,
+        action_type,
+        f"{verb}数据修正申请 #{request_id}（{res.get('sheet_name') or res.get('sheet_key')}，业务日 {res.get('biz_date')}）",
+        request=request,
+        unit=res.get("unit_id") or getattr(actor, "unit", None),
+        resource_id=f"correction:{request_id}",
+        after_value={"action": payload.action, "status": res.get("status"), "note": payload.note.strip()},
+    )
+    return res

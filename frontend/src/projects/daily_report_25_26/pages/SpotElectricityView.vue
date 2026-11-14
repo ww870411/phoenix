@@ -1597,6 +1597,7 @@ import {
   getSpotElectricitySyncConfig,
   saveSpotElectricitySyncConfig,
   manualSyncSpotElectricity,
+  recordDailyReportOperationLog,
 } from '../services/api'
 
 const route = useRoute()
@@ -3176,6 +3177,16 @@ function renderChart() {
   chartInstance.resize()
 }
 
+function notifySpotExport(fileName, mode, rowCount) {
+  recordDailyReportOperationLog(projectKey, {
+    unit: '电力现货交易中心',
+    action_type: 'EXPORT_SHEET_DATA',
+    action_desc: `导出电力现货数据 Excel（${fileName}，共 ${rowCount} 行）`,
+    resource_id: `spot_electricity:${mode}`,
+    after_value: { file_name: fileName, mode, row_count: rowCount },
+  })
+}
+
 // 导出 Excel / CSV
 function exportCurrentData() {
   if (viewMode.value === 'range' && rangeSubMode.value === 'monthly') {
@@ -3202,6 +3213,7 @@ function exportCurrentData() {
 
     const fileName = `辽宁电力现货月度均价走势_${rangeStartDate.value}_至_${rangeEndDate.value}.xlsx`
     XLSX.writeFile(workbook, fileName)
+    notifySpotExport(fileName, 'range_monthly', exportRows.length)
     return
   }
 
@@ -3233,6 +3245,7 @@ function exportCurrentData() {
 
     const fileName = `辽宁电力现货时段均价走势_${rangeStartDate.value}_至_${rangeEndDate.value}.xlsx`
     XLSX.writeFile(workbook, fileName)
+    notifySpotExport(fileName, 'range_period', exportRows.length)
     return
   }
 
@@ -3258,6 +3271,7 @@ function exportCurrentData() {
 
     const fileName = `辽宁电力现货日均电价走势_${rangeStartDate.value}_至_${rangeEndDate.value}.xlsx`
     XLSX.writeFile(workbook, fileName)
+    notifySpotExport(fileName, 'range_daily', exportRows.length)
     return
   }
 
@@ -3297,6 +3311,7 @@ function exportCurrentData() {
     : `辽宁电力现货15分钟分时明细_${rangeStartDate.value}_至_${rangeEndDate.value}${negSuffix}.xlsx`
 
   XLSX.writeFile(workbook, fileName)
+  notifySpotExport(fileName, viewMode.value === 'single' ? 'single_points' : 'range_points', exportRows.length)
 }
 
 function handleResize() {

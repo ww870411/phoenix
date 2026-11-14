@@ -444,6 +444,7 @@ import {
   uploadXianghaiEfficiencyReport,
   uploadGongreEfficiencyReport,
   calculateComplaintStatistics,
+  recordDailyReportOperationLog,
 } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { useTemplatePlaceholders } from '../composables/useTemplatePlaceholders'
@@ -2954,7 +2955,14 @@ async function copyComplaintSummary() {
 function downloadComplaintCsv() {
   const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`
   const rows = [['业务日期', complaintStats.value.business_date], ['本月开始', complaintStats.value.month_start], ['供暖期开始', complaintStats.value.season_start], ['结果完整', complaintStats.value.complete ? '是' : '否'], ['未归属名称及数量', Object.entries(complaintStats.value.unmatched.names).map(([name, count]) => `${name}: ${count}`).join('；')], ...complaintStats.value.issues.map(issue => ['未计入记录', issue.sheet, issue.row, issue.reason]), [], ['单位', ...complaintMetrics.map(m => m.label)], ...complaintSummaryRows.value.map(row => [row.name, ...complaintMetrics.map(m => row.metrics[m.key])]), [], ['工作表', '行号', '来源', '日期', '编号', '类型', '投诉类别', '服务中心', '办理情况'], ...complaintStats.value.records.map(r => [r.sheet, r.row, r.source, r.date, r.identifier, r.type, r.category, r.center_original, r.status])]
-  downloadComplaintBlob(new Blob(['\ufeff', rows.map(row => row.map(quote).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `投诉统计_${complaintStats.value.business_date}.csv`)
+  const fileName = `投诉统计_${complaintStats.value.business_date}.csv`
+  downloadComplaintBlob(new Blob(['\ufeff', rows.map(row => row.map(quote).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), fileName)
+  recordDailyReportOperationLog(projectKey || 'daily_report_25_26', {
+    action_type: 'EXPORT_SHEET_DATA',
+    action_desc: `导出 ${complaintStats.value.business_date} 12345 投诉统计明细 CSV`,
+    resource_id: `complaint_csv:${complaintStats.value.business_date || 'latest'}`,
+    after_value: { biz_date: complaintStats.value.business_date, file_name: fileName, row_count: complaintStats.value.records.length },
+  })
 }
 
 function downloadComplaintBlob(blob, filename) {

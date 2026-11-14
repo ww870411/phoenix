@@ -34,6 +34,13 @@ from backend.projects.daily_report_25_26.services.xianghai_efficiency_parser imp
 from backend.projects.daily_report_25_26.services.gongre_efficiency_parser import (
     parse_gongre_efficiency_excel,
 )
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_data_analysis_query,
+    log_efficiency_import,
+    log_session_operation,
+    log_sheet_submission,
+    normalize_unit_label,
+)
 from backend.config import DATA_DIRECTORY
 from backend.db.database_daily_report_25_26 import (
     CoalInventoryData,
@@ -2177,6 +2184,7 @@ def get_workflow_status_endpoint(
 )
 def approve_unit_workflow(
     payload: WorkflowApproveRequest,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> WorkflowStatusResponse:
     action_flags = session.get_project_action_flags(PROJECT_KEY)
@@ -2186,11 +2194,22 @@ def approve_unit_workflow(
     allowed_units = (session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())) & set(_collect_seed_units())
     if target_unit not in allowed_units:
         raise HTTPException(status_code=403, detail="无权审批该单位")
+    biz_dt = _current_biz_datetime()
     workflow_status_manager.mark_approved(
         "daily_report_25_26",
-        _current_biz_datetime(),
+        biz_dt,
         target_unit,
         session,
+    )
+    biz_str = biz_dt.date().isoformat()
+    log_session_operation(
+        session,
+        "APPROVE_UNIT",
+        f"审核通过【{normalize_unit_label(target_unit)}】{biz_str} 生产日报数据",
+        request=request,
+        unit=target_unit,
+        resource_id=f"workflow:approve:{target_unit}:{biz_str}",
+        after_value={"unit": target_unit, "biz_date": biz_str},
     )
     return _build_workflow_response(session)
 
@@ -2202,6 +2221,7 @@ def approve_unit_workflow(
 )
 def revoke_unit_workflow(
     payload: WorkflowRevokeRequest,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> WorkflowStatusResponse:
     action_flags = session.get_project_action_flags(PROJECT_KEY)
@@ -2211,11 +2231,22 @@ def revoke_unit_workflow(
     allowed_units = (session.resolve_allowed_units(PROJECT_KEY) or set(_collect_seed_units())) & set(_collect_seed_units())
     if target_unit not in allowed_units:
         raise HTTPException(status_code=403, detail="无权取消该单位审批")
+    biz_dt = _current_biz_datetime()
     workflow_status_manager.mark_pending(
         "daily_report_25_26",
-        _current_biz_datetime(),
+        biz_dt,
         target_unit,
         session,
+    )
+    biz_str = biz_dt.date().isoformat()
+    log_session_operation(
+        session,
+        "REVOKE_UNIT",
+        f"撤销【{normalize_unit_label(target_unit)}】{biz_str} 生产日报审批状态",
+        request=request,
+        unit=target_unit,
+        resource_id=f"workflow:revoke:{target_unit}:{biz_str}",
+        after_value={"unit": target_unit, "biz_date": biz_str},
     )
     return _build_workflow_response(session)
 
@@ -2227,6 +2258,7 @@ def revoke_unit_workflow(
 )
 def publish_daily_report(
     payload: WorkflowPublishRequest,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> WorkflowStatusResponse:
     action_flags = session.get_project_action_flags(PROJECT_KEY)
@@ -2242,6 +2274,16 @@ def publish_daily_report(
         session,
     )
     auth_manager.set_display_date(biz_date)
+    biz_str = biz_date.isoformat()
+    log_session_operation(
+        session,
+        "PUBLISH_DAILY",
+        f"正式发布 {biz_str} 洁净能源集团生产日报",
+        request=request,
+        unit="洁净能源集团",
+        resource_id=f"workflow:publish:{biz_str}",
+        after_value={"biz_date": biz_str},
+    )
     return _build_workflow_response(session)
 
 
@@ -2265,10 +2307,19 @@ def get_validation_master_switch_state():
 )
 def update_validation_master_switch(
     payload: ValidationMasterSwitchPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ):
     _ensure_manage_validation_permission(session)
     updated = _persist_master_validation_switch(payload.validation_enabled)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"更新全局数据填报校验总开关为【{'开启' if updated else '关闭'}】",
+        request=request,
+        resource_id="validation:master_switch",
+        after_value={"validation_enabled": updated},
+    )
     return {"ok": True, "validation_enabled": updated}
 
 
@@ -2303,7 +2354,9 @@ async def get_ai_settings_endpoint(session: AuthSession = Depends(get_current_se
     summary="更新 AI 智能体配置",
 )
 async def update_ai_settings_endpoint(
-    payload: AiSettingsPayload, session: AuthSession = Depends(get_current_session)
+    payload: AiSettingsPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
 ):
     _ensure_manage_ai_settings_permission(session)
     result = _persist_ai_settings(
@@ -2328,6 +2381,14 @@ async def update_ai_settings_endpoint(
         payload.show_chat_bubble,
     )
     ai_runtime.reset_runtime_client()
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"更新 AI 智能体与报表分析配置（服务商：{result.get('provider')}，模型：{result.get('model')}）",
+        request=request,
+        resource_id="ai_settings",
+        after_value={"provider": result.get("provider"), "model": result.get("model"), "report_mode": result.get("report_mode")},
+    )
     return {
         "ok": True,
         "provider": result["provider"],
@@ -2445,6 +2506,7 @@ def get_sheet_validation_switch(
     summary="更新指定表的校验开关",
 )
 def update_sheet_validation_switch(
+    request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
     config: Optional[str] = Query(
         default=None,
@@ -2461,6 +2523,14 @@ def update_sheet_validation_switch(
         if preferred_path is None:
             raise HTTPException(status_code=404, detail=f"未找到页面配置文件: {config}")
     updated = _persist_sheet_validation_switch(sheet_key, payload.validation_enabled, preferred_path=preferred_path)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"更新表单 {sheet_key} 校验开关为【{'开启' if updated else '关闭'}】",
+        request=request,
+        resource_id=f"validation:{sheet_key}",
+        after_value={"sheet_key": sheet_key, "validation_enabled": updated},
+    )
     return {"ok": True, "validation_enabled": updated}
 
 
@@ -2493,6 +2563,7 @@ def get_sheet_ai_switch(
     summary="更新指定表的 AI 报告开关",
 )
 def update_sheet_ai_switch(
+    request: Request,
     sheet_key: str = Path(..., description="目标 sheet_key"),
     config: Optional[str] = Query(
         default=None,
@@ -2509,6 +2580,14 @@ def update_sheet_ai_switch(
         if preferred_path is None:
             raise HTTPException(status_code=404, detail=f"未找到页面配置文件: {config}")
     updated = _persist_sheet_ai_report_switch(sheet_key, payload.ai_report_enabled, preferred_path=preferred_path)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"更新表单 {sheet_key} AI 报告开关为【{'开启' if updated else '关闭'}】",
+        request=request,
+        resource_id=f"ai_switch:{sheet_key}",
+        after_value={"sheet_key": sheet_key, "ai_report_enabled": updated},
+    )
     return {"ok": True, "ai_report_enabled": updated}
 
 
@@ -2634,14 +2713,12 @@ async def submit_debug(
     from backend.projects.daily_report_25_26.services.data_correction import validate_regular_submission
     payload = validate_regular_submission(session, sheet_key, payload)
     if _is_gongre_sheet(sheet_key):
-        return await handle_gongre_branches_detail_submission(payload)
-
-    if _is_constant_sheet(sheet_key):
-        return await handle_constant_submission(payload)
-
-    if _is_coal_inventory_sheet(sheet_key, payload):
+        response = await handle_gongre_branches_detail_submission(payload)
+    elif _is_constant_sheet(sheet_key):
+        response = await handle_constant_submission(payload)
+    elif _is_coal_inventory_sheet(sheet_key, payload):
         # 调用煤炭库存表的专用处理器
-        return await handle_coal_inventory_submission(payload)
+        response = await handle_coal_inventory_submission(payload)
     else:
         # 调用处理标准基础报表的旧逻辑
         try:
@@ -2649,7 +2726,7 @@ async def submit_debug(
             normalized = _normalize_submission(payload_aligned)
             flattened = _flatten_records(payload_aligned, normalized)
             inserted_rows = _persist_daily_basic(payload_aligned, normalized, flattened)
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=200,
                 content={
                     "ok": True,
@@ -2664,6 +2741,31 @@ async def submit_debug(
                 status_code=500,
                 content={"ok": False, "message": "处理标准报表时发生错误", "error": str(exc)},
             )
+
+    if getattr(response, "status_code", 200) < 400:
+        inserted_val = 0
+        try:
+            body_data = json.loads(bytes(response.body).decode("utf-8"))
+            inserted_val = int(body_data.get("inserted") or body_data.get("records") or 0)
+        except Exception:
+            inserted_val = 0
+        tpl_names = _extract_names(payload)
+        if not tpl_names.get("sheet_name") or not tpl_names.get("unit_name"):
+            tpl_payload, _, _ = _locate_sheet_payload(sheet_key)
+            if tpl_payload:
+                fallback_names = _extract_names(tpl_payload)
+                tpl_names["sheet_name"] = tpl_names["sheet_name"] or fallback_names["sheet_name"]
+                tpl_names["unit_name"] = tpl_names["unit_name"] or fallback_names["unit_name"]
+        log_sheet_submission(
+            session,
+            request,
+            sheet_key,
+            payload,
+            unit_name=tpl_names.get("unit_name", ""),
+            sheet_name=tpl_names.get("sheet_name", ""),
+            inserted_count=inserted_val,
+        )
+    return response
 
 
 
@@ -3380,6 +3482,7 @@ def list_sheets(
     summary="解析北海能效报表Excel",
 )
 async def parse_beihai_efficiency_report_endpoint(
+    request: Request,
     file: UploadFile = File(..., description="北海能效分析表 Excel 文件"),
     biz_date: str = Form(..., description="业务日期 YYYY-MM-DD"),
     session: AuthSession = Depends(get_current_session),
@@ -3399,6 +3502,7 @@ async def parse_beihai_efficiency_report_endpoint(
     try:
         contents = await file.read()
         res = parse_beihai_efficiency_excel(contents, biz_date)
+        log_efficiency_import(session, request, unit_label="北海热电厂", sheet_tag="beihai_efficiency", filename=filename, biz_date=biz_date, res=res)
         return JSONResponse(status_code=200, content=res)
     except ValueError as e:
         return JSONResponse(
@@ -3424,6 +3528,7 @@ async def parse_beihai_efficiency_report_endpoint(
     summary="解析香海热电厂能效报表Excel",
 )
 async def parse_xianghai_efficiency_report_endpoint(
+    request: Request,
     file: UploadFile = File(..., description="香海能效分析表 Excel 文件"),
     biz_date: str = Form(..., description="业务日期 YYYY-MM-DD"),
     session: AuthSession = Depends(get_current_session),
@@ -3443,6 +3548,7 @@ async def parse_xianghai_efficiency_report_endpoint(
     try:
         contents = await file.read()
         res = parse_xianghai_efficiency_excel(contents, biz_date)
+        log_efficiency_import(session, request, unit_label="香海热电厂", sheet_tag="xianghai_efficiency", filename=filename, biz_date=biz_date, res=res)
         return JSONResponse(status_code=200, content=res)
     except ValueError as e:
         return JSONResponse(
@@ -3468,6 +3574,7 @@ async def parse_xianghai_efficiency_report_endpoint(
     summary="解析供热公司能效报表Excel",
 )
 async def parse_gongre_efficiency_report_endpoint(
+    request: Request,
     file: UploadFile = File(..., description="供热公司能效分析表 Excel 文件"),
     biz_date: str = Form(..., description="业务日期 YYYY-MM-DD"),
     session: AuthSession = Depends(get_current_session),
@@ -3487,6 +3594,7 @@ async def parse_gongre_efficiency_report_endpoint(
     try:
         contents = await file.read()
         res = parse_gongre_efficiency_excel(contents, biz_date)
+        log_efficiency_import(session, request, unit_label="供热分公司", sheet_tag="gongre_efficiency", filename=filename, biz_date=biz_date, res=res)
         return JSONResponse(status_code=200, content=res)
     except ValueError as e:
         return JSONResponse(
@@ -4830,7 +4938,19 @@ async def query_data_analysis(
             status_code=500,
             content={"ok": False, "message": "无法加载数据分析配置"},
         )
-    return _execute_data_analysis_query(payload, schema_payload, session)
+    resp = _execute_data_analysis_query(payload, schema_payload, session)
+    if getattr(resp, "status_code", 200) < 400:
+        log_data_analysis_query(
+            session,
+            request,
+            unit_key=str(payload.unit_key or ""),
+            analysis_mode=str(payload.analysis_mode or "daily"),
+            start_date=payload.start_date.isoformat(),
+            end_date=payload.end_date.isoformat() if payload.end_date else None,
+            metrics_count=len(payload.metrics or []),
+            request_ai_report=bool(payload.request_ai_report),
+        )
+    return resp
 
 
 DATA_ANALYSIS_BATCH_MAX_WORKERS = max(1, int(os.getenv("DATA_ANALYSIS_BATCH_MAX_WORKERS", "4") or "4"))

@@ -21,6 +21,13 @@ from sqlalchemy.orm import Session
 from backend.db.database_daily_report_25_26 import TemperatureData
 from backend.services.auth_manager import EAST_8
 from backend.services.project_data_paths import get_project_runtime_dir
+from backend.services import project_settings
+from backend.services.project_settings import (
+    DEFAULT_PROJECT_KEY,
+    atomic_write_json,
+    read_json_dict,
+    update_settings_section,
+)
 
 # 未保存管理配置时沿用原气温来源，兼容现有部署。
 OPEN_METEO_API_URL = (
@@ -47,8 +54,8 @@ def _weather_config_path():
     return get_project_runtime_dir("daily_report_25_26") / "weather_import_config.json"
 
 
-def _validate_api_url(api_url: str) -> str:
-    """只校验地址格式，数据格式由现有逐小时解析器校验。"""
+def validate_api_url(api_url: str) -> str:
+    """只校验地址格式，数据格式由对应解析器校验。"""
     value = api_url.strip()
     try:
         parsed = urlsplit(value)
@@ -61,33 +68,89 @@ def _validate_api_url(api_url: str) -> str:
     return value
 
 
+_validate_api_url = validate_api_url
+
+
+def load_url_from_project_settings(
+    section: str,
+    default_url: str,
+    legacy_path_getter,
+    error_cls,
+    error_message: str,
+) -> Dict[str, str]:
+    """从综合配置 project_settings.json 读取气温 API 地址，未配置时回退旧文件或默认地址。"""
+    settings_path = project_settings.get_project_settings_path(DEFAULT_PROJECT_KEY)
+    if settings_path.exists():
+        try:
+            doc = read_json_dict(settings_path)
+        except (OSError, ValueError) as exc:
+            raise error_cls(error_message) from exc
+        node = doc.get(section)
+        if isinstance(node, dict) and "api_url" in node:
+            try:
+                return {"api_url": validate_api_url(node["api_url"])}
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise error_cls(error_message) from exc
+        if section in doc and not isinstance(node, dict):
+            raise error_cls(error_message)
+
+    legacy_path = legacy_path_getter()
+    if legacy_path.exists():
+        try:
+            data = json.loads(legacy_path.read_text(encoding="utf-8"))
+            return {"api_url": validate_api_url(data["api_url"])}
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise error_cls(error_message) from exc
+    return {"api_url": default_url}
+
+
+def save_url_to_project_settings(
+    section: str,
+    api_url: str,
+    legacy_path_getter,
+) -> Dict[str, str]:
+    """将校验后的气温 API 地址原子写入综合配置 project_settings.json 对应节点（保留同节点其他设置）。"""
+    valid_url = validate_api_url(api_url)
+
+    def _legacy_loader() -> Optional[Dict[str, str]]:
+        legacy_path = legacy_path_getter()
+        if not legacy_path.exists():
+            return None
+        try:
+            data = json.loads(legacy_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "api_url" in data:
+                return {"api_url": validate_api_url(data["api_url"])}
+        except Exception:
+            return None
+        return None
+
+    update_settings_section(
+        section,
+        {"api_url": valid_url},
+        project_key=DEFAULT_PROJECT_KEY,
+        legacy_loader=_legacy_loader,
+    )
+    return {"api_url": valid_url}
+
+
 def load_weather_import_config() -> Dict[str, str]:
     """每次读取持久化地址，保存后立即对预览和入库生效。"""
-    path = _weather_config_path()
-    if not path.exists():
-        return {"api_url": OPEN_METEO_API_URL}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return {"api_url": _validate_api_url(data["api_url"])}
-    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        raise WeatherImporterError("读取气温 API 配置失败，请在全局管理中心重新保存。") from exc
+    return load_url_from_project_settings(
+        section="weather_near",
+        default_url=OPEN_METEO_API_URL,
+        legacy_path_getter=_weather_config_path,
+        error_cls=WeatherImporterError,
+        error_message="读取气温 API 配置失败，请在全局管理中心重新保存。",
+    )
 
 
 def save_weather_import_config(api_url: str) -> Dict[str, str]:
-    """原子替换配置文件，避免读取到未写完的 JSON。"""
-    config = {"api_url": _validate_api_url(api_url)}
-    path = _weather_config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as handle:
-            temp_path = handle.name
-            json.dump(config, handle, ensure_ascii=False, indent=2)
-        os.replace(temp_path, path)
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
-    return config
+    """原子更新综合配置文件中的近端气温 API 地址。"""
+    return save_url_to_project_settings(
+        section="weather_near",
+        api_url=api_url,
+        legacy_path_getter=_weather_config_path,
+    )
 
 
 def _validate_hourly_payload(payload: Dict) -> Sequence[HourlyTemperature]:

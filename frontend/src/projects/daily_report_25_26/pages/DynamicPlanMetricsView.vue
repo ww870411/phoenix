@@ -903,7 +903,7 @@ import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
-import { getDynamicPlanMeta, getDynamicPlanData, importEnsembleTemperature, fetchDynamicDailyDecomposition, updateDynamicPlanKParameters } from '../services/api'
+import { getDynamicPlanMeta, getDynamicPlanData, importEnsembleTemperature, fetchDynamicDailyDecomposition, updateDynamicPlanKParameters, recordDailyReportOperationLog } from '../services/api'
 import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
 import { useAuthStore } from '../store/auth'
 import { useDynamicPlanActuals, singleMetricSelection, actualBarSeries, monthDates, aggregateDecomposedPlan } from '../composables/useDynamicPlanActuals'
@@ -2338,6 +2338,13 @@ function exportToExcel() {
   XLSX.utils.book_append_sheet(wb, ws, '月度计划数据')
   const fileName = `${currentUnitLabel.value}_${pageDisplayName.value}_${startMonth.value}_${endMonth.value}.xlsx`
   XLSX.writeFile(wb, fileName)
+  recordDailyReportOperationLog(projectKey, {
+    unit: currentUnitLabel.value || '洁净能源集团',
+    action_type: 'EXPORT_SHEET_DATA',
+    action_desc: `导出 ${currentUnitLabel.value || '当前单位'} ${pageDisplayName.value}（${startMonth.value}~${endMonth.value}）Excel`,
+    resource_id: `dynamic_plan:${currentUnitLabel.value}:${startMonth.value}:${endMonth.value}`,
+    after_value: { file_name: fileName, start_month: startMonth.value, end_month: endMonth.value },
+  })
 }
 
 onMounted(async () => {

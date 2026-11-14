@@ -1,3 +1,56 @@
+## 2026-11-14 业务操作日志后端空表自动回填增强（前端无代码变动）
+
+- 本轮仅增强后端 `audit_log_service.py` 在表被删除/清空后的自动建表自愈与真实历史回填逻辑，前端页面与接口契约无改动。
+
+## 2026-11-14 前端导出操作审计上报接入与全局管理中心“业务操作记录”筛选完善
+
+- **`src/projects/daily_report_25_26/services/api.js`**：
+  - 新增 `recordDailyReportOperationLog()`，对接 `POST /api/v1/projects/{projectKey}/daily_report/global-management/operation-logs` 静默上报客户端导出动作。
+- **纯客户端导出页面接入**：
+  - `DashBoard.vue`（`downloadPDF()` 上报 `EXPORT_DASHBOARD_PDF`）、`DailyBriefView.vue`（`exportPdf()` 上报 `EXPORT_DAILY_BRIEF_PDF`）；
+  - `DisplayRuntimeView.vue`（Excel 与截图导出）、`DataEntryView.vue`（投诉统计 CSV 导出）、`DynamicPlanMetricsView.vue`（分解计划 Excel 导出）与 `SpotElectricityView.vue`（现货数据 Excel 导出，提取 `notifySpotExport()`）统一上报 `EXPORT_SHEET_DATA`。
+- **`src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+  - 补充 `主城区`、`售电`、`研究院` 单位筛选项，补齐业务提交/修正/调度/能效/审批驳回/简报与表格导出行为筛选菜单，精简 `onSubmissionCategoryChange()` 并更新徽标色彩与动作标签映射。
+- **构建验证**：`npm --prefix frontend run build` 1073 模块编译打包通过（24.13s，0 错误）。
+
+## 2026-11-14 全局管理中心各标签页视觉风格与排版系统性统一
+
+- **`src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+  - 统一工作台视觉规范：所有板块统一 `.section-card`（`14px` 圆角 + `22px 24px` 内边距 + 细腻边框投影）、`.card-header-row` 头部与语义 `.header-pill` 标签、以及全页统一的 `38px` 表单控件 / `34px` 紧凑按钮尺度；
+  - 分板块精修：`submissions` 等高筛选栏与分页栏；`algorithms` 修复卡片/表格 `.view-mode-toggle` 分段高亮并新增 `.catalog-result-bar` 筛选汇总与一键清空；`season_params` 按“周期与联动 / 本期与同期对称窗口”分组并更新 `biz_date` 路径标注；`kdocs_complaint` 规整表单操作条与编号步骤指引；`weather_mgmt` 模块切换器升级为分段式（带 `type=near`/`type=far` 徽标），同时简化桌面与窄屏响应式样式。
+- **`src/projects/daily_report_25_26/components/WeatherImportModulePanel.vue`**：
+  - 对齐主页面卡片间距、输入高度、状态条与表头样式，并优化小屏顶部操作按钮与时间添加栏布局。
+- **构建验证**：`npm --prefix frontend run build` 1073 模块编译打包通过（23.53s，0 错误）。
+
+## 2026-11-14 生产日报配置中心收口重构（前端无代码变动）
+
+- 本轮仅对后端配置存储结构进行整理，将业务/连接配置收口至 `project_settings.json` 并拆分运行态至 `runtime/*_state.json`，前后端 HTTP 接口路径与响应字段契约保持完全不变，前端无改动。
+
+## 2026-11-14 全局管理中心清理无效占位标签页
+
+- **`src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+  - 从桌面端侧栏、移动端下拉切换及主体面板中移除 3 个无效占位标签页：`constants`（静态提示说明）、`entities`（静态硬编码卡片）与 `raw_config`（只读 JSON 原始文本打印），并清理对应的冗余 CSS 样式（保留 `unitList` 供 Sandbox 单位中文名称映射使用）；
+  - 页面精简为 `submissions`、`algorithms`、`season_params`、`kdocs_complaint` 与 `weather_mgmt` 共 5 个实际功能标签页。
+- **构建验证**：`npm --prefix frontend run build` 1073 模块编译打包通过（23.42s，0 错误）。
+
+## 2026-11-14 全局管理中心“导入气温数据管理”扩展双模块独立调度面板
+
+- **`src/projects/daily_report_25_26/services/api.js`**：
+  - 新增 35 天集合气温预报配置与定时调度接口封装：`getEnsembleTemperatureImportConfig()`、`saveEnsembleTemperatureImportConfig()`、`getEnsembleTemperatureAutoImportStatus()`、`saveEnsembleTemperatureAutoImportConfig()`、`runEnsembleTemperatureImportNow()`。
+- **`src/projects/daily_report_25_26/components/WeatherImportModulePanel.vue`（新增）**：
+  - 抽取通用气温导入管理面板组件，集中提供运行状态条、上次成功/失败/最近尝试概览卡片、立即执行、多时段自动获取配置、API 地址表单及近 30 条尝试历史明细，供不同气温导入模块复用。
+- **`src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+  - 在 `weather_mgmt` 标签页顶部增加“🌡️ 近端实况气温导入（数据看板）”与“🔮 35天集合气温预报导入（计划情景模型）”双模块切换栏，两个模块各自独立绑定 API 与定时获取接口并独立工作；原数据看板“导入气温”及计划情景分解模型页“导入35天预报”按钮功能保持不变。
+- **构建验证**：`npm --prefix frontend run build` 1073 模块编译打包通过（18.08s，0 错误）。
+
+## 2026-11-14 全局管理中心升级“⛅ 导入气温数据管理”标签页
+
+- **`src/projects/daily_report_25_26/services/api.js`**：
+  - 新增 `getTemperatureAutoImportStatus()`、`saveTemperatureAutoImportConfig()` 与 `runTemperatureImportNow()`，对接 `/dashboard/temperature/auto-import/*` 管理接口。
+- **`src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+  - 将 `weather_mgmt` 标签页升级为 **⛅ 导入气温数据管理**：保留原有气温导入 API 地址配置表单，新增状态总览（上次成功导入时间、上次失败时间、最近尝试状态、下次计划时间）、立即尝试获取并入库按钮、多时段自动定时获取配置（开关 + 自定义时间点添加/删除 + 预设批量配置 + 今日执行状态标记）以及近 30 次尝试记录表；数据看板原有“导入气温”功能保持不变。
+- **构建验证**：`npm --prefix frontend run build` 1071 模块编译打包通过（24.14s，0 错误）。
+
 ## 2026-11-14 登录页（`/login`）窄屏手机响应式布局修复与悬浮卡片美化
 
 - **`src/pages/LoginView.vue`**：

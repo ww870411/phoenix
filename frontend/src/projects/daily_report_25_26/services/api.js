@@ -964,6 +964,21 @@ export async function getTubeSubmissionLogs(projectKey, params = {}) {
 
 export const getDailyReportSubmissionLogs = getTubeSubmissionLogs
 
+export async function recordDailyReportOperationLog(projectKey = 'daily_report_25_26', payload = {}) {
+  try {
+    const response = await authAwareFetch(`${projectPath(projectKey)}/global-management/operation-logs`, {
+      method: 'POST',
+      headers: attachAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload || {}),
+    })
+    if (!response.ok) return { ok: false }
+    return await response.json()
+  } catch (err) {
+    console.warn('上报前端业务操作日志失败（已忽略）:', err)
+    return { ok: false }
+  }
+}
+
 export async function getTubeIpLocation(projectKey, ip) {
   const query = new URLSearchParams()
   query.append('ip', ip)
@@ -2246,6 +2261,80 @@ export async function saveTemperatureImportConfig(projectKey, apiUrl) {
     body: JSON.stringify({ api_url: apiUrl }),
   })
   if (!response.ok) throw new Error(await parseErrorDetail(response, '保存气温 API 配置失败'))
+  return response.json()
+}
+
+export async function getTemperatureAutoImportStatus(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/auto-import/status`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '读取气温自动获取状态失败'))
+  return response.json()
+}
+
+export async function saveTemperatureAutoImportConfig(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/auto-import/config`, {
+    method: 'PUT',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '保存气温自动获取设置失败'))
+  return response.json()
+}
+
+export async function runTemperatureImportNow(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/auto-import/run`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '执行气温导入失败'))
+  return response.json()
+}
+
+export async function getEnsembleTemperatureImportConfig(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/ensemble/config`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '读取 35 天预报 API 配置失败'))
+  return response.json()
+}
+
+export async function saveEnsembleTemperatureImportConfig(projectKey, apiUrl) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/ensemble/config`, {
+    method: 'PUT',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ api_url: apiUrl }),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '保存 35 天预报 API 配置失败'))
+  return response.json()
+}
+
+export async function getEnsembleTemperatureAutoImportStatus(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/ensemble/auto-import/status`, {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '读取 35 天预报自动获取状态失败'))
+  return response.json()
+}
+
+export async function saveEnsembleTemperatureAutoImportConfig(projectKey, payload) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/ensemble/auto-import/config`, {
+    method: 'PUT',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload || {}),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '保存 35 天预报自动获取设置失败'))
+  return response.json()
+}
+
+export async function runEnsembleTemperatureImportNow(projectKey) {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/ensemble/auto-import/run`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '执行 35 天预报导入失败'))
   return response.json()
 }
 

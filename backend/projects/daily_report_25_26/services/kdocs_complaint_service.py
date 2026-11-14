@@ -20,11 +20,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from backend.services.project_settings import (
+    DEFAULT_PROJECT_KEY,
+    load_section_with_runtime_state,
+    resolve_legacy_kdocs_config_candidates,
+    save_section_with_runtime_state,
+)
+
 logger = logging.getLogger(__name__)
 
-# 配置文件持久化路径
-CONFIG_DIR = Path("backend_data/projects/daily_report_25_26/config")
-CONFIG_FILE = CONFIG_DIR / "kdocs_complaint_config.json"
+# 综合配置节区与运行态文件拆分
+SETTINGS_SECTION = "kdocs_complaint"
+STATE_FILENAME = "kdocs_complaint_state.json"
+CONFIG_KEYS = ("share_link", "share_id", "wps_sid", "description", "auto_sync_enabled")
+STATE_KEYS = ("last_sync_time", "last_test_status", "last_test_time", "last_test_message")
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "share_link": "https://www.kdocs.cn/l/cj8e1PTQW0uN",
@@ -70,22 +79,17 @@ def extract_share_id(link_or_id: str) -> str:
 
 
 def load_config() -> Dict[str, Any]:
-    """读取金山文档配置，若不存在则初始化默认配置并落盘"""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_CONFIG, f, ensure_ascii=False, indent=2)
-        except Exception as exc:
-            logger.warning("初始化默认金山文档配置失败: %s", exc)
-        return dict(DEFAULT_CONFIG)
-
+    """合并读取综合配置中的金山文档设置与 runtime 运行态（兼容回退旧文件）。"""
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            saved = json.load(f)
-        merged = dict(DEFAULT_CONFIG)
-        merged.update(saved)
-        # 补全 share_id
+        merged = load_section_with_runtime_state(
+            SETTINGS_SECTION,
+            STATE_FILENAME,
+            DEFAULT_CONFIG,
+            CONFIG_KEYS,
+            STATE_KEYS,
+            project_key=DEFAULT_PROJECT_KEY,
+            legacy_candidates=resolve_legacy_kdocs_config_candidates(DEFAULT_PROJECT_KEY),
+        )
         if not merged.get("share_id") and merged.get("share_link"):
             merged["share_id"] = extract_share_id(merged["share_link"])
         return merged
@@ -95,15 +99,8 @@ def load_config() -> Dict[str, Any]:
 
 
 def save_config(updates: Dict[str, Any]) -> Dict[str, Any]:
-    """保存或更新金山文档配置"""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    current = dict(DEFAULT_CONFIG)
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                current.update(json.load(f))
-        except Exception:
-            pass
+    """按配置键与运行态键拆分并原子保存金山文档接入设置与测试状态。"""
+    current = load_config()
     current.update(updates)
 
     # 规范化 link 和 id
@@ -114,9 +111,18 @@ def save_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     elif "share_id" in updates and updates["share_id"]:
         current["share_id"] = extract_share_id(updates["share_id"])
 
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(current, f, ensure_ascii=False, indent=2)
-
+    has_config_update = any(k in CONFIG_KEYS for k in updates)
+    has_state_update = any(k in STATE_KEYS for k in updates)
+    save_section_with_runtime_state(
+        SETTINGS_SECTION,
+        STATE_FILENAME,
+        current,
+        CONFIG_KEYS,
+        STATE_KEYS,
+        project_key=DEFAULT_PROJECT_KEY,
+        save_config=has_config_update,
+        save_state=has_state_update or not has_config_update,
+    )
     return current
 
 

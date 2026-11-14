@@ -10,11 +10,14 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_session_operation,
+)
 from backend.services.auth_manager import AuthSession, auth_manager, get_current_session, get_current_session_optional
 
 PROJECT_KEY = "daily_report_25_26"
@@ -483,13 +486,47 @@ def get_dynamic_plan_data(
 
 
 @public_router.post("/dynamic_plan/import_ensemble_temperature", summary="从Open-Meteo导入35天集合气温预报并入库(标记type=far)")
-async def import_ensemble_temperature_endpoint():
+async def import_ensemble_temperature_endpoint(
+    request: Request,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
+    from backend.services.ensemble_weather_service import fetch_and_import_ensemble_weather
+    from backend.services.weather_auto_import_service import ensemble_weather_auto_import_service
+
     try:
-        from backend.services.ensemble_weather_service import fetch_and_import_ensemble_weather
         res = fetch_and_import_ensemble_weather()
+        ok = bool(res.get("ok"))
+        message = str(res.get("message") or ("35天集合气温预报同步成功" if ok else "拉取35天集合气温预报失败"))
+        try:
+            ensemble_weather_auto_import_service.record_external_import_outcome(
+                ok=ok,
+                trigger="manual_dynamic_plan",
+                message=message,
+                summary=res if ok else None,
+            )
+        except Exception:
+            pass
+        if ok:
+            log_session_operation(
+                session,
+                "IMPORT_TEMPERATURE",
+                f"手动导入 35 天集合气温预报入库（{message}）",
+                request=request,
+                unit="集团生产调度中心",
+                resource_id="weather:far:manual",
+            )
         return res
     except Exception as exc:
-        return {"ok": False, "message": f"拉取35天集合气温预报失败: {str(exc)}"}
+        err_msg = f"拉取35天集合气温预报失败: {str(exc)}"
+        try:
+            ensemble_weather_auto_import_service.record_external_import_outcome(
+                ok=False,
+                trigger="manual_dynamic_plan",
+                message=err_msg,
+            )
+        except Exception:
+            pass
+        return {"ok": False, "message": err_msg}
 
 
 @public_router.get("/dynamic_plan/daily_decomposition", summary="获取月度计划的动态日分解与气温分布曲线")
@@ -608,6 +645,7 @@ class UpdateKParametersPayload(BaseModel):
 @public_router.post("/dynamic_plan/update_k_parameters", summary="Global_admin 设定各指标 m 缩放参数")
 async def update_k_parameters_endpoint(
     payload: UpdateKParametersPayload,
+    request: Request,
     session: Optional[AuthSession] = Depends(get_current_session_optional),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
@@ -702,6 +740,17 @@ async def update_k_parameters_endpoint(
                 updated_count += 1
 
         db.commit()
+        if updated_count > 0:
+            companies = sorted({u.company.strip() for u in payload.updates if u.company})
+            months = sorted({str(u.month) for u in payload.updates})
+            log_session_operation(
+                session,
+                "UPDATE_COAL_PLAN",
+                f"更新动态计划分解 m 缩放参数共 {updated_count} 项（口径：{','.join(companies)}；月份：{','.join(months)}）",
+                request=request,
+                resource_id=f"dynamic_plan:k_m:{','.join(companies[:3])}",
+                after_value={"updated_count": updated_count, "companies": companies, "months": months},
+            )
         return {
             "ok": True,
             "message": f"成功保存 {updated_count} 项指标 k/m 参数！",

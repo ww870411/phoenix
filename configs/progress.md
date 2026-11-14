@@ -1,5 +1,142 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-14 业务操作日志空表自愈与真实历史自动回填增强
+
+- **需求背景**：
+  - 当开发库或生产库删除/清空 `logs.daily_report_operation_logs` 或执行全库备份还原后，旧记录会变为 0 条且运行中的后端进程可能因 `_table_ensured` 缓存报错或展示空白。
+- **后端改动**：
+  - **`backend/projects/daily_report_25_26/services/audit_log_service.py`**：
+    - 新增 `_is_missing_operation_logs_table()` 与 `_recover_missing_operation_logs_table()`：在 `save_operation_log()` 与 `query_submission_logs()` 捕获运行期表缺失异常时自动重置内存缓存、重建表结构并重试一次；
+    - `query_submission_logs()` 在无筛选条件下若检测到表总记录数为 0，自动调用 `backfill_from_system_audit_logs(days=30)` 从 `logs.system_audit_logs` 回填近 30 天真实操作并立即返回最新结果（仍保持 `ensure_daily_report_operation_logs_table()` 不向空表写入任何虚构数据）。
+  - **`backend/projects/daily_report_25_26/tests/test_operation_audit_logs.py`**：
+    - 新增 `test_query_auto_backfills_when_empty_and_recovers_missing_table`。
+- **前端改动**：无。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_operation_audit_logs.py -v`：**6 passed（0 错误）**；
+  - 对本地已清空的 `logs.daily_report_operation_logs` 首次调用 `query_submission_logs(limit=5, offset=0)`：自动回填并返回 `total=545`、`recent_24h_count=48`。
+
+## 2026-11-14 全局管理中心“业务操作记录”去虚构化、历史回填与全链路审计闭环
+
+- **需求背景**：
+  - 排查全局管理中心（`/projects/daily_report_25_26/pages/global_management`）“业务操作记录”标签页内容异常与缺失问题：确认此前表内 36 条记录均为 `audit_log_service.py` 在空表时自动生成的虚构演示种子数据，且包括“数据看板导出 PDF”在内的多数前端导出与业务写接口未接入 `logs.daily_report_operation_logs`。
+- **后端改动**：
+  - **`backend/projects/daily_report_25_26/services/audit_log_service.py`**：
+    - 移除 `_generate_rich_seed_records()`、`_seed_initial_history()`、`reseed_operation_logs_dataset()` 及 `ensure_daily_report_operation_logs_table()` 的空表自动灌入逻辑；
+    - 新增 `CLIENT_REPORTABLE_ACTIONS`（`EXPORT_DASHBOARD_PDF`、`EXPORT_DAILY_BRIEF_PDF`、`EXPORT_SHEET_DATA`）、`UNIT_LABEL_MAP`、`normalize_unit_label()`、`extract_client_ip()`、`log_session_operation()`、`purge_synthetic_seed_logs()`、`_map_system_audit_click()` 与基于 `after_value->>'source_audit_id'` 的幂等历史回填函数 `backfill_from_system_audit_logs()`（并在重复回填时维持 2 秒双击防抖抑制）；
+    - 新增 `log_sheet_submission()`、`log_efficiency_import()`、`log_data_analysis_query()`，`save_operation_log()` 支持 `created_at` 与单位规范化，并在 `ENTITY_ALIAS_MAP` 补充 `主城区`、`售电`、`研究院`。
+  - **`backend/projects/daily_report_25_26/api/global_management.py`**：
+    - 新增 `ClientOperationLogPayload` 与 `POST /global-management/operation-logs`（`record_client_operation_log`），按白名单接收浏览器端纯前端导出操作并落库。
+  - **业务接口与调度接入审计**：
+    - 为 `dashboard.py`、`dynamic_plan.py`、`spot_electricity.py`、`services/spot_electricity_sync_service.py`、`spot_settlement.py`、`complaint_optimizer.py`、`dispatch_info.py`、`data_correction.py` 及 `legacy_full.py` 中的关键填报、审批、发布、调度维护、数据修正、能效导入、外部导入/同步、参数修改与多维分析查询接入操作日志写入（对 `@public_router` 接口使用 `get_current_session_optional` 保证兼容）。
+  - **`backend/projects/daily_report_25_26/tests/test_operation_audit_logs.py`（新增）**：
+    - 覆盖空表不灌入虚构种子、单位代号归一化、前端上报白名单校验、埋点映射及二次回填 2 秒防抖幂等性 5 项单元测试。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/services/api.js`**：新增 `recordDailyReportOperationLog()`（静默上报，不阻塞导出）。
+  - **纯客户端导出上报接入**：更新 `DashBoard.vue`（看板标准 PDF）、`DailyBriefView.vue`（内参简报 PDF）、`DisplayRuntimeView.vue`（展示表 Excel 与长截图）、`DataEntryView.vue`（12345 投诉统计 CSV）、`DynamicPlanMetricsView.vue`（标煤分解计划 Excel）与 `SpotElectricityView.vue`（电力现货 Excel，抽取 `notifySpotExport()` 复用）。
+  - **`frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：补齐 `主城区`/`售电`/`研究院` 单位筛选项与完整操作行为 `<optgroup>`，重构 `onSubmissionCategoryChange()` 并更新 `getActionTypeBadgeStyle()` 与 `translateActionType()` 映射。
+- **实库清洗与验证结果**：
+  - 实库执行 `purge_synthetic_seed_logs()` 清理全部 **36 条** 虚构种子记录；执行 `backfill_from_system_audit_logs(days=30)` 从 `logs.system_audit_logs` 回填近 30 天真实业务操作 **503 条**（含 `2026-11-13 17:39:53` CST 的 `EXPORT_DASHBOARD_PDF` 记录，`source_audit_id=75161`），二次回填写入 **0 条**；
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_operation_audit_logs.py backend/projects/daily_report_25_26/tests/test_project_settings.py backend/projects/daily_report_25_26/tests/test_weather_auto_import.py backend/projects/daily_report_25_26/tests/test_data_correction.py backend/projects/daily_report_25_26/tests/test_dispatch_operations.py backend/projects/daily_report_25_26/tests/test_season_rollover.py -v`：**60 passed, 2 skipped**；
+  - `npm --prefix frontend run build`：**1073 modules transformed，built in 24.13s（0 错误）**。
+
+## 2026-11-14 全局管理中心各标签页视觉风格与排版系统性统一优化
+
+- **需求背景**：
+  - 对生产日报全局管理控制台（`/projects/daily_report_25_26/pages/global_management`）下保留的 5 个管理标签页及嵌套子组件进行全面视觉规范统一与排版优化，消除此前不同模块间卡片边框/内边距/输入控件高度参差、视图切换高亮缺失以及表单堆叠无序等问题。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+    - 建立统一管理控制台设计系统：统一 `.section-card`（`14px` 圆角、`22px 24px` 内边距、柔和投影与 `1px solid #e2e8f0` 边框）、统一 `.card-header-row` + 标题语义胶囊（`.header-pill`）、统一表单输入/下拉/按钮 `38px`（紧凑按钮 `34px`）尺寸及 `.page-tip` 横幅规范，去除早期遗留的杂乱粗彩色边框与 `v-if="false"` 死代码；
+    - 升级控制台顶栏简介、5 列运行概览条与带分组标题及左指示条的侧栏导航；
+    - 逐页优化：**业务操作记录**对齐状态概览与等高筛选控件并整理分页信息条；**生产指标与算法体系**修复 `.view-mode-toggle` 分段切换激活态样式、新增筛选命中汇总与一键清空按钮（`.catalog-result-bar`），并将沙盒控制与 8 窗口矩阵纳回统一卡片规范；**供暖期与时间参数**将 9 项时间参数拆组为“1. 周期与联动 + 2. 本期与同期三列对称窗口”并同步修正 `biz_date` 来源标注为 `config/project_settings.json -> biz_date`；**12345 投诉底表(金山)** 规整表单与操作条并将指引改为编号圆标步骤卡片；**导入气温数据管理**将模块切换条升级为带 `type=near`/`type=far` 标记的分段切换器；同步整理 `<= 768px` / `<= 420px` 移动端适配规则。
+  - **`frontend/src/projects/daily_report_25_26/components/WeatherImportModulePanel.vue`**：
+    - 同步统一 `.section-card` 圆角/阴影、`.card-header` 字体层级、34px/38px 控件尺度、`.weather-history-table` 表头样式与移动端双按钮排布，使其与主控制台 5 个标签页视觉一致。
+- **后端改动**：无（纯前端排版与样式系统优化）。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1073 modules transformed，built in 23.53s（0 错误）**。
+
+## 2026-11-14 生产日报项目配置文件收口与运行态隔离整合（Step 1 + Step 2）
+
+- **需求背景**：
+  - 梳理并治理 `backend_data/projects/daily_report_25_26/` 下 `config/` 与 `runtime/` 的历史配置文件杂乱问题：将一次性迁移备份、临时排查快照和工作流压缩包移出生产运行目录，并将分散的 6 组低频人工业务配置收口为 `config/project_settings.json` 单一综合配置，同时把高频运行状态/执行日志拆分保留在 `runtime/*_state.json`，避免运行日志改写污染配置（保留 `config/数据结构_*.json`、`dashboard_frontend_config.json`、`period_report/display_config.json` 与 `smart_heating/tunnel_config.json` 原位不变）。
+- **步骤一（历史备份归档）**：
+  - 将 19 个一次性迁移备份、旧版缓存/调度排查快照、`api_key.json.backup`、`runtime/test.md` 及 `period_report/*.rar` 统一归档至 `backend_data/_archive/daily_report_25_26/`，不删除业务数据。
+- **步骤二（后端统一配置中心与运行态拆分解耦）**：
+  - **`backend/services/project_settings.py`（新增）**：
+    - 实现线程安全且原子写盘（UTF-8 无 BOM）的综合配置 store，统一读写 `DATA_DIRECTORY/projects/<project_key>/config/project_settings.json`（含 `biz_date`、`season`、`weather_near`、`weather_ensemble`、`kdocs_complaint`、`spot_electricity` 六个节点），提供 `get_settings_section()`、`update_settings_section()`、`load_section_with_runtime_state()`、`save_section_with_runtime_state()`，以及幂等迁移与自动归档入口 `migrate_legacy_project_settings()`。
+  - **`backend/services/heating_season_service.py`、`dashboard_expression.py`、`auth_manager.py`**：
+    - `biz_date` 与 `season` 统一接入 `project_settings.json`（保留旧文件只读回退），并保持三端日期缓存联动一致。
+  - **`backend/services/weather_importer.py`、`ensemble_weather_service.py`、`weather_auto_import_service.py`**：
+    - 近端实况与 35 天集合预报的 `api_url`、`enabled`、`schedule_times` 统一保存于 `project_settings.json` 的 `weather_near` / `weather_ensemble` 节点；运行态与近 30 次执行历史拆回 `runtime/weather_auto_import_state.json` 与 `runtime/ensemble_weather_auto_import_state.json`。
+  - **`backend/projects/daily_report_25_26/services/kdocs_complaint_service.py`、`backend/services/spot_electricity_sync_service.py`**：
+    - 金山文档投诉配置修复硬编码相对路径，拆为 `project_settings.json["kdocs_complaint"]` + `runtime/kdocs_complaint_state.json`；
+    - 电力现货定时同步拆为 `project_settings.json["spot_electricity"]` + `runtime/spot_electricity_sync_state.json`，仅在修改配置时写 `config/project_settings.json`，调度重试与状态记录仅写 `runtime/`。
+  - **`backend/main.py` & `backend/services/project_registry.py`**：
+    - `main.py` 在 `on_startup()` 启动调度器前自动调用 `migrate_legacy_project_settings("daily_report_25_26", archive_legacy=True)`，兼容生产/Docker 容器零手工平滑迁移；同步更新 `DEFAULT_PROJECT_CONFIG_FILES` 与 `DEFAULT_PROJECT_RUNTIME_FILES` 清单。
+  - **测试与文档**：新增 `backend/projects/daily_report_25_26/tests/test_project_settings.py`，并更新 `test_weather_import_config.py`、`test_weather_auto_import.py`。
+- **前端改动**：无（所有前后端接口契约 100% 保持兼容）。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_weather_import_config.py backend/projects/daily_report_25_26/tests/test_weather_auto_import.py backend/projects/daily_report_25_26/tests/test_season_rollover.py backend/projects/daily_report_25_26/tests/test_project_settings.py -q`：**37 passed, 1 skipped（0 错误）**；
+  - 对本地 `backend_data/projects/daily_report_25_26/` 执行 `migrate_legacy_project_settings("daily_report_25_26", archive_legacy=True)` 完成全部 6 节汇入与 7 个旧文件归档至 `_archive/daily_report_25_26/migrated_legacy_configs/`，二次重复执行返回空列表验证幂等；
+  - `create_app()` 与各配置服务联合导入冒烟通过（362 条路由就绪，日期/供暖期/双气温模块/金山文档/电力现货配置读取全部正常）。
+
+## 2026-11-14 全局管理中心清理无效占位标签页
+
+- **需求背景**：
+  - 清理全局管理中心（`/projects/daily_report_25_26/pages/global_management`）中无实际交互或仅作展示占位的标签页，保留具备完整业务逻辑的 5 个功能板块。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+    - 从桌面端侧边导航栏、移动端 `<select>` 下拉切换器及主体面板中移除 3 个无效占位标签页：`constants`（常量指标与价格基准静态说明）、`entities`（供热单位编码硬编码展示卡片）和 `raw_config`（算法元数据 JSON 原始结构只读打印）；
+    - 清理不再使用的 `.entities-grid`、`.entity-card`、`.entity-name`、`.entity-code`、`.entity-type-badge` 及 `.json-code-box` 桌面与移动端样式（保留脚本中 `unitList` 以供指标算法沙盒 `getCompanyName()` 继续使用）；
+    - 完整保留 `submissions`（业务操作记录）、`algorithms`（生产指标与算法体系）、`season_params`（供暖期与时间参数）、`kdocs_complaint`（12345投诉底表(金山文档)）和 `weather_mgmt`（导入气温数据管理）5 个核心标签页。
+- **后端改动**：无（纯前端页面精简）。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1073 modules transformed，built in 23.42s（0 错误）**。
+
+## 2026-11-14 全局管理中心扩展为“近端实况 + 35天集合预报”双模块独立导入与定时调度
+
+- **需求背景**：
+  - 在保持数据看板“导入气温”及计划情景分解模型页（`/projects/daily_report_25_26/pages/dynamic_plan`）“导入35天预报”原有手动导入按钮不变的基础上，将 **35天集合气温预报（`type=far`）** 也纳入全局管理中心 `weather_mgmt` 标签页，使“近端实况气温导入”和“35天集合气温预报导入”成为两个各自独立工作的模块，均支持独立配置 API 地址、多时段每日自动定时获取与入库，并追踪上次成功/失败时间及尝试记录。
+- **后端改动**：
+  - **`backend/services/weather_importer.py`**：导出复用 `validate_api_url()`（保留 `_validate_api_url` 兼容别名）和 `atomic_write_json()` 公共辅助函数，消除配置校验与原子写盘重复逻辑。
+  - **`backend/services/ensemble_weather_service.py`**：
+    - 新增 `DEFAULT_ENSEMBLE_API_URL`、`EnsembleWeatherError`、`_ensemble_config_path()`、`load_ensemble_weather_import_config()` 与 `save_ensemble_weather_import_config()`（持久化至 `backend_data/projects/daily_report_25_26/runtime/ensemble_weather_import_config.json`）；
+    - 更新 `fetch_and_import_ensemble_weather()` 默认读取动态配置的 API 地址，并在 HTTP/解析/写库失败时抛出语义清晰的 `EnsembleWeatherError`。
+  - **`backend/services/weather_auto_import_service.py`**：
+    - 重构 `WeatherAutoImportService` 支持实例化多个独立调度器（注入 `service_name`、`thread_name`、`config_path_getter`、`import_executor` 与 `audit_resource_prefix`），同时托管近端实况单例 `weather_auto_import_service`（`weather_auto_import_config.json`）与 35 天集合预报单例 `ensemble_weather_auto_import_service`（`ensemble_weather_auto_import_config.json`），新增触发方式 `manual_dynamic_plan`（`计划情景页面手动`）。
+  - **`backend/main.py`**：在 FastAPI `startup` / `shutdown` 钩子中同步启动与停止 `weather_auto_import_service` 和 `ensemble_weather_auto_import_service`。
+  - **`backend/projects/daily_report_25_26/api/dashboard.py`**：新增 5 个限管理员访问的 35 天集合预报管理接口：`GET /dashboard/temperature/ensemble/config`、`PUT /dashboard/temperature/ensemble/config`、`GET /dashboard/temperature/ensemble/auto-import/status`、`PUT /dashboard/temperature/ensemble/auto-import/config`、`POST /dashboard/temperature/ensemble/auto-import/run`。
+  - **`backend/projects/daily_report_25_26/api/dynamic_plan.py`**：更新 `POST /dynamic_plan/import_ensemble_temperature` 在保留原接口返回契约的同时，同步将成功/失败结果记录至 `ensemble_weather_auto_import_service`（`trigger="manual_dynamic_plan"`）。
+  - **`backend/projects/daily_report_25_26/tests/test_weather_auto_import.py`**：补充 `EnsembleWeatherAutoImportTests` 单元测试，覆盖 35 天预报 API 配置校验与持久化、双调度器隔离、管理端接口权限与参数校验，以及计划情景页面手动接口联动。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/services/api.js`**：新增 `getEnsembleTemperatureImportConfig()`、`saveEnsembleTemperatureImportConfig()`、`getEnsembleTemperatureAutoImportStatus()`、`saveEnsembleTemperatureAutoImportConfig()` 与 `runEnsembleTemperatureImportNow()`。
+  - **`frontend/src/projects/daily_report_25_26/components/WeatherImportModulePanel.vue`（新增）**：抽取可复用的气温导入管理面板组件，统一承载运行状态与上次成功/失败概览卡片、立即获取入库按钮、多时段自动获取开关与时间点配置、API 数据源表单以及近 30 次尝试历史表。
+  - **`frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：将 `weather_mgmt` 标签页改造成包含“🌡️ 近端实况气温导入（数据看板）”与“🔮 35天集合气温预报导入（计划情景模型）”子模块切换器，各自挂载独立的 `WeatherImportModulePanel` 实例与接口函数。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_weather_import_config.py backend/projects/daily_report_25_26/tests/test_weather_auto_import.py -q`：**19 passed in 0.99s**；
+  - `npm --prefix frontend run build`：**1073 modules transformed，built in 18.08s（0 错误）**。
+
+## 2026-11-14 全局管理中心新增导入气温数据管理与多时段自动定时获取功能
+
+- **需求背景**：
+  - 数据看板（`/projects/daily_report_25_26/pages/dashboard/dashboard`）上的“导入气温”外部 API 偶发连接失败，需要在保留看板原有手动导入功能的前提下，在全局管理中心（`/projects/daily_report_25_26/pages/global_management`）中完善“导入气温数据管理”标签页，支持配置多个每日自动尝试获取并入库的时间点，并记录上次成功与上次失败的气温导入时间。
+- **后端改动**：
+  - **`backend/services/weather_auto_import_service.py`（新增）**：
+    - 实现 `WeatherAutoImportService` 单例调度服务（守护线程每 15 秒巡检北京时间），配置与运行状态原子持久化至 `backend_data/projects/daily_report_25_26/runtime/weather_auto_import_config.json`；
+    - 支持 `enabled` 开关与多时段 `schedule_times`（`HH:MM` 去重排序校验，最多 48 个时段）；到点自动执行一次 `fetch_hourly_temperatures()` + `persist_hourly_temperatures()`（共用现有气温 API 地址与入库失效缓存逻辑）；
+    - 分别记录 `last_success_time` / `last_success_message`、`last_failure_time` / `last_failure_message`、`last_attempt_*`、当日各时段执行标记 `executed_slots_today` 及近 30 条尝试历史 `history`。
+  - **`backend/main.py`**：在 FastAPI `startup` / `shutdown` 生命周期中启动与优雅停止 `weather_auto_import_service`。
+  - **`backend/projects/daily_report_25_26/api/dashboard.py`**：
+    - 新增 `GET /dashboard/temperature/auto-import/status`、`PUT /dashboard/temperature/auto-import/config`、`POST /dashboard/temperature/auto-import/run`（均受 `_ensure_cache_operator` 权限校验保护）；
+    - 保留既有 `/dashboard/temperature/import` 与 `/dashboard/temperature/import/commit`，并在看板手动确认入库成功/失败时同步调用 `record_external_import_outcome()` 更新最近成功/失败时间记录。
+  - **`backend/projects/daily_report_25_26/tests/test_weather_auto_import.py`（新增）**：覆盖时间校验、下次时间推算、多时段调度与防重复触发、成功/失败时间记录、权限控制及看板入库联动。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/services/api.js`**：新增 `getTemperatureAutoImportStatus()`、`saveTemperatureAutoImportConfig()`、`runTemperatureImportNow()`。
+  - **`frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+    - 将既有 `weather_mgmt` 标签页升级为 **⛅ 导入气温数据管理**（保留既有的气温 API 地址配置表单），增加运行状态与最近成功/失败时间卡片、立即尝试获取并入库按钮、多时段自动获取开关与时间点管理（支持自定义添加、预设批添、单点删除及今日执行标记）以及近 30 次导入尝试记录表。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_weather_import_config.py backend/projects/daily_report_25_26/tests/test_weather_auto_import.py -q`：**16 passed in 1.31s**；
+  - `npm --prefix frontend run build`：**1071 modules transformed，built in 24.14s（0 错误）**。
+
 ## 2026-11-14 登录页（`/login`）窄屏手机响应式布局修复与视觉美化升级
 
 - **问题定位与迭代**：

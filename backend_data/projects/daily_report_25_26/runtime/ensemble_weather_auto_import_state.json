@@ -1,0 +1,20 @@
+{
+  "last_attempt_time": null,
+  "last_attempt_status": "IDLE",
+  "last_attempt_trigger": null,
+  "last_attempt_message": "尚未执行过 35 天集合气温预报自动或手动导入",
+  "last_success_time": null,
+  "last_success_trigger": null,
+  "last_success_message": null,
+  "last_success_summary": null,
+  "last_failure_time": null,
+  "last_failure_trigger": null,
+  "last_failure_message": null,
+  "executed_slots_date": "2026-11-14",
+  "executed_slots_today": {
+    "06:30": "跳过（06:30 早于本次保存时刻）",
+    "12:00": "跳过（12:00 早于本次保存时刻）",
+    "18:00": "跳过（18:00 早于本次保存时刻）"
+  },
+  "history": []
+}

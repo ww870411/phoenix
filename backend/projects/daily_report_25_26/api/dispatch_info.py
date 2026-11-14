@@ -11,9 +11,12 @@ import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, UploadFile, Query, HTTPException, Body, Depends
+from fastapi import APIRouter, File, Form, UploadFile, Query, HTTPException, Body, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse
-from backend.services.auth_manager import AuthSession, get_current_session
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_session_operation,
+)
+from backend.services.auth_manager import AuthSession, get_current_session, get_current_session_optional
 from backend.projects.daily_report_25_26.services.dispatch_reconciliation import reconcile_report, RESOLUTIONS
 
 from backend.projects.daily_report_25_26.services.dispatch_extractor import (
@@ -165,8 +168,10 @@ def cleanup_temp_files(token: Optional[str] = Body(None, embed=True)):
 @router.post("/save_to_db", summary="一键入库 (支持冲突确认覆盖)")
 @public_router.post("/save_to_db", summary="一键入库 (支持冲突确认覆盖)")
 def save_dispatch_data(
+    request: Request,
     payload: Dict[str, Any] = Body(...),
-    project_key: str = "daily_report_25_26"
+    project_key: str = "daily_report_25_26",
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
 ):
     """
     接收待入库数据或 Token，并执行数据库写入：
@@ -198,11 +203,23 @@ def save_dispatch_data(
         return {'ok': False, 'has_status_conflict': True, 'status_conflicts': unresolved,
                 'message': '请逐项选择以原表格或主设备事件为准后再入库'}
     result = save_dispatch_reports(reports, overwrite=overwrite, project_key=project_key)
+    if result.get("ok"):
+        dates = sorted({str(r.get("biz_date") or "").strip() for r in reports if r.get("biz_date")})
+        log_session_operation(
+            session,
+            "IMPORT_DISPATCH",
+            f"保存 {len(reports)} 份生产调度日报入库（覆盖：{'是' if overwrite else '否'}，日期：{', '.join(dates[:5]) or '-'}）",
+            request=request,
+            unit="集团生产调度中心",
+            resource_id=f"dispatch:{dates[-1] if dates else 'batch'}",
+            after_value={"count": len(reports), "overwrite": overwrite, "dates": dates},
+        )
     return result
 
 
 @router.post('/resolve_status', summary='确认历史调度日报的设备显示状态')
 def resolve_dispatch_status(
+    request: Request,
     payload: Dict[str, Any] = Body(...),
     project_key: str = 'daily_report_25_26',
     session: AuthSession = Depends(get_current_session)
@@ -222,7 +239,17 @@ def resolve_dispatch_status(
     evidence = payload.get('status_evidence')
     if evidence is not None and not isinstance(evidence, dict):
         raise HTTPException(status_code=400, detail='状态依据格式无效')
-    return update_dispatch_statuses(biz_date, choices, project_key, evidence)
+    res = update_dispatch_statuses(biz_date, choices, project_key, evidence)
+    log_session_operation(
+        session,
+        "IMPORT_DISPATCH",
+        f"确认历史调度日报 {biz_date} 设备运行状态（共 {len(choices)} 项）",
+        request=request,
+        unit="集团生产调度中心",
+        resource_id=f"dispatch:status:{biz_date}",
+        after_value={"biz_date": biz_date, "choices": choices},
+    )
+    return res
 
 
 @router.get("/query", summary="多维综合查询已入库调度信息")

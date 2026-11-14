@@ -120,7 +120,7 @@ import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { evalSpec, evalSpecsBatch, getTemplate, getWorkflowStatus, listSheets } from '../services/api'
+import { evalSpec, evalSpecsBatch, getTemplate, getWorkflowStatus, listSheets, recordDailyReportOperationLog } from '../services/api'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 
 const route = useRoute()
@@ -1269,8 +1269,15 @@ async function exportToExcel() {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     })
 
-    const finalFileName = `生产日报-数据展示-${effectiveBizDate.value || bizDate.value || 'export'}.xlsx`
+    const targetDateStr = effectiveBizDate.value || bizDate.value || 'export'
+    const finalFileName = `生产日报-数据展示-${targetDateStr}.xlsx`
     downloadBlob(dataBlob, finalFileName)
+    recordDailyReportOperationLog(projectKey.value || 'daily_report_25_26', {
+      action_type: 'EXPORT_SHEET_DATA',
+      action_desc: `导出数据展示表 Excel 工作簿（${finalFileName}）`,
+      resource_id: `data_show:excel:${targetDateStr}`,
+      after_value: { filename: finalFileName, biz_date: targetDateStr },
+    })
   } catch (err) {
     console.error('导出Excel失败:', err)
     errorMessage.value = `导出失败: ${normalizeExportError(err)}`
@@ -1306,6 +1313,12 @@ async function exportAllScreenshots() {
 
     captureProgressText.value = '下载完成！'
     showCaptureToast('3张展示表高清截图已下载完毕，可直接发送到工作群！')
+    recordDailyReportOperationLog(projectKey.value || 'daily_report_25_26', {
+      action_type: 'EXPORT_SHEET_DATA',
+      action_desc: `导出全部 ${cleanSheetNames.length} 张展示表高清长截图（业务日期：${dateStr}）`,
+      resource_id: `data_show:screenshot_all:${dateStr}`,
+      after_value: { sheets: cleanSheetNames, biz_date: dateStr },
+    })
     await new Promise((r) => setTimeout(r, 1500))
   } catch (err) {
     console.error('导出截图失败:', err)
@@ -1340,6 +1353,12 @@ async function exportCurrentScreenshotOnly() {
     if (ws) {
       await captureWorksheetToPng(ws, targetName, dateStr, html2canvas)
       showCaptureToast(`已导出「${targetName}」高清长截图！`)
+      recordDailyReportOperationLog(projectKey.value || 'daily_report_25_26', {
+        action_type: 'EXPORT_SHEET_DATA',
+        action_desc: `导出展示表「${targetName}」高清长截图（业务日期：${dateStr}）`,
+        resource_id: `data_show:screenshot:${dateStr}`,
+        after_value: { sheet: targetName, biz_date: dateStr },
+      })
     }
   } catch (err) {
     console.error('导出当前截图失败:', err)

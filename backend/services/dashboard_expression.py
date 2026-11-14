@@ -35,6 +35,8 @@ from backend.services.project_data_paths import (
     resolve_project_config_path,
 )
 from backend.services.project_registry import get_default_project_key
+from backend.services import project_settings
+from backend.services.project_settings import get_settings_section
 from backend.services.runtime_expression import _fetch_metrics_from_view, _to_decimal
 from sqlalchemy import func, or_, select, text
 
@@ -113,16 +115,27 @@ def _resolve_dashboard_config_path(project_key: str) -> Path:
 
 
 def load_default_push_date(project_key: str = DEFAULT_PROJECT_KEY) -> str:
-    """从 date.json 中读取默认 push_date。"""
-    date_config_path = _resolve_date_config_path(project_key)
-    if not date_config_path.exists():
-        raise HTTPException(status_code=500, detail="日期配置文件不存在")
-    try:
-        payload = _read_json(date_config_path)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"读取日期配置失败: {exc}") from exc
+    """优先从综合配置 project_settings.json 读取默认 push_date，未配置时回退旧 date.json。"""
+    payload: Optional[Dict[str, Any]] = None
+    settings_path = project_settings.get_project_settings_path(project_key)
+    if settings_path.exists():
+        try:
+            section = get_settings_section("biz_date", project_key=project_key)
+            if isinstance(section, dict) and section.get("set_biz_date"):
+                payload = section
+        except Exception as exc:  # pragma: no cover
+            raise HTTPException(status_code=500, detail=f"读取日期配置失败: {exc}") from exc
+
+    if payload is None:
+        date_config_path = _resolve_date_config_path(project_key)
+        if not date_config_path.exists():
+            raise HTTPException(status_code=500, detail="日期配置文件不存在")
+        try:
+            payload = _read_json(date_config_path)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except Exception as exc:  # pragma: no cover
+            raise HTTPException(status_code=500, detail=f"读取日期配置失败: {exc}") from exc
 
     value = payload.get("set_biz_date")
     if not isinstance(value, str) or not value.strip():

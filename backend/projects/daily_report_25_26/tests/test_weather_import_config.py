@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.services import project_settings
 from backend.services import weather_importer as weather
 from backend.projects.daily_report_25_26.api import dashboard
 
@@ -17,10 +18,14 @@ class WeatherImportConfigTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=Path(__file__).parent)
         self.addCleanup(self.temp.cleanup)
-        self.path = Path(self.temp.name) / "weather_import_config.json"
-        mocked = patch.object(weather, "_weather_config_path", return_value=self.path)
-        mocked.start()
-        self.addCleanup(mocked.stop)
+        self.path = Path(self.temp.name) / "project_settings.json"
+        self.legacy_path = Path(self.temp.name) / "weather_import_config.json"
+        mock_settings = patch.object(project_settings, "get_project_settings_path", return_value=self.path)
+        mock_legacy = patch.object(weather, "_weather_config_path", return_value=self.legacy_path)
+        mock_settings.start()
+        mock_legacy.start()
+        self.addCleanup(mock_settings.stop)
+        self.addCleanup(mock_legacy.stop)
         self.api_url = "https://example.com/forecast?latitude=39&hourly=temperature_2m"
 
     def test_missing_config_preserves_original_url_without_creating_file(self):
@@ -41,13 +46,13 @@ class WeatherImportConfigTests(unittest.TestCase):
         self.assertEqual(weather.load_weather_import_config()["api_url"], self.api_url)
 
     def test_corrupt_config_is_reported_instead_of_silently_using_default(self):
-        self.path.write_text("{}", encoding="utf-8")
+        self.path.write_text("{corrupt-json", encoding="utf-8")
         with self.assertRaises(weather.WeatherImporterError):
             weather.load_weather_import_config()
 
     def test_failed_replace_preserves_config_and_cleans_temporary_file(self):
         weather.save_weather_import_config(self.api_url)
-        with patch.object(weather.os, "replace", side_effect=OSError("模拟写入失败")):
+        with patch.object(project_settings.os, "replace", side_effect=OSError("模拟写入失败")):
             with self.assertRaises(OSError):
                 weather.save_weather_import_config("https://example.org/forecast")
         self.assertEqual(weather.load_weather_import_config()["api_url"], self.api_url)
@@ -100,7 +105,7 @@ class WeatherImportConfigTests(unittest.TestCase):
         with self.client() as client:
             with patch.object(dashboard, "save_weather_import_config", side_effect=OSError):
                 self.assertEqual(client.put("/dashboard/temperature/config", json={"api_url": self.api_url}).status_code, 500)
-            self.path.write_text("{}", encoding="utf-8")
+            self.path.write_text("{corrupt-json", encoding="utf-8")
             self.assertEqual(client.get("/dashboard/temperature/config").status_code, 500)
 
     def test_preview_and_commit_both_use_saved_source(self):

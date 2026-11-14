@@ -24,6 +24,11 @@ from backend.services.project_data_paths import (
     get_project_runtime_dir as _resolve_runtime_dir,
     resolve_global_date_path,
 )
+from backend.services.project_settings import (
+    get_settings_section,
+    read_json_dict,
+    update_settings_section,
+)
 
 
 DEFAULT_SEASON_CONFIG: Dict[str, Any] = {
@@ -99,24 +104,49 @@ def get_default_season_dates(period: str) -> Tuple[str, str]:
     return f"{start_year}-11-01", f"{end_year}-04-05"
 
 
-def read_current_biz_date(project_key: str = "daily_report_25_26") -> str:
-    """从 date.json 读取当前的 set_biz_date。"""
+def _legacy_biz_date_loader(project_key: str = "daily_report_25_26") -> Optional[Dict[str, Any]]:
     date_path = _get_date_config_path(project_key)
     if date_path.exists():
         try:
-            with open(date_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                val = data.get("set_biz_date")
-                if val and isinstance(val, str):
-                    return val.strip()
+            loaded = read_json_dict(date_path)
+            if isinstance(loaded, dict) and loaded.get("set_biz_date"):
+                return {"set_biz_date": str(loaded["set_biz_date"]).strip()}
         except Exception:
             pass
+    return None
+
+
+def _legacy_season_loader(project_key: str = "daily_report_25_26") -> Optional[Dict[str, Any]]:
+    cfg_path = _get_season_config_path(project_key)
+    if cfg_path.exists():
+        try:
+            loaded = read_json_dict(cfg_path)
+            if isinstance(loaded, dict) and loaded:
+                return loaded
+        except Exception:
+            pass
+    return None
+
+
+def read_current_biz_date(project_key: str = "daily_report_25_26") -> str:
+    """从综合配置（兼容回退旧 date.json）读取当前的 set_biz_date。"""
+    try:
+        section = get_settings_section(
+            "biz_date",
+            project_key=project_key,
+            legacy_loader=lambda: _legacy_biz_date_loader(project_key),
+        )
+        val = section.get("set_biz_date")
+        if val and isinstance(val, str):
+            return val.strip()
+    except Exception:
+        pass
     return "2026-03-28"
 
 
 def write_current_biz_date(project_key: str, new_biz_date: str) -> bool:
     """
-    更新 date.json 中的 set_biz_date，并同步刷新 auth_manager 内存缓存。
+    更新综合配置中的 biz_date.set_biz_date，并同步刷新 auth_manager 内存缓存。
     """
     clean_date_str = (new_biz_date or "").strip()
     try:
@@ -124,21 +154,13 @@ def write_current_biz_date(project_key: str, new_biz_date: str) -> bool:
     except (ValueError, TypeError):
         return False
 
-    date_path = _get_date_config_path(project_key)
     try:
-        payload: Dict[str, Any] = {}
-        if date_path.exists():
-            try:
-                with open(date_path, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                    if isinstance(loaded, dict):
-                        payload = loaded
-            except Exception:
-                pass
-        payload["set_biz_date"] = clean_date_str
-        date_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(date_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        update_settings_section(
+            "biz_date",
+            {"set_biz_date": clean_date_str},
+            project_key=project_key,
+            legacy_loader=lambda: _legacy_biz_date_loader(project_key),
+        )
 
         # 核心关键：同步刷新 auth_manager 内部缓存与时间戳！
         try:
@@ -176,23 +198,28 @@ def set_business_date(project_key: str, new_biz_date: str) -> Dict[str, Any]:
 def get_season_config(project_key: str = "daily_report_25_26") -> Dict[str, Any]:
     """
     读取并返回当前的供暖期全局配置。
-    若文件不存在，则自动初始化并保存。
+    若综合配置中尚未包含 season 节点，则自动兼容旧文件并持久化初始化。
     """
-    cfg_path = _get_season_config_path(project_key)
-    config = dict(DEFAULT_SEASON_CONFIG)
-    if cfg_path.exists():
-        try:
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    config.update(loaded)
-        except Exception:
-            pass
-    else:
+    try:
+        config = get_settings_section(
+            "season",
+            project_key=project_key,
+            defaults=DEFAULT_SEASON_CONFIG,
+            legacy_loader=lambda: _legacy_season_loader(project_key),
+            persist_if_migrated=True,
+        )
+    except Exception:
+        config = dict(DEFAULT_SEASON_CONFIG)
+
+    if not config.get("updated_at"):
         config["updated_at"] = datetime.now(tz=EAST_8).isoformat()
         try:
-            with open(cfg_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
+            update_settings_section(
+                "season",
+                config,
+                project_key=project_key,
+                defaults=DEFAULT_SEASON_CONFIG,
+            )
         except Exception:
             pass
 
@@ -300,8 +327,7 @@ def update_season_config(
         raise IOError("展示日期更新失败，未保存供暖期设置")
     current_cfg["current_biz_date"] = target_biz_date
 
-    # 写入 season_config.json
-    cfg_path = _get_season_config_path(project_key)
+    # 原子更新综合配置中的 season 节点
     save_data = {
         "active_period": current_cfg["active_period"],
         "peer_period": current_cfg["peer_period"],
@@ -314,8 +340,7 @@ def update_season_config(
         "description": current_cfg.get("description", "供热集团生产日报供暖期全局运行参数"),
         "updated_at": current_cfg["updated_at"],
     }
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        json.dump(save_data, f, ensure_ascii=False, indent=2)
+    update_settings_section("season", save_data, project_key=project_key, replace=True)
 
     return get_season_config(project_key)
 

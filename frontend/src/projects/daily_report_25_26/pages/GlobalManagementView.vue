@@ -4,11 +4,11 @@
     <main class="tube-page-main container">
       <Breadcrumbs :items="breadcrumbItems" />
 
-      <!-- 高级控制台顶栏 -->
+      <!-- 控制台顶栏 -->
       <header class="topbar premium-topbar">
-        <div>
+        <div class="topbar-title-group">
           <h2>生产日报子项目 · 全局管理控制台</h2>
-          <p class="sub">统一管控供热生产指标与算法体系、供暖期核心参数、常量价格基准与底层计算引擎。</p>
+          <p class="sub">集中管控业务操作追溯、指标算法字典与沙盒验算、供暖期与业务日期、12345 投诉底表接入及气温自动定时导入。</p>
         </div>
         <div class="topbar-actions">
           <button class="btn ghost btn-back" type="button" @click="goProjectPages">⬅️ 返回功能页</button>
@@ -18,10 +18,10 @@
         </div>
       </header>
 
-      <p v-if="errorMessage" class="page-error">{{ errorMessage }}</p>
+      <p v-if="errorMessage" class="page-tip error">{{ errorMessage }}</p>
       <p v-if="globalTip" :class="['page-tip', globalTip.type]">{{ globalTip.text }}</p>
 
-      <!-- 磨砂玻璃态全局数据看板 (Quick Dashboard) -->
+      <!-- 全局运行概览条 (Quick Dashboard) -->
       <section class="card elevated quick-dashboard-card">
         <div class="meta-dashboard">
           <div class="meta-card">
@@ -32,7 +32,7 @@
             <span class="meta-label">业务分类大类</span>
             <strong class="meta-value">{{ categories.length || 7 }} 大领域</strong>
           </div>
-          <div class="meta-card highlight">
+          <div class="meta-card is-highlight">
             <span class="meta-label">底层计算引擎</span>
             <strong class="meta-value highlight-num">DailyDashboardEngine (0.1s)</strong>
           </div>
@@ -40,9 +40,9 @@
             <span class="meta-label">当前运行供暖期</span>
             <strong class="meta-value">{{ currentSeasonCode || '25-26期' }}</strong>
           </div>
-          <div class="meta-card highlight">
+          <div class="meta-card is-highlight">
             <span class="meta-label">基准业务日期</span>
-            <strong class="meta-value">{{ currentBizDate || '加载中…' }}</strong>
+            <strong class="meta-value highlight-num">{{ currentBizDate || '加载中…' }}</strong>
           </div>
         </div>
       </section>
@@ -61,10 +61,7 @@
               <option value="algorithms">🧮 生产指标与算法体系</option>
               <option value="season_params">⚙️ 供暖期与时间参数</option>
               <option value="kdocs_complaint">📋 12345投诉底表(金山文档)</option>
-              <option value="constants">📊 常量指标与价格基准</option>
-              <option value="entities">🏢 供热单位与组织架构</option>
-              <option value="weather_mgmt">⛅ 气温与气象数据管理</option>
-              <option value="raw_config">💻 原始配置结构预览</option>
+              <option value="weather_mgmt">⛅ 导入气温数据管理</option>
             </select>
             <span class="select-arrow-icon">▼</span>
           </div>
@@ -72,61 +69,46 @@
 
         <!-- 选项卡菜单 (桌面端纵向侧栏 / 移动端横向平滑滚动胶囊栏) -->
         <aside class="admin-sidebar" ref="sidebarRef">
+          <div class="sidebar-group-title">管理板块导航</div>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'submissions' }]"
             @click="selectTab('submissions', $event)"
           >
-            📋 业务操作记录
+            <span class="tab-icon" aria-hidden="true">📋</span>
+            <span class="tab-label">业务操作记录</span>
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'algorithms' }]"
             @click="selectTab('algorithms', $event)"
           >
-            🧮 生产指标与算法体系
+            <span class="tab-icon" aria-hidden="true">🧮</span>
+            <span class="tab-label">生产指标与算法体系</span>
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'season_params' }]"
             @click="selectTab('season_params', $event)"
           >
-            ⚙️ 供暖期与时间参数
+            <span class="tab-icon" aria-hidden="true">⚙️</span>
+            <span class="tab-label">供暖期与时间参数</span>
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'kdocs_complaint' }]"
             @click="selectTab('kdocs_complaint', $event)"
           >
-            📋 12345投诉底表(金山文档)
-          </button>
-          <button
-            type="button"
-            :class="['sidebar-tab-btn', { active: activeTab === 'constants' }]"
-            @click="selectTab('constants', $event)"
-          >
-            📊 常量指标与价格基准
-          </button>
-          <button
-            type="button"
-            :class="['sidebar-tab-btn', { active: activeTab === 'entities' }]"
-            @click="selectTab('entities', $event)"
-          >
-            🏢 供热单位与组织架构
+            <span class="tab-icon" aria-hidden="true">📊</span>
+            <span class="tab-label">12345投诉底表(金山)</span>
           </button>
           <button
             type="button"
             :class="['sidebar-tab-btn', { active: activeTab === 'weather_mgmt' }]"
             @click="selectTab('weather_mgmt', $event)"
           >
-            ⛅ 气温与气象数据管理
-          </button>
-          <button
-            type="button"
-            :class="['sidebar-tab-btn', { active: activeTab === 'raw_config' }]"
-            @click="selectTab('raw_config', $event)"
-          >
-            💻 原始配置结构预览
+            <span class="tab-icon" aria-hidden="true">⛅</span>
+            <span class="tab-label">导入气温数据管理</span>
           </button>
         </aside>
 
@@ -214,6 +196,9 @@
                     <option value="金普">🏭 金普热电 (JinPu)</option>
                     <option value="庄河">🏭 庄河热电 (ZhuangHe)</option>
                     <option value="供热">🏢 供热分公司 (GongRe)</option>
+                    <option value="主城区">🏙️ 主城区 (ZhuChengQu)</option>
+                    <option value="售电">⚡ 售电公司 (ShouDian)</option>
+                    <option value="研究院">🔬 研究院 (YanJiuYuan)</option>
                     <option value="集团">🏢 集团经济运行部 / 汇总</option>
                     <option value="调度">⏱️ 生产调度中心</option>
                     <option value="现货">⚡ 电力现货交易中心</option>
@@ -226,9 +211,12 @@
                     <option value="">全部具体行为</option>
                     <optgroup v-if="submissionFilters.category !== 'query' && submissionFilters.category !== 'workflow'" label="📥 业务数据提交行为">
                       <option value="SUBMIT_ENTRY">📝 日报数据填报提交</option>
+                      <option value="SUBMIT_CORRECTION">🛠️ 提交数据修正申请</option>
                       <option value="IMPORT_COMPLAINT">📋 12345投诉底表拉取填入</option>
-                      <option value="IMPORT_TEMPERATURE">⛅ 历史气象气温导入入库</option>
+                      <option value="IMPORT_TEMPERATURE">⛅ 气象气温导入入库</option>
                       <option value="SYNC_SPOT_ELEC">⚡ 电力现货量价数据同步</option>
+                      <option value="IMPORT_DISPATCH">⏱️ 机炉调度信息维护</option>
+                      <option value="IMPORT_EFFICIENCY">📊 能效/生产Excel导入</option>
                       <option value="UPDATE_COAL_PLAN">🎯 标煤动态分解计划维护</option>
                       <option value="UPDATE_CONFIG">⚙️ 全局核心运行参数修改</option>
                     </optgroup>
@@ -237,14 +225,20 @@
                       <option value="REVOKE_UNIT">↩️ 撤销单位审核状态</option>
                       <option value="PUBLISH_DAILY">📢 正式发布集团生产日报</option>
                       <option value="REVOKE_PUBLISH">❌ 撤销已发布日报状态</option>
+                      <option value="APPROVE_CORRECTION">✅ 批准数据修正申请</option>
+                      <option value="REJECT_CORRECTION">🚫 驳回数据修正申请</option>
                     </optgroup>
-                    <optgroup v-if="submissionFilters.category !== 'submission' && submissionFilters.category !== 'workflow'" label="🔍 综合数据调阅行为">
-                      <option value="QUERY_DASHBOARD">📊 调阅生产经营数据看板</option>
+                    <optgroup v-if="submissionFilters.category !== 'submission' && submissionFilters.category !== 'workflow'" label="🔍 综合数据调阅与导出">
                       <option value="EXPORT_DASHBOARD_PDF">📑 导出标准宽屏看板 PDF</option>
+                      <option value="EXPORT_DAILY_BRIEF_PDF">📰 导出每日内参简报 PDF</option>
+                      <option value="EXPORT_SHEET_DATA">📥 导出报表 Excel / CSV / 截图</option>
+                      <option value="QUERY_DASHBOARD">📊 调阅生产经营数据看板</option>
                       <option value="QUERY_SHEET_DATA">📋 查阅单位报表明细</option>
                       <option value="QUERY_DATA_ANALYSIS">📈 生产多维数据智能分析</option>
                       <option value="QUERY_DISPATCH_INFO">⏱️ 调阅机炉运行调度记录</option>
+                      <option value="QUERY_DYNAMIC_PLAN">🎯 调阅标煤动态分解计划</option>
                       <option value="QUERY_SPOT_ELEC">⚡ 查阅电力现货市场行情</option>
+                      <option value="QUERY_DAILY_BRIEF">📰 调阅每日生产内参简报</option>
                     </optgroup>
                   </select>
                 </label>
@@ -275,8 +269,8 @@
               </div>
 
               <!-- 操作记录明细列表 -->
-              <div v-if="submissionLoading" class="loading-placeholder" style="padding: 40px; text-align: center; color: #64748b;">业务操作记录加载中...</div>
-              <div v-else-if="submissionLogs.length === 0" class="empty-placeholder" style="padding: 40px; text-align: center; color: #777;">未查询到任何业务操作记录。</div>
+              <div v-if="submissionLoading" class="table-state-placeholder">正在加载业务操作记录…</div>
+              <div v-else-if="submissionLogs.length === 0" class="table-state-placeholder">未查询到符合条件的业务操作记录。</div>
               <div v-else>
                 <div class="submission-table-wrap">
                   <table class="table editor-table submission-log-table">
@@ -429,6 +423,21 @@
                   <span class="pill-count">({{ getCategoryCount(cat.key) }})</span>
                 </button>
               </div>
+
+              <!-- 筛选命中汇总栏 -->
+              <div class="catalog-result-bar">
+                <span class="catalog-result-summary">
+                  当前显示 <strong>{{ filteredCatalog.length }}</strong> / {{ catalogList.length }} 项指标
+                </span>
+                <button
+                  v-if="searchKeyword || selectedScopeFilter !== 'all' || selectedDerivedFilter !== 'all' || activeCategoryKey !== 'all'"
+                  type="button"
+                  class="btn ghost compact-btn"
+                  @click="searchKeyword = ''; selectedScopeFilter = 'all'; selectedDerivedFilter = 'all'; activeCategoryKey = 'all'"
+                >
+                  ✕ 清空全部筛选
+                </button>
+              </div>
             </section>
 
             <!-- A. 卡片视图 -->
@@ -548,7 +557,10 @@
             <section id="sandbox-section" class="card elevated section-card sandbox-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">🧪 算法在线实时验算沙盒 (Live Calculator Sandbox)</div>
+                  <div class="card-header-with-tag">
+                    <span class="card-header">🧪 算法在线实时验算沙盒 (Live Calculator Sandbox)</span>
+                    <span class="header-pill is-primary">实时引擎直连</span>
+                  </div>
                   <p class="sub block-sub">
                     选择具体业务日、生产单位与指标，直接由底层计算引擎实时解构输入参数、展开推导步骤并输出 8 窗口值与同比分析。
                   </p>
@@ -704,24 +716,24 @@
           </div>
 
           <!-- ========================================== -->
-          <!-- Tab 2: ⚙️ 供暖期与时间参数 (预留扩展模块)  -->
+          <!-- Tab 2: ⚙️ 供暖期与时间参数 -->
           <!-- ========================================== -->
           <div v-if="activeTab === 'season_params'" class="pane-content-wrapper">
-            <!-- 供暖期滚动与控制中枢卡片 -->
-            <!-- ============================================== -->
             <!-- 板块 1：📅 系统基准业务日期管控 (Base Business Date) -->
-            <!-- ============================================== -->
             <section class="card elevated section-card biz-date-controller-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">📅 全局基准业务日期管控 (Global Business Date)</div>
+                  <div class="card-header-with-tag">
+                    <span class="card-header">📅 全局基准业务日期管控 (Global Business Date)</span>
+                    <span class="header-pill is-success">全站时间锚点</span>
+                  </div>
                   <p class="sub block-sub">
                     设定系统默认的业务基准日期（<code>set_biz_date</code>）。此日期决定生产大盘首屏、日报填报默认日历及各模块的锚点基准。
                   </p>
                 </div>
                 <div class="section-actions">
                   <button
-                    class="btn primary shadow-accent execute-sandbox-btn"
+                    class="btn primary execute-sandbox-btn"
                     type="button"
                     :disabled="savingBizDate"
                     @click="saveBizDate"
@@ -732,7 +744,7 @@
               </div>
 
               <!-- 业务日期反馈提示 -->
-              <div v-if="bizDateTip" :class="['season-tip-banner', bizDateTip.type]">
+              <div v-if="bizDateTip" :class="['page-tip', bizDateTip.type]">
                 {{ bizDateTip.text }}
               </div>
 
@@ -748,27 +760,28 @@
                 </label>
 
                 <div class="date-status-card">
-                  <span class="status-label">当前生效日期</span>
+                  <span class="status-label">当前生效业务日期</span>
                   <strong class="status-val">{{ currentBizDate || '未设置' }}</strong>
-                  <span class="status-sub">文件：backend_data/.../date.json</span>
+                  <span class="status-sub">存储：config/project_settings.json → biz_date</span>
                 </div>
               </div>
             </section>
 
-            <!-- ============================================== -->
             <!-- 板块 2：⚙️ 供暖期同项目无损滚动中枢 (Season Roll) -->
-            <!-- ============================================== -->
             <section class="card elevated section-card season-controller-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">⚙️ 供暖期同项目滚动控制台</div>
+                  <div class="card-header-with-tag">
+                    <span class="card-header">⚙️ 供暖期同项目滚动控制台</span>
+                    <span class="header-pill is-primary">当前期 {{ currentSeasonCode || selectedPeriod }}</span>
+                  </div>
                   <p class="sub block-sub">
                     手动设置或滚动当前供暖期。系统将自动联动：常量表动态列头、历史同期只读参考、入库 period 编码及基准业务日期。
                   </p>
                 </div>
                 <div class="section-actions">
                   <button
-                    class="btn primary shadow-accent execute-sandbox-btn"
+                    class="btn primary execute-sandbox-btn"
                     type="button"
                     :disabled="savingSeason"
                     @click="saveSeasonConfig"
@@ -779,72 +792,84 @@
               </div>
 
               <!-- 切换反馈提示 -->
-              <div v-if="seasonTip" :class="['season-tip-banner', seasonTip.type]">
+              <div v-if="seasonTip" :class="['page-tip', seasonTip.type]">
                 {{ seasonTip.text }}
               </div>
 
-              <!-- 控制表单栅格 -->
-              <div class="season-control-form-grid">
-                <label class="field">
-                  <span class="field-title">🎯 目标激活供暖期 (active_period)</span>
-                  <select v-model="selectedPeriod" class="input season-select" @change="onPeriodSelectChange">
-                    <option v-for="s in seasonConfig.available_seasons || ['24-25', '25-26', '26-27', '27-28', '28-29']" :key="s" :value="s">
-                      {{ s }} 供暖期 {{ s === currentSeasonCode ? '（当前运行）' : '' }}
-                    </option>
-                  </select>
-                  <small class="field-help">选择新供暖期后，系统将自动推导历史同期并调整各页面列名与入库标签。</small>
-                </label>
+              <!-- 分组 1：周期选择与联动 -->
+              <div class="form-group-panel">
+                <div class="form-group-title">1. 供暖周期选择与日期联动</div>
+                <div class="season-control-form-grid">
+                  <label class="field">
+                    <span class="field-title">🎯 目标激活供暖期 (active_period)</span>
+                    <select v-model="selectedPeriod" class="input season-select" @change="onPeriodSelectChange">
+                      <option v-for="s in seasonConfig.available_seasons || ['24-25', '25-26', '26-27', '27-28', '28-29']" :key="s" :value="s">
+                        {{ s }} 供暖期 {{ s === currentSeasonCode ? '（当前运行）' : '' }}
+                      </option>
+                    </select>
+                    <small class="field-help">选择新供暖期后，系统将自动推导历史同期并调整各页面列名与入库标签。</small>
+                  </label>
 
-                <label class="field">
-                  <span class="field-title">🔄 自动推导历史同期 (peer_period)</span>
-                  <input type="text" class="input readonly-input" :value="seasonConfig.peer_period || '24-25'" disabled />
-                  <small class="field-help">由中枢引擎自动向前推算一年，作为新供暖期的历史同期对比基准。</small>
-                </label>
+                  <label class="field">
+                    <span class="field-title">🔄 自动推导历史同期 (peer_period)</span>
+                    <input type="text" class="input readonly-input" :value="seasonConfig.peer_period || '24-25'" disabled />
+                    <small class="field-help">由中枢引擎自动向前推算一年，作为新供暖期的历史同期对比基准。</small>
+                  </label>
 
-                <label class="field">
-                  <span class="field-title">📅 业务日期自适应联动</span>
-                  <div class="checkbox-align-box">
-                    <input v-model="autoAlignBizDate" type="checkbox" id="auto-align-date-check" class="align-checkbox" />
-                    <label for="auto-align-date-check" class="align-checkbox-label">自动将基准业务日期对齐至新开栓首日 ({{ formStartDate }})</label>
-                  </div>
-                  <small class="field-help">开启后，切换供暖期将全自动将全局业务基准日期设为上方开栓日。</small>
-                </label>
+                  <label class="field">
+                    <span class="field-title">📅 业务日期自适应联动</span>
+                    <div class="checkbox-align-box">
+                      <input v-model="autoAlignBizDate" type="checkbox" id="auto-align-date-check" class="align-checkbox" />
+                      <label for="auto-align-date-check" class="align-checkbox-label">自动对齐至开栓首日 ({{ formStartDate }})</label>
+                    </div>
+                    <small class="field-help">开启后，切换供暖期将自动将全局业务基准日期设为开栓日。</small>
+                  </label>
+                </div>
+              </div>
 
-                <label class="field">
-                  <span class="field-title">日报统计开始日</span>
-                  <input v-model="formStartDate" type="date" class="input" />
-                  <small class="field-help">月累计、近7日与供暖期累计均只统计此日起的数据，当日明细不受限制。</small>
-                </label>
+              <!-- 分组 2：统计时间窗口参数（本期 3 项 + 同期 3 项，三列对称） -->
+              <div class="form-group-panel">
+                <div class="form-group-title">2. 本期与历史同期统计时间窗口</div>
+                <div class="season-control-form-grid">
+                  <label class="field">
+                    <span class="field-title">日报统计开始日（本期）</span>
+                    <input v-model="formStartDate" type="date" class="input" />
+                    <small class="field-help">月累计、近7日与供暖期累计均只统计此日起的数据。</small>
+                  </label>
 
-                <label class="field">
-                  <span class="field-title">日报统计结束日</span>
-                  <input v-model="formEndDate" type="date" class="input" />
-                  <small class="field-help">累计统计止于此日，之后录入的当日明细仍可查询。</small>
-                </label>
+                  <label class="field">
+                    <span class="field-title">日报统计结束日（本期）</span>
+                    <input v-model="formEndDate" type="date" class="input" />
+                    <small class="field-help">累计统计止于此日，之后录入的当日明细仍可查询。</small>
+                  </label>
 
-                <label class="field">
-                  <span class="field-title">本期平均气温起算日</span>
-                  <input v-model="formTemperatureStartDate" type="date" class="input" />
-                  <small class="field-help">默认当期11月1日，独立于日报统计开始日；期均温计算至查询日，最晚统计结束日。</small>
-                </label>
-                <label class="field">
-                  <span class="field-title">同期平均气温起算日（{{ seasonConfig.peer_period }}）</span>
-                  <input v-model="formPeerTemperatureStartDate" type="date" class="input" />
-                </label>
-                <label class="field">
-                  <span class="field-title">同期日报统计开始日</span>
-                  <input v-model="formPeerStartDate" type="date" class="input" />
-                </label>
-                <label class="field">
-                  <span class="field-title">同期日报统计结束日</span>
-                  <input v-model="formPeerEndDate" type="date" class="input" />
-                  <small class="field-help">本期与同期分别保存各自的日期设置，回看历史时使用历史期的设置。</small>
-                </label>
+                  <label class="field">
+                    <span class="field-title">平均气温起算日（本期）</span>
+                    <input v-model="formTemperatureStartDate" type="date" class="input" />
+                    <small class="field-help">默认当期 11 月 1 日，期均温计算至查询日。</small>
+                  </label>
 
-                <label class="field full-width">
-                  <span class="field-title">📝 供暖期切换说明 / 备注</span>
-                  <input v-model="formDescription" type="text" class="input" placeholder="输入切换原因或备忘说明…" />
-                </label>
+                  <label class="field">
+                    <span class="field-title">同期日报统计开始日（{{ seasonConfig.peer_period }}）</span>
+                    <input v-model="formPeerStartDate" type="date" class="input" />
+                  </label>
+
+                  <label class="field">
+                    <span class="field-title">同期日报统计结束日（{{ seasonConfig.peer_period }}）</span>
+                    <input v-model="formPeerEndDate" type="date" class="input" />
+                  </label>
+
+                  <label class="field">
+                    <span class="field-title">同期平均气温起算日（{{ seasonConfig.peer_period }}）</span>
+                    <input v-model="formPeerTemperatureStartDate" type="date" class="input" />
+                    <small class="field-help">本期与同期分别保存各自日期设置，互不干扰。</small>
+                  </label>
+
+                  <label class="field full-width">
+                    <span class="field-title">📝 供暖期切换说明 / 备注</span>
+                    <input v-model="formDescription" type="text" class="input" placeholder="输入切换原因或备忘说明…" />
+                  </label>
+                </div>
               </div>
 
               <!-- 历史数据安全保障说明看板 -->
@@ -857,55 +882,26 @@
                 </ul>
               </div>
             </section>
-
-            <!-- 规则说明卡片 -->
-            <div v-if="false">
-              <div class="card-header-row">
-                <div>
-                  <div class="card-header">⚙️ 供暖期与时间窗口参数管理</div>
-                  <p class="sub block-sub">暖收入按各期设定的统计起止日期等额分摊，天数自动计算并包含首尾日期。</p>
-                </div>
-              </div>
-              <div class="field-grid core-field-grid">
-                <label class="field">
-                  <span>当前激活供暖期</span>
-                  <input type="text" class="input" :value="currentSeasonCode" disabled />
-                  <small class="field-help">由 season_utils 根据当前系统日期自动推导，免人工硬编码。</small>
-                </label>
-                <label class="field">
-                  <span>当期暖收入分摊天数</span>
-                  <input type="number" class="input" :value="seasonConfig.stat_days" disabled />
-                  <small class="field-help">整期暖收入 ÷ 当期统计总天数；只向设定区间内的日期分摊，同期按其自身设置计算。</small>
-                </label>
-                <label class="field">
-                  <span>新旧采暖季切换基准月日</span>
-                  <input type="text" class="input" value="10-01" disabled />
-                  <small class="field-help">每年 10 月 1 日起自动转入新供暖季周期（如 2026-10-01 自动识别为 26-27 期）。</small>
-                </label>
-                <label class="field">
-                  <span>闰年同期日映射规则</span>
-                  <input type="text" class="input" value="2月29日 ➔ 2月28日" disabled />
-                  <small class="field-help">针对闰年 2 月 29 日无损向平年对齐，杜绝日期越界异常。</small>
-                </label>
-              </div>
-            </div>
           </div>
 
           <!-- ========================================== -->
-          <!-- Tab 3: 📋 12345投诉底表 (金山文档) 接入与配置  -->
+          <!-- Tab 3: 📋 12345投诉底表 (金山文档) 接入与配置 -->
           <!-- ========================================== -->
           <div v-if="activeTab === 'kdocs_complaint'" class="pane-content-wrapper">
             <section class="card elevated section-card kdocs-config-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">📋 12345 诉求件统计底表 · 金山文档 (KDocs) 接入配置</div>
+                  <div class="card-header-with-tag">
+                    <span class="card-header">📊 12345 诉求件统计底表 · 金山文档接入配置</span>
+                    <span class="header-pill is-primary">底表直连同步</span>
+                  </div>
                   <p class="sub block-sub">
-                    统一维护金山文档共享链接及用于免登录调取直链的授权凭证 (<code>wps_sid</code>)。支持免人工下载直接自动拉取最新底表并计算。
+                    统一维护金山文档共享链接及授权凭证 (<code>wps_sid</code>)，支持免人工下载直接拉取最新底表并试算当日投诉指标。
                   </p>
                 </div>
                 <div class="section-actions">
                   <button
-                    class="btn primary shadow-accent execute-sandbox-btn"
+                    class="btn primary execute-sandbox-btn"
                     type="button"
                     :disabled="savingKdocs"
                     @click="saveKdocsConfig"
@@ -916,81 +912,83 @@
               </div>
 
               <!-- 提示通知横幅 -->
-              <div v-if="kdocsTip" :class="['season-tip-banner', kdocsTip.type]">
+              <div v-if="kdocsTip" :class="['page-tip', kdocsTip.type]">
                 {{ kdocsTip.text }}
               </div>
 
               <!-- 表单区域 -->
-              <div class="kdocs-form-layout">
-                <label class="field">
-                  <span class="field-title">🔗 金山文档分享链接 (Share URL)</span>
-                  <input
-                    v-model="kdocsConfig.share_link"
-                    type="text"
-                    class="input kdocs-input-link"
-                    placeholder="例如: https://www.kdocs.cn/l/cj8e1PTQW0uN"
-                    @input="handleShareLinkInput"
-                  />
-                  <small class="field-help">
-                    支持带参数的完整分享链接，输入后系统会自动提取并识别下方的 Share ID。
-                  </small>
-                </label>
-
-                <div class="kdocs-two-col">
+              <div class="form-group-panel kdocs-form-panel">
+                <div class="kdocs-form-layout">
                   <label class="field">
-                    <span class="field-title">🆔 分享标识符 (Share ID)</span>
+                    <span class="field-title">🔗 金山文档分享链接 (Share URL)</span>
                     <input
-                      v-model="kdocsConfig.share_id"
+                      v-model="kdocsConfig.share_link"
                       type="text"
-                      class="input readonly-style"
-                      readonly
+                      class="input kdocs-input-link"
+                      placeholder="例如: https://www.kdocs.cn/l/cj8e1PTQW0uN"
+                      @input="handleShareLinkInput"
                     />
-                    <small class="field-help">金山文档分配给该共享文件的唯一短码。</small>
+                    <small class="field-help">
+                      支持带参数的完整分享链接，输入后系统会自动提取并识别下方的 Share ID。
+                    </small>
                   </label>
 
+                  <div class="kdocs-two-col">
+                    <label class="field">
+                      <span class="field-title">🆔 分享标识符 (Share ID)</span>
+                      <input
+                        v-model="kdocsConfig.share_id"
+                        type="text"
+                        class="input readonly-input font-mono"
+                        readonly
+                      />
+                      <small class="field-help">金山文档分配给该共享文件的唯一短码。</small>
+                    </label>
+
+                    <label class="field">
+                      <span class="field-title">📝 配置说明与备注</span>
+                      <input
+                        v-model="kdocsConfig.description"
+                        type="text"
+                        class="input"
+                        placeholder="配置备注说明"
+                      />
+                      <small class="field-help">用于标注该底表所属的业务年度或维护部门。</small>
+                    </label>
+                  </div>
+
                   <label class="field">
-                    <span class="field-title">📝 配置说明与备注</span>
-                    <input
-                      v-model="kdocsConfig.description"
-                      type="text"
-                      class="input"
-                      placeholder="配置备注说明"
-                    />
-                    <small class="field-help">用于标注该底表所属的业务年度或维护部门。</small>
+                    <div class="field-title-row">
+                      <span class="field-title">🔑 WPS 账号身份凭据 (wps_sid Cookie)</span>
+                      <button
+                        type="button"
+                        class="btn-text-action"
+                        @click="showWpsSid = !showWpsSid"
+                      >
+                        {{ showWpsSid ? '🙈 隐藏明文' : '👁️ 显示明文' }}
+                      </button>
+                    </div>
+                    <div class="sid-input-wrap">
+                      <input
+                        v-if="!showWpsSid"
+                        v-model="kdocsConfig.wps_sid"
+                        type="password"
+                        class="input kdocs-sid-input font-mono"
+                        placeholder="请粘贴浏览器中获取的 wps_sid Cookie 值"
+                      />
+                      <textarea
+                        v-else
+                        v-model="kdocsConfig.wps_sid"
+                        rows="2"
+                        class="input kdocs-sid-textarea font-mono"
+                        placeholder="请粘贴浏览器中获取的 wps_sid Cookie 值"
+                      ></textarea>
+                    </div>
+                    <small class="field-help">
+                      用于直接换取免登录下载直链的身份凭据。在浏览器登录 <a href="https://www.kdocs.cn" target="_blank" class="link">kdocs.cn</a> 后按 F12 → Application → Cookies 获取。
+                    </small>
                   </label>
                 </div>
-
-                <label class="field">
-                  <div class="field-title-row">
-                    <span class="field-title">🔑 WPS 账号身份凭据 (wps_sid Cookie)</span>
-                    <button
-                      type="button"
-                      class="btn-text-action"
-                      @click="showWpsSid = !showWpsSid"
-                    >
-                      {{ showWpsSid ? '🙈 隐藏明文' : '👁️ 显示明文' }}
-                    </button>
-                  </div>
-                  <div class="sid-input-wrap">
-                    <input
-                      v-if="!showWpsSid"
-                      v-model="kdocsConfig.wps_sid"
-                      type="password"
-                      class="input kdocs-sid-input font-mono"
-                      placeholder="请粘贴浏览器中获取的 wps_sid Cookie 值"
-                    />
-                    <textarea
-                      v-else
-                      v-model="kdocsConfig.wps_sid"
-                      rows="2"
-                      class="input kdocs-sid-textarea font-mono"
-                      placeholder="请粘贴浏览器中获取的 wps_sid Cookie 值"
-                    ></textarea>
-                  </div>
-                  <small class="field-help">
-                    用于直接换取免登录下载直链的身份凭据。在浏览器登录 <a href="https://www.kdocs.cn" target="_blank" class="link">kdocs.cn</a> 后按 F12 → Application → Cookies 获取。
-                  </small>
-                </label>
               </div>
 
               <!-- 操作与连通性检测区 -->
@@ -1016,7 +1014,7 @@
                   </button>
 
                   <button
-                    class="btn ghost compact-btn"
+                    class="btn light compact-btn"
                     type="button"
                     :disabled="syncingKdocs"
                     @click="syncKdocsComplaints"
@@ -1035,21 +1033,21 @@
               <!-- 连通性测试报告卡片 -->
               <div v-if="kdocsConfig.last_test_time || kdocsTestResult" class="kdocs-status-card">
                 <div class="status-row">
-                  <span class="status-label">最近测试时间：</span>
-                  <span class="status-val">{{ kdocsTestResult?.test_time || kdocsConfig.last_test_time || '未测试' }}</span>
+                  <span class="status-label">最近测试时间</span>
+                  <span class="status-val font-mono">{{ kdocsTestResult?.test_time || kdocsConfig.last_test_time || '未测试' }}</span>
                 </div>
                 <div class="status-row">
-                  <span class="status-label">诊断结果说明：</span>
+                  <span class="status-label">诊断结果说明</span>
                   <span class="status-val status-desc">{{ kdocsTestResult?.message || kdocsConfig.last_test_message || '暂无信息' }}</span>
                 </div>
                 <div v-if="kdocsConfig.last_sync_time" class="status-row">
-                  <span class="status-label">最后同步时间：</span>
-                  <span class="status-val">{{ kdocsConfig.last_sync_time }}</span>
+                  <span class="status-label">最后同步时间</span>
+                  <span class="status-val font-mono">{{ kdocsConfig.last_sync_time }}</span>
                 </div>
               </div>
 
               <!-- 试算结果预览卡片 -->
-              <div v-if="kdocsSyncResult" class="card elevated sync-preview-card">
+              <div v-if="kdocsSyncResult" class="sync-preview-card">
                 <div class="preview-header">
                   <strong>🎉 试算成功反馈 (业务日期: {{ kdocsSyncResult.biz_date }})</strong>
                   <span class="sub">底表文件: {{ kdocsSyncResult.filename }}</span>
@@ -1077,7 +1075,12 @@
 
             <!-- 帮助指南卡片 -->
             <section class="card elevated section-card help-guide-card">
-              <div class="card-header">💡 如何获取或更新 WPS 身份凭证 (wps_sid)？</div>
+              <div class="card-header-row">
+                <div>
+                  <div class="card-header">💡 如何获取或更新 WPS 身份凭证 (wps_sid)？</div>
+                  <p class="sub block-sub">当提示凭证失效或需更换授权账号时，按下方步骤在浏览器重新复制 Cookie 即可。</p>
+                </div>
+              </div>
               <ol class="kdocs-guide-steps">
                 <li>使用电脑 Chrome / Edge 浏览器打开 <a href="https://www.kdocs.cn" target="_blank" class="link">https://www.kdocs.cn</a>，登录你的任意普通 WPS 账号；</li>
                 <li>按键盘 <code>F12</code> 打开浏览器开发者工具，切换到顶部的 <strong>Application (应用程序)</strong> 标签页；</li>
@@ -1089,88 +1092,83 @@
           </div>
 
           <!-- ========================================== -->
-          <!-- Tab 4: 📊 常量指标与价格基准 (预留扩展模块)  -->
-          <!-- ========================================== -->
-          <div v-if="activeTab === 'constants'" class="pane-content-wrapper">
-            <section class="card elevated section-card">
-              <div class="card-header-row">
-                <div>
-                  <div class="card-header">📊 常量指标与各厂价格基准</div>
-                  <p class="sub block-sub">管理供热收费面积、标煤单价、天然气价格、外购电价及各厂辅材价格。</p>
-                </div>
-              </div>
-              <div class="panel-state">
-                常量指标由 <code>constant_data</code> 实体表统一驱动。可通过日常常量指标页面或数据库管理工具统一维护。
-              </div>
-            </section>
-          </div>
-
-          <!-- ========================================== -->
-          <!-- Tab 4: 🏢 供热单位与组织架构 (预留扩展模块)  -->
-          <!-- ========================================== -->
-          <div v-if="activeTab === 'entities'" class="pane-content-wrapper">
-            <section class="card elevated section-card">
-              <div class="card-header-row">
-                <div>
-                  <div class="card-header">🏢 供热单位与组织架构</div>
-                  <p class="sub block-sub">纳管集团下属 11 家电厂、供热分公司与科研机构的编码映射。</p>
-                </div>
-              </div>
-              <div class="entities-grid">
-                <div v-for="u in unitList" :key="u.code" class="entity-card">
-                  <div class="entity-name">{{ u.name }}</div>
-                  <code class="entity-code">{{ u.code }}</code>
-                  <span class="entity-type-badge">{{ u.type }}</span>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <!-- ========================================== -->
-          <!-- Tab 5: ⛅ 气温与气象数据管理 -->
+          <!-- Tab 4: ⛅ 导入气温数据管理 -->
           <!-- ========================================== -->
           <div v-if="activeTab === 'weather_mgmt'" class="pane-content-wrapper">
-            <section class="card elevated section-card">
+            <section class="card elevated section-card weather-module-header-card">
               <div class="card-header-row">
                 <div>
-                  <div class="card-header">⛅ 气温与气象数据管理</div>
-                  <p class="sub block-sub">逐小时温度数据接入、Open-Meteo 天气同步与日度聚合状态。</p>
+                  <div class="card-header-with-tag">
+                    <span class="card-header">⛅ 气温导入数据管理中心</span>
+                    <span class="header-pill is-primary">双模块独立调度</span>
+                  </div>
+                  <p class="sub block-sub">
+                    实况与短期气温导入（数据看板）与 35 天集合气温预报导入（计划情景分解模型）各自独立工作，支持分别配置 API 地址、每日多时段自动获取与成功/失败状态追踪；两处业务页面的手动导入功能同步保留。
+                  </p>
                 </div>
               </div>
-              <form class="weather-config-form" @submit.prevent="saveWeatherConfig">
-                <label class="field">
-                  <span class="field-title">气温导入 API 地址</span>
-                  <textarea v-model.trim="weatherApiUrl" class="input" rows="4" required
-                    :disabled="loadingWeather || savingWeather" placeholder="请输入完整的 HTTP / HTTPS API 地址（含查询参数）"></textarea>
-                </label>
-                <p class="sub block-sub">保存后，下次在数据看板或项目后台点击“导入气温”即使用此地址，无需重启。查询参数可调整经纬度、时区及历史天数。</p>
-                <p class="sub block-sub">接口须返回 Open-Meteo 兼容的 hourly.time 和 hourly.temperature_2m 数组。保存配置不会请求天气接口或写入气温数据。</p>
-                <div class="section-actions">
-                  <button class="btn primary" type="submit" :disabled="loadingWeather || savingWeather || !weatherApiUrl">
-                    {{ savingWeather ? '保存中…' : '保存气温 API 配置' }}
-                  </button>
-                  <button class="btn ghost" type="button" :disabled="loadingWeather || savingWeather" @click="loadWeatherConfig">
-                    {{ loadingWeather ? '读取中…' : '重新读取' }}
-                  </button>
-                </div>
-                <p v-if="weatherTip" :class="['page-tip', weatherTip.type]" role="status">{{ weatherTip.text }}</p>
-              </form>
-            </section>
-          </div>
 
-          <!-- ========================================== -->
-          <!-- Tab 6: 💻 原始配置结构预览 (预留扩展模块)  -->
-          <!-- ========================================== -->
-          <div v-if="activeTab === 'raw_config'" class="pane-content-wrapper">
-            <section class="card elevated section-card">
-              <div class="card-header-row">
-                <div>
-                  <div class="card-header">💻 生产指标算法元数据 JSON 原生配置</div>
-                  <p class="sub block-sub">只读展示后端 catalog_data.py 输出的完整 JSON 结构。</p>
-                </div>
+              <div class="weather-subtab-bar" role="tablist" aria-label="气温导入模块切换">
+                <button
+                  type="button"
+                  role="tab"
+                  :aria-selected="weatherSubTab === 'near'"
+                  :class="['weather-subtab-btn', { active: weatherSubTab === 'near' }]"
+                  @click="weatherSubTab = 'near'"
+                >
+                  <span class="subtab-main">🌡️ 近端实况气温导入（数据看板）</span>
+                  <span class="subtab-tag">type=near</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  :aria-selected="weatherSubTab === 'ensemble'"
+                  :class="['weather-subtab-btn', { active: weatherSubTab === 'ensemble' }]"
+                  @click="weatherSubTab = 'ensemble'"
+                >
+                  <span class="subtab-main">🔮 35天集合气温预报导入（计划情景模型）</span>
+                  <span class="subtab-tag">type=far</span>
+                </button>
               </div>
-              <pre class="json-code-box">{{ JSON.stringify(catalogList, null, 2) }}</pre>
             </section>
+
+            <WeatherImportModulePanel
+              v-show="weatherSubTab === 'near'"
+              ref="nearWeatherPanelRef"
+              :project-key="projectKey"
+              title="🌡️ 近端实况气温导入（数据看板）"
+              subtitle="集中管理 Open-Meteo 逐小时实况与短期预报（type=near）API 来源、多时段自动定时获取与入库状态追踪；数据看板手动“导入气温”同步保留并记录到本模块历史。"
+              schedule-hint="针对气温 API 偶发无法连接的情况，可设置每日多个尝试时间点（北京时间 24 小时制）；到点后系统自动尝试拉取并按时间覆盖写入 temperature_data（type=near）。"
+              api-title="🔗 近端实况气温 API 数据源配置"
+              api-subtitle="数据看板手动“导入气温”与管理中心自动定时获取共用此数据源地址。"
+              api-field-label="近端气温导入 API 地址"
+              api-format-hint="接口须返回 Open-Meteo 兼容的 hourly.time 和 hourly.temperature_2m 数组。保存配置不会请求天气接口或写入气温数据。"
+              default-new-time="08:00"
+              :get-api-config-fn="getTemperatureImportConfig"
+              :save-api-config-fn="saveTemperatureImportConfig"
+              :get-auto-status-fn="getTemperatureAutoImportStatus"
+              :save-auto-config-fn="saveTemperatureAutoImportConfig"
+              :run-import-now-fn="runTemperatureImportNow"
+            />
+
+            <WeatherImportModulePanel
+              v-show="weatherSubTab === 'ensemble'"
+              ref="ensembleWeatherPanelRef"
+              :project-key="projectKey"
+              title="🔮 35天集合气温预报导入（计划情景模型）"
+              subtitle="集中管理 Open-Meteo Ensemble API 未来 35 天逐小时均值气温预报（type=far）的来源、多时段自动定时获取与状态追踪；计划情景分解模型页原有“导入35天预报”按钮同步保留。"
+              schedule-hint="可设置每日多个尝试时间点（北京时间 24 小时制）；到点后自动拉取 35 天集合预报并按小时均值入库（仅写入未存在近端实况的时段，不会覆盖 type=near 数据）。"
+              api-title="🔗 35天集合气温预报 API 数据源配置"
+              api-subtitle="计划情景分解模型页面手动“导入35天预报”与本模块定时任务共用此 API 地址。"
+              api-field-label="35天集合预报 API 地址"
+              api-format-hint="接口须返回 Open-Meteo Ensemble API 兼容的 hourly.time 以及多个 temperature_2m* 成员数组。保存配置不会立即请求天气接口或写入数据库。"
+              default-new-time="07:30"
+              :get-api-config-fn="getEnsembleTemperatureImportConfig"
+              :save-api-config-fn="saveEnsembleTemperatureImportConfig"
+              :get-auto-status-fn="getEnsembleTemperatureAutoImportStatus"
+              :save-auto-config-fn="saveEnsembleTemperatureAutoImportConfig"
+              :run-import-now-fn="runEnsembleTemperatureImportNow"
+            />
           </div>
         </div>
       </div>
@@ -1183,8 +1181,21 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
+import WeatherImportModulePanel from '../components/WeatherImportModulePanel.vue'
 import { getProjectNameById, ensureProjectsLoaded } from '../composables/useProjects'
-import { getTemperatureImportConfig, saveTemperatureImportConfig, getDailyReportSubmissionLogs } from '../services/api'
+import {
+  getTemperatureImportConfig,
+  saveTemperatureImportConfig,
+  getTemperatureAutoImportStatus,
+  saveTemperatureAutoImportConfig,
+  runTemperatureImportNow,
+  getEnsembleTemperatureImportConfig,
+  saveEnsembleTemperatureImportConfig,
+  getEnsembleTemperatureAutoImportStatus,
+  saveEnsembleTemperatureAutoImportConfig,
+  runEnsembleTemperatureImportNow,
+  getDailyReportSubmissionLogs,
+} from '../services/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -1215,6 +1226,8 @@ function selectTab(tabKey, event) {
   activeTab.value = tabKey
   if (tabKey === 'submissions') {
     fetchSubmissionLogs(1)
+  } else if (tabKey === 'weather_mgmt') {
+    refreshWeatherPanels()
   }
   if (event && event.currentTarget && typeof event.currentTarget.scrollIntoView === 'function') {
     event.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
@@ -1224,6 +1237,8 @@ function selectTab(tabKey, event) {
 function onMobileSelectChange() {
   if (activeTab.value === 'submissions') {
     fetchSubmissionLogs(1)
+  } else if (activeTab.value === 'weather_mgmt') {
+    refreshWeatherPanels()
   }
   setTimeout(() => {
     const activeEl = sidebarRef.value?.querySelector('.sidebar-tab-btn.active')
@@ -1255,31 +1270,26 @@ const submissionFilters = ref({
 })
 
 function onSubmissionCategoryChange() {
-  const cat = submissionFilters.value.category
-  if (cat === 'submission') {
-    const queryOrWf = [
+  const categoryActions = {
+    submission: [
+      'SUBMIT_ENTRY', 'SUBMIT_SHEET', 'SUBMIT_CORRECTION',
+      'IMPORT_COMPLAINT', 'IMPORT_TEMPERATURE', 'SYNC_SPOT_ELEC',
+      'IMPORT_DISPATCH', 'IMPORT_EFFICIENCY', 'IMPORT_XLSX',
+      'UPDATE_COAL_PLAN', 'UPDATE_CONFIG',
+    ],
+    workflow: [
       'APPROVE_UNIT', 'REVOKE_UNIT', 'PUBLISH_DAILY', 'REVOKE_PUBLISH',
-      'QUERY_DASHBOARD', 'EXPORT_DASHBOARD_PDF', 'QUERY_SHEET_DATA', 'QUERY_DATA_ANALYSIS', 'QUERY_DISPATCH_INFO', 'QUERY_SPOT_ELEC'
-    ]
-    if (queryOrWf.includes(submissionFilters.value.actionType)) {
-      submissionFilters.value.actionType = ''
-    }
-  } else if (cat === 'workflow') {
-    const subOrQ = [
-      'SUBMIT_ENTRY', 'IMPORT_COMPLAINT', 'IMPORT_TEMPERATURE', 'SYNC_SPOT_ELEC', 'UPDATE_COAL_PLAN', 'UPDATE_CONFIG',
-      'QUERY_DASHBOARD', 'EXPORT_DASHBOARD_PDF', 'QUERY_SHEET_DATA', 'QUERY_DATA_ANALYSIS', 'QUERY_DISPATCH_INFO', 'QUERY_SPOT_ELEC'
-    ]
-    if (subOrQ.includes(submissionFilters.value.actionType)) {
-      submissionFilters.value.actionType = ''
-    }
-  } else if (cat === 'query') {
-    const notQ = [
-      'SUBMIT_ENTRY', 'IMPORT_COMPLAINT', 'IMPORT_TEMPERATURE', 'SYNC_SPOT_ELEC', 'UPDATE_COAL_PLAN', 'UPDATE_CONFIG',
-      'APPROVE_UNIT', 'REVOKE_UNIT', 'PUBLISH_DAILY', 'REVOKE_PUBLISH'
-    ]
-    if (notQ.includes(submissionFilters.value.actionType)) {
-      submissionFilters.value.actionType = ''
-    }
+      'APPROVE_CORRECTION', 'REJECT_CORRECTION', 'AUDIT_RESET',
+    ],
+    query: [
+      'EXPORT_DASHBOARD_PDF', 'EXPORT_DAILY_BRIEF_PDF', 'EXPORT_SHEET_DATA',
+      'QUERY_DASHBOARD', 'QUERY_SHEET_DATA', 'QUERY_DATA_ANALYSIS',
+      'QUERY_DISPATCH_INFO', 'QUERY_DYNAMIC_PLAN', 'QUERY_SPOT_ELEC', 'QUERY_DAILY_BRIEF',
+    ],
+  }
+  const allowed = categoryActions[submissionFilters.value.category]
+  if (allowed && submissionFilters.value.actionType && !allowed.includes(submissionFilters.value.actionType)) {
+    submissionFilters.value.actionType = ''
   }
   fetchSubmissionLogs(1)
 }
@@ -1371,7 +1381,7 @@ function getActionTypeBadgeStyle(actionType) {
   if (type.startsWith('IMPORT') || type.startsWith('SYNC')) {
     return { background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }
   }
-  if (type.startsWith('REVOKE') || type.includes('CANCEL') || type.includes('RESET')) {
+  if (type.startsWith('REVOKE') || type.startsWith('REJECT') || type.includes('CANCEL') || type.includes('RESET')) {
     return { background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa' }
   }
   if (type.startsWith('QUERY') || type.startsWith('EXPORT')) {
@@ -1384,17 +1394,26 @@ function translateActionType(actionType) {
   const map = {
     SUBMIT_ENTRY: '📝 填报提交',
     SUBMIT_SHEET: '📝 表单提交',
+    SUBMIT_CORRECTION: '🛠️ 提交修正',
     IMPORT_COMPLAINT: '📋 投诉拉取',
     IMPORT_TEMPERATURE: '⛅ 气象导入',
     SYNC_SPOT_ELEC: '⚡ 现货同步',
+    IMPORT_DISPATCH: '⏱️ 调度维护',
+    IMPORT_EFFICIENCY: '📊 能效导入',
+    IMPORT_XLSX: '📥 表格导入',
     UPDATE_COAL_PLAN: '🎯 标煤维护',
     UPDATE_CONFIG: '⚙️ 参数修改',
     APPROVE_UNIT: '✅ 审核通过',
     REVOKE_UNIT: '↩️ 撤销审核',
     PUBLISH_DAILY: '📢 日报发布',
     REVOKE_PUBLISH: '❌ 撤销发布',
-    QUERY_DASHBOARD: '📊 看板调阅',
+    APPROVE_CORRECTION: '✅ 批准修正',
+    REJECT_CORRECTION: '🚫 驳回修正',
+    AUDIT_RESET: '🔄 审计重置',
     EXPORT_DASHBOARD_PDF: '📑 导出PDF',
+    EXPORT_DAILY_BRIEF_PDF: '📰 导出简报',
+    EXPORT_SHEET_DATA: '📥 导出明细',
+    QUERY_DASHBOARD: '📊 看板调阅',
     QUERY_SHEET_DATA: '📋 报表调阅',
     QUERY_DATA_ANALYSIS: '📈 综合分析',
     QUERY_DISPATCH_INFO: '⏱️ 调度调阅',
@@ -1409,36 +1428,16 @@ function translateActionType(actionType) {
 const loading = ref(false)
 const errorMessage = ref('')
 const globalTip = ref(null)
-const weatherApiUrl = ref('')
-const loadingWeather = ref(false)
-const savingWeather = ref(false)
-const weatherTip = ref(null)
+// 气温导入双模块（近端实况气温 + 35天集合预报）切换与统一刷新
+const weatherSubTab = ref('near')
+const nearWeatherPanelRef = ref(null)
+const ensembleWeatherPanelRef = ref(null)
 
-async function loadWeatherConfig() {
-  loadingWeather.value = true
-  weatherTip.value = null
-  try {
-    const result = await getTemperatureImportConfig(projectKey)
-    weatherApiUrl.value = result.data.api_url
-  } catch (err) {
-    weatherTip.value = { type: 'error', text: err.message }
-  } finally {
-    loadingWeather.value = false
-  }
-}
-
-async function saveWeatherConfig() {
-  savingWeather.value = true
-  weatherTip.value = null
-  try {
-    const result = await saveTemperatureImportConfig(projectKey, weatherApiUrl.value)
-    weatherApiUrl.value = result.data.api_url
-    weatherTip.value = { type: 'success', text: '配置已保存，下次导入气温时生效。' }
-  } catch (err) {
-    weatherTip.value = { type: 'error', text: err.message }
-  } finally {
-    savingWeather.value = false
-  }
+async function refreshWeatherPanels() {
+  await Promise.all([
+    nearWeatherPanelRef.value?.refresh?.(),
+    ensembleWeatherPanelRef.value?.refresh?.(),
+  ])
 }
 const currentBizDate = ref('')
 const currentSeasonCode = ref('25-26')
@@ -1547,7 +1546,7 @@ onMounted(async () => {
   await loadBizDate()
   await loadCatalog()
   await loadKdocsConfig()
-  await loadWeatherConfig()
+  await refreshWeatherPanels()
 })
 
 function goProjectPages() {
@@ -1725,7 +1724,7 @@ async function loadCatalog() {
 
 async function refreshAll() {
   await fetchSubmissionLogs(submissionPage.value || 1).catch(() => {})
-  await loadWeatherConfig()
+  await refreshWeatherPanels()
   await loadSeasonConfig()
   await loadBizDate()
   await loadCatalog()
@@ -2028,28 +2027,426 @@ async function executeSandbox() {
 </script>
 
 <style scoped>
+/* ==================== 🎨 全局统一布局骨架与设计系统 ==================== */
+.dr-global-mgmt-view {
+  min-height: 100vh;
+  background: #f4f7fb;
+  color: #0f172a;
+}
+
+.tube-page-main {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 18px 24px 64px;
+}
+
+/* 统一输入与按钮尺度，消除跨标签高低差 */
+.dr-global-mgmt-view :deep(.input),
+.dr-global-mgmt-view .input,
+.dr-global-mgmt-view .select {
+  height: 38px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13.5px;
+  box-sizing: border-box;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.dr-global-mgmt-view textarea.input {
+  height: auto;
+  padding: 9px 12px;
+  line-height: 1.5;
+}
+
+.dr-global-mgmt-view .input:focus,
+.dr-global-mgmt-view .select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: none;
+}
+
+.dr-global-mgmt-view .btn {
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+
+.dr-global-mgmt-view .btn.compact-btn {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+
+.dr-global-mgmt-view .btn.primary {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  border-color: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.22);
+}
+
+.dr-global-mgmt-view .btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-0.5px);
+}
+
+.dr-global-mgmt-view .btn.ghost {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.dr-global-mgmt-view .btn.ghost:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+/* 统一页面/表单反馈横幅 */
+.page-tip,
+.page-error {
+  margin: 0 0 16px;
+  padding: 11px 15px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.page-tip.success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.page-tip.error,
+.page-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* 顶栏 */
+.premium-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 10px 0 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.topbar-title-group {
+  min-width: 0;
+}
+
+.premium-topbar h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+
+.premium-topbar .sub {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* 全局运行概览条 (Quick Dashboard) */
+.quick-dashboard-card {
+  margin-bottom: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.03);
+}
+
+.meta-dashboard {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.meta-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.meta-card.is-highlight {
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
+  border-color: #bfdbfe;
+}
+
+.meta-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.meta-value {
+  font-size: 16.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.highlight-num {
+  color: #1d4ed8;
+}
+
+/* 双栏工作台 */
+.admin-workbench-layout {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.mobile-tab-switcher {
+  display: none;
+}
+
+.admin-sidebar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: sticky;
+  top: 76px;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.03);
+}
+
+.sidebar-group-title {
+  padding: 4px 12px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 4px;
+}
+
+.sidebar-tab-btn {
+  position: relative;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #475569;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-tab-btn .tab-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.sidebar-tab-btn .tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-tab-btn:hover {
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.sidebar-tab-btn.active {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+.sidebar-tab-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #2563eb;
+}
+
+.admin-content-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.pane-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+/* 统一标准主卡片与头部 */
+.section-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 22px 24px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.03);
+}
+
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.card-header-with-tag {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card-header {
+  font-size: 16.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.header-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.header-pill.is-primary {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.header-pill.is-success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.block-sub {
+  font-size: 13px;
+  color: #64748b;
+  margin: 5px 0 0;
+  line-height: 1.55;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.table-state-placeholder {
+  padding: 44px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13.5px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+}
+
+.form-group-panel {
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.form-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
 /* ==================== 📋 业务操作记录样式 ==================== */
 .submission-overview {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(360px, 1.2fr);
+  grid-template-columns: minmax(240px, 1fr) minmax(360px, 1.35fr);
   align-items: center;
-  gap: 18px;
-  margin-bottom: 20px;
-  padding: 16px 20px;
-  background: #ffffff;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: #f8fafc;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .submission-overview__lead {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .submission-overview__icon {
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1;
 }
 
@@ -2060,14 +2457,15 @@ async function executeSandbox() {
 }
 
 .submission-overview__label {
-  font-size: 12.5px;
+  font-size: 12px;
   color: #64748b;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .submission-overview__time {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 15px;
   font-weight: 700;
@@ -2085,18 +2483,18 @@ async function executeSandbox() {
 
 .submission-metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
 .submission-metric {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
-  background: #f8fafc;
+  gap: 3px;
+  padding: 10px 10px;
+  background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 10px;
   text-align: center;
 }
 
@@ -2114,7 +2512,7 @@ async function executeSandbox() {
 
 .submission-metric__value span {
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
   color: #94a3b8;
 }
 
@@ -2136,13 +2534,13 @@ async function executeSandbox() {
 
 .submission-filter-panel {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
   gap: 12px;
   padding: 16px;
   background: #f8fafc;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid #e2e8f0;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   align-items: flex-end;
 }
 
@@ -2152,55 +2550,38 @@ async function executeSandbox() {
   gap: 6px;
   font-size: 12px;
   color: #475569;
-  font-weight: 500;
+  font-weight: 600;
+  min-width: 0;
 }
 
 .submission-filter-item .select,
 .submission-filter-item .input {
   width: 100%;
-  padding: 7px 10px;
-  font-size: 13px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #fff;
-  color: #0f172a;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.submission-filter-item .select:focus,
-.submission-filter-item .input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
 .submission-filter-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .submission-reset-btn,
 .submission-query-btn {
-  padding: 7px 14px;
-  font-size: 13px;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
+  flex: 1;
 }
 
 .submission-table-wrap {
   overflow-x: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #fff;
-  margin-bottom: 16px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.035);
   border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #ffffff;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
 }
 
 .submission-log-table {
   width: 100%;
-  min-width: 960px;
+  min-width: 940px;
   margin: 0;
   table-layout: fixed;
   border-collapse: separate;
@@ -2210,11 +2591,11 @@ async function executeSandbox() {
 }
 
 .submission-col-time {
-  width: 230px;
+  width: 220px;
 }
 
 .submission-col-operator {
-  width: 190px;
+  width: 185px;
 }
 
 .submission-col-action {
@@ -2229,26 +2610,26 @@ async function executeSandbox() {
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 12px 16px;
+  padding: 11px 14px;
   text-align: left;
   color: #475569;
-  background: #f1f5f9;
-  border-bottom: 1px solid #cbd5e1;
+  background: #f4f7fb;
+  border-bottom: 1px solid #dbe4ef;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
 
 .submission-log-table tbody td {
-  padding: 14px 16px;
+  padding: 12px 14px;
   vertical-align: top;
-  border-bottom: 1px solid #e8edf3;
+  border-bottom: 1px solid #eef2f6;
   text-align: left;
 }
 
 .submission-log-table tbody tr {
-  background: #fff;
-  transition: background-color 0.18s;
+  background: #ffffff;
+  transition: background-color 0.16s ease;
 }
 
 .submission-log-table tbody tr:nth-child(even) {
@@ -2271,8 +2652,8 @@ async function executeSandbox() {
 
 .submission-time-value {
   color: #0f172a;
-  font-family: monospace, sans-serif;
-  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -2352,32 +2733,32 @@ async function executeSandbox() {
 }
 
 .submission-action-badge {
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   max-width: 100%;
-  padding: 4px 10px !important;
-  font-size: 11px !important;
-  font-weight: 650 !important;
-  border-radius: 7px !important;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 7px;
   white-space: nowrap;
 }
 
 .submission-detail-cell {
   color: #334155;
   font-size: 13px;
-  line-height: 1.65;
+  line-height: 1.6;
   vertical-align: top;
   overflow-wrap: anywhere;
 }
 
 .submission-detail-text {
-  min-height: 42px;
+  min-height: 40px;
   box-sizing: border-box;
   padding: 8px 12px;
   color: #1e293b;
   background: #f8fafc;
-  border-left: 3px solid #bfdbfe;
-  border-radius: 0 7px 7px 0;
+  border-left: 3px solid #93c5fd;
+  border-radius: 0 8px 8px 0;
   overflow-wrap: anywhere;
 }
 
@@ -2399,7 +2780,10 @@ async function executeSandbox() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   font-size: 13px;
   color: #64748b;
 }
@@ -2407,217 +2791,89 @@ async function executeSandbox() {
 .submission-pagination__controls {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.submission-page-btn {
-  padding: 4px 12px;
-  font-size: 12.5px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-}
-
-.submission-page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-@media (max-width: 900px) {
-  .submission-overview {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .submission-metrics {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .submission-filter-panel {
-    grid-template-columns: 1fr;
-  }
-  .submission-filter-actions {
-    flex-direction: column;
-  }
-  .submission-reset-btn,
-  .submission-query-btn {
-    width: 100%;
-  }
-  .submission-pagination {
-    flex-direction: column;
-    gap: 10px;
-    align-items: flex-start;
-  }
-}
-
-.weather-config-form {
-  display: grid;
-  gap: 12px;
-}
-
-.weather-config-form .field {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.weather-config-form textarea {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  overflow-wrap: anywhere;
-}
-
-.dr-global-mgmt-view {
-  min-height: 100vh;
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-.tube-page-main {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 16px 24px 64px;
-}
-
-/* 顶栏 */
-.premium-topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 12px 0;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.premium-topbar h2 {
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 4px;
-}
-
-.premium-topbar .sub {
-  font-size: 13.5px;
-  color: #64748b;
-  margin: 0;
-}
-
-.topbar-actions {
-  display: flex;
   gap: 10px;
 }
 
-/* 磨砂玻璃态快速看板 */
-.quick-dashboard-card {
-  margin-bottom: 24px !important;
-  background: rgba(255, 255, 255, 0.85) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(226, 232, 240, 0.9) !important;
-  border-radius: 12px !important;
-  padding: 16px 20px !important;
-}
-
-.meta-dashboard {
+/* ⛅ 气温模块子标签（分段控件） */
+.weather-subtab-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
 }
 
-.meta-card {
+.weather-subtab-btn {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.meta-label {
-  font-size: 12px;
-  color: #64748b;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  border-radius: 9px;
+  padding: 10px 14px;
+  font-size: 13.5px;
   font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  text-align: left;
 }
 
-.meta-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
+.weather-subtab-btn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.6);
 }
 
-.highlight-num {
-  color: #2563eb !important;
+.weather-subtab-btn.active {
+  background: #ffffff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
 }
 
-/* 双栏工作台 */
-.admin-workbench-layout {
-  display: grid !important;
-  grid-template-columns: 240px 1fr !important;
-  gap: 24px !important;
-  align-items: start !important;
+.subtab-main {
+  min-width: 0;
 }
 
-.mobile-tab-switcher {
-  display: none !important;
+.subtab-tag {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
 }
 
-.admin-sidebar {
-  background: rgba(255, 255, 255, 0.85) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(226, 232, 240, 0.8) !important;
-  border-radius: 14px !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 6px !important;
-  position: sticky;
-  top: 80px;
-  z-index: 10;
+.weather-subtab-btn.active .subtab-tag {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
-.sidebar-tab-btn {
-  width: 100% !important;
-  border: none !important;
-  background: transparent !important;
-  padding: 12px 16px !important;
-  border-radius: 10px !important;
-  font-size: 13.5px !important;
-  font-weight: 600 !important;
-  color: #475569 !important;
-  text-align: left !important;
-  cursor: pointer !important;
-  transition: all 0.2s ease !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-}
-
-.sidebar-tab-btn:hover {
-  color: #1e293b !important;
-  background: rgba(241, 245, 249, 0.7) !important;
-}
-
-.sidebar-tab-btn.active {
-  color: #2563eb !important;
-  background: #eff6ff !important;
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.15) !important;
+@media (max-width: 1100px) {
+  .meta-dashboard {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1024px) {
   .admin-workbench-layout {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
-  /* 移动端专属快捷功能板块切换器 */
   .mobile-tab-switcher {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 8px !important;
-    background: #ffffff !important;
-    border: 1.5px solid #93c5fd !important;
-    border-radius: 10px !important;
-    padding: 10px 14px !important;
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08) !important;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
   }
 
   .switcher-header {
@@ -2648,9 +2904,9 @@ async function executeSandbox() {
     font-size: 14px;
     font-weight: 700;
     color: #1e293b;
-    background: #f0f7ff;
+    background: #eff6ff;
     border: 1px solid #bfdbfe;
-    border-radius: 8px;
+    border-radius: 9px;
     padding: 0 34px 0 12px;
     appearance: none;
     cursor: pointer;
@@ -2666,129 +2922,117 @@ async function executeSandbox() {
     pointer-events: none;
   }
 
-  /* 移动端侧栏转为横向平滑滚动条 */
   .admin-sidebar {
-    position: static !important;
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    flex-wrap: nowrap !important;
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
-    scrollbar-color: #94a3b8 #f1f5f9;
-    padding: 6px !important;
-    border-radius: 10px !important;
-    gap: 8px !important;
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    scrollbar-color: #cbd5e1 #f8fafc;
+    padding: 8px;
+    border-radius: 12px;
+    gap: 8px;
   }
 
-  /* 优雅细微的滚动条，明确提示右侧有内容可滑动 */
-  .admin-sidebar::-webkit-scrollbar {
-    height: 4px !important;
-    display: block !important;
+  .sidebar-group-title {
+    display: none;
   }
 
-  .admin-sidebar::-webkit-scrollbar-track {
-    background: #f1f5f9 !important;
-    border-radius: 4px !important;
-  }
-
-  .admin-sidebar::-webkit-scrollbar-thumb {
-    background: #94a3b8 !important;
-    border-radius: 4px !important;
-  }
-
-  /* 核心修复：移动端按钮自适应紧凑药丸，绝不占 100% 宽度 */
   .sidebar-tab-btn {
-    width: auto !important;
-    min-width: max-content !important;
-    flex: 0 0 auto !important;
-    white-space: nowrap !important;
-    padding: 8px 14px !important;
-    font-size: 13px !important;
-    border-radius: 8px !important;
-    background: #f1f5f9 !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #334155 !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    text-align: center !important;
-    box-shadow: none !important;
-  }
-
-  .sidebar-tab-btn:hover {
-    background: #e2e8f0 !important;
-    color: #0f172a !important;
+    width: auto;
+    min-width: max-content;
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 9px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
   }
 
   .sidebar-tab-btn.active {
-    background: #2563eb !important;
-    color: #ffffff !important;
-    border-color: #2563eb !important;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35) !important;
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28);
+  }
+
+  .sidebar-tab-btn.active::before {
+    display: none;
   }
 }
 
-.admin-content-pane {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 20px !important;
-  min-width: 0 !important;
+@media (max-width: 900px) {
+  .submission-overview {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .submission-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
-.pane-content-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: 100%;
+@media (max-width: 640px) {
+  .weather-subtab-bar {
+    grid-template-columns: 1fr;
+  }
+  .submission-filter-panel {
+    grid-template-columns: 1fr;
+  }
+  .submission-filter-actions {
+    flex-direction: row;
+  }
+  .submission-pagination {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
 }
 
-.section-card {
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 12px !important;
-  padding: 20px !important;
+/* ==================== 🧮 算法字典与沙盒样式 ==================== */
+.view-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
 }
 
-.card-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
+.view-mode-toggle .btn {
+  height: 30px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  box-shadow: none;
+  border-radius: 7px;
 }
 
-.card-header {
-  font-size: 17px;
-  font-weight: 700;
+.view-mode-toggle .btn:hover {
+  background: rgba(255, 255, 255, 0.65);
   color: #0f172a;
 }
 
-.block-sub {
-  font-size: 13px;
-  color: #64748b;
-  margin-top: 4px;
+.view-mode-toggle .btn.active {
+  background: #ffffff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
-.compact-btn {
-  padding: 6px 12px !important;
-  font-size: 12.5px !important;
-}
-
-/* 过滤工具栏 */
 .filter-toolbar {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .search-box {
   position: relative;
   flex: 1;
-  min-width: 280px;
+  min-width: 260px;
   display: flex;
   align-items: center;
 }
@@ -2803,10 +3047,10 @@ async function executeSandbox() {
 
 .search-input {
   width: 100%;
-  padding-left: 36px !important;
-  padding-right: 32px !important;
+  padding-left: 36px;
+  padding-right: 32px;
   height: 38px;
-  border-radius: 8px;
+  border-radius: 9px;
   font-size: 13.5px;
 }
 
@@ -2820,14 +3064,19 @@ async function executeSandbox() {
   font-size: 14px;
 }
 
+.btn-clear:hover {
+  color: #475569;
+}
+
 .filter-dropdowns {
   display: flex;
   gap: 10px;
 }
 
-.scope-select, .derived-select {
+.scope-select,
+.derived-select {
   height: 38px;
-  border-radius: 8px;
+  border-radius: 9px;
   font-size: 13px;
 }
 
@@ -2836,7 +3085,7 @@ async function executeSandbox() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 12px;
+  padding-top: 14px;
   border-top: 1px dashed #e2e8f0;
 }
 
@@ -2844,31 +3093,32 @@ async function executeSandbox() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
-  background: #f1f5f9;
+  padding: 6px 13px;
+  background: #f8fafc;
   border: 1px solid #cbd5e1;
   border-radius: 999px;
   font-size: 12.5px;
   font-weight: 600;
-  color: #334155;
+  color: #475569;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.16s ease;
 }
 
 .category-pill:hover {
-  background: #e2e8f0;
-  border-color: #94a3b8;
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e40af;
 }
 
 .category-pill.active {
   background: #2563eb;
   color: #ffffff;
   border-color: #2563eb;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.22);
 }
 
 .category-pill.active .pill-count {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .pill-count {
@@ -2876,47 +3126,84 @@ async function executeSandbox() {
   color: #64748b;
 }
 
+.catalog-result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.catalog-result-summary {
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.catalog-result-summary strong {
+  color: #1d4ed8;
+}
+
 /* 卡片网格 */
+.catalog-cards-container {
+  width: 100%;
+}
+
+.panel-state.empty-state {
+  padding: 44px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13.5px;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+}
+
 .catalog-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
 }
 
 .metric-card {
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 12px !important;
-  padding: 16px !important;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: all 0.2s ease;
+  gap: 11px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.025);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
 .metric-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.05) !important;
-  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
+  border-color: #bfdbfe;
 }
 
 .metric-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 10px;
 }
 
 .metric-title-wrap {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  min-width: 0;
 }
 
 .category-badge {
   font-size: 11px;
   font-weight: 700;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #f1f5f9;
   color: #475569;
   align-self: flex-start;
@@ -2927,15 +3214,18 @@ async function executeSandbox() {
   font-weight: 700;
   color: #0f172a;
   margin: 0;
+  line-height: 1.35;
 }
 
 .unit-badge {
-  font-size: 12px;
+  flex-shrink: 0;
+  font-size: 11.5px;
   font-weight: 700;
-  padding: 3px 8px;
-  background: #e0f2fe;
-  color: #0369a1;
-  border-radius: 6px;
+  padding: 3px 9px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
 }
 
 .metric-key-bar {
@@ -2943,13 +3233,13 @@ async function executeSandbox() {
   align-items: center;
   gap: 6px;
   background: #f8fafc;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
 }
 
 .metric-key {
-  font-family: Consolas, Monaco, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12.5px;
   color: #1e293b;
   cursor: pointer;
@@ -2965,15 +3255,16 @@ async function executeSandbox() {
 
 .copy-success-tip {
   font-size: 11px;
-  color: #16a34a;
+  color: #059669;
   font-weight: 700;
 }
 
 .formula-box {
-  background: #f8fafc;
+  background: #f8fbff;
+  border: 1px solid #dbeafe;
   border-left: 3px solid #3b82f6;
-  padding: 8px 10px;
-  border-radius: 0 6px 6px 0;
+  padding: 9px 12px;
+  border-radius: 0 8px 8px 0;
 }
 
 .formula-label {
@@ -2981,41 +3272,41 @@ async function executeSandbox() {
   color: #64748b;
   font-weight: 600;
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .formula-code {
-  font-family: Consolas, Monaco, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12.5px;
   font-weight: 700;
-  color: #0284c7;
+  color: #1d4ed8;
   word-break: break-all;
 }
 
 .metric-desc {
   font-size: 12.5px;
   color: #475569;
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0;
 }
 
 .metric-meta-details {
   border-top: 1px dashed #e2e8f0;
-  padding-top: 8px;
+  padding-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   font-size: 12px;
 }
 
 .meta-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: baseline;
 }
 
 .row-label {
-  color: #94a3b8;
+  color: #64748b;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -3025,7 +3316,7 @@ async function executeSandbox() {
 }
 
 .highlight-rule {
-  color: #d97706 !important;
+  color: #b45309;
   font-weight: 600;
 }
 
@@ -3038,9 +3329,10 @@ async function executeSandbox() {
 .time-tag {
   background: #f1f5f9;
   color: #475569;
+  border: 1px solid #e2e8f0;
   font-size: 10.5px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: 5px;
 }
 
 .card-footer-action {
@@ -3051,18 +3343,28 @@ async function executeSandbox() {
 .sandbox-trigger-btn {
   width: 100%;
   justify-content: center;
-  color: #2563eb !important;
-  border-color: #bfdbfe !important;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  background: #f8fbff;
 }
 
 .sandbox-trigger-btn:hover {
-  background: #eff6ff !important;
+  background: #eff6ff;
+  border-color: #93c5fd;
 }
 
 /* 表格视图 */
 .catalog-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+.catalog-table thead th {
+  background: #f4f7fb;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 1px solid #dbe4ef;
 }
 
 .table-key-cell {
@@ -3072,7 +3374,7 @@ async function executeSandbox() {
 }
 
 .clickable-key {
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   cursor: pointer;
   color: #2563eb;
@@ -3083,8 +3385,8 @@ async function executeSandbox() {
   font-weight: 600;
   background: #f1f5f9;
   color: #475569;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: 5px;
 }
 
 .cell-formula {
@@ -3092,8 +3394,8 @@ async function executeSandbox() {
 }
 
 .formula-inline {
-  color: #0284c7;
-  font-family: monospace;
+  color: #1d4ed8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12.5px;
 }
 
@@ -3104,27 +3406,37 @@ async function executeSandbox() {
   margin-top: 2px;
 }
 
-/* ================== 沙盒样式 ================== */
-.sandbox-card {
-  border: 1.5px solid #93c5fd !important;
-  background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%) !important;
-}
-
+/* ================== 🧪 沙盒样式（统一规范） ================== */
 .sandbox-control-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) auto;
-  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 14px;
   align-items: flex-end;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.sandbox-control-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
 }
 
 .date-input-group {
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+
+.date-input-group .input {
+  flex: 1;
 }
 
 .sandbox-action-wrap {
@@ -3134,43 +3446,50 @@ async function executeSandbox() {
 
 .execute-sandbox-btn {
   height: 38px;
-  padding: 0 20px !important;
-  font-size: 14px !important;
+  padding: 0 18px;
+  font-size: 13.5px;
 }
 
 .sandbox-results-panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn 0.24s ease;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .result-headline-card {
-  background: #ffffff;
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
   border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 16px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .indicator-badge {
   font-size: 11px;
   font-weight: 700;
-  color: #16a34a;
+  color: #065f46;
   background: #dcfce7;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
 }
 
 .headline-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #0f172a;
   margin: 6px 0 4px;
@@ -3178,40 +3497,42 @@ async function executeSandbox() {
 
 .headline-meta {
   font-size: 13px;
-  color: #64748b;
+  color: #475569;
   margin: 0;
 }
 
 .final-unit-pill {
-  font-size: 13px;
+  flex-shrink: 0;
+  font-size: 12.5px;
   font-weight: 700;
-  padding: 4px 12px;
-  background: #eff6ff;
+  padding: 5px 12px;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
   color: #1d4ed8;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 /* 8 窗口结果矩阵卡片 */
 .matrix-8-windows {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .window-card {
-  background: #ffffff;
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: 11px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .window-card.highlight-win {
-  border-color: #3b82f6;
-  background: #f8fafc;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+  border-color: #93c5fd;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
 }
 
 .win-label {
@@ -3228,7 +3549,7 @@ async function executeSandbox() {
 
 .win-peer {
   font-size: 12px;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .win-growth {
@@ -3242,51 +3563,57 @@ async function executeSandbox() {
 }
 
 .growth-down {
-  color: #16a34a;
+  color: #059669;
 }
 
 /* 步骤时间轴 */
 .derivation-steps-block {
-  background: #ffffff;
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 16px 18px;
 }
 
 .steps-heading {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
-  color: #1e293b;
-  margin: 0 0 16px;
+  color: #0f172a;
+  margin: 0 0 14px;
 }
 
 .steps-timeline {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .timeline-step-item {
   display: flex;
   gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
 }
 
 .step-num-badge {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #2563eb;
   color: #ffffff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .step-content-box {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3302,13 +3629,13 @@ async function executeSandbox() {
   font-size: 13px;
   color: #475569;
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .step-breakdown-table-wrap {
   margin-top: 8px;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -3317,70 +3644,31 @@ async function executeSandbox() {
   font-size: 12px;
 }
 
-/* 组织架构 */
-.entities-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
+@media (max-width: 1120px) {
+  .sandbox-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .matrix-8-windows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.entity-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.entity-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.entity-code {
-  font-family: monospace;
-  font-size: 12px;
-  color: #2563eb;
-}
-
-.entity-type-badge {
-  font-size: 11px;
-  background: #e2e8f0;
-  color: #475569;
-  padding: 2px 6px;
-  border-radius: 4px;
-  align-self: flex-start;
-}
-
-.json-code-box {
-  background: #0f172a;
-  color: #38bdf8;
-  font-family: Consolas, Monaco, monospace;
-  font-size: 12px;
-  padding: 16px;
-  border-radius: 8px;
-  max-height: 480px;
-  overflow: auto;
-}
-
-/* 基准业务日期控制卡片专属样式 */
-.biz-date-controller-card {
-  border-left: 4px solid #10b981;
-  margin-bottom: 20px;
-}
-
+/* ==================== ⚙️ 供暖期与基准业务日期样式 ==================== */
 .biz-date-form-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.9fr);
+  gap: 18px;
+  align-items: stretch;
 }
 
 .date-picker-field {
-  flex: 1 1 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
 }
 
 .date-picker-wrap {
@@ -3390,57 +3678,61 @@ async function executeSandbox() {
 }
 
 .highlight-date-input {
+  flex: 1;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14.5px;
   color: #0f766e;
-  background: #f0fdf4;
+  background: #ffffff;
   border-color: #86efac;
 }
 
 .date-status-card {
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
-  padding: 12px 18px;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 200px;
+  justify-content: center;
+  gap: 4px;
 }
 
 .status-label {
   font-size: 12px;
-  color: #64748b;
+  color: #475569;
   font-weight: 600;
 }
 
 .status-val {
-  font-size: 18px;
+  font-size: 20px;
   color: #047857;
-  font-weight: 700;
-  font-family: monospace;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .status-sub {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 11.5px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .checkbox-align-box {
+  height: 38px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin-top: 2px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  padding: 0 12px;
 }
 
 .align-checkbox {
   cursor: pointer;
   width: 16px;
   height: 16px;
+  accent-color: #2563eb;
 }
 
 .align-checkbox-label {
@@ -3449,37 +3741,24 @@ async function executeSandbox() {
   cursor: pointer;
   margin: 0;
   user-select: none;
-}
-
-/* 供暖期控制台专属样式 */
-.season-controller-card {
-  border-left: 4px solid #3b82f6;
-}
-
-.season-tip-banner {
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 16px;
-}
-.season-tip-banner.success {
-  background: #ecfdf5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
-}
-.season-tip-banner.error {
-  background: #fef2f2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .season-control-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 16px;
 }
+
+.season-control-form-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
 .season-control-form-grid .full-width {
   grid-column: 1 / -1;
 }
@@ -3488,106 +3767,110 @@ async function executeSandbox() {
   font-weight: 600;
   color: #1e293b;
   font-size: 13px;
-  margin-bottom: 4px;
   display: block;
+}
+
+.field-help {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.45;
 }
 
 .season-select {
   font-weight: 600;
   color: #1d4ed8;
-  background: #f8fafc;
 }
 
 .readonly-input {
-  background: #f1f5f9;
-  color: #64748b;
+  background: #f1f5f9 !important;
+  color: #64748b !important;
   cursor: not-allowed;
 }
 
 .season-safety-notice {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 16px 20px;
 }
+
 .safety-title {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #166534;
   margin-bottom: 8px;
 }
+
 .safety-list {
   margin: 0;
-  padding-left: 20px;
-  font-size: 13px;
+  padding-left: 18px;
+  font-size: 12.5px;
   color: #15803d;
   line-height: 1.7;
 }
+
 .safety-list code {
   background: #dcfce7;
   color: #14532d;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 4px;
   font-weight: 600;
 }
 
-/* ============================================================================== */
-/* 📋 金山文档 (KDocs) 12345 底表配置样式 */
-/* ============================================================================== */
-.kdocs-config-card {
-  border-top: 3px solid #2563eb !important;
+@media (max-width: 1100px) {
+  .season-control-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ==================== 📊 金山文档 (KDocs) 底表配置样式 ==================== */
+.kdocs-form-panel {
+  margin-bottom: 0;
 }
 
 .kdocs-form-layout {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-top: 10px;
+  gap: 14px;
+}
+
+.kdocs-form-layout .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
 }
 
 .kdocs-two-col {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-@media (max-width: 768px) {
-  .kdocs-two-col {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .kdocs-input-link {
   width: 100%;
 }
 
-.readonly-style {
-  background-color: #f1f5f9 !important;
-  color: #475569 !important;
-  cursor: not-allowed !important;
-  font-family: monospace;
-}
-
 .field-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
 }
 
 .btn-text-action {
-  background: none;
-  border: none;
-  color: #2563eb;
-  font-size: 12.5px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
 }
 
 .btn-text-action:hover {
-  background: #eff6ff;
-  text-decoration: underline;
+  background: #dbeafe;
 }
 
 .kdocs-sid-input,
@@ -3595,7 +3878,6 @@ async function executeSandbox() {
   width: 100%;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
-  line-height: 1.4;
 }
 
 .kdocs-action-bar {
@@ -3604,21 +3886,22 @@ async function executeSandbox() {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 20px;
+  margin-top: 16px;
   padding-top: 16px;
   border-top: 1px dashed #e2e8f0;
 }
 
 .left-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .status-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -3650,23 +3933,25 @@ async function executeSandbox() {
 .kdocs-status-card {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: 10px;
+  padding: 14px 16px;
   margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .status-row {
   display: flex;
+  align-items: baseline;
+  gap: 10px;
   font-size: 13px;
   line-height: 1.5;
 }
 
 .status-label {
   color: #64748b;
-  width: 105px;
+  width: 96px;
   flex-shrink: 0;
   font-weight: 600;
 }
@@ -3681,30 +3966,32 @@ async function executeSandbox() {
 }
 
 .sync-preview-card {
-  margin-top: 16px !important;
-  background: #f0fdf4 !important;
-  border: 1px solid #86efac !important;
-  border-radius: 10px !important;
-  padding: 16px !important;
+  margin-top: 14px;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 16px 18px;
 }
 
 .preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 12px;
   color: #166534;
 }
 
 .preview-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   gap: 10px;
 }
 
 .metric-mini-card {
   background: #ffffff;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
@@ -3718,8 +4005,8 @@ async function executeSandbox() {
 }
 
 .m-val {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 800;
   color: #0f172a;
 }
 
@@ -3731,29 +4018,52 @@ async function executeSandbox() {
   color: #d97706;
 }
 
-.help-guide-card {
-  background: #fdfdfd !important;
-  border-left: 4px solid #6366f1 !important;
-}
-
+/* 带圆点序号的步骤说明列表 */
 .kdocs-guide-steps {
-  margin: 12px 0 0;
-  padding-left: 20px;
-  font-size: 13.5px;
-  line-height: 1.8;
-  color: #334155;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: guide-step;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .kdocs-guide-steps li {
-  margin-bottom: 6px;
+  counter-increment: guide-step;
+  position: relative;
+  padding: 10px 14px 10px 44px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.kdocs-guide-steps li::before {
+  content: counter(guide-step);
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .kdocs-guide-steps code {
-  background: #f1f5f9;
-  color: #2563eb;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: monospace;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .link {
@@ -3761,18 +4071,14 @@ async function executeSandbox() {
   text-decoration: underline;
 }
 
-/* ============================================================================== */
-/* 📱 移动端与手机窄屏极致体验适配 (Mobile & Narrow Screen Optimization)           */
-/* ============================================================================== */
-
-/* 移动端表格横向滑动提示条 */
+/* ==================== 📱 移动端与手机窄屏适配 ==================== */
 .mobile-table-hint {
   display: none;
   font-size: 11.5px;
   color: #0369a1;
   background: #f0f9ff;
   border: 1px dashed #bae6fd;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 6px 10px;
   margin-bottom: 10px;
   text-align: center;
@@ -3783,157 +4089,137 @@ async function executeSandbox() {
     display: block;
   }
 
-  /* 根容器与主容器适配：消除两边过大空白 */
   .dr-global-mgmt-view {
     overflow-x: hidden;
     width: 100%;
   }
 
   .tube-page-main {
-    padding: 10px 12px 48px !important;
+    padding: 10px 12px 48px;
   }
 
-  /* 顶栏垂直流式排布：标题居上，操作按钮均分双列居下 */
   .premium-topbar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 12px !important;
-    margin-bottom: 14px !important;
-    padding: 6px 0 12px !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin: 6px 0 14px;
+    padding-bottom: 12px;
   }
 
   .premium-topbar h2 {
-    font-size: 18px !important;
+    font-size: 18px;
     line-height: 1.35;
-    margin-bottom: 4px;
   }
 
   .premium-topbar .sub {
-    font-size: 12px !important;
-    line-height: 1.5;
+    font-size: 12px;
   }
 
   .topbar-actions {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-    width: 100% !important;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
   }
 
   .topbar-actions .btn {
-    width: 100% !important;
-    height: 38px !important;
-    justify-content: center !important;
-    font-size: 13px !important;
-    padding: 0 8px !important;
+    width: 100%;
+    padding: 0 8px;
+    font-size: 13px;
   }
 
-  /* 磨砂玻璃态全局数据看板：2 列网格紧凑重构，引擎项整行通栏突出 */
   .quick-dashboard-card {
-    padding: 12px 10px !important;
-    margin-bottom: 14px !important;
-    border-radius: 10px !important;
+    padding: 10px;
+    margin-bottom: 14px;
+    border-radius: 12px;
   }
 
   .meta-dashboard {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .meta-dashboard .meta-card {
     padding: 8px 10px;
-    background: rgba(248, 250, 252, 0.85);
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 8px;
-    gap: 2px;
   }
 
   .meta-dashboard .meta-card:nth-child(3) {
-    grid-column: 1 / -1; /* 底层计算引擎卡片通栏跨两列 */
-    background: #eff6ff;
-    border-color: #bfdbfe;
+    grid-column: 1 / -1;
   }
 
   .meta-label {
-    font-size: 11px !important;
+    font-size: 11px;
   }
 
   .meta-value {
-    font-size: 15px !important;
+    font-size: 14.5px;
   }
 
-  /* 通用配置卡片内边距紧凑适配 */
   .section-card {
-    padding: 14px 12px !important;
-    border-radius: 10px !important;
+    padding: 16px 14px;
+    border-radius: 12px;
   }
 
   .card-header-row {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 10px !important;
-    margin-bottom: 12px !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
   }
 
   .card-header {
-    font-size: 16px !important;
-    line-height: 1.4;
+    font-size: 15.5px;
   }
 
   .block-sub {
-    font-size: 12px !important;
-    line-height: 1.5;
+    font-size: 12px;
   }
 
-  /* 视图切换按钮（卡片 / 表格）：全宽分段开关 (Segmented Control) */
+  .section-actions,
+  .section-actions .execute-sandbox-btn {
+    width: 100%;
+  }
+
   .view-mode-toggle {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    width: 100% !important;
-    gap: 6px !important;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
   }
 
   .view-mode-toggle .btn {
-    width: 100% !important;
-    height: 34px !important;
-    justify-content: center !important;
+    width: 100%;
   }
 
-  /* 筛选工具栏单列化 */
   .filter-toolbar {
-    flex-direction: column !important;
-    gap: 10px !important;
-    margin-bottom: 12px !important;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .search-box {
-    width: 100% !important;
-    min-width: 0 !important;
+    width: 100%;
+    min-width: 0;
   }
 
   .filter-dropdowns {
-    flex-direction: column !important;
-    width: 100% !important;
-    gap: 8px !important;
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
   }
 
   .scope-select,
   .derived-select {
-    width: 100% !important;
-    height: 38px !important;
-    font-size: 13px !important;
+    width: 100%;
   }
 
-  /* 分类胶囊栏：横向单行顺滑滚动，防止垂直堆叠占满屏幕 */
   .category-pills {
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    padding-top: 10px !important;
-    padding-bottom: 6px !important;
-    gap: 6px !important;
+    padding-top: 10px;
+    padding-bottom: 4px;
   }
 
   .category-pills::-webkit-scrollbar {
@@ -3941,49 +4227,24 @@ async function executeSandbox() {
   }
 
   .category-pill {
-    flex-shrink: 0 !important;
-    white-space: nowrap !important;
-    padding: 5px 11px !important;
-    font-size: 12px !important;
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 5px 11px;
+    font-size: 12px;
   }
 
-  /* 🧮 算法指标卡片网格：单列撑满，消除 360px 宽度导致的屏幕横向溢出 */
   .catalog-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .metric-card {
-    padding: 14px 12px !important;
-    border-radius: 10px !important;
-  }
-
-  .metric-card-header {
-    gap: 8px;
-  }
-
-  .metric-title-wrap {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .metric-name {
-    font-size: 15px !important;
-    word-break: break-word;
-  }
-
-  .unit-badge {
-    flex-shrink: 0;
-    align-self: flex-start;
-  }
-
-  .metric-key-bar {
-    min-width: 0;
-    padding: 4px 6px;
+    padding: 14px;
+    border-radius: 12px;
   }
 
   .metric-key {
-    font-size: 12px !important;
+    font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -3991,38 +4252,10 @@ async function executeSandbox() {
     flex: 1;
   }
 
-  .formula-box {
-    padding: 6px 8px !important;
-  }
-
-  .formula-code {
-    font-size: 12px !important;
-  }
-
-  .metric-meta-details {
-    font-size: 11.5px !important;
-    gap: 6px !important;
-  }
-
-  .meta-row {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .row-label {
-    min-width: 58px;
-  }
-
-  .sandbox-trigger-btn {
-    height: 38px !important;
-    font-size: 13px !important;
-  }
-
-  /* 紧凑表格视图横向滚动包裹 */
   .table-wrap {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1px solid #e2e8f0;
   }
 
@@ -4030,19 +4263,13 @@ async function executeSandbox() {
     min-width: 680px;
   }
 
-  /* 🧪 在线沙盒控制区：垂直单列排布，大触控区 */
   .sandbox-control-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-    padding: 12px 10px !important;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
   }
 
-  .date-input-group {
-    display: flex;
-    gap: 6px;
-  }
-
-  .date-input-group input[type="date"] {
+  .date-input-group input[type='date'] {
     flex: 1;
     min-width: 0;
   }
@@ -4052,87 +4279,36 @@ async function executeSandbox() {
   }
 
   .execute-sandbox-btn {
-    width: 100% !important;
-    height: 42px !important;
-    font-size: 14px !important;
-    justify-content: center !important;
+    width: 100%;
+    height: 40px;
   }
 
-  /* 沙盒验算结果头部卡片 */
   .result-headline-card {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-    padding: 12px 10px !important;
-  }
-
-  .headline-title {
-    font-size: 16px !important;
-  }
-
-  .headline-meta {
-    font-size: 12px !important;
-    line-height: 1.5;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px;
   }
 
   .final-unit-pill {
     align-self: flex-start;
-    font-size: 12px !important;
-    padding: 2px 8px !important;
   }
 
-  /* 8 窗口结果矩阵卡片：2x2 双列对比排布，在手机上一屏对比 4 个阶段 */
   .matrix-8-windows {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .window-card {
-    padding: 10px 8px !important;
-  }
-
-  .win-label {
-    font-size: 11px !important;
+    padding: 10px;
   }
 
   .win-val {
-    font-size: 17px !important;
+    font-size: 17px;
   }
 
-  .win-peer {
-    font-size: 11px !important;
-  }
-
-  .win-growth {
-    font-size: 11.5px !important;
-  }
-
-  /* 推导步骤卡片 */
   .derivation-steps-block {
-    padding: 12px 10px !important;
-  }
-
-  .steps-heading {
-    font-size: 14px !important;
-    margin-bottom: 12px !important;
-  }
-
-  .timeline-step-item {
-    gap: 8px !important;
-  }
-
-  .step-num-badge {
-    width: 22px !important;
-    height: 22px !important;
-    font-size: 11px !important;
-  }
-
-  .step-title {
-    font-size: 13.5px !important;
-  }
-
-  .step-desc {
-    font-size: 12px !important;
+    padding: 12px;
   }
 
   .step-breakdown-table-wrap {
@@ -4144,84 +4320,39 @@ async function executeSandbox() {
     min-width: 320px;
   }
 
-  /* Tab 2: ⚙️ 供暖期与时间参数管控 */
-  .biz-date-form-row {
-    flex-direction: column !important;
-    gap: 12px !important;
+  .form-group-panel {
+    padding: 12px;
   }
 
-  .date-picker-field,
-  .date-status-card {
-    width: 100% !important;
-    min-width: 0 !important;
+  .biz-date-form-row,
+  .season-control-form-grid,
+  .kdocs-two-col {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .date-picker-field {
+    padding: 12px;
   }
 
   .date-picker-wrap {
     flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .highlight-date-input {
-    flex: 1 1 180px;
-    min-width: 0;
-  }
-
-  .season-control-form-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-  }
-
-  .season-safety-notice {
-    padding: 12px 14px !important;
-  }
-
-  .safety-title {
-    font-size: 13.5px !important;
-  }
-
-  .safety-list {
-    font-size: 12px !important;
-    padding-left: 16px;
-  }
-
-  /* Tab 3: 📋 12345 投诉底表 (金山文档) 移动端排版 */
-  .kdocs-two-col {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
   }
 
   .kdocs-action-bar {
-    flex-direction: column-reverse !important;
-    align-items: stretch !important;
-    gap: 12px !important;
-    padding-top: 12px !important;
-    margin-top: 14px !important;
+    flex-direction: column-reverse;
+    align-items: stretch;
   }
 
-  .status-summary {
+  .status-summary,
+  .status-badge,
+  .left-actions,
+  .left-actions .btn {
     width: 100%;
-    display: flex;
-    justify-content: center;
-  }
-
-  .status-badge {
-    width: 100% !important;
-    text-align: center;
-    padding: 6px 12px !important;
   }
 
   .left-actions {
-    flex-direction: column !important;
-    width: 100% !important;
-    gap: 8px !important;
-  }
-
-  .left-actions .btn {
-    width: 100% !important;
-    height: 38px !important;
-    justify-content: center !important;
-    font-size: 13px !important;
-    padding: 0 10px !important;
+    flex-direction: column;
   }
 
   .status-row {
@@ -4230,102 +4361,31 @@ async function executeSandbox() {
   }
 
   .status-label {
-    width: auto !important;
-    font-size: 12px;
-  }
-
-  .status-val {
-    font-size: 12.5px;
+    width: auto;
   }
 
   .preview-metrics-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-  }
-
-  .metric-mini-card {
-    padding: 8px 10px !important;
-  }
-
-  .m-val {
-    font-size: 15px !important;
-  }
-
-  .kdocs-guide-steps {
-    padding-left: 16px;
-    font-size: 12.5px !important;
-    line-height: 1.6;
-  }
-
-  /* Tab 5: 🏢 供热单位与组织架构 2 列紧凑排布 */
-  .entities-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-  }
-
-  .entity-card {
-    padding: 10px 8px !important;
-    gap: 4px !important;
-  }
-
-  .entity-name {
-    font-size: 13px !important;
-  }
-
-  .entity-code {
-    font-size: 11px !important;
-  }
-
-  .entity-type-badge {
-    font-size: 10px !important;
-  }
-
-  /* Tab 6: 💻 原始配置代码盒 */
-  .json-code-box {
-    padding: 10px !important;
-    font-size: 11px !important;
-    max-height: 320px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 }
 
-/* 针对更极窄手机屏幕 (<= 420px，如 iPhone SE, 375px 小屏) 的细节微调 */
 @media (max-width: 420px) {
   .tube-page-main {
-    padding: 8px 8px 40px !important;
+    padding: 8px 8px 40px;
   }
 
   .premium-topbar h2 {
-    font-size: 16.5px !important;
+    font-size: 16.5px;
   }
 
   .topbar-actions .btn {
-    font-size: 12px !important;
-    padding: 0 4px !important;
-  }
-
-  .meta-dashboard {
-    gap: 6px !important;
-  }
-
-  .meta-dashboard .meta-card {
-    padding: 6px 8px !important;
-  }
-
-  .meta-value {
-    font-size: 14px !important;
-  }
-
-  .matrix-8-windows {
-    gap: 6px !important;
+    font-size: 12px;
+    padding: 0 4px;
   }
 
   .win-val {
-    font-size: 15px !important;
-  }
-
-  .category-pill {
-    padding: 4px 9px !important;
-    font-size: 11.5px !important;
+    font-size: 15px;
   }
 }
 </style>

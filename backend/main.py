@@ -79,11 +79,30 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def on_startup():
         try:
+            from backend.services.project_settings import migrate_legacy_project_settings
+            mig_res = migrate_legacy_project_settings("daily_report_25_26", archive_legacy=True)
+            if mig_res["migrated_sections"] or mig_res["archived_files"]:
+                logging.info("Migrated project_settings on startup: %s", mig_res)
+        except Exception as e:
+            logging.error("Failed to migrate legacy project settings on startup: %s", e)
+
+        try:
             from backend.services.spot_electricity_sync_service import spot_sync_service
             spot_sync_service.start_scheduler()
             logging.info("SpotElectricitySyncService scheduler initialized on app startup.")
         except Exception as e:
             logging.error("Failed to start SpotElectricitySyncService scheduler on app startup: %s", e)
+
+        try:
+            from backend.services.weather_auto_import_service import (
+                ensemble_weather_auto_import_service,
+                weather_auto_import_service,
+            )
+            weather_auto_import_service.start_scheduler()
+            ensemble_weather_auto_import_service.start_scheduler()
+            logging.info("WeatherAutoImportService & EnsembleWeatherAutoImportService schedulers initialized on app startup.")
+        except Exception as e:
+            logging.error("Failed to start WeatherAutoImportService schedulers on app startup: %s", e)
 
         try:
             from backend.projects.insulation_pipe_supply_2026.services.joint_review_service import ensure_joint_review_tables
@@ -100,6 +119,17 @@ def create_app() -> FastAPI:
             logging.info("SpotElectricitySyncService scheduler stopped gracefully on app shutdown.")
         except Exception as e:
             logging.error("Failed to stop SpotElectricitySyncService scheduler on app shutdown: %s", e)
+
+        try:
+            from backend.services.weather_auto_import_service import (
+                ensemble_weather_auto_import_service,
+                weather_auto_import_service,
+            )
+            weather_auto_import_service.stop_scheduler()
+            ensemble_weather_auto_import_service.stop_scheduler()
+            logging.info("WeatherAutoImportService & EnsembleWeatherAutoImportService schedulers stopped gracefully on app shutdown.")
+        except Exception as e:
+            logging.error("Failed to stop WeatherAutoImportService schedulers on app shutdown: %s", e)
 
     return app
 

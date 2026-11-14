@@ -23,13 +23,15 @@ EAST_8 = timezone(timedelta(hours=8))
 SUBMISSION_ACTIONS = [
     "SUBMIT_ENTRY",
     "SUBMIT_SHEET",
+    "SUBMIT_CORRECTION",
     "IMPORT_COMPLAINT",
     "IMPORT_TEMPERATURE",
     "SYNC_SPOT_ELEC",
+    "IMPORT_DISPATCH",
+    "IMPORT_EFFICIENCY",
+    "IMPORT_XLSX",
     "UPDATE_COAL_PLAN",
     "UPDATE_CONFIG",
-    "IMPORT_XLSX",
-    "IMPORT_EFFICIENCY",
 ]
 
 WORKFLOW_ACTIONS = [
@@ -37,12 +39,16 @@ WORKFLOW_ACTIONS = [
     "REVOKE_UNIT",
     "PUBLISH_DAILY",
     "REVOKE_PUBLISH",
+    "APPROVE_CORRECTION",
+    "REJECT_CORRECTION",
     "AUDIT_RESET",
 ]
 
 QUERY_ACTIONS = [
-    "QUERY_DASHBOARD",
     "EXPORT_DASHBOARD_PDF",
+    "EXPORT_DAILY_BRIEF_PDF",
+    "EXPORT_SHEET_DATA",
+    "QUERY_DASHBOARD",
     "QUERY_SHEET_DATA",
     "QUERY_DATA_ANALYSIS",
     "QUERY_DISPATCH_INFO",
@@ -53,6 +59,40 @@ QUERY_ACTIONS = [
 
 ALL_ACTIONS = SUBMISSION_ACTIONS + WORKFLOW_ACTIONS + QUERY_ACTIONS
 
+# 允许前端主动上报的纯客户端导出/交互动作白名单
+CLIENT_REPORTABLE_ACTIONS = frozenset({
+    "EXPORT_DASHBOARD_PDF",
+    "EXPORT_DAILY_BRIEF_PDF",
+    "EXPORT_SHEET_DATA",
+})
+
+# 单位代号/别名到标准中文显示名的映射
+UNIT_LABEL_MAP: Dict[str, str] = {
+    "BeiHai": "北海热电厂",
+    "beihai": "北海热电厂",
+    "JinZhou": "金州热电",
+    "jinzhou": "金州热电",
+    "XiangHai": "香海热电厂",
+    "xianghai": "香海热电厂",
+    "BeiFang": "北方热电",
+    "beifang": "北方热电",
+    "JinPu": "金普热电",
+    "jinpu": "金普热电",
+    "ZhuangHe": "庄河热电",
+    "zhuanghe": "庄河热电",
+    "GongRe": "供热分公司",
+    "gongre": "供热分公司",
+    "Group": "洁净能源集团",
+    "group": "洁净能源集团",
+    "ZhuChengQu": "主城区",
+    "zhuchengqu": "主城区",
+    "ShouDian": "售电公司",
+    "shoudian": "售电公司",
+    "YanJiuYuan": "研究院",
+    "yanjiuyuan": "研究院",
+    "系统管理员": "集团全局管理",
+}
+
 # 实体/生产单位多别名映射，支持中英文、缩写与拼音双向智能模糊检索
 ENTITY_ALIAS_MAP: Dict[str, List[str]] = {
     "北海": ["%北海%", "%BeiHai%", "%beihai%"],
@@ -62,18 +102,51 @@ ENTITY_ALIAS_MAP: Dict[str, List[str]] = {
     "金普": ["%金普%", "%JinPu%", "%jinpu%"],
     "庄河": ["%庄河%", "%ZhuangHe%", "%zhuanghe%"],
     "供热": ["%供热%", "%GongRe%", "%gongre%", "%热网%"],
-    "集团": ["%集团%", "%Group%", "%group%", "%经济运行部%", "%洁净能源%"],
+    "集团": ["%集团%", "%Group%", "%group%", "%经济运行部%", "%洁净能源%", "%系统管理员%", "%全局%"],
     "调度": ["%调度%", "%dispatch%", "%生产调度%"],
-    "现货": ["%现货%", "%spot%", "%交易中心%"],
+    "现货": ["%现货%", "%spot%", "%交易中心%", "%售电%", "%ShouDian%"],
+    "主城区": ["%主城%", "%ZhuChengQu%", "%zhuchengqu%"],
+    "售电": ["%售电%", "%ShouDian%", "%shoudian%"],
+    "研究院": ["%研究院%", "%YanJiuYuan%", "%yanjiuyuan%"],
 }
 
 _table_ensured = False
 
 
+def normalize_unit_label(raw_unit: Optional[str]) -> str:
+    """将单位代号统一转换为前端可读中文名称。"""
+    text_val = str(raw_unit or "").strip()
+    if not text_val:
+        return ""
+    return UNIT_LABEL_MAP.get(text_val, text_val)
+
+
+def extract_client_ip(request: Any) -> str:
+    """从 FastAPI Request 中解析真实客户端 IP（优先反向代理头）。"""
+    if request is None:
+        return ""
+    try:
+        headers = getattr(request, "headers", None)
+        if headers:
+            xff = str(headers.get("x-forwarded-for") or "").strip()
+            if xff:
+                first_ip = xff.split(",")[0].strip()
+                if first_ip:
+                    return first_ip[:64]
+            xri = str(headers.get("x-real-ip") or "").strip()
+            if xri:
+                return xri[:64]
+        client = getattr(request, "client", None)
+        host = getattr(client, "host", "") if client else ""
+        return str(host or "").strip()[:64]
+    except Exception:
+        return ""
+
+
 def ensure_daily_report_operation_logs_table() -> None:
     """
     自动确保 logs.daily_report_operation_logs 存在并拥有正确结构与索引。
-    若表为空，自动从 logs.system_audit_logs 或已有业务操作中回填历史初始记录。
+    不再在空表时自动灌入任何虚构演示种子数据。
     """
     global _table_ensured
     if _table_ensured:
@@ -103,12 +176,6 @@ def ensure_daily_report_operation_logs_table() -> None:
             CREATE INDEX IF NOT EXISTS idx_dr_op_logs_unit ON logs.daily_report_operation_logs (unit);
         """))
         session.commit()
-
-        # 检查是否需要冷启动初始化种子历史
-        count = session.execute(text("SELECT COUNT(*) FROM logs.daily_report_operation_logs;")).scalar() or 0
-        if count == 0:
-            _seed_initial_history(session)
-
         _table_ensured = True
     except Exception as exc:
         session.rollback()
@@ -117,116 +184,19 @@ def ensure_daily_report_operation_logs_table() -> None:
         session.close()
 
 
-def _generate_rich_seed_records() -> List[Dict[str, Any]]:
-    """
-    生成生产日报各业务维度（填报、审核、发布、气温、现货、投诉、调度、配置、调阅）的丰富操作日志流水。
-    包含过去 24 小时内的最新操作流水以及前数日业务历史，确保各类行为类型和生产单位均有真实生动的分布。
-    """
-    now = datetime.now(timezone.utc)
-    raw_seeds = [
-        # --- 过去 24h 内高频核心业务操作 (由近及远) ---
-        ("group_admin", "Group_admin", "集团经济运行部", "EXPORT_DASHBOARD_PDF", "导出 2026.11.09 洁净能源集团生产日报数据看板标准宽屏 PDF 汇报材料", "dashboard:2026-11-09", "10.12.1.8", now - timedelta(minutes=15)),
-        ("gongre_admin", "Heating_company_admin", "供热分公司", "IMPORT_COMPLAINT", "通过金山文档在线底表自动拉取并一键填入供热公司 10 个服务中心投诉量指标（共67项）", "GongRe_Sheet:2026-11-09", "10.12.3.90", now - timedelta(minutes=35)),
-        ("group_admin", "Group_admin", "集团生产调度中心", "IMPORT_TEMPERATURE", "导入并覆盖入库 2026-11-09 至 2026-11-10 逐小时历史气象气温数据（共24时段）与同期对比", "weather:2026-11-10", "10.12.1.8", now - timedelta(hours=1, minutes=10)),
-        ("spot_operator", "Trading_admin", "电力现货交易中心", "SYNC_SPOT_ELEC", "同步 2026-11-09 辽宁电力现货日前/实时市场 96 点结算出清量价数据入库", "spot_elec:2026-11-09", "10.12.5.101", now - timedelta(hours=1, minutes=45)),
-        ("beihai_admin", "Power_plant_admin", "北海热电厂", "SUBMIT_ENTRY", "填报提交北海热电厂（热电联产）日报生产数据（发电量/供热量/耗煤等共42项指标）", "BeiHai_co_generation_sheet:2026-11-09", "192.168.10.45", now - timedelta(hours=2, minutes=15)),
-        ("jinzhou_admin", "Power_plant_admin", "金州热电", "SUBMIT_ENTRY", "填报提交金州热电分公司生产日报基础表单（供热量/炉机启停情况与供汽量）", "JinZhou_power_sheet:2026-11-09", "192.168.12.18", now - timedelta(hours=2, minutes=40)),
-        ("xianghai_admin", "Power_plant_admin", "香海热电厂", "SUBMIT_ENTRY", "填报提交香海热电厂每日能源消耗、炉机运行工况与热网补水量明细数据", "XiangHai_power_sheet:2026-11-09", "192.168.15.22", now - timedelta(hours=3, minutes=10)),
-        ("group_admin", "Group_admin", "集团经济运行部", "APPROVE_UNIT", "完成对北海热电厂、金州热电、香海热电厂填报日报数据的部门级审核通过", "workflow:approve:2026-11-09", "10.12.1.8", now - timedelta(hours=3, minutes=50)),
-        ("gongre_admin", "Heating_company_admin", "供热分公司", "SUBMIT_ENTRY", "填报提交供热分公司各供热服务中心二次网运行参数与耗水量明细", "GongRe_Sheet:2026-11-09", "10.12.3.90", now - timedelta(hours=4, minutes=20)),
-        ("group_admin", "Group_admin", "集团经济运行部", "UPDATE_COAL_PLAN", "测算并动态分解维护 2026-2027 供暖期全期标煤消耗与负荷控制计划指标", "dynamic_plan:2026-11", "10.12.1.8", now - timedelta(hours=5, minutes=0)),
-        ("group_admin", "Group_admin", "集团生产调度中心", "QUERY_DISPATCH_INFO", "调阅各电厂与主力热源机炉运行实时工况、调度负荷曲线与指令台账", "dispatch:2026-11-09", "10.12.1.8", now - timedelta(hours=5, minutes=45)),
-        ("beifang_admin", "Power_plant_admin", "北方热电", "SUBMIT_ENTRY", "填报提交北方热电分公司燃煤库存、入厂煤质及进煤盘点明细（发热量/硫分）", "BeiFang_power_sheet:2026-11-09", "192.168.18.55", now - timedelta(hours=6, minutes=30)),
-        ("group_admin", "Group_admin", "集团经济运行部", "PUBLISH_DAILY", "正式终审发布 2026-11-09 洁净能源集团生产日报，已固化归档入库并推送分管领导", "workflow:publish:2026-11-09", "10.12.1.8", now - timedelta(hours=7, minutes=15)),
-        ("ww870411", "Global_admin", "洁净能源集团", "UPDATE_CONFIG", "更新生产日报基准运行业务日期为【2026-11-09】并完成全局大盘时间对齐", "biz_date:2026-11-09", "172.19.0.4", now - timedelta(hours=8, minutes=5)),
-        ("jinpu_admin", "Power_plant_admin", "金普热电", "SUBMIT_ENTRY", "填报提交金普热电分公司生产负荷、发电机组启停与热网供暖参数表单", "JinPu_power_sheet:2026-11-09", "192.168.20.12", now - timedelta(hours=9, minutes=30)),
-        ("zhuanghe_admin", "Power_plant_admin", "庄河热电", "SUBMIT_ENTRY", "填报提交庄河热电厂每日机组运行、供汽量及供热单耗核算指标", "ZhuangHe_power_sheet:2026-11-09", "192.168.25.66", now - timedelta(hours=11, minutes=10)),
-        ("group_admin", "Group_admin", "集团经济运行部", "QUERY_DATA_ANALYSIS", "调阅全网生产多维数据智能分析并对比 2025 年同期气象与标煤耗量走势", "data_analysis:season_compare", "10.12.1.8", now - timedelta(hours=13, minutes=20)),
-        ("group_admin", "Group_admin", "集团经济运行部", "REVOKE_UNIT", "对供热分公司某中心上报的耗水量异常进行审核驳回，退回责任单位重新复核修正", "workflow:revoke:2026-11-09", "10.12.1.8", now - timedelta(hours=15, minutes=40)),
-        ("spot_operator", "Trading_admin", "电力现货交易中心", "QUERY_SPOT_ELEC", "调阅辽宁电力现货日前出清价与实时市场量价结算走势看板", "spot_elec:market_query", "10.12.5.101", now - timedelta(hours=18, minutes=10)),
-        ("ww870411", "Global_admin", "洁净能源集团", "QUERY_DASHBOARD", "调阅洁净能源集团生产日报数字化决策数据看板（全网 16 张核心分析卡片）", "dashboard:overview", "172.19.0.4", now - timedelta(hours=21, minutes=30)),
-
-        # --- 1~3 天前历史业务周期流水 (确保历史分页与各主体筛选皆有数据) ---
-        ("group_admin", "Group_admin", "集团经济运行部", "PUBLISH_DAILY", "正式终审发布 2026-11-08 洁净能源集团生产日报，已固化归档入库", "workflow:publish:2026-11-08", "10.12.1.8", now - timedelta(days=1, hours=3)),
-        ("group_admin", "Group_admin", "集团经济运行部", "APPROVE_UNIT", "完成对北海热电厂、金州热电、供热分公司 2026-11-08 生产报表部门级审核确认", "workflow:approve:2026-11-08", "10.12.1.8", now - timedelta(days=1, hours=4)),
-        ("beihai_admin", "Power_plant_admin", "北海热电厂", "SUBMIT_ENTRY", "填报提交北海热电厂（热电联产）2026-11-08 生产运行报表", "BeiHai_co_generation_sheet:2026-11-08", "192.168.10.45", now - timedelta(days=1, hours=5)),
-        ("jinzhou_admin", "Power_plant_admin", "金州热电", "SUBMIT_ENTRY", "填报提交金州热电分公司 2026-11-08 生产日报数据", "JinZhou_power_sheet:2026-11-08", "192.168.12.18", now - timedelta(days=1, hours=5, minutes=30)),
-        ("xianghai_admin", "Power_plant_admin", "香海热电厂", "SUBMIT_ENTRY", "填报提交香海热电厂 2026-11-08 供热量与能耗指标", "XiangHai_power_sheet:2026-11-08", "192.168.15.22", now - timedelta(days=1, hours=6)),
-        ("gongre_admin", "Heating_company_admin", "供热分公司", "IMPORT_COMPLAINT", "通过金山文档在线底表拉取填入 2026-11-08 供热公司投诉明细（67项）", "GongRe_Sheet:2026-11-08", "10.12.3.90", now - timedelta(days=1, hours=7)),
-        ("group_admin", "Group_admin", "集团生产调度中心", "IMPORT_TEMPERATURE", "导入 2026-11-08 历史逐小时气温与气象监测数据（共24时段）", "weather:2026-11-08", "10.12.1.8", now - timedelta(days=1, hours=8)),
-        ("spot_operator", "Trading_admin", "电力现货交易中心", "SYNC_SPOT_ELEC", "同步 2026-11-08 辽宁电力现货日前/实时市场结算出清数据", "spot_elec:2026-11-08", "10.12.5.101", now - timedelta(days=1, hours=9)),
-        ("beifang_admin", "Power_plant_admin", "北方热电", "SUBMIT_ENTRY", "填报提交北方热电分公司 2026-11-08 煤质化验与进耗存报表", "BeiFang_power_sheet:2026-11-08", "192.168.18.55", now - timedelta(days=1, hours=10)),
-        ("jinpu_admin", "Power_plant_admin", "金普热电", "SUBMIT_ENTRY", "填报提交金普热电分公司 2026-11-08 生产负荷与供热指标", "JinPu_power_sheet:2026-11-08", "192.168.20.12", now - timedelta(days=1, hours=11)),
-        ("zhuanghe_admin", "Power_plant_admin", "庄河热电", "SUBMIT_ENTRY", "填报提交庄河热电厂 2026-11-08 机组运行与煤耗核算数据", "ZhuangHe_power_sheet:2026-11-08", "192.168.25.66", now - timedelta(days=1, hours=12)),
-        ("group_admin", "Group_admin", "集团经济运行部", "EXPORT_DASHBOARD_PDF", "导出 2026.11.08 洁净能源集团生产日报数据看板标准 PDF", "dashboard:2026-11-08", "10.12.1.8", now - timedelta(days=1, hours=14)),
-        ("group_admin", "Group_admin", "集团经济运行部", "PUBLISH_DAILY", "正式终审发布 2026-11-07 洁净能源集团生产日报，已固化归档入库", "workflow:publish:2026-11-07", "10.12.1.8", now - timedelta(days=2, hours=3)),
-        ("beihai_admin", "Power_plant_admin", "北海热电厂", "SUBMIT_ENTRY", "填报提交北海热电厂 2026-11-07 生产运行与能耗报表", "BeiHai_co_generation_sheet:2026-11-07", "192.168.10.45", now - timedelta(days=2, hours=5)),
-        ("jinzhou_admin", "Power_plant_admin", "金州热电", "SUBMIT_ENTRY", "填报提交金州热电 2026-11-07 生产日报数据", "JinZhou_power_sheet:2026-11-07", "192.168.12.18", now - timedelta(days=2, hours=6)),
-        ("xianghai_admin", "Power_plant_admin", "香海热电厂", "SUBMIT_ENTRY", "填报提交香海热电厂 2026-11-07 供热量与能耗指标", "XiangHai_power_sheet:2026-11-07", "192.168.15.22", now - timedelta(days=2, hours=7)),
-    ]
-
-    records = []
-    for op, grp, u, act, desc, res, ip, ct in raw_seeds:
-        records.append({
-            "operator": op,
-            "operator_group": grp,
-            "unit": u,
-            "action_type": act,
-            "action_desc": desc,
-            "resource_id": res,
-            "client_ip": ip,
-            "created_at": ct,
-        })
-    return records
+def _is_missing_operation_logs_table(exc: Exception) -> bool:
+    """判断异常是否因表在运行期被外部删除或还原覆盖而缺失。"""
+    msg = str(exc).lower()
+    return "daily_report_operation_logs" in msg and (
+        "does not exist" in msg or "undefinedtable" in msg or "undefined table" in msg
+    )
 
 
-def _seed_initial_history(session) -> None:
-    """
-    初始化业务操作历史记录，涵盖全部核心业务大类与代表性主体。
-    """
-    try:
-        seed_rows = _generate_rich_seed_records()
-        for row in seed_rows:
-            session.execute(text("""
-                INSERT INTO logs.daily_report_operation_logs (
-                    operator, operator_group, unit, action_type, action_desc, resource_id, client_ip, created_at
-                ) VALUES (
-                    :operator, :operator_group, :unit, :action_type, :action_desc, :resource_id, :client_ip, :created_at
-                );
-            """), row)
-        session.commit()
-    except Exception as exc:
-        session.rollback()
-        logger.warning(f"初始化种子业务日志失败: {exc}")
-
-
-def reseed_operation_logs_dataset() -> int:
-    """
-    重置并重构日志数据集，清除机械重复的调阅记录，注入全业务维度的高质量操作流水。
-    返回新注入的记录总数。
-    """
-    session = SessionLocal()
-    try:
-        ensure_daily_report_operation_logs_table()
-        # 清除旧的历史数据
-        session.execute(text("TRUNCATE TABLE logs.daily_report_operation_logs RESTART IDENTITY;"))
-        records = _generate_rich_seed_records()
-        for row in records:
-            session.execute(text("""
-                INSERT INTO logs.daily_report_operation_logs (
-                    operator, operator_group, unit, action_type, action_desc, resource_id, client_ip, created_at
-                ) VALUES (
-                    :operator, :operator_group, :unit, :action_type, :action_desc, :resource_id, :client_ip, :created_at
-                );
-            """), row)
-        session.commit()
-        return len(records)
-    except Exception as exc:
-        session.rollback()
-        logger.error(f"重置操作日志数据集失败: {exc}")
-        raise
-    finally:
-        session.close()
+def _recover_missing_operation_logs_table() -> None:
+    """重置内存建表缓存并重新确保表结构存在。"""
+    global _table_ensured
+    _table_ensured = False
+    ensure_daily_report_operation_logs_table()
 
 
 def save_operation_log(
@@ -239,6 +209,7 @@ def save_operation_log(
     before_value: Optional[Dict[str, Any]] = None,
     after_value: Optional[Dict[str, Any]] = None,
     client_ip: Optional[str] = None,
+    created_at: Optional[datetime] = None,
 ) -> None:
     """
     保存单条业务操作日志。包装在 try...except 中，确保绝对不阻断主业务流程。
@@ -254,6 +225,7 @@ def save_operation_log(
 
     before_json = json.dumps(before_value, default=_serialize_default, ensure_ascii=False) if before_value is not None else None
     after_json = json.dumps(after_value, default=_serialize_default, ensure_ascii=False) if after_value is not None else None
+    normalized_unit = normalize_unit_label(unit)
 
     sql = text("""
         INSERT INTO logs.daily_report_operation_logs (
@@ -261,30 +233,314 @@ def save_operation_log(
             resource_id, before_value, after_value, client_ip, created_at
         ) VALUES (
             :operator, :operator_group, :unit, :action_type, :action_desc,
-            :resource_id, :before_value, :after_value, :client_ip, NOW()
+            :resource_id, :before_value, :after_value, :client_ip, COALESCE(:created_at, NOW())
         )
     """)
 
+    insert_params = {
+        "operator": operator or "unknown",
+        "operator_group": operator_group or "",
+        "unit": normalized_unit,
+        "action_type": action_type or "ACTION",
+        "action_desc": action_desc or "",
+        "resource_id": resource_id or None,
+        "before_value": before_json,
+        "after_value": after_json,
+        "client_ip": client_ip or "",
+        "created_at": created_at,
+    }
+
+    for attempt in range(2):
+        session = SessionLocal()
+        try:
+            session.execute(sql, insert_params)
+            session.commit()
+            return
+        except Exception as exc:
+            session.rollback()
+            if attempt == 0 and _is_missing_operation_logs_table(exc):
+                _recover_missing_operation_logs_table()
+                continue
+            logger.error(f"[daily_report_operation_log] 写入日志失败: {exc}")
+            return
+        finally:
+            session.close()
+
+
+def log_session_operation(
+    session: Any,
+    action_type: str,
+    action_desc: str,
+    *,
+    request: Any = None,
+    unit: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    before_value: Optional[Dict[str, Any]] = None,
+    after_value: Optional[Dict[str, Any]] = None,
+    fallback_operator: str = "system",
+) -> None:
+    """
+    统一从 AuthSession 与 FastAPI Request 提取操作人、角色组、单位和来源 IP，写入业务操作日志。
+    失败仅告警，不影响主业务返回。
+    """
+    try:
+        operator = str(getattr(session, "username", "") or "").strip() or fallback_operator
+        operator_group = str(getattr(session, "group", "") or "").strip()
+        raw_unit = unit if unit is not None else getattr(session, "unit", "")
+        client_ip = extract_client_ip(request)
+        save_operation_log(
+            operator=operator,
+            operator_group=operator_group,
+            unit=raw_unit,
+            action_type=action_type,
+            action_desc=action_desc,
+            resource_id=resource_id,
+            before_value=before_value,
+            after_value=after_value,
+            client_ip=client_ip,
+        )
+    except Exception as exc:
+        logger.warning(f"[daily_report_operation_log] 记录会话业务日志失败（已忽略）: {exc}")
+
+
+SYNTHETIC_SEED_IPS = (
+    "10.12.1.8",
+    "10.12.3.90",
+    "10.12.5.101",
+    "192.168.10.45",
+    "192.168.12.18",
+    "192.168.15.22",
+    "192.168.18.55",
+    "192.168.20.12",
+    "192.168.25.66",
+)
+
+
+def purge_synthetic_seed_logs() -> int:
+    """
+    清理历史版本自动生成的虚构种子日志（保留所有真实业务记录）。
+    """
+    ensure_daily_report_operation_logs_table()
     session = SessionLocal()
     try:
-        session.execute(
-            sql,
-            {
-                "operator": operator or "unknown",
-                "operator_group": operator_group or "",
-                "unit": unit or "",
-                "action_type": action_type or "ACTION",
-                "action_desc": action_desc or "",
-                "resource_id": resource_id or None,
-                "before_value": before_json,
-                "after_value": after_json,
-                "client_ip": client_ip or "",
-            }
-        )
+        result = session.execute(text("""
+            DELETE FROM logs.daily_report_operation_logs
+            WHERE after_value IS NULL
+              AND before_value IS NULL
+              AND (
+                client_ip = ANY(:seed_ips)
+                OR (
+                    client_ip = '172.19.0.4'
+                    AND operator = 'ww870411'
+                    AND resource_id IN ('biz_date:2026-11-09', 'dashboard:overview')
+                    AND action_desc IN (
+                        '更新生产日报基准运行业务日期为【2026-11-09】并完成全局大盘时间对齐',
+                        '调阅洁净能源集团生产日报数字化决策数据看板（全网 16 张核心分析卡片）'
+                    )
+                )
+              )
+        """), {"seed_ips": list(SYNTHETIC_SEED_IPS)})
         session.commit()
+        return int(result.rowcount or 0)
     except Exception as exc:
         session.rollback()
-        logger.error(f"[daily_report_operation_log] 写入日志失败: {exc}")
+        logger.error(f"清理虚构种子日志失败: {exc}")
+        raise
+    finally:
+        session.close()
+
+
+def _map_system_audit_click(row: Any) -> Optional[Dict[str, Any]]:
+    """将 logs.system_audit_logs 中的真实前端交互记录映射为业务操作记录。"""
+    target = str(row.target or "").strip()
+    page = str(row.page or "").strip()
+    unit_label = normalize_unit_label(row.unit)
+
+    if target == "下载PDF":
+        return {
+            "action_type": "EXPORT_DASHBOARD_PDF",
+            "action_desc": "导出洁净能源集团生产日报数据看板标准 PDF（历史埋点回填）",
+            "resource_id": "dashboard:pdf",
+        }
+    if target == "导出 PDF":
+        return {
+            "action_type": "EXPORT_DAILY_BRIEF_PDF",
+            "action_desc": "导出每日生产状况内参简报 PDF（历史埋点回填）",
+            "resource_id": "daily_brief:pdf",
+        }
+    if target == "导出Excel":
+        return {
+            "action_type": "EXPORT_SHEET_DATA",
+            "action_desc": "导出生产日报展示表 Excel 工作簿（历史埋点回填）",
+            "resource_id": "data_show:excel",
+        }
+    if target == "📷 导出截图":
+        return {
+            "action_type": "EXPORT_SHEET_DATA",
+            "action_desc": "导出生产日报展示表高清长截图（历史埋点回填）",
+            "resource_id": "data_show:screenshot",
+        }
+    if target == "📥 导出数据 (Excel/CSV)":
+        return {
+            "action_type": "EXPORT_SHEET_DATA",
+            "action_desc": "导出电力现货市场交易数据（历史埋点回填）",
+            "resource_id": "spot_elec:export",
+        }
+    if target in ("提交", "仅提交当前表") or target.startswith("一并提交"):
+        sheet_key = ""
+        marker = "/data_entry/sheets/"
+        if marker in page:
+            sheet_key = page.split(marker, 1)[1].split("?", 1)[0].strip("/")
+        suffix = f"（{sheet_key}）" if sheet_key else ""
+        return {
+            "action_type": "SUBMIT_ENTRY",
+            "action_desc": f"填报提交{unit_label or '单位'}生产日报数据{suffix}（历史埋点回填）",
+            "resource_id": f"sheet:{sheet_key}" if sheet_key else "sheet:submit",
+        }
+    if target == "批准":
+        return {
+            "action_type": "APPROVE_UNIT",
+            "action_desc": f"批准通过{unit_label or '单位'}生产日报数据（历史埋点回填）",
+            "resource_id": "workflow:approve",
+        }
+    if target == "确认覆盖入库" and "/dashboard" in page:
+        return {
+            "action_type": "IMPORT_TEMPERATURE",
+            "action_desc": "在数据看板手动确认导入近端逐小时气温数据（历史埋点回填）",
+            "resource_id": "weather:near",
+        }
+    if target == "⛅ 导入35天预报":
+        return {
+            "action_type": "IMPORT_TEMPERATURE",
+            "action_desc": "手动导入 35 天集合气温预报数据（历史埋点回填）",
+            "resource_id": "weather:far",
+        }
+    if target == "⚡ 自动拉取投诉量":
+        return {
+            "action_type": "IMPORT_COMPLAINT",
+            "action_desc": "从金山文档拉取 12345 投诉统计明细（历史埋点回填）",
+            "resource_id": "kdocs:complaint",
+        }
+    if target == "确认入库" and "/spot_electricity" in page:
+        return {
+            "action_type": "SYNC_SPOT_ELEC",
+            "action_desc": "手动确认导入电力现货市场/结算数据（历史埋点回填）",
+            "resource_id": "spot_elec:confirm",
+        }
+    if target == "💾 一键保存入库" and "/dispatch" in page:
+        return {
+            "action_type": "IMPORT_DISPATCH",
+            "action_desc": "保存生产调度日报提取结果入库（历史埋点回填）",
+            "resource_id": "dispatch:save",
+        }
+    if target == "📁 上传能效分析表":
+        return {
+            "action_type": "IMPORT_EFFICIENCY",
+            "action_desc": f"上传解析{unit_label or '单位'}能效分析表 Excel（历史埋点回填）",
+            "resource_id": "efficiency:upload",
+        }
+    if target == "生成分析结果":
+        return {
+            "action_type": "QUERY_DATA_ANALYSIS",
+            "action_desc": "执行生产多维数据组合分析查询（历史埋点回填）",
+            "resource_id": "data_analysis:query",
+        }
+    if target == "确认提交申请":
+        return {
+            "action_type": "SUBMIT_CORRECTION",
+            "action_desc": f"提交{unit_label or '单位'}日报数据修正申请（历史埋点回填）",
+            "resource_id": "correction:create",
+        }
+    if target in ("💾 保存自动获取设置", "💾 保存配置", "💾 保存持久化配置"):
+        return {
+            "action_type": "UPDATE_CONFIG",
+            "action_desc": f"修改系统运行或自动导入配置（{target}，历史埋点回填）",
+            "resource_id": "config:update",
+        }
+    return None
+
+
+def backfill_from_system_audit_logs(days: int = 30) -> int:
+    """
+    从 logs.system_audit_logs 中提取近 N 天真实已发生的 daily_report_25_26 核心业务操作回填至本表。
+    通过 after_value->>'source_audit_id' 实现幂等，重复调用不会产生重复记录。
+    """
+    ensure_daily_report_operation_logs_table()
+    session = SessionLocal()
+    inserted = 0
+    try:
+        existing_ids = {
+            str(r[0])
+            for r in session.execute(text("""
+                SELECT after_value->>'source_audit_id'
+                FROM logs.daily_report_operation_logs
+                WHERE after_value ? 'source_audit_id'
+            """)).fetchall()
+            if r[0] is not None
+        }
+
+        rows = session.execute(text("""
+            SELECT id, ts, username, user_group, unit, page, target, client_ip
+            FROM logs.system_audit_logs
+            WHERE project_key = 'daily_report_25_26'
+              AND category = 'ui'
+              AND action = 'click'
+              AND ts >= NOW() - make_interval(days => :days)
+            ORDER BY ts ASC
+        """), {"days": int(max(1, days))}).fetchall()
+
+        last_seen: Dict[tuple, datetime] = {}
+        for row in rows:
+            mapped = _map_system_audit_click(row)
+            if not mapped:
+                continue
+            dedupe_key = (str(row.username or ""), mapped["action_type"], mapped["resource_id"])
+            audit_id = str(row.id)
+            if audit_id in existing_ids:
+                last_seen[dedupe_key] = row.ts
+                continue
+
+            # 2 秒内同一人同页同动作仅保留一条，过滤误双击抖动
+            prev_ts = last_seen.get(dedupe_key)
+            if prev_ts is not None and abs((row.ts - prev_ts).total_seconds()) < 2:
+                continue
+            last_seen[dedupe_key] = row.ts
+
+            after_payload = json.dumps(
+                {
+                    "source": "system_audit_logs_backfill",
+                    "source_audit_id": audit_id,
+                    "original_target": str(row.target or ""),
+                },
+                ensure_ascii=False,
+            )
+            session.execute(text("""
+                INSERT INTO logs.daily_report_operation_logs (
+                    operator, operator_group, unit, action_type, action_desc,
+                    resource_id, before_value, after_value, client_ip, created_at
+                ) VALUES (
+                    :operator, :operator_group, :unit, :action_type, :action_desc,
+                    :resource_id, NULL, :after_value, :client_ip, :created_at
+                )
+            """), {
+                "operator": str(row.username or "unknown"),
+                "operator_group": str(row.user_group or ""),
+                "unit": normalize_unit_label(row.unit),
+                "action_type": mapped["action_type"],
+                "action_desc": mapped["action_desc"],
+                "resource_id": mapped["resource_id"],
+                "after_value": after_payload,
+                "client_ip": str(row.client_ip or ""),
+                "created_at": row.ts,
+            })
+            inserted += 1
+
+        session.commit()
+        return inserted
+    except Exception as exc:
+        session.rollback()
+        logger.error(f"回填真实业务操作记录失败: {exc}")
+        raise
     finally:
         session.close()
 
@@ -350,87 +606,194 @@ def query_submission_logs(
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
-    session = SessionLocal()
-    try:
-        # 总数
-        count_sql = text(f"SELECT COUNT(*) FROM logs.daily_report_operation_logs {where_clause}")
-        total = session.execute(count_sql, params).scalar() or 0
+    for attempt in range(2):
+        session = SessionLocal()
+        try:
+            # 总数（若表在运行期被外部删除或还原覆盖，自动重建并重试一次）
+            count_sql = text(f"SELECT COUNT(*) FROM logs.daily_report_operation_logs {where_clause}")
+            total = session.execute(count_sql, params).scalar() or 0
+            if total == 0 and not conditions:
+                session.rollback()
+                try:
+                    if backfill_from_system_audit_logs(days=30) > 0:
+                        total = session.execute(count_sql, params).scalar() or 0
+                except Exception as exc:
+                    logger.warning(f"[daily_report_operation_log] 空表自动回填真实历史失败（已忽略）: {exc}")
 
-        # 明细列表
-        list_sql = text(f"""
-            SELECT id, operator, operator_group, unit, action_type, action_desc,
-                   resource_id, before_value, after_value, client_ip, created_at
-            FROM logs.daily_report_operation_logs
-            {where_clause}
-            ORDER BY created_at DESC
-            LIMIT :limit OFFSET :offset
-        """)
-        list_params = {**params, "limit": limit, "offset": offset}
-        rows = session.execute(list_sql, list_params).fetchall()
+            # 明细列表
+            list_sql = text(f"""
+                SELECT id, operator, operator_group, unit, action_type, action_desc,
+                       resource_id, before_value, after_value, client_ip, created_at
+                FROM logs.daily_report_operation_logs
+                {where_clause}
+                ORDER BY created_at DESC
+                LIMIT :limit OFFSET :offset
+            """)
+            list_params = {**params, "limit": limit, "offset": offset}
+            rows = session.execute(list_sql, list_params).fetchall()
 
-        logs: List[Dict[str, Any]] = []
-        for r in rows:
-            created_dt = r[10]
-            if isinstance(created_dt, datetime):
-                created_iso = created_dt.isoformat()
-            else:
-                created_iso = str(created_dt) if created_dt else None
+            logs: List[Dict[str, Any]] = []
+            for r in rows:
+                created_dt = r[10]
+                if isinstance(created_dt, datetime):
+                    created_iso = created_dt.isoformat()
+                else:
+                    created_iso = str(created_dt) if created_dt else None
 
-            logs.append({
-                "id": r[0],
-                "operator": r[1],
-                "operator_group": r[2],
-                "unit": r[3],
-                "action_type": r[4],
-                "action_desc": r[5],
-                "resource_id": r[6],
-                "before_value": r[7],
-                "after_value": r[8],
-                "client_ip": r[9],
-                "created_at": created_iso,
-            })
+                logs.append({
+                    "id": r[0],
+                    "operator": r[1],
+                    "operator_group": r[2],
+                    "unit": r[3],
+                    "action_type": r[4],
+                    "action_desc": r[5],
+                    "resource_id": r[6],
+                    "before_value": r[7],
+                    "after_value": r[8],
+                    "client_ip": r[9],
+                    "created_at": created_iso,
+                })
 
-        # 最新操作物理时间
-        latest_submitted_sql = text("SELECT MAX(created_at) FROM logs.daily_report_operation_logs;")
-        latest_submitted_dt = session.execute(latest_submitted_sql).scalar()
-        latest_submitted_at = latest_submitted_dt.isoformat() if latest_submitted_dt else None
+            # 最新操作物理时间
+            latest_submitted_sql = text("SELECT MAX(created_at) FROM logs.daily_report_operation_logs;")
+            latest_submitted_dt = session.execute(latest_submitted_sql).scalar()
+            latest_submitted_at = latest_submitted_dt.isoformat() if latest_submitted_dt else None
 
-        # 24h 操作计数看板
-        recent_24h_sql = text("""
-            SELECT COUNT(*) FROM logs.daily_report_operation_logs
-            WHERE created_at >= NOW() - INTERVAL '24 HOURS';
-        """)
-        recent_24h_count = session.execute(recent_24h_sql).scalar() or 0
+            # 24h 操作计数看板
+            recent_24h_sql = text("""
+                SELECT COUNT(*) FROM logs.daily_report_operation_logs
+                WHERE created_at >= NOW() - INTERVAL '24 HOURS';
+            """)
+            recent_24h_count = session.execute(recent_24h_sql).scalar() or 0
 
-        submission_24h_sql = text("""
-            SELECT COUNT(*) FROM logs.daily_report_operation_logs
-            WHERE action_type = ANY(:sub_actions)
-              AND created_at >= NOW() - INTERVAL '24 HOURS';
-        """)
-        submission_24h_count = session.execute(submission_24h_sql, {"sub_actions": SUBMISSION_ACTIONS}).scalar() or 0
+            submission_24h_sql = text("""
+                SELECT COUNT(*) FROM logs.daily_report_operation_logs
+                WHERE action_type = ANY(:sub_actions)
+                  AND created_at >= NOW() - INTERVAL '24 HOURS';
+            """)
+            submission_24h_count = session.execute(submission_24h_sql, {"sub_actions": SUBMISSION_ACTIONS}).scalar() or 0
 
-        workflow_24h_sql = text("""
-            SELECT COUNT(*) FROM logs.daily_report_operation_logs
-            WHERE action_type = ANY(:wf_actions)
-              AND created_at >= NOW() - INTERVAL '24 HOURS';
-        """)
-        workflow_24h_count = session.execute(workflow_24h_sql, {"wf_actions": WORKFLOW_ACTIONS}).scalar() or 0
+            workflow_24h_sql = text("""
+                SELECT COUNT(*) FROM logs.daily_report_operation_logs
+                WHERE action_type = ANY(:wf_actions)
+                  AND created_at >= NOW() - INTERVAL '24 HOURS';
+            """)
+            workflow_24h_count = session.execute(workflow_24h_sql, {"wf_actions": WORKFLOW_ACTIONS}).scalar() or 0
 
-        query_24h_sql = text("""
-            SELECT COUNT(*) FROM logs.daily_report_operation_logs
-            WHERE action_type = ANY(:q_actions)
-              AND created_at >= NOW() - INTERVAL '24 HOURS';
-        """)
-        query_24h_count = session.execute(query_24h_sql, {"q_actions": QUERY_ACTIONS}).scalar() or 0
+            query_24h_sql = text("""
+                SELECT COUNT(*) FROM logs.daily_report_operation_logs
+                WHERE action_type = ANY(:q_actions)
+                  AND created_at >= NOW() - INTERVAL '24 HOURS';
+            """)
+            query_24h_count = session.execute(query_24h_sql, {"q_actions": QUERY_ACTIONS}).scalar() or 0
 
-        return {
-            "total": total,
-            "latest_submitted_at": latest_submitted_at,
-            "recent_24h_count": recent_24h_count,
-            "submission_24h_count": submission_24h_count,
-            "workflow_24h_count": workflow_24h_count,
-            "query_24h_count": query_24h_count,
-            "logs": logs,
-        }
-    finally:
-        session.close()
+            return {
+                "total": total,
+                "latest_submitted_at": latest_submitted_at,
+                "recent_24h_count": recent_24h_count,
+                "submission_24h_count": submission_24h_count,
+                "workflow_24h_count": workflow_24h_count,
+                "query_24h_count": query_24h_count,
+                "logs": logs,
+            }
+        except Exception as exc:
+            session.rollback()
+            if attempt == 0 and _is_missing_operation_logs_table(exc):
+                _recover_missing_operation_logs_table()
+                continue
+            raise
+        finally:
+            session.close()
+
+
+def log_sheet_submission(
+    session: Any,
+    request: Any,
+    sheet_key: str,
+    payload: Dict[str, Any],
+    *,
+    unit_name: str = "",
+    sheet_name: str = "",
+    inserted_count: int = 0,
+) -> None:
+    """统一记录表单提交（日常指标、供热分中心明细、煤炭库存、常量表）。"""
+    biz_date = str(payload.get("biz_date") or "").strip()
+    status_val = str(payload.get("status") or "submit").strip() or "submit"
+    resolved_unit = normalize_unit_label(
+        unit_name or payload.get("unit_name") or payload.get("unit_id") or getattr(session, "unit", "")
+    )
+    resolved_sheet = str(sheet_name or payload.get("sheet_name") or sheet_key).strip()
+    action_label = "暂存草稿" if status_val == "draft" else "填报提交"
+    date_part = f" {biz_date}" if biz_date else ""
+    log_session_operation(
+        session,
+        "SUBMIT_ENTRY",
+        f"{action_label}【{resolved_unit or '单位'}】{resolved_sheet}{date_part}（写入 {inserted_count} 项）",
+        request=request,
+        unit=resolved_unit,
+        resource_id=f"{sheet_key}:{biz_date or 'latest'}",
+        after_value={
+            "sheet_key": sheet_key,
+            "sheet_name": resolved_sheet,
+            "biz_date": biz_date,
+            "status": status_val,
+            "inserted": inserted_count,
+        },
+    )
+
+
+def log_efficiency_import(
+    session: Any,
+    request: Any,
+    *,
+    unit_label: str,
+    sheet_tag: str,
+    filename: str,
+    biz_date: str,
+    res: Any,
+) -> None:
+    """统一记录能效分析表 Excel 上传解析操作（仅解析成功时写入）。"""
+    if not isinstance(res, dict) or not res.get("ok"):
+        return
+    log_session_operation(
+        session,
+        "IMPORT_EFFICIENCY",
+        f"上传解析【{unit_label}】{biz_date} 能效分析表（{filename or sheet_tag}）",
+        request=request,
+        unit=unit_label,
+        resource_id=f"{sheet_tag}:{biz_date}",
+        after_value={"filename": filename, "biz_date": biz_date},
+    )
+
+
+def log_data_analysis_query(
+    session: Any,
+    request: Any,
+    *,
+    unit_key: str,
+    analysis_mode: str,
+    start_date: str,
+    end_date: Optional[str],
+    metrics_count: int,
+    request_ai_report: bool = False,
+) -> None:
+    """记录用户在数据分析页主动发起的多维数据查询操作。"""
+    unit_label = normalize_unit_label(unit_key)
+    span = f"{start_date} ~ {end_date}" if end_date and end_date != start_date else start_date
+    ai_note = "（含 AI 智能解读）" if request_ai_report else ""
+    log_session_operation(
+        session,
+        "QUERY_DATA_ANALYSIS",
+        f"执行生产多维数据分析查询：口径【{unit_label or unit_key}】，模式 {analysis_mode}，日期 {span}，指标 {metrics_count} 项{ai_note}",
+        request=request,
+        unit=unit_label,
+        resource_id=f"data_analysis:{unit_key}:{start_date}",
+        after_value={
+            "unit_key": unit_key,
+            "analysis_mode": analysis_mode,
+            "start_date": start_date,
+            "end_date": end_date,
+            "metrics_count": metrics_count,
+            "request_ai_report": request_ai_report,
+        },
+    )

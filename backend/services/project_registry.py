@@ -19,12 +19,16 @@ DEFAULT_PROJECT_CONFIG_FILES: List[str] = [
     "数据结构_常量指标表.json",
     "数据结构_审批用表.json",
     "数据结构_数据分析表.json",
+    "数据结构_全口径展示表.json",
     "数据结构_数据看板.json",
-    "date.json",
+    "project_settings.json",
 ]
 DEFAULT_PROJECT_RUNTIME_FILES: List[str] = [
-    "dashboard_cache.json",
-    "test.md",
+    "status.json",
+    "weather_auto_import_state.json",
+    "ensemble_weather_auto_import_state.json",
+    "kdocs_complaint_state.json",
+    "spot_electricity_sync_state.json",
 ]
 
 

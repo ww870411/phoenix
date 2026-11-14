@@ -6,16 +6,54 @@ daily_report_25_26 全局管理控制台专有 API：
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from backend.services.auth_manager import AuthSession, get_current_session
 from backend.projects.daily_report_25_26.services.audit_log_service import (
-    query_submission_logs,
-    save_operation_log,
+    CLIENT_REPORTABLE_ACTIONS,
     PROJECT_KEY,
+    log_session_operation,
+    query_submission_logs,
 )
 
 router = APIRouter()
+
+
+class ClientOperationLogPayload(BaseModel):
+    """前端纯客户端导出/关键操作上报载荷。"""
+
+    action_type: str = Field(..., min_length=1, max_length=64, description="操作类型（需在白名单内）")
+    action_desc: str = Field(..., min_length=1, max_length=500, description="操作说明")
+    resource_id: Optional[str] = Field(default=None, max_length=128, description="关联资源标识")
+    unit: Optional[str] = Field(default=None, max_length=128, description="可选覆盖所属单位")
+    after_value: Optional[Dict[str, Any]] = Field(default=None, description="附加结构化详情")
+
+
+@router.post("/global-management/operation-logs", summary="上报前端纯客户端业务操作日志")
+def record_client_operation_log(
+    payload: ClientOperationLogPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+) -> Dict[str, Any]:
+    """
+    接收浏览器端完成的纯前端导出动作（如看板 PDF、每日简报 PDF、展示表 Excel/截图），
+    写入 logs.daily_report_operation_logs。
+    """
+    action_type = str(payload.action_type or "").strip()
+    if action_type not in CLIENT_REPORTABLE_ACTIONS:
+        raise HTTPException(status_code=422, detail=f"不支持的前端日志上报类型: {action_type}")
+
+    log_session_operation(
+        session=session,
+        action_type=action_type,
+        action_desc=str(payload.action_desc or "").strip(),
+        request=request,
+        unit=payload.unit,
+        resource_id=str(payload.resource_id or "").strip() or None,
+        after_value=payload.after_value,
+    )
+    return {"ok": True}
 
 
 @router.get("/global-management/submission-logs", summary="读取业务操作记录")

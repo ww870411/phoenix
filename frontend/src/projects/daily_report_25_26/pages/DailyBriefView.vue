@@ -414,7 +414,7 @@
 <script setup>
 import { computed, onBeforeUnmount, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchDailyBrief } from '../services/api'
+import { fetchDailyBrief, recordDailyReportOperationLog } from '../services/api'
 import BriefSubjectSection from '../components/BriefSubjectSection.vue'
 import BriefComparisonText from '../components/BriefComparisonText.vue'
 import { formatBriefNumber as fmt } from '../composables/dailyBriefPresentation'
@@ -461,6 +461,13 @@ async function exportPdf() {
   try {
     await exportDailyBriefPdf(newspaperSheet.value, {
       date, theme, isCurrent: () => id === requestId && !loading.value && currentTheme.value === theme,
+    })
+    const projectKey = String(route.params.projectKey || 'daily_report_25_26')
+    recordDailyReportOperationLog(projectKey, {
+      action_type: 'EXPORT_DAILY_BRIEF_PDF',
+      action_desc: `导出 ${date} 每日生产状况内参简报 PDF（主题：${theme}）`,
+      resource_id: `daily_brief:${date}`,
+      after_value: { date, theme },
     })
   } catch (cause) {
     exportError.value = `PDF 导出失败：${cause.message || '请稍后重试。'}`

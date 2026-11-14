@@ -1027,6 +1027,7 @@ import {
   getSpotElectricitySummary,
   getSpotElectricityPoints,
   fetchCoalPlanComparison,
+  recordDailyReportOperationLog,
 } from '../services/api'
 import { useRouter } from 'vue-router'
 import { queryDispatchData } from '../services/dispatchApi'
@@ -5144,8 +5145,15 @@ const downloadPDF = async () => {
     })
 
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight)
-    const formattedDate = (effectiveBizDate.value || bizDateInput.value || '').replace(/-/g, '.')
+    const targetBizDate = effectiveBizDate.value || bizDateInput.value || ''
+    const formattedDate = targetBizDate.replace(/-/g, '.')
     pdf.save(`${formattedDate} 洁净能源集团生产日报数据看板.pdf`)
+    recordDailyReportOperationLog(projectKey, {
+      action_type: 'EXPORT_DASHBOARD_PDF',
+      action_desc: `导出 ${formattedDate || '当前'} 洁净能源集团生产日报数据看板标准 PDF`,
+      resource_id: `dashboard:${targetBizDate || 'latest'}`,
+      after_value: { biz_date: targetBizDate, mode: 'standard_wide_pdf' },
+    })
   } catch (err) {
     console.error('导出标准看板 PDF 失败:', err)
   } finally {

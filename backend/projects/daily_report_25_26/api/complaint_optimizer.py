@@ -4,9 +4,12 @@ from datetime import datetime
 from pathlib import PurePath
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Response
 from pydantic import BaseModel
 
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_session_operation,
+)
 from backend.services.auth_manager import AuthSession, get_current_session, get_current_session_optional
 from backend.services.excel_optimizer import optimize_workbook
 from backend.projects.daily_report_25_26.services.complaint_statistics import calculate
@@ -73,10 +76,22 @@ def get_kdocs_config():
 
 
 @public_router.post('/data_entry/complaints/kdocs/config', summary='更新金山文档 12345 底表配置')
-def update_kdocs_config(payload: KDocsConfigPayload):
+def update_kdocs_config(
+    payload: KDocsConfigPayload,
+    request: Request,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
     """更新并保存金山文档配置（包括链接、Cookie凭证、说明等）。"""
     updates = {k: v for k, v in payload.dict().items() if v is not None}
     saved = kdocs_complaint_service.save_config(updates)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        "更新金山文档 12345 投诉底表接入配置",
+        request=request,
+        unit="供热分公司",
+        resource_id="kdocs:complaint_config",
+    )
     return {'ok': True, 'data': saved, 'message': '金山文档接入配置已成功保存！'}
 
 
@@ -94,7 +109,11 @@ def test_kdocs_connectivity(payload: Optional[KDocsTestPayload] = None):
 
 
 @public_router.post('/data_entry/complaints/kdocs/sync', summary='从金山文档一键抓取并自动计算当日投诉')
-def sync_complaints_from_kdocs(payload: Optional[KDocsSyncPayload] = None):
+def sync_complaints_from_kdocs(
+    request: Request,
+    payload: Optional[KDocsSyncPayload] = None,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
     """
     使用配置的 wps_sid 直接从金山文档下载最新 12345 底表并执行统计。
     """
@@ -118,6 +137,15 @@ def sync_complaints_from_kdocs(payload: Optional[KDocsSyncPayload] = None):
         kdocs_complaint_service.save_config({
             'last_sync_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         })
+        log_session_operation(
+            session,
+            "IMPORT_COMPLAINT",
+            f"通过金山文档底表【{filename}】拉取并统计 {biz_date} 12345 投诉量",
+            request=request,
+            unit="供热分公司",
+            resource_id=f"GongRe_Sheet:{biz_date}",
+            after_value={"filename": filename, "biz_date": biz_date},
+        )
         return {
             'ok': True,
             'message': f'成功从金山文档拉取【{filename}】并完成 {biz_date} 投诉量统计！',

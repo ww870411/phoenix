@@ -49,8 +49,13 @@ GET_LINE_API_URL = "https://fgw.ln.gov.cn/indexview/api/getLine"
 DEFAULT_TIMEOUT = 20.0
 
 from backend.config import DATA_DIRECTORY
+from backend.services.project_settings import (
+    DEFAULT_PROJECT_KEY,
+    load_section_with_runtime_state,
+    save_section_with_runtime_state,
+)
 
-# 配置文件存储路径（统一挂载持久化）
+# 兼容旧配置文件路径（首次迁移后仅保留读取回退）
 _CONFIG_DIR = (
     DATA_DIRECTORY
     / "projects"
@@ -58,6 +63,11 @@ _CONFIG_DIR = (
     / "config"
 )
 CONFIG_FILE_PATH = _CONFIG_DIR / "spot_electricity_sync_config.json"
+
+SETTINGS_SECTION = "spot_electricity"
+STATE_FILENAME = "spot_electricity_sync_state.json"
+CONFIG_KEYS = ("enabled", "cron_time", "retry_interval_minutes", "max_retries_per_day", "target_date_rule")
+STATE_KEYS = ("last_sync_date", "last_run_time", "last_run_status", "last_run_message", "next_run_time")
 
 # 默认配置
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -161,33 +171,35 @@ class SpotElectricitySyncService:
         self._bg_thread: Optional[threading.Thread] = None
 
     def _load_config(self) -> Dict[str, Any]:
-        """从文件加载配置，若不存在则初始化默认配置。"""
+        """合并加载综合配置中的现货同步设置与 runtime 运行态，兼容回退旧文件。"""
         with self._config_lock:
-            if not CONFIG_FILE_PATH.exists():
-                _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-                CONFIG_FILE_PATH.write_text(
-                    json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                return dict(DEFAULT_CONFIG)
             try:
-                raw = CONFIG_FILE_PATH.read_text(encoding="utf-8")
-                loaded = json.loads(raw)
-                merged = dict(DEFAULT_CONFIG)
-                merged.update(loaded)
-                return merged
+                return load_section_with_runtime_state(
+                    SETTINGS_SECTION,
+                    STATE_FILENAME,
+                    DEFAULT_CONFIG,
+                    CONFIG_KEYS,
+                    STATE_KEYS,
+                    project_key=DEFAULT_PROJECT_KEY,
+                    legacy_candidates=[CONFIG_FILE_PATH],
+                )
             except Exception as e:
                 logger.error("加载现货同步配置文件失败，使用默认配置: %s", e)
                 return dict(DEFAULT_CONFIG)
 
-    def _persist_config(self) -> None:
-        """持久化当前配置到磁盘。"""
+    def _persist_config(self, include_settings: bool = False) -> None:
+        """持久化运行态到 runtime/；仅在修改调度配置时同步写入 config/project_settings.json。"""
         with self._config_lock:
             try:
-                _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-                CONFIG_FILE_PATH.write_text(
-                    json.dumps(self._config, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
+                save_section_with_runtime_state(
+                    SETTINGS_SECTION,
+                    STATE_FILENAME,
+                    self._config,
+                    CONFIG_KEYS,
+                    STATE_KEYS,
+                    project_key=DEFAULT_PROJECT_KEY,
+                    save_config=include_settings,
+                    save_state=True,
                 )
             except Exception as e:
                 logger.error("保存现货同步配置失败: %s", e)
@@ -221,7 +233,7 @@ class SpotElectricitySyncService:
                 except Exception:
                     self._config["retry_interval_minutes"] = 20
 
-        self._persist_config()
+        self._persist_config(include_settings=True)
         self._wake_event.set()  # 唤醒后台调度线程立即重新计算下一次执行时间
         return self.get_config()
 
@@ -617,6 +629,19 @@ class SpotElectricitySyncService:
         res = self.sync_data(target_date=yesterday_date, is_manual=False)
 
         if res.get("ok"):
+            try:
+                from backend.projects.daily_report_25_26.services.audit_log_service import save_operation_log
+                save_operation_log(
+                    operator="spot_scheduler",
+                    operator_group="System_scheduler",
+                    unit="电力现货交易中心",
+                    action_type="SYNC_SPOT_ELEC",
+                    action_desc=str(res.get("message") or f"定时自动同步 {yesterday_date} 电力现货 96 点电价数据入库"),
+                    resource_id=f"spot_elec:{yesterday_date}",
+                    after_value={"target_date": yesterday_date, "points_count": res.get("points_count"), "trigger": "auto"},
+                )
+            except Exception as log_exc:
+                logger.warning("[现货同步] 记录自动同步审计日志失败（已忽略）: %s", log_exc)
             self._retry_count_today = 0
             self._current_tracking_date = None
             # 计算明日执行时间（北京时间）

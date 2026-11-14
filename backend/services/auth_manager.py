@@ -66,6 +66,15 @@ from backend.services.project_data_paths import (
 
 )
 
+from backend.services import project_settings
+from backend.services.project_settings import (
+
+    DEFAULT_PROJECT_KEY,
+
+    update_settings_section,
+
+)
+
 
 
 
@@ -2694,9 +2703,23 @@ class AuthManager:
 
 
 
+    def _active_date_watch_path(self) -> Path:
+
+        settings_path = project_settings.get_project_settings_path(DEFAULT_PROJECT_KEY)
+
+        if settings_path.exists():
+
+            return settings_path
+
+        return self._date_config_path
+
+
+
     def _refresh_display_date_locked(self) -> None:
 
-        if not self._date_config_path.exists():
+        watch_path = self._active_date_watch_path()
+
+        if not watch_path.exists():
 
             self._date_config_mtime = None
 
@@ -2706,7 +2729,7 @@ class AuthManager:
 
         try:
 
-            raw = json.loads(self._date_config_path.read_text(encoding="utf-8"))
+            raw = json.loads(watch_path.read_text(encoding="utf-8"))
 
         except json.JSONDecodeError:
 
@@ -2714,7 +2737,31 @@ class AuthManager:
 
         else:
 
-            display_value = raw.get("set_biz_date")
+            if isinstance(raw, dict) and isinstance(raw.get("biz_date"), dict):
+
+                display_value = raw["biz_date"].get("set_biz_date")
+
+            elif isinstance(raw, dict):
+
+                display_value = raw.get("set_biz_date")
+
+            else:
+
+                display_value = None
+
+            if not display_value and watch_path != self._date_config_path and self._date_config_path.exists():
+
+                try:
+
+                    legacy_raw = json.loads(self._date_config_path.read_text(encoding="utf-8"))
+
+                    if isinstance(legacy_raw, dict):
+
+                        display_value = legacy_raw.get("set_biz_date")
+
+                except Exception:
+
+                    display_value = None
 
             parsed: Optional[date] = None
 
@@ -2722,7 +2769,7 @@ class AuthManager:
 
                 try:
 
-                    parsed = date.fromisoformat(display_value)
+                    parsed = date.fromisoformat(display_value.strip())
 
                 except ValueError:
 
@@ -2734,7 +2781,7 @@ class AuthManager:
 
             try:
 
-                self._date_config_mtime = self._date_config_path.stat().st_mtime
+                self._date_config_mtime = watch_path.stat().st_mtime
 
             except FileNotFoundError:
 
@@ -2750,9 +2797,11 @@ class AuthManager:
 
         with self._lock:
 
+            watch_path = self._active_date_watch_path()
+
             try:
 
-                current_mtime = self._date_config_path.stat().st_mtime
+                current_mtime = watch_path.stat().st_mtime
 
             except FileNotFoundError:
 
@@ -2768,39 +2817,43 @@ class AuthManager:
 
     def set_display_date(self, target_date: date) -> None:
 
-        try:
+        def _legacy_loader() -> Optional[Dict[str, str]]:
 
-            raw_text = self._date_config_path.read_text(encoding="utf-8")
+            if not self._date_config_path.exists():
 
-            payload = json.loads(raw_text)
+                return None
 
-            if not isinstance(payload, dict):
+            try:
 
-                payload = {}
+                loaded = json.loads(self._date_config_path.read_text(encoding="utf-8"))
 
-        except FileNotFoundError:
+                if isinstance(loaded, dict) and loaded.get("set_biz_date"):
 
-            payload = {}
+                    return {"set_biz_date": str(loaded["set_biz_date"]).strip()}
 
-        except json.JSONDecodeError:
+            except Exception:
 
-            payload = {}
+                return None
 
-        payload["set_biz_date"] = target_date.isoformat()
+            return None
 
         with self._lock:
 
-            self._date_config_path.parent.mkdir(parents=True, exist_ok=True)
+            update_settings_section(
 
-            self._date_config_path.write_text(
+                "biz_date",
 
-                json.dumps(payload, ensure_ascii=False, indent=2),
+                {"set_biz_date": target_date.isoformat()},
 
-                encoding="utf-8",
+                project_key=DEFAULT_PROJECT_KEY,
+
+                legacy_loader=_legacy_loader,
 
             )
 
-            self._date_config_mtime = self._date_config_path.stat().st_mtime
+            settings_path = project_settings.get_project_settings_path(DEFAULT_PROJECT_KEY)
+
+            self._date_config_mtime = settings_path.stat().st_mtime
 
             self._display_date_cache = target_date
 

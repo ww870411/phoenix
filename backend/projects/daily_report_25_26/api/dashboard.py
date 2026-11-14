@@ -5,17 +5,29 @@ from __future__ import annotations
 
 import copy
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_session_operation,
+)
 from backend.services import dashboard_cache
-from backend.services.auth_manager import EAST_8, AuthSession, get_current_session
+from backend.services.auth_manager import EAST_8, AuthSession, get_current_session, get_current_session_optional
 from backend.services.dashboard_cache_job import cache_publish_job_manager
 from backend.services.dashboard_expression import evaluate_dashboard, load_default_push_date, normalize_show_date
+from backend.services.ensemble_weather_service import (
+    EnsembleWeatherError,
+    load_ensemble_weather_import_config,
+    save_ensemble_weather_import_config,
+)
+from backend.services.weather_auto_import_service import (
+    ensemble_weather_auto_import_service,
+    weather_auto_import_service,
+)
 from backend.services.weather_importer import (
     WeatherImporterError,
     compare_with_existing,
@@ -169,11 +181,24 @@ class DashboardDateRequest(BaseModel):
     summary="设置当前全局基准业务日期 set_biz_date",
     tags=["daily_report_25_26"],
 )
-def update_dashboard_date(payload: DashboardDateRequest):
+def update_dashboard_date(
+    payload: DashboardDateRequest,
+    request: Request,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
     from backend.services import heating_season_service
     try:
         target_date = payload.get_target_date()
-        return heating_season_service.set_business_date(PROJECT_KEY, target_date)
+        res = heating_season_service.set_business_date(PROJECT_KEY, target_date)
+        log_session_operation(
+            session,
+            "UPDATE_CONFIG",
+            f"更新全局基准业务日期为【{target_date}】",
+            request=request,
+            resource_id=f"biz_date:{target_date}",
+            after_value={"set_biz_date": target_date},
+        )
+        return res
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -253,6 +278,7 @@ def get_dashboard_network_water_dumbbell(
     tags=["daily_report_25_26"],
 )
 def publish_dashboard_cache(
+    request: Request,
     session: AuthSession = Depends(get_current_session),
     days: int = Query(default=7, ge=1, le=30, description="发布窗口天数（含 set_biz_date 当天）"),
     preset: str | None = Query(default=None, description="缓存发布预设档位"),
@@ -272,6 +298,14 @@ def publish_dashboard_cache(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     schedule = list(reversed(target_dates))
     snapshot, started = cache_publish_job_manager.start(PROJECT_KEY, schedule)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"发起数据看板缓存生成任务（范围：{selection_label or f'{len(target_dates)}天'}）",
+        request=request,
+        resource_id="dashboard_cache:publish",
+        after_value={"days": len(target_dates), "preset": preset, "selection_label": selection_label},
+    )
     return {
         "ok": True,
         "started": started,
@@ -292,6 +326,7 @@ def get_dashboard_cache_inventory(session: AuthSession = Depends(get_current_ses
 
 @router.delete("/dashboard/cache/range", summary="只清除指定日期区间的缓存")
 def delete_dashboard_cache_range(
+    request: Request,
     start_date: str = Query(...),
     end_date: str = Query(...),
     session: AuthSession = Depends(get_current_session),
@@ -303,6 +338,13 @@ def delete_dashboard_cache_range(
         status = dashboard_cache.delete_cache_range(PROJECT_KEY, start_date, end_date)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"清除数据看板指定区间缓存（{start_date} ~ {end_date}）",
+        request=request,
+        resource_id=f"dashboard_cache:{start_date}_{end_date}",
+    )
     return {"ok": True, **status}
 
 
@@ -312,10 +354,18 @@ def delete_dashboard_cache_range(
     tags=["daily_report_25_26"],
 )
 def disable_dashboard_cache_endpoint(
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ):
     _ensure_cache_operator(session)
     status = dashboard_cache.disable_cache(PROJECT_KEY)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        "禁用数据看板缓存模式",
+        request=request,
+        resource_id="dashboard_cache:disable",
+    )
     return {
         "ok": True,
         "cache_disabled": status.get("disabled", True),
@@ -327,6 +377,13 @@ class WeatherImportConfigPayload(BaseModel):
     """全局管理中心维护的逐小时气温来源。"""
 
     api_url: str
+
+
+class WeatherAutoImportConfigPayload(BaseModel):
+    """全局管理中心维护的气温自动定时获取配置。"""
+
+    enabled: bool = Field(default=True, description="是否启用定时自动获取气温")
+    schedule_times: List[str] = Field(default_factory=list, description="每日定时获取时间列表（HH:MM）")
 
 
 @router.get("/dashboard/temperature/config", summary="读取气温导入 API 配置")
@@ -341,15 +398,154 @@ def get_temperature_import_config(session: AuthSession = Depends(get_current_ses
 @router.put("/dashboard/temperature/config", summary="保存气温导入 API 配置")
 def update_temperature_import_config(
     payload: WeatherImportConfigPayload,
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ):
     _ensure_cache_operator(session)
     try:
-        return {"ok": True, "data": save_weather_import_config(payload.api_url)}
+        saved = save_weather_import_config(payload.api_url)
+        log_session_operation(
+            session,
+            "UPDATE_CONFIG",
+            "更新近端实况气温导入 API 来源配置",
+            request=request,
+            unit="集团生产调度中心",
+            resource_id="weather_config:near",
+            after_value={"api_url": saved.get("api_url")},
+        )
+        return {"ok": True, "data": saved}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail="保存气温 API 配置失败，请检查运行时目录是否可写。") from exc
+
+
+@router.get("/dashboard/temperature/auto-import/status", summary="读取气温自动导入配置与最近成功/失败状态")
+def get_temperature_auto_import_status(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    return {"ok": True, "data": weather_auto_import_service.get_status()}
+
+
+@router.put("/dashboard/temperature/auto-import/config", summary="保存气温自动导入时间配置")
+def update_temperature_auto_import_config(
+    payload: WeatherAutoImportConfigPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    try:
+        data = weather_auto_import_service.update_config(
+            enabled=payload.enabled,
+            schedule_times=payload.schedule_times,
+        )
+        log_session_operation(
+            session,
+            "UPDATE_CONFIG",
+            f"保存近端气温自动导入定时设置（启用：{'是' if payload.enabled else '否'}，时点：{', '.join(payload.schedule_times) or '无'}）",
+            request=request,
+            unit="集团生产调度中心",
+            resource_id="weather_auto_import:near",
+            after_value={"enabled": payload.enabled, "schedule_times": payload.schedule_times},
+        )
+        return {"ok": True, "message": "气温自动获取时间配置已保存并立即生效。", "data": data}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="保存气温自动获取配置失败，请检查运行时目录是否可写。") from exc
+
+
+@router.post("/dashboard/temperature/auto-import/run", summary="立即执行一次气温获取与入库并记录状态")
+def run_temperature_auto_import_now(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    operator = getattr(session, "username", None) or "global_admin"
+    result = weather_auto_import_service.run_import_once(
+        trigger="manual_admin",
+        operator=operator,
+    )
+    if result.get("busy"):
+        raise HTTPException(status_code=409, detail=result.get("message") or "当前已有气温导入任务正在执行。")
+    return result
+
+
+@router.get("/dashboard/temperature/ensemble/config", summary="读取 35 天集合气温预报 API 配置")
+def get_ensemble_temperature_import_config(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    try:
+        return {"ok": True, "data": load_ensemble_weather_import_config()}
+    except EnsembleWeatherError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.put("/dashboard/temperature/ensemble/config", summary="保存 35 天集合气温预报 API 配置")
+def update_ensemble_temperature_import_config(
+    payload: WeatherImportConfigPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    try:
+        saved = save_ensemble_weather_import_config(payload.api_url)
+        log_session_operation(
+            session,
+            "UPDATE_CONFIG",
+            "更新 35 天集合气温预报 API 来源配置",
+            request=request,
+            unit="集团生产调度中心",
+            resource_id="weather_config:far",
+            after_value={"api_url": saved.get("api_url")},
+        )
+        return {"ok": True, "data": saved}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="保存 35 天预报 API 配置失败，请检查运行时目录是否可写。") from exc
+
+
+@router.get("/dashboard/temperature/ensemble/auto-import/status", summary="读取 35 天集合气温预报自动导入状态")
+def get_ensemble_temperature_auto_import_status(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    return {"ok": True, "data": ensemble_weather_auto_import_service.get_status()}
+
+
+@router.put("/dashboard/temperature/ensemble/auto-import/config", summary="保存 35 天集合气温预报自动导入时间配置")
+def update_ensemble_temperature_auto_import_config(
+    payload: WeatherAutoImportConfigPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+):
+    _ensure_cache_operator(session)
+    try:
+        data = ensemble_weather_auto_import_service.update_config(
+            enabled=payload.enabled,
+            schedule_times=payload.schedule_times,
+        )
+        log_session_operation(
+            session,
+            "UPDATE_CONFIG",
+            f"保存 35 天集合气温预报自动导入定时设置（启用：{'是' if payload.enabled else '否'}，时点：{', '.join(payload.schedule_times) or '无'}）",
+            request=request,
+            unit="集团生产调度中心",
+            resource_id="weather_auto_import:far",
+            after_value={"enabled": payload.enabled, "schedule_times": payload.schedule_times},
+        )
+        return {"ok": True, "message": "35 天集合预报自动获取时间配置已保存并立即生效。", "data": data}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="保存 35 天预报自动获取配置失败，请检查运行时目录是否可写。") from exc
+
+
+@router.post("/dashboard/temperature/ensemble/auto-import/run", summary="立即执行一次 35 天集合气温预报获取与入库")
+def run_ensemble_temperature_auto_import_now(session: AuthSession = Depends(get_current_session)):
+    _ensure_cache_operator(session)
+    operator = getattr(session, "username", None) or "global_admin"
+    result = ensemble_weather_auto_import_service.run_import_once(
+        trigger="manual_admin",
+        operator=operator,
+    )
+    if result.get("busy"):
+        raise HTTPException(status_code=409, detail=result.get("message") or "当前已有 35 天预报导入任务正在执行。")
+    return result
 
 
 @router.post(
@@ -391,6 +587,7 @@ def import_dashboard_temperature(
     tags=["daily_report_25_26"],
 )
 def commit_dashboard_temperature(
+    request: Request,
     session: AuthSession = Depends(get_current_session),
 ):
     _ensure_cache_operator(session)
@@ -401,13 +598,59 @@ def commit_dashboard_temperature(
         persist_result = persist_hourly_temperatures(db_session, result.get("hourly", []), tz_name)
     except WeatherImporterError as exc:
         db_session.close()
+        try:
+            weather_auto_import_service.record_external_import_outcome(
+                ok=False,
+                trigger="manual_dashboard",
+                message=f"气温获取或入库失败：{exc}",
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except Exception:
+    except Exception as exc:
         db_session.rollback()
         db_session.close()
+        try:
+            weather_auto_import_service.record_external_import_outcome(
+                ok=False,
+                trigger="manual_dashboard",
+                message=f"气温获取或入库失败：{exc}",
+            )
+        except Exception:
+            pass
         raise
     fetched_at = datetime.now(tz=EAST_8).isoformat()
     db_session.close()
+    dates = list(result.get("dates", []) or [])
+    total_hours = int((result.get("summary") or {}).get("total_hours") or len(result.get("hourly", [])))
+    inserted = int((persist_result or {}).get("inserted") or 0)
+    replaced = int((persist_result or {}).get("replaced") or 0)
+    date_span = f"{dates[0]} ~ {dates[-1]}" if len(dates) > 1 else (dates[0] if dates else "—")
+    try:
+        weather_auto_import_service.record_external_import_outcome(
+            ok=True,
+            trigger="manual_dashboard",
+            message=f"气温获取并入库成功：共拉取 {total_hours} 小时，写入 {inserted} 条、覆盖 {replaced} 条（日期范围：{date_span}）。",
+            summary={
+                "total_hours": total_hours,
+                "inserted": inserted,
+                "replaced": replaced,
+                "start": (persist_result or {}).get("start"),
+                "end": (persist_result or {}).get("end"),
+                "dates": dates,
+            },
+        )
+    except Exception:
+        pass
+    log_session_operation(
+        session,
+        "IMPORT_TEMPERATURE",
+        f"数据看板手动导入并覆盖气温数据：共拉取 {total_hours} 小时，写入 {inserted} 条、覆盖 {replaced} 条（日期范围：{date_span}）",
+        request=request,
+        unit="集团生产调度中心",
+        resource_id=f"weather:near:{dates[-1] if dates else 'manual'}",
+        after_value={"total_hours": total_hours, "inserted": inserted, "replaced": replaced, "dates": dates},
+    )
     return {
         "ok": True,
         "fetched_at": fetched_at,
@@ -445,6 +688,7 @@ def cancel_cache_publish(session: AuthSession = Depends(get_current_session)):
     tags=["daily_report_25_26"],
 )
 def refresh_dashboard_cache(
+    request: Request,
     show_date: str = Query(
         default="",
         description="目标展示日期，格式 YYYY-MM-DD；留空刷新默认缓存",
@@ -456,6 +700,13 @@ def refresh_dashboard_cache(
     result = evaluate_dashboard(PROJECT_KEY, show_date=show_date)
     payload = _build_dashboard_payload(result)
     status = dashboard_cache.update_cache_entry(PROJECT_KEY, cache_key, payload)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"手动刷新数据看板缓存（目标日期：{cache_key}）",
+        request=request,
+        resource_id=f"dashboard_cache:{cache_key}",
+    )
     return {
         "ok": True,
         "cached_key": cache_key,
@@ -528,7 +779,11 @@ def get_season_configuration():
     summary="手动修改或滚动切换供暖期",
     tags=["daily_report_25_26"],
 )
-def update_season_configuration(payload: SeasonConfigRequest):
+def update_season_configuration(
+    payload: SeasonConfigRequest,
+    request: Request,
+    session: Optional[AuthSession] = Depends(get_current_session_optional),
+):
     from backend.services import heating_season_service
     try:
         updated = heating_season_service.update_season_config(
@@ -542,6 +797,14 @@ def update_season_configuration(payload: SeasonConfigRequest):
             peer_start_date=payload.peer_start_date,
             peer_end_date=payload.peer_end_date,
             peer_temperature_start_date=payload.peer_temperature_start_date,
+        )
+        log_session_operation(
+            session,
+            "UPDATE_CONFIG",
+            f"更新供暖期配置：当前供暖期 {payload.active_period}（同期 {updated.get('peer_period')}，业务日 {payload.biz_date or updated.get('biz_date') or '-'}）",
+            request=request,
+            resource_id=f"season:{payload.active_period}",
+            after_value={"active_period": payload.active_period, "biz_date": payload.biz_date, "start_date": payload.start_date, "end_date": payload.end_date},
         )
         return {
             "ok": True,

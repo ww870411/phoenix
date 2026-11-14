@@ -14,10 +14,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_session_operation,
+)
 from backend.services.auth_manager import AuthSession, get_current_session_optional
 
 
@@ -559,17 +562,28 @@ def get_spot_electricity_sync_config(
 @public_router.post("/spot_electricity/sync/config", summary="保存电力现货自动同步配置 (仅限 Global_admin)")
 def save_spot_electricity_sync_config(
     payload: SyncConfigUpdatePayload,
+    request: Request,
     session: Optional[AuthSession] = Depends(get_current_session_optional),
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
     updates = {k: v for k, v in payload.dict().items() if v is not None}
     updated_config = spot_sync_service.update_config(updates)
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        "更新电力现货数据自动同步配置",
+        request=request,
+        unit="电力现货交易中心",
+        resource_id="spot_elec:sync_config",
+        after_value=updates,
+    )
     return {"ok": True, "message": "自动拉取配置已成功更新并即时生效", "data": updated_config}
 
 
 @public_router.post("/spot_electricity/sync/manual", summary="手动实时拉取现货数据入库 (仅限 Global_admin)")
 def manual_sync_spot_electricity(
     payload: ManualSyncPayload,
+    request: Request,
     session: Optional[AuthSession] = Depends(get_current_session_optional),
 ) -> Dict[str, Any]:
     _ensure_global_admin(session)
@@ -579,6 +593,17 @@ def manual_sync_spot_electricity(
         is_manual=True,
         overwrite=payload.overwrite,
     )
+    if result.get("ok"):
+        synced_date = str(result.get("target_date") or target_date or "")
+        log_session_operation(
+            session,
+            "SYNC_SPOT_ELEC",
+            str(result.get("message") or f"手动同步 {synced_date} 电力现货数据入库"),
+            request=request,
+            unit="电力现货交易中心",
+            resource_id=f"spot_elec:{synced_date}",
+            after_value={"target_date": synced_date, "points_count": result.get("points_count"), "overwrite": payload.overwrite},
+        )
     return result
 
 

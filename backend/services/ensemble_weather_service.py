@@ -8,12 +8,22 @@
 5. 同时刻已有 near 记录时跳过；其他记录允许更新为 far。
 """
 
+import json
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List, Tuple
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple
 import httpx
 import psycopg2
 from psycopg2.extras import execute_values
+
+from backend.services.project_data_paths import get_project_runtime_dir
+from backend.services.weather_importer import (
+    atomic_write_json,
+    load_url_from_project_settings,
+    save_url_to_project_settings,
+    validate_api_url,
+)
 
 EAST_8 = timezone(timedelta(hours=8))
 
@@ -21,6 +31,40 @@ EAST_8 = timezone(timedelta(hours=8))
 DEFAULT_LATITUDE = 38.875
 DEFAULT_LONGITUDE = 121.625
 ENSEMBLE_API_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
+DEFAULT_ENSEMBLE_API_URL = (
+    "https://ensemble-api.open-meteo.com/v1/ensemble?"
+    "latitude=38.875&longitude=121.625&hourly=temperature_2m"
+    "&models=gfs05&forecast_days=35&timezone=Asia%2FSingapore"
+)
+
+
+class EnsembleWeatherError(RuntimeError):
+    """35天集合气温预报配置或获取过程中的通用错误。"""
+
+
+def _ensemble_config_path() -> Path:
+    """复用项目运行时目录存储 35 天集合预报 API 配置。"""
+    return get_project_runtime_dir("daily_report_25_26") / "ensemble_weather_import_config.json"
+
+
+def load_ensemble_weather_import_config() -> Dict[str, str]:
+    """从综合配置读取 35 天集合预报 API 地址；未保存时兼容旧文件或沿用默认地址。"""
+    return load_url_from_project_settings(
+        section="weather_ensemble",
+        default_url=DEFAULT_ENSEMBLE_API_URL,
+        legacy_path_getter=_ensemble_config_path,
+        error_cls=EnsembleWeatherError,
+        error_message="读取 35 天预报 API 配置失败，请在全局管理中心重新保存。",
+    )
+
+
+def save_ensemble_weather_import_config(api_url: str) -> Dict[str, str]:
+    """原子更新综合配置文件中的 35 天集合预报 API 地址。"""
+    return save_url_to_project_settings(
+        section="weather_ensemble",
+        api_url=api_url,
+        legacy_path_getter=_ensemble_config_path,
+    )
 
 
 def ensure_temperature_table_ready(cur):
@@ -63,7 +107,8 @@ def ensure_temperature_table_ready(cur):
 def fetch_and_import_ensemble_weather(
     latitude: float = DEFAULT_LATITUDE,
     longitude: float = DEFAULT_LONGITUDE,
-    db_url: str = None,
+    db_url: Optional[str] = None,
+    api_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     拉取 35 天集合气温预报，计算各时刻算术平均，截断全 null，并覆盖写入 public.temperature_data。
@@ -71,22 +116,35 @@ def fetch_and_import_ensemble_weather(
     if not db_url:
         db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/phoenix")
 
-    params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "hourly": "temperature_2m",
-        "models": "gfs05",
-        "forecast_days": 35,
-        "timezone": "Asia/Singapore",
-    }
-
     headers = {"User-Agent": "Phoenix/1.0 (DynamicPlanForecast)"}
 
-    # 1. 发起网络请求获取集合预报
-    with httpx.Client(timeout=30.0) as client:
-        resp = client.get(ENSEMBLE_API_URL, params=params, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
+    # 1. 发起网络请求获取集合预报：优先使用显式参数，默认走全局管理中心保存的 API 地址。
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            if api_url:
+                target_url = validate_api_url(api_url)
+                resp = client.get(target_url, headers=headers)
+            elif latitude != DEFAULT_LATITUDE or longitude != DEFAULT_LONGITUDE:
+                params = {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "hourly": "temperature_2m",
+                    "models": "gfs05",
+                    "forecast_days": 35,
+                    "timezone": "Asia/Singapore",
+                }
+                resp = client.get(ENSEMBLE_API_URL, params=params, headers=headers)
+            else:
+                target_url = load_ensemble_weather_import_config()["api_url"]
+                resp = client.get(target_url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+    except EnsembleWeatherError:
+        raise
+    except httpx.HTTPError as exc:
+        raise EnsembleWeatherError(f"请求 35 天集合气温 API 失败: {exc}") from exc
+    except ValueError as exc:
+        raise EnsembleWeatherError(f"解析 35 天集合气温 API 响应失败: {exc}") from exc
 
     hourly = data.get("hourly", {})
     times = hourly.get("time", [])

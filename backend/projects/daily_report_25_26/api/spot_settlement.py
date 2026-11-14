@@ -3,13 +3,16 @@ from typing import List
 from uuid import UUID
 from zipfile import BadZipFile
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
 from backend.db.database_daily_report_25_26 import SessionLocal
+from backend.projects.daily_report_25_26.services.audit_log_service import (
+    log_session_operation,
+)
 from backend.services.auth_manager import AuthSession, get_current_session
 from ..services import spot_settlement_import as bill_service
 from ..services.spot_settlement_import import TABLE, PLANTS, load_batch, parse_bill, persist_upload, stage_uploads
@@ -65,9 +68,19 @@ class ConfirmBills(BaseModel):
 
 
 @router.post('/confirm', summary='确认后将量价映射写入15分钟数据表')
-def confirm_bills(payload: ConfirmBills, session=Depends(_importer)):
+def confirm_bills(payload: ConfirmBills, request: Request, session=Depends(_importer)):
     try:
-        return persist_upload(payload.token, session.username, _allowed(session), overwrite=payload.overwrite)
+        res = persist_upload(payload.token, session.username, _allowed(session), overwrite=payload.overwrite)
+        log_session_operation(
+            session,
+            "SYNC_SPOT_ELEC",
+            f"导入电力现货原始日账单并写入 15 分钟量价表（批次：{payload.token}，覆盖：{'是' if payload.overwrite else '否'}）",
+            request=request,
+            unit="电力现货交易中心",
+            resource_id=f"spot_bill:{payload.token}",
+            after_value={"overwrite": payload.overwrite, "ok": res.get("ok", True) if isinstance(res, dict) else True},
+        )
+        return res
     except FileNotFoundError as error:
         raise HTTPException(404, '上传预览不存在，请重新上传') from error
     except PermissionError as error:
