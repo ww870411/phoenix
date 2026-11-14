@@ -1,5 +1,18 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-14 登录页（`/login`）窄屏手机响应式布局修复与视觉美化升级
+
+- **问题定位与迭代**：
+  - [LoginView.vue](file:///D:/编程项目/phoenix/frontend/src/pages/LoginView.vue) 原 `@media (max-width: 1024px)` 内错误嵌套了 `@media (prefers-reduced-motion: reduce)`，导致 `.login-page { flex-direction: column; }` 失效；全局未设 `box-sizing: border-box;` 引发窄屏横向溢出；初版平铺白底面板规整但缺乏质感与呼吸感。
+- **前端改动**：
+  - **`frontend/src/pages/LoginView.vue`**：
+    - 为 `.login-page` 及其子元素补充局部 `box-sizing: border-box` 与 `overflow-x: hidden`，将 `@media (prefers-reduced-motion: reduce)` 拆出为独立顶层媒体查询；
+    - 移动端（`<= 1024px` / `<= 640px` / `<= 360px`）采用全屏通透商务蓝渐变背景配合轻量化悬浮几何装饰：顶部 `.visual-overlay` 改为去边框的居中品牌文字加半透明毛玻璃口号胶囊（`准确 · 规范 · 高效`）；
+    - 中央保留高质感悬浮白色圆角登录卡片（`border-radius: 22px`、`rgba(255,255,255,0.97)` 配合柔和投影），输入框使用浅灰底色（`#f8fafc`）、`16px` 字号防 Safari 自动缩放并扩大密码显隐按钮触控区，按钮补充立体蓝光阴影；
+    - `.form-footer` 回归常规文档流并置于悬浮卡片下方居中以半透明白字呈现，彻底规避遮挡或溢出。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1071 modules transformed，built in 24.74s（0 错误）**。
+
 ## 2026-11-14 项目选择页（`/projects`）“生产日报”卡片应用与“每日数据填报页面”一致的渐变蓝样式
 
 - **需求背景**：

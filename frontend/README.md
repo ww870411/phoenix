@@ -1,3 +1,10 @@
+## 2026-11-14 登录页（`/login`）窄屏手机响应式布局修复与悬浮卡片美化
+
+- **`src/pages/LoginView.vue`**：
+  - 修复 `@media (max-width: 1024px)` 内误嵌套 `@media (prefers-reduced-motion: reduce)` 导致 `flex-direction: column` 失效的问题，并补全作用域 `box-sizing: border-box` 与 `overflow-x: hidden`；
+  - 重构 `<= 1024px`、`<= 640px` 及 `<= 360px` 视觉层次：以全屏蓝渐变与轻量几何背景承托，顶部收敛为无边框居中品牌标题与毛玻璃口号胶囊（`准确 · 规范 · 高效`），主体改为悬浮圆角白色登录卡片（浅灰底 `16px` 防缩放输入框 + 蓝光按钮阴影），`.form-footer` 回归文档流居中显示于卡片下方。
+- **构建验证**：`npm --prefix frontend run build` 1071 模块编译打包通过（24.74s，0 错误）。
+
 ## 2026-11-14 项目选择页（`/projects`）“生产日报”卡片渐变蓝视觉统一
 
 - **`src/pages/ProjectSelectView.vue`**：

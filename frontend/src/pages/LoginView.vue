@@ -95,9 +95,17 @@ async function onSubmit() {
 </script>
 
 <style scoped>
+.login-page,
+.login-page *,
+.login-page *::before,
+.login-page *::after {
+  box-sizing: border-box;
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;
+  overflow-x: hidden;
   background: linear-gradient(135deg, #2f63c7 0%, #3f72d4 45%, #82b8f0 100%);
   color: #fff;
 }
@@ -388,81 +396,218 @@ async function onSubmit() {
   100% { transform: rotate(360deg); }
 }
 
-@media (max-width: 1024px) {
-  .login-page {
 @media (prefers-reduced-motion: reduce) {
   .shape {
     animation: none;
   }
 }
 
+@media (max-width: 1024px) {
+  .login-page {
     flex-direction: column;
-    background: linear-gradient(135deg, #325fbf 0%, #6aa6e9 100%);
+    justify-content: center;
+    padding: 36px 24px calc(28px + env(safe-area-inset-bottom, 0px));
+    gap: 24px;
+    background: linear-gradient(155deg, #1e4eb8 0%, #2f63c7 42%, #5b97ee 78%, #8bc2f9 100%);
   }
 
   .visual-panel {
     flex: none;
     width: 100%;
-    padding: 48px 24px;
-    min-height: 40vh;
+    padding: 0;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .visual-shapes {
+    position: fixed;
+    inset: 0;
   }
 
   .form-panel {
+    flex: none;
     width: 100%;
-    padding: 40px 24px 60px;
+    padding: 0;
+    background: transparent;
+    justify-content: center;
+    gap: 20px;
   }
 
   .visual-overlay {
-    max-width: 520px;
+    width: 100%;
+    max-width: 460px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 4px 12px;
+  }
+
+  .visual-title {
+    font-size: 28px;
+    margin: 0 0 8px;
+    text-shadow: 0 2px 12px rgba(15, 23, 42, 0.22);
+  }
+
+  .visual-subtitle {
+    font-size: 16px;
+    margin: 0 0 10px;
+    opacity: 0.95;
+  }
+
+  .visual-description {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    padding: 4px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    opacity: 0.96;
+  }
+
+  .login-form {
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 22px 50px rgba(15, 23, 42, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.65) inset;
+  }
+
+  .form-footer {
+    position: static;
+    transform: none;
+    white-space: normal;
+    width: 100%;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
   }
 }
 
 @media (max-width: 640px) {
   .login-page {
     min-height: 100dvh;
+    padding: 24px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    gap: 18px;
   }
 
-  .visual-panel {
-    min-height: 28vh;
-    padding: 28px 18px 8px;
+  .shape-circle {
+    width: 170px;
+    height: 170px;
+    top: -40px;
+    left: -40px;
+    opacity: 0.26;
   }
 
-  .login-form {
-    padding: 32px 26px 36px;
-    border-radius: 24px 24px 0 0;
+  .shape-square {
+    width: 84px;
+    height: 84px;
+    bottom: 14%;
+    left: -18px;
+    opacity: 0.22;
   }
 
-  .form-panel {
-    padding: 0;
+  .shape-triangle {
+    top: 12%;
+    right: -12px;
+    border-left-width: 38px;
+    border-right-width: 38px;
+    border-bottom-width: 68px;
+    opacity: 0.2;
+  }
+
+  .shape-ring {
+    width: 190px;
+    height: 190px;
+    bottom: -65px;
+    right: -55px;
+    border-width: 18px;
+    opacity: 0.25;
   }
 
   .visual-overlay {
-    padding: 18px 10px 0;
+    max-width: 400px;
+    padding: 0 6px;
   }
 
   .visual-title {
-    font-size: 28px;
+    font-size: 24px;
+    margin: 0 0 6px;
   }
 
   .visual-subtitle {
-    font-size: 15px;
+    font-size: 14px;
+    margin: 0 0 10px;
   }
 
   .visual-description {
-    font-size: 12px;
-    letter-spacing: 0.12em;
+    font-size: 11px;
+    padding: 3px 12px;
+  }
+
+  .form-panel {
+    gap: 18px;
+  }
+
+  .login-form {
+    max-width: 400px;
+    padding: 26px 22px 28px;
+    border-radius: 22px;
+    gap: 15px;
+  }
+
+  .form-header {
+    margin-bottom: 4px;
   }
 
   .form-title {
-    font-size: 24px;
+    font-size: 21px;
   }
 
   .field input {
+    width: 100%;
     min-height: 46px;
+    font-size: 16px;
+    background: #f8fafc;
+    border-radius: 10px;
+  }
+
+  .field input:focus {
+    background: #ffffff;
+  }
+
+  .password-input-wrapper input {
+    padding-right: 44px !important;
+  }
+
+  .toggle-password-btn {
+    width: 36px;
+    height: 36px;
+    right: 6px;
   }
 
   .login-button {
+    width: 100%;
     min-height: 48px;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+  }
+
+  .form-footer {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .login-page {
+    padding: 20px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+    gap: 14px;
+  }
+
+  .visual-title {
+    font-size: 21px;
+  }
+
+  .login-form {
+    padding: 22px 18px 24px;
+    border-radius: 18px;
   }
 }
 </style>
