@@ -14,7 +14,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-phoenix}:${POSTGRES_PASSWORD:-phoenix}@db:5432/${POSTGRES_DB:-phoenix}
       DATA_DIRECTORY: /app/data
-      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      # 隧道调度状态保存在单进程内存中，多 worker 会导致 /poll 与 /respond 错配丢包
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-1}
     volumes:
       - /home/ww870411/25-26/backend_data:/app/data
     depends_on:

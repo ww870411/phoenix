@@ -1,5 +1,32 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-14 项目选择页（`/projects`）“生产日报”卡片应用与“每日数据填报页面”一致的渐变蓝样式
+
+- **需求背景**：
+  - 用户要求在 `http://localhost:5173/projects` 页面上，将生产日报项目卡片标为渐变蓝色，与功能选择页中的“每日数据填报页面”核心卡片颜色保持一致。
+- **前端改动**：
+  - **`frontend/src/pages/ProjectSelectView.vue`**：
+    - 在项目卡片循环中为 `project.project_id === 'daily_report_25_26'`（即生产日报项目）动态绑定 `card-primary-daily-report` 类名；
+    - 复用 [PageSelectView.vue](file:///D:/编程项目/phoenix/frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue) 中 `.card-primary-entry` 的渐变蓝视觉规范（常态 `linear-gradient(135deg, #3b82f6 0%, #4f8ff7 45%, #60a5fa 100%)`、边框 `#60a5fa`、阴影 `0 3px 12px rgba(59, 130, 246, 0.18)`；悬停 `#2563eb -> #3b82f6 -> #60a5fa`、边框 `#93c5fd`），并将 `.card-header`、`.name` 与 `.desc` 文字分别调整为 `#ffffff` 和 `rgba(255, 255, 255, 0.92)`。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1071 modules transformed，built in 21.96s（0 错误）**。
+
+## 2026-11-14 修复智慧供热内网直通多 Worker 丢包、双向传输压缩与“历史记录”跳出网关 404 问题
+
+- **问题定位（基于真实 `smart_heating_tunnel.log` 分析）**：
+  - 线上日志 1,183 次请求中 538 次回传遭服务端拒收（45.5%，`请求已超时或不存在`），根因为生产默认启动 `--workers 2` 导致 `/poll` 与 `/respond` 在多进程间内存状态隔离；同时 `/fhrjl_ssxx/` 等大页面未压缩传输（原始 5.4 MB / Base64 7.2 MB）加剧卡顿；
+  - 点击“历史记录”等按钮后日志未收到任何请求且浏览器报 Nginx 404，根因为 `<option value="/...">`、`window.open('/...')`、`location.href = '/...'`、带空格的 HTML 属性及动态 `<a>` 链接等未覆盖重写，跳转逃逸出 `/api/v1/projects/daily_report_25_26/smart-heating-tunnel/gateway/` 前缀。
+- **代码与配置改动**：
+  - **`lo1_new_server.yml` & `backend/Dockerfile.prod`**：将默认 `UVICORN_WORKERS` 由 `2` 调整为 `1`，保证 `TUNNEL` 单进程内存任务队列与回传状态一致。
+  - **`backend/main.py`**：引入并启用 `GZipMiddleware(minimum_size=1024)`，对网关返回给浏览器的大页面自动 gzip 压缩。
+  - **`backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`**：`post_phoenix_json()` 支持 `Content-Encoding` 请求头；`send_response_to_phoenix()` 对超过 1KB 的 JSON 回传负载自动执行 `gzip.compress`（仅在体积更小时启用）并记录原始与压缩后大小。
+  - **`backend/projects/daily_report_25_26/api/smart_heating_tunnel.py`**：
+    - 新增 `_parse_tunnel_response_payload()`，使 `/respond` 同时兼容普通 JSON 与 `Content-Encoding: gzip` 压缩回传；
+    - 新增 `_append_phoenix_token()`、`_rewrite_intranet_url()`、`_rewrite_js_navigation_urls()`，增强 `Location` 重定向、HTML `href/src/action/data-url/data-href`（含等号空白与完整内网地址）、`<option value="/...">` 下拉跳转及非 `.min.js` 业务脚本显式跳转重写；注入脚本补充 `window.__phoenixGatewayUrl`、`window.open` 劫持与捕获阶段全局 `<a>` 点击拦截，并在 `#hash` 前安全注入 `phoenix_token`。
+  - **`backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py`**：新增 `test_gzip_respond_and_client_compression` 与 `test_history_links_options_and_js_navigation_rewritten` 回归测试。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py -q -s --basetemp=backend/.pytest_cache/tunnel-fix2`：**17 passed in 5.92s**。
+
 ## 2026-11-14 智慧供热中继客户端（`smart_heating_tunnel_win7.py`）迁移至绑定挂载目录并启用同目录滚动日志
 
 - **需求背景**：

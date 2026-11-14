@@ -17,6 +17,7 @@
 """
 
 import base64
+import gzip
 import http.client
 import json
 import logging
@@ -137,7 +138,7 @@ STOP_EVENT = threading.Event()
 PHOENIX_CONNECTION = threading.local()
 
 
-def post_phoenix_json(endpoint, payload, timeout):
+def post_phoenix_json(endpoint, payload, timeout, content_encoding=None):
     """每个工作线程复用一条公网连接，poll/respond 不再重复建立 TCP/TLS。"""
     parsed = urllib.parse.urlsplit(CONFIG["phoenix_server_url"])
     connection = getattr(PHOENIX_CONNECTION, "connection", None)
@@ -149,11 +150,14 @@ def post_phoenix_json(endpoint, payload, timeout):
     if connection.sock is not None:
         connection.sock.settimeout(timeout)
     path = parsed.path.rstrip("/") + "/api/v1/projects/daily_report_25_26/smart-heating-tunnel/" + endpoint
+    req_headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "X-Tunnel-Secret": CONFIG["tunnel_secret"],
+    }
+    if content_encoding:
+        req_headers["Content-Encoding"] = content_encoding
     try:
-        connection.request("POST", path, body=payload, headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "X-Tunnel-Secret": CONFIG["tunnel_secret"],
-        })
+        connection.request("POST", path, body=payload, headers=req_headers)
         if connection.sock is not None:
             try:
                 connection.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -287,28 +291,37 @@ def execute_intranet_request(task: dict) -> dict:
 
 
 def send_response_to_phoenix(result: dict):
-    """将内网响应结果回传给 Phoenix 云端隧道"""
-    payload_bytes = json.dumps(result, ensure_ascii=False).encode("utf-8")
-    payload_len = len(payload_bytes)
+    """将内网响应结果回传给 Phoenix 云端隧道（大响应自动启用 gzip 压缩）"""
+    raw_bytes = json.dumps(result, ensure_ascii=False).encode("utf-8")
+    raw_len = len(raw_bytes)
+    payload_bytes = raw_bytes
+    content_encoding = None
+    if raw_len > 1024:
+        compressed_bytes = gzip.compress(raw_bytes, compresslevel=6)
+        if len(compressed_bytes) < raw_len:
+            payload_bytes = compressed_bytes
+            content_encoding = "gzip"
+    wire_len = len(payload_bytes)
     respond_start = time.time()
     try:
-        reply = post_phoenix_json("respond", payload_bytes, timeout=35)
+        reply = post_phoenix_json("respond", payload_bytes, timeout=35, content_encoding=content_encoding)
         respond_ms = int((time.time() - respond_start) * 1000)
+        size_info = f"{wire_len}B(原始={raw_len}B)" if content_encoding else f"{wire_len}B"
         if not reply.get("ok"):
             logger.warning(
-                "响应未被服务端采纳 [%s] (回传=%dms, 负载=%dB): %s",
-                result.get("request_id"), respond_ms, payload_len, reply.get("message", ""),
+                "响应未被服务端采纳 [%s] (回传=%dms, 负载=%s): %s",
+                result.get("request_id"), respond_ms, size_info, reply.get("message", ""),
             )
         else:
             logger.info(
-                "回传完成 [%s] 状态=%s 回传=%dms 负载=%dB",
-                result.get("request_id"), result.get("status_code"), respond_ms, payload_len,
+                "回传完成 [%s] 状态=%s 回传=%dms 负载=%s",
+                result.get("request_id"), result.get("status_code"), respond_ms, size_info,
             )
     except Exception as e:
         respond_ms = int((time.time() - respond_start) * 1000)
         logger.error(
             "回传响应到 Phoenix 失败 [%s] (耗时=%dms, 负载=%dB, %s): %s",
-            result.get("request_id"), respond_ms, payload_len, type(e).__name__, e,
+            result.get("request_id"), respond_ms, wire_len, type(e).__name__, e,
         )
 
 

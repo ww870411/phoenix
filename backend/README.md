@@ -1,3 +1,13 @@
+## 2026-11-14 修复智慧供热内网直通多 Worker 丢包、gzip 压缩及“历史记录”跳出网关 404
+
+- **`lo1_new_server.yml` & `backend/Dockerfile.prod`**：默认 `UVICORN_WORKERS` 调整为 `1`，消除多进程导致 `/poll` 与 `/respond` 状态分裂。
+- **`backend/main.py`**：新增 `GZipMiddleware(minimum_size=1024)`，压缩发往浏览器的大体积页面与静态资源。
+- **`backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`**：`post_phoenix_json()` 与 `send_response_to_phoenix()` 对超过 1KB 的 `/respond` 负载自动启用 `gzip` 请求体压缩。
+- **`projects/daily_report_25_26/api/smart_heating_tunnel.py`**：
+  - 新增 `_parse_tunnel_response_payload()` 支持 `Content-Encoding: gzip` 回传解压与校验；
+  - 抽取 `_append_phoenix_token()`、`_rewrite_intranet_url()`、`_rewrite_js_navigation_urls()` 统一处理 302 `Location`、HTML 属性、`option[value]` 及非压缩 `.js` 跳转字面量，并在注入脚本中增加 `window.open` 劫持、捕获期 `<a>` 点击拦截与 `#hash` 前自动补 `phoenix_token`。
+- **测试 (`projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py`)**：新增 gzip 压缩往返及按钮/下拉/JS 跳转重写测试，`python -m pytest backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel.py backend/projects/daily_report_25_26/tests/test_smart_heating_tunnel_performance.py -q -s --basetemp=backend/.pytest_cache/tunnel-fix2`：**17 passed in 5.92s**。
+
 ## 2026-11-14 智慧供热中继客户端迁移至绑定挂载目录并启用同目录滚动日志
 
 - **`backend_data/projects/daily_report_25_26/smart_heating_tunnel_win7.py`**（由 `backend/projects/daily_report_25_26/smart_heating_tunnel_win7.py` 移入，并移除 `backend/` 下源码副本）：

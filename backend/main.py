@@ -8,6 +8,7 @@ FastAPI 应用入口
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import os
 import logging
 
@@ -64,6 +65,8 @@ def create_app() -> FastAPI:
         expose_headers=["*"],
         max_age=86400,
     )
+
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     # 挂载 v1 路由前缀：/api/v1
     if v1_router is not None:

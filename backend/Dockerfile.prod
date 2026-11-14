@@ -53,4 +53,5 @@ COPY backend /app/backend
 EXPOSE 8000
 VOLUME ["/app/data"]
 
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}"]
+# 隧道调度使用单进程内存队列，默认保持 1 个 worker 避免 /poll 与 /respond 跨进程丢失
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1}"]

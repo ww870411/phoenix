@@ -16,7 +16,12 @@
         <div v-else-if="projectList.length === 0" class="placeholder">暂无项目，请联系管理员配置。</div>
         <template v-else>
           <div
-            class="card clickable elevated"
+            :class="[
+              'card',
+              'clickable',
+              'elevated',
+              { 'card-primary-daily-report': project.project_id === 'daily_report_25_26' },
+            ]"
             v-for="project in projectList"
             :key="project.project_id"
             @click="enter(project)"
@@ -85,6 +90,24 @@ onMounted(() => {
 }
 .card:hover {
   transform: translateY(-2px);
+}
+/* 生产日报项目卡片：与“每日数据填报页面”卡片保持一致的轻快通透渐变蓝 */
+.card.card-primary-daily-report {
+  background: linear-gradient(135deg, #3b82f6 0%, #4f8ff7 45%, #60a5fa 100%);
+  border: 1px solid #60a5fa;
+  box-shadow: 0 3px 12px rgba(59, 130, 246, 0.18);
+}
+.card.card-primary-daily-report:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #60a5fa 100%);
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.28);
+  border-color: #93c5fd;
+}
+.card.card-primary-daily-report .card-header,
+.card.card-primary-daily-report .name {
+  color: #ffffff;
+}
+.card.card-primary-daily-report .desc {
+  color: rgba(255, 255, 255, 0.92);
 }
 .card-header {
   margin-bottom: 10px;

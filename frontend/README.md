@@ -1,3 +1,9 @@
+## 2026-11-14 项目选择页（`/projects`）“生产日报”卡片渐变蓝视觉统一
+
+- **`src/pages/ProjectSelectView.vue`**：
+  - 为 `project.project_id === 'daily_report_25_26'`（`2026-2027供暖期生产日报`）卡片动态添加 `.card-primary-daily-report` 样式类，采用与 `PageSelectView.vue` 中 `.page-card.card-primary-entry`（每日数据填报页面）完全一致的渐变蓝背景（`#3b82f6 -> #4f8ff7 -> #60a5fa`）、悬停态（`#2563eb -> #3b82f6 -> #60a5fa`）、边框及白色/半透明白文字配色。
+- **构建验证**：`npm --prefix frontend run build` 1071 模块编译打包通过（21.96s，0 错误）。
+
 ## 2026-11-14 智慧供热内网直通页（`smart_heating_tunnel`）界面精简
 
 - **`src/projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue`**：

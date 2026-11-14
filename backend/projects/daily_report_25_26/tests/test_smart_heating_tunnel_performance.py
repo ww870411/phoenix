@@ -4,6 +4,7 @@
 import ast
 import asyncio
 import base64
+import gzip
 import json
 import threading
 import time
@@ -294,3 +295,93 @@ def test_relay_file_logging_in_same_directory(tmp_path):
                 relay["logger"].removeHandler(h)
                 h.close()
         relay["logger"]._file_logging_configured = False
+
+
+def test_gzip_respond_and_client_compression(gateway):
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway[0]), base_url="http://test") as ac:
+            big_body = ("<div>工况数据</div>" * 300).encode("utf-8")
+            call = asyncio.create_task(ac.get(PREFIX + "/gateway/fhrjl_ssxx/"))
+            secret = tunnel.load_tunnel_config()["tunnel_secret"]
+            headers = {"X-Tunnel-Secret": secret}
+            polled = await ac.post(PREFIX + "/poll", headers=headers, json={"timeout": 5})
+            task = polled.json()["task"]
+            raw_json = json.dumps({
+                "request_id": task["request_id"],
+                "status_code": 200,
+                "headers": {"Content-Type": "text/html; charset=utf-8"},
+                "body_b64": base64.b64encode(big_body).decode("ascii"),
+                "duration_ms": 12,
+            }).encode("utf-8")
+            gz_json = gzip.compress(raw_json)
+            assert len(gz_json) < len(raw_json)
+            replied = await ac.post(
+                PREFIX + "/respond",
+                headers={**headers, "Content-Encoding": "gzip", "Content-Type": "application/json"},
+                content=gz_json,
+            )
+            assert replied.status_code == 200 and replied.json()["ok"] is True
+            resp = await call
+            assert resp.status_code == 200
+            assert "工况数据" in resp.text
+
+    asyncio.run(run())
+
+    relay = load_relay_without_local_config()
+    captured = {}
+
+    def fake_post(endpoint, payload, timeout, content_encoding=None):
+        captured["endpoint"] = endpoint
+        captured["payload"] = payload
+        captured["content_encoding"] = content_encoding
+        return {"ok": True}
+
+    relay["post_phoenix_json"] = fake_post
+    relay["send_response_to_phoenix"]({
+        "request_id": "req-gz-1",
+        "status_code": 200,
+        "headers": {},
+        "cookies": [],
+        "body_b64": base64.b64encode(b"A" * 5000).decode("ascii"),
+        "duration_ms": 5,
+    })
+    assert captured["endpoint"] == "respond"
+    assert captured["content_encoding"] == "gzip"
+    decoded = json.loads(gzip.decompress(captured["payload"]).decode("utf-8"))
+    assert decoded["request_id"] == "req-gz-1"
+
+
+def test_history_links_options_and_js_navigation_rewritten(gateway):
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway[0]), base_url="http://test") as ac:
+            html = (
+                '<html><head></head><body>'
+                '<a href = "/bj_ls_xx/">报警历史</a>'
+                '<a href="http://192.168.1.206:6688/fhrjl_lsxx/">历史记录</a>'
+                '<select id="selectpath"><option value="/ry_ssxx/">热源</option></select>'
+                '<button onclick="window.open(\'/ls_popup/\')">弹窗</button>'
+                '<script>location.href = \'/ls_script/\';</script>'
+                '</body></html>'
+            ).encode("utf-8")
+            call = asyncio.create_task(ac.get(PREFIX + "/gateway/gk_ssxx/"))
+            await exchange(ac, html, "text/html; charset=utf-8")
+            rendered = (await call).text
+            assert f'href="{PREFIX}/gateway/bj_ls_xx/"' in rendered
+            assert f'href="{PREFIX}/gateway/fhrjl_lsxx/"' in rendered
+            assert f'<option value="{PREFIX}/gateway/ry_ssxx/">' in rendered
+            assert f"window.open('{PREFIX}/gateway/ls_popup/')" in rendered
+            assert f"location.href = '{PREFIX}/gateway/ls_script/'" in rendered
+            assert "window.__phoenixGatewayUrl" in rendered
+            assert "origWindowOpen" in rendered
+
+            js_call = asyncio.create_task(ac.get(PREFIX + "/gateway/static/js/jc/custom.js"))
+            await exchange(
+                ac,
+                b"function go(){ window.location.href = '/ls_js/'; window.open('http://192.168.1.206:6688/ls2/'); }",
+                "application/javascript",
+            )
+            js_rendered = (await js_call).text
+            assert f"window.location.href = '{PREFIX}/gateway/ls_js/'" in js_rendered
+            assert f"window.open('{PREFIX}/gateway/ls2/')" in js_rendered
+
+    asyncio.run(run())

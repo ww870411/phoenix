@@ -12,6 +12,7 @@
 
 import asyncio
 import base64
+import gzip
 import hashlib
 import json
 import logging
@@ -27,7 +28,7 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from backend.config import DATA_DIRECTORY
 from backend.services.auth_manager import AuthSession, auth_manager, get_current_session
@@ -346,17 +347,92 @@ async def poll_tunnel_task(
         return {"has_task": False, "task": None}
 
 
+def _parse_tunnel_response_payload(raw_body: bytes, content_encoding: str = "") -> TunnelResponsePayload:
+    """解析办公机回传的响应体，兼容普通 JSON 与 gzip 压缩 JSON。"""
+    if content_encoding.strip().lower() == "gzip":
+        try:
+            raw_body = gzip.decompress(raw_body)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"gzip 解压回传数据失败: {exc}") from exc
+    try:
+        data = json.loads(raw_body.decode("utf-8"))
+        if hasattr(TunnelResponsePayload, "model_validate"):
+            return TunnelResponsePayload.model_validate(data)
+        return TunnelResponsePayload.parse_obj(data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"无效的回传 JSON 负载: {exc}") from exc
+
+
+def _append_phoenix_token(url: str, token: str) -> str:
+    """将 phoenix_token 追加到查询参数（置于 # 锚点之前）。"""
+    if not token or "phoenix_token=" in url:
+        return url
+    base_part, sep, frag = url.partition("#")
+    delim = "&" if "?" in base_part else "?"
+    updated = f"{base_part}{delim}phoenix_token={token}"
+    return f"{updated}{sep}{frag}" if sep else updated
+
+
+def _rewrite_intranet_url(
+    url: str,
+    target_base: str,
+    gateway_base_clean: str,
+    token: str = "",
+    append_token: bool = False,
+) -> str:
+    """将内网绝对地址或根路径统一重写到反向代理网关前缀。"""
+    if not url:
+        return url
+    clean_target = target_base.rstrip("/")
+    rewritten = url
+    if clean_target and rewritten.startswith(clean_target):
+        suffix = rewritten[len(clean_target):]
+        if not suffix:
+            suffix = "/"
+        if suffix.startswith("/"):
+            rewritten = f"{gateway_base_clean}/{suffix.lstrip('/')}"
+    elif rewritten.startswith("/") and not rewritten.startswith(
+        (gateway_base_clean + "/", "/api/", "/projects/", "//")
+    ):
+        rewritten = f"{gateway_base_clean}/{rewritten.lstrip('/')}"
+    if append_token and token:
+        rewritten = _append_phoenix_token(rewritten, token)
+    return rewritten
+
+
+def _rewrite_js_navigation_urls(js_text: str, target_base: str, gateway_base_clean: str) -> str:
+    """安全改写脚本中显式指向内网根路径或内网域名的跳转字面量。"""
+    clean_target = target_base.rstrip("/")
+    if clean_target:
+        js_text = re.sub(
+            re.escape(clean_target) + r"(/[^'\"\s<>]*)",
+            lambda m: f"{gateway_base_clean}/{m.group(1).lstrip('/')}",
+            js_text,
+        )
+    js_text = re.sub(
+        r"(\b(?:window\.|document\.)?location(?:\.href)?\s*=\s*|window\.open\(\s*|location\.(?:assign|replace)\(\s*)(['\"])/(?!(?:api/|projects/|/))([^'\"]*)\2",
+        lambda m: f"{m.group(1)}{m.group(2)}{gateway_base_clean}/{m.group(3)}{m.group(2)}",
+        js_text,
+    )
+    return js_text
+
+
 @public_router.post("/respond", summary="办公机回传内网请求响应")
 async def respond_tunnel_task(
-    payload: TunnelResponsePayload = Body(...),
+    request: Request,
     x_tunnel_secret: Optional[str] = Header(None, alias="X-Tunnel-Secret"),
 ):
-    """办公电脑客户端在内网执行请求完毕后，将响应内容回传至此端点"""
+    """办公电脑客户端在内网执行请求完毕后，将响应内容回传至此端点（支持 gzip 压缩）"""
     config = load_tunnel_config()
     expected_secret = config.get("tunnel_secret") or DEFAULT_TUNNEL_CONFIG["tunnel_secret"]
 
     if x_tunnel_secret != expected_secret:
         raise HTTPException(status_code=403, detail="中继通信密钥无效")
+
+    raw_body = await request.body()
+    payload = _parse_tunnel_response_payload(raw_body, request.headers.get("content-encoding", ""))
 
     req_id = payload.request_id
     future = TUNNEL.pending_futures.get(req_id)
@@ -600,24 +676,17 @@ async def gateway_reverse_proxy(
         "set-cookie",       # Set-Cookie 统一在下方通过 response.raw_headers / set_cookie 注入，避免覆盖
     }
 
+    target_base = (config.get("target_base_url") or "http://192.168.1.206:6688").rstrip("/")
     for k, v in result_payload.headers.items():
         lk = k.lower()
         if lk == "content-type":
             content_type = v
             resp_headers[k] = v
         elif lk == "location":
-            # 重写 301/302 重定向 Location 头，防止浏览器跳转至无法访问的内网 IP
-            target_base = config.get("target_base_url") or "http://192.168.1.206:6688"
-            loc = v
-            if loc.startswith(target_base):
-                loc = loc[len(target_base):]
-            if loc.startswith("/"):
-                loc = f"{gateway_base_clean}/{loc.lstrip('/')}"
-            # 关键修复：重定向时附带 phoenix_token，防止后续跳转请求丢失凭证导致 403 / 空白
-            if token and "phoenix_token=" not in loc:
-                delim = "&" if "?" in loc else "?"
-                loc = f"{loc}{delim}phoenix_token={token}"
-            resp_headers[k] = loc
+            # 重写 301/302 重定向 Location 头，防止浏览器跳转至无法访问的内网 IP 或脱离网关
+            resp_headers[k] = _rewrite_intranet_url(
+                v, target_base, gateway_base_clean, token=token or "", append_token=True,
+            )
         elif lk == "content-security-policy":
             # 清理 CSP 中的 frame-ancestors 避免阻断 iframe 呈现
             clean_csp = re.sub(r"frame-ancestors\s+[^;]+;?", "", v, flags=re.IGNORECASE)
@@ -656,24 +725,35 @@ async def gateway_reverse_proxy(
         try:
             html_text = body_bytes.decode("utf-8", errors="replace")
 
-            # 1. 深度正则重写绝对路径：将 href="/static/...", src="/...", action="/..." 统一映射至网关
-            # 匹配形如 href="/xxx" 或 src='/xxx'，排除已有前缀、协议或锚点
+            # 1. 深度正则重写绝对路径与内网完整地址：覆盖 href/src/action/data-url/data-href、option[value] 及内联脚本跳转
             def rewrite_abs_urls(match):
                 attr = match.group(1)
                 quote = match.group(2)
-                path_part = match.group(3)
-                extra_token = ""
-                # 如果是表单提交 action，自动附加 phoenix_token 避免跨域 iframe 提交时丢失凭证直接 403
-                if attr.lower() == "action" and token and "phoenix_token=" not in path_part:
-                    delim = "&" if "?" in path_part else "?"
-                    extra_token = f"{delim}phoenix_token={token}"
-                return f"{attr}={quote}{gateway_base_clean}/{path_part}{extra_token}{quote}"
+                raw_url = match.group(3)
+                rewritten = _rewrite_intranet_url(
+                    raw_url,
+                    target_base,
+                    gateway_base_clean,
+                    token=token or "",
+                    append_token=(attr.lower() == "action"),
+                )
+                return f"{attr}={quote}{rewritten}{quote}"
 
+            target_escaped = re.escape(target_base)
             html_text = re.sub(
-                r'\b(href|src|action)=([\'"])/(?!(?:api/|projects/|#|data:|javascript:))([^\'"]*)[\'"]',
+                rf'(?<=\s)(href|src|action|data-url|data-href)\s*=\s*([\'"])((?:{target_escaped})?/(?!(?:api/|projects/|#|data:|javascript:|/))[^\'"]*)\2',
                 rewrite_abs_urls,
                 html_text,
+                flags=re.IGNORECASE,
             )
+            # 重写下拉框跳转选项 <option value="/...">，修复如 gkssxx.js 等通过 select.value 执行 location.href 的跳转
+            html_text = re.sub(
+                rf'(<option\b[^>]*\svalue\s*=\s*)([\'"])((?:{target_escaped})?/(?!(?:api/|projects/|/))[^\'"]*)\2',
+                lambda m: f'{m.group(1)}{m.group(2)}{_rewrite_intranet_url(m.group(3), target_base, gateway_base_clean)}{m.group(2)}',
+                html_text,
+                flags=re.IGNORECASE,
+            )
+            html_text = _rewrite_js_navigation_urls(html_text, target_base, gateway_base_clean)
 
             # 同一文档只加载一次此版本 jQuery，保留置顶顺序满足旧页面内联脚本依赖。
             html_text = re.sub(
@@ -684,6 +764,7 @@ async def gateway_reverse_proxy(
             document_base = gateway_prefix + page_directory.lstrip('/')
             # 替换原有 base，维持子页面的相对路径语义。
             html_text = re.sub(r'<base\b[^>]*>', '', html_text, flags=re.IGNORECASE)
+            target_origin_js = json.dumps(target_base)
             injection = f"""<base href="{document_base}">
 <script src="{gateway_base_clean}/static/js/libs/jquery-1.8.2.min.js"></script>
 <script>
@@ -716,21 +797,41 @@ async def gateway_reverse_proxy(
         }}
     }} catch(e) {{}}
 
-    // 2. 全局 Ajax 拦截：自动补充网关前缀与 phoenix_token 凭证
+    // 2. 全局网关 URL 改写与请求/跳转拦截：防止按钮、弹窗、动态链接和 Ajax 逃逸出 /gateway/ 前缀
     var gBase = '{gateway_base_clean}';
     var gToken = '{token or ""}';
+    var gTargetOrigin = {target_origin_js};
+    function appendPhoenixToken(url) {{
+        if (!gToken || url.indexOf('phoenix_token=') !== -1) return url;
+        var hashIdx = url.indexOf('#');
+        var basePart = hashIdx === -1 ? url : url.slice(0, hashIdx);
+        var hashPart = hashIdx === -1 ? '' : url.slice(hashIdx);
+        var d = basePart.indexOf('?') === -1 ? '?' : '&';
+        return basePart + d + 'phoenix_token=' + encodeURIComponent(gToken) + hashPart;
+    }}
+    function rewriteGatewayUrl(url, withToken) {{
+        if (typeof url !== 'string' || !url) return url;
+        var trimmed = url.replace(/^\\s+|\\s+$/g, '');
+        if (!trimmed || trimmed.charAt(0) === '#' || /^javascript:|^data:|^mailto:/i.test(trimmed)) return url;
+        var rewritten = trimmed;
+        if (gTargetOrigin && rewritten.indexOf(gTargetOrigin) === 0) {{
+            rewritten = gBase + (rewritten.slice(gTargetOrigin.length) || '/');
+        }} else if (rewritten.indexOf('192.168.1.206:6688') !== -1) {{
+            rewritten = rewritten.replace(/^https?:\\/\\/192\\.168\\.1\\.206:6688/, gBase);
+        }} else if (rewritten.charAt(0) === '/' && rewritten.indexOf('//') !== 0 && rewritten.indexOf(gBase) !== 0 && rewritten.indexOf('/api/') !== 0 && rewritten.indexOf('/projects/') !== 0) {{
+            rewritten = gBase + rewritten;
+        }}
+        if (withToken !== false && (rewritten.indexOf(gBase) === 0 || rewritten.charAt(0) !== '/')) {{
+            rewritten = appendPhoenixToken(rewritten);
+        }}
+        return rewritten;
+    }}
+    window.__phoenixGatewayUrl = rewriteGatewayUrl;
+
     var origOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url, async, user, password) {{
         if (typeof url === 'string') {{
-            if (url.indexOf('192.168.1.206:6688') !== -1) {{
-                url = url.replace(/https?:\\/\\/192\\.168\\.1\\.206:6688/, gBase);
-            }} else if (url.startsWith('/') && !url.startsWith(gBase)) {{
-                url = gBase + url;
-            }}
-            if (gToken && url.indexOf('phoenix_token=') === -1) {{
-                var d = url.indexOf('?') === -1 ? '?' : '&';
-                url = url + d + 'phoenix_token=' + encodeURIComponent(gToken);
-            }}
+            arguments[1] = rewriteGatewayUrl(url, true);
         }}
         return origOpen.apply(this, arguments);
     }};
@@ -738,27 +839,42 @@ async def gateway_reverse_proxy(
         var origFetch = window.fetch;
         window.fetch = function(input, init) {{
             if (typeof input === 'string') {{
-                if (input.indexOf('192.168.1.206:6688') !== -1) {{
-                    input = input.replace(/https?:\\/\\/192\\.168\\.1\\.206:6688/, gBase);
-                }} else if (input.startsWith('/') && !input.startsWith(gBase)) {{
-                    input = gBase + input;
-                }}
-                if (gToken && input.indexOf('phoenix_token=') === -1) {{
-                    var d = input.indexOf('?') === -1 ? '?' : '&';
-                    input = input + d + 'phoenix_token=' + encodeURIComponent(gToken);
-                }}
+                input = rewriteGatewayUrl(input, true);
             }}
             return origFetch(input, init);
         }};
     }}
-    // 全局表单提交拦截：为所有动态表单补齐 phoenix_token 凭证
+    if (window.open) {{
+        var origWindowOpen = window.open;
+        window.open = function(url, target, features) {{
+            if (typeof url === 'string') {{
+                arguments[0] = rewriteGatewayUrl(url, true);
+            }}
+            return origWindowOpen.apply(this, arguments);
+        }};
+    }}
+    // 捕获阶段拦截所有动态生成的 <a> 链接点击，修正漏网的根路径或内网域名跳转
+    document.addEventListener('click', function(e) {{
+        var node = e.target;
+        while (node && node.nodeType === 1 && node.tagName !== 'A') {{
+            node = node.parentNode;
+        }}
+        if (!node || node.tagName !== 'A') return;
+        var rawHref = node.getAttribute('href');
+        if (!rawHref) return;
+        var fixedHref = rewriteGatewayUrl(rawHref, false);
+        if (fixedHref !== rawHref) {{
+            node.setAttribute('href', fixedHref);
+        }}
+    }}, true);
+    // 全局表单提交拦截：修正 action 并为所有动态表单补齐 phoenix_token 凭证
     document.addEventListener('submit', function(e) {{
         var form = e.target;
-        if (form && gToken) {{
+        if (form) {{
             var action = form.getAttribute('action') || window.location.href;
-            if (action.indexOf('phoenix_token=') === -1) {{
-                var d = action.indexOf('?') === -1 ? '?' : '&';
-                form.setAttribute('action', action + d + 'phoenix_token=' + encodeURIComponent(gToken));
+            var fixedAction = rewriteGatewayUrl(action, true);
+            if (fixedAction !== action || (gToken && action.indexOf('phoenix_token=') === -1)) {{
+                form.setAttribute('action', fixedAction);
             }}
         }}
     }}, true);
@@ -795,6 +911,16 @@ async def gateway_reverse_proxy(
             body_bytes = css_text.encode("utf-8")
         except Exception as e:
             logger.warning("CSS 内部 url 路径重写失败: %s", e)
+
+    # 对非压缩业务 JS 文件中的显式根路径/内网域名跳转字面量进行重写
+    elif ("javascript" in content_type.lower() or clean_sub.lower().endswith(".js")) and not clean_sub.lower().endswith(".min.js"):
+        try:
+            js_text = body_bytes.decode("utf-8", errors="replace")
+            rewritten_js = _rewrite_js_navigation_urls(js_text, target_base, gateway_base_clean)
+            if rewritten_js != js_text:
+                body_bytes = rewritten_js.encode("utf-8")
+        except Exception as e:
+            logger.warning("JS 内部跳转路径重写失败: %s", e)
 
     # 动态写入静态资源极速缓存，供后续秒级直出
     if static_get and result_payload.status_code == 200 and body_bytes:
