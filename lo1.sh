@@ -61,10 +61,13 @@ case "${CHOICE}" in
     echo "=================================================="
     echo "🛑 模式 [2]：开始全量停机重建"
     echo "=================================================="
-    echo "🛑 [步骤 1/2] 正在停止并移除全部旧容器与网络..."
+    echo "🛑 [步骤 1/3] 正在停止并移除全部旧容器与网络..."
     docker compose -f "${COMPOSE_FILE}" down
 
-    echo "▶️ [步骤 2/2] 正在拉取新镜像并启动所有容器..."
+    echo "📦 [步骤 2/3] 正在拉取最新镜像..."
+    docker compose -f "${COMPOSE_FILE}" pull
+
+    echo "▶️ [步骤 3/3] 正在启动所有容器..."
     docker compose -f "${COMPOSE_FILE}" up -d
     ;;
 

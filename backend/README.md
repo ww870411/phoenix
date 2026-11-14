@@ -1,3 +1,9 @@
+## 2026-11-14 修复金山文档 12345 投诉底表连接测试与同步时间 UTC 偏差
+
+- **`projects/daily_report_25_26/services/kdocs_complaint_service.py` & `api/complaint_optimizer.py`**：
+  - 新增 `EAST_8` 与 `now_east8_str()`，统一将 `last_test_time`、`last_sync_time` 及兜底 `biz_date` 改为东八区北京时间生成，消除容器默认 UTC 时区造成的 8 小时偏差。
+- **测试 (`projects/daily_report_25_26/tests/test_project_settings.py`)**：新增 `test_kdocs_connectivity_records_east8_time`，联合回归 `11 passed`。
+
 ## 2026-11-14 业务操作日志表自愈重建与空表真实历史自动回填
 
 - **`projects/daily_report_25_26/services/audit_log_service.py`**：

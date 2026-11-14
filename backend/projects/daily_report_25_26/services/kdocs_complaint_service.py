@@ -16,7 +16,7 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -28,6 +28,12 @@ from backend.services.project_settings import (
 )
 
 logger = logging.getLogger(__name__)
+EAST_8 = timezone(timedelta(hours=8))
+
+
+def now_east8_str(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """统一返回东八区（北京时间）格式化时间字符串，避免容器 UTC 时区偏差。"""
+    return datetime.now(EAST_8).strftime(fmt)
 
 # 综合配置节区与运行态文件拆分
 SETTINGS_SECTION = "kdocs_complaint"
@@ -174,7 +180,7 @@ def test_kdocs_connectivity(
             except Exception:
                 file_size_mb = "未知大小"
 
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now_str = now_east8_str()
             success_msg = f"连接测试成功！已成功获取下载直链，文件大小约 {file_size_mb}。"
 
             # 回写测试状态到配置
@@ -201,7 +207,7 @@ def test_kdocs_connectivity(
         except Exception:
             err_msg += f" - {err_body[:100]}"
 
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now_str = now_east8_str()
         fail_msg = f"测试失败 ({err_msg})，请检查 wps_sid 是否已过期或被登出。"
         save_config({
             "last_test_status": "FAILED",
@@ -211,7 +217,7 @@ def test_kdocs_connectivity(
         return False, fail_msg, {"error_body": err_body}
 
     except Exception as exc:
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now_str = now_east8_str()
         fail_msg = f"网络请求异常: {exc}"
         save_config({
             "last_test_status": "ERROR",

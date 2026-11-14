@@ -1,5 +1,17 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-14 修复“12345投诉底表(金山)”测试连接与同步时间戳容器 UTC 时区偏差
+
+- **问题原因**：
+  - Docker 后端容器默认处于 UTC 时区，`kdocs_complaint_service.py` 与 `complaint_optimizer.py` 使用无时区 `datetime.now()` 生成并落库 `last_test_time` / `last_sync_time`，导致前端显示比北京时间少 8 小时。
+- **后端改动**：
+  - **`backend/projects/daily_report_25_26/services/kdocs_complaint_service.py`**：新增 `EAST_8 = timezone(timedelta(hours=8))` 与公共辅助函数 `now_east8_str()`，替换连接测试成功/HTTP异常/网络异常三处时间戳写入。
+  - **`backend/projects/daily_report_25_26/api/complaint_optimizer.py`**：将 `sync_complaints_from_kdocs()` 的 `last_sync_time` 与兜底 `biz_date` 统一改用 `kdocs_complaint_service.now_east8_str()`。
+  - **`backend/projects/daily_report_25_26/tests/test_project_settings.py`**：新增 `test_kdocs_connectivity_records_east8_time` 单元测试验证东八区时间落库与返回。
+- **前端改动**：无。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_project_settings.py backend/projects/daily_report_25_26/tests/test_operation_audit_logs.py -v`：**11 passed（0 错误）**。
+
 ## 2026-11-14 业务操作日志空表自愈与真实历史自动回填增强
 
 - **需求背景**：

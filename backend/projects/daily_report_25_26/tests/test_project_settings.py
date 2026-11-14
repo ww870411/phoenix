@@ -307,6 +307,29 @@ class ProjectSettingsStoreTests(unittest.TestCase):
         self.assertEqual(second["migrated_states"], [])
         self.assertEqual(second["archived_files"], [])
 
+    def test_kdocs_connectivity_records_east8_time(self) -> None:
+        """金山文档测试连接时间即使在 UTC 容器下也必须记录为东八区北京时间。"""
+        from datetime import datetime as real_datetime, timezone as real_tz
+
+        fixed_utc = real_datetime(2026, 11, 14, 11, 42, 0, tzinfo=real_tz.utc)
+        fake_resp = MagicMock()
+        fake_resp.__enter__.return_value = fake_resp
+        fake_resp.__exit__.return_value = False
+        fake_resp.read.return_value = b'{"download_url": "https://example.com/file.xlsx?file_size=1048576"}'
+
+        with patch.object(kdocs_complaint_service, "datetime") as mocked_dt, \
+             patch("urllib.request.urlopen", return_value=fake_resp):
+            mocked_dt.now.side_effect = lambda tz=None: fixed_utc.astimezone(tz) if tz else fixed_utc.replace(tzinfo=None)
+            ok, _msg, meta = kdocs_complaint_service.test_kdocs_connectivity(
+                share_link="https://www.kdocs.cn/l/testShare02",
+                wps_sid="dummy-session-token",
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(meta["test_time"], "2026-11-14 19:42:00")
+        loaded = kdocs_complaint_service.load_config()
+        self.assertEqual(loaded["last_test_time"], "2026-11-14 19:42:00")
+
 
 if __name__ == "__main__":
     unittest.main()

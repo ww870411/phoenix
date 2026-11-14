@@ -1,6 +1,5 @@
 """投诉报表优化接口：复用项目登录鉴权，仅返回内存中的独立副本。同时支持金山文档 (KDocs) 12345 底表配置与同步。"""
 import base64
-from datetime import datetime
 from pathlib import PurePath
 from typing import Any, Dict, Optional
 
@@ -124,7 +123,7 @@ def sync_complaints_from_kdocs(
             from backend.projects.daily_report_25_26.api.dashboard import _get_current_business_date
             biz_date = _get_current_business_date()
         except Exception:
-            biz_date = datetime.now().strftime('%Y-%m-%d')
+            biz_date = kdocs_complaint_service.now_east8_str('%Y-%m-%d')
 
     try:
         file_bytes, filename = kdocs_complaint_service.download_kdocs_workbook_bytes()
@@ -135,7 +134,7 @@ def sync_complaints_from_kdocs(
         stats = calculate(file_bytes, biz_date)
         # 更新最后同步时间
         kdocs_complaint_service.save_config({
-            'last_sync_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'last_sync_time': kdocs_complaint_service.now_east8_str(),
         })
         log_session_operation(
             session,
