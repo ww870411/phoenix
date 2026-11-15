@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>大连洁净能源集团 26-27供暖期第二周生产运行情况演示</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      background: #0f172a;
+      color: #0f172a;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      height: 48px;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid #1e293b;
+      flex-shrink: 0;
+      z-index: 40;
+    }
+    .slides-viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #0f172a;
+      perspective: 1600px;
+      transition: transform 0.25s ease, width 0.25s ease;
+    }
+    body.screen-8-3 .slides-viewport {
+      width: 150%;
+      transform: scaleX(0.6666667);
+      transform-origin: left center;
+    }
+    .slide-page {
+      position: absolute;
+      inset: 8px 14px;
+      background: #f1f5f9;
+      border-radius: 14px;
+      box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.12);
+      display: flex;
+      flex-direction: column;
+      padding: 12px 16px 14px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(60px) scale(0.97);
+      transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.48s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .slide-page.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) translateY(0) scale(1) rotateX(0deg) rotateY(0deg);
+      z-index: 10;
+    }
+    .fx-slide .slide-page.prev-page { transform: translateX(-80px) scale(0.96); opacity: 0; }
+    .fx-slide .slide-page.next-page { transform: translateX(80px) scale(0.96); opacity: 0; }
+    .fx-cube .slide-page.prev-page { transform: translateX(-45%) rotateY(-38deg) scale(0.88); opacity: 0; transform-origin: right center; }
+    .fx-cube .slide-page.next-page { transform: translateX(45%) rotateY(38deg) scale(0.88); opacity: 0; transform-origin: left center; }
+    .fx-flip .slide-page.prev-page { transform: translateY(-40px) rotateX(28deg) scale(0.92); opacity: 0; transform-origin: center bottom; }
+    .fx-flip .slide-page.next-page { transform: translateY(40px) rotateX(-28deg) scale(0.92); opacity: 0; transform-origin: center top; }
+    .fx-zoom .slide-page.prev-page { transform: scale(1.12); opacity: 0; }
+    .fx-zoom .slide-page.next-page { transform: scale(0.86); opacity: 0; }
+
+    .slide-header {
+      background: linear-gradient(90deg, #0f2942 0%, #14446b 100%);
+      color: #ffffff;
+      border-radius: 10px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+    }
+    .slide-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .chart-box {
+      flex: 1;
+      width: 100%;
+      min-height: 150px;
+    }
+    .bottombar {
+      height: 44px;
+      background: #0f172a;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-top: 1px solid #1e293b;
+      flex-shrink: 0;
+    }
+    .num-pos { color: #dc2626; font-weight: 700; }
+    .num-down { color: #16a34a; font-weight: 700; }
+    .drawer {
+      position: fixed;
+      top: 48px;
+      left: 0;
+      bottom: 44px;
+      width: 300px;
+      background: #0f172a;
+      color: #f8fafc;
+      border-right: 1px solid #334155;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      z-index: 50;
+      padding: 14px;
+      overflow-y: auto;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-item {
+      width: 100%;
+      text-align: left;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #cbd5e1;
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .drawer-item:hover { background: #1e293b; color: #ffffff; }
+    .drawer-item.active { background: #14446b; color: #ffffff; border-color: #38bdf8; font-weight: 600; }
+  </style>
+</head>
+<body class="fx-slide">
+  <!-- 顶部控制栏 -->
+  <header class="topbar">
+    <div class="flex items-center gap-3">
+      <button id="menuToggleBtn" type="button" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-semibold border border-slate-700">☰ 目录</button>
+      <span class="font-bold text-sm tracking-wide text-sky-300">大连洁净能源集团</span>
+      <span class="text-slate-400 text-xs">|</span>
+      <span class="text-sm font-semibold">26-27供暖期第二周（11月8日—11月14日）生产运行情况演示</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <select id="fxSelect" aria-label="翻页特效" class="px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs font-semibold border border-slate-700 cursor-pointer">
+        <option value="fx-slide">✨ 推拉特效</option>
+        <option value="fx-cube">🧊 3D 立方</option>
+        <option value="fx-flip">📖 3D 翻转</option>
+        <option value="fx-zoom">🔍 缩放淡入</option>
+      </select>
+      <button id="ratio16x9Btn" type="button" class="px-2.5 py-1 rounded text-xs font-semibold bg-sky-600 text-white">📺 16:9 标准</button>
+      <button id="ratio8x3Btn" type="button" class="px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">🖥️ 8:3 预压 (8)</button>
+    </div>
+  </header>
+
+  <!-- 侧边目录抽屉 -->
+  <aside id="navDrawer" class="drawer">
+    <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">演示页面导航（与简报章节同步）</div>
+    <div id="drawerList"></div>
+  </aside>
+
+  <!-- 主视口 -->
+  <main id="slidesViewport" class="slides-viewport">
+
+    <!-- P01: 一、基本概况与气象复盘 -->
+    <section class="slide-page active" data-slide-index="0" data-title="01. 一、基本概况与气象复盘">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs">第 01 / 09 页 · 决策总览</span>
+          <h2 class="text-base font-bold">一、基本概况与气象复盘（11月8日—11月14日）</h2>
+        </div>
+        <span class="text-xs text-sky-200">主城区日均温 8.74℃ · 累计 HDD20 78.84℃·日 (+29.45%)</span>
+      </div>
+      <div class="slide-body">
+        <div class="grid grid-cols-6 gap-2.5 flex-shrink-0">
+          <div class="card !p-2.5 border-l-4 border-l-sky-700">
+            <div class="text-xs text-slate-500 font-semibold">主城区日均气温</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-0.5">8.74℃</div>
+            <div class="text-xs mt-0.5"><span class="num-down">同比 -2.56℃</span> · <span class="num-down">环比 -2.39℃</span></div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-red-600">
+            <div class="text-xs text-slate-500 font-semibold">集团汇总供热量</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-0.5">482,216 <span class="text-xs font-normal">GJ</span></div>
+            <div class="text-xs mt-0.5"><span class="num-pos">同比 +30.43%</span> · <span class="num-pos">环比 +36.49%</span></div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-red-600">
+            <div class="text-xs text-slate-500 font-semibold">集团汇总标煤耗量</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-0.5">19,965 <span class="text-xs font-normal">吨</span></div>
+            <div class="text-xs mt-0.5"><span class="num-pos">同比 +19.65%</span> · <span class="num-pos">环比 +34.19%</span></div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-emerald-600">
+            <div class="text-xs text-slate-500 font-semibold">可比煤价边际利润</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-0.5">2,264 <span class="text-xs font-normal">万元</span></div>
+            <div class="text-xs mt-0.5"><span class="num-down">同比 -15.04%</span> · <span class="num-down">环比 -12.47%</span></div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-amber-500">
+            <div class="text-xs text-slate-500 font-semibold">省市平台投诉量</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-0.5">1,108 <span class="text-xs font-normal">件</span></div>
+            <div class="text-xs mt-0.5"><span class="num-pos">同比 +168.28%</span> · <span class="num-down">环比 -19.88%</span></div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-amber-600">
+            <div class="text-xs text-slate-500 font-semibold">住建局考核净投诉</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-0.5">172 <span class="text-xs font-normal">件</span></div>
+            <div class="text-xs mt-0.5"><span class="num-pos">同比 +47.01%</span> · <span class="num-pos">环比 +37.60%</span></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-12 gap-3 flex-1 min-h-0">
+          <div class="card col-span-8">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm font-bold text-slate-800">图1 统计周期主城区每日平均气温与同期对比曲线图</span>
+              <span class="text-xs text-slate-500">最高 14.90℃ / 最低 -1.10℃ · 累计 HDD20 78.84℃·日</span>
+            </div>
+            <div id="chart_p1_temp" class="chart-box"></div>
+          </div>
+          <div class="col-span-4 grid grid-rows-4 gap-2.5 min-h-0">
+            <div class="card !p-3 bg-sky-50/60 border-sky-200 justify-center">
+              <div class="text-xs font-bold text-sky-900">1. 寒潮保供稳健 · 煤耗增幅低于需热增幅</div>
+              <div class="text-xs text-slate-700 mt-1">供热量同比 <span class="num-pos">+30.43%</span>，标煤耗量同比 <span class="num-pos">+19.65%</span>，低于 HDD20 理论需热增幅（+29.45%）。</div>
+            </div>
+            <div class="card !p-3 bg-amber-50/60 border-amber-200 justify-center">
+              <div class="text-xs font-bold text-amber-900">2. 现货中枢上移 · 两厂加权均价跑赢大盘</div>
+              <div class="text-xs text-slate-700 mt-1">本周实时均价 258.87 元/MWh（环比 <span class="num-pos">+9.11%</span>）；1–8日北海、香海加权电价分别跑赢实时均价 8.46%、3.39%。</div>
+            </div>
+            <div class="card !p-3 bg-rose-50/60 border-rose-200 justify-center">
+              <div class="text-xs font-bold text-rose-900">3. 煤价与水电增支 · 利润阶段性承压</div>
+              <div class="text-xs text-slate-700 mt-1">可比煤价边际利润同比减少 401 万元（<span class="num-down">-15.04%</span>），实际边际利润 1,858 万元（<span class="num-down">-36.35%</span>）。</div>
+            </div>
+            <div class="card !p-3 bg-emerald-50/60 border-emerald-200 justify-center">
+              <div class="text-xs font-bold text-emerald-900">4. 下周强降温预警 · 需严控月度煤耗进度</div>
+              <div class="text-xs text-slate-700 mt-1">15–21日预报日均温降至 4.31℃，月度剩余16天日均可用标煤 2,575 吨/日，控煤裕度偏紧。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P02: 核心指标同比谱系与水电资源结构 -->
+    <section class="slide-page" data-slide-index="1" data-title="02. 核心指标同比谱系与资源结构">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs">第 02 / 09 页 · 全景谱系</span>
+          <h2 class="text-base font-bold">核心指标同比变化率排序谱系与资源投入结构</h2>
+        </div>
+        <span class="text-xs text-sky-200">红增绿减 · 对标 HDD20 (+29.45%) 理论需热基准</span>
+      </div>
+      <div class="slide-body grid grid-cols-12 gap-3 !flex-row">
+        <div class="card col-span-7">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-sm font-bold text-slate-800">集团汇总 14 项核心指标同比增减幅排序谱系图 (%)</span>
+            <span class="text-xs text-slate-500">红色为同比增加 · 绿色为同比减少</span>
+          </div>
+          <div id="chart_p2_spectrum" class="chart-box"></div>
+        </div>
+        <div class="col-span-5 flex flex-col gap-3 min-h-0">
+          <div class="card flex-1">
+            <div class="text-sm font-bold text-slate-800 mb-1">能源与水电投入同比对比（本期 vs 同期）</div>
+            <div id="chart_p2_resources" class="chart-box"></div>
+          </div>
+          <div class="card flex-1">
+            <div class="text-sm font-bold text-slate-800 mb-1">直接收入结构拆解（4,758万元，同比 +0.46%）</div>
+            <div id="chart_p2_income" class="chart-box"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P03: 二、标煤耗量、外购热与运行调度 -->
+    <section class="slide-page" data-slide-index="2" data-title="03. 二、标煤耗量、外购热与调度">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs">第 03 / 09 页 · 能源消耗</span>
+          <h2 class="text-base font-bold">二、标煤耗量、外购热与运行调度情况</h2>
+        </div>
+        <span class="text-xs text-sky-200">集团标煤 19,965 吨 (+19.65%) · 庄河外购热 33,412 GJ (+15.77%)</span>
+      </div>
+      <div class="slide-body">
+        <div class="grid grid-cols-12 gap-3 flex-1 min-h-0">
+          <div class="card col-span-6">
+            <div class="text-sm font-bold text-slate-800 mb-1">图2(a) 各单位标煤耗量同比增减分解（红增绿减，吨）</div>
+            <div id="chart_p3_coal_diff" class="chart-box"></div>
+          </div>
+          <div class="card col-span-6">
+            <div class="text-sm font-bold text-slate-800 mb-1">图2(b) 标煤与庄河外购热期间计划完成率及同比 (%)</div>
+            <div id="chart_p3_coal_plan" class="chart-box"></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-4 gap-2.5 flex-shrink-0">
+          <div class="card !p-2.5 bg-slate-50">
+            <div class="text-xs font-bold text-slate-800">北海热电厂 (8,123吨 · <span class="num-pos">+42.08%</span>)</div>
+            <div class="text-xs text-slate-600 mt-0.5">9日#1水炉停炉、#4汽炉并汽门漏消缺及#2机解列；14日#4汽炉并汽。</div>
+          </div>
+          <div class="card !p-2.5 bg-slate-50">
+            <div class="text-xs font-bold text-slate-800">香海热电厂 (5,866吨 · <span class="num-pos">+3.53%</span>)</div>
+            <div class="text-xs text-slate-600 mt-0.5">12日#3机尖峰加热器停运；13日#4炉引风机变频故障1小时恢复。</div>
+          </div>
+          <div class="card !p-2.5 bg-slate-50">
+            <div class="text-xs font-bold text-slate-800">金州热电 (3,290吨 · <span class="num-pos">+4.68%</span>)</div>
+            <div class="text-xs text-slate-600 mt-0.5">10日#2炉停炉消缺、#3炉并汽；11日#1炉按计划停炉。</div>
+          </div>
+          <div class="card !p-2.5 bg-slate-50">
+            <div class="text-xs font-bold text-slate-800">北方/金普/庄河</div>
+            <div class="text-xs text-slate-600 mt-0.5">北方11日#1炉停运(煤耗<span class="num-pos">+32.67%</span>)；庄河外购热环比<span class="num-pos">+139.69%</span>。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P04: 三、发电量与电力现货市场情况 -->
+    <section class="slide-page" data-slide-index="3" data-title="04. 三、发电量与电力现货市场">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs">第 04 / 09 页 · 发用与现货</span>
+          <h2 class="text-base font-bold">三、发电量与电力现货市场情况</h2>
+        </div>
+        <span class="text-xs text-sky-200">售电量 920.74 万kWh (-27.55% / 环比 +51.79%) · 实时均价 258.87 元/MWh</span>
+      </div>
+      <div class="slide-body">
+        <div class="card flex-[1.25] min-h-0">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-sm font-bold text-slate-800">图3 11月8日—11月14日辽宁电力现货每日96点实时与日前出清电价走势图</span>
+            <span class="text-xs text-slate-500">实时最高 830.00 / 最低 -100.00 · 实时负电价 134 点 (19.94%)</span>
+          </div>
+          <div id="chart_p4_96pt" class="chart-box"></div>
+        </div>
+        <div class="card flex-1 min-h-0">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-sm font-bold text-slate-800">各热电厂发电量与售电量对比（万kWh）</span>
+            <span class="text-xs text-slate-500">北海#2机解列及14日投运#2高减致售电同比-66.97%；香海售电环比+77.14%</span>
+          </div>
+          <div id="chart_p4_power" class="chart-box"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P05: 四、边际利润与成本归因分析 -->
+    <section class="slide-page" data-slide-index="4" data-title="05. 四、边际利润与成本归因">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs">第 05 / 09 页 · 经营效益</span>
+          <h2 class="text-base font-bold">四、边际利润与成本归因分析</h2>
+        </div>
+        <span class="text-xs text-sky-200">可比煤价边际利润 2,264 万元 (-15.04%) · 边际利润 1,858 万元 (-36.35%)</span>
+      </div>
+      <div class="slide-body grid grid-cols-12 gap-3 !flex-row">
+        <div class="card col-span-6">
+          <div class="text-sm font-bold text-slate-800 mb-1">图4(a) 可比煤价边际利润 -400.80 万元驱动分解</div>
+          <div id="chart_p5_driver" class="chart-box"></div>
+        </div>
+        <div class="card col-span-6">
+          <div class="text-sm font-bold text-slate-800 mb-1">图4(b) 各单位可比煤价边际利润与实际边际利润对比 (万元)</div>
+          <div id="chart_p5_units" class="chart-box"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P06: 五、供暖单耗与服务质量对标分析 -->
+    <section class="slide-page" data-slide-index="5" data-title="06. 五、供暖单耗与服务质量对标">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs">第 06 / 09 页 · 能效与客服</span>
+          <h2 class="text-base font-bold">五、供暖单耗与服务质量对标分析</h2>
+        </div>
+        <span class="text-xs text-sky-200">热单耗 104.62 (+29.59%) · 水单耗 30.31 (+21.32%) · 省市平台 1,108 件 / 净投诉 172 件</span>
+      </div>
+      <div class="slide-body grid grid-rows-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 min-h-0">
+          <div class="card">
+            <div class="text-sm font-bold text-slate-800 mb-1">图5(a) 各单位供暖热单耗对比 (GJ/万㎡ · 集团均值 104.62)</div>
+            <div id="chart_p6_heat" class="chart-box"></div>
+          </div>
+          <div class="card">
+            <div class="text-sm font-bold text-slate-800 mb-1">图5(b) 各单位供暖水单耗对比 (吨/万㎡ · 集团均值 30.31)</div>
+            <div id="chart_p6_water" class="chart-box"></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-12 gap-3 min-h-0">
+          <div class="card col-span-7">
+            <div class="text-sm font-bold text-slate-800 mb-1">图5(c) 服务质量投诉量双轨对标：省市平台投诉量 vs 考核净投诉量 (件)</div>
+            <div id="chart_p6_complaints" class="chart-box"></div>
+          </div>
+          <div class="card col-span-5 bg-slate-50 justify-center gap-2">
+            <div class="text-sm font-bold text-slate-900">单耗与投诉管控要点</div>
+            <div class="text-xs text-slate-700 leading-relaxed">• <b>热单耗</b>：同比增幅 +29.59% 与 HDD20（+29.45%）基本匹配，主城区 93.14 处于全集团最低。</div>
+            <div class="text-xs text-slate-700 leading-relaxed">• <b>电单耗</b>：北方（718.41，<span class="num-pos">+26.46%</span>）与研究院（<span class="num-pos">+30.42%</span>）需结合现场核查。</div>
+            <div class="text-xs text-slate-700 leading-relaxed">• <b>水单耗</b>：庄河环海 87.87（<span class="num-pos">+50.53%</span>）偏高，全集团需把查漏贯穿供暖期始终，关注一次网安全。</div>
+            <div class="text-xs text-slate-700 leading-relaxed">• <b>投诉化解</b>：北方净投诉 11 件（<span class="num-down">-54.17%</span>）成效突出；主城区、金州需加强低温期末端排气与回访。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P07: 六（一）电力现货数据分析：基本情况 -->
+    <section class="slide-page" data-slide-index="6" data-title="07. 六（一）电力现货：1-14日与两周对比">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-cyan-400 text-slate-950 font-bold text-xs">第 07 / 09 页 · 现货专题 1/2</span>
+          <h2 class="text-base font-bold">六、电力现货数据分析 —— （一）11月1日—14日全景与两周走势对比</h2>
+        </div>
+        <span class="text-xs text-sky-200">1–14日实时均价 248.06 元/MWh · 负电价占比 28.12%</span>
+      </div>
+      <div class="slide-body">
+        <div class="grid grid-cols-4 gap-2.5 flex-shrink-0">
+          <div class="card !p-2.5 border-l-4 border-l-sky-700">
+            <div class="text-xs text-slate-500 font-semibold">11.1–14日前电价 (1344点)</div>
+            <div class="text-lg font-extrabold text-slate-900">均价 270.85 <span class="text-xs font-normal">元/MWh</span></div>
+            <div class="text-xs text-slate-600">最高 900.00 / 最低 -100.00</div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-indigo-600">
+            <div class="text-xs text-slate-500 font-semibold">11.1–14实时电价 (1344点)</div>
+            <div class="text-lg font-extrabold text-slate-900">均价 248.06 <span class="text-xs font-normal">元/MWh</span></div>
+            <div class="text-xs text-slate-600">最高 910.00 / 负电价 378点 (28.12%)</div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-red-600">
+            <div class="text-xs text-slate-500 font-semibold">两周实时均价环比变化</div>
+            <div class="text-lg font-extrabold num-pos">+21.62 元/MWh (+9.11%)</div>
+            <div class="text-xs text-slate-600">237.25 → 258.87 元/MWh</div>
+          </div>
+          <div class="card !p-2.5 border-l-4 border-l-emerald-600">
+            <div class="text-xs text-slate-500 font-semibold">两周负电价占比变化</div>
+            <div class="text-lg font-extrabold num-down">-11.01 个百分点</div>
+            <div class="text-xs text-slate-600">208点(30.95%) → 134点(19.94%)</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-12 gap-3 flex-1 min-h-0">
+          <div class="card col-span-5">
+            <div class="text-sm font-bold text-slate-800 mb-1">图6(a) 11.1–11.7 vs 11.8–11.14 现货电价与负电价占比</div>
+            <div id="chart_p7_week_cmp" class="chart-box"></div>
+          </div>
+          <div class="card col-span-7">
+            <div class="text-sm font-bold text-slate-800 mb-1">图6(b) 11.8—11.14 逐日日前/实时均价及负电价点数走势</div>
+            <div id="chart_p7_daily" class="chart-box"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P08: 六（二）主城区热电厂现货销售分析 -->
+    <section class="slide-page" data-slide-index="7" data-title="08. 六（二）主城区热电厂现货销售">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-cyan-400 text-slate-950 font-bold text-xs">第 08 / 09 页 · 现货专题 2/2</span>
+          <h2 class="text-base font-bold">六、电力现货数据分析 —— （二）11月1日—8日北海与香海热电厂销售分析</h2>
+        </div>
+        <span class="text-xs text-sky-200">1–8日实时算术均价 239.84 元/MWh · 日前均价 262.89 元/MWh</span>
+      </div>
+      <div class="slide-body">
+        <div class="grid grid-cols-2 gap-3 flex-shrink-0">
+          <div class="card !p-2.5 bg-sky-50/70 border-sky-200">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-sky-900">北海热电厂（1–3号机 · 11.1–11.8）</span>
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-700">加权单价跑赢实时均价 +8.46%</span>
+            </div>
+            <div class="grid grid-cols-4 gap-2 mt-1.5 text-xs">
+              <div><span class="text-slate-500">售电量:</span> <b>2,169.04 MWh</b></div>
+              <div><span class="text-slate-500">现货电费:</span> <b>564,225 元</b></div>
+              <div><span class="text-slate-500">加权单价:</span> <b class="text-sky-800">260.13 元</b></div>
+              <div><span class="text-slate-500">全局相关:</span> <b>日前+0.28 / 实时+0.20</b></div>
+            </div>
+          </div>
+          <div class="card !p-2.5 bg-indigo-50/70 border-indigo-200">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-indigo-900">香海热电厂（1–4号机 · 11.1–11.8）</span>
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-700">加权单价跑赢实时均价 +3.39%</span>
+            </div>
+            <div class="grid grid-cols-4 gap-2 mt-1.5 text-xs">
+              <div><span class="text-slate-500">售电量:</span> <b>3,516.48 MWh</b></div>
+              <div><span class="text-slate-500">现货电费:</span> <b>871,929 元</b></div>
+              <div><span class="text-slate-500">加权单价:</span> <b class="text-indigo-800">247.96 元</b></div>
+              <div><span class="text-slate-500">区间/全局:</span> <b>日前+0.30 / 实时+0.05</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-12 gap-3 flex-1 min-h-0">
+          <div class="card col-span-6">
+            <div class="text-sm font-bold text-slate-800 mb-1">图7(a) 11.1—11.8 两厂四区间上网电量构成 (%)</div>
+            <div id="chart_p8_tier_pct" class="chart-box"></div>
+          </div>
+          <div class="card col-span-6">
+            <div class="text-sm font-bold text-slate-800 mb-1">图7(b) 四区间加权结算均价与实时算术均价基准对比 (元/MWh)</div>
+            <div id="chart_p8_tier_prc" class="chart-box"></div>
+          </div>
+        </div>
+        <div class="card !p-2.5 bg-amber-50/80 border-amber-300 flex-shrink-0">
+          <div class="text-xs text-slate-800 leading-relaxed">
+            <b class="text-amber-900">量价错位归因与建议：</b>两厂负荷调控主要依据次日“日前电价曲线”（北海0.28、香海0.30），但实际结算按“实时电价”执行；香海调控力度虽更大，但因日前与实时曲线错位，其与实时电价相关性明显偏低（<b>+0.05</b> vs 北海 <b>+0.20</b>），导致加权单价低于北海。建议售电公司结合预报机制研究更精准的实时负荷调控策略。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- P09: 七、计划完成情况与下步工作要求 -->
+    <section class="slide-page" data-slide-index="8" data-title="09. 七、计划完成情况与下步工作要求">
+      <div class="slide-header">
+        <div class="flex items-center gap-3">
+          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs">第 09 / 09 页 · 计划与展望</span>
+          <h2 class="text-base font-bold">七、计划完成情况与下步工作要求</h2>
+        </div>
+        <span class="text-xs text-sky-200">11月累计标煤 34,844 吨 · 剩余16天日均可用 2,575 吨 · 下周预报日均温 4.31℃</span>
+      </div>
+      <div class="slide-body">
+        <div class="grid grid-cols-12 gap-3 flex-1 min-h-0">
+          <div class="card col-span-6">
+            <div class="text-sm font-bold text-slate-800 mb-1">图9(a) 标煤与庄河外购热期间实际完成与计划测算对比</div>
+            <div id="chart_p9_plan" class="chart-box"></div>
+          </div>
+          <div class="card col-span-6">
+            <div class="text-sm font-bold text-slate-800 mb-1">图9(b) 未来7天（11月15日—21日）主城区日均温预测对比</div>
+            <div id="chart_p9_forecast" class="chart-box"></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3 flex-shrink-0">
+          <div class="card !p-3 bg-sky-50/70 border-sky-200">
+            <div class="text-xs font-bold text-sky-900">1. 紧盯强降温 · 严控煤耗进度</div>
+            <div class="text-xs text-slate-700 mt-1">下周预报日均温降至 4.31℃（HDD20 同比 +28.08%），依托动态模型精准控温防超供，压降月度煤耗超支风险。</div>
+          </div>
+          <div class="card !p-3 bg-amber-50/70 border-amber-200">
+            <div class="text-xs font-bold text-amber-900">2. 深化现货协同 · 提升实时相关性</div>
+            <div class="text-xs text-slate-700 mt-1">热电厂继续优化负电价时段高减与水炉调峰，提升高价时段顶峰能力与实时电价曲线匹配度。</div>
+          </div>
+          <div class="card !p-3 bg-emerald-50/70 border-emerald-200">
+            <div class="text-xs font-bold text-emerald-900">3. 异常排查与管网查漏回访</div>
+            <div class="text-xs text-slate-700 mt-1">北方热电、研究院排查电单耗异常；庄河环海与供热公司强化一次网查漏及低温期末端客服回访。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 底部导航栏 -->
+  <footer class="bottombar">
+    <div class="flex items-center gap-2">
+      <button id="prevBtn" type="button" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-semibold">← 上一页</button>
+      <button id="nextBtn" type="button" class="px-3 py-1 rounded bg-sky-700 hover:bg-sky-600 text-white text-xs font-semibold">下一页 →</button>
+    </div>
+    <div id="pageIndicator" class="text-xs font-semibold text-slate-300">第 1 / 9 页</div>
+    <div class="text-xs text-slate-400">快捷键：← / → 翻页 · 8 切换 8:3 大屏预压</div>
+  </footer>
+
+<script>
+(function() {
+  const THEME = {
+    NAVY: '#14446B',
+    BLUE: '#2678B2',
+    GOLD: '#F3C677',
+    GOLD_BORDER: '#B45309',
+    AMBER: '#D97706',
+    RED: '#DC2626',
+    GREEN: '#16A34A',
+    TEAL: '#0F766E'
+  };
+
+  const charts = {};
+  function getOrCreateChart(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    if (!charts[id]) charts[id] = echarts.init(el);
+    return charts[id];
+  }
+  function resizeAllCharts() {
+    Object.values(charts).forEach(c => { if (c && !c.isDisposed()) c.resize(); });
+  }
+
+  const CHART_REGISTRY = {
+    0: function() {
+      const c = getOrCreateChart('chart_p1_temp');
+      if (!c) return;
+      c.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { top: 0, right: 10, textStyle: { fontSize: 12 } },
+        grid: { left: 48, right: 24, top: 38, bottom: 28 },
+        xAxis: { type: 'category', data: ['11月8日','11月9日','11月10日','11月11日','11月12日','11月13日','11月14日'], axisLabel: { fontSize: 12, fontWeight: 600 } },
+        yAxis: { type: 'value', name: '℃', min: 0, max: 16, axisLabel: { fontSize: 11 } },
+        series: [
+          { name: '本期日均气温 (均值8.74℃)', type: 'line', data: [1.58, 3.09, 9.90, 11.52, 12.21, 12.03, 10.83], symbol: 'circle', symbolSize: 8, lineStyle: { width: 3, color: THEME.NAVY }, itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', formatter: '{c}℃', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY } },
+          { name: '同期日均气温 (均值11.30℃)', type: 'line', data: [11.92, 11.25, 9.80, 11.60, 13.14, 10.53, 10.87], symbol: 'rect', symbolSize: 7, lineStyle: { width: 2.5, type: 'dashed', color: THEME.AMBER }, itemStyle: { color: THEME.AMBER }, label: { show: true, position: 'bottom', formatter: '{c}℃', fontSize: 11, color: '#B45309' } }
+        ]
+      });
+    },
+    1: function() {
+      const c1 = getOrCreateChart('chart_p2_spectrum');
+      if (c1) {
+        const items = [['实际边际利润', -36.35], ['售电量', -27.55], ['发电量', -18.45], ['可比煤价边际利润', -15.04], ['工商业售汽量', -3.25], ['直接收入', 0.46], ['供暖电单耗', 4.42], ['庄河外购热量', 15.77], ['耗水量', 18.72], ['标煤耗量', 19.65], ['供暖水单耗', 21.32], ['供暖热单耗', 29.59], ['集团供热量', 30.43], ['考核净投诉量', 47.01]];
+        c1.setOption({
+          tooltip: { trigger: 'axis', formatter: '{b}: {c}%' },
+          grid: { left: 120, right: 56, top: 20, bottom: 26 },
+          xAxis: { type: 'value', axisLabel: { formatter: '{value}%', fontSize: 11 } },
+          yAxis: { type: 'category', data: items.map(x => x[0]), axisLabel: { fontSize: 11.5, fontWeight: 600, color: '#0f172a' } },
+          series: [{
+            type: 'bar', barWidth: 16,
+            data: items.map(x => ({ value: x[1], itemStyle: { color: x[1] >= 0 ? THEME.RED : THEME.GREEN }, label: { show: true, position: x[1] >= 0 ? 'right' : 'left', formatter: (x[1] >= 0 ? '+' : '') + x[1].toFixed(2) + '%', fontSize: 11, fontWeight: 'bold', color: x[1] >= 0 ? THEME.RED : THEME.GREEN } })),
+            markLine: { symbol: 'none', lineStyle: { color: THEME.AMBER, type: 'dashed', width: 2 }, label: { formatter: 'HDD20 +29.45%', position: 'insideEndTop', color: '#B45309', fontWeight: 'bold' }, data: [{ xAxis: 29.45 }] }
+          }]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p2_resources');
+      if (c2) {
+        c2.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11 } },
+          grid: { left: 52, right: 18, top: 30, bottom: 25 },
+          xAxis: { type: 'category', data: ['标煤(百吨)', '耗水(千吨)', '外购电(万kWh)', '辅材(万元)'], axisLabel: { fontSize: 11, fontWeight: 600 } },
+          yAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '本期实际', type: 'bar', data: [199.65, 171.67, 359.24, 45.86], itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', fontSize: 10.5, fontWeight: 'bold' } },
+            { name: '去年同期', type: 'bar', data: [166.87, 144.60, 255.36, 29.09], itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 10.5 } }
+          ]
+        });
+      }
+      const c3 = getOrCreateChart('chart_p2_income');
+      if (c3) {
+        c3.setOption({
+          tooltip: { trigger: 'item', formatter: '{b}: {c}万元 ({d}%)' },
+          series: [{
+            type: 'pie', radius: ['42%', '70%'], center: ['50%', '54%'],
+            label: { formatter: '{b}\n{c}万 ({d}%)', fontSize: 11, fontWeight: 600 },
+            data: [
+              { value: 4064.76, name: '供暖收入', itemStyle: { color: THEME.NAVY } },
+              { value: 352.20, name: '高温水', itemStyle: { color: THEME.BLUE } },
+              { value: 303.85, name: '售电收入', itemStyle: { color: THEME.AMBER } },
+              { value: 37.00, name: '售汽收入', itemStyle: { color: THEME.TEAL } }
+            ]
+          }]
+        });
+      }
+    },
+    2: function() {
+      const c1 = getOrCreateChart('chart_p3_coal_diff');
+      if (c1) {
+        const d = [['庄河环海', -23], ['金普公司', 108], ['金州热电', 147], ['香海热电', 200], ['北方热电', 440], ['北海热电', 2406]];
+        c1.setOption({
+          tooltip: { trigger: 'axis' },
+          grid: { left: 82, right: 56, top: 18, bottom: 28 },
+          xAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+          yAxis: { type: 'category', data: d.map(x => x[0]), axisLabel: { fontSize: 12, fontWeight: 600 } },
+          series: [{ type: 'bar', barWidth: 24, data: d.map(x => ({ value: x[1], itemStyle: { color: x[1] >= 0 ? THEME.RED : THEME.GREEN }, label: { show: true, position: x[1] >= 0 ? 'right' : 'left', formatter: (x[1] >= 0 ? '+' : '') + x[1] + '吨', fontSize: 11.5, fontWeight: 'bold', color: x[1] >= 0 ? THEME.RED : THEME.GREEN } })) }]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p3_coal_plan');
+      if (c2) {
+        const names = ['集团标煤', '主城标煤', '北海标煤', '香海标煤', '金州标煤', '北方标煤', '金普标煤', '庄河外购热'];
+        const rates = [112.53, 113.00, 116.41, 108.61, 104.99, 127.93, 108.05, 121.63];
+        c2.setOption({
+          tooltip: { trigger: 'axis', formatter: '{b}: {c}%' },
+          grid: { left: 46, right: 18, top: 28, bottom: 42 },
+          xAxis: { type: 'category', data: names, axisLabel: { fontSize: 11, rotate: 20, fontWeight: 600 } },
+          yAxis: { type: 'value', max: 145, axisLabel: { formatter: '{value}%', fontSize: 11 } },
+          series: [{ type: 'bar', barWidth: 26, data: rates, itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', formatter: '{c}%', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY }, markLine: { symbol: 'none', lineStyle: { color: THEME.RED, type: 'dashed', width: 2 }, label: { formatter: '100%基准' }, data: [{ yAxis: 100 }] } }]
+        });
+      }
+    },
+    3: function() {
+      const c1 = getOrCreateChart('chart_p4_96pt');
+      if (c1) {
+        const days = ['11-08','11-09','11-10','11-11','11-12','11-13','11-14'];
+        c1.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 52, right: 24, top: 34, bottom: 26 },
+          xAxis: { type: 'category', data: days, axisLabel: { fontSize: 12, fontWeight: 600 } },
+          yAxis: { type: 'value', name: '元/MWh', min: 0, max: 900, axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '日前日均价', type: 'line', data: [343.35, 326.64, 315.93, 212.50, 224.20, 267.97, 341.55], lineStyle: { width: 2.5, type: 'dashed', color: THEME.AMBER }, itemStyle: { color: THEME.AMBER }, label: { show: true, position: 'top', fontSize: 11 } },
+            { name: '实时日均价', type: 'line', data: [257.97, 297.26, 286.30, 179.51, 219.99, 235.12, 335.97], lineStyle: { width: 3, color: THEME.NAVY }, itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'bottom', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY } },
+            { name: '实时日最高价', type: 'bar', barWidth: 20, data: [780, 810, 830, 690, 740, 790, 800], itemStyle: { color: 'rgba(220,38,38,0.18)', borderColor: THEME.RED, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 10.5, color: THEME.RED } }
+          ]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p4_power');
+      if (c2) {
+        c2.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 52, right: 24, top: 32, bottom: 26 },
+          xAxis: { type: 'category', data: ['集团汇总', '主城区', '北海热电', '香海热电', '金州热电', '北方热电'], axisLabel: { fontSize: 12, fontWeight: 600 } },
+          yAxis: { type: 'value', name: '万kWh', axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '本期售电', type: 'bar', data: [920.74, 668.61, 180.66, 487.95, 147.00, 105.14], itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold' } },
+            { name: '同期售电', type: 'bar', data: [1270.80, 1073.75, 547.00, 526.75, 135.00, 62.05], itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 11 } }
+          ]
+        });
+      }
+    },
+    4: function() {
+      const c1 = getOrCreateChart('chart_p5_driver');
+      if (c1) {
+        const drv = [['煤与外购热可比增支', -349.54], ['外购电成本增支', -42.27], ['可计量辅材增支', -16.76], ['购水成本增支', -14.19], ['直接收入增加', 21.96], ['可比利润同比净减', -400.80]];
+        c1.setOption({
+          tooltip: { trigger: 'axis' },
+          grid: { left: 135, right: 64, top: 20, bottom: 28 },
+          xAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+          yAxis: { type: 'category', data: drv.map(x => x[0]), axisLabel: { fontSize: 12, fontWeight: 600 } },
+          series: [{ type: 'bar', barWidth: 24, data: drv.map(x => ({ value: x[1], itemStyle: { color: x[0].includes('净减') ? THEME.NAVY : (x[1] >= 0 ? THEME.RED : THEME.GREEN) }, label: { show: true, position: x[1] >= 0 ? 'right' : 'left', formatter: (x[1] >= 0 ? '+' : '') + x[1].toFixed(2) + '万', fontSize: 11.5, fontWeight: 'bold', color: x[0].includes('净减') ? THEME.NAVY : (x[1] >= 0 ? THEME.RED : THEME.GREEN) } })) }]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p5_units');
+      if (c2) {
+        c2.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 52, right: 20, top: 34, bottom: 28 },
+          xAxis: { type: 'category', data: ['主城区', '金州热电', '北方热电', '金普公司', '庄河环海', '研究院'], axisLabel: { fontSize: 12, fontWeight: 600 } },
+          yAxis: { type: 'value', name: '万元', axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '可比煤价边际利润', type: 'bar', data: [1570.59, 391.22, 148.99, 78.21, 75.04, -0.31], itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold' } },
+            { name: '实际边际利润', type: 'bar', data: [1319.15, 313.08, 102.22, 48.46, 75.04, -0.31], itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 11 } }
+          ]
+        });
+      }
+    },
+    5: function() {
+      const units = ['主城区', '金州', '北方', '金普', '庄河', '研究院'];
+      const c1 = getOrCreateChart('chart_p6_heat');
+      if (c1) {
+        const hv = [93.14, 113.31, 137.02, 113.47, 147.01, 146.17];
+        c1.setOption({
+          tooltip: { trigger: 'axis' },
+          grid: { left: 42, right: 16, top: 18, bottom: 24 },
+          xAxis: { type: 'category', data: units, axisLabel: { fontSize: 11.5, fontWeight: 600 } },
+          yAxis: { type: 'value', max: 170, axisLabel: { fontSize: 10.5 } },
+          series: [{ type: 'bar', barWidth: 26, data: hv.map(v => ({ value: v, itemStyle: { color: v > 104.62 ? THEME.RED : THEME.NAVY } })), label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold' }, markLine: { symbol: 'none', lineStyle: { color: THEME.RED, type: 'dashed' }, data: [{ yAxis: 104.62 }] } }]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p6_water');
+      if (c2) {
+        const wv = [27.81, 24.84, 15.64, 34.49, 87.87, 12.22];
+        c2.setOption({
+          tooltip: { trigger: 'axis' },
+          grid: { left: 40, right: 16, top: 18, bottom: 24 },
+          xAxis: { type: 'category', data: units, axisLabel: { fontSize: 11.5, fontWeight: 600 } },
+          yAxis: { type: 'value', max: 105, axisLabel: { fontSize: 10.5 } },
+          series: [{ type: 'bar', barWidth: 26, data: wv.map(v => ({ value: v, itemStyle: { color: v > 30.31 ? THEME.RED : THEME.TEAL } })), label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold' }, markLine: { symbol: 'none', lineStyle: { color: THEME.RED, type: 'dashed' }, data: [{ yAxis: 30.31 }] } }]
+        });
+      }
+      const c3 = getOrCreateChart('chart_p6_complaints');
+      if (c3) {
+        c3.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, right: 10, textStyle: { fontSize: 11 } },
+          grid: { left: 44, right: 16, top: 26, bottom: 24 },
+          xAxis: { type: 'category', data: ['主城区', '庄河', '金州', '金普', '北方', '研究院'], axisLabel: { fontSize: 11.5, fontWeight: 600 } },
+          yAxis: { type: 'value', axisLabel: { fontSize: 10.5 } },
+          series: [
+            { name: '省市平台投诉', type: 'bar', data: [811, 124, 111, 32, 22, 8], itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold' } },
+            { name: '考核净投诉', type: 'bar', data: [76, 4, 63, 17, 11, 1], itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 11 } }
+          ]
+        });
+      }
+    },
+    6: function() {
+      const c1 = getOrCreateChart('chart_p7_week_cmp');
+      if (c1) {
+        c1.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 48, right: 20, top: 34, bottom: 30 },
+          xAxis: { type: 'category', data: ['日前均价(元)', '实时均价(元)', '实时负电价占比(%)'], axisLabel: { fontSize: 11.5, fontWeight: 600 } },
+          yAxis: { type: 'value', max: 340, axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '11.1—11.7 (上期)', type: 'bar', barWidth: 28, data: [251.39, 237.25, 30.95], itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 11.5 } },
+            { name: '11.8—11.14 (本期)', type: 'bar', barWidth: 28, data: [290.31, 258.87, 19.94], itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', fontSize: 11.5, fontWeight: 'bold', color: THEME.NAVY } }
+          ]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p7_daily');
+      if (c2) {
+        c2.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 48, right: 48, top: 34, bottom: 28 },
+          xAxis: { type: 'category', data: ['11-08','11-09','11-10','11-11','11-12','11-13','11-14'], axisLabel: { fontSize: 12, fontWeight: 600 } },
+          yAxis: [{ type: 'value', name: '元/MWh', min: 0, max: 480, axisLabel: { fontSize: 11 } }, { type: 'value', name: '负电价点数', min: 0, max: 72, axisLabel: { fontSize: 11 } }],
+          series: [
+            { name: '实时负电价点数', type: 'bar', yAxisIndex: 1, barWidth: 24, data: [9, 6, 4, 48, 36, 31, 0], itemStyle: { color: 'rgba(22,163,74,0.35)', borderColor: THEME.GREEN, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 11, color: THEME.GREEN, fontWeight: 'bold' } },
+            { name: '日前日均价', type: 'line', data: [343.35, 326.64, 315.93, 212.50, 224.20, 267.97, 341.55], lineStyle: { width: 2.5, type: 'dashed', color: THEME.AMBER }, itemStyle: { color: THEME.AMBER }, label: { show: true, position: 'top', fontSize: 11 } },
+            { name: '实时日均价', type: 'line', data: [257.97, 297.26, 286.30, 179.51, 219.99, 235.12, 335.97], lineStyle: { width: 3, color: THEME.NAVY }, itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'bottom', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY } }
+          ]
+        });
+      }
+    },
+    7: function() {
+      const c1 = getOrCreateChart('chart_p8_tier_pct');
+      if (c1) {
+        c1.setOption({
+          tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 105, right: 22, top: 38, bottom: 26 },
+          xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%', fontSize: 11 } },
+          yAxis: { type: 'category', data: ['香海热电厂\n(3,516.48 MWh)', '北海热电厂\n(2,169.04 MWh)'], axisLabel: { fontSize: 11.5, fontWeight: 600 } },
+          series: [
+            { name: '[-100, 0) 弃电深谷', type: 'bar', stack: 'total', barWidth: 38, data: [24.64, 25.03], itemStyle: { color: '#2563EB' }, label: { show: true, formatter: '{c}%', color: '#fff', fontWeight: 'bold', fontSize: 11 } },
+            { name: '[0, 200) 低谷承压', type: 'bar', stack: 'total', barWidth: 38, data: [2.00, 1.87], itemStyle: { color: '#10B981' }, label: { show: false } },
+            { name: '[200, 400) 基准区间', type: 'bar', stack: 'total', barWidth: 38, data: [59.44, 55.17], itemStyle: { color: '#F59E0B' }, label: { show: true, formatter: '{c}%', color: '#fff', fontWeight: 'bold', fontSize: 11.5 } },
+            { name: '>= 400 高峰高利', type: 'bar', stack: 'total', barWidth: 38, data: [13.92, 17.94], itemStyle: { color: '#DC2626' }, label: { show: true, formatter: '{c}%', color: '#fff', fontWeight: 'bold', fontSize: 11 } }
+          ]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p8_tier_prc');
+      if (c2) {
+        c2.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 54, right: 20, top: 34, bottom: 32 },
+          xAxis: { type: 'category', data: ['[-100, 0)', '[0, 200)', '[200, 400)', '>= 400'], axisLabel: { fontSize: 11.5, fontWeight: 600 } },
+          yAxis: { type: 'value', min: -140, max: 700, axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '北海加权均价', type: 'bar', barWidth: 26, data: [-91.34, 66.21, 306.95, 626.77], itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold' } },
+            { name: '香海加权均价', type: 'bar', barWidth: 26, data: [-89.06, 67.61, 306.13, 622.12], itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 }, label: { show: true, position: 'top', fontSize: 11 }, markLine: { symbol: 'none', lineStyle: { color: THEME.RED, type: 'dashed', width: 2 }, label: { formatter: '实时均价 239.84元' }, data: [{ yAxis: 239.84 }] } }
+          ]
+        });
+      }
+    },
+    8: function() {
+      const c1 = getOrCreateChart('chart_p9_plan');
+      if (c1) {
+        const names = ['集团标煤', '主城标煤', '北海标煤', '香海标煤', '金州标煤', '北方标煤', '金普标煤', '庄河外购热'];
+        c1.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 56, right: 18, top: 34, bottom: 42 },
+          xAxis: { type: 'category', data: names, axisLabel: { fontSize: 11, rotate: 20, fontWeight: 600 } },
+          yAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '本期实际完成', type: 'bar', data: [19965, 13990, 8123, 5866, 3290, 1788, 898, 33412], itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'top', fontSize: 10.5, fontWeight: 'bold' } },
+            { name: '期间计划测算', type: 'bar', data: [17742, 12380, 6979, 5401, 3134, 1398, 831, 27471], itemStyle: { color: THEME.GOLD, borderColor: THEME.GOLD_BORDER, borderWidth: 1 } }
+          ]
+        });
+      }
+      const c2 = getOrCreateChart('chart_p9_forecast');
+      if (c2) {
+        c2.setOption({
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, textStyle: { fontSize: 11.5 } },
+          grid: { left: 42, right: 18, top: 34, bottom: 28 },
+          xAxis: { type: 'category', data: ['11-15','11-16','11-17','11-18','11-19','11-20','11-21'], axisLabel: { fontSize: 12, fontWeight: 600 } },
+          yAxis: { type: 'value', name: '℃', min: 0, max: 16, axisLabel: { fontSize: 11 } },
+          series: [
+            { name: '预测日均温 (均值4.31℃)', type: 'line', data: [7.62, 5.12, 3.92, 4.88, 2.73, 3.32, 2.59], lineStyle: { width: 3, color: THEME.NAVY }, itemStyle: { color: THEME.NAVY }, label: { show: true, position: 'bottom', formatter: '{c}℃', fontSize: 11, fontWeight: 'bold', color: THEME.NAVY } },
+            { name: '同期日均温 (均值7.75℃)', type: 'line', data: [13.52, 10.19, 2.56, 3.95, 8.07, 7.41, 8.55], lineStyle: { width: 2.5, type: 'dashed', color: THEME.AMBER }, itemStyle: { color: THEME.AMBER }, label: { show: true, position: 'top', formatter: '{c}℃', fontSize: 11 } }
+          ]
+        });
+      }
+    }
+  };
+
+  const slides = Array.from(document.querySelectorAll('.slide-page'));
+  const total = slides.length;
+  let current = 0;
+
+  const drawerList = document.getElementById('drawerList');
+  slides.forEach((s, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'drawer-item' + (idx === 0 ? ' active' : '');
+    btn.textContent = s.getAttribute('data-title') || ('第 ' + (idx + 1) + ' 页');
+    btn.addEventListener('click', () => {
+      goToSlide(idx);
+      document.getElementById('navDrawer').classList.remove('open');
+    });
+    drawerList.appendChild(btn);
+  });
+
+  function updateSlideClasses(targetIdx) {
+    slides.forEach((s, i) => {
+      s.classList.remove('active', 'prev-page', 'next-page');
+      if (i === targetIdx) s.classList.add('active');
+      else if (i < targetIdx) s.classList.add('prev-page');
+      else s.classList.add('next-page');
+    });
+    Array.from(drawerList.children).forEach((b, i) => b.classList.toggle('active', i === targetIdx));
+  }
+
+  function goToSlide(idx) {
+    if (idx < 0 || idx >= total) return;
+    current = idx;
+    updateSlideClasses(current);
+    document.getElementById('pageIndicator').textContent = '第 ' + (current + 1) + ' / ' + total + ' 页';
+    setTimeout(() => {
+      if (CHART_REGISTRY[current]) CHART_REGISTRY[current]();
+      resizeAllCharts();
+    }, 80);
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', () => goToSlide(current - 1));
+  document.getElementById('nextBtn').addEventListener('click', () => goToSlide(current + 1));
+  document.getElementById('menuToggleBtn').addEventListener('click', () => {
+    document.getElementById('navDrawer').classList.toggle('open');
+  });
+
+  const fxSelect = document.getElementById('fxSelect');
+  fxSelect.addEventListener('change', () => {
+    document.body.classList.remove('fx-slide', 'fx-cube', 'fx-flip', 'fx-zoom');
+    document.body.classList.add(fxSelect.value);
+    try { localStorage.setItem('report_fx_mode', fxSelect.value); } catch (e) {}
+  });
+
+  function setRatio(is8x3) {
+    document.body.classList.toggle('screen-8-3', is8x3);
+    const b16 = document.getElementById('ratio16x9Btn');
+    const b8 = document.getElementById('ratio8x3Btn');
+    if (is8x3) {
+      b8.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-sky-600 text-white';
+      b16.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700';
+    } else {
+      b16.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-sky-600 text-white';
+      b8.className = 'px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700';
+    }
+    try { localStorage.setItem('report_screen_ratio', is8x3 ? '8:3' : '16:9'); } catch (e) {}
+    setTimeout(resizeAllCharts, 260);
+  }
+
+  document.getElementById('ratio16x9Btn').addEventListener('click', () => setRatio(false));
+  document.getElementById('ratio8x3Btn').addEventListener('click', () => setRatio(true));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') goToSlide(current + 1);
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') goToSlide(current - 1);
+    else if (e.key === '8') setRatio(!document.body.classList.contains('screen-8-3'));
+  });
+
+  window.addEventListener('resize', resizeAllCharts);
+  window.addEventListener('load', () => {
+    try {
+      if (localStorage.getItem('report_screen_ratio') === '8:3') setRatio(true);
+      const savedFx = localStorage.getItem('report_fx_mode');
+      if (savedFx) {
+        document.body.classList.remove('fx-slide', 'fx-cube', 'fx-flip', 'fx-zoom');
+        document.body.classList.add(savedFx);
+        fxSelect.value = savedFx;
+      }
+    } catch (e) {}
+    goToSlide(0);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,3 +1,13 @@
+## 2026-11-15 气温定时导入错误信息脱噪、连续失败合并与历史清理接口
+
+- **`services/weather_auto_import_service.py`**：
+  - 新增 `sanitize_weather_error_message()` 清洗 SQLAlchemy 参数堆栈、httpx 引导链接、HTML 错误页与超长查询串，并在写入记录及读取旧态文件时自动脱噪；
+  - 升级 `_append_history()` 自动合并连续同源同原因 `FAILED` 记录（记录 `first_time` 与 `repeat_count`），避免刷屏挤掉历史成功记录；
+  - 新增 `_acquire_state_lock()`（线程锁 + POSIX `fcntl.flock` 文件锁）以及 `clear_history(scope="failed" | "all")`。
+- **`projects/daily_report_25_26/api/dashboard.py`**：
+  - 新增 `WeatherHistoryClearPayload`、`_clear_weather_history_helper()` 及 `POST /dashboard/temperature/auto-import/history/clear`、`POST /dashboard/temperature/ensemble/auto-import/history/clear` 管理员清理接口。
+- **测试 (`projects/daily_report_25_26/tests/test_weather_auto_import.py`)**：新增 `test_error_sanitization_coalescing_and_clear_history`，联合回归 `25 passed`。
+
 ## 2026-11-14 修复金山文档 12345 投诉底表连接测试与同步时间 UTC 偏差
 
 - **`projects/daily_report_25_26/services/kdocs_complaint_service.py` & `api/complaint_optimizer.py`**：

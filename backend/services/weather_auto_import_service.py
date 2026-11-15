@@ -14,16 +14,24 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import copy
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from urllib.parse import urlsplit
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows 环境无 fcntl
+    fcntl = None
 
 from backend.db.database_daily_report_25_26 import SessionLocal
 from backend.services import ensemble_weather_service, weather_importer
@@ -46,8 +54,63 @@ if not logger.handlers:
 
 MAX_SCHEDULE_TIMES = 48
 MAX_HISTORY_RECORDS = 30
+MAX_ERROR_MESSAGE_LENGTH = 220
 SCHEDULER_POLL_SECONDS = 15.0
 SLOT_TRIGGER_WINDOW_SECONDS = 90.0
+
+_HTTPX_DOC_HINT_RE = re.compile(r"\s*For more information check:\s*https?://\S+", re.IGNORECASE)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_HTML_DOC_RE = re.compile(r"<(?:!doctype|html|head|body|title)\b", re.IGNORECASE)
+_HTML_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+_LONG_QUERY_URL_RE = re.compile(r"(https?://[^\s/?#'\"]+(?:/[^\s?#'\"]*)?)\?[^\s'\"]{24,}")
+
+
+def sanitize_weather_error_message(raw_message: Any, *, max_len: int = MAX_ERROR_MESSAGE_LENGTH) -> str:
+    """
+    将原始异常文本精简为单行可读摘要，剔除 SQL 参数转储、httpx 引导尾巴、HTML 页面及超长查询串。
+    """
+    text = str(raw_message or "").strip()
+    if not text:
+        return "未知错误"
+
+    # 1. 截除 SQLAlchemy 冗长的 SQL 语句、绑定参数与官方链接尾巴
+    for marker in ("\n[SQL:", " [SQL:", "\n(Background on this error at:", " (Background on this error at:"):
+        idx = text.find(marker)
+        if idx > 0:
+            text = text[:idx].strip()
+
+    # 2. 去掉 httpx 异常末尾固定的 MDN 提示链接
+    text = _HTTPX_DOC_HINT_RE.sub("", text).strip()
+
+    # 3. 若接口/网关返回完整 HTML 错误页，提取标题或剥离标签
+    if _HTML_DOC_RE.search(text):
+        title_match = _HTML_TITLE_RE.search(text)
+        title_text = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
+        if title_text:
+            prefix_match = re.match(r"^(.*?[:：])\s*<", text, re.DOTALL)
+            prefix = prefix_match.group(1).strip() if prefix_match else "远端接口返回 HTML 异常："
+            text = f"{prefix} {title_text}".strip()
+        else:
+            text = _HTML_TAG_RE.sub(" ", text)
+
+    # 4. 精简过长的 URL 查询参数，保留主机与路径便于排查
+    def _shorten_url(match: re.Match[str]) -> str:
+        base = match.group(1)
+        try:
+            parsed = urlsplit(match.group(0))
+            if parsed.scheme and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?..."
+        except Exception:
+            pass
+        return f"{base}?..."
+
+    text = _LONG_QUERY_URL_RE.sub(_shorten_url, text)
+
+    # 5. 多行空白折叠为单行并限制最大长度
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > max_len:
+        text = text[: max_len - 1].rstrip() + "…"
+    return text
 
 
 def _now_east8() -> datetime:
@@ -323,6 +386,34 @@ class WeatherAutoImportService:
     def _get_config_path(self) -> Path:
         return self._config_path_getter()
 
+    @contextmanager
+    def _acquire_state_lock(self) -> Iterator[None]:
+        """线程锁 + Linux 跨进程文件锁，防止多 worker 并发读写状态文件或重复触发同一时段。"""
+        with self._state_lock:
+            if fcntl is None:
+                yield
+                return
+            state_path = self._get_config_path()
+            lock_path = state_path.with_suffix(".lock")
+            lock_handle = None
+            try:
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                lock_handle = open(lock_path, "a+", encoding="utf-8")
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            except OSError:
+                if lock_handle is not None:
+                    lock_handle.close()
+                    lock_handle = None
+            try:
+                yield
+            finally:
+                if lock_handle is not None:
+                    try:
+                        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+                    lock_handle.close()
+
     def _read_raw_state_file(self) -> Dict[str, Any]:
         """读取 runtime 运行态文件，不存在时兼容读取旧 auto_import_config.json。"""
         state_path = self._get_config_path()
@@ -363,10 +454,25 @@ class WeatherAutoImportService:
             if key in raw_state and raw_state[key] is not None:
                 state[key] = raw_state[key]
 
+        if state.get("last_failure_message"):
+            state["last_failure_message"] = sanitize_weather_error_message(state["last_failure_message"])
+        if state.get("last_attempt_status") == "FAILED" and state.get("last_attempt_message"):
+            state["last_attempt_message"] = sanitize_weather_error_message(state["last_attempt_message"])
+
         if isinstance(raw_state.get("executed_slots_today"), dict):
             state["executed_slots_today"] = dict(raw_state["executed_slots_today"])
         if isinstance(raw_state.get("history"), list):
-            state["history"] = [item for item in raw_state["history"] if isinstance(item, dict)][:MAX_HISTORY_RECORDS]
+            cleaned_history: List[Dict[str, Any]] = []
+            for item in raw_state["history"]:
+                if not isinstance(item, dict):
+                    continue
+                normalized_item = dict(item)
+                if normalized_item.get("status") == "FAILED" and normalized_item.get("message"):
+                    normalized_item["message"] = sanitize_weather_error_message(normalized_item["message"])
+                cleaned_history.append(normalized_item)
+                if len(cleaned_history) >= MAX_HISTORY_RECORDS:
+                    break
+            state["history"] = cleaned_history
 
         # 2. 从综合配置文件读取 enabled 与 schedule_times（若尚未保存则回退旧文件）
         cfg_node: Dict[str, Any] = {}
@@ -417,7 +523,7 @@ class WeatherAutoImportService:
 
     def get_status(self, now: Optional[datetime] = None) -> Dict[str, Any]:
         """获取自动导入配置与最近成功/失败状态快照。"""
-        with self._state_lock:
+        with self._acquire_state_lock():
             state = self._read_state()
             return self._build_status_payload(state, now=now)
 
@@ -431,7 +537,7 @@ class WeatherAutoImportService:
         current = (now or _now_east8()).astimezone(EAST_8)
         today_str = current.strftime("%Y-%m-%d")
 
-        with self._state_lock:
+        with self._acquire_state_lock():
             state = self._read_state()
             config_updates: Dict[str, Any] = {}
             if enabled is not None:
@@ -477,6 +583,23 @@ class WeatherAutoImportService:
 
     def _append_history(self, state: Dict[str, Any], entry: Dict[str, Any]) -> None:
         history = list(state.get("history") or [])
+        if (
+            entry.get("status") == "FAILED"
+            and history
+            and history[0].get("status") == "FAILED"
+            and history[0].get("trigger") == entry.get("trigger")
+            and history[0].get("message") == entry.get("message")
+        ):
+            latest = dict(history[0])
+            latest["first_time"] = latest.get("first_time") or latest.get("time")
+            latest["time"] = entry.get("time")
+            latest["trigger_label"] = entry.get("trigger_label") or latest.get("trigger_label")
+            latest["scheduled_slot"] = entry.get("scheduled_slot") or latest.get("scheduled_slot")
+            latest["repeat_count"] = int(latest.get("repeat_count") or 1) + 1
+            history[0] = latest
+            state["history"] = history[:MAX_HISTORY_RECORDS]
+            return
+
         history.insert(0, entry)
         state["history"] = history[:MAX_HISTORY_RECORDS]
 
@@ -492,23 +615,24 @@ class WeatherAutoImportService:
     ) -> Dict[str, Any]:
         ts_str = _format_dt(timestamp)
         trigger_label = _format_trigger_label(trigger, scheduled_slot)
+        normalized_message = str(message or "").strip() if ok else sanitize_weather_error_message(message)
 
-        with self._state_lock:
+        with self._acquire_state_lock():
             state = self._read_state()
             state["last_attempt_time"] = ts_str
             state["last_attempt_status"] = "SUCCESS" if ok else "FAILED"
             state["last_attempt_trigger"] = trigger_label
-            state["last_attempt_message"] = message
+            state["last_attempt_message"] = normalized_message
 
             if ok:
                 state["last_success_time"] = ts_str
                 state["last_success_trigger"] = trigger_label
-                state["last_success_message"] = message
+                state["last_success_message"] = normalized_message
                 state["last_success_summary"] = summary
             else:
                 state["last_failure_time"] = ts_str
                 state["last_failure_trigger"] = trigger_label
-                state["last_failure_message"] = message
+                state["last_failure_message"] = normalized_message
 
             self._append_history(
                 state,
@@ -518,12 +642,72 @@ class WeatherAutoImportService:
                     "trigger": trigger,
                     "trigger_label": trigger_label,
                     "scheduled_slot": scheduled_slot,
-                    "message": message,
+                    "message": normalized_message,
                     "summary": summary if ok else None,
                 },
             )
             self._write_state(state)
             return self._build_status_payload(state, now=timestamp)
+
+    def clear_history(self, scope: str = "failed") -> Dict[str, Any]:
+        """清理导入尝试历史记录：scope='failed' 仅清理失败记录，scope='all' 清空全部记录。"""
+        normalized_scope = str(scope or "failed").strip().lower()
+        if normalized_scope not in {"failed", "all"}:
+            raise ValueError("清理范围仅支持 'failed'（仅失败记录）或 'all'（全部记录）。")
+
+        now = _now_east8()
+        with self._acquire_state_lock():
+            state = self._read_state()
+            old_history = list(state.get("history") or [])
+
+            if normalized_scope == "all":
+                removed_count = len(old_history)
+                state["history"] = []
+                state["last_attempt_time"] = None
+                state["last_attempt_status"] = "IDLE"
+                state["last_attempt_trigger"] = None
+                state["last_attempt_message"] = self._initial_idle_message
+                state["last_success_time"] = None
+                state["last_success_trigger"] = None
+                state["last_success_message"] = None
+                state["last_success_summary"] = None
+                state["last_failure_time"] = None
+                state["last_failure_trigger"] = None
+                state["last_failure_message"] = None
+            else:
+                kept_history = [item for item in old_history if item.get("status") == "SUCCESS"]
+                removed_count = len(old_history) - len(kept_history)
+                state["history"] = kept_history
+                state["last_failure_time"] = None
+                state["last_failure_trigger"] = None
+                state["last_failure_message"] = None
+
+                if state.get("last_attempt_status") == "FAILED":
+                    latest_success = kept_history[0] if kept_history else None
+                    if latest_success:
+                        state["last_attempt_time"] = latest_success.get("time")
+                        state["last_attempt_status"] = "SUCCESS"
+                        state["last_attempt_trigger"] = latest_success.get("trigger_label") or latest_success.get("trigger")
+                        state["last_attempt_message"] = latest_success.get("message")
+                    elif state.get("last_success_time"):
+                        state["last_attempt_time"] = state.get("last_success_time")
+                        state["last_attempt_status"] = "SUCCESS"
+                        state["last_attempt_trigger"] = state.get("last_success_trigger")
+                        state["last_attempt_message"] = state.get("last_success_message")
+                    else:
+                        state["last_attempt_time"] = None
+                        state["last_attempt_status"] = "IDLE"
+                        state["last_attempt_trigger"] = None
+                        state["last_attempt_message"] = self._initial_idle_message
+
+            self._write_state(state)
+            snapshot = self._build_status_payload(state, now=now)
+
+        return {
+            "scope": normalized_scope,
+            "removed_count": removed_count,
+            "data": snapshot,
+        }
 
     def record_external_import_outcome(
         self,
@@ -619,8 +803,8 @@ class WeatherAutoImportService:
             return payload
         except Exception as exc:
             finished_at = _now_east8()
-            err_detail = str(exc).strip() or exc.__class__.__name__
-            fail_msg = f"气温获取或入库失败：{err_detail}"
+            err_raw = str(exc).strip() or exc.__class__.__name__
+            fail_msg = sanitize_weather_error_message(f"气温获取或入库失败：{err_raw}")
             snapshot = self._record_outcome(
                 ok=False,
                 timestamp=finished_at,
@@ -646,7 +830,7 @@ class WeatherAutoImportService:
         today_str = current.strftime("%Y-%m-%d")
 
         due_slots: List[str] = []
-        with self._state_lock:
+        with self._acquire_state_lock():
             state = self._read_state()
             changed = False
 
@@ -742,5 +926,6 @@ __all__ = [
     "WeatherAutoImportService",
     "ensemble_weather_auto_import_service",
     "normalize_schedule_times",
+    "sanitize_weather_error_message",
     "weather_auto_import_service",
 ]

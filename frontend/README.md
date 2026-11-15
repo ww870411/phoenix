@@ -1,3 +1,13 @@
+## 2026-11-15 全局管理中心气温导入历史筛选、报错折叠与一键清理增强
+
+- **`src/projects/daily_report_25_26/services/api.js`**：
+  - 新增 `clearTemperatureAutoImportHistory()` 与 `clearEnsembleTemperatureAutoImportHistory()`，对接 `/dashboard/temperature/auto-import/history/clear` 与 `/dashboard/temperature/ensemble/auto-import/history/clear`。
+- **`src/projects/daily_report_25_26/components/WeatherImportModulePanel.vue`**：
+  - 增强“最近导入尝试记录（近 30 次）”交互：增加 `全部 / 仅成功 / 仅失败` 筛选标签、默认折叠为近 10 条（支持展开全部）、长错误消息折叠与 `展开详情/收起` 切换、合并失败记录 `×N` 次数与首次发生时间展示，以及 `🧹 清理失败记录`、`🗑️ 清空全部记录` 按钮；同步限制顶部概览卡片超长异常文案高度。
+- **`src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+  - 为近端实况与 35 天集合预报面板分别传入 `:clear-history-fn`。
+- **构建验证**：`npm --prefix frontend run build` 1073 模块编译打包通过（24.90s，0 错误）。
+
 ## 2026-11-14 金山文档连接测试时间时区修复（前端无代码变动）
 
 - 本轮仅将后端 `kdocs_complaint_service.py` 与 `complaint_optimizer.py` 生成的时间字符串固定为东八区北京时间，前端展示逻辑无改动。

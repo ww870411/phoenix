@@ -386,6 +386,53 @@ class WeatherAutoImportConfigPayload(BaseModel):
     schedule_times: List[str] = Field(default_factory=list, description="每日定时获取时间列表（HH:MM）")
 
 
+class WeatherHistoryClearPayload(BaseModel):
+    """清理气温导入历史尝试记录的请求体。"""
+
+    scope: str = Field(default="failed", description="清理范围：failed（仅失败记录）或 all（全部记录）")
+
+
+def _clear_weather_history_helper(
+    service,
+    scope: str,
+    module_label: str,
+    resource_id: str,
+    request: Request,
+    session: AuthSession,
+) -> dict:
+    """统一校验权限、清理气温自动导入历史并记录操作审计。"""
+    _ensure_cache_operator(session)
+    try:
+        res = service.clear_history(scope=scope)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="清理气温导入历史失败，请检查运行时目录是否可写。") from exc
+
+    removed = int(res.get("removed_count") or 0)
+    scope_label = "失败记录" if res.get("scope") == "failed" else "全部历史记录"
+    msg = (
+        f"已清理 {removed} 条{module_label}{scope_label}。"
+        if removed > 0
+        else f"已重置{module_label}最近失败状态（历史列表暂无待清理的{scope_label}）。"
+    )
+    log_session_operation(
+        session,
+        "UPDATE_CONFIG",
+        f"清理{module_label}导入尝试历史（范围：{scope_label}，清理 {removed} 条）",
+        request=request,
+        unit="集团生产调度中心",
+        resource_id=resource_id,
+        after_value={"scope": res.get("scope"), "removed_count": removed},
+    )
+    return {
+        "ok": True,
+        "message": msg,
+        "removed_count": removed,
+        "data": res.get("data"),
+    }
+
+
 @router.get("/dashboard/temperature/config", summary="读取气温导入 API 配置")
 def get_temperature_import_config(session: AuthSession = Depends(get_current_session)):
     _ensure_cache_operator(session)
@@ -467,6 +514,22 @@ def run_temperature_auto_import_now(session: AuthSession = Depends(get_current_s
     return result
 
 
+@router.post("/dashboard/temperature/auto-import/history/clear", summary="清理近端气温导入尝试历史记录")
+def clear_temperature_auto_import_history(
+    payload: WeatherHistoryClearPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+):
+    return _clear_weather_history_helper(
+        service=weather_auto_import_service,
+        scope=payload.scope,
+        module_label="近端实况气温",
+        resource_id="weather_auto_import:near",
+        request=request,
+        session=session,
+    )
+
+
 @router.get("/dashboard/temperature/ensemble/config", summary="读取 35 天集合气温预报 API 配置")
 def get_ensemble_temperature_import_config(session: AuthSession = Depends(get_current_session)):
     _ensure_cache_operator(session)
@@ -546,6 +609,22 @@ def run_ensemble_temperature_auto_import_now(session: AuthSession = Depends(get_
     if result.get("busy"):
         raise HTTPException(status_code=409, detail=result.get("message") or "当前已有 35 天预报导入任务正在执行。")
     return result
+
+
+@router.post("/dashboard/temperature/ensemble/auto-import/history/clear", summary="清理 35 天集合气温预报导入尝试历史记录")
+def clear_ensemble_temperature_auto_import_history(
+    payload: WeatherHistoryClearPayload,
+    request: Request,
+    session: AuthSession = Depends(get_current_session),
+):
+    return _clear_weather_history_helper(
+        service=ensemble_weather_auto_import_service,
+        scope=payload.scope,
+        module_label="35天集合气温预报",
+        resource_id="weather_auto_import:far",
+        request=request,
+        session=session,
+    )
 
 
 @router.post(

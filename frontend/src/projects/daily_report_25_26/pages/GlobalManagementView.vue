@@ -1149,6 +1149,7 @@
               :get-auto-status-fn="getTemperatureAutoImportStatus"
               :save-auto-config-fn="saveTemperatureAutoImportConfig"
               :run-import-now-fn="runTemperatureImportNow"
+              :clear-history-fn="clearTemperatureAutoImportHistory"
             />
 
             <WeatherImportModulePanel
@@ -1168,6 +1169,7 @@
               :get-auto-status-fn="getEnsembleTemperatureAutoImportStatus"
               :save-auto-config-fn="saveEnsembleTemperatureAutoImportConfig"
               :run-import-now-fn="runEnsembleTemperatureImportNow"
+              :clear-history-fn="clearEnsembleTemperatureAutoImportHistory"
             />
           </div>
         </div>
@@ -1189,11 +1191,13 @@ import {
   getTemperatureAutoImportStatus,
   saveTemperatureAutoImportConfig,
   runTemperatureImportNow,
+  clearTemperatureAutoImportHistory,
   getEnsembleTemperatureImportConfig,
   saveEnsembleTemperatureImportConfig,
   getEnsembleTemperatureAutoImportStatus,
   saveEnsembleTemperatureAutoImportConfig,
   runEnsembleTemperatureImportNow,
+  clearEnsembleTemperatureAutoImportHistory,
   getDailyReportSubmissionLogs,
 } from '../services/api'
 

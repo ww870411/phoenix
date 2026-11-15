@@ -10,12 +10,7 @@
   "last_failure_time": null,
   "last_failure_trigger": null,
   "last_failure_message": null,
-  "executed_slots_date": "2026-11-14",
-  "executed_slots_today": {
-    "06:00": "跳过（06:00 早于本次保存时刻）",
-    "10:00": "跳过（10:00 早于本次保存时刻）",
-    "14:00": "跳过（14:00 早于本次保存时刻）",
-    "16:00": "跳过（16:00 早于本次保存时刻）"
-  },
+  "executed_slots_date": "2026-11-15",
+  "executed_slots_today": {},
   "history": []
 }

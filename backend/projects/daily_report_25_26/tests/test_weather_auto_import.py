@@ -408,6 +408,102 @@ class EnsembleWeatherAutoImportTests(unittest.TestCase):
             self.assertEqual(status_after_fail["last_failure_trigger"], "计划情景页面手动")
             self.assertIn("远端连接重置", status_after_fail["last_failure_message"])
 
+    def test_error_sanitization_coalescing_and_clear_history(self):
+        # 1. 验证超长 SQLAlchemy / httpx / HTML 错误信息会被脱噪精简
+        sql_noise = (
+            "气温获取或入库失败：(psycopg2.errors.UniqueViolation) duplicate key value\n"
+            "[SQL: INSERT INTO temperature_data (date_time, value) VALUES (%(p1)s, %(p2)s)]\n"
+            "[parameters: {'p1': '2026-11-15', 'p2': 1.2}]\n"
+            "(Background on this error at: https://sqlalche.me/e/20/gkpj)"
+        )
+        cleaned_sql = auto_mod.sanitize_weather_error_message(sql_noise)
+        self.assertNotIn("[SQL:", cleaned_sql)
+        self.assertNotIn("Background on this error", cleaned_sql)
+        self.assertIn("UniqueViolation", cleaned_sql)
+
+        httpx_noise = (
+            "气温获取或入库失败：请求 Open-Meteo 失败: Client error '429 Too Many Requests' for url "
+            "'https://api.open-meteo.com/v1/forecast?latitude=38.875&longitude=121.625&hourly=temperature_2m&timezone=Asia%2FSingapore&past_days=3'\n"
+            "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429"
+        )
+        cleaned_httpx = auto_mod.sanitize_weather_error_message(httpx_noise)
+        self.assertNotIn("developer.mozilla.org", cleaned_httpx)
+        self.assertNotIn("past_days=3", cleaned_httpx)
+        self.assertIn("429 Too Many Requests", cleaned_httpx)
+
+        html_noise = "气温获取或入库失败：<html><head><title>502 Bad Gateway</title></head><body><h1>nginx</h1></body></html>"
+        cleaned_html = auto_mod.sanitize_weather_error_message(html_noise)
+        self.assertEqual(cleaned_html, "气温获取或入库失败： 502 Bad Gateway")
+
+        # 2. 验证历史状态文件中的遗留长错误在读取时会自动精简，连续相同自动失败会折叠计数
+        service = auto_mod.weather_auto_import_service
+        service.update_config(
+            enabled=True,
+            schedule_times=["06:00", "10:00", "14:00"],
+            now=datetime(2026, 11, 15, 5, 0, 0, tzinfo=EAST_8),
+        )
+        service.record_external_import_outcome(
+            ok=True,
+            trigger="manual_dashboard",
+            message="历史成功导入 240 小时",
+            timestamp=datetime(2026, 11, 15, 5, 30, 0, tzinfo=EAST_8),
+        )
+        with patch.object(
+            weather,
+            "fetch_hourly_temperatures",
+            side_effect=weather.WeatherImporterError(httpx_noise.replace("气温获取或入库失败：", "")),
+        ):
+            service._scheduler_step(now=datetime(2026, 11, 15, 6, 0, 5, tzinfo=EAST_8))
+            service._scheduler_step(now=datetime(2026, 11, 15, 10, 0, 5, tzinfo=EAST_8))
+            service._scheduler_step(now=datetime(2026, 11, 15, 14, 0, 5, tzinfo=EAST_8))
+
+        snap = service.get_status(now=datetime(2026, 11, 15, 14, 1, 0, tzinfo=EAST_8))
+        # 3 次相同自动失败合并为 1 条带 repeat_count=3 的记录，成功记录仍保留在紧邻下一条
+        self.assertEqual(len(snap["history"]), 2)
+        self.assertEqual(snap["history"][0]["status"], "FAILED")
+        self.assertEqual(snap["history"][0]["repeat_count"], 3)
+        self.assertTrue(snap["history"][0]["first_time"])
+        self.assertLessEqual(snap["history"][0]["first_time"], snap["history"][0]["time"])
+        self.assertNotIn("developer.mozilla.org", snap["history"][0]["message"])
+        self.assertEqual(snap["history"][1]["status"], "SUCCESS")
+
+        # 2.5 验证读取历史遗留未清洗状态文件时自动脱噪
+        import json
+        raw_legacy = json.loads(self.near_state.read_text(encoding="utf-8"))
+        raw_legacy["last_failure_message"] = sql_noise
+        raw_legacy["history"][0]["message"] = sql_noise
+        self.near_state.write_text(json.dumps(raw_legacy, ensure_ascii=False), encoding="utf-8")
+        reloaded = service.get_status(now=datetime(2026, 11, 15, 14, 2, 0, tzinfo=EAST_8))
+        self.assertNotIn("[SQL:", reloaded["last_failure_message"])
+        self.assertNotIn("[SQL:", reloaded["history"][0]["message"])
+
+        # 3. 验证接口清理失败记录（保留成功记录与当日定时执行标记）与清空全部记录
+        with self._client("Group_admin") as forbidden_client:
+            self.assertEqual(
+                forbidden_client.post("/dashboard/temperature/auto-import/history/clear", json={"scope": "failed"}).status_code,
+                403,
+            )
+
+        with self._client("Global_admin") as client:
+            bad_scope = client.post("/dashboard/temperature/auto-import/history/clear", json={"scope": "invalid"})
+            self.assertEqual(bad_scope.status_code, 422)
+
+            clear_failed = client.post("/dashboard/temperature/auto-import/history/clear", json={"scope": "failed"})
+            self.assertEqual(clear_failed.status_code, 200)
+            body_failed = clear_failed.json()
+            self.assertTrue(body_failed["ok"])
+            self.assertEqual(body_failed["removed_count"], 1)
+            data_failed = body_failed["data"]
+            self.assertEqual(len(data_failed["history"]), 1)
+            self.assertEqual(data_failed["history"][0]["status"], "SUCCESS")
+            self.assertIsNone(data_failed["last_failure_time"])
+            self.assertEqual(data_failed["last_attempt_status"], "SUCCESS")
+            self.assertIn("14:00", data_failed["executed_slots_today"])
+
+            clear_all = client.post("/dashboard/temperature/ensemble/auto-import/history/clear", json={"scope": "all"})
+            self.assertEqual(clear_all.status_code, 200)
+            self.assertEqual(clear_all.json()["data"]["history"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

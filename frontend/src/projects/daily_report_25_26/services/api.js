@@ -2292,6 +2292,16 @@ export async function runTemperatureImportNow(projectKey) {
   return response.json()
 }
 
+export async function clearTemperatureAutoImportHistory(projectKey, scope = 'failed') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/auto-import/history/clear`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ scope }),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '清理气温导入历史失败'))
+  return response.json()
+}
+
 export async function getEnsembleTemperatureImportConfig(projectKey) {
   const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/ensemble/config`, {
     headers: attachAuthHeaders(),
@@ -2335,6 +2345,16 @@ export async function runEnsembleTemperatureImportNow(projectKey) {
     body: JSON.stringify({}),
   })
   if (!response.ok) throw new Error(await parseErrorDetail(response, '执行 35 天预报导入失败'))
+  return response.json()
+}
+
+export async function clearEnsembleTemperatureAutoImportHistory(projectKey, scope = 'failed') {
+  const response = await authAwareFetch(`${projectPath(projectKey)}/dashboard/temperature/ensemble/auto-import/history/clear`, {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({ scope }),
+  })
+  if (!response.ok) throw new Error(await parseErrorDetail(response, '清理 35 天预报导入历史失败'))
   return response.json()
 }
 

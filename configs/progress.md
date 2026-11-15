@@ -1,5 +1,30 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-15 优化全局管理中心气温定时导入失败信息展示、去重折叠与历史清理能力
+
+- **需求背景**：
+  - 全局管理中心“导入气温数据管理”模块（含近端实况与 35 天集合预报）在定时任务或外部接口异常时，会将冗长的原始异常信息（SQL 参数转储、httpx 引导链接、长 URL 参数、HTML 页面等）直接落盘，且连续相同失败会重复占用近 30 次历史槽位；同时前端缺乏状态筛选、文本折叠及清理失败记录入口，导致“最近导入尝试记录（近 30 次）”被无效报错信息占满。
+- **后端改动**：
+  - **`backend/services/weather_auto_import_service.py`**：
+    - 新增 `sanitize_weather_error_message()`，在 `run_import_once()`、`record_external_import_outcome()` 与 `_read_state()` 统一剔除 `[SQL: ...]`、`[parameters: ...]`、MDN 引导尾巴、超长查询串及 HTML 标签，并将多行空白折叠限长，确保历史遗留与新增失败记录均以单行可读摘要展示；
+    - 升级 `_append_history()` 对连续同源同原因 `FAILED` 记录自动合并更新 `first_time` / `time` / `repeat_count`，防止重复报错挤占历史成功记录；
+    - 新增 `_acquire_state_lock()`（线程锁 + Linux 跨进程 `fcntl.flock`）避免多 worker 重复触发与状态写冲突；
+    - 新增 `clear_history(scope="failed" | "all")` 支持仅清理失败记录（保留成功记录并回退 `last_attempt_*`、不动当日 `executed_slots_today`）或清空全部历史。
+  - **`backend/projects/daily_report_25_26/api/dashboard.py`**：
+    - 新增 `WeatherHistoryClearPayload`、`_clear_weather_history_helper()` 及管理员接口 `POST /dashboard/temperature/auto-import/history/clear`、`POST /dashboard/temperature/ensemble/auto-import/history/clear`（含审计日志记录）。
+  - **`backend/projects/daily_report_25_26/tests/test_weather_auto_import.py`**：
+    - 新增 `test_error_sanitization_coalescing_and_clear_history`，覆盖异常脱噪、遗留状态兼容清洗、连续失败折叠计数及清理接口权限与行为验证。
+- **前端改动**：
+  - **`frontend/src/projects/daily_report_25_26/services/api.js`**：
+    - 新增 `clearTemperatureAutoImportHistory()` 与 `clearEnsembleTemperatureAutoImportHistory()`。
+  - **`frontend/src/projects/daily_report_25_26/components/WeatherImportModulePanel.vue`**：
+    - 在“最近导入尝试记录（近 30 次）”卡片增加 `全部 / 仅成功 / 仅失败` 状态筛选、默认展示前 10 条及展开全部切换、超长报错详情单行截断与展开/收起按钮、`连续 ×N` 合并次数标记与首次发生时间提示，以及 `🧹 清理失败记录` / `🗑️ 清空全部记录` 一键操作按钮；同时在概览状态卡片补充超长文本截断保护。
+  - **`frontend/src/projects/daily_report_25_26/pages/GlobalManagementView.vue`**：
+    - 为近端实况与 35 天集合预报两个 `WeatherImportModulePanel` 绑定对应 `clearHistoryFn`。
+- **验证结果**：
+  - `python -m pytest backend/projects/daily_report_25_26/tests/test_weather_auto_import.py backend/projects/daily_report_25_26/tests/test_weather_import_config.py backend/projects/daily_report_25_26/tests/test_project_settings.py -v`：**25 passed（0 错误）**；
+  - `npm --prefix frontend run build`：**1073 modules transformed，built in 24.90s（0 错误）**。
+
 ## 2026-11-14 修复“12345投诉底表(金山)”测试连接与同步时间戳容器 UTC 时区偏差
 
 - **问题原因**：

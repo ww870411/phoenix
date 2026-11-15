@@ -89,7 +89,7 @@
             <span class="weather-age-text">{{ formatWeatherTimeAgo(autoStatus.last_failure_time) }}</span>
           </div>
           <p class="weather-metric-desc">
-            {{ autoStatus.last_failure_message || '最近运行未出现连接或入库异常' }}
+            {{ formatMetricMessage(autoStatus.last_failure_message, '最近运行未出现连接或入库异常') }}
           </p>
         </div>
 
@@ -116,7 +116,7 @@
             <span class="weather-trigger-tag">{{ autoStatus.last_attempt_trigger }}</span>
           </div>
           <p class="weather-metric-desc">
-            {{ autoStatus.last_attempt_message || '等待首次执行' }}
+            {{ formatMetricMessage(autoStatus.last_attempt_message, '等待首次执行') }}
           </p>
         </div>
       </div>
@@ -262,37 +262,134 @@
       <div class="card-header-row">
         <div>
           <div class="card-header">📜 最近导入尝试记录（近 30 次）</div>
-          <p class="sub block-sub">记录每次定时自动获取、管理中心手动触发以及业务页面手动导入的执行结果。</p>
+          <p class="sub block-sub">
+            记录每次定时自动获取、管理中心手动触发以及业务页面手动导入的执行结果；连续相同的失败会自动合并计数，避免重复刷屏。
+          </p>
+        </div>
+        <div v-if="clearHistoryFn" class="section-actions">
+          <button
+            v-if="failedHistoryCount > 0 || autoStatus.last_failure_time"
+            class="btn ghost compact-btn"
+            type="button"
+            :disabled="clearingHistory || loadingAuto || runningNow"
+            @click="handleClearHistory('failed')"
+          >
+            {{ clearingHistory === 'failed' ? '清理中…' : `🧹 清理失败记录 (${failedHistoryCount})` }}
+          </button>
+          <button
+            v-if="historyRows.length > 0"
+            class="btn ghost compact-btn weather-clear-btn"
+            type="button"
+            :disabled="clearingHistory || loadingAuto || runningNow"
+            @click="handleClearHistory('all')"
+          >
+            {{ clearingHistory === 'all' ? '清空中…' : '🗑️ 清空全部记录' }}
+          </button>
         </div>
       </div>
+
+      <div v-if="historyRows.length > 0" class="weather-history-toolbar">
+        <div class="weather-filter-tabs" role="tablist" aria-label="导入记录状态筛选">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="historyFilter === 'all'"
+            :class="['weather-filter-btn', { active: historyFilter === 'all' }]"
+            @click="setHistoryFilter('all')"
+          >
+            全部 ({{ historyRows.length }})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="historyFilter === 'SUCCESS'"
+            :class="['weather-filter-btn', { active: historyFilter === 'SUCCESS' }]"
+            @click="setHistoryFilter('SUCCESS')"
+          >
+            仅成功 ({{ successHistoryCount }})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="historyFilter === 'FAILED'"
+            :class="['weather-filter-btn', { active: historyFilter === 'FAILED' }]"
+            @click="setHistoryFilter('FAILED')"
+          >
+            仅失败 ({{ failedHistoryCount }})
+          </button>
+        </div>
+      </div>
+
+      <p v-if="historyTip" :class="['page-tip', historyTip.type]" role="status">
+        {{ historyTip.text }}
+      </p>
+
       <div v-if="!historyRows.length" class="weather-empty-slots">
         暂无导入尝试历史记录。
       </div>
-      <div v-else class="table-wrap">
-        <table class="table editor-table weather-history-table">
-          <thead>
-            <tr>
-              <th style="width: 175px;">尝试时间</th>
-              <th style="width: 155px;">触发方式</th>
-              <th style="width: 95px;">结果状态</th>
-              <th>执行结果详情</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(item, idx) in historyRows" :key="`${item.time}-${idx}`">
-              <td class="font-mono">{{ item.time }}</td>
-              <td>
-                <span class="weather-trigger-tag">{{ item.trigger_label || item.trigger || '—' }}</span>
-              </td>
-              <td>
-                <span :class="['weather-result-badge', item.status === 'SUCCESS' ? 'badge-ok' : 'badge-err']">
-                  {{ item.status === 'SUCCESS' ? '成功' : '失败' }}
-                </span>
-              </td>
-              <td class="weather-history-msg">{{ item.message }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else-if="!filteredHistoryRows.length" class="weather-empty-slots">
+        当前筛选条件下暂无记录。
+      </div>
+      <div v-else>
+        <div class="table-wrap">
+          <table class="table editor-table weather-history-table">
+            <thead>
+              <tr>
+                <th style="width: 185px;">尝试时间</th>
+                <th style="width: 155px;">触发方式</th>
+                <th style="width: 120px;">结果状态</th>
+                <th>执行结果详情</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in visibleHistoryRows" :key="`${item.time}-${idx}`">
+                <td class="font-mono">
+                  <div>{{ item.time }}</div>
+                  <div v-if="item.repeat_count > 1 && item.first_time" class="weather-history-subtime">
+                    首次：{{ item.first_time }}
+                  </div>
+                </td>
+                <td>
+                  <span class="weather-trigger-tag">{{ item.trigger_label || item.trigger || '—' }}</span>
+                </td>
+                <td>
+                  <div class="weather-status-cell">
+                    <span :class="['weather-result-badge', item.status === 'SUCCESS' ? 'badge-ok' : 'badge-err']">
+                      {{ item.status === 'SUCCESS' ? '成功' : '失败' }}
+                    </span>
+                    <span v-if="item.repeat_count > 1" class="weather-repeat-badge">
+                      ×{{ item.repeat_count }}
+                    </span>
+                  </div>
+                </td>
+                <td class="weather-history-msg">
+                  <span>{{ getHistoryMessageText(item, idx) }}</span>
+                  <button
+                    v-if="isLongHistoryMessage(item.message)"
+                    type="button"
+                    class="weather-msg-toggle"
+                    @click="toggleHistoryMsgExpand(item, idx)"
+                  >
+                    {{ isHistoryMsgExpanded(item, idx) ? '收起' : '展开详情' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="filteredHistoryRows.length > DEFAULT_VISIBLE_HISTORY" class="weather-history-more">
+          <button
+            type="button"
+            class="btn ghost compact-btn"
+            @click="showAllHistory = !showAllHistory"
+          >
+            {{
+              showAllHistory
+                ? `收起至最近 ${DEFAULT_VISIBLE_HISTORY} 条`
+                : `展开全部 ${filteredHistoryRows.length} 条记录`
+            }}
+          </button>
+        </div>
       </div>
     </section>
   </div>
@@ -316,6 +413,7 @@ const props = defineProps({
   getAutoStatusFn: { type: Function, required: true },
   saveAutoConfigFn: { type: Function, required: true },
   runImportNowFn: { type: Function, required: true },
+  clearHistoryFn: { type: Function, default: null },
 })
 
 const apiUrl = ref('')
@@ -349,10 +447,90 @@ const savingAuto = ref(false)
 const runningNow = ref(false)
 const autoTip = ref(null)
 const runTip = ref(null)
+const historyTip = ref(null)
+const clearingHistory = ref('')
+const historyFilter = ref('all')
+const showAllHistory = ref(false)
+const expandedHistoryMsgs = ref({})
+
+const DEFAULT_VISIBLE_HISTORY = 10
+const BRIEF_HISTORY_MSG_LIMIT = 110
+const BRIEF_METRIC_MSG_LIMIT = 140
 
 const historyRows = computed(() => (
   Array.isArray(autoStatus.value?.history) ? autoStatus.value.history : []
 ))
+
+const successHistoryCount = computed(() => (
+  historyRows.value.filter((item) => item.status === 'SUCCESS').length
+))
+
+const failedHistoryCount = computed(() => (
+  historyRows.value.filter((item) => item.status !== 'SUCCESS').length
+))
+
+const filteredHistoryRows = computed(() => {
+  if (historyFilter.value === 'all') return historyRows.value
+  if (historyFilter.value === 'SUCCESS') {
+    return historyRows.value.filter((item) => item.status === 'SUCCESS')
+  }
+  return historyRows.value.filter((item) => item.status !== 'SUCCESS')
+})
+
+const visibleHistoryRows = computed(() => (
+  showAllHistory.value
+    ? filteredHistoryRows.value
+    : filteredHistoryRows.value.slice(0, DEFAULT_VISIBLE_HISTORY)
+))
+
+function normalizeCompactText(raw) {
+  return String(raw || '').replace(/\s+/g, ' ').trim()
+}
+
+function formatMetricMessage(raw, fallbackText) {
+  const compact = normalizeCompactText(raw)
+  if (!compact) return fallbackText
+  if (compact.length <= BRIEF_METRIC_MSG_LIMIT) return compact
+  return `${compact.slice(0, BRIEF_METRIC_MSG_LIMIT - 1).trimEnd()}…`
+}
+
+function setHistoryFilter(nextFilter) {
+  historyFilter.value = nextFilter
+  showAllHistory.value = false
+}
+
+function getHistoryRowKey(item, idx) {
+  return `${item?.time || ''}-${item?.trigger || ''}-${idx}`
+}
+
+function isLongHistoryMessage(msg) {
+  const text = String(msg || '')
+  return text.includes('\n') || text.length > BRIEF_HISTORY_MSG_LIMIT
+}
+
+function isHistoryMsgExpanded(item, idx) {
+  return Boolean(expandedHistoryMsgs.value[getHistoryRowKey(item, idx)])
+}
+
+function toggleHistoryMsgExpand(item, idx) {
+  const key = getHistoryRowKey(item, idx)
+  expandedHistoryMsgs.value = {
+    ...expandedHistoryMsgs.value,
+    [key]: !expandedHistoryMsgs.value[key],
+  }
+}
+
+function getHistoryMessageText(item, idx) {
+  const raw = String(item?.message || '')
+  if (isHistoryMsgExpanded(item, idx)) {
+    return raw
+  }
+  const compact = normalizeCompactText(raw)
+  if (compact.length <= BRIEF_HISTORY_MSG_LIMIT) {
+    return compact || '—'
+  }
+  return `${compact.slice(0, BRIEF_HISTORY_MSG_LIMIT - 1).trimEnd()}…`
+}
 
 function formatWeatherStatusLabel(status) {
   if (status === 'SUCCESS') return '成功'
@@ -487,6 +665,33 @@ async function handleRunNow() {
     await loadAutoStatus().catch(() => {})
   } finally {
     runningNow.value = false
+  }
+}
+
+async function handleClearHistory(scope) {
+  if (!props.clearHistoryFn || clearingHistory.value) return
+  if (scope === 'all' && !window.confirm('确认清空全部导入尝试记录（含成功与失败记录）吗？定时时间点配置不会受到影响。')) {
+    return
+  }
+  clearingHistory.value = scope
+  historyTip.value = null
+  try {
+    const result = await props.clearHistoryFn(props.projectKey, scope)
+    if (result?.data) {
+      applyAutoStatusSnapshot(result.data)
+    }
+    expandedHistoryMsgs.value = {}
+    if (scope === 'failed' && historyFilter.value === 'FAILED') {
+      historyFilter.value = 'all'
+    }
+    historyTip.value = {
+      type: 'success',
+      text: result?.message || (scope === 'failed' ? '已清理失败记录。' : '已清空全部历史记录。'),
+    }
+  } catch (err) {
+    historyTip.value = { type: 'error', text: err.message }
+  } finally {
+    clearingHistory.value = ''
   }
 }
 
@@ -934,6 +1139,93 @@ onMounted(() => {
 .weather-history-msg {
   word-break: break-word;
   line-height: 1.55;
+}
+
+.weather-history-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.weather-filter-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.weather-filter-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.weather-filter-btn:hover {
+  color: #0f172a;
+}
+
+.weather-filter-btn.active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.weather-history-subtime {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.weather-status-cell {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.weather-repeat-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.weather-msg-toggle {
+  margin-left: 8px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.weather-msg-toggle:hover {
+  text-decoration: underline;
+}
+
+.weather-history-more {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 
 .page-tip {
