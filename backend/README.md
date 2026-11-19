@@ -1,3 +1,69 @@
+## 2026-11-20 增加居民室温 48 小时滚动淘汰机制
+
+- **`projects/smart_heating_platform/services/collector_engine.py`**：新增 `TEMP_RETENTION_HOURS = 48` 与 `prune_old_temp_hourly()`，在每轮 `run_snapshot_cycle()` 自动清理 `fact_temp_hourly` 中超过 48 小时的室温记录，避免表膨胀。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_prune_old_temp_hourly_cutoff` 单元测试。
+
+## 2026-11-19 前端算法说明书页增补“源站接口清单”标签页（后端无代码变动）
+
+- 本轮仅扩展前端 `AlgorithmGuideView.vue` 顶层双标签展示，后端逻辑与接口无改动。
+
+## 2026-11-19 新增 `scripts/backfill_smart_heating_history.py` 历史数据回溯工具
+
+- **`scripts/backfill_smart_heating_history.py`（新增）**：支持从 `2026-11-01` 起单线程分段、带断点续传回溯补采商业日耗量、242 座换热站小时与表底校准、电厂/首站上游小时、商业小时积分及 2,097 户居民室温小时断面。
+
+## 2026-11-19 接入商业用户逐小时采集精算链路并修复 `sh_dict` 时间解析
+
+- **`sql/smart_heating_platform_fact_init.sql`**：新增 `fact_merchant_15min` 与 `fact_merchant_hourly` 两张商业用户时序/小时精算表。
+- **`projects/smart_heating_platform/services/{cleaning_engine,collector_engine,report_query_service}.py` & `api/reports.py`**：
+  - 接入 `POST /get_sh_data/0`（断流自动降级按主干网 `2..16` 分片）与 `POST /sh_ls_zb/`（5 分钟历史补采），实现商业户 15 分钟/5 分钟梯形积分、`国际航运中心大厦` 别名归口、4 户测试商户阳面剔除、`rdry='蒸汽'` 商户 `kg/h·MJ/h ÷1000` 单位折算与逐小时报表/Excel 输出；
+  - `clean_upstream_point()` 兼容 `sh_dict` 的 `update_time` 字段。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：补充商业户清洗与逐小时接口回归测试。
+
+## 2026-11-19 新增 `smart_heating_platform` 主体每小时指标算法说明书入口（后端无代码变动）
+
+- 本轮仅新增前端页面 `AlgorithmGuideView.vue`，并在 `backend_data/shared/项目列表.json` 与 `backend_data/shared/auth/permissions/smart_heating_platform.json` 增加 `algorithm_guide` 入口卡片及 `page_access` 权限，后端 Python 代码与数据库结构无改动。
+
+## 2026-11-19 精简 `smart_heating_platform` 项目功能大厅卡片配置（后端代码无变动）
+
+- 本轮仅调整 `backend_data/shared/项目列表.json` 与前端子导航结构，后端路由与接口无改动。
+
+## 2026-11-19 交付 `smart_heating_platform` 事实表、15分钟积分采集清洗引擎及四大业务接口
+
+- **`sql/smart_heating_platform_fact_init.sql` & `projects/smart_heating_platform/services/db_schema.py`（新增）**：
+  - 创建 15 分钟采样表、小时精算表、商业用户日耗表及阴面督办表共 9 张事实表。
+- **`projects/smart_heating_platform/services/cleaning_engine.py`、`collector_engine.py`、`scheduler_service.py`（新增） & `main.py`**：
+  - 落地 15 分钟梯形积分、整点表底线性插值（`f220/f221/f253/f254`）、6 类异常清洗打标、单线程错峰采集与后台调度接入。
+- **`projects/smart_heating_platform/services/report_query_service.py`、`api/{reports,faults,dicts,settings,router}.py`**：
+  - 提供逐小时 4 维报告、每日精算与 `daily_basic_data` 双轨核对、阴面督办单导出、台账面积/标签补录及 15/30/60 分钟采样设置。
+- **真实采数调优**：`cleaning_engine.py`、`collector_engine.py` 与 `report_query_service.py` 增补 `trust_env=False` 与 502 重试、`277,777.78` W/(GJ/h) 精确换算系数、瞬时补水 `>100 t/h` 极值屏蔽、停运备机 `0.0℃` 去噪以及以 `/zx_hrz/.online` 为主判据。
+- **测试**：`pytest backend/projects/smart_heating_platform/tests -v` **5 passed**。
+
+## 2026-11-19 修复 `collector_config_service.py` 商户日报接口探测参数与居民室温条数统计
+
+- **`projects/smart_heating_platform/services/collector_config_service.py`**：
+  - `test_collector_connectivity()` 调用 `/getall_bb_shrb/` 时自动构造当月 `YYYYM` 与 `lastDay` 表单参数，消除无参 500 导致的 Cookie 误判；`_probe_endpoint()` 优先统计字典中 `data` 数组长度（如 `/jumin/` 返回 2,100 条）。
+
+## 2026-11-19 修复前端 `Global_admin` 新项目权限缓存未自动同步问题（后端无代码变动）
+
+- 本轮仅优化前端 `auth.js` 与 `router/index.js` 的会话权限刷新及 `Global_admin` 放行守卫，后端权限与设置接口无需改动。
+
+## 2026-11-19 新增 `smart_heating_platform` 项目模块与采集配置/Cookie 管理接口
+
+- **`projects/smart_heating_platform/services/collector_config_service.py`（新增）**：
+  - 原子持久化源站连接模式（`public` / `intranet` / `custom`）、Session Cookie、单线程间隔（`0.5~5.0s`）、超时及定时参数至 `DATA_DIRECTORY/projects/smart_heating_platform/config/collector_settings.json`；提供 Cookie 规范化与脱敏展示，以及单线程只读探测 `/gk_get_data/`、`/get_yw_data/1`、`/jumin/`、`/getall_bb_shrb/` 的连通性测试函数。
+- **`projects/smart_heating_platform/api/settings.py` & `router.py`（新增）**：
+  - 新增 `GET /settings/collector`、`PUT /settings/collector`、`POST /settings/collector/test` 接口（严格限定 `Global_admin` 访问），并通过 `api/v1/project_router_registry.py` 挂载至 `/api/v1/projects/smart_heating_platform`。
+- **测试 (`projects/smart_heating_platform/tests/test_collector_settings.py`)**：`pytest` **2 passed**；`AuthManager` 权限与项目/页面清单联调验证通过。
+
+## 2026-11-19 构建智慧供热平台专用 Schema (`smart_heating_platform`) 及 `dict_` 基础字典表
+
+- **`sql/smart_heating_platform_dict_init.sql`（新增）**：
+  - 创建专用 schema `smart_heating_platform`、8 张 `dict_` 前缀标准字典表（`dict_service_center`、`dict_main_network`、`dict_branch_network`、`dict_heating_station`、`dict_secondary_zone`、`dict_temp_device`、`dict_merchant`、`dict_upstream_point`）及别名映射视图 `v_temp_station_alias_map`；
+  - 严格落地全部物理主外键与唯一性约束（`center_id` / `main_network_id` / `branch_network_id` 转为 `INTEGER`，哈希 ID/分区编号/`temp_device_id` 保留 `VARCHAR`），并附完整中文表/列注释。
+- **`scripts/init_smart_heating_platform_dicts.py`（新增）**：
+  - 从 `configs/成果_智慧供热平台基础台账.xlsx` 读取八大主体数据，按拓扑依赖顺序在事务内幂等 UPSERT（`ON CONFLICT ... DO UPDATE`）并核验全表行数与联表完整性。
+- **验证**：两次幂等执行 `python backend/scripts/init_smart_heating_platform_dicts.py` 均成功入库（9 / 15 / 41 / 242 / 580 / 2,097 / 464 / 82），5 表外键 JOIN 2,097 户测温用户全命中。
+
 ## 2026-11-15 气温定时导入错误信息脱噪、连续失败合并与历史清理接口
 
 - **`services/weather_auto_import_service.py`**：

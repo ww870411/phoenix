@@ -1,3 +1,60 @@
+## 2026-11-20 在接口说明书中补充居民室温 48 小时滚动保留说明
+
+- **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：更新 `/jumin/` 接口文档卡片的存储周期与保留说明。
+
+## 2026-11-19 为 `AlgorithmGuideView.vue` 增加“源站接口清单与使用方式”双标签页
+
+- **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：重构为顶层双标签布局——`📐 主体每小时指标算法`（保留全量算法公式、清洗规则与试算器）与 `🔌 源站接口清单与使用方式`（展示全网 12 组实测源站接口、参数/返回字段、鉴权与限速规范及回溯运维命令）。
+
+## 2026-11-19 扩展《逐小时运行报告》商业用户小时明细页签并升级算法说明书
+
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：新增第 5 页签 `🏬 464商业用户小时明细`（支持热源大网/主干网/负荷状态筛选与汇总徽标）。
+- **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：同步更新商业用户板块为“15分钟/5分钟梯形积分逐小时 + 日表底结算核对”双轨算法说明。
+
+## 2026-11-19 新增 `smart_heating_platform` 主体每小时指标算法说明书页面
+
+- **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`（新增）**：提供按主体分类（换热站、上游热源/首站/网口、二次网分区、居民室温终端、聚合管理主体及商业用户说明）查看每小时指标公式、兜底降级策略、异常清洗口径与实时试算器的交互页面。
+- **`src/router/index.js`**：在 `settings` 前新增 `/projects/smart_heating_platform/pages/algorithm_guide` 路由。
+
+## 2026-11-19 精简 `smart_heating_platform` 入口卡片与工作台子导航标签
+
+- **`src/projects/smart_heating_platform/components/PlatformSubNav.vue`**：移除“采集与Cookie设置”切换标签，保留 4 个核心业务工作台标签。
+- **`src/projects/smart_heating_platform/pages/SettingsView.vue`**：移除顶部子导航栏，保持独立设置页布局。
+
+## 2026-11-19 交付 `smart_heating_platform` 四大核心页面与子导航体系
+
+- **`src/projects/smart_heating_platform/components/PlatformSubNav.vue`（新增）**：5 页面统一切换条。
+- **`src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView,FaultAuditView,DictCenterView}.vue`（新增）**：
+  - 交付【阳面】逐小时运行报告（24h 时间轴、7 项 KPI、双折线趋势、4 维报表与下钻）、【阳面】每日精算日报（与手工日报同屏双轨核对）、【阴面】异常巡检督办中心（研究院/高校工单流转导出）及八大主体标准台账中心（在线补录面积与五维标签）。
+- **`src/projects/smart_heating_platform/{pages/SettingsView.vue,services/api.js}` & `src/router/index.js`**：
+  - 支持 15/30/60 分钟采样间隔设置，并完成 5 页面路由注册与 `Global_admin` 守卫。
+- **构建验证**：`npm --prefix frontend run build` **1086 modules transformed，built in 23.64s（0 错误）**。
+
+## 2026-11-19 智慧供热平台 Cookie 探测参数后端修复（前端无代码变动）
+
+- 本轮仅调整后端 `collector_config_service.py` 的 `/getall_bb_shrb/` 探测入参与 `/jumin/` 返回条数解析，前端页面与接口契约无改动。
+
+## 2026-11-19 修复已登录 `Global_admin` 访问新增项目被旧权限缓存拦截问题
+
+- **`src/projects/daily_report_25_26/store/auth.js`**：
+  - 新增并导出 `refreshSession()`，在 SPA 运行期间可按需从 `/auth/me` 同步最新权限矩阵；`hasProjectAccess()` 与 `hasPageAccess()` 对 `isGlobalAdmin` 访问 `smart_heating_platform` 直接放行。
+- **`src/router/index.js`**：
+  - 调整 `/projects/smart_heating_platform/pages/settings` 仅校验 `auth.isGlobalAdmin`；通用项目路由在目标 `projectKey` 未命中本地权限缓存时自动触发 `auth.refreshSession()`。
+
+## 2026-11-19 新增智慧供热旁路精算与质检平台 `SettingsView.vue` 设置页面
+
+- **`src/projects/smart_heating_platform/services/api.js`（新增）**：
+  - 封装 `/api/v1/projects/smart_heating_platform/settings/collector` 读取、保存及 `/test` 连通性测试接口。
+- **`src/projects/smart_heating_platform/pages/SettingsView.vue`（新增）**：
+  - 新增“采集配置与 Cookie 设置”页面，展示当前源站、Cookie 脱敏状态及最近检测摘要，支持随时替换或清空 Cookie、切换公网/内网/自定义地址、调整单线程请求间隔与调度开关，以及在线执行只读接口连通性测试。
+- **`src/router/index.js` & `src/projects/daily_report_25_26/pages/PageSelectView.vue`**：
+  - 新增 `/projects/smart_heating_platform/pages/settings` 路由并限制仅 `Global_admin` 访问；将 `smart_heating_platform` 纳入工作台直跳列表与审批进度豁免名单。
+- **构建验证**：`npm --prefix frontend run build` 1076 模块编译打包通过（19.88s，0 错误）。
+
+## 2026-11-19 智慧供热平台 `smart_heating_platform` 数据库字典层初始化（前端无代码变动）
+
+- 本轮仅在后端及 PostgreSQL 新增 `smart_heating_platform` schema 下的 8 张 `dict_` 字典表与台账导入脚本，前端页面、组件及接口调用无改动。
+
 ## 2026-11-15 全局管理中心气温导入历史筛选、报错折叠与一键清理增强
 
 - **`src/projects/daily_report_25_26/services/api.js`**：

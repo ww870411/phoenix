@@ -1,0 +1,54 @@
+{
+  "source_mode": "public",
+  "custom_base_url": "",
+  "cookie": "session=.eJx9k12PojAUhv9Lr72wCup4CQS6xTUrJeEjJg0z4gzJggYhc7HZ_74HcJx-uTdN-jw99LTl_YPS-JByh_Jgx2kIQ-7FFG3nM1EwJ865d4gC5hhVQNPUKEiUG3kUZOYvMYK2WMcJoTvj-ix9IvK9oddEbzP3HIfviaMtHgVjkcnAYKY-ifR-vg3PiFHudtqVj5wlLj08NzyBBzPqfB9TXzLU1R4D0CFVbgRYlOmMEYX9ApyG8mkOMQ9-MO7S3KEmEaQDxxqHvsyCEYXHIYwukz4ODHZU7gHgcA8SyxI4LqMqSyncV0qj5JnIvsXwjgkPffEyJsZUlrmhcNs7Q-HEolxnTF33LIKCkiMoiPHVsc7lCApCjKCE7yk0uKdCjqcg5HhOwhBFQTASOeoepox-GTmjAlUyqhopo4KUMipwJaOCUUIIBpJE3ThTWeSTzNXgGEMssSmGImNynRZLYPfQqO-q52aCPolDlZEkD9Vilig9A0uJoxdn0U_4oVX6iCe_lm1dNGXToW3X9uUMldfL2wfvqrqEPdcv9vxlvsKbGapuvDjVVYO26NivXwsM49mG0SoXp2Nvn9-WaIZ-X96rhlfN-QLrHvOmGL6G3j95fytb68GvnyfAeLG07NUDtmVd1q9lOx55Qreu6MpxPtTzou8-oM6zFxbGy5W9tmzLx67jec7c8tyVhV13Y7vovvxUXou2q-GMvBr2s-a2Qd17_M_Zxopq6hh_zY1la3uxOfarxXJtob__ABlQUC8.av7o3w.UEQJlk7qJZ3Z242ALRGSV-8Kaks",
+  "scheduler_enabled": true,
+  "snapshot_interval_minutes": 15,
+  "hourly_offset_minutes": 5,
+  "request_interval_seconds": 0.8,
+  "request_timeout_seconds": 15.0,
+  "table_bottom_sync_hours": 6,
+  "updated_at": "2026-11-19 23:19:55",
+  "updated_by": "ww870411",
+  "last_test_result": {
+    "tested_at": "2026-11-19 20:41:01",
+    "base_url": "http://124.93.31.19:6688",
+    "public_ok": true,
+    "cookie_status": "valid",
+    "cookie_ok": true,
+    "checks": [
+      {
+        "name": "上游工况 (/gk_get_data/)",
+        "ok": true,
+        "status_code": 200,
+        "elapsed_ms": 3563.6,
+        "count": 137,
+        "detail": "返回字典 5 组，合计 137 条"
+      },
+      {
+        "name": "换热站一网 (/get_yw_data/1)",
+        "ok": true,
+        "status_code": 200,
+        "elapsed_ms": 1745.4,
+        "count": 242,
+        "detail": "返回列表 242 条"
+      },
+      {
+        "name": "居民室温 (/jumin/)",
+        "ok": true,
+        "status_code": 200,
+        "elapsed_ms": 7120.8,
+        "count": 2100,
+        "detail": "返回记录 2100 条"
+      },
+      {
+        "name": "商户日报 (/getall_bb_shrb/)",
+        "ok": true,
+        "status_code": 200,
+        "elapsed_ms": 7917.5,
+        "count": 458,
+        "detail": "返回列表 458 条"
+      }
+    ]
+  }
+}

@@ -111,6 +111,15 @@ def create_app() -> FastAPI:
         except Exception as e:
             logging.error("Failed to verify joint review tables on app startup: %s", e)
 
+        try:
+            from backend.projects.smart_heating_platform.services.db_schema import ensure_smart_heating_fact_tables
+            from backend.projects.smart_heating_platform.services.scheduler_service import smart_heating_scheduler
+            ensure_smart_heating_fact_tables()
+            smart_heating_scheduler.start_scheduler()
+            logging.info("SmartHeatingPlatform fact tables and scheduler initialized on app startup.")
+        except Exception as e:
+            logging.error("Failed to start SmartHeatingPlatform scheduler on app startup: %s", e)
+
     @app.on_event("shutdown")
     def on_shutdown():
         try:
@@ -130,6 +139,13 @@ def create_app() -> FastAPI:
             logging.info("WeatherAutoImportService & EnsembleWeatherAutoImportService schedulers stopped gracefully on app shutdown.")
         except Exception as e:
             logging.error("Failed to stop WeatherAutoImportService schedulers on app shutdown: %s", e)
+
+        try:
+            from backend.projects.smart_heating_platform.services.scheduler_service import smart_heating_scheduler
+            smart_heating_scheduler.stop_scheduler()
+            logging.info("SmartHeatingSchedulerService stopped gracefully on app shutdown.")
+        except Exception as e:
+            logging.error("Failed to stop SmartHeatingSchedulerService on app shutdown: %s", e)
 
     return app
 

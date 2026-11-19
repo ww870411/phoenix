@@ -64,6 +64,36 @@ const routes = [
     component: () => import('../projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue'),
   },
   {
+    path: '/projects/smart_heating_platform/pages/hourly_report',
+    component: () => import('../projects/smart_heating_platform/pages/HourlyReportView.vue'),
+    meta: { title: '逐小时精细化运行报告' },
+  },
+  {
+    path: '/projects/smart_heating_platform/pages/daily_report',
+    component: () => import('../projects/smart_heating_platform/pages/DailyReportView.vue'),
+    meta: { title: '每日生产精算日报' },
+  },
+  {
+    path: '/projects/smart_heating_platform/pages/fault_audit',
+    component: () => import('../projects/smart_heating_platform/pages/FaultAuditView.vue'),
+    meta: { title: '异常巡检督办中心' },
+  },
+  {
+    path: '/projects/smart_heating_platform/pages/dict_center',
+    component: () => import('../projects/smart_heating_platform/pages/DictCenterView.vue'),
+    meta: { title: '八大主体标准台账中心' },
+  },
+  {
+    path: '/projects/smart_heating_platform/pages/algorithm_guide',
+    component: () => import('../projects/smart_heating_platform/pages/AlgorithmGuideView.vue'),
+    meta: { title: '主体每小时指标算法说明书' },
+  },
+  {
+    path: '/projects/smart_heating_platform/pages/settings',
+    component: () => import('../projects/smart_heating_platform/pages/SettingsView.vue'),
+    meta: { title: '采集配置与 Cookie 设置' },
+  },
+  {
     path: '/projects/:projectKey/pages/:pageKey/sheets',
     component: () => import('../projects/daily_report_25_26/pages/Sheets.vue'),
   },
@@ -306,9 +336,26 @@ router.beforeEach(async (to) => {
     return true
   }
 
+  // 5.4 智慧供热旁路精算与质检平台页面群：严格仅限 Global_admin 访问（直接以角色放行，不因本地旧缓存误拦）
+  if (to.path.startsWith('/projects/smart_heating_platform/pages/')) {
+    if (!auth.isGlobalAdmin) {
+      return makeForbiddenRedirect(to, 'smart_heating_platform', String(to.path.split('/').pop() || ''))
+    }
+    return true
+  }
+
   // 6. 通用项目子页面路由（含 sheets、dashboard、data-entry、approval、display、data-analysis 等）
   const projectKey = String(to.params.projectKey || '').trim()
   const pageKey = String(to.params.pageKey || '').trim()
+
+  // 当访问的项目尚未出现在本地缓存权限矩阵中时，主动向后端同步一次最新会话权限，避免新增项目后未强刷被误拦
+  if (
+    projectKey &&
+    auth.token &&
+    !(projectKey in (auth.permissions?.projects || {}))
+  ) {
+    await auth.refreshSession()
+  }
 
   if (projectKey && pageKey) {
     if (!auth.hasProjectAccess(projectKey)) {

@@ -1,16 +1,89 @@
 {
-  "last_attempt_time": null,
-  "last_attempt_status": "IDLE",
-  "last_attempt_trigger": null,
-  "last_attempt_message": "尚未执行过气温自动或手动导入",
-  "last_success_time": null,
-  "last_success_trigger": null,
-  "last_success_message": null,
-  "last_success_summary": null,
+  "last_attempt_time": "2026-11-16 16:00:13",
+  "last_attempt_status": "SUCCESS",
+  "last_attempt_trigger": "定时自动 (16:00)",
+  "last_attempt_message": "气温获取并入库成功：共拉取 240 小时，写入 240 条、覆盖 240 条（日期范围：2026-11-13 ~ 2026-11-22）。",
+  "last_success_time": "2026-11-16 16:00:13",
+  "last_success_trigger": "定时自动 (16:00)",
+  "last_success_message": "气温获取并入库成功：共拉取 240 小时，写入 240 条、覆盖 240 条（日期范围：2026-11-13 ~ 2026-11-22）。",
+  "last_success_summary": {
+    "total_hours": 240,
+    "inserted": 240,
+    "replaced": 240,
+    "start": "2026-11-13T00:00:00+08:00",
+    "end": "2026-11-22T23:00:00+08:00",
+    "dates": [
+      "2026-11-13",
+      "2026-11-14",
+      "2026-11-15",
+      "2026-11-16",
+      "2026-11-17",
+      "2026-11-18",
+      "2026-11-19",
+      "2026-11-20",
+      "2026-11-21",
+      "2026-11-22"
+    ]
+  },
   "last_failure_time": null,
   "last_failure_trigger": null,
   "last_failure_message": null,
-  "executed_slots_date": "2026-11-15",
+  "executed_slots_date": "2026-11-20",
   "executed_slots_today": {},
-  "history": []
+  "history": [
+    {
+      "time": "2026-11-16 16:00:13",
+      "status": "SUCCESS",
+      "trigger": "auto",
+      "trigger_label": "定时自动 (16:00)",
+      "scheduled_slot": "16:00",
+      "message": "气温获取并入库成功：共拉取 240 小时，写入 240 条、覆盖 240 条（日期范围：2026-11-13 ~ 2026-11-22）。",
+      "summary": {
+        "total_hours": 240,
+        "inserted": 240,
+        "replaced": 240,
+        "start": "2026-11-13T00:00:00+08:00",
+        "end": "2026-11-22T23:00:00+08:00",
+        "dates": [
+          "2026-11-13",
+          "2026-11-14",
+          "2026-11-15",
+          "2026-11-16",
+          "2026-11-17",
+          "2026-11-18",
+          "2026-11-19",
+          "2026-11-20",
+          "2026-11-21",
+          "2026-11-22"
+        ]
+      }
+    },
+    {
+      "time": "2026-11-16 14:00:08",
+      "status": "SUCCESS",
+      "trigger": "auto",
+      "trigger_label": "定时自动 (14:00)",
+      "scheduled_slot": "14:00",
+      "message": "气温获取并入库成功：共拉取 240 小时，写入 240 条、覆盖 240 条（日期范围：2026-11-13 ~ 2026-11-22）。",
+      "summary": {
+        "total_hours": 240,
+        "inserted": 240,
+        "replaced": 240,
+        "start": "2026-11-13T00:00:00+08:00",
+        "end": "2026-11-22T23:00:00+08:00",
+        "dates": [
+          "2026-11-13",
+          "2026-11-14",
+          "2026-11-15",
+          "2026-11-16",
+          "2026-11-17",
+          "2026-11-18",
+          "2026-11-19",
+          "2026-11-20",
+          "2026-11-21",
+          "2026-11-22"
+        ]
+      }
+    }
+  ]
 }

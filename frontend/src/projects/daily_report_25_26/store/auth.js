@@ -155,23 +155,28 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     clearAllStorage()
   }
 
+  async function refreshSession() {
+    if (!token.value) return false
+    try {
+      const session = await fetchSession()
+      user.value = session?.user ?? null
+      permissions.value = session?.permissions ?? null
+      persist(rememberLogin.value)
+      return true
+    } catch (err) {
+      console.warn('刷新登录状态失败', err)
+      if (err?.status === 401 || (err?.message && err.message.includes('已过期'))) {
+        clearSession()
+      }
+      return false
+    }
+  }
+
   async function bootstrap() {
     if (initialized.value) return
     restoreFromStorage()
     if (token.value) {
-      try {
-        const session = await fetchSession()
-        user.value = session?.user ?? null
-        permissions.value = session?.permissions ?? null
-        persist(rememberLogin.value)
-      } catch (err) {
-        console.warn('刷新登录状态失败', err)
-        // 防误杀机制：仅在明确返回 401 (身份完全失效/不存在) 时清除本地缓存并注销。
-        // 若为网络波动、后端服务重启、Failed to fetch 或 500 等异常，保留本地 Token 凭据，防止被误剔除登录
-        if (err?.status === 401 || (err?.message && err.message.includes('已过期'))) {
-          clearSession()
-        }
-      }
+      await refreshSession()
     }
     initialized.value = true
   }
@@ -289,6 +294,9 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   function hasProjectAccess(projectKey) {
     const normalizedKey = normalizeProjectKey(projectKey)
     if (!normalizedKey) return false
+    if (isGlobalAdmin.value && normalizedKey === 'smart_heating_platform') {
+      return true
+    }
     const projectMap =
       permissions.value && typeof permissions.value.projects === 'object'
         ? permissions.value.projects
@@ -303,6 +311,10 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
   function hasPageAccess(projectKey, pageKey) {
     if (pageKey === undefined) {
       return hasPageAccess(DEFAULT_PERMISSION_PROJECT, projectKey)
+    }
+    const normalizedProjectKey = normalizeProjectKey(projectKey)
+    if (isGlobalAdmin.value && normalizedProjectKey === 'smart_heating_platform') {
+      return true
     }
     const pageSet = getPageAccessSet(projectKey)
     const rawKey = String(pageKey || '').trim()
@@ -465,6 +477,7 @@ export const useAuthStore = defineStore('phoenix-auth', () => {
     canAccessAdminConsole,
     allowedUnits,
     bootstrap,
+    refreshSession,
     login,
     logout,
     filterPages,

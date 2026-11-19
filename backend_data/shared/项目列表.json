@@ -214,5 +214,28 @@
         "页面描述": "订单流转多方联合会审、共识校核与争议仲裁中心"
       }
     }
+  },
+  "smart_heating_platform": {
+    "availability": [
+      "Global_admin"
+    ],
+    "project_name": "智慧供热旁路精算与质检平台",
+    "pages": {
+      "hourly_report": {
+        "页面名称": "🔥 智慧供热运行精算与质检工作台",
+        "数据源": "smart_heating_platform",
+        "页面描述": "包含逐小时精细化运行报告、每日生产精算日报双轨核对、阴面异常巡检督办与八大主体标准台账中心"
+      },
+      "algorithm_guide": {
+        "页面名称": "📐 主体每小时指标算法说明书",
+        "数据源": "smart_heating_platform",
+        "页面描述": "按主体分类查看逐小时指标口径、15分钟梯形积分与表底线性插值公式及异常清洗规则"
+      },
+      "settings": {
+        "页面名称": "⚙️ 采集配置与 Cookie 设置",
+        "数据源": "smart_heating_platform",
+        "页面描述": "设置源站连接地址、Session Cookie、15分钟采集间隔与接口连通性测试"
+      }
+    }
   }
 }

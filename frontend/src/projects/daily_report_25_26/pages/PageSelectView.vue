@@ -453,7 +453,7 @@ const categorizedGroups = computed(() => {
 
 const projectName = computed(() => getProjectNameById(projectKey) ?? projectKey)
 const isWorkflowExempt = computed(() => {
-  const exempt = ['monthly_data_show', 'insulation_pipe_supply_2026']
+  const exempt = ['monthly_data_show', 'insulation_pipe_supply_2026', 'smart_heating_platform']
   return exempt.includes(projectKey)
 })
 const isClickable = computed(() => {
@@ -618,7 +618,7 @@ function openPage(page) {
   if (typeof page?.page_url === 'string' && page.page_url.startsWith('/')) {
     return router.push({ path: page.page_url })
   }
-  if (currentProjectKey === 'insulation_pipe_supply_2026') {
+  if (currentProjectKey === 'insulation_pipe_supply_2026' || currentProjectKey === 'smart_heating_platform') {
     return router.push({
       path: `/projects/${encodeURIComponent(currentProjectKey)}/pages/${encodeURIComponent(page.page_key)}`,
     })
