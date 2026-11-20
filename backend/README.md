@@ -1,3 +1,19 @@
+## 2026-11-20 日报元信息透传系统采集频率 `snapshot_interval_minutes`
+
+- **`projects/smart_heating_platform/services/report_query_service.py`**：`get_daily_report()` 返回的 `meta` 新增 `snapshot_interval_minutes`（读取 `collector_config_service.get_collector_settings_view()`）。
+
+## 2026-11-20 升级逐日运行报告 Excel 导出（周期逐日总览、中心偏差矩阵与 242 站跨天横表）
+
+- **`projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：
+  - 新增 `build_daily_export_payload()`，重构 `build_daily_excel()` 输出 7 张专业表（跨天总览、9 中心逐日热量/偏差率矩阵、242 站逐日横表、结算日核对/242 站日耗含供回温/464 商业户正确台账列及合计行），并支持超 `±10%` 告警标橙与突发跳变标红。
+
+## 2026-11-20 重构逐小时 24h 横向矩阵导出与日报 Excel 商业户工作表
+
+- **`projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：
+  - 新增 `build_hourly_export_payload()`，重构 `build_hourly_excel()` 为前导全天 24 小时逐时统计、9中心/主干热网/242站横向 `00:00~23:00` 热量矩阵、全天突发跳变清单及当前断面明细，支持可选 `scope/key` 主体附表与突发单元格红底批注；
+  - `build_daily_excel()` 补齐 `464商业用户日耗量` Sheet 与突发标红批注；
+  - 新增 `test_hourly_and_daily_excel_export_with_24h_matrix_and_highlights` 单测。
+
 ## 2026-11-20 新增单个主体/换热站 24 小时趋势图查询接口 (`/hourly/entity-trend`)
 
 - **`projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：提取 `_build_trend_24h_from_rows` 并新增 `get_entity_trend_24h()` 与 `GET /reports/hourly/entity-trend`，支持按服务中心、主干热网、支线热网及单座换热站维度拉取 24 小时柱形与供回温曲线。

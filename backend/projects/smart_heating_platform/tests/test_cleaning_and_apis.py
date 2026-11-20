@@ -950,3 +950,159 @@ def test_build_trend_24h_from_rows_for_single_entity():
     trend_raw = rqs._build_trend_24h_from_rows(rows, {7: 1.5, 8: 2.0}, mode="raw")
     assert trend_raw[7]["hour_heat_gj"] == 15483.87
     assert "突发热量跳变异常原值" in trend_raw[7]["anomalies"]["hour_heat_gj"]["note"]
+
+
+def test_hourly_and_daily_excel_export_with_24h_matrix_and_highlights():
+    """验证逐小时 Excel 导出包含当天 24h 汇总/横表矩阵/突发跳变红底批注，以及日报 Excel 补齐商业户明细。"""
+    from io import BytesIO
+    import openpyxl
+    from projects.smart_heating_platform.services import report_query_service as rqs
+
+    trend = [
+        {
+            "hour": h,
+            "label": f"{h:02d}:00",
+            "has_data": True,
+            "station_count": 2,
+            "hour_heat_gj": 100.0 + h,
+            "heat_index_wm2": 35.0,
+            "avg_sup_temp": 80.0,
+            "avg_ret_temp": 45.0,
+            "outdoor_temp": 2.0,
+            "anomalies": (
+                {"hour_heat_gj": {"count": 1, "note": "受 1 项异常修正影响：国运壹号: 突发热量跳变已修正（原值 26338 → 修正 0 GJ）"}}
+                if h == 15
+                else {}
+            ),
+        }
+        for h in range(24)
+    ]
+    sample_report = {
+        "meta": {"date": "2026-11-20", "hour": 15, "mode": "clean"},
+        "kpis": {"total_stations": 2},
+        "trend_24h": trend,
+        "group_summaries": {
+            "by_center": [
+                {
+                    "group_key": 60, "group_name": "华乐服务中心", "online_stations": 2, "total_stations": 2,
+                    "covered_area_wan": 20.0, "hour_heat_gj": 115.0, "instant_load_gjh": 110.0,
+                    "heat_index_wm2": 35.0, "hour_water_t": 5.0, "avg_sup_temp": 80.0, "avg_ret_temp": 45.0,
+                    "anomalies": {},
+                }
+            ],
+            "by_rdfz": [],
+            "by_branch": [],
+        },
+        "stations": [
+            {
+                "station_id": "S1", "name": "国运壹号", "center_name": "华乐服务中心", "rdfz": "东环",
+                "branch_name": "促进路分支", "covered_area": 100000.0, "online": True,
+                "e1": 100.0, "e3": 80.0, "e4": 45.0, "e7": 0.8, "e8": 0.5, "e11": 0.0,
+                "hour_heat_gj": 0.0, "hour_heat_source": "FALLBACK_INTEGRAL_15M", "heat_index_wm2": 0.0,
+                "hour_water_t": 2.0, "value_source": "MASKED_PREV_HOLD",
+                "field_notes": {"hour_heat_gj": "国运壹号: 突发热量跳变已修正（原值 26338 → 修正 0 GJ）"},
+            }
+        ],
+        "upstream_points": [],
+        "merchants": [],
+    }
+    export_ctx = {
+        "report": sample_report,
+        "entity_trend": {"entity_name": "华乐服务中心", "station_count": 2, "trend_24h": trend},
+        "center_matrix_24h": [
+            {
+                "name": "华乐服务中心", "covered_area_wan": 20.0, "hours": [10.0] * 24,
+                "hour_notes": {15: "突发热量跳变"}, "day_heat_gj": 240.0, "heat_per_wan_gj": 12.0,
+            }
+        ],
+        "rdfz_matrix_24h": [
+            {
+                "name": "东环", "covered_area_wan": 20.0, "hours": [10.0] * 24,
+                "hour_notes": {}, "day_heat_gj": 240.0, "heat_per_wan_gj": 12.0,
+            }
+        ],
+        "station_matrix_24h": [
+            {
+                "name": "国运壹号", "center_name": "华乐服务中心", "rdfz": "东环", "branch_name": "促进路分支",
+                "covered_area": 100000.0, "hours": [10.0] * 24, "hour_notes": {15: "国运壹号: 突发热量跳变已修正"},
+                "day_heat_gj": 240.0, "heat_per_wan_gj": 24.0, "anomaly_note": "15:00 突发热量跳变已修正",
+            }
+        ],
+        "burst_events": [
+            {"hour": 15, "label": "15:00", "entity_type": "换热站", "entity_name": "国运壹号", "metric": "小时供热量(GJ)", "note": "原值 26338 → 修正 0 GJ"}
+        ],
+    }
+
+    xls_bytes = rqs.build_hourly_excel(sample_report, export_ctx=export_ctx)
+    wb = openpyxl.load_workbook(BytesIO(xls_bytes))
+    assert wb.sheetnames[:5] == [
+        "全网24小时逐时统计",
+        "华乐服务中心_24小时",
+        "9大中心_24小时供热矩阵",
+        "主干热网_24小时供热矩阵",
+        "242站_24小时供热矩阵",
+    ]
+    assert "当日突发跳变记录" in wb.sheetnames
+    ws1 = wb["全网24小时逐时统计"]
+    # 第 15:00 行是第 17 行 (1表头 + 0..15共16行)，第3列小时供热量(GJ) 应标红且带批注
+    c15 = ws1.cell(row=17, column=3)
+    assert c15.fill.start_color.rgb.endswith("FEE2E2")
+    assert c15.comment is not None and "国运壹号" in c15.comment.text
+    assert ws1.cell(row=27, column=1).value == "全天合计/均值"
+
+    ws_st_mat = wb["242站_24小时供热矩阵"]
+    headers_st = [ws_st_mat.cell(row=1, column=i).value for i in range(1, ws_st_mat.max_column + 1)]
+    assert "00:00" in headers_st and "23:00" in headers_st
+    assert ws_st_mat.cell(row=2, column=6 + 15).fill.start_color.rgb.endswith("FEE2E2")
+
+    daily_report_sample = {
+        "meta": {"date": "2026-11-20", "period_mode": "natural", "mode": "clean", "window_start": "2026-11-20 00:00", "window_end": "2026-11-21 00:00"},
+        "center_comparison": [
+            {
+                "center_name": "华乐服务中心", "covered_area_wan": 20.0, "sys_heat_gj": 220.0, "man_heat_gj": 180.0,
+                "heat_diff_gj": 40.0, "heat_diff_pct": 22.22, "is_heat_alert": True, "heat_per_wan_gj": 11.0,
+                "sys_water_t": 10.0, "man_water_t": 9.0, "avg_room_temp": 21.2, "anomalies": {},
+            }
+        ],
+        "station_daily": [
+            {
+                "name": "国运壹号", "center_name": "华乐服务中心", "rdfz": "东环", "covered_area": 100000.0,
+                "hours_count": 24, "meter_diff_hours": 22, "start_tot_j": 100.0, "end_tot_j": 320.0,
+                "day_heat_gj": 220.0, "heat_per_wan_gj": 22.0, "day_flow_t": 5000.0, "day_water_t": 10.0,
+                "day_elec_kwh": 300.0, "avg_sup_temp": 78.5, "avg_ret_temp": 44.2, "anomalies": {},
+            }
+        ],
+        "merchant_daily": [{"name": "测试商业A", "rdfz": "东环", "rdry": "水", "rdss": "私有", "rdjg": "商业", "rdgz": "已改", "daily_consumption": 12.34, "daily_unit_heat": 0.5}],
+    }
+    daily_ctx = {
+        "report": daily_report_sample,
+        "date_labels": ["11-19", "11-20"],
+        "tot_area_wan": 20.0,
+        "daily_overview": [
+            {"date": "2026-11-19", "avg_outdoor_temp": 3.0, "sys_heat_gj": 200.0, "man_heat_gj": 200.0, "heat_diff_gj": 0.0, "heat_diff_pct": 0.0, "heat_per_wan_gj": 10.0, "sys_water_t": 8.0, "man_water_t": 8.0, "merchant_heat_gj": 10.0, "anomaly_note": ""},
+            {"date": "2026-11-20", "avg_outdoor_temp": 2.0, "sys_heat_gj": 220.0, "man_heat_gj": 180.0, "heat_diff_gj": 40.0, "heat_diff_pct": 22.22, "heat_per_wan_gj": 11.0, "sys_water_t": 10.0, "man_water_t": 9.0, "merchant_heat_gj": 12.34, "anomaly_note": "15:00 国运壹号 突跳"},
+        ],
+        "center_matrix": [
+            {"name": "华乐服务中心", "covered_area_wan": 20.0, "values": [200.0, 220.0], "diff_pcts": [0.0, 22.22], "day_notes": {1: "突发跳变"}, "sum_heat_gj": 420.0, "avg_per_wan_gj": 10.5}
+        ],
+        "station_matrix": [
+            {"name": "国运壹号", "center_name": "华乐服务中心", "rdfz": "东环", "covered_area": 100000.0, "values": [200.0, 220.0], "day_notes": {1: "突发跳变"}, "sum_heat_gj": 420.0, "avg_per_wan_gj": 21.0, "anomaly_summary": "11-20 突跳"}
+        ],
+    }
+    daily_bytes = rqs.build_daily_excel(daily_report_sample, export_ctx=daily_ctx)
+    wb_daily = openpyxl.load_workbook(BytesIO(daily_bytes))
+    assert wb_daily.sheetnames == [
+        "全网逐日统计总览",
+        "9大中心_逐日供热矩阵",
+        "9大中心_逐日双轨偏差率",
+        "242站_逐日供热矩阵",
+        "11-20_9大中心核对",
+        "11-20_242站日耗",
+        "11-20_464商业用户",
+    ]
+    assert wb_daily["全网逐日统计总览"].cell(row=4, column=1).value == "期间合计/均值"
+    assert wb_daily["9大中心_逐日双轨偏差率"].cell(row=2, column=4).fill.start_color.rgb.endswith("FEF3C7")
+    assert wb_daily["11-20_242站日耗"].cell(row=2, column=15).value == 78.5
+    assert wb_daily["11-20_464商业用户"].cell(row=1, column=3).value == "介质 (rdry)"
+    assert wb_daily["11-20_464商业用户"].cell(row=2, column=7).value == 12.34
+    assert wb_daily["11-20_464商业用户"].cell(row=3, column=7).value == 12.34

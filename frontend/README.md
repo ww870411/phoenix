@@ -1,3 +1,19 @@
+## 2026-11-20 日报页面副标题动态联动系统采样分钟数
+
+- **`src/projects/smart_heating_platform/pages/DailyReportView.vue`**：副标题文案调整为 `（系统自动表底抄表/{{ meta.snapshot_interval_minutes ?? 5 }}分钟积分 vs 日报手工填报对比）`。
+
+## 2026-11-20 每日运行报告补齐“日均供回温”列并升级逐日多天报告导出
+
+- **`src/projects/smart_heating_platform/pages/DailyReportView.vue`**：在 242 站日耗明细增加 `日均供/回温 (℃)` 异常联动列，导出按钮调整为 `📥 导出逐日统计报告`。
+
+## 2026-11-20 升级逐小时导出入口为当天 24 小时全量报告
+
+- **`src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView}.vue`**：逐小时页面导出按钮升级为 `📥 导出当日逐小时报告`，自动透传 `mode` 与当前选中主体 `scope/key`，下载含日期与口径的 Excel；日报页同步更新带口径的文件名。
+
+## 2026-11-20 逐小时双图表同步标注当前选中小时位置并支持点击图表切小时
+
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：切换小时（顶部控件或直接点击图上柱形/折线点列区域）时，热量柱形图与供回温折线图同步在当前小时正上方渲染蓝色向下箭头 `▼`，点亮当前柱条、折线圆点及 X 轴刻度并联动刷新页面数据。
+
 ## 2026-11-20 支持点击主体/换热站查看对应 24 小时柱形图与曲线
 
 - **`src/projects/smart_heating_platform/{services/api.js,pages/HourlyReportView.vue}`**：新增 `fetchEntityTrend24h()`；支持在“服务中心与热网”或“换热站明细”中点击任意主体行，在上方图表区切换展示该主体 24 小时供热量柱形图与供回温折线（含异常红标、口径/日期联动与“返回全网走势”按钮）。

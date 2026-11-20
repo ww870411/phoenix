@@ -1,5 +1,39 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-20 每日报告副标题积分分钟数动态读取系统采集配置
+
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：`get_daily_report()` 的 `meta` 中透传当前系统配置的 `snapshot_interval_minutes`（当前为 `5` 分钟）。
+  - **`frontend/src/projects/smart_heating_platform/pages/DailyReportView.vue`**：顶部副标题调整为 `（系统自动表底抄表/{{ meta.snapshot_interval_minutes ?? 5 }}分钟积分 vs 日报手工填报对比）`，随系统配置页设置实时联动。
+
+## 2026-11-20 全面重构“逐日运行报告”多日横表导出并完善每日页面日均供回温展示
+
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：
+    - 新增 `build_daily_export_payload()`，生成从供暖初（`2026-11-01` 或近 31 天）至选定结算日、严格对齐 `自然日(00-24)` / `生产班次(08-08)` 的跨天逐日统计；
+    - 升级 `build_daily_excel()` 为 7 张工作表：`全网逐日统计总览`、`9大中心_逐日供热矩阵`、`9大中心_逐日双轨偏差率`、`242站_逐日供热矩阵`、`{日}_9大中心核对`、`{日}_242站日耗`（补齐起止差值/循环水量/日均供回温）与 `{日}_464商业用户`（修正为 `介质/产权/价格分类/改造批次` 并附合计行）；
+    - `_style_excel_sheet()` 新增 `warn_cells`（双轨偏差超过 `±10%` 自动标橙黄色告警与批注）及各表合计/均值行样式。
+  - **`frontend/src/projects/smart_heating_platform/pages/DailyReportView.vue`**：242 站日耗明细表格补齐 `日均供/回温 (℃)` 列（接入 `AnomalyBadgeValue`），导出按钮升级为 `📥 导出逐日统计报告` 并生成完整带周期及口径的文件名。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：补充逐日 7 表导出的单测断言。
+
+## 2026-11-20 重构“逐小时统计”与“每日日报” Excel 导出结构（支持全天24h横表与突发跳变标红）
+
+- **改动缘由**：原 `build_hourly_excel()` 仅导出单一选定小时横断面，缺少当天 00:00~23:00 逐小时汇总及各主体/站点的 24 小时横向矩阵，也未在 Excel 中继承突发跳变红色标记与修正备注；同时 `build_daily_excel()` 缺少商业户日耗量工作表。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：
+    - 新增 `build_hourly_export_payload()`，一次查齐并生成当天 `全网24小时逐时统计`、`{选中主体}_24小时`、`9大中心_24小时供热矩阵`、`主干热网_24小时供热矩阵`、`242站_24小时供热矩阵`、`当日突发跳变记录` 及当前选中小时全维明细（`多维汇总` / `242换热站明细` / `上游热源首站` / `464商业用户`）；
+    - `_style_excel_sheet()` 新增突发跳变单元格淡红填充（`#FEE2E2`）、红字（`#B91C1C`）、悬停批注 `Comment` 及合计行高亮样式；
+    - `build_daily_excel()` 补全 `464商业用户日耗量` Sheet 并接入突发跳变标红与批注，`/hourly/export` 与 `/daily/export` 文件名自动携带口径标识。
+  - **`frontend/src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView}.vue`**：导出按钮升级为 `📥 导出当日逐小时报告`，并在当前选中了主体/换热站时透传 `scope` 与 `key` 至导出接口，同步下载带日期与口径的文件名。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_hourly_and_daily_excel_export_with_24h_matrix_and_highlights` 单测。
+
+## 2026-11-20 在逐小时双图表中实时标注当前选中的小时位置并支持点击图表切换小时
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：
+    - 移除 `markArea` 框与 `markLine` 虚线，改用顶部对齐 `xAxis`（`position: 'top'`）在当前选中的小时上方展示简洁蓝色向下箭头 `▼`，并同步高亮当前柱条色深、折线节点圆环与 X 轴加粗时间刻度；
+    - 新增 `bindChartHourClick()`，支持直接在两张图表任意柱形、折线点或小时列区域点击切换 `selectedHour` 并同步刷新报表与双图指示位置。
+
 ## 2026-11-20 支持点击任意主体或换热站切换展示其 24 小时柱形图与供回温曲线
 
 - **改动清单**：

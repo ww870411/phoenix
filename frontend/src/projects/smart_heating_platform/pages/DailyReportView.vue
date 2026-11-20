@@ -11,7 +11,7 @@
             <h2>每日运行报告与手工日报双轨核对</h2>
           </div>
           <p class="subtitle">
-            结算周期：{{ meta.window_start || '-' }} ~ {{ meta.window_end || '-' }}（系统自动表底抄表/15分钟积分 vs Phoenix 手工填报对比）
+            结算周期：{{ meta.window_start || '-' }} ~ {{ meta.window_end || '-' }}（系统自动表底抄表/{{ meta.snapshot_interval_minutes ?? 5 }}分钟积分 vs 日报手工填报对比）
           </p>
         </div>
         <div class="topbar-actions">
@@ -44,8 +44,13 @@
           <button class="btn secondary btn-sm" type="button" :disabled="calibrating" @click="handleCalibrateToday">
             {{ calibrating ? '校准中(约3分钟)…' : '📏 校准当日表底' }}
           </button>
-          <button class="btn primary btn-sm" type="button" @click="handleExport">
-            📥 导出日报 Excel
+          <button
+            class="btn primary btn-sm"
+            type="button"
+            title="导出本供暖季/近31天逐日趋势矩阵与选定日完整双轨核对 Excel"
+            @click="handleExport"
+          >
+            📥 导出逐日统计报告
           </button>
         </div>
       </header>
@@ -181,6 +186,7 @@
                   <th>万平耗热</th>
                   <th>日补水 (t)</th>
                   <th>日电耗 (kWh)</th>
+                  <th>日均供/回温 (℃)</th>
                 </tr>
               </thead>
               <tbody>
@@ -202,6 +208,9 @@
                     <AnomalyBadgeValue :text="fmt(s.day_water_t)" :note="s.anomalies?.day_water_t?.note" />
                   </td>
                   <td>{{ fmt(s.day_elec_kwh) }}</td>
+                  <td>
+                    <AnomalyBadgeValue :text="`${fmt(s.avg_sup_temp)} / ${fmt(s.avg_ret_temp)}`" :note="s.anomalies?.avg_sup_temp?.note || s.anomalies?.avg_ret_temp?.note" />
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -399,9 +408,11 @@ async function handleSyncMerchants() {
 
 async function handleExport() {
   try {
+    const periodTag = periodMode.value === 'shift' ? '生产班次' : '自然日'
+    const modeTag = mode.value === 'raw' ? '_原始数据' : ''
     await downloadPlatformExcel(
       `/reports/daily/export?date=${encodeURIComponent(selectedDate.value)}&period_mode=${periodMode.value}&mode=${mode.value}`,
-      `每日运行报告_${selectedDate.value}.xlsx`,
+      `每日运行统计报告_${selectedDate.value}_${periodTag}${modeTag}.xlsx`,
     )
   } catch (err) {
     notice.type = 'error'

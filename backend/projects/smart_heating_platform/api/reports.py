@@ -27,7 +27,9 @@ from backend.projects.smart_heating_platform.services.collector_engine import (
 )
 from backend.projects.smart_heating_platform.services.report_query_service import (
     build_daily_excel,
+    build_daily_export_payload,
     build_hourly_excel,
+    build_hourly_export_payload,
     get_daily_report,
     get_entity_trend_24h,
     get_hourly_report,
@@ -107,17 +109,21 @@ def api_station_temps(
     return {"ok": True, "data": rows}
 
 
-@router.get("/hourly/export", summary="导出逐小时精细化运行报告 Excel")
+@router.get("/hourly/export", summary="导出当日24小时逐时统计与断面明细 Excel")
 def api_export_hourly(
     date: Optional[str] = Query(None),
     hour: Optional[int] = Query(None, ge=0, le=23),
     mode: str = Query("clean"),
+    scope: Optional[str] = Query(None, description="可选当前选中主体维度: by_center | by_rdfz | by_branch | station"),
+    key: Optional[str] = Query(None, description="可选当前选中主体键值"),
     session: AuthSession = Depends(get_current_session),
 ):
     _require_admin(session)
-    report_data = get_hourly_report(target_date_str=date, hour=hour, mode=mode)
-    excel_bytes = build_hourly_excel(report_data)
-    filename = f"逐小时精细化运行报告_{report_data['meta']['date']}_{report_data['meta']['hour']:02d}时.xlsx"
+    export_ctx = build_hourly_export_payload(target_date_str=date, hour=hour, mode=mode, scope=scope, key=key)
+    report_data = export_ctx["report"]
+    excel_bytes = build_hourly_excel(report_data, export_ctx=export_ctx)
+    mode_tag = "原始数据" if report_data["meta"].get("mode") == "raw" else "修正后"
+    filename = f"逐小时统计报告_{report_data['meta']['date']}_{mode_tag}_{report_data['meta']['hour']:02d}时断面.xlsx"
     encoded = quote(filename)
     return Response(
         content=excel_bytes,
@@ -138,7 +144,7 @@ def api_daily_report(
     return {"ok": True, "data": data}
 
 
-@router.get("/daily/export", summary="导出每日生产精算日报与双轨核对 Excel")
+@router.get("/daily/export", summary="导出周期逐日趋势与选定日生产精算双轨核对 Excel")
 def api_export_daily(
     date: Optional[str] = Query(None),
     period_mode: str = Query("natural"),
@@ -146,9 +152,12 @@ def api_export_daily(
     session: AuthSession = Depends(get_current_session),
 ):
     _require_admin(session)
-    report_data = get_daily_report(target_date_str=date, period_mode=period_mode, mode=mode)
-    excel_bytes = build_daily_excel(report_data)
-    filename = f"每日运行报告_{report_data['meta']['date']}.xlsx"
+    export_ctx = build_daily_export_payload(target_date_str=date, period_mode=period_mode, mode=mode)
+    report_data = export_ctx["report"]
+    excel_bytes = build_daily_excel(report_data, export_ctx=export_ctx)
+    period_tag = "生产班次" if report_data["meta"].get("period_mode") == "shift" else "自然日"
+    mode_tag = "_原始数据" if report_data["meta"].get("mode") == "raw" else ""
+    filename = f"每日运行统计报告_{report_data['meta']['date']}_{period_tag}{mode_tag}.xlsx"
     encoded = quote(filename)
     return Response(
         content=excel_bytes,

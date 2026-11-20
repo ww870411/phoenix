@@ -104,9 +104,10 @@
               class="btn primary btn-sm"
               type="button"
               :disabled="loading"
+              title="导出当天 24 小时逐时统计、横向矩阵、突发记录与当前小时明细 Excel"
               @click="handleExport"
             >
-              📥 导出本小时 Excel
+              📥 导出当日逐小时报告
             </button>
           </div>
         </div>
@@ -1377,9 +1378,11 @@ async function handleGapRecoverNow() {
 
 async function handleExport() {
   try {
+    const scopeParam = selectedEntity.value ? `&scope=${encodeURIComponent(selectedEntity.value.scope)}&key=${encodeURIComponent(selectedEntity.value.key)}` : ''
+    const modeTag = mode.value === 'raw' ? '原始数据' : '修正后'
     await downloadPlatformExcel(
-      `/reports/hourly/export?date=${encodeURIComponent(selectedDate.value)}&hour=${selectedHour.value}&mode=${mode.value}`,
-      `逐小时精细化运行报告_${selectedDate.value}_${String(selectedHour.value).padStart(2, '0')}时.xlsx`,
+      `/reports/hourly/export?date=${encodeURIComponent(selectedDate.value)}&hour=${selectedHour.value}&mode=${mode.value}${scopeParam}`,
+      `逐小时统计报告_${selectedDate.value}_${modeTag}_${String(selectedHour.value).padStart(2, '0')}时断面.xlsx`,
     )
   } catch (err) {
     notice.type = 'error'
@@ -1463,6 +1466,28 @@ function buildAnomalyTooltipFormatter() {
   }
 }
 
+function bindChartHourClick(chartInstance) {
+  const zr = chartInstance.getZr()
+  zr.on('mousemove', (event) => {
+    const inside = chartInstance.containPixel('grid', [event.offsetX, event.offsetY])
+    zr.setCursorStyle(inside ? 'pointer' : 'default')
+  })
+  zr.on('click', (event) => {
+    const pointInPixel = [event.offsetX, event.offsetY]
+    if (!chartInstance.containPixel('grid', pointInPixel)) return
+    const pointInGrid = chartInstance.convertFromPixel({ seriesIndex: 0 }, pointInPixel)
+    if (!Array.isArray(pointInGrid) || Number.isNaN(pointInGrid[0])) return
+    const idx = Math.round(pointInGrid[0])
+    const targetRow = chartTrend.value?.[idx]
+    if (!targetRow || targetRow.hour === null || targetRow.hour === undefined) return
+    const nextHour = Number(targetRow.hour)
+    if (nextHour !== Number(selectedHour.value)) {
+      selectedHour.value = nextHour
+      scheduleLoadReport(80)
+    }
+  })
+}
+
 function renderCharts() {
   const rows = chartTrend.value
   const entityName = selectedEntity.value?.name
@@ -1471,15 +1496,63 @@ function renderCharts() {
   const labels = rows.map((r) => r.label)
   const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640
   const tooltipFormatter = buildAnomalyTooltipFormatter()
+  const activeLabel =
+    selectedHour.value !== null && selectedHour.value !== undefined
+      ? `${String(selectedHour.value).padStart(2, '0')}:00`
+      : null
+
+  const xAxisBottom = {
+    type: 'category',
+    data: labels,
+    axisLabel: {
+      formatter: (val) => (activeLabel && val === activeLabel ? `{active|${val}}` : val),
+      rich: {
+        active: {
+          color: '#1d4ed8',
+          fontWeight: 700,
+        },
+      },
+    },
+  }
+
+  const xAxisTopArrow = {
+    type: 'category',
+    position: 'top',
+    data: labels,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    splitLine: { show: false },
+    axisLabel: {
+      interval: 0,
+      margin: 4,
+      color: '#1d4ed8',
+      fontSize: 12,
+      fontWeight: 700,
+      formatter: (val) => (activeLabel && val === activeLabel ? '▼' : ''),
+    },
+  }
+
+  const topAxisAnchorSeries = {
+    name: '__hour_marker__',
+    type: 'line',
+    xAxisIndex: 1,
+    data: [],
+    silent: true,
+    showSymbol: false,
+    tooltip: { show: false },
+  }
 
   if (heatChartEl.value) {
-    if (!heatChart) heatChart = echarts.init(heatChartEl.value)
+    if (!heatChart) {
+      heatChart = echarts.init(heatChartEl.value)
+      bindChartHourClick(heatChart)
+    }
     heatChart.setOption({
       title: { text: `${prefix}小时供热量 (GJ) & 室外气温 (℃)`, textStyle: { fontSize: isNarrow ? 12 : 13 } },
       tooltip: { trigger: 'axis', formatter: tooltipFormatter },
       legend: { bottom: 0, type: 'scroll', data: ['小时供热量(GJ)', '热指标(W/㎡)', '室外气温(℃)'] },
-      grid: { left: isNarrow ? 8 : 48, right: isNarrow ? 8 : 48, top: 40, bottom: 38, containLabel: true },
-      xAxis: { type: 'category', data: labels },
+      grid: { left: isNarrow ? 8 : 48, right: isNarrow ? 8 : 48, top: 44, bottom: 38, containLabel: true },
+      xAxis: [xAxisBottom, xAxisTopArrow],
       yAxis: [
         { type: 'value', name: isNarrow ? '' : 'GJ / W/㎡' },
         { type: 'value', name: isNarrow ? '' : '℃' },
@@ -1488,16 +1561,24 @@ function renderCharts() {
         {
           name: '小时供热量(GJ)',
           type: 'bar',
-          itemStyle: { color: '#2563eb' },
-          data: rows.map((r) =>
-            r.anomalies?.hour_heat_gj
-              ? {
-                  value: r.hour_heat_gj,
-                  itemStyle: { color: '#dc2626' },
-                  anomalyNote: r.anomalies.hour_heat_gj.note,
-                }
-              : r.hour_heat_gj,
-          ),
+          itemStyle: { color: '#3b82f6' },
+          data: rows.map((r) => {
+            const isSel = activeLabel && r.label === activeLabel
+            if (r.anomalies?.hour_heat_gj) {
+              return {
+                value: r.hour_heat_gj,
+                itemStyle: { color: isSel ? '#b91c1c' : '#dc2626' },
+                anomalyNote: r.anomalies.hour_heat_gj.note,
+              }
+            }
+            if (isSel) {
+              return {
+                value: r.hour_heat_gj,
+                itemStyle: { color: '#1d4ed8' },
+              }
+            }
+            return r.hour_heat_gj
+          }),
         },
         {
           name: '热指标(W/㎡)',
@@ -1517,13 +1598,17 @@ function renderCharts() {
           ),
         },
         { name: '室外气温(℃)', type: 'line', yAxisIndex: 1, smooth: true, data: rows.map((r) => r.outdoor_temp), itemStyle: { color: '#06b6d4' } },
+        topAxisAnchorSeries,
       ],
     }, true)
     heatChart.resize()
   }
 
   if (tempChartEl.value) {
-    if (!tempChart) tempChart = echarts.init(tempChartEl.value)
+    if (!tempChart) {
+      tempChart = echarts.init(tempChartEl.value)
+      bindChartHourClick(tempChart)
+    }
     tempChart.setOption({
       title: {
         text: isSingleStation ? `${prefix}一网供回温 (℃)` : `${prefix}流量加权供回温 (℃)`,
@@ -1531,8 +1616,8 @@ function renderCharts() {
       },
       tooltip: { trigger: 'axis', formatter: tooltipFormatter },
       legend: { bottom: 0, type: 'scroll', data: ['一网供温', '一网回温'] },
-      grid: { left: isNarrow ? 8 : 45, right: isNarrow ? 8 : 20, top: 40, bottom: 38, containLabel: true },
-      xAxis: { type: 'category', data: labels },
+      grid: { left: isNarrow ? 8 : 45, right: isNarrow ? 8 : 20, top: 44, bottom: 38, containLabel: true },
+      xAxis: [xAxisBottom, xAxisTopArrow],
       yAxis: { type: 'value', name: isNarrow ? '' : '℃' },
       series: [
         {
@@ -1540,35 +1625,54 @@ function renderCharts() {
           type: 'line',
           smooth: true,
           itemStyle: { color: '#dc2626' },
-          data: rows.map((r) =>
-            r.anomalies?.avg_sup_temp
+          data: rows.map((r) => {
+            const isSel = activeLabel && r.label === activeLabel
+            if (r.anomalies?.avg_sup_temp) {
+              return {
+                value: r.avg_sup_temp,
+                symbol: 'diamond',
+                symbolSize: isSel ? 10 : 9,
+                itemStyle: { color: '#b91c1c', borderColor: '#fecaca', borderWidth: 2 },
+                anomalyNote: r.anomalies.avg_sup_temp.note,
+              }
+            }
+            return isSel
               ? {
                   value: r.avg_sup_temp,
-                  symbol: 'diamond',
-                  symbolSize: 9,
-                  itemStyle: { color: '#b91c1c', borderColor: '#fecaca', borderWidth: 2 },
-                  anomalyNote: r.anomalies.avg_sup_temp.note,
+                  symbol: 'circle',
+                  symbolSize: 8,
+                  itemStyle: { color: '#dc2626', borderColor: '#fff', borderWidth: 2 },
                 }
-              : r.avg_sup_temp,
-          ),
+              : r.avg_sup_temp
+          }),
         },
         {
           name: '一网回温',
           type: 'line',
           smooth: true,
           itemStyle: { color: '#2563eb' },
-          data: rows.map((r) =>
-            r.anomalies?.avg_ret_temp
+          data: rows.map((r) => {
+            const isSel = activeLabel && r.label === activeLabel
+            if (r.anomalies?.avg_ret_temp) {
+              return {
+                value: r.avg_ret_temp,
+                symbol: 'diamond',
+                symbolSize: isSel ? 10 : 9,
+                itemStyle: { color: '#dc2626', borderColor: '#fecaca', borderWidth: 2 },
+                anomalyNote: r.anomalies.avg_ret_temp.note,
+              }
+            }
+            return isSel
               ? {
                   value: r.avg_ret_temp,
-                  symbol: 'diamond',
-                  symbolSize: 9,
-                  itemStyle: { color: '#dc2626', borderColor: '#fecaca', borderWidth: 2 },
-                  anomalyNote: r.anomalies.avg_ret_temp.note,
+                  symbol: 'circle',
+                  symbolSize: 8,
+                  itemStyle: { color: '#1d4ed8', borderColor: '#fff', borderWidth: 2 },
                 }
-              : r.avg_ret_temp,
-          ),
+              : r.avg_ret_temp
+          }),
         },
+        topAxisAnchorSeries,
       ],
     }, true)
     tempChart.resize()
@@ -1599,6 +1703,11 @@ function renderCharts() {
     roomPieChart.resize()
   }
 }
+
+watch(selectedHour, async () => {
+  await nextTick()
+  renderCharts()
+})
 
 watch(showTrendChart, async (val) => {
   if (val) {
