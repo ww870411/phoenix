@@ -118,20 +118,20 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>服务中心</th>
-                  <th>在网面积 (万㎡)</th>
-                  <th>系统精算热量 (GJ)</th>
-                  <th>手工填报热量 (GJ)</th>
-                  <th>热量偏差 (GJ)</th>
-                  <th>偏差率</th>
-                  <th>万平耗热 (GJ/万㎡)</th>
-                  <th>系统补水 (t)</th>
-                  <th>手工补水 (t)</th>
-                  <th>日均室温 (℃)</th>
+                  <SortableTh label="服务中心" sort-key="center_name" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="在网面积 (万㎡)" sort-key="covered_area_wan" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="系统精算热量 (GJ)" sort-key="sys_heat_gj" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="手工填报热量 (GJ)" sort-key="man_heat_gj" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="热量偏差 (GJ)" sort-key="heat_diff_gj" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="偏差率" sort-key="heat_diff_pct" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="万平耗热 (GJ/万㎡)" sort-key="heat_per_wan_gj" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="系统补水 (t)" sort-key="sys_water_t" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="手工补水 (t)" sort-key="man_water_t" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="日均室温 (℃)" sort-key="avg_room_temp" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="c in reportData.center_comparison" :key="c.center_id" :class="{ 'row-alert': c.is_heat_alert }">
+                <tr v-for="c in compareSort.sortedRows.value" :key="c.center_id" :class="{ 'row-alert': c.is_heat_alert }">
                   <td class="font-bold">{{ c.center_name }}</td>
                   <td>{{ fmt(c.covered_area_wan) }}</td>
                   <td class="font-bold">
@@ -175,22 +175,22 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>换热站</th>
-                  <th>服务中心</th>
-                  <th>主干热网</th>
-                  <th>面积 (㎡)</th>
-                  <th>有效小时 / 表底小时</th>
-                  <th>起表底 totJ</th>
-                  <th>止表底 totJ</th>
-                  <th>日供热量 (GJ)</th>
-                  <th>万平耗热</th>
-                  <th>日补水 (t)</th>
-                  <th>日电耗 (kWh)</th>
-                  <th>日均供/回温 (℃)</th>
+                  <SortableTh label="换热站" sort-key="name" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="服务中心" sort-key="center_name" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="主干热网" sort-key="rdfz" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="面积 (㎡)" sort-key="covered_area" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="有效小时 / 表底小时" sort-key="hours_count" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="起表底 totJ" sort-key="start_tot_j" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="止表底 totJ" sort-key="end_tot_j" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="日供热量 (GJ)" sort-key="day_heat_gj" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="万平耗热" sort-key="heat_per_wan_gj" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="日补水 (t)" sort-key="day_water_t" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="日电耗 (kWh)" sort-key="day_elec_kwh" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="日均供/回温 (℃)" sort-key="avg_sup_temp" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="s in filteredStationDaily" :key="s.station_id">
+                <tr v-for="s in stationSort.sortedRows.value" :key="s.station_id">
                   <td class="font-bold">{{ s.name }}</td>
                   <td>{{ s.center_name }}</td>
                   <td>{{ s.rdfz }}</td>
@@ -229,18 +229,18 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>商户名称</th>
-                  <th>主干热网 (rdfz)</th>
-                  <th>介质 (rdry)</th>
-                  <th>产权 (rdss)</th>
-                  <th>价格分类 (rdjg)</th>
-                  <th>改造批次 (rdgz)</th>
-                  <th>日累计消耗量</th>
-                  <th>日单耗参考</th>
+                  <SortableTh label="商户名称" sort-key="name" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="主干热网 (rdfz)" sort-key="rdfz" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="介质 (rdry)" sort-key="rdry" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="产权 (rdss)" sort-key="rdss" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="价格分类 (rdjg)" sort-key="rdjg" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="改造批次 (rdgz)" sort-key="rdgz" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="日累计消耗量" sort-key="daily_consumption" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="日单耗参考" sort-key="daily_unit_heat" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="m in filteredMerchants" :key="m.merchant_id">
+                <tr v-for="m in merchantSort.sortedRows.value" :key="m.merchant_id">
                   <td class="font-bold">{{ m.name }}</td>
                   <td>{{ m.rdfz || '待补录' }}</td>
                   <td>{{ m.rdry || '待补录' }}</td>
@@ -266,6 +266,8 @@ import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import PlatformSubNav from '../components/PlatformSubNav.vue'
 import DateStepPicker from '../components/DateStepPicker.vue'
 import AnomalyBadgeValue from '../components/AnomalyBadgeValue.vue'
+import SortableTh from '../components/SortableTh.vue'
+import { useTableSort } from '../utils/tableSort'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { downloadPlatformExcel, fetchDailyReport, triggerManualCollect } from '../services/api'
 
@@ -317,6 +319,10 @@ const filteredMerchants = computed(() => {
     return String(m.name || '').toLowerCase().includes(kw) || String(m.rdfz || '').toLowerCase().includes(kw)
   })
 })
+
+const compareSort = useTableSort(() => reportData.value.center_comparison || [])
+const stationSort = useTableSort(filteredStationDaily)
+const merchantSort = useTableSort(filteredMerchants)
 
 function fmt(val, suffix = '') {
   if (val === null || val === undefined || val === '') return '-'

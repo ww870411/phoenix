@@ -91,20 +91,20 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>发生小时</th>
-                <th>主体类型</th>
-                <th>站点 / 测点名称</th>
-                <th>故障类型</th>
-                <th>问题类别</th>
-                <th>原始异常值快照</th>
-                <th>清洗处置策略</th>
+                <SortableTh label="发生小时" sort-key="biz_hour" :sort-state="ticketSort.state" @sort="ticketSort.toggle" />
+                <SortableTh label="主体类型" sort-key="entity_type" :sort-state="ticketSort.state" @sort="ticketSort.toggle" />
+                <SortableTh label="站点 / 测点名称" sort-key="entity_name" :sort-state="ticketSort.state" @sort="ticketSort.toggle" />
+                <SortableTh label="故障类型" sort-key="fault_label" :sort-state="ticketSort.state" @sort="ticketSort.toggle" />
+                <SortableTh label="问题类别" sort-key="owner_label" :sort-state="ticketSort.state" @sort="ticketSort.toggle" />
+                <SortableTh label="原始异常值快照" sort-key="raw_value_text" :sort-state="ticketSort.state" @sort="ticketSort.toggle" />
+                <SortableTh label="清洗处置策略" sort-key="clean_strategy" :sort-state="ticketSort.state" @sort="ticketSort.toggle" />
               </tr>
             </thead>
             <tbody>
               <tr v-if="tickets.length === 0">
                 <td colspan="7" class="empty-td">当前筛选条件下暂无异常监测记录</td>
               </tr>
-              <tr v-for="t in tickets" :key="t.ticket_id">
+              <tr v-for="t in ticketSort.sortedRows.value" :key="t.ticket_id">
                 <td class="mono">{{ t.biz_hour }}</td>
                 <td>{{ t.entity_type }}</td>
                 <td class="font-bold">{{ t.entity_name }}</td>
@@ -130,6 +130,8 @@ import '../../daily_report_25_26/styles/theme.css'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import DateStepPicker from '../components/DateStepPicker.vue'
+import SortableTh from '../components/SortableTh.vue'
+import { useTableSort } from '../utils/tableSort'
 import * as echarts from 'echarts'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -156,6 +158,7 @@ const days = ref(1)
 const auditing = ref(false)
 const summary = ref({ total_tickets: 0, by_fault_code: [], by_owner: [] })
 const tickets = ref([])
+const ticketSort = useTableSort(tickets)
 const notice = reactive({ type: 'info', text: '' })
 const filters = reactive({ owner_party: '', fault_code: '', keyword: '' })
 

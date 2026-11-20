@@ -1,3 +1,8 @@
+## 2026-11-20 智慧供热平台全部数据表格接入字段点击排序
+
+- **`src/projects/smart_heating_platform/{utils/tableSort.js,components/SortableTh.vue}`**：新增统一三态表格排序引擎（降序/升序/恢复默认，空值置底与中文自然序）及排序表头组件 `SortableTh`。
+- **`src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView,FaultAuditView,DictCenterView,SettingsView}.vue`**：全模块全部表格字段名均支持点击排序。
+
 ## 2026-11-20 日报页面副标题动态联动系统采样分钟数
 
 - **`src/projects/smart_heating_platform/pages/DailyReportView.vue`**：副标题文案调整为 `（系统自动表底抄表/{{ meta.snapshot_interval_minutes ?? 5 }}分钟积分 vs 日报手工填报对比）`。

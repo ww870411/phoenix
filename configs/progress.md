@@ -1,5 +1,11 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-20 智慧供热平台全模块表格统一支持表头点击排序
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/utils/tableSort.js` & `components/SortableTh.vue`**：新增通用表格排序 Composable（三态切换：降序 → 升序 → 恢复默认，空值永远置底，数值按大小排序，中文及序号 `#1/#2/#10` 自然排序）及统一样式可点击表头组件 `SortableTh`。
+  - **`frontend/src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView,FaultAuditView,DictCenterView,SettingsView}.vue`**：覆盖全部 5 个含表页面共计 16 张表格（含主表、切换子表及抽屉下钻表），均支持点击字段名实时排序。
+
 ## 2026-11-20 每日报告副标题积分分钟数动态读取系统采集配置
 
 - **改动清单**：

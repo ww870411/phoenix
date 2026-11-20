@@ -50,17 +50,17 @@
           <table v-if="activeEntity === 'stations'" class="data-table">
             <thead>
               <tr>
-                <th>站名</th>
-                <th>中心</th>
-                <th>支线网</th>
-                <th>主干热网 (rdfz)</th>
-                <th>分表名 (rd_code)</th>
-                <th>供热面积 (㎡)</th>
+                <SortableTh label="站名" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="中心" sort-key="center_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="支线网" sort-key="branch_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="主干热网 (rdfz)" sort-key="rdfz" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="分表名 (rd_code)" sort-key="rd_code" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="供热面积 (㎡)" sort-key="covered_area" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in items" :key="r.station_id">
+              <tr v-for="r in dictSort.sortedRows.value" :key="r.station_id">
                 <td class="font-bold">{{ r.name }}</td>
                 <td>{{ r.center_name }}</td>
                 <td>{{ r.branch_name }}</td>
@@ -80,19 +80,19 @@
           <table v-else-if="activeEntity === 'merchants'" class="data-table">
             <thead>
               <tr>
-                <th>商户名</th>
-                <th>支线网</th>
-                <th>分表名</th>
-                <th>rdfz</th>
-                <th>rdry</th>
-                <th>rdss</th>
-                <th>rdjg</th>
-                <th>rdgz</th>
+                <SortableTh label="商户名" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="支线网" sort-key="branch_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="分表名" sort-key="table_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="rdfz" sort-key="rdfz" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="rdry" sort-key="rdry" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="rdss" sort-key="rdss" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="rdjg" sort-key="rdjg" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="rdgz" sort-key="rdgz" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in items" :key="r.merchant_id">
+              <tr v-for="r in dictSort.sortedRows.value" :key="r.merchant_id">
                 <td class="font-bold">{{ r.name }}</td>
                 <td>{{ r.branch_name }}</td>
                 <td class="mono">{{ r.table_name }}</td>
@@ -112,18 +112,18 @@
           <table v-else-if="activeEntity === 'main_networks'" class="data-table">
             <thead>
               <tr>
-                <th>主干热网名称 (rdfz)</th>
-                <th>下辖换热站数</th>
-                <th>在网供热面积 (㎡)</th>
-                <th>待补面积站数</th>
-                <th>关联商业户数</th>
+                <SortableTh label="主干热网名称 (rdfz)" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="下辖换热站数" sort-key="station_count" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="在网供热面积 (㎡)" sort-key="covered_area_m2" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="待补面积站数" sort-key="missing_area_stations" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh label="关联商业户数" sort-key="merchant_count" :sort-state="dictSort.state" @sort="dictSort.toggle" />
               </tr>
             </thead>
             <tbody>
               <tr v-if="items.length === 0">
                 <td colspan="5" class="empty-td">暂无主干热网记录</td>
               </tr>
-              <tr v-for="r in items" :key="r.name">
+              <tr v-for="r in dictSort.sortedRows.value" :key="r.name">
                 <td class="font-bold">{{ r.name }}</td>
                 <td>{{ r.station_count }}</td>
                 <td>{{ Number(r.covered_area_m2 || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
@@ -137,14 +137,21 @@
           <table v-else class="data-table">
             <thead>
               <tr>
-                <th v-for="col in genericColumns" :key="col">{{ col }}</th>
+                <SortableTh
+                  v-for="col in genericColumns"
+                  :key="col"
+                  :label="col"
+                  :sort-key="col"
+                  :sort-state="dictSort.state"
+                  @sort="dictSort.toggle"
+                />
               </tr>
             </thead>
             <tbody>
               <tr v-if="items.length === 0">
                 <td :colspan="Math.max(genericColumns.length, 1)" class="empty-td">暂无记录</td>
               </tr>
-              <tr v-for="(r, idx) in items" :key="idx">
+              <tr v-for="(r, idx) in dictSort.sortedRows.value" :key="idx">
                 <td v-for="col in genericColumns" :key="col">{{ r[col] ?? '-' }}</td>
               </tr>
             </tbody>
@@ -188,6 +195,8 @@ import '../../daily_report_25_26/styles/theme.css'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import PlatformSubNav from '../components/PlatformSubNav.vue'
+import SortableTh from '../components/SortableTh.vue'
+import { useTableSort } from '../utils/tableSort'
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
   fetchDictItems,
@@ -199,6 +208,7 @@ import {
 const overview = ref({})
 const activeEntity = ref('stations')
 const items = ref([])
+const dictSort = useTableSort(items)
 const keyword = ref('')
 const onlyMissing = ref(false)
 const notice = reactive({ type: 'info', text: '' })
@@ -274,6 +284,7 @@ function selectEntity(key) {
   activeEntity.value = key
   onlyMissing.value = false
   keyword.value = ''
+  dictSort.reset()
   loadItems()
 }
 

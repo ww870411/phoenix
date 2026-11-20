@@ -302,16 +302,16 @@
           <table class="probe-table">
             <thead>
               <tr>
-                <th>探测接口</th>
-                <th>结果</th>
-                <th>HTTP 状态</th>
-                <th>耗时</th>
-                <th>返回条数</th>
-                <th>明细说明</th>
+                <SortableTh label="探测接口" sort-key="name" :sort-state="probeSort.state" @sort="probeSort.toggle" />
+                <SortableTh label="结果" sort-key="ok" :sort-state="probeSort.state" @sort="probeSort.toggle" />
+                <SortableTh label="HTTP 状态" sort-key="status_code" :sort-state="probeSort.state" @sort="probeSort.toggle" />
+                <SortableTh label="耗时" sort-key="elapsed_ms" :sort-state="probeSort.state" @sort="probeSort.toggle" />
+                <SortableTh label="返回条数" sort-key="count" :sort-state="probeSort.state" @sort="probeSort.toggle" />
+                <SortableTh label="明细说明" sort-key="detail" :sort-state="probeSort.state" @sort="probeSort.toggle" />
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in testResult.checks" :key="item.name">
+              <tr v-for="item in probeSort.sortedRows.value" :key="item.name">
                 <td class="mono">{{ item.name }}</td>
                 <td>
                   <span :class="['status-pill', item.ok ? 'pill-ok' : 'pill-err']">
@@ -337,6 +337,8 @@ import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import SortableTh from '../components/SortableTh.vue'
+import { useTableSort } from '../utils/tableSort'
 import {
   fetchCollectorSettings,
   saveCollectorSettings,
@@ -396,6 +398,10 @@ const breadcrumbItems = computed(() => [
 ])
 
 const testResult = computed(() => settings.value.last_test_result || null)
+const probeSort = useTableSort(
+  () => testResult.value?.checks || [],
+  { ok: (r) => (r.ok ? 1 : 0) },
+)
 
 const testSummaryText = computed(() => {
   const res = testResult.value

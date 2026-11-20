@@ -278,23 +278,23 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>类别</th>
-                  <th>子类</th>
-                  <th class="sticky-col">测点标准名称</th>
-                  <th>采集时间</th>
-                  <th>温度 (℃)</th>
-                  <th>压力 (MPa)</th>
-                  <th>瞬时流量</th>
-                  <th>瞬时热量</th>
-                  <th>小时积分 (GJ)</th>
-                  <th>数据来源</th>
+                  <SortableTh label="类别" sort-key="category" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="子类" sort-key="sub_category" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh class="sticky-col" label="测点标准名称" sort-key="display_name" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="采集时间" sort-key="source_time" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="温度 (℃)" sort-key="temp" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="压力 (MPa)" sort-key="pressure" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="瞬时流量" sort-key="flow" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="瞬时热量" sort-key="heat" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="小时积分 (GJ)" sort-key="hour_heat_gj" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
+                  <SortableTh label="数据来源" sort-key="value_source" :sort-state="upstreamSort.state" @sort="upstreamSort.toggle" />
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="filteredUpstream.length === 0">
                   <td colspan="10" class="empty-td">当前时刻暂无上游数据，请点击右上角“立即采集当前时段”</td>
                 </tr>
-                <tr v-for="u in filteredUpstream" :key="`${u.data_zone}_${u.source_name}`" @click="openUpstreamDrawer(u)" class="clickable-row">
+                <tr v-for="u in upstreamSort.sortedRows.value" :key="`${u.data_zone}_${u.source_name}`" @click="openUpstreamDrawer(u)" class="clickable-row">
                   <td>{{ u.category }}</td>
                   <td>{{ u.sub_category || '-' }}</td>
                   <td class="sticky-col font-bold">{{ u.display_name }}</td>
@@ -342,21 +342,21 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th class="sticky-col">聚合主体名称</th>
-                  <th>在线/总站</th>
-                  <th>面积 (万㎡)</th>
-                  <th>小时供热量 (GJ)</th>
-                  <th>折算热指标 (W/㎡)</th>
-                  <th>万平耗热 (GJ/万㎡)</th>
-                  <th>小时补水 (t)</th>
-                  <th>加权供/回温 (℃)</th>
-                  <th>平均室温 (℃)</th>
-                  <th>室温达标率</th>
+                  <SortableTh class="sticky-col" label="聚合主体名称" sort-key="group_name" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="在线/总站" sort-key="online_stations" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="面积 (万㎡)" sort-key="covered_area_wan" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="小时供热量 (GJ)" sort-key="hour_heat_gj" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="折算热指标 (W/㎡)" sort-key="heat_index_wm2" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="万平耗热 (GJ/万㎡)" sort-key="heat_per_wan_gj" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="小时补水 (t)" sort-key="hour_water_t" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="加权供/回温 (℃)" sort-key="avg_sup_temp" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="平均室温 (℃)" sort-key="avg_room_temp" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="室温达标率" sort-key="temp_pass_rate_pct" :sort-state="groupSort.state" @sort="groupSort.toggle" />
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="g in activeGroupRows"
+                  v-for="g in groupSort.sortedRows.value"
                   :key="g.group_key"
                   :class="[
                     'clickable-row',
@@ -421,21 +421,21 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th class="sticky-col">换热站名称</th>
-                  <th>中心 / 支线</th>
-                  <th>面积 (㎡)</th>
-                  <th>状态</th>
-                  <th>一网供/回温 (℃)</th>
-                  <th>一网供/回压 (MPa)</th>
-                  <th>一网瞬时热 (GJ/h)</th>
-                  <th>小时供热 (GJ)</th>
-                  <th>热指标 (W/㎡)</th>
-                  <th>补水 (t)</th>
-                  <th>均温 (℃)</th>
+                  <SortableTh class="sticky-col" label="换热站名称" sort-key="name" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="中心 / 支线" sort-key="center_name" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="面积 (㎡)" sort-key="covered_area" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="状态" sort-key="online" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="一网供/回温 (℃)" sort-key="e3" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="一网供/回压 (MPa)" sort-key="e7" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="一网瞬时热 (GJ/h)" sort-key="e11" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="小时供热 (GJ)" sort-key="hour_heat_gj" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="热指标 (W/㎡)" sort-key="heat_index_wm2" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="补水 (t)" sort-key="e14" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="均温 (℃)" sort-key="avg_room_temp" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                 </tr>
               </thead>
               <tbody>
-                <template v-for="s in filteredStations" :key="s.station_id">
+                <template v-for="s in stationSort.sortedRows.value" :key="s.station_id">
                   <tr
                     :class="[
                       'clickable-row',
@@ -507,11 +507,11 @@
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th>换热站</th>
-                      <th>服务中心</th>
-                      <th>有效户数</th>
-                      <th>平均室温 (℃)</th>
-                      <th>达标率 (≥18℃)</th>
+                      <SortableTh label="换热站" sort-key="name" :sort-state="tempRankSort.state" @sort="tempRankSort.toggle" />
+                      <SortableTh label="服务中心" sort-key="center_name" :sort-state="tempRankSort.state" @sort="tempRankSort.toggle" />
+                      <SortableTh label="有效户数" sort-key="valid_count" :sort-state="tempRankSort.state" @sort="tempRankSort.toggle" />
+                      <SortableTh label="平均室温 (℃)" sort-key="avg_room_temp" :sort-state="tempRankSort.state" @sort="tempRankSort.toggle" />
+                      <SortableTh label="达标率 (≥18℃)" sort-key="pass_rate_pct" :sort-state="tempRankSort.state" @sort="tempRankSort.toggle" />
                     </tr>
                   </thead>
                   <tbody>
@@ -519,7 +519,7 @@
                       <td colspan="5" class="empty-td">当前时刻暂无居民室温数据（请检查 Cookie 与整点采集）</td>
                     </tr>
                     <tr
-                      v-for="r in tempSummary.station_rankings"
+                      v-for="r in tempRankSort.sortedRows.value"
                       :key="r.station_id"
                       class="clickable-row"
                       @click="openStationTempsDrawer(r)"
@@ -568,24 +568,24 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th class="sticky-col">商业户名称</th>
-                  <th>大网 / 支线</th>
-                  <th>状态</th>
-                  <th>供水流量 (t/h)</th>
-                  <th>供/回温 (℃)</th>
-                  <th>供/回压 (MPa)</th>
-                  <th>瞬时热量 (GJ/h)</th>
-                  <th>小时供热量 (GJ)</th>
-                  <th>小时流量 (t)</th>
-                  <th>阀门开度 (%)</th>
-                  <th>数据来源</th>
+                  <SortableTh class="sticky-col" label="商业户名称" sort-key="name" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="大网 / 支线" sort-key="branch_name" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="状态" sort-key="online" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="供水流量 (t/h)" sort-key="flow" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="供/回温 (℃)" sort-key="temp_sup" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="供/回压 (MPa)" sort-key="pres_sup" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="瞬时热量 (GJ/h)" sort-key="heat" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="小时供热量 (GJ)" sort-key="hour_heat_gj" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="小时流量 (t)" sort-key="hour_flow_t" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="阀门开度 (%)" sort-key="valve_open" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="数据来源" sort-key="value_source" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="filteredMerchants.length === 0">
                   <td colspan="11" class="empty-td">暂无匹配的商业用户小时数据</td>
                 </tr>
-                <tr v-for="m in filteredMerchants" :key="m.merchant_id">
+                <tr v-for="m in merchantSort.sortedRows.value" :key="m.merchant_id">
                   <td class="sticky-col font-bold">
                     {{ m.name }}
                     <span
@@ -640,16 +640,16 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>小时</th>
-                  <th>温度 (℃)</th>
-                  <th>压力 (MPa)</th>
-                  <th>瞬时流量</th>
-                  <th>瞬时热量</th>
-                  <th>积分热量 (GJ)</th>
+                  <SortableTh label="小时" sort-key="hour" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="温度 (℃)" sort-key="temp" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="压力 (MPa)" sort-key="pressure" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="瞬时流量" sort-key="flow" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="瞬时热量" sort-key="heat" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="积分热量 (GJ)" sort-key="hour_heat_gj" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="pt in drawer.rows" :key="pt.hour">
+                <tr v-for="pt in drawerSort.sortedRows.value" :key="pt.hour">
                   <td>{{ pt.label }}</td>
                   <td>{{ fmt(pt.temp) }}</td>
                   <td>{{ fmt(pt.pressure, '', 3) }}</td>
@@ -664,17 +664,17 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>门牌号</th>
-                  <th>型号</th>
-                  <th>清洗室温 (℃)</th>
-                  <th>原始室温</th>
-                  <th>最后上传</th>
-                  <th>状态</th>
-                  <th>巡检备注</th>
+                  <SortableTh label="门牌号" sort-key="village_name" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="型号" sort-key="zdxh" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="清洗室温 (℃)" sort-key="temp_clean" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="原始室温" sort-key="temp_raw" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="最后上传" sort-key="upload_time" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="状态" sort-key="is_online_valid" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
+                  <SortableTh label="巡检备注" sort-key="remark" :sort-state="drawerSort.state" @sort="drawerSort.toggle" />
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="d in drawer.rows" :key="d.temp_device_id">
+                <tr v-for="d in drawerSort.sortedRows.value" :key="d.temp_device_id">
                   <td class="font-bold">{{ d.village_name }}</td>
                   <td class="mono">{{ d.zdxh }}</td>
                   <td class="font-bold">{{ fmt(d.temp_clean) }}</td>
@@ -816,15 +816,15 @@
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th>批次ID</th>
-                      <th>状态</th>
-                      <th>开始时间</th>
-                      <th>耗时</th>
-                      <th>入库汇总</th>
+                      <SortableTh label="批次ID" sort-key="run_id" :sort-state="gapRunsSort.state" @sort="gapRunsSort.toggle" />
+                      <SortableTh label="状态" sort-key="status" :sort-state="gapRunsSort.state" @sort="gapRunsSort.toggle" />
+                      <SortableTh label="开始时间" sort-key="started_at" :sort-state="gapRunsSort.state" @sort="gapRunsSort.toggle" />
+                      <SortableTh label="耗时" sort-key="duration_ms" :sort-state="gapRunsSort.state" @sort="gapRunsSort.toggle" />
+                      <SortableTh label="入库汇总" sort-key="summary_count" :sort-state="gapRunsSort.state" @sort="gapRunsSort.toggle" />
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="run in gapStatus.recent_recovery_runs" :key="run.run_id">
+                    <tr v-for="run in gapRunsSort.sortedRows.value" :key="run.run_id">
                       <td class="mono">#{{ run.run_id }}</td>
                       <td>
                         <span :class="['src-pill', run.status === 'SUCCESS' ? 'src-real' : 'src-interp']">{{ run.status }}</span>
@@ -855,6 +855,8 @@ import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import PlatformSubNav from '../components/PlatformSubNav.vue'
 import DateStepPicker from '../components/DateStepPicker.vue'
 import AnomalyBadgeValue from '../components/AnomalyBadgeValue.vue'
+import SortableTh from '../components/SortableTh.vue'
+import { useTableSort } from '../utils/tableSort'
 import { MIN_PLATFORM_DATE, shiftIsoDate, todayLocalIso } from '../utils/dateUtils'
 import * as echarts from 'echarts'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
@@ -1008,6 +1010,27 @@ const filteredMerchants = computed(() => {
     if (kw && !`${m.name || ''} ${m.branch_name || ''}`.toLowerCase().includes(kw)) return false
     return true
   })
+})
+
+const upstreamSort = useTableSort(filteredUpstream)
+const groupSort = useTableSort(activeGroupRows)
+const stationSort = useTableSort(filteredStations, {
+  center_name: (s) => `${s.center_name}/${s.branch_name}`,
+  online: (s) => (s.online ? 2 : s.has_record ? 1 : 0),
+})
+const tempRankSort = useTableSort(() => tempSummary.value.station_rankings || [])
+const merchantSort = useTableSort(filteredMerchants, {
+  branch_name: (m) => `${m.rdfz}/${m.branch_name}`,
+  online: (m) => (m.online ? 2 : m.has_record ? 1 : 0),
+})
+const drawerSort = useTableSort(() => drawer.rows || [], {
+  is_online_valid: (d) => (d.is_online_valid ? 1 : 0),
+})
+const gapRunsSort = useTableSort(() => gapStatus.value?.recent_recovery_runs || [], {
+  summary_count: (r) =>
+    (r.summary?.recovered_station_hours ?? 0) +
+    (r.summary?.recovered_upstream_hours ?? 0) +
+    (r.summary?.recovered_merchant_hours ?? 0),
 })
 
 function fmt(val, suffix = '', fixed = 2) {
@@ -1395,6 +1418,7 @@ async function openUpstreamDrawer(item) {
   drawer.kind = 'upstream'
   drawer.title = `${item.display_name} — ${selectedDate.value} 24小时走势`
   drawer.rows = []
+  drawerSort.reset()
   try {
     const res = await fetchUpstreamTrend24h({
       date: selectedDate.value,
@@ -1413,6 +1437,7 @@ async function openStationTempsDrawer(st) {
   drawer.kind = 'station_temps'
   drawer.title = `${st.name}（${st.center_name}）— 居民室温单户明细`
   drawer.rows = []
+  drawerSort.reset()
   try {
     const res = await fetchStationTempDevices({
       date: selectedDate.value,
