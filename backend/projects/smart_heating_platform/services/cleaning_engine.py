@@ -76,11 +76,17 @@ def parse_dt_east8(val: Any) -> Optional[datetime]:
     return None
 
 
+def floor_to_bucket(dt: datetime, interval_minutes: int = 5) -> datetime:
+    """将时间向下对齐至指定分钟步长整刻度（默认 5 分钟）。"""
+    step = max(1, min(60, int(interval_minutes)))
+    dt_e8 = dt.astimezone(EAST_8) if dt.tzinfo else dt.replace(tzinfo=EAST_8)
+    minute = (dt_e8.minute // step) * step
+    return dt_e8.replace(minute=minute, second=0, microsecond=0)
+
+
 def floor_to_15min(dt: datetime) -> datetime:
     """将时间向下对齐至最近 15 分钟整刻度。"""
-    dt_e8 = dt.astimezone(EAST_8) if dt.tzinfo else dt.replace(tzinfo=EAST_8)
-    minute = (dt_e8.minute // 15) * 15
-    return dt_e8.replace(minute=minute, second=0, microsecond=0)
+    return floor_to_bucket(dt, 15)
 
 
 def floor_to_hour(dt: datetime) -> datetime:
@@ -312,6 +318,175 @@ def clean_upstream_point(
     return cleaned, faults
 
 
+def _clean_station_primary_metrics(
+    station_id: str,
+    station_name: str,
+    e1_raw: Optional[float],
+    e3_raw: Optional[float],
+    e4_raw: Optional[float],
+    e7_raw: Optional[float],
+    e8_raw: Optional[float],
+    e11_raw: Optional[float],
+    e14_raw: Optional[float],
+    prev_station_valid: Optional[Dict[str, Any]] = None,
+) -> Tuple[Dict[str, Optional[float]], str, List[str], List[Dict[str, Any]]]:
+    """对换热站一次网瞬时温压流补水执行传感器越限与物理倒挂清洗。"""
+    e1_clean, e3_clean, e4_clean = e1_raw, e3_raw, e4_raw
+    e7_clean, e8_clean, e11_clean, e14_clean = e7_raw, e8_raw, e11_raw, e14_raw
+    value_source = SRC_REAL
+    faults: List[Dict[str, Any]] = []
+    fault_tags: List[str] = []
+
+    for lbl, val, low, high in (
+        ("一网供温", e3_raw, 0.0, 150.0),
+        ("一网回温", e4_raw, 0.0, 150.0),
+    ):
+        if val is not None and (val <= low or val > high):
+            fault_tags.append(FAULT_SENSOR_RANGE)
+            faults.append({
+                "entity_type": "STATION",
+                "entity_id": station_id,
+                "entity_name": station_name,
+                "fault_code": FAULT_SENSOR_RANGE,
+                "owner_party": OWNER_RESEARCH,
+                "raw_value_text": f"{lbl}={val}℃",
+                "clean_strategy": "屏蔽温度极值并回退前序正常值",
+                "rule_desc": "一网水温 <=0℃ 或 >150℃",
+            })
+            if lbl == "一网供温" and prev_station_valid:
+                e3_clean = prev_station_valid.get("e3_clean")
+            if lbl == "一网回温" and prev_station_valid:
+                e4_clean = prev_station_valid.get("e4_clean")
+            value_source = SRC_MASKED_PREV
+
+    for lbl, val in (("一网供压", e7_raw), ("一网回压", e8_raw)):
+        if val is not None and (val < 0.0 or val > 2.5):
+            fault_tags.append(FAULT_SENSOR_RANGE)
+            faults.append({
+                "entity_type": "STATION",
+                "entity_id": station_id,
+                "entity_name": station_name,
+                "fault_code": FAULT_SENSOR_RANGE,
+                "owner_party": OWNER_RESEARCH,
+                "raw_value_text": f"{lbl}={val}MPa",
+                "clean_strategy": "屏蔽越限压力并回退前序正常值",
+                "rule_desc": "压力 <0 或 >2.5MPa",
+            })
+            if lbl == "一网供压" and prev_station_valid:
+                e7_clean = prev_station_valid.get("e7_clean")
+            if lbl == "一网回压" and prev_station_valid:
+                e8_clean = prev_station_valid.get("e8_clean")
+            value_source = SRC_MASKED_PREV
+
+    if e14_raw is not None and (e14_raw < 0.0 or e14_raw > 100.0):
+        fault_tags.append(FAULT_SENSOR_RANGE)
+        faults.append({
+            "entity_type": "STATION",
+            "entity_id": station_id,
+            "entity_name": station_name,
+            "fault_code": FAULT_SENSOR_RANGE,
+            "owner_party": OWNER_RESEARCH,
+            "raw_value_text": f"自来水瞬时补水={e14_raw}t/h",
+            "clean_strategy": "屏蔽满量程坏表极值并回退前序正常值（无前值则置空）",
+            "rule_desc": "单站瞬时补水量 <0 或 >100 t/h",
+        })
+        e14_clean = prev_station_valid.get("e14_clean") if prev_station_valid else None
+        value_source = SRC_MASKED_PREV
+
+    if e1_raw is not None and e1_raw > 1.0 and e3_raw is not None and e4_raw is not None and e3_raw <= e4_raw:
+        fault_tags.append(FAULT_TEMP_INVERSION)
+        faults.append({
+            "entity_type": "STATION",
+            "entity_id": station_id,
+            "entity_name": station_name,
+            "fault_code": FAULT_TEMP_INVERSION,
+            "owner_party": OWNER_RESEARCH,
+            "raw_value_text": f"e1={e1_raw}t/h, 供温={e3_raw}℃ <= 回温={e4_raw}℃",
+            "clean_strategy": "回退相邻正常小时温差避免物理倒挂",
+            "rule_desc": "正常供暖站出现一次网供温 <= 回温",
+        })
+        if prev_station_valid:
+            e3_clean = prev_station_valid.get("e3_clean")
+            e4_clean = prev_station_valid.get("e4_clean")
+            value_source = SRC_MASKED_PREV
+
+    return {
+        "e1_clean": e1_clean,
+        "e3_clean": e3_clean,
+        "e4_clean": e4_clean,
+        "e7_clean": e7_clean,
+        "e8_clean": e8_clean,
+        "e11_clean": e11_clean,
+        "e14_clean": e14_clean,
+    }, value_source, fault_tags, faults
+
+
+def clean_station_history_point(
+    station_meta: Dict[str, Any],
+    rep_record: Optional[Dict[str, Any]],
+    prev_station_valid: Optional[Dict[str, Any]] = None,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """清洗从 `/hrz_ls_zb/` 提取的换热站小时代表断面（路线 B 专用）。"""
+    station_id = station_meta["station_id"]
+    station_name = station_meta["name"]
+    if rep_record is None:
+        if prev_station_valid:
+            return {
+                "online": False,
+                "e1_raw": None, "e1_clean": prev_station_valid.get("e1_clean"),
+                "e3_raw": None, "e3_clean": prev_station_valid.get("e3_clean"),
+                "e4_raw": None, "e4_clean": prev_station_valid.get("e4_clean"),
+                "e7_raw": None, "e7_clean": prev_station_valid.get("e7_clean"),
+                "e8_raw": None, "e8_clean": prev_station_valid.get("e8_clean"),
+                "e11_raw": None, "e11_clean": prev_station_valid.get("e11_clean"),
+                "value_source": SRC_TEMP_OFFLINE,
+                "fault_tag": FAULT_COMM_OFFLINE,
+            }, [{
+                "entity_type": "STATION",
+                "entity_id": station_id,
+                "entity_name": station_name,
+                "fault_code": FAULT_COMM_OFFLINE,
+                "owner_party": OWNER_RESEARCH,
+                "raw_value_text": "该小时 /hrz_ls_zb/ 无上报记录",
+                "clean_strategy": "回退前序有效断面并标注离线估值",
+                "rule_desc": "换热站整小时无历史表底与瞬时上报",
+            }]
+        return {
+            "online": False,
+            "e1_raw": None, "e1_clean": None,
+            "e3_raw": None, "e3_clean": None,
+            "e4_raw": None, "e4_clean": None,
+            "e7_raw": None, "e7_clean": None,
+            "e8_raw": None, "e8_clean": None,
+            "e11_raw": None, "e11_clean": None,
+            "value_source": SRC_PERM_OFFLINE,
+            "fault_tag": FAULT_COMM_OFFLINE,
+        }, []
+
+    e1_raw = rep_record.get("f2")
+    e3_raw = rep_record.get("f3")
+    e4_raw = rep_record.get("f5")
+    e7_raw = rep_record.get("f1")
+    e8_raw = rep_record.get("f4")
+    e11_raw = rep_record.get("f222")
+    cleaned_map, value_source, fault_tags, faults = _clean_station_primary_metrics(
+        station_id, station_name,
+        e1_raw, e3_raw, e4_raw, e7_raw, e8_raw, e11_raw, None,
+        prev_station_valid=prev_station_valid,
+    )
+    return {
+        "online": True,
+        "e1_raw": e1_raw, "e1_clean": cleaned_map["e1_clean"],
+        "e3_raw": e3_raw, "e3_clean": cleaned_map["e3_clean"],
+        "e4_raw": e4_raw, "e4_clean": cleaned_map["e4_clean"],
+        "e7_raw": e7_raw, "e7_clean": cleaned_map["e7_clean"],
+        "e8_raw": e8_raw, "e8_clean": cleaned_map["e8_clean"],
+        "e11_raw": e11_raw, "e11_clean": cleaned_map["e11_clean"],
+        "value_source": value_source,
+        "fault_tag": ",".join(dict.fromkeys(fault_tags)) if fault_tags else None,
+    }, faults
+
+
 def clean_station_and_zones(
     station_meta: Dict[str, Any],
     zx_item: Optional[Dict[str, Any]],
@@ -382,81 +557,20 @@ def clean_station_and_zones(
         else:
             value_source = SRC_PERM_OFFLINE
     else:
-        # 越限检查
-        for lbl, val, low, high in (
-            ("一网供温", e3_raw, 0.0, 150.0),
-            ("一网回温", e4_raw, 0.0, 150.0),
-        ):
-            if val is not None and (val <= low or val > high):
-                fault_tags.append(FAULT_SENSOR_RANGE)
-                faults.append({
-                    "entity_type": "STATION",
-                    "entity_id": station_id,
-                    "entity_name": station_name,
-                    "fault_code": FAULT_SENSOR_RANGE,
-                    "owner_party": OWNER_RESEARCH,
-                    "raw_value_text": f"{lbl}={val}℃",
-                    "clean_strategy": "屏蔽温度极值并回退前序正常值",
-                    "rule_desc": "一网水温 <=0℃ 或 >150℃",
-                })
-                if lbl == "一网供温" and prev_station_valid:
-                    e3_clean = prev_station_valid.get("e3_clean")
-                if lbl == "一网回温" and prev_station_valid:
-                    e4_clean = prev_station_valid.get("e4_clean")
-                value_source = SRC_MASKED_PREV
-
-        for lbl, val in (("一网供压", e7_raw), ("一网回压", e8_raw)):
-            if val is not None and (val < 0.0 or val > 2.5):
-                fault_tags.append(FAULT_SENSOR_RANGE)
-                faults.append({
-                    "entity_type": "STATION",
-                    "entity_id": station_id,
-                    "entity_name": station_name,
-                    "fault_code": FAULT_SENSOR_RANGE,
-                    "owner_party": OWNER_RESEARCH,
-                    "raw_value_text": f"{lbl}={val}MPa",
-                    "clean_strategy": "屏蔽越限压力并回退前序正常值",
-                    "rule_desc": "压力 <0 或 >2.5MPa",
-                })
-                if lbl == "一网供压" and prev_station_valid:
-                    e7_clean = prev_station_valid.get("e7_clean")
-                if lbl == "一网回压" and prev_station_valid:
-                    e8_clean = prev_station_valid.get("e8_clean")
-                value_source = SRC_MASKED_PREV
-
-        # 自来水瞬时补水越限检查 (<0 或 >100 t/h 满量程死值/坏表，如 500/1545.2 t/h)
-        if e14_raw is not None and (e14_raw < 0.0 or e14_raw > 100.0):
-            fault_tags.append(FAULT_SENSOR_RANGE)
-            faults.append({
-                "entity_type": "STATION",
-                "entity_id": station_id,
-                "entity_name": station_name,
-                "fault_code": FAULT_SENSOR_RANGE,
-                "owner_party": OWNER_RESEARCH,
-                "raw_value_text": f"自来水瞬时补水={e14_raw}t/h",
-                "clean_strategy": "屏蔽满量程坏表极值并回退前序正常值（无前值则置空）",
-                "rule_desc": "单站瞬时补水量 <0 或 >100 t/h",
-            })
-            e14_clean = prev_station_valid.get("e14_clean") if prev_station_valid else None
-            value_source = SRC_MASKED_PREV
-
-        # 物理倒挂检查：正常供暖流量 e1 > 1 t/h 且 供温 <= 回温
-        if e1_raw is not None and e1_raw > 1.0 and e3_raw is not None and e4_raw is not None and e3_raw <= e4_raw:
-            fault_tags.append(FAULT_TEMP_INVERSION)
-            faults.append({
-                "entity_type": "STATION",
-                "entity_id": station_id,
-                "entity_name": station_name,
-                "fault_code": FAULT_TEMP_INVERSION,
-                "owner_party": OWNER_RESEARCH,
-                "raw_value_text": f"e1={e1_raw}t/h, 供温={e3_raw}℃ <= 回温={e4_raw}℃",
-                "clean_strategy": "回退相邻正常小时温差避免物理倒挂",
-                "rule_desc": "正常供暖站出现一次网供温 <= 回温",
-            })
-            if prev_station_valid:
-                e3_clean = prev_station_valid.get("e3_clean")
-                e4_clean = prev_station_valid.get("e4_clean")
-                value_source = SRC_MASKED_PREV
+        cleaned_map, value_source, p_tags, p_faults = _clean_station_primary_metrics(
+            station_id, station_name,
+            e1_raw, e3_raw, e4_raw, e7_raw, e8_raw, e11_raw, e14_raw,
+            prev_station_valid=prev_station_valid,
+        )
+        e1_clean = cleaned_map["e1_clean"]
+        e3_clean = cleaned_map["e3_clean"]
+        e4_clean = cleaned_map["e4_clean"]
+        e7_clean = cleaned_map["e7_clean"]
+        e8_clean = cleaned_map["e8_clean"]
+        e11_clean = cleaned_map["e11_clean"]
+        e14_clean = cleaned_map["e14_clean"]
+        fault_tags.extend(p_tags)
+        faults.extend(p_faults)
 
     # 清洗下属二次网分区
     cleaned_zones: List[Dict[str, Any]] = []

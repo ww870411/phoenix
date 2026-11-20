@@ -240,10 +240,11 @@ function renderChart() {
   if (!faultChartEl.value) return
   if (!faultChart) faultChart = echarts.init(faultChartEl.value)
   const items = summary.value.by_fault_code || []
+  const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640
   faultChart.setOption({
-    title: { text: '6 大类数据质量异常分布', textStyle: { fontSize: 13 } },
+    title: { text: '6 大类数据质量异常分布', textStyle: { fontSize: isNarrow ? 12 : 13 } },
     tooltip: { trigger: 'axis' },
-    grid: { left: 155, right: 25, top: 36, bottom: 24 },
+    grid: { left: isNarrow ? 8 : 155, right: 24, top: 36, bottom: 24, containLabel: isNarrow },
     xAxis: { type: 'value' },
     yAxis: { type: 'category', data: items.map((i) => i.label).reverse() },
     series: [
@@ -254,25 +255,34 @@ function renderChart() {
         label: { show: true, position: 'right' },
       },
     ],
-  })
+  }, true)
+  faultChart.resize()
 }
 
 function onResize() {
   faultChart?.resize()
 }
 
+let chartResizeObserver = null
 onMounted(() => {
   window.addEventListener('resize', onResize)
+  if (typeof ResizeObserver !== 'undefined' && faultChartEl.value) {
+    chartResizeObserver = new ResizeObserver(() => onResize())
+    chartResizeObserver.observe(faultChartEl.value)
+  }
   loadAll()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  chartResizeObserver?.disconnect()
   faultChart?.dispose()
 })
 </script>
 
 <style scoped>
-.shp-main { padding: 18px 16px 40px; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.shp-page-root { overflow-x: clip; }
+.shp-main { padding: 18px 16px 40px; max-width: 1400px; width: 100%; box-sizing: border-box; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.shp-main > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .topbar { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .title-row { display: flex; align-items: center; gap: 10px; }
 .title-row h2 { margin: 0; font-size: 18px; }
@@ -289,8 +299,8 @@ onBeforeUnmount(() => {
 .stat-label { font-size: 12px; color: #64748b; }
 .stat-val { font-size: 18px; color: #0f172a; }
 .stat-sub { font-size: 12px; color: #64748b; }
-.chart-card { padding: 14px 16px; }
-.chart-box { height: 220px; width: 100%; }
+.chart-card { padding: 14px 16px; min-width: 0; overflow: hidden; }
+.chart-box { height: 220px; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
 .list-card { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; }
 .table-wrap { overflow-x: auto; max-height: 540px; }
@@ -312,4 +322,18 @@ onBeforeUnmount(() => {
 .text-err { color: #dc2626; }
 .text-warn { color: #d97706; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+@media (max-width: 768px) {
+  .shp-main { padding: 12px 10px 28px; gap: 10px; }
+  .topbar, .list-card, .chart-card { padding: 12px; }
+  .title-row { flex-wrap: wrap; gap: 6px; }
+  .title-row h2 { font-size: 16px; }
+  .topbar-actions { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .topbar-actions > .ctrl-input, .topbar-actions > .btn { width: 100%; justify-content: center; }
+  .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .stat-card { padding: 11px 12px; }
+  .filter-bar > .ctrl-input { flex: 1 1 140px; min-width: 0; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 7px 8px; }
+}
 </style>

@@ -168,16 +168,64 @@ def _load_outdoor_temps_24h(target_date: date) -> Dict[int, float]:
     return {int(r.hr): round(float(r.val), 1) for r in rows if r.val is not None}
 
 
+def _resolve_latest_available_biz_hour(
+    conn: Any,
+    target_d: Optional[date] = None,
+) -> Optional[datetime]:
+    """查询指定日期（或全库）最新一个已有数据的小时断面（优先换热站表底校准小时，其次上游/商业户）。"""
+    tables = (
+        "fact_station_hourly",
+        "fact_upstream_hourly",
+        "fact_merchant_hourly",
+    )
+    if target_d is not None:
+        ds = datetime(target_d.year, target_d.month, target_d.day, 0, 0, 0, tzinfo=EAST_8)
+        de = ds + timedelta(days=1)
+        for tbl in tables:
+            val = conn.execute(
+                text(f"SELECT MAX(biz_hour) FROM smart_heating_platform.{tbl} WHERE biz_hour >= :ds AND biz_hour < :de"),
+                {"ds": ds, "de": de},
+            ).scalar()
+            if val is not None:
+                return val.astimezone(EAST_8) if val.tzinfo else val.replace(tzinfo=EAST_8)
+        return None
+
+    for tbl in tables:
+        val = conn.execute(text(f"SELECT MAX(biz_hour) FROM smart_heating_platform.{tbl}")).scalar()
+        if val is not None:
+            return val.astimezone(EAST_8) if val.tzinfo else val.replace(tzinfo=EAST_8)
+    return None
+
+
 def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode: str = "clean") -> Dict[str, Any]:
     """构建【界面一：阳面逐小时精细化运行报告】全量数据载荷。"""
     ensure_smart_heating_fact_tables()
     now_e8 = datetime.now(EAST_8)
-    target_d = date.fromisoformat(target_date_str) if target_date_str else now_e8.date()
-    sel_hour = now_e8.hour if hour is None else max(0, min(23, int(hour)))
-    biz_hour = datetime(target_d.year, target_d.month, target_d.day, sel_hour, 0, 0, tzinfo=EAST_8)
-    day_start = datetime(target_d.year, target_d.month, target_d.day, 0, 0, 0, tzinfo=EAST_8)
-    day_end = day_start + timedelta(days=1)
     use_raw = str(mode).lower() == "raw"
+
+    with engine.connect() as conn:
+        if target_date_str is None and hour is None:
+            latest_bh = _resolve_latest_available_biz_hour(conn, target_d=None)
+            if latest_bh is not None:
+                target_d = latest_bh.date()
+                sel_hour = latest_bh.hour
+            else:
+                target_d = now_e8.date()
+                sel_hour = now_e8.hour
+        elif target_date_str is not None and hour is None:
+            target_d = date.fromisoformat(target_date_str)
+            latest_day_bh = _resolve_latest_available_biz_hour(conn, target_d=target_d)
+            if latest_day_bh is not None:
+                sel_hour = latest_day_bh.hour
+            else:
+                sel_hour = now_e8.hour if target_d == now_e8.date() else 23
+        else:
+            target_d = date.fromisoformat(target_date_str) if target_date_str else now_e8.date()
+            sel_hour = now_e8.hour if hour is None else max(0, min(23, int(hour)))
+
+        biz_hour = datetime(target_d.year, target_d.month, target_d.day, sel_hour, 0, 0, tzinfo=EAST_8)
+        day_start = datetime(target_d.year, target_d.month, target_d.day, 0, 0, 0, tzinfo=EAST_8)
+        day_end = day_start + timedelta(days=1)
 
     outdoor_24h = _load_outdoor_temps_24h(target_d)
 
@@ -195,15 +243,6 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
                     "JOIN smart_heating_platform.dict_branch_network bn ON hs.branch_network_id = bn.branch_network_id "
                     "JOIN smart_heating_platform.dict_main_network mn ON bn.main_network_id = mn.main_network_id "
                     "ORDER BY hs.center_id, hs.name"
-                )
-            ).fetchall()
-        ]
-        zones_meta = [
-            dict(r._mapping)
-            for r in conn.execute(
-                text(
-                    "SELECT secondary_zone_id, station_id, zone_name, is_online "
-                    "FROM smart_heating_platform.dict_secondary_zone ORDER BY secondary_zone_id"
                 )
             ).fetchall()
         ]
@@ -234,18 +273,11 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
         ).fetchall()
         temp_24h_map = {int(r.hr): _round(_f(r.avg_temp), 2) for r in temp_day_rows}
 
-        # 3. 选中小时的站、区、上游、室温、运行日志
+        # 3. 选中小时的站、上游、室温、运行日志（已停用二次网分区统计）
         st_hour_map = {
             r.station_id: dict(r._mapping)
             for r in conn.execute(
                 text("SELECT * FROM smart_heating_platform.fact_station_hourly WHERE biz_hour = :bh"),
-                {"bh": biz_hour},
-            ).fetchall()
-        }
-        zn_hour_map = {
-            r.secondary_zone_id: dict(r._mapping)
-            for r in conn.execute(
-                text("SELECT * FROM smart_heating_platform.fact_zone_hourly WHERE biz_hour = :bh"),
                 {"bh": biz_hour},
             ).fetchall()
         }
@@ -359,24 +391,8 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
         else:
             room_dist["over_25"] += 1
 
-    # 整理二次网分区按站分组
+    # 已停用二次网分区统计，保持接口结构兼容并返回空数组
     zones_by_station: Dict[str, List[Dict[str, Any]]] = {}
-    for zm in zones_meta:
-        zf = zn_hour_map.get(zm["secondary_zone_id"]) or {}
-        zones_by_station.setdefault(zm["station_id"], []).append({
-            "secondary_zone_id": zm["secondary_zone_id"],
-            "zone_name": zm["zone_name"],
-            "baseline_online": zm["is_online"],
-            "e2": _f(zf.get("e2_raw") if use_raw else zf.get("e2_clean")),
-            "e5": _f(zf.get("e5_raw") if use_raw else zf.get("e5_clean")),
-            "e6": _f(zf.get("e6_raw") if use_raw else zf.get("e6_clean")),
-            "e9": _f(zf.get("e9_raw") if use_raw else zf.get("e9_clean")),
-            "e10": _f(zf.get("e10_raw") if use_raw else zf.get("e10_clean")),
-            "e15": _f(zf.get("e15_raw") if use_raw else zf.get("e15_clean")),
-            "e12_audit": _f(zf.get("e12_raw")),
-            "value_source": zf.get("value_source") or ("REAL" if zm["is_online"] else "OFFLINE_PERMANENT"),
-            "fault_tag": zf.get("fault_tag"),
-        })
 
     # 整理 242 站小时全貌
     stations_full: List[Dict[str, Any]] = []

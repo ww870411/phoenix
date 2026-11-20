@@ -111,4 +111,23 @@ function go(path) {
   background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
 }
+
+@media (max-width: 768px) {
+  .shp-subnav {
+    padding: 8px 10px;
+  }
+  .subnav-links {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .subnav-btn {
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 12px;
+    gap: 4px;
+    white-space: nowrap;
+  }
+}
 </style>

@@ -1,5 +1,33 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-20 重构 `smart_heating_platform` 为路线 B 并行采集、5 分钟高频积分与 2 小时算完即清架构
+
+- **改动原因**：
+  - 按用户架构对齐要求：① 上游点位与商业用户改为每 5 分钟受控并行采样，并在当前小时结束后才定格积分累计量，采样明细表执行 2 小时滚动“算完即清”；② 换热站全面切换为路线 B，彻底取消 `/zx_hrz/` 与 `/get_yw_data/1` 实时拉取，改为每小时整点后 `:05` 并行调用 `/hrz_ls_zb/` 产出精确表底差值与清洗后代表断面；③ 彻底停用二次网分区实时统计与前端下钻子表，减负约 40%+ 写入量；④ 引入独立作业锁与可控多线程并行（默认 `max_workers=4`，支持 `1~16` 调节）。
+- **后端改动**：
+  - **`backend/projects/smart_heating_platform/services/collector_config_service.py` & `api/settings.py`**：
+    - `DEFAULT_COLLECTOR_SETTINGS` 默认采样间隔调整为 `5` 分钟（支持 `5 / 15 / 30 / 60`），表底校准周期默认为 `1` 小时，新增并发线程数 `max_workers`（默认 `4`，校验范围 `1~16`）。
+  - **`backend/projects/smart_heating_platform/services/cleaning_engine.py`**：
+    - 新增通用刻度对齐函数 `floor_to_bucket()`，并抽取共用一次网指标清洗函数 `_clean_station_primary_metrics()` 与路线 B 历史断面清洗函数 `clean_station_history_point()`。
+  - **`backend/projects/smart_heating_platform/services/collector_engine.py` & `scheduler_service.py`**：
+    - 将单一全局锁拆分为 `_SNAPSHOT_LOCK`、`_CALIB_LOCK`、`_MERCHANT_DAILY_LOCK`、`_MERCHANT_BACKFILL_LOCK`，并在 `scheduler_service.py` 通过 `_spawn_job()` 异步拉起，彻底避免耗时校准阻塞 5 分钟采样；
+    - `run_snapshot_cycle()` 改为 `ThreadPoolExecutor` 并发拉取 `/gk_get_data/`、`/get_sh_data/`（含并发主干网分片降级）及整点 `/jumin/`，不再请求换热站实时接口也不写 `fact_station_15min` / `fact_zone_15min` / `fact_zone_hourly`；
+    - `_aggregate_upstream_hourly()` 与 `_aggregate_merchant_hourly()` 支持 `finalize=False`（未结束当前小时仅更新瞬时断面、累计量留空）与 `finalize=True`（跨小时后定格积分），并新增 `SAMPLING_KEEP_HOURS = 2` 与 `prune_old_sampling_rows()` 清理早于上一小时的历史采样明细；
+    - `run_table_bottom_calibration()` 与 `run_merchant_hourly_backfill()` 升级为受控并发拉取，且路线 B 校准同步清洗并更新 `fact_station_hourly` 的代表温压负荷断面与在线状态。
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - `get_hourly_report()` 移除对 `dict_secondary_zone` 与 `fact_zone_hourly` 的数据库查询，站点 `zones` 字段统一返回空数组保持结构兼容；新增 `_resolve_latest_available_biz_hour()`，未传日期/小时时自动定位全库最新有数据的小时（优先换热站已校准小时），切换日期未传小时时自动定位当日最新有数据小时。
+  - **`backend/projects/smart_heating_platform/tests/{test_cleaning_and_apis.py,test_collector_settings.py}`**：
+    - 新增 `test_5min_bucket_station_history_and_sampling_prune`、`max_workers` / `5 分钟间隔` 校验及逐小时默认最新有数据时段断言。
+- **前端改动**：
+  - **`frontend/src/projects/smart_heating_platform/pages/SettingsView.vue`**：新增 `max_workers`（1~16）配置项，采样间隔默认并新增 `5 分钟` 选项，校准周期默认调整为 `1 小时`。
+  - **`frontend/src/projects/smart_heating_platform/{components/PlatformSubNav.vue,pages/*.vue}`**：
+    - `HourlyReportView.vue`：移除换热站表格中的二次分区展开按钮与子表；将顶部占空间的 24 格小时按钮条精简为紧凑单行组合控件（`◀ / 24h下拉选择含站数状态 / ▶ / 最新 / 轮播`）；首屏及切换日期时自动对齐后端返回的最新有数据日期与小时，优化手动采集文案并新增“📏 校准换热站表底”快捷触发按钮；
+    - 全模块手机窄屏响应式优化（`<= 768px`）：`PlatformSubNav.vue` 改为 2×2 导航格、`HourlyReportView.vue` 取消手机端吸顶占屏并改为 2 列 KPI 与不溢出单列图表（补充 `min-width: 0`、`overflow: hidden`、`ResizeObserver`、ECharts `containLabel: true` 及窄屏紧凑边距避免图表画布溢出）、`DailyReportView.vue` / `FaultAuditView.vue` / `DictCenterView.vue` / `SettingsView.vue` 同步适配窄屏栅格、横向滚动标签与全宽操作按钮。
+  - **`frontend/src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：同步更新路线 B、5 分钟并行采样、2 小时算完即清及停用二次分区说明。
+- **验证结果**：
+  - `python -m pytest backend/projects/smart_heating_platform/tests -v`：**7 passed（0 错误）**；
+  - `npm --prefix frontend run build`：**1088 modules transformed，built in 24.24s（0 错误）**。
+
 ## 2026-11-20 为居民室温表增加 48 小时滚动自动清理机制并完成历史室温瘦身
 
 - **改动原因**：居民室温全量历史数据体积过大（超 81 万行 / 244MB），按用户要求终止历史室温回溯并将 `fact_temp_hourly` 改为仅滚动保留最近 48 小时数据。

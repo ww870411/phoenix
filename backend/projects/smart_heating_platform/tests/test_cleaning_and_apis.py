@@ -20,8 +20,10 @@ from backend.projects.smart_heating_platform.services.cleaning_engine import (
     SRC_TEMP_OFFLINE,
     clean_merchant_point,
     clean_station_and_zones,
+    clean_station_history_point,
     clean_temp_device,
     clean_upstream_point,
+    floor_to_bucket,
     interpolate_meter_at_hour,
     trapezoidal_hour_integral,
     validate_meter_delta,
@@ -211,6 +213,16 @@ def test_platform_endpoints_smoke_and_permissions():
     assert len(r_h.json()["data"]["merchants"]) == 464
     assert r_h.json()["data"]["merchant_summary"]["total_merchants"] == 464
 
+    # 校验无参数调用默认定位到最新有数据的日期和小时
+    from backend.projects.smart_heating_platform.services.report_query_service import _resolve_latest_available_biz_hour
+    from backend.db.database_daily_report_25_26 import engine
+
+    with engine.connect() as conn:
+        expected_bh = _resolve_latest_available_biz_hour(conn)
+    if expected_bh is not None:
+        assert r_h.json()["data"]["meta"]["date"] == expected_bh.date().isoformat()
+        assert r_h.json()["data"]["meta"]["hour"] == expected_bh.hour
+
     r_d = client.get("/api/v1/projects/smart_heating_platform/reports/daily")
     assert r_d.status_code == 200 and len(r_d.json()["data"]["center_comparison"]) == 9
 
@@ -249,3 +261,46 @@ def test_prune_old_temp_hourly_cutoff():
     sql_text, params = conn.calls[0]
     assert "DELETE FROM smart_heating_platform.fact_temp_hourly" in sql_text
     assert params["cutoff"] == datetime(2026, 11, 18, 5, 0, tzinfo=EAST_8)
+
+
+def test_5min_bucket_station_history_and_sampling_prune():
+    from backend.projects.smart_heating_platform.services.collector_engine import (
+        SAMPLING_KEEP_HOURS,
+        prune_old_sampling_rows,
+    )
+
+    dt = datetime(2026, 11, 20, 8, 47, 29, tzinfo=EAST_8)
+    assert floor_to_bucket(dt, 5) == datetime(2026, 11, 20, 8, 45, tzinfo=EAST_8)
+    assert floor_to_bucket(dt, 15) == datetime(2026, 11, 20, 8, 45, tzinfo=EAST_8)
+
+    # 路线 B：/hrz_ls_zb/ 代表断面温度越限与倒挂清洗
+    cleaned, faults = clean_station_history_point(
+        {"station_id": "st_hist", "name": "测试历史站"},
+        {"f1": 0.6, "f2": 20.0, "f3": 42.0, "f4": 0.4, "f5": 48.0, "f222": 2.5},
+        prev_station_valid={"e3_clean": 72.0, "e4_clean": 40.0},
+    )
+    assert cleaned["online"] is True
+    assert cleaned["e3_clean"] == 72.0
+    assert cleaned["e4_clean"] == 40.0
+    assert cleaned["value_source"] == SRC_MASKED_PREV
+    assert FAULT_TEMP_INVERSION in (cleaned["fault_tag"] or "")
+    assert len(faults) == 1
+
+    # 算完即清（2小时保留：当前小时 + 上一小时，删除 biz_hour < ref_hour - 1h）
+    class _FakeRes:
+        rowcount = 50
+
+    class _FakeConn:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, stmt, params=None):
+            self.calls.append((str(stmt), params or {}))
+            return _FakeRes()
+
+    conn = _FakeConn()
+    res = prune_old_sampling_rows(conn, reference_time=datetime(2026, 11, 20, 9, 12, tzinfo=EAST_8))
+    assert SAMPLING_KEEP_HOURS == 2
+    assert res["total"] == 200
+    assert len(conn.calls) == 4
+    assert conn.calls[0][1]["cutoff"] == datetime(2026, 11, 20, 8, 0, tzinfo=EAST_8)

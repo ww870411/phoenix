@@ -1,3 +1,12 @@
+## 2026-11-20 同步 `smart_heating_platform` 路线 B 并行采集、5 分钟参数配置与停用二次分区 UI
+
+- **`src/projects/smart_heating_platform/pages/SettingsView.vue`**：新增 `max_workers`（1~16，默认 4）并发线程配置，采样间隔新增并默认 `5` 分钟，表底校准周期默认 `1` 小时。
+- **`src/projects/smart_heating_platform/{components/PlatformSubNav.vue,pages/{HourlyReportView,DailyReportView,FaultAuditView,DictCenterView,SettingsView}.vue}`**：
+  - `HourlyReportView.vue` 移除二次网分区展开子表、将 24 格小时时间轴替换为紧凑下拉+步进器（含 `最新` 一键定位与轮播）、首屏与切换日期自动定位最新有数据时段并新增“📏 校准换热站表底”按钮；
+  - 全面补齐 `<= 768px` 手机窄屏排版适配（2×2 子导航、非吸顶控制台、2 列 KPI 卡片、防溢出 `ResizeObserver` + `containLabel` 响应式图表与横向可滚动页签/表格）。
+- **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：同步更新 5 分钟并行采样、2 小时算完即清、路线 B 整点表底校准与停用二次分区口径说明。
+- **构建验证**：`npm --prefix frontend run build` **1088 modules transformed，built in 24.24s（0 错误）**。
+
 ## 2026-11-20 在接口说明书中补充居民室温 48 小时滚动保留说明
 
 - **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：更新 `/jumin/` 接口文档卡片的存储周期与保留说明。

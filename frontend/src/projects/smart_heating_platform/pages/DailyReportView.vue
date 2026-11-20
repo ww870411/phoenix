@@ -356,4 +356,23 @@ onMounted(loadReport)
 .text-ok { color: #059669; }
 .text-err { color: #dc2626; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+@media (max-width: 768px) {
+  .shp-main { padding: 12px 10px 28px; gap: 10px; }
+  .topbar, .tabs-card { padding: 12px; }
+  .title-row { flex-wrap: wrap; gap: 6px; }
+  .title-row h2 { font-size: 16px; }
+  .topbar-actions { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .inline-field { width: 100%; justify-content: space-between; }
+  .inline-field .ctrl-input { flex: 1; min-width: 0; }
+  .topbar-actions > .btn { width: 100%; justify-content: center; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kpi-card { padding: 11px 12px; }
+  .kpi-val { font-size: 16px; }
+  .tab-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; }
+  .tab-btn { flex-shrink: 0; padding: 7px 12px; font-size: 12px; }
+  .filter-bar > .ctrl-input { flex: 1 1 160px; min-width: 0; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 7px 8px; }
+}
 </style>

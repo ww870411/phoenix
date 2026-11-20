@@ -34,9 +34,10 @@ class CollectorSettingsUpdateRequest(BaseModel):
     cookie: Optional[str] = Field(None, description="源站登录 Session Cookie（留空或不传则保持原值不变）")
     clear_cookie: Optional[bool] = Field(False, description="是否清空已保存 Cookie")
     scheduler_enabled: Optional[bool] = Field(None, description="是否启用定时采集开关")
-    snapshot_interval_minutes: Optional[int] = Field(None, description="批量采样间隔分钟数 (15 / 30 / 60)")
+    snapshot_interval_minutes: Optional[int] = Field(None, description="批量采样间隔分钟数 (5 / 15 / 30 / 60)")
     hourly_offset_minutes: Optional[int] = Field(None, description="整点后延迟采集分钟数 (0~59)")
-    request_interval_seconds: Optional[float] = Field(None, description="单线程串行请求间隔秒数 (0.5~5.0)")
+    max_workers: Optional[int] = Field(None, description="并行采集工作线程数 (1~16)")
+    request_interval_seconds: Optional[float] = Field(None, description="单线程请求间隔秒数 (0.5~5.0)")
     request_timeout_seconds: Optional[float] = Field(None, description="单次请求超时秒数 (3~60)")
     table_bottom_sync_hours: Optional[int] = Field(None, description="累计表底校准间隔小时数 (1~24)")
 

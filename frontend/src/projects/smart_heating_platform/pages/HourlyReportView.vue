@@ -5,12 +5,15 @@
       <Breadcrumbs :items="breadcrumbItems" />
       <PlatformSubNav current="hourly_report" />
 
-      <!-- 吸顶控制台：日期 + 口径切换 + 24小时时间轴 -->
+      <!-- 吸顶控制台：日期 + 紧凑时段选择器 + 口径切换 + 操作按钮 -->
       <section class="card elevated control-bar">
         <div class="control-top">
           <div class="control-left">
             <h2>主城区智慧供热 · 逐小时精细化运行报告</h2>
             <span class="badge-yang">阳面精算视图</span>
+            <span class="slot-badge">
+              断面：<strong>{{ meta.biz_hour_label || (selectedDate ? `${selectedDate} ${selectedHour == null ? '--' : String(selectedHour).padStart(2, '0')}:00` : '定位最新小时…') }}</strong>
+            </span>
             <span v-if="meta.last_run?.finished_at" class="run-meta">
               最近采集：{{ meta.last_run.finished_at }}（{{ meta.station_records_count }}/242 站）
             </span>
@@ -18,8 +21,60 @@
           <div class="control-right">
             <label class="inline-field">
               <span>日期</span>
-              <input v-model="selectedDate" type="date" class="ctrl-input" @change="loadReport" />
+              <input v-model="selectedDate" type="date" class="ctrl-input" @change="onDateChange" />
             </label>
+            <div class="hour-picker-group" role="group" aria-label="小时时段切换">
+              <button
+                class="hour-step-btn"
+                type="button"
+                title="上一小时"
+                :disabled="selectedHour === null || selectedHour <= 0"
+                @click="stepHour(-1)"
+              >
+                ◀
+              </button>
+              <select
+                v-model.number="selectedHour"
+                class="ctrl-input hour-select"
+                aria-label="选择小时时段"
+                @change="loadReport"
+              >
+                <option v-if="selectedHour === null" :value="null" disabled>定位最新…</option>
+                <option
+                  v-for="item in trend24h"
+                  :key="item.hour"
+                  :value="item.hour"
+                >
+                  {{ item.label }}{{ item.has_data ? ` (${item.station_count}站)` : ' (暂无)' }}
+                </option>
+              </select>
+              <button
+                class="hour-step-btn"
+                type="button"
+                title="下一小时"
+                :disabled="selectedHour === null || selectedHour >= 23"
+                @click="stepHour(1)"
+              >
+                ▶
+              </button>
+              <button
+                class="hour-action-btn"
+                type="button"
+                title="跳转最新有数据时段"
+                :disabled="loading"
+                @click="jumpToLatest"
+              >
+                最新
+              </button>
+              <button
+                class="hour-action-btn"
+                type="button"
+                :title="playing ? '暂停 24 小时轮播' : '开启 24 小时自动轮播'"
+                @click="togglePlay"
+              >
+                {{ playing ? '⏸ 暂停' : '▶ 轮播' }}
+              </button>
+            </div>
             <div class="mode-switch" role="group" aria-label="数据口径切换">
               <button
                 type="button"
@@ -39,10 +94,18 @@
             <button
               class="btn secondary btn-sm"
               type="button"
-              :disabled="collecting"
+              :disabled="collecting || calibrating"
               @click="handleCollectNow"
             >
-              {{ collecting ? '采集中(约50s)…' : '⚡ 立即采集当前时段' }}
+              {{ collecting ? '采集中…' : '⚡ 采集上游/商户/室温' }}
+            </button>
+            <button
+              class="btn secondary btn-sm"
+              type="button"
+              :disabled="calibrating || collecting"
+              @click="handleCalibNow"
+            >
+              {{ calibrating ? '并行校准中…' : '📏 校准换热站表底' }}
             </button>
             <button
               class="btn primary btn-sm"
@@ -51,34 +114,6 @@
               @click="handleExport"
             >
               📥 导出本小时 Excel
-            </button>
-          </div>
-        </div>
-
-        <!-- 24小时时间轴滑块与快捷时刻格子 -->
-        <div class="timeline-box">
-          <div class="timeline-header">
-            <span class="timeline-current">
-              当前断面：<strong>{{ meta.biz_hour_label || `${selectedDate} ${String(selectedHour).padStart(2, '0')}:00` }}</strong>
-            </span>
-            <div class="timeline-btns">
-              <button class="btn ghost btn-xs" type="button" :disabled="selectedHour <= 0" @click="stepHour(-1)">◀ 上一小时</button>
-              <button class="btn ghost btn-xs" type="button" @click="togglePlay">
-                {{ playing ? '⏸ 暂停轮播' : '▶ 24h 播放' }}
-              </button>
-              <button class="btn ghost btn-xs" type="button" :disabled="selectedHour >= 23" @click="stepHour(1)">下一小时 ▶</button>
-            </div>
-          </div>
-          <div class="hour-pills">
-            <button
-              v-for="item in trend24h"
-              :key="item.hour"
-              type="button"
-              :class="['hour-pill', { active: selectedHour === item.hour, empty: !item.has_data }]"
-              :title="item.has_data ? `${item.label}（已采 ${item.station_count} 站）` : `${item.label}（暂无数据）`"
-              @click="selectHour(item.hour)"
-            >
-              {{ String(item.hour).padStart(2, '0') }}
             </button>
           </div>
         </div>
@@ -261,7 +296,7 @@
           </div>
         </div>
 
-        <!-- Tab 3: 242站 & 580分区 -->
+        <!-- Tab 3: 242座换热站一次网及表底精算 -->
         <div v-if="activeTab === 'stations'" class="tab-panel">
           <div class="filter-bar">
             <select v-model="stationFilter.centerId" class="ctrl-input" @change="onCenterChange">
@@ -288,7 +323,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th class="sticky-col">换热站（点击展开分区）</th>
+                  <th class="sticky-col">换热站名称</th>
                   <th>中心 / 支线</th>
                   <th>面积 (㎡)</th>
                   <th>状态</th>
@@ -305,15 +340,6 @@
                 <template v-for="s in filteredStations" :key="s.station_id">
                   <tr :class="{ 'row-interp': s.value_source !== 'REAL' && s.value_source !== 'NO_DATA' }">
                     <td class="sticky-col font-bold">
-                      <button
-                        v-if="s.zones.length > 0"
-                        type="button"
-                        class="expand-btn"
-                        @click="toggleExpandStation(s.station_id)"
-                      >
-                        {{ expandedStations.has(s.station_id) ? '▼' : '▶' }}
-                      </button>
-                      <span v-else class="no-zone-dot">·</span>
                       {{ s.name }}
                       <span
                         v-if="s.value_source !== 'REAL' && s.value_source !== 'NO_DATA'"
@@ -338,38 +364,6 @@
                     <td>{{ fmt(s.heat_index_wm2) }}</td>
                     <td>{{ fmt(s.e14) }}</td>
                     <td>{{ fmt(s.avg_room_temp) }}</td>
-                  </tr>
-                  <tr v-if="expandedStations.has(s.station_id)" class="zone-subrow">
-                    <td colspan="11">
-                      <div class="zone-subtable-wrap">
-                        <table class="zone-subtable">
-                          <thead>
-                            <tr>
-                              <th>分区编号</th>
-                              <th>分区名称</th>
-                              <th>台账状态</th>
-                              <th>二网流量 (t/h)</th>
-                              <th>二网供/回温 (℃)</th>
-                              <th>二网供/回压 (MPa)</th>
-                              <th>二网补水 (t/h)</th>
-                              <th>审计比对 e12 (仅参考)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr v-for="z in s.zones" :key="z.secondary_zone_id">
-                              <td class="mono">{{ z.secondary_zone_id }}</td>
-                              <td>{{ z.zone_name }}</td>
-                              <td>{{ z.baseline_online ? '正常' : '台账常离线' }}</td>
-                              <td>{{ fmt(z.e2) }}</td>
-                              <td>{{ fmt(z.e5) }} / {{ fmt(z.e6) }}</td>
-                              <td>{{ fmt(z.e9, '', 3) }} / {{ fmt(z.e10, '', 3) }}</td>
-                              <td>{{ fmt(z.e15) }}</td>
-                              <td class="muted-cell">{{ fmt(z.e12_audit) }}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </td>
                   </tr>
                 </template>
               </tbody>
@@ -597,11 +591,12 @@ function todayIso() {
   return `${y}-${m}-${day}`
 }
 
-const selectedDate = ref(todayIso())
-const selectedHour = ref(new Date().getHours())
+const selectedDate = ref('')
+const selectedHour = ref(null)
 const mode = ref('clean')
 const loading = ref(false)
 const collecting = ref(false)
+const calibrating = ref(false)
 const playing = ref(false)
 const showTrendChart = ref(true)
 const activeTab = ref('groups')
@@ -623,7 +618,6 @@ const reportData = ref({
 const upstreamFilter = reactive({ category: '', keyword: '', onlyCore: false })
 const stationFilter = reactive({ centerId: '', mainId: '', branchId: '', statusFilter: '', keyword: '' })
 const merchantFilter = reactive({ rdfz: '', mainId: '', statusFilter: '', keyword: '' })
-const expandedStations = ref(new Set())
 const drawer = reactive({ open: false, kind: '', title: '', rows: [] })
 
 const heatChartEl = ref(null)
@@ -633,6 +627,7 @@ let heatChart = null
 let tempChart = null
 let roomPieChart = null
 let playTimer = null
+let chartResizeObserver = null
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
@@ -643,7 +638,7 @@ const breadcrumbItems = computed(() => [
 const reportTabs = [
   { key: 'groups', label: '🏢 中心/大网小时汇总' },
   { key: 'upstream', label: '🔥 热源与首站' },
-  { key: 'stations', label: '🏭 242站与580分区明细' },
+  { key: 'stations', label: '🏭 242座换热站明细' },
   { key: 'merchants', label: '🏬 464商业用户小时明细' },
   { key: 'temps', label: '🌡️ 居民室温达标分布' },
 ]
@@ -765,23 +760,19 @@ function onMainChange() {
   stationFilter.branchId = ''
 }
 
-function toggleExpandStation(stId) {
-  const next = new Set(expandedStations.value)
-  if (next.has(stId)) next.delete(stId)
-  else next.add(stId)
-  expandedStations.value = next
-}
-
 async function loadReport() {
   loading.value = true
   try {
-    const res = await fetchHourlyReport({
-      date: selectedDate.value,
-      hour: selectedHour.value,
-      mode: mode.value,
-    })
+    const params = { mode: mode.value }
+    if (selectedDate.value) params.date = selectedDate.value
+    if (selectedHour.value !== null && selectedHour.value !== undefined) params.hour = selectedHour.value
+    const res = await fetchHourlyReport(params)
     if (res?.data) {
       reportData.value = res.data
+      if (res.data.meta?.date) selectedDate.value = res.data.meta.date
+      if (res.data.meta?.hour !== undefined && res.data.meta?.hour !== null) {
+        selectedHour.value = Number(res.data.meta.hour)
+      }
       await nextTick()
       renderCharts()
     }
@@ -793,13 +784,24 @@ async function loadReport() {
   }
 }
 
-function selectHour(h) {
-  selectedHour.value = h
+function onDateChange() {
+  selectedHour.value = null
   loadReport()
 }
+
+function jumpToLatest() {
+  selectedDate.value = ''
+  selectedHour.value = null
+  loadReport()
+}
+
 function stepHour(delta) {
-  const next = Math.max(0, Math.min(23, selectedHour.value + delta))
-  if (next !== selectedHour.value) selectHour(next)
+  const cur = Number(selectedHour.value ?? 0)
+  const next = Math.max(0, Math.min(23, cur + delta))
+  if (next !== cur) {
+    selectedHour.value = next
+    loadReport()
+  }
 }
 function switchMode(m) {
   mode.value = m
@@ -815,7 +817,7 @@ function togglePlay() {
   }
   playing.value = true
   playTimer = setInterval(() => {
-    selectedHour.value = (selectedHour.value + 1) % 24
+    selectedHour.value = (Number(selectedHour.value ?? 0) + 1) % 24
     loadReport()
   }, 2500)
 }
@@ -823,19 +825,36 @@ function togglePlay() {
 async function handleCollectNow() {
   collecting.value = true
   notice.type = 'info'
-  notice.text = '正在按单线程间隔采集源站全网实时断面与居民室温（约 45~60 秒），请耐心等候…'
+  notice.text = '正在并行采集上游点位、464 户商业用户实时断面与居民室温，请稍候…'
   try {
     const res = await triggerManualCollect({ action: 'snapshot', include_jumin: true })
     notice.type = 'success'
-    notice.text = `采集完成：更新换热站 ${res.station_hourly} 座、分区 ${res.zone_hourly} 个、居民室温 ${res.temp_hourly} 户、异常工单 ${res.fault_tickets} 条。`
-    selectedDate.value = todayIso()
-    selectedHour.value = new Date().getHours()
+    notice.text = `采集完成：更新上游 ${res.upstream_hourly} 点、商业用户 ${res.merchant_hourly} 户、居民室温 ${res.temp_hourly} 户、异常工单 ${res.fault_tickets} 条。`
     await loadReport()
   } catch (err) {
     notice.type = 'error'
     notice.text = `采集失败：${err.message}`
   } finally {
     collecting.value = false
+  }
+}
+
+async function handleCalibNow() {
+  calibrating.value = true
+  const targetDate = selectedDate.value || todayIso()
+  notice.type = 'info'
+  notice.text = `正在并行拉取 ${targetDate} 全网 242 座换热站表底（/hrz_ls_zb/），请稍候…`
+  try {
+    const res = await triggerManualCollect({ action: 'calib', target_date: targetDate })
+    notice.type = 'success'
+    notice.text = `表底校准完成：更新 ${res.updated_station_hours} 站·小时记录（并发 ${res.max_workers} 线程），跳变异常 ${res.jump_faults} 条。`
+    selectedHour.value = null
+    await loadReport()
+  } catch (err) {
+    notice.type = 'error'
+    notice.text = `表底校准失败：${err.message}`
+  } finally {
+    calibrating.value = false
   }
 }
 
@@ -890,54 +909,60 @@ async function openStationTempsDrawer(st) {
 function renderCharts() {
   const rows = trend24h.value
   const labels = rows.map((r) => r.label)
+  const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640
 
   if (heatChartEl.value) {
     if (!heatChart) heatChart = echarts.init(heatChartEl.value)
     heatChart.setOption({
-      title: { text: '全网小时供热量 (GJ) & 室外气温 (℃)', textStyle: { fontSize: 13 } },
+      title: { text: '全网小时供热量 (GJ) & 室外气温 (℃)', textStyle: { fontSize: isNarrow ? 12 : 13 } },
       tooltip: { trigger: 'axis' },
-      legend: { bottom: 0, data: ['小时供热量(GJ)', '热指标(W/㎡)', '室外气温(℃)'] },
-      grid: { left: 48, right: 48, top: 38, bottom: 38 },
+      legend: { bottom: 0, type: 'scroll', data: ['小时供热量(GJ)', '热指标(W/㎡)', '室外气温(℃)'] },
+      grid: { left: isNarrow ? 8 : 48, right: isNarrow ? 8 : 48, top: 40, bottom: 38, containLabel: true },
       xAxis: { type: 'category', data: labels },
       yAxis: [
-        { type: 'value', name: 'GJ / W/㎡' },
-        { type: 'value', name: '气温(℃)' },
+        { type: 'value', name: isNarrow ? '' : 'GJ / W/㎡' },
+        { type: 'value', name: isNarrow ? '' : '℃' },
       ],
       series: [
         { name: '小时供热量(GJ)', type: 'bar', data: rows.map((r) => r.hour_heat_gj), itemStyle: { color: '#2563eb' } },
         { name: '热指标(W/㎡)', type: 'line', smooth: true, data: rows.map((r) => r.heat_index_wm2), itemStyle: { color: '#f59e0b' } },
         { name: '室外气温(℃)', type: 'line', yAxisIndex: 1, smooth: true, data: rows.map((r) => r.outdoor_temp), itemStyle: { color: '#06b6d4' } },
       ],
-    })
+    }, true)
+    heatChart.resize()
   }
 
   if (tempChartEl.value) {
     if (!tempChart) tempChart = echarts.init(tempChartEl.value)
     tempChart.setOption({
-      title: { text: '一网流量加权供回温 & 真实平均室温 (℃)', textStyle: { fontSize: 13 } },
+      title: { text: '一网流量加权供回温 & 真实平均室温 (℃)', textStyle: { fontSize: isNarrow ? 12 : 13 } },
       tooltip: { trigger: 'axis' },
-      legend: { bottom: 0, data: ['一网供温', '一网回温', '平均室温'] },
-      grid: { left: 45, right: 20, top: 38, bottom: 38 },
+      legend: { bottom: 0, type: 'scroll', data: ['一网供温', '一网回温', '平均室温'] },
+      grid: { left: isNarrow ? 8 : 45, right: isNarrow ? 8 : 20, top: 40, bottom: 38, containLabel: true },
       xAxis: { type: 'category', data: labels },
-      yAxis: { type: 'value', name: '℃' },
+      yAxis: { type: 'value', name: isNarrow ? '' : '℃' },
       series: [
         { name: '一网供温', type: 'line', smooth: true, data: rows.map((r) => r.avg_sup_temp), itemStyle: { color: '#dc2626' } },
         { name: '一网回温', type: 'line', smooth: true, data: rows.map((r) => r.avg_ret_temp), itemStyle: { color: '#2563eb' } },
         { name: '平均室温', type: 'line', smooth: true, data: rows.map((r) => r.avg_room_temp), itemStyle: { color: '#10b981' } },
       ],
-    })
+    }, true)
+    tempChart.resize()
   }
 
   if (activeTab.value === 'temps' && roomPieEl.value) {
     if (!roomPieChart) roomPieChart = echarts.init(roomPieEl.value)
     const d = tempSummary.value.distribution || {}
     roomPieChart.setOption({
-      title: { text: '居民真实室温区间分布', left: 'center', textStyle: { fontSize: 14 } },
+      title: { text: '居民真实室温区间分布', left: 'center', textStyle: { fontSize: isNarrow ? 13 : 14 } },
       tooltip: { trigger: 'item', formatter: '{b}: {c} 户 ({d}%)' },
+      legend: isNarrow ? { bottom: 0, type: 'scroll' } : undefined,
       series: [
         {
           type: 'pie',
-          radius: ['42%', '70%'],
+          radius: isNarrow ? ['36%', '60%'] : ['42%', '70%'],
+          center: isNarrow ? ['50%', '46%'] : ['50%', '54%'],
+          label: { show: !isNarrow },
           data: [
             { value: d.under_18 || 0, name: '<18℃ 不达标', itemStyle: { color: '#ef4444' } },
             { value: d.ok_18_20 || 0, name: '18~20℃ 合格', itemStyle: { color: '#f59e0b' } },
@@ -946,13 +971,24 @@ function renderCharts() {
           ],
         },
       ],
-    })
+    }, true)
+    roomPieChart.resize()
   }
 }
+
+watch(showTrendChart, async (val) => {
+  if (val) {
+    await nextTick()
+    onResize()
+  }
+})
 
 watch(activeTab, async (val) => {
   if (val === 'temps') {
     await nextTick()
+    if (chartResizeObserver && roomPieEl.value) {
+      chartResizeObserver.observe(roomPieEl.value)
+    }
     renderCharts()
   }
 })
@@ -965,11 +1001,18 @@ function onResize() {
 
 onMounted(() => {
   window.addEventListener('resize', onResize)
+  if (typeof ResizeObserver !== 'undefined') {
+    chartResizeObserver = new ResizeObserver(() => onResize())
+    if (heatChartEl.value) chartResizeObserver.observe(heatChartEl.value)
+    if (tempChartEl.value) chartResizeObserver.observe(tempChartEl.value)
+    if (roomPieEl.value) chartResizeObserver.observe(roomPieEl.value)
+  }
   loadReport()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  chartResizeObserver?.disconnect()
   if (playTimer) clearInterval(playTimer)
   heatChart?.dispose()
   tempChart?.dispose()
@@ -978,26 +1021,28 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.shp-main { padding: 18px 16px 40px; max-width: 1420px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-.control-bar { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 8px; z-index: 20; }
-.control-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.shp-page-root { overflow-x: clip; }
+.shp-main { padding: 18px 16px 40px; max-width: 1420px; width: 100%; box-sizing: border-box; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.shp-main > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.control-bar { padding: 12px 18px; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 8px; z-index: 20; }
+.control-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .control-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .control-left h2 { margin: 0; font-size: 18px; }
 .badge-yang { font-size: 12px; font-weight: 600; background: #dcfce7; color: #166534; padding: 2px 10px; border-radius: 999px; }
+.slot-badge { font-size: 12px; background: #eff6ff; color: #1e40af; padding: 2px 10px; border-radius: 999px; border: 1px solid #bfdbfe; }
 .run-meta { font-size: 12px; color: #64748b; }
-.control-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.control-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .inline-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #334155; }
 .ctrl-input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 13px; background: #fff; }
+.hour-picker-group { display: inline-flex; align-items: center; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #fff; }
+.hour-step-btn, .hour-action-btn { border: none; background: #f8fafc; color: #334155; padding: 6px 9px; font-size: 12px; font-weight: 600; cursor: pointer; border-right: 1px solid #e2e8f0; }
+.hour-action-btn:last-child { border-right: none; }
+.hour-step-btn:hover:not(:disabled), .hour-action-btn:hover:not(:disabled) { background: #eff6ff; color: #1d4ed8; }
+.hour-step-btn:disabled, .hour-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.hour-select { border: none; border-right: 1px solid #e2e8f0; border-radius: 0; padding: 6px 8px; min-width: 122px; font-weight: 600; color: #0f172a; }
 .mode-switch { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
 .mode-btn { padding: 6px 12px; font-size: 12px; border: none; background: #f8fafc; color: #475569; cursor: pointer; font-weight: 600; }
 .mode-btn.active { background: #1d4ed8; color: #fff; }
-.timeline-box { border-top: 1px solid #e2e8f0; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
-.timeline-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
-.timeline-btns { display: flex; gap: 6px; }
-.hour-pills { display: grid; grid-template-columns: repeat(24, minmax(26px, 1fr)); gap: 4px; }
-.hour-pill { padding: 6px 0; border-radius: 6px; border: 1px solid #cbd5e1; background: #eff6ff; color: #1e40af; font-size: 12px; font-weight: 600; cursor: pointer; }
-.hour-pill.empty { background: #f8fafc; color: #94a3b8; }
-.hour-pill.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
 .notice-banner { padding: 10px 14px; border-radius: 8px; font-size: 13px; }
 .notice-banner.success { background: #ecfdf5; color: #065f46; }
 .notice-banner.error { background: #fef2f2; color: #991b1b; }
@@ -1008,18 +1053,18 @@ onBeforeUnmount(() => {
 .kpi-label { font-size: 12px; color: #64748b; }
 .kpi-val { font-size: 18px; color: #0f172a; }
 .kpi-sub { font-size: 12px; color: #64748b; }
-.chart-section { padding: 16px 20px; }
-.section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.chart-section { padding: 16px 20px; min-width: 0; overflow: hidden; }
+.section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; flex-wrap: wrap; }
 .section-head h3 { margin: 0; font-size: 15px; }
-.chart-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
-.chart-box { height: 270px; width: 100%; }
-.report-tabs-card { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.chart-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; min-width: 0; }
+.chart-box { height: 270px; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
+.report-tabs-card { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; overflow: hidden; }
 .tab-bar { display: flex; gap: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; flex-wrap: wrap; }
 .tab-btn { padding: 8px 16px; border: 1px solid transparent; border-radius: 8px; background: #f1f5f9; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; }
 .tab-btn.active { background: #0f172a; color: #fff; }
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
-.table-wrap { overflow-x: auto; max-height: 540px; }
+.table-wrap { overflow-x: auto; max-height: 540px; -webkit-overflow-scrolling: touch; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
 .data-table th, .data-table td { padding: 9px 11px; border-bottom: 1px solid #e2e8f0; text-align: left; }
 .data-table thead th { position: sticky; top: 0; background: #f8fafc; color: #334155; font-weight: 600; z-index: 5; }
@@ -1034,15 +1079,11 @@ onBeforeUnmount(() => {
 .src-real { background: #dcfce7; color: #166534; }
 .src-interp { background: #fef3c7; color: #92400e; }
 .src-off { background: #f1f5f9; color: #64748b; }
-.expand-btn { border: none; background: transparent; cursor: pointer; color: #1d4ed8; font-size: 12px; margin-right: 4px; }
-.no-zone-dot { color: #cbd5e1; margin-right: 6px; }
-.zone-subrow td { background: #f8fafc; padding: 8px 16px; }
-.zone-subtable { width: 100%; border-collapse: collapse; font-size: 12px; }
-.zone-subtable th, .zone-subtable td { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; }
-.temp-layout { display: grid; grid-template-columns: 360px 1fr; gap: 16px; }
+.temp-layout { display: grid; grid-template-columns: 360px 1fr; gap: 16px; min-width: 0; }
+.temp-chart-panel, .temp-rank-panel { min-width: 0; max-width: 100%; overflow: hidden; }
 @media (max-width: 960px) { .temp-layout { grid-template-columns: 1fr; } }
 .temp-stat-badges { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; margin-bottom: 10px; background: #f8fafc; padding: 10px; border-radius: 8px; }
-.pie-box { height: 280px; width: 100%; }
+.pie-box { height: 280px; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
 .font-bold { font-weight: 600; }
 .muted-cell { color: #64748b; }
 .empty-td { text-align: center !important; color: #64748b; padding: 28px !important; }
@@ -1051,6 +1092,41 @@ onBeforeUnmount(() => {
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; justify-content: flex-end; z-index: 60; }
 .drawer-panel { width: min(760px, 95vw); height: 100%; border-radius: 0; padding: 20px; overflow-y: auto; }
-.drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 8px; }
 .drawer-head h3 { margin: 0; font-size: 16px; }
+
+@media (max-width: 768px) {
+  .shp-main { padding: 12px 10px 28px; gap: 10px; }
+  .control-bar { position: static; padding: 12px; gap: 10px; }
+  .control-left { gap: 6px; }
+  .control-left h2 { font-size: 16px; line-height: 1.35; }
+  .control-right { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .inline-field { width: 100%; justify-content: space-between; }
+  .inline-field .ctrl-input { flex: 1; min-width: 0; }
+  .hour-picker-group { width: 100%; display: flex; }
+  .hour-select { flex: 1; min-width: 0; }
+  .mode-switch { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+  .control-right > .btn { width: 100%; justify-content: center; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kpi-grid > .kpi-card:last-child { grid-column: 1 / -1; }
+  .kpi-card { padding: 11px 12px; }
+  .kpi-val { font-size: 16px; }
+  .chart-section, .report-tabs-card { padding: 12px; }
+  .chart-pair { grid-template-columns: 1fr; gap: 12px; }
+  .chart-box { height: 220px; }
+  .tab-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; padding-bottom: 8px; }
+  .tab-btn { flex-shrink: 0; padding: 7px 12px; font-size: 12px; }
+  .filter-bar { gap: 8px; }
+  .filter-bar > .ctrl-input { flex: 1 1 140px; min-width: 0; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 7px 8px; }
+  .sticky-col { max-width: 132px; overflow: hidden; text-overflow: ellipsis; }
+  .temp-stat-badges { grid-template-columns: 1fr; }
+  .pie-box { height: 240px; }
+  .drawer-panel { width: 100vw; padding: 14px; }
+}
+
+@media (max-width: 420px) {
+  .hour-step-btn, .hour-action-btn { padding: 6px 7px; font-size: 11px; }
+}
 </style>

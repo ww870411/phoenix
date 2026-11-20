@@ -110,9 +110,9 @@
         <section class="card elevated form-card">
           <div class="card-header-row">
             <div>
-              <h3>2. 源站接入与并发保护参数</h3>
+              <h3>2. 源站接入与受控并发参数</h3>
               <p class="card-desc">
-                源站使用 Flask/Werkzeug 单线程容器运行，请保持单线程请求间隔 ≥ 0.5 秒。
+                支持受控多线程并发拉取（默认 4 并发）与失败退避重试，同时保留探测间隔保护避免压垮源站容器。
               </p>
             </div>
           </div>
@@ -148,7 +148,20 @@
 
           <div class="numeric-fields">
             <div class="field-group">
-              <label for="interval-input">单线程请求间隔（秒，0.5~5.0）</label>
+              <label for="workers-input">并行采集线程数（1~16）</label>
+              <input
+                id="workers-input"
+                v-model.number="form.max_workers"
+                type="number"
+                min="1"
+                max="16"
+                step="1"
+                class="text-input"
+              />
+            </div>
+
+            <div class="field-group">
+              <label for="interval-input">探测/退避间隔（秒，0.5~5.0）</label>
               <input
                 id="interval-input"
                 v-model.number="form.request_interval_seconds"
@@ -174,9 +187,10 @@
             </div>
 
             <div class="field-group">
-              <label for="snap-interval-select">批量采样间隔（分钟）</label>
+              <label for="snap-interval-select">上游/商户采样间隔（分钟）</label>
               <select id="snap-interval-select" v-model.number="form.snapshot_interval_minutes" class="text-input">
-                <option :value="15">每 15 分钟（推荐 · 精准梯形积分）</option>
+                <option :value="5">每 5 分钟（推荐 · 高频积分 + 2h算完即清）</option>
+                <option :value="15">每 15 分钟</option>
                 <option :value="30">每 30 分钟</option>
                 <option :value="60">每 60 分钟（仅整点）</option>
               </select>
@@ -196,7 +210,7 @@
             </div>
 
             <div class="field-group">
-              <label for="sync-hours-input">累计表底错峰校准周期（小时，1~24）</label>
+              <label for="sync-hours-input">换热站表底校准周期（小时，1~24，默认每小时 :05）</label>
               <input
                 id="sync-hours-input"
                 v-model.number="form.table_bottom_sync_hours"
@@ -299,11 +313,12 @@ const settings = ref({
   cookie_masked: '',
   cookie_length: 0,
   scheduler_enabled: false,
-  snapshot_interval_minutes: 15,
+  snapshot_interval_minutes: 5,
   hourly_offset_minutes: 0,
+  max_workers: 4,
   request_interval_seconds: 0.8,
   request_timeout_seconds: 15,
-  table_bottom_sync_hours: 6,
+  table_bottom_sync_hours: 1,
   updated_at: '',
   updated_by: '',
   last_test_result: null,
@@ -314,11 +329,12 @@ const form = reactive({
   custom_base_url: '',
   cookieInput: '',
   scheduler_enabled: false,
-  snapshot_interval_minutes: 15,
+  snapshot_interval_minutes: 5,
   hourly_offset_minutes: 0,
+  max_workers: 4,
   request_interval_seconds: 0.8,
   request_timeout_seconds: 15,
-  table_bottom_sync_hours: 6,
+  table_bottom_sync_hours: 1,
 })
 
 const breadcrumbItems = computed(() => [
@@ -357,11 +373,12 @@ function applySettingsToForm(data) {
   form.source_mode = data.source_mode || 'public'
   form.custom_base_url = data.custom_base_url || ''
   form.scheduler_enabled = Boolean(data.scheduler_enabled)
-  form.snapshot_interval_minutes = Number(data.snapshot_interval_minutes ?? 15)
+  form.snapshot_interval_minutes = Number(data.snapshot_interval_minutes ?? 5)
   form.hourly_offset_minutes = Number(data.hourly_offset_minutes ?? 0)
+  form.max_workers = Number(data.max_workers ?? 4)
   form.request_interval_seconds = Number(data.request_interval_seconds ?? 0.8)
   form.request_timeout_seconds = Number(data.request_timeout_seconds ?? 15)
-  form.table_bottom_sync_hours = Number(data.table_bottom_sync_hours ?? 6)
+  form.table_bottom_sync_hours = Number(data.table_bottom_sync_hours ?? 1)
 }
 
 function setNotice(type, text) {
@@ -393,6 +410,7 @@ async function handleSave() {
       scheduler_enabled: form.scheduler_enabled,
       snapshot_interval_minutes: form.snapshot_interval_minutes,
       hourly_offset_minutes: form.hourly_offset_minutes,
+      max_workers: form.max_workers,
       request_interval_seconds: form.request_interval_seconds,
       request_timeout_seconds: form.request_timeout_seconds,
       table_bottom_sync_hours: form.table_bottom_sync_hours,
@@ -793,5 +811,47 @@ onMounted(() => {
 
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@media (max-width: 768px) {
+  .shp-main {
+    padding: 12px 10px 28px;
+    gap: 10px;
+  }
+  .topbar,
+  .form-card,
+  .result-card {
+    padding: 14px 12px;
+  }
+  .title-row h2 {
+    font-size: 17px;
+  }
+  .topbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .topbar-actions > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .stat-card {
+    padding: 12px;
+  }
+  .numeric-fields {
+    grid-template-columns: 1fr;
+  }
+  .form-actions {
+    flex-direction: column;
+  }
+  .form-actions > .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>

@@ -1,3 +1,11 @@
+## 2026-11-20 升级 `smart_heating_platform` 为路线 B 并行采集、5 分钟高频积分与 2 小时算完即清
+
+- **`projects/smart_heating_platform/services/collector_config_service.py` & `api/settings.py`**：默认采样间隔改为 `5` 分钟（支持 `5/15/30/60`），校准周期默认 `1` 小时，新增受控并发线程数 `max_workers`（默认 `4`，范围 `1~16`）。
+- **`projects/smart_heating_platform/services/cleaning_engine.py`**：新增 `floor_to_bucket()`、共用清洗 `_clean_station_primary_metrics()` 与路线 B 历史代表断面清洗 `clean_station_history_point()`。
+- **`projects/smart_heating_platform/services/collector_engine.py` & `scheduler_service.py`**：按作业拆锁并异步拉起任务；`run_snapshot_cycle()` 并发采集上游、商业用户（含并发分片降级）及整点 `/jumin/`，停用换热站实时拉取与二次网分区统计；未结束小时不外推累计量，跨小时定格积分并调用 `prune_old_sampling_rows()` 保留 2 小时（当前小时 + 上一小时）明细；`run_table_bottom_calibration()` 与 `run_merchant_hourly_backfill()` 升级为受控并行拉取。
+- **`projects/smart_heating_platform/services/report_query_service.py`**：`get_hourly_report()` 移除二次分区表查询（站点 `zones` 返回空列表），并新增 `_resolve_latest_available_biz_hour()` 在未指定日期/小时时自动定位最新有数据的小时断面。
+- **测试 (`projects/smart_heating_platform/tests/`)**：`pytest backend/projects/smart_heating_platform/tests -v` **7 passed**。
+
 ## 2026-11-20 增加居民室温 48 小时滚动淘汰机制
 
 - **`projects/smart_heating_platform/services/collector_engine.py`**：新增 `TEMP_RETENTION_HOURS = 48` 与 `prune_old_temp_hourly()`，在每轮 `run_snapshot_cycle()` 自动清理 `fact_temp_hourly` 中超过 48 小时的室温记录，避免表膨胀。

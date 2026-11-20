@@ -2,17 +2,20 @@
 """
 智慧供热旁路精算与质检平台 —— 核心旁路采集引擎与入库聚合服务。
 
-支持三类安全采集作业（严格单线程串行 + 可配置间隔保护源站 Werkzeug 容器）：
-1. `run_snapshot_cycle()`：每 15 分钟执行一次批量接口采样（/gk_get_data/ + /get_yw_data/1 +
-   9次 /zx_hrz/），整点（或手动要求）附带 /jumin/；实时计算 15 分钟梯形积分写入 hourly 表；
-2. `run_table_bottom_calibration()`：低峰错峰按站轮询 /hrz_ls_zb/（isdownload=1 提取
-   f220/f221/f253/f254/f222），线性插值对齐整点并回刷校准热/水/电小时累计消耗量；
-3. `run_merchant_daily_cycle()`：拉取 /getall_bb_shrb/（累计量 + 日单耗）写入商户日耗表。
+支持三类受控并发采集作业（多线程受控并发 + Connection: close + 失败退避重试）：
+1. `run_snapshot_cycle()`：每 5 分钟（可配 5/15/30/60）并发拉取上游（/gk_get_data/）与商业用户
+   （/get_sh_data/），整点 `:00` 附带 /jumin/；对已结束小时执行时间加权梯形积分定格，
+   并对采样明细执行 2 小时滚动算完即清（仅保留当前小时 + 上一小时）；
+2. `run_table_bottom_calibration()`：路线 B 专责换热站每小时整点后（默认 `:05`）受控并行拉取
+   /hrz_ls_zb/（isdownload=1），整点线性插值计算表底差值（METER_DIFF）与代表断面写入
+   fact_station_hourly（坏表底自动降级为历史 f222 积分）；彻底不再拉取换热站实时与二次分区；
+3. `run_merchant_daily_cycle()`：每日 08:30 拉取 /getall_bb_shrb/ 写入商业用户日耗表。
 """
 
 from __future__ import annotations
 
 import calendar
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 import threading
@@ -32,10 +35,10 @@ from backend.projects.smart_heating_platform.services.cleaning_engine import (
     SRC_INTEGRAL_15M,
     SRC_METER_DIFF,
     clean_merchant_point,
-    clean_station_and_zones,
+    clean_station_history_point,
     clean_temp_device,
     clean_upstream_point,
-    floor_to_15min,
+    floor_to_bucket,
     floor_to_hour,
     interpolate_meter_at_hour,
     parse_dt_east8,
@@ -52,8 +55,14 @@ from backend.projects.smart_heating_platform.services.db_schema import ensure_sm
 
 logger = logging.getLogger(__name__)
 
-_COLLECT_LOCK = threading.RLock()
+# 按作业类型拆锁：表底校准与 5 分钟快照采集互不阻塞
+_SNAPSHOT_LOCK = threading.RLock()
+_CALIB_LOCK = threading.RLock()
+_MERCHANT_DAILY_LOCK = threading.RLock()
+_MERCHANT_BACKFILL_LOCK = threading.RLock()
+
 TEMP_RETENTION_HOURS = 48
+SAMPLING_KEEP_HOURS = 2
 
 
 def prune_old_temp_hourly(
@@ -69,6 +78,39 @@ def prune_old_temp_hourly(
         {"cutoff": cutoff},
     )
     return int(res.rowcount or 0)
+
+
+def prune_old_sampling_rows(
+    conn: Any,
+    reference_time: Optional[datetime] = None,
+    keep_hours: int = SAMPLING_KEEP_HOURS,
+) -> Dict[str, int]:
+    """
+    算完即清：清理高频采样明细表中早于保留窗口的记录。
+
+    默认 `keep_hours=2` 时，仅保留当前正在进行的小时与刚结束的上一小时
+    （即 `cutoff = floor_to_hour(ref) - 1h`，删除 `biz_hour < cutoff` 的明细）。
+    """
+    ref_e8 = floor_to_hour(reference_time or datetime.now(EAST_8))
+    cutoff = ref_e8 - timedelta(hours=max(1, int(keep_hours)) - 1)
+    tables = (
+        "fact_upstream_15min",
+        "fact_merchant_15min",
+        "fact_station_15min",
+        "fact_zone_15min",
+    )
+    counts: Dict[str, int] = {}
+    total = 0
+    for tbl in tables:
+        res = conn.execute(
+            text(f"DELETE FROM smart_heating_platform.{tbl} WHERE biz_hour < :cutoff"),
+            {"cutoff": cutoff},
+        )
+        deleted = int(res.rowcount or 0)
+        counts[tbl] = deleted
+        total += deleted
+    counts["total"] = total
+    return counts
 
 
 def _post_with_retry(
@@ -214,16 +256,6 @@ def _load_prev_valid_snapshots(biz_hour: datetime) -> Dict[str, Any]:
             {"prev_start": prev_start, "biz_hour": biz_hour},
         ).fetchall()
 
-        zn_rows = conn.execute(
-            text(
-                "SELECT DISTINCT ON (secondary_zone_id) secondary_zone_id, e5_clean, e6_clean "
-                "FROM smart_heating_platform.fact_zone_hourly "
-                "WHERE biz_hour >= :prev_start AND biz_hour < :biz_hour AND e5_clean IS NOT NULL "
-                "ORDER BY secondary_zone_id, biz_hour DESC"
-            ),
-            {"prev_start": prev_start, "biz_hour": biz_hour},
-        ).fetchall()
-
         mc_rows = conn.execute(
             text(
                 "SELECT DISTINCT ON (source_name) source_name, flow_clean, temp_sup_clean, temp_ret_clean, "
@@ -238,7 +270,6 @@ def _load_prev_valid_snapshots(biz_hour: datetime) -> Dict[str, Any]:
     return {
         "upstream": {(r.data_zone, r.source_name): dict(r._mapping) for r in up_rows},
         "station": {r.station_id: dict(r._mapping) for r in st_rows},
-        "zone": {r.secondary_zone_id: dict(r._mapping) for r in zn_rows},
         "merchant": {r.source_name: dict(r._mapping) for r in mc_rows},
     }
 
@@ -313,8 +344,13 @@ def _finish_run_log(
         )
 
 
-def _aggregate_upstream_hourly(conn: Any, biz_hour: datetime) -> int:
-    """从 fact_upstream_15min 对指定小时做 15 分钟梯形积分与代表断面汇总。"""
+def _aggregate_upstream_hourly(conn: Any, biz_hour: datetime, finalize: bool = True) -> int:
+    """
+    从 fact_upstream_15min 对指定小时汇总代表断面与梯形积分。
+
+    - `finalize=False`（当前尚未结束的小时）：仅更新瞬时代表断面，`hour_heat_gj`/`hour_flow_t` 保持为空；
+    - `finalize=True`（已结束整点小时）：计算 5/15 分钟时间加权梯形积分并定格。
+    """
     rows = conn.execute(
         text(
             "SELECT sample_bucket, point_id, data_zone, source_name, display_name, category, sub_category, "
@@ -355,8 +391,8 @@ def _aggregate_upstream_hourly(conn: Any, biz_hour: datetime) -> int:
             "flow_clean": latest.flow_clean,
             "heat_raw": latest.heat_raw,
             "heat_clean": latest.heat_clean,
-            "hour_heat_gj": trapezoidal_hour_integral(heat_samples),
-            "hour_flow_t": trapezoidal_hour_integral(flow_samples),
+            "hour_heat_gj": trapezoidal_hour_integral(heat_samples) if finalize else None,
+            "hour_flow_t": trapezoidal_hour_integral(flow_samples) if finalize else None,
             "value_source": latest.value_source,
             "fault_tag": latest.fault_tag,
         })
@@ -382,200 +418,13 @@ def _aggregate_upstream_hourly(conn: Any, biz_hour: datetime) -> int:
     return len(hourly_rows)
 
 
-def _aggregate_station_hourly_from_15min(conn: Any, biz_hour: datetime) -> int:
-    """从 fact_station_15min 计算换热站小时代表值与 15 分钟梯形积分（不覆盖已表底校准的 METER_DIFF）。"""
-    rows = conn.execute(
-        text(
-            "SELECT sample_bucket, station_id, online, source_update_time, "
-            "e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean, e7_raw, e7_clean, e8_raw, e8_clean, "
-            "e11_raw, e11_clean, e13_raw, e14_raw, e14_clean, e16_raw, zone_heat_sum_e12, "
-            "value_source, fault_tag "
-            "FROM smart_heating_platform.fact_station_15min "
-            "WHERE biz_hour = :biz_hour "
-            "ORDER BY station_id, sample_bucket ASC"
-        ),
-        {"biz_hour": biz_hour},
-    ).fetchall()
-
-    grouped: Dict[str, List[Any]] = {}
-    for r in rows:
-        grouped.setdefault(r.station_id, []).append(r)
-
-    hourly_rows: List[Dict[str, Any]] = []
-    for st_id, items in grouped.items():
-        latest = items[-1]
-        heat_samples = [(it.sample_bucket, float(it.e11_clean) if it.e11_clean is not None else None) for it in items]
-        flow_samples = [(it.sample_bucket, float(it.e1_clean) if it.e1_clean is not None else None) for it in items]
-        water_samples = [(it.sample_bucket, float(it.e14_clean) if it.e14_clean is not None else None) for it in items]
-
-        heat_diff_pct: Optional[float] = None
-        if latest.zone_heat_sum_e12 is not None and latest.e11_raw is not None and float(latest.e11_raw) > 0.05:
-            heat_diff_pct = round(
-                (float(latest.zone_heat_sum_e12) - float(latest.e11_raw)) / float(latest.e11_raw) * 100.0,
-                2,
-            )
-
-        hourly_rows.append({
-            "biz_hour": biz_hour,
-            "station_id": st_id,
-            "sample_count": len(items),
-            "online": latest.online,
-            "source_update_time": latest.source_update_time,
-            "e1_raw": latest.e1_raw,
-            "e1_clean": latest.e1_clean,
-            "e3_raw": latest.e3_raw,
-            "e3_clean": latest.e3_clean,
-            "e4_raw": latest.e4_raw,
-            "e4_clean": latest.e4_clean,
-            "e7_raw": latest.e7_raw,
-            "e7_clean": latest.e7_clean,
-            "e8_raw": latest.e8_raw,
-            "e8_clean": latest.e8_clean,
-            "e11_raw": latest.e11_raw,
-            "e11_clean": latest.e11_clean,
-            "e13_raw": latest.e13_raw,
-            "e14_raw": latest.e14_raw,
-            "e14_clean": latest.e14_clean,
-            "e16_raw": latest.e16_raw,
-            "zone_heat_sum_e12": latest.zone_heat_sum_e12,
-            "heat_balance_diff_pct": heat_diff_pct,
-            "hour_heat_gj": trapezoidal_hour_integral(heat_samples),
-            "hour_heat_source": SRC_INTEGRAL_15M,
-            "hour_flow_t": trapezoidal_hour_integral(flow_samples),
-            "hour_flow_source": SRC_INTEGRAL_15M,
-            "hour_water_t": trapezoidal_hour_integral(water_samples),
-            "hour_water_source": SRC_INTEGRAL_15M,
-            "value_source": latest.value_source,
-            "fault_tag": latest.fault_tag,
-        })
-
-    if not hourly_rows:
-        return 0
-
-    sql = """
-    INSERT INTO smart_heating_platform.fact_station_hourly (
-        biz_hour, station_id, sample_count, online, source_update_time,
-        e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean, e7_raw, e7_clean,
-        e8_raw, e8_clean, e11_raw, e11_clean, e13_raw, e14_raw, e14_clean, e16_raw,
-        zone_heat_sum_e12, heat_balance_diff_pct,
-        hour_heat_gj, hour_heat_source, hour_flow_t, hour_flow_source,
-        hour_water_t, hour_water_source, value_source, fault_tag
-    ) VALUES (
-        :biz_hour, :station_id, :sample_count, :online, :source_update_time,
-        :e1_raw, :e1_clean, :e3_raw, :e3_clean, :e4_raw, :e4_clean, :e7_raw, :e7_clean,
-        :e8_raw, :e8_clean, :e11_raw, :e11_clean, :e13_raw, :e14_raw, :e14_clean, :e16_raw,
-        :zone_heat_sum_e12, :heat_balance_diff_pct,
-        :hour_heat_gj, :hour_heat_source, :hour_flow_t, :hour_flow_source,
-        :hour_water_t, :hour_water_source, :value_source, :fault_tag
-    )
-    ON CONFLICT (biz_hour, station_id) DO UPDATE SET
-        sample_count = EXCLUDED.sample_count,
-        online = EXCLUDED.online,
-        source_update_time = EXCLUDED.source_update_time,
-        e1_raw = EXCLUDED.e1_raw, e1_clean = EXCLUDED.e1_clean,
-        e3_raw = EXCLUDED.e3_raw, e3_clean = EXCLUDED.e3_clean,
-        e4_raw = EXCLUDED.e4_raw, e4_clean = EXCLUDED.e4_clean,
-        e7_raw = EXCLUDED.e7_raw, e7_clean = EXCLUDED.e7_clean,
-        e8_raw = EXCLUDED.e8_raw, e8_clean = EXCLUDED.e8_clean,
-        e11_raw = EXCLUDED.e11_raw, e11_clean = EXCLUDED.e11_clean,
-        e13_raw = EXCLUDED.e13_raw, e14_raw = EXCLUDED.e14_raw,
-        e14_clean = EXCLUDED.e14_clean, e16_raw = EXCLUDED.e16_raw,
-        zone_heat_sum_e12 = EXCLUDED.zone_heat_sum_e12,
-        heat_balance_diff_pct = EXCLUDED.heat_balance_diff_pct,
-        hour_heat_gj = CASE
-            WHEN smart_heating_platform.fact_station_hourly.hour_heat_source = 'METER_DIFF'
-            THEN smart_heating_platform.fact_station_hourly.hour_heat_gj
-            ELSE EXCLUDED.hour_heat_gj END,
-        hour_heat_source = CASE
-            WHEN smart_heating_platform.fact_station_hourly.hour_heat_source = 'METER_DIFF'
-            THEN 'METER_DIFF' ELSE EXCLUDED.hour_heat_source END,
-        hour_flow_t = CASE
-            WHEN smart_heating_platform.fact_station_hourly.hour_flow_source = 'METER_DIFF'
-            THEN smart_heating_platform.fact_station_hourly.hour_flow_t
-            ELSE EXCLUDED.hour_flow_t END,
-        hour_flow_source = CASE
-            WHEN smart_heating_platform.fact_station_hourly.hour_flow_source = 'METER_DIFF'
-            THEN 'METER_DIFF' ELSE EXCLUDED.hour_flow_source END,
-        hour_water_t = CASE
-            WHEN smart_heating_platform.fact_station_hourly.hour_water_source = 'METER_DIFF'
-            THEN smart_heating_platform.fact_station_hourly.hour_water_t
-            ELSE EXCLUDED.hour_water_t END,
-        hour_water_source = CASE
-            WHEN smart_heating_platform.fact_station_hourly.hour_water_source = 'METER_DIFF'
-            THEN 'METER_DIFF' ELSE EXCLUDED.hour_water_source END,
-        value_source = EXCLUDED.value_source,
-        fault_tag = EXCLUDED.fault_tag,
-        updated_at = NOW()
+def _aggregate_merchant_hourly(conn: Any, biz_hour: datetime, finalize: bool = True) -> int:
     """
-    conn.execute(text(sql), hourly_rows)
-    return len(hourly_rows)
+    从 fact_merchant_15min 汇总商业用户小时代表断面与梯形积分（热量 GJ 与流量 t）。
 
-
-def _aggregate_zone_hourly(conn: Any, biz_hour: datetime) -> int:
-    """从 fact_zone_15min 汇总二次网分区小时断面。"""
-    rows = conn.execute(
-        text(
-            "SELECT DISTINCT ON (secondary_zone_id) secondary_zone_id, station_id, "
-            "e2_raw, e2_clean, e5_raw, e5_clean, e6_raw, e6_clean, "
-            "e9_raw, e9_clean, e10_raw, e10_clean, e12_raw, e15_raw, e15_clean, "
-            "value_source, fault_tag, "
-            "(SELECT COUNT(*) FROM smart_heating_platform.fact_zone_15min z2 "
-            " WHERE z2.biz_hour = :biz_hour AND z2.secondary_zone_id = z1.secondary_zone_id) AS sample_count "
-            "FROM smart_heating_platform.fact_zone_15min z1 "
-            "WHERE biz_hour = :biz_hour "
-            "ORDER BY secondary_zone_id, sample_bucket DESC"
-        ),
-        {"biz_hour": biz_hour},
-    ).fetchall()
-
-    hourly_rows = [
-        {
-            "biz_hour": biz_hour,
-            "secondary_zone_id": r.secondary_zone_id,
-            "station_id": r.station_id,
-            "sample_count": int(r.sample_count or 1),
-            "e2_raw": r.e2_raw,
-            "e2_clean": r.e2_clean,
-            "e5_raw": r.e5_raw,
-            "e5_clean": r.e5_clean,
-            "e6_raw": r.e6_raw,
-            "e6_clean": r.e6_clean,
-            "e9_raw": r.e9_raw,
-            "e9_clean": r.e9_clean,
-            "e10_raw": r.e10_raw,
-            "e10_clean": r.e10_clean,
-            "e12_raw": r.e12_raw,
-            "e15_raw": r.e15_raw,
-            "e15_clean": r.e15_clean,
-            "value_source": r.value_source,
-            "fault_tag": r.fault_tag,
-        }
-        for r in rows
-    ]
-
-    _upsert_batch(
-        conn,
-        "fact_zone_hourly",
-        [
-            "biz_hour", "secondary_zone_id", "station_id", "sample_count",
-            "e2_raw", "e2_clean", "e5_raw", "e5_clean", "e6_raw", "e6_clean",
-            "e9_raw", "e9_clean", "e10_raw", "e10_clean", "e12_raw", "e15_raw", "e15_clean",
-            "value_source", "fault_tag",
-        ],
-        ["biz_hour", "secondary_zone_id"],
-        [
-            "station_id", "sample_count", "e2_raw", "e2_clean", "e5_raw", "e5_clean",
-            "e6_raw", "e6_clean", "e9_raw", "e9_clean", "e10_raw", "e10_clean",
-            "e12_raw", "e15_raw", "e15_clean", "value_source", "fault_tag",
-        ],
-        hourly_rows,
-        extra_set_clauses=["updated_at = NOW()"],
-    )
-    return len(hourly_rows)
-
-
-def _aggregate_merchant_hourly(conn: Any, biz_hour: datetime) -> int:
-    """从 fact_merchant_15min 汇总商业用户小时代表断面与 15 分钟梯形积分（热量 GJ 与流量 t）。"""
+    - `finalize=False`（当前尚未结束的小时）：仅更新瞬时代表断面，`hour_heat_gj`/`hour_flow_t` 保持为空；
+    - `finalize=True`（已结束整点小时）：计算 5/15 分钟时间加权梯形积分并定格。
+    """
     rows = conn.execute(
         text(
             "SELECT sample_bucket, merchant_id, source_name, is_registered, online, "
@@ -599,8 +448,8 @@ def _aggregate_merchant_hourly(conn: Any, biz_hour: datetime) -> int:
         latest = items[-1]
         heat_samples = [(it.sample_bucket, float(it.heat_clean) if it.heat_clean is not None else None) for it in items]
         flow_samples = [(it.sample_bucket, float(it.flow_clean) if it.flow_clean is not None else None) for it in items]
-        hour_heat = trapezoidal_hour_integral(heat_samples) if latest.is_registered else None
-        hour_flow = trapezoidal_hour_integral(flow_samples) if latest.is_registered else None
+        hour_heat = trapezoidal_hour_integral(heat_samples) if (finalize and latest.is_registered) else None
+        hour_flow = trapezoidal_hour_integral(flow_samples) if (finalize and latest.is_registered) else None
 
         hourly_rows.append({
             "biz_hour": biz_hour,
@@ -625,9 +474,9 @@ def _aggregate_merchant_hourly(conn: Any, biz_hour: datetime) -> int:
             "valve_open": latest.valve_open,
             "valve_set": latest.valve_set,
             "hour_heat_gj": hour_heat,
-            "hour_heat_source": SRC_INTEGRAL_15M,
+            "hour_heat_source": SRC_INTEGRAL_15M if finalize else "PENDING",
             "hour_flow_t": hour_flow,
-            "hour_flow_source": SRC_INTEGRAL_15M,
+            "hour_flow_source": SRC_INTEGRAL_15M if finalize else "PENDING",
             "value_source": latest.value_source,
             "fault_tag": latest.fault_tag,
         })
@@ -659,51 +508,59 @@ def _aggregate_merchant_hourly(conn: Any, biz_hour: datetime) -> int:
 
 
 def _fetch_merchant_realtime_items(
-    client: httpx.Client,
     base_url: str,
     headers: Dict[str, str],
     main_network_ids: Sequence[int],
-    interval: float,
+    timeout: float,
+    max_workers: int = 4,
 ) -> List[Dict[str, Any]]:
     """
-    免 Cookie 获取商业用户全网实时运行参数（含瞬时热量与流量）。
+    免 Cookie 并行获取商业用户全网实时运行参数（含瞬时热量与流量）。
 
     优先尝试单次调用 `/get_sh_data/0`（sh_selected=0）；若大包被源站 NAT 中断，
-    则自动降级按主干网 ID（2..16）分片拉取 `/get_sh_data/{mn_id}` 合并去重。
+    则自动降级使用受控线程池按主干网 ID（2..16）并发拉取 `/get_sh_data/{mn_id}` 合并去重。
     """
     req_headers = {**headers, "Connection": "close"}
     try:
-        r0 = _post_with_retry(
-            client,
-            f"{base_url}/get_sh_data/0",
-            data={"sh_selected": "0"},
-            headers=req_headers,
-            retries=1,
-        )
-        if r0.status_code == 200:
-            arr = r0.json()
-            if isinstance(arr, list) and arr:
-                return [x for x in arr if isinstance(x, dict) and x.get("name")]
+        with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+            r0 = _post_with_retry(
+                client,
+                f"{base_url}/get_sh_data/0",
+                data={"sh_selected": "0"},
+                headers=req_headers,
+                retries=1,
+            )
+            if r0.status_code == 200:
+                arr = r0.json()
+                if isinstance(arr, list) and arr:
+                    return [x for x in arr if isinstance(x, dict) and x.get("name")]
     except Exception as exc:
-        logger.info("全量 /get_sh_data/0 遇到截断抖动，切换主干网分片采集: %s", exc)
+        logger.info("全量 /get_sh_data/0 遇到截断抖动，切换主干网并发分片采集: %s", exc)
+
+    def _fetch_shard(mid: int) -> List[Dict[str, Any]]:
+        with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+            rm = _post_with_retry(
+                client,
+                f"{base_url}/get_sh_data/{mid}",
+                data={"sh_selected": str(mid)},
+                headers=req_headers,
+                retries=2,
+            )
+            if rm.status_code != 200:
+                return []
+            arr = rm.json() or []
+            return [x for x in arr if isinstance(x, dict) and x.get("name")] if isinstance(arr, list) else []
 
     seen: Dict[str, Dict[str, Any]] = {}
-    for mid in main_network_ids:
-        time.sleep(max(0.5, interval))
-        rm = _post_with_retry(
-            client,
-            f"{base_url}/get_sh_data/{mid}",
-            data={"sh_selected": str(mid)},
-            headers=req_headers,
-            retries=2,
-        )
-        if rm.status_code != 200:
-            continue
-        arr = rm.json() or []
-        if isinstance(arr, list):
-            for x in arr:
-                if isinstance(x, dict) and x.get("name"):
+    workers = max(1, min(int(max_workers), len(main_network_ids) or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_fetch_shard, mid) for mid in main_network_ids]
+        for fut in as_completed(futures):
+            try:
+                for x in fut.result():
                     seen[str(x["name"]).strip()] = x
+            except Exception as exc:
+                logger.warning("商户主干网分片采集失败: %s", exc)
     return list(seen.values())
 
 
@@ -712,185 +569,153 @@ def run_snapshot_cycle(
     trigger: str = "AUTO",
 ) -> Dict[str, Any]:
     """
-    执行单轮 15 分钟批量断面采集、五重清洗与小时梯形积分聚合。
+    执行单轮高频（默认 5 分钟）受控并行快照采集、清洗、整点后积分定格与 2 小时滚动清理。
 
-    当 `include_jumin` 为 None 时，仅在整点 00 分钟自动采集居民室温（降低 Cookie 接口压力）；
-    手动触发时默认全量采集（若已配置 Cookie）。
+    路线 B 约定：
+    - 彻底不再拉取换热站实时（/zx_hrz/、/get_yw_data/1）及二次网分区；
+    - 并发拉取上游点位（/gk_get_data/）、商业用户（/get_sh_data/）及整点居民室温（/jumin/）；
+    - 当前未结束小时仅更新瞬时代表断面（累计耗量留空）；跨小时后自动对已结束小时做梯形积分定格，
+      并执行“算完即清”（仅保留当前小时 + 上一小时采样明细）。
     """
     ensure_smart_heating_fact_tables()
-    with _COLLECT_LOCK:
+    with _SNAPSHOT_LOCK:
         started_perf = time.perf_counter()
         now_e8 = datetime.now(EAST_8)
-        sample_bucket = floor_to_15min(now_e8)
-        biz_hour = floor_to_hour(now_e8)
-
         cfg = _read_raw_config()
         base_url = resolve_effective_base_url(cfg)
-        interval = max(0.5, float(cfg.get("request_interval_seconds", 0.8)))
+        snap_interval = int(cfg.get("snapshot_interval_minutes", 5))
+        max_workers = max(1, min(16, int(cfg.get("max_workers", 4))))
         timeout = float(cfg.get("request_timeout_seconds", 15.0))
         cookie = normalize_cookie_input(str(cfg.get("cookie") or ""))
 
+        sample_bucket = floor_to_bucket(now_e8, snap_interval)
+        biz_hour = floor_to_hour(now_e8)
+
         should_fetch_jumin = (sample_bucket.minute == 0) if include_jumin is None else bool(include_jumin)
-        run_type = "MANUAL" if trigger == "MANUAL" else "SNAPSHOT_15M"
+        run_type = "MANUAL" if trigger == "MANUAL" else "SNAPSHOT_5M"
         run_id = _insert_run_log(biz_hour, run_type, cfg.get("source_mode", "public"))
 
         headers = {
             "User-Agent": "Phoenix-SmartHeating-Collector/2.0",
             "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Connection": "close",
         }
 
         caches = _load_dict_caches()
         prev_valid = _load_prev_valid_snapshots(biz_hour)
 
         upstream_rows: List[Dict[str, Any]] = []
-        station_rows: List[Dict[str, Any]] = []
-        zone_rows: List[Dict[str, Any]] = []
         temp_rows: List[Dict[str, Any]] = []
         merchant_rows: List[Dict[str, Any]] = []
         fault_rows: List[Dict[str, Any]] = []
         cookie_valid: Optional[bool] = None
 
-        try:
-            partial_errors: List[str] = []
+        def _fetch_upstream() -> Dict[str, Any]:
             with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
-                # 1. 上游五大字典 (/gk_get_data/)
                 r_gk = _post_with_retry(client, f"{base_url}/gk_get_data/", headers=headers)
                 r_gk.raise_for_status()
-                gk_data = r_gk.json()
-                for data_zone, zone_dict in (gk_data or {}).items():
-                    if not isinstance(zone_dict, dict):
-                        continue
-                    for src_name, raw_item in zone_dict.items():
-                        if not isinstance(raw_item, dict):
-                            continue
-                        meta = caches["upstream_by_key"].get(
-                            (data_zone, src_name),
-                            {
-                                "point_id": None,
-                                "data_zone": data_zone,
-                                "source_name": src_name,
-                                "name": raw_item.get("item_name") or src_name,
-                                "category": data_zone,
-                                "sub_category": None,
-                            },
-                        )
-                        cleaned_u, u_faults = clean_upstream_point(
-                            raw_item,
-                            meta,
-                            now_e8,
-                            prev_valid=prev_valid["upstream"].get((data_zone, src_name)),
-                        )
-                        cleaned_u["sample_bucket"] = sample_bucket
-                        cleaned_u["biz_hour"] = biz_hour
-                        upstream_rows.append(cleaned_u)
-                        fault_rows.extend(u_faults)
+                return r_gk.json() or {}
 
-                time.sleep(interval)
+        def _fetch_jumin() -> Tuple[Optional[bool], List[Dict[str, Any]]]:
+            with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+                r_jm = _post_with_retry(
+                    client,
+                    f"{base_url}/jumin/",
+                    data={"department_name": "0", "filter_level": "0", "isDownload": "1"},
+                    headers={**headers, "Cookie": cookie},
+                )
+                if r_jm.status_code != 200:
+                    return False, []
+                jm_json = r_jm.json()
+                items = jm_json.get("data", []) if isinstance(jm_json, dict) else []
+                return True, items
 
-                # 2. 242 站精确时间戳与一网快照 (/get_yw_data/1)
-                r_yw = _post_with_retry(client, f"{base_url}/get_yw_data/1", data={"yw_selected": "1"}, headers=headers)
-                r_yw.raise_for_status()
-                yw_by_name = {
-                    str(item.get("name") or "").strip(): item
-                    for item in (r_yw.json() or [])
-                    if isinstance(item, dict)
-                }
+        try:
+            partial_errors: List[str] = []
+            gk_data: Dict[str, Any] = {}
+            raw_merchants: List[Dict[str, Any]] = []
+            jm_items: List[Dict[str, Any]] = []
 
-                # 3. 9 大服务中心 /zx_hrz/ (60..68)
-                zx_by_id: Dict[str, Dict[str, Any]] = {}
-                for center_id in range(60, 69):
-                    time.sleep(interval)
-                    try:
-                        r_zx = _post_with_retry(client, f"{base_url}/zx_hrz/", data={"branch_id": str(center_id)}, headers=headers)
-                        r_zx.raise_for_status()
-                        for st_item in json.loads(r_zx.text):
-                            if isinstance(st_item, dict) and st_item.get("id"):
-                                zx_by_id[str(st_item["id"])] = st_item
-                    except Exception as zx_exc:
-                        partial_errors.append(f"zx_hrz({center_id}): {zx_exc}")
-                        logger.warning("采集中心 %s 异常已跳过继续: %s", center_id, zx_exc)
+            with ThreadPoolExecutor(max_workers=min(max_workers, 3)) as pool:
+                fut_up = pool.submit(_fetch_upstream)
+                fut_mc = pool.submit(
+                    _fetch_merchant_realtime_items,
+                    base_url,
+                    headers,
+                    caches["main_network_ids"],
+                    timeout,
+                    max_workers,
+                )
+                fut_jm = pool.submit(_fetch_jumin) if (should_fetch_jumin and cookie) else None
 
-                # 对全网 242 座台账换热站做统一清洗归口（含 5 座无分区站）
-                for st_meta in caches["stations"]:
-                    st_id = st_meta["station_id"]
-                    st_name = st_meta["name"]
-                    zx_item = zx_by_id.get(st_id)
-                    yw_item = yw_by_name.get(st_name)
-                    if zx_item is None and yw_item is None:
-                        continue
-                    cleaned_st, cleaned_zns, st_faults = clean_station_and_zones(
-                        station_meta=st_meta,
-                        zx_item=zx_item,
-                        yw_item=yw_item,
-                        zone_meta_map=caches["zones_by_station"].get(st_id, {}),
-                        collected_at=now_e8,
-                        prev_station_valid=prev_valid["station"].get(st_id),
-                        prev_zones_valid=prev_valid["zone"],
-                    )
-                    cleaned_st["sample_bucket"] = sample_bucket
-                    cleaned_st["biz_hour"] = biz_hour
-                    station_rows.append(cleaned_st)
-                    for z in cleaned_zns:
-                        z["sample_bucket"] = sample_bucket
-                        z["biz_hour"] = biz_hour
-                        zone_rows.append(z)
-                    fault_rows.extend(st_faults)
-
-                # 4. 居民室温 (/jumin/)
-                if should_fetch_jumin and cookie:
-                    time.sleep(interval)
-                    r_jm = _post_with_retry(
-                        client,
-                        f"{base_url}/jumin/",
-                        data={"department_name": "0", "filter_level": "0", "isDownload": "1"},
-                        headers={**headers, "Cookie": cookie},
-                    )
-                    if r_jm.status_code == 200:
-                        jm_json = r_jm.json()
-                        jm_items = jm_json.get("data", []) if isinstance(jm_json, dict) else []
-                        cookie_valid = True
-                        for raw_u in jm_items:
-                            if not isinstance(raw_u, dict) or not raw_u.get("id"):
-                                continue
-                            cleaned_t, t_faults = clean_temp_device(
-                                raw_u,
-                                device_dict=caches["device_by_id"],
-                                alias_station_map=caches["alias_station_map"],
-                                collected_at=now_e8,
-                            )
-                            cleaned_t["biz_hour"] = biz_hour
-                            temp_rows.append(cleaned_t)
-                            fault_rows.extend(t_faults)
-                    else:
-                        cookie_valid = False
-
-                # 5. 商业用户全网实时运行参数 (/get_sh_data/0，断流时自动降级分片拉取，免 Cookie)
-                time.sleep(interval)
+                gk_data = fut_up.result()
                 try:
-                    raw_merchants = _fetch_merchant_realtime_items(
-                        client,
-                        base_url,
-                        headers,
-                        caches["main_network_ids"],
-                        interval,
-                    )
-                    for raw_m in raw_merchants:
-                        sname_key = str(raw_m.get("name") or "").strip()
-                        cleaned_m, m_faults = clean_merchant_point(
-                            raw_m,
-                            merchant_lookup=caches["merchant_by_name"],
-                            collected_at=now_e8,
-                            prev_valid=prev_valid["merchant"].get(sname_key),
-                        )
-                        cleaned_m["sample_bucket"] = sample_bucket
-                        cleaned_m["biz_hour"] = biz_hour
-                        merchant_rows.append(cleaned_m)
-                        fault_rows.extend(m_faults)
+                    raw_merchants = fut_mc.result()
                 except Exception as mc_exc:
                     partial_errors.append(f"get_sh_data: {mc_exc}")
                     logger.warning("采集商业用户实时断面异常已跳过继续: %s", mc_exc)
+                if fut_jm is not None:
+                    try:
+                        cookie_valid, jm_items = fut_jm.result()
+                    except Exception as jm_exc:
+                        cookie_valid = False
+                        partial_errors.append(f"jumin: {jm_exc}")
 
-            # 统一入库与小时聚合
+            for data_zone, zone_dict in (gk_data or {}).items():
+                if not isinstance(zone_dict, dict):
+                    continue
+                for src_name, raw_item in zone_dict.items():
+                    if not isinstance(raw_item, dict):
+                        continue
+                    meta = caches["upstream_by_key"].get(
+                        (data_zone, src_name),
+                        {
+                            "point_id": None,
+                            "data_zone": data_zone,
+                            "source_name": src_name,
+                            "name": raw_item.get("item_name") or src_name,
+                            "category": data_zone,
+                            "sub_category": None,
+                        },
+                    )
+                    cleaned_u, u_faults = clean_upstream_point(
+                        raw_item,
+                        meta,
+                        now_e8,
+                        prev_valid=prev_valid["upstream"].get((data_zone, src_name)),
+                    )
+                    cleaned_u["sample_bucket"] = sample_bucket
+                    cleaned_u["biz_hour"] = biz_hour
+                    upstream_rows.append(cleaned_u)
+                    fault_rows.extend(u_faults)
+
+            for raw_u in jm_items:
+                if not isinstance(raw_u, dict) or not raw_u.get("id"):
+                    continue
+                cleaned_t, t_faults = clean_temp_device(
+                    raw_u,
+                    device_dict=caches["device_by_id"],
+                    alias_station_map=caches["alias_station_map"],
+                    collected_at=now_e8,
+                )
+                cleaned_t["biz_hour"] = biz_hour
+                temp_rows.append(cleaned_t)
+                fault_rows.extend(t_faults)
+
+            for raw_m in raw_merchants:
+                sname_key = str(raw_m.get("name") or "").strip()
+                cleaned_m, m_faults = clean_merchant_point(
+                    raw_m,
+                    merchant_lookup=caches["merchant_by_name"],
+                    collected_at=now_e8,
+                    prev_valid=prev_valid["merchant"].get(sname_key),
+                )
+                cleaned_m["sample_bucket"] = sample_bucket
+                cleaned_m["biz_hour"] = biz_hour
+                merchant_rows.append(cleaned_m)
+                fault_rows.extend(m_faults)
+
+            # 统一入库、完结历史小时积分、算完即清
             with engine.begin() as conn:
                 _upsert_batch(
                     conn,
@@ -908,44 +733,6 @@ def run_snapshot_cycle(
                         "freq_val", "value_source", "fault_tag",
                     ],
                     upstream_rows,
-                )
-
-                _upsert_batch(
-                    conn,
-                    "fact_station_15min",
-                    [
-                        "sample_bucket", "biz_hour", "station_id", "online", "source_update_time",
-                        "e1_raw", "e1_clean", "e3_raw", "e3_clean", "e4_raw", "e4_clean",
-                        "e7_raw", "e7_clean", "e8_raw", "e8_clean", "e11_raw", "e11_clean",
-                        "e13_raw", "e14_raw", "e14_clean", "e16_raw", "zone_heat_sum_e12",
-                        "value_source", "fault_tag",
-                    ],
-                    ["sample_bucket", "station_id"],
-                    [
-                        "online", "source_update_time", "e1_raw", "e1_clean", "e3_raw", "e3_clean",
-                        "e4_raw", "e4_clean", "e7_raw", "e7_clean", "e8_raw", "e8_clean",
-                        "e11_raw", "e11_clean", "e13_raw", "e14_raw", "e14_clean", "e16_raw",
-                        "zone_heat_sum_e12", "value_source", "fault_tag",
-                    ],
-                    station_rows,
-                )
-
-                _upsert_batch(
-                    conn,
-                    "fact_zone_15min",
-                    [
-                        "sample_bucket", "biz_hour", "secondary_zone_id", "station_id",
-                        "e2_raw", "e2_clean", "e5_raw", "e5_clean", "e6_raw", "e6_clean",
-                        "e9_raw", "e9_clean", "e10_raw", "e10_clean", "e12_raw", "e15_raw", "e15_clean",
-                        "value_source", "fault_tag",
-                    ],
-                    ["sample_bucket", "secondary_zone_id"],
-                    [
-                        "e2_raw", "e2_clean", "e5_raw", "e5_clean", "e6_raw", "e6_clean",
-                        "e9_raw", "e9_clean", "e10_raw", "e10_clean", "e12_raw", "e15_raw", "e15_clean",
-                        "value_source", "fault_tag",
-                    ],
-                    zone_rows,
                 )
 
                 if temp_rows:
@@ -988,7 +775,6 @@ def run_snapshot_cycle(
                         merchant_rows,
                     )
 
-                # 去重后写入阴面故障督办单
                 dedup_faults: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
                 for flt in fault_rows:
                     flt["biz_hour"] = biz_hour
@@ -1007,25 +793,58 @@ def run_snapshot_cycle(
                     extra_set_clauses=["updated_at = NOW()"],
                 )
 
-                up_hourly_cnt = _aggregate_upstream_hourly(conn, biz_hour)
-                st_hourly_cnt = _aggregate_station_hourly_from_15min(conn, biz_hour)
-                zn_hourly_cnt = _aggregate_zone_hourly(conn, biz_hour)
-                mc_hourly_cnt = _aggregate_merchant_hourly(conn, biz_hour)
+                # 先对已结束但尚未清理的完整小时执行积分定格
+                pending_up_hours = [
+                    r[0]
+                    for r in conn.execute(
+                        text(
+                            "SELECT DISTINCT biz_hour FROM smart_heating_platform.fact_upstream_15min "
+                            "WHERE biz_hour < :bh ORDER BY biz_hour ASC"
+                        ),
+                        {"bh": biz_hour},
+                    ).fetchall()
+                ]
+                pending_mc_hours = [
+                    r[0]
+                    for r in conn.execute(
+                        text(
+                            "SELECT DISTINCT biz_hour FROM smart_heating_platform.fact_merchant_15min "
+                            "WHERE biz_hour < :bh ORDER BY biz_hour ASC"
+                        ),
+                        {"bh": biz_hour},
+                    ).fetchall()
+                ]
+                for ph in pending_up_hours:
+                    _aggregate_upstream_hourly(conn, ph, finalize=True)
+                for ph in pending_mc_hours:
+                    _aggregate_merchant_hourly(conn, ph, finalize=True)
+
+                # 当前进行中的小时仅更新瞬时断面，不外推累计耗量
+                up_hourly_cnt = _aggregate_upstream_hourly(conn, biz_hour, finalize=False)
+                mc_hourly_cnt = _aggregate_merchant_hourly(conn, biz_hour, finalize=False)
+
+                # 算完即清：保留当前小时 + 上一小时（2 小时），清理更早采样明细
+                sampling_pruned = prune_old_sampling_rows(conn, reference_time=biz_hour, keep_hours=SAMPLING_KEEP_HOURS)
                 temp_pruned_cnt = prune_old_temp_hourly(conn, reference_time=biz_hour)
 
             summary = {
                 "sample_bucket": sample_bucket.strftime("%Y-%m-%d %H:%M:%S"),
                 "biz_hour": biz_hour.strftime("%Y-%m-%d %H:00:00"),
-                "upstream_15min": len(upstream_rows),
-                "station_15min": len(station_rows),
-                "zone_15min": len(zone_rows),
+                "sample_interval_minutes": snap_interval,
+                "max_workers": max_workers,
+                "upstream_samples": len(upstream_rows),
+                "station_hourly": 0,
+                "zone_hourly": 0,
                 "temp_hourly": len(temp_rows),
                 "temp_pruned": temp_pruned_cnt,
-                "merchant_15min": len(merchant_rows),
+                "merchant_samples": len(merchant_rows),
+                "sampling_pruned": sampling_pruned,
+                "finalized_hours": sorted({
+                    h.astimezone(EAST_8).strftime("%Y-%m-%d %H:00")
+                    for h in (*pending_up_hours, *pending_mc_hours)
+                }),
                 "fault_tickets": len(dedup_faults),
                 "upstream_hourly": up_hourly_cnt,
-                "station_hourly": st_hourly_cnt,
-                "zone_hourly": zn_hourly_cnt,
                 "merchant_hourly": mc_hourly_cnt,
                 "cookie_valid": cookie_valid,
                 "partial_errors": partial_errors,
@@ -1045,25 +864,184 @@ def run_snapshot_cycle(
             raise
 
 
+def _process_station_calibration(
+    st: Dict[str, Any],
+    base_url: str,
+    query_start: str,
+    query_end: str,
+    hours_to_calib: List[datetime],
+    timeout: float,
+    prev_station_db: Optional[Dict[str, Any]],
+) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]], bool]:
+    """拉取单座换热站 `/hrz_ls_zb/` 并计算整点表底差值与代表断面（供多线程并发调用）。"""
+    st_id = st["station_id"]
+    st_name = st["name"]
+    covered_area = float(st["covered_area"]) if st.get("covered_area") else 100000.0
+    max_hourly_heat = max(250.0, covered_area * 0.00045)
+
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+            resp = _post_with_retry(
+                client,
+                f"{base_url}/hrz_ls_zb/",
+                data={
+                    "name": st_name,
+                    "start_date": query_start,
+                    "end_date": query_end,
+                    "isdownload": "1",
+                },
+                headers={"User-Agent": "Phoenix-SmartHeating-Collector/2.0", "Connection": "close"},
+                retries=2,
+            )
+            if resp.status_code != 200:
+                return st_name, [], [], False
+            raw_records = resp.json()
+            if not isinstance(raw_records, list) or not raw_records:
+                return st_name, [], [], True
+    except Exception:
+        return st_name, [], [], False
+
+    parsed: List[Dict[str, Any]] = []
+    for rec in raw_records:
+        ts = parse_dt_east8(rec.get("create_time"))
+        if ts is None:
+            continue
+        parsed.append({
+            "ts": ts,
+            "f1": to_float(rec.get("f1")),
+            "f2": to_float(rec.get("f2")),
+            "f3": to_float(rec.get("f3")),
+            "f4": to_float(rec.get("f4")),
+            "f5": to_float(rec.get("f5")),
+            "f220": to_float(rec.get("f220")),  # totF
+            "f221": to_float(rec.get("f221")),  # totJ
+            "f222": to_float(rec.get("f222")),  # flowJ
+            "f253": to_float(rec.get("f253")),  # 电能累计
+            "f254": to_float(rec.get("f254")),  # 补水累计
+        })
+
+    if not parsed:
+        return st_name, [], [], True
+
+    seq_j = [(p["ts"], p["f221"]) for p in parsed]
+    seq_f = [(p["ts"], p["f220"]) for p in parsed]
+    seq_w = [(p["ts"], p["f254"]) for p in parsed]
+    seq_e = [(p["ts"], p["f253"]) for p in parsed]
+
+    upsert_rows: List[Dict[str, Any]] = []
+    faults: List[Dict[str, Any]] = []
+    rolling_prev = prev_station_db
+
+    for hr in hours_to_calib:
+        hr_next = hr + timedelta(hours=1)
+        j0 = interpolate_meter_at_hour(seq_j, hr)
+        j1 = interpolate_meter_at_hour(seq_j, hr_next)
+        f0 = interpolate_meter_at_hour(seq_f, hr)
+        f1_v = interpolate_meter_at_hour(seq_f, hr_next)
+        w0 = interpolate_meter_at_hour(seq_w, hr)
+        w1 = interpolate_meter_at_hour(seq_w, hr_next)
+        e0 = interpolate_meter_at_hour(seq_e, hr)
+        e1_v = interpolate_meter_at_hour(seq_e, hr_next)
+
+        win_pts = sorted((p for p in parsed if hr <= p["ts"] <= hr_next), key=lambda x: x["ts"])
+        fb_heat = trapezoidal_hour_integral([(p["ts"], p["f222"]) for p in win_pts])
+        fb_flow = trapezoidal_hour_integral([(p["ts"], p["f2"]) for p in win_pts])
+
+        delta_j, jump_j, msg_j = validate_meter_delta(j0, j1, max_hourly_limit=max_hourly_heat)
+        delta_f, _, _ = validate_meter_delta(f0, f1_v, max_hourly_limit=max_hourly_heat * 12)
+        delta_w, _, _ = validate_meter_delta(w0, w1, max_hourly_limit=200.0)
+        delta_e, _, _ = validate_meter_delta(e0, e1_v, max_hourly_limit=5000.0)
+
+        if jump_j:
+            faults.append({
+                "biz_hour": hr,
+                "entity_type": "STATION",
+                "entity_id": st_id,
+                "entity_name": st_name,
+                "fault_code": FAULT_METER_JUMP,
+                "owner_party": OWNER_SHARED,
+                "raw_value_text": msg_j,
+                "clean_strategy": "丢弃异常表底差，自动降级采用历史瞬时热量 f222 积分值",
+                "rule_desc": "相邻整点累计表底 totJ 出现倒走/清零或超过极限负荷1.5倍",
+            })
+
+        if delta_j is not None:
+            hr_heat, hr_heat_src = delta_j, SRC_METER_DIFF
+        else:
+            hr_heat, hr_heat_src = fb_heat, (SRC_FALLBACK_INTEGRAL if jump_j else SRC_INTEGRAL_15M)
+
+        hr_flow, hr_flow_src = (
+            (delta_f, SRC_METER_DIFF) if delta_f is not None else (fb_flow, SRC_INTEGRAL_15M)
+        )
+
+        rep = win_pts[-1] if win_pts else None
+        cleaned_rep, rep_faults = clean_station_history_point(st, rep, prev_station_valid=rolling_prev)
+        for rf in rep_faults:
+            rf["biz_hour"] = hr
+            faults.append(rf)
+        if cleaned_rep["online"]:
+            rolling_prev = cleaned_rep
+
+        upsert_rows.append({
+            "biz_hour": hr,
+            "station_id": st_id,
+            "sample_count": len(win_pts),
+            "online": cleaned_rep["online"],
+            "e1_raw": cleaned_rep["e1_raw"],
+            "e1_clean": cleaned_rep["e1_clean"],
+            "e3_raw": cleaned_rep["e3_raw"],
+            "e3_clean": cleaned_rep["e3_clean"],
+            "e4_raw": cleaned_rep["e4_raw"],
+            "e4_clean": cleaned_rep["e4_clean"],
+            "e7_raw": cleaned_rep["e7_raw"],
+            "e7_clean": cleaned_rep["e7_clean"],
+            "e8_raw": cleaned_rep["e8_raw"],
+            "e8_clean": cleaned_rep["e8_clean"],
+            "e11_raw": cleaned_rep["e11_raw"],
+            "e11_clean": cleaned_rep["e11_clean"],
+            "tot_j": j0,
+            "tot_f": f0,
+            "tot_water_f254": w0,
+            "tot_elec_f253": e0,
+            "hour_heat_gj": hr_heat,
+            "hour_heat_source": hr_heat_src,
+            "hour_flow_t": hr_flow,
+            "hour_flow_source": hr_flow_src,
+            "hour_water_t": delta_w,
+            "hour_water_source": SRC_METER_DIFF if delta_w is not None else "NONE",
+            "hour_elec_kwh": delta_e,
+            "hour_elec_source": SRC_METER_DIFF if delta_e is not None else "NONE",
+            "value_source": cleaned_rep["value_source"],
+            "fault_tag": cleaned_rep["fault_tag"],
+        })
+
+    return st_name, upsert_rows, faults, True
+
+
 def run_table_bottom_calibration(
     target_date_str: Optional[str] = None,
     station_names: Optional[List[str]] = None,
     trigger: str = "AUTO",
 ) -> Dict[str, Any]:
     """
-    错峰拉取 `/hrz_ls_zb/`（isdownload=1），按整点线性插值计算精确表底差值，
-    回刷 `fact_station_hourly` 的小时累计热量/流量/补水/电量，并将坏表底写入阴面督办单。
+    受控并行拉取 `/hrz_ls_zb/`（isdownload=1），按整点线性插值计算精确表底差值与代表断面，
+    写入 `fact_station_hourly`（路线 B 专责换热站每小时整点后产出，不阻塞 5 分钟快照采集）。
     """
     ensure_smart_heating_fact_tables()
-    with _COLLECT_LOCK:
+    with _CALIB_LOCK:
         started_perf = time.perf_counter()
         now_e8 = datetime.now(EAST_8)
-        target_d = date.fromisoformat(target_date_str) if target_date_str else now_e8.date()
+        default_d = (now_e8.date() - timedelta(days=1)) if now_e8.hour == 0 else now_e8.date()
+        target_d = date.fromisoformat(target_date_str) if target_date_str else default_d
         day_start = datetime(target_d.year, target_d.month, target_d.day, 0, 0, 0, tzinfo=EAST_8)
         next_day_start = day_start + timedelta(days=1)
 
-        # 如果是今天，校准截止到当前整点；若是历史日，校准全天 24 小时
-        max_hour = floor_to_hour(now_e8) if target_d >= now_e8.date() else (next_day_start - timedelta(hours=1))
+        # 仅校准已结束的整点小时；今日截止到上一已完成整点，历史日覆盖全天 24 小时
+        max_hour = (
+            floor_to_hour(now_e8) - timedelta(hours=1)
+            if target_d >= now_e8.date()
+            else (next_day_start - timedelta(hours=1))
+        )
         hours_to_calib: List[datetime] = []
         cursor = day_start
         while cursor <= max_hour:
@@ -1072,11 +1050,24 @@ def run_table_bottom_calibration(
 
         cfg = _read_raw_config()
         base_url = resolve_effective_base_url(cfg)
-        interval = max(1.0, float(cfg.get("request_interval_seconds", 0.8)))
+        max_workers = max(1, min(16, int(cfg.get("max_workers", 4))))
         timeout = max(20.0, float(cfg.get("request_timeout_seconds", 15.0)))
         run_id = _insert_run_log(day_start, "TABLE_BOTTOM_CALIB" if trigger != "MANUAL" else "MANUAL_CALIB", cfg.get("source_mode", "public"))
 
+        if not hours_to_calib:
+            summary = {
+                "target_date": target_d.isoformat(),
+                "stations_total": 0,
+                "updated_station_hours": 0,
+                "failed_stations": [],
+                "jump_faults": 0,
+                "max_workers": max_workers,
+            }
+            _finish_run_log(run_id, started_perf, "SUCCESS", None, summary)
+            return {"ok": True, "run_id": run_id, **summary}
+
         caches = _load_dict_caches()
+        prev_station_map = _load_prev_valid_snapshots(day_start)["station"]
         target_stations = caches["stations"]
         if station_names:
             name_set = {s.strip() for s in station_names if s.strip()}
@@ -1085,187 +1076,98 @@ def run_table_bottom_calibration(
         query_start = (day_start - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
         query_end = (next_day_start + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
 
-        updated_hours = 0
+        all_upsert_rows: List[Dict[str, Any]] = []
         failed_stations: List[str] = []
-        jump_faults: List[Dict[str, Any]] = []
+        all_faults: List[Dict[str, Any]] = []
 
         try:
-            with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
-                for idx, st in enumerate(target_stations):
-                    if idx > 0:
-                        time.sleep(interval)
-                    st_id = st["station_id"]
-                    st_name = st["name"]
-                    covered_area = float(st["covered_area"]) if st.get("covered_area") else 100000.0
-                    # 按 120 W/㎡ 估算单小时极限负荷 (GJ/h)，防止小站大跳变漏检
-                    max_hourly_heat = max(250.0, covered_area * 0.00045)
-
-                    try:
-                        resp = client.post(
-                            f"{base_url}/hrz_ls_zb/",
-                            data={
-                                "name": st_name,
-                                "start_date": query_start,
-                                "end_date": query_end,
-                                "isdownload": "1",
-                            },
-                        )
-                        if resp.status_code != 200:
-                            failed_stations.append(st_name)
-                            continue
-                        raw_records = resp.json()
-                        if not isinstance(raw_records, list) or not raw_records:
-                            continue
-                    except Exception:
+            workers = max(1, min(max_workers, len(target_stations) or 1))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [
+                    pool.submit(
+                        _process_station_calibration,
+                        st,
+                        base_url,
+                        query_start,
+                        query_end,
+                        hours_to_calib,
+                        timeout,
+                        prev_station_map.get(st["station_id"]),
+                    )
+                    for st in target_stations
+                ]
+                for fut in as_completed(futures):
+                    st_name, st_rows, st_faults, ok_flag = fut.result()
+                    if not ok_flag:
                         failed_stations.append(st_name)
-                        continue
+                    if st_rows:
+                        all_upsert_rows.extend(st_rows)
+                    if st_faults:
+                        all_faults.extend(st_faults)
 
-                    parsed: List[Dict[str, Any]] = []
-                    for rec in raw_records:
-                        ts = parse_dt_east8(rec.get("create_time"))
-                        if ts is None:
-                            continue
-                        parsed.append({
-                            "ts": ts,
-                            "f1": to_float(rec.get("f1")),
-                            "f2": to_float(rec.get("f2")),
-                            "f3": to_float(rec.get("f3")),
-                            "f4": to_float(rec.get("f4")),
-                            "f5": to_float(rec.get("f5")),
-                            "f220": to_float(rec.get("f220")),  # totF
-                            "f221": to_float(rec.get("f221")),  # totJ
-                            "f222": to_float(rec.get("f222")),  # flowJ
-                            "f253": to_float(rec.get("f253")),  # 电能累计
-                            "f254": to_float(rec.get("f254")),  # 补水累计
-                        })
+            if all_upsert_rows:
+                sql = """
+                INSERT INTO smart_heating_platform.fact_station_hourly (
+                    biz_hour, station_id, sample_count, online,
+                    e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean,
+                    e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean,
+                    tot_j, tot_f, tot_water_f254, tot_elec_f253,
+                    hour_heat_gj, hour_heat_source, hour_flow_t, hour_flow_source,
+                    hour_water_t, hour_water_source, hour_elec_kwh, hour_elec_source,
+                    value_source, fault_tag
+                ) VALUES (
+                    :biz_hour, :station_id, :sample_count, :online,
+                    :e1_raw, :e1_clean, :e3_raw, :e3_clean, :e4_raw, :e4_clean,
+                    :e7_raw, :e7_clean, :e8_raw, :e8_clean, :e11_raw, :e11_clean,
+                    :tot_j, :tot_f, :tot_water_f254, :tot_elec_f253,
+                    :hour_heat_gj, :hour_heat_source, :hour_flow_t, :hour_flow_source,
+                    :hour_water_t, :hour_water_source, :hour_elec_kwh, :hour_elec_source,
+                    :value_source, :fault_tag
+                )
+                ON CONFLICT (biz_hour, station_id) DO UPDATE SET
+                    sample_count = EXCLUDED.sample_count,
+                    online = EXCLUDED.online,
+                    e1_raw = COALESCE(EXCLUDED.e1_raw, smart_heating_platform.fact_station_hourly.e1_raw),
+                    e1_clean = COALESCE(EXCLUDED.e1_clean, smart_heating_platform.fact_station_hourly.e1_clean),
+                    e3_raw = COALESCE(EXCLUDED.e3_raw, smart_heating_platform.fact_station_hourly.e3_raw),
+                    e3_clean = COALESCE(EXCLUDED.e3_clean, smart_heating_platform.fact_station_hourly.e3_clean),
+                    e4_raw = COALESCE(EXCLUDED.e4_raw, smart_heating_platform.fact_station_hourly.e4_raw),
+                    e4_clean = COALESCE(EXCLUDED.e4_clean, smart_heating_platform.fact_station_hourly.e4_clean),
+                    e7_raw = COALESCE(EXCLUDED.e7_raw, smart_heating_platform.fact_station_hourly.e7_raw),
+                    e7_clean = COALESCE(EXCLUDED.e7_clean, smart_heating_platform.fact_station_hourly.e7_clean),
+                    e8_raw = COALESCE(EXCLUDED.e8_raw, smart_heating_platform.fact_station_hourly.e8_raw),
+                    e8_clean = COALESCE(EXCLUDED.e8_clean, smart_heating_platform.fact_station_hourly.e8_clean),
+                    e11_raw = COALESCE(EXCLUDED.e11_raw, smart_heating_platform.fact_station_hourly.e11_raw),
+                    e11_clean = COALESCE(EXCLUDED.e11_clean, smart_heating_platform.fact_station_hourly.e11_clean),
+                    tot_j = COALESCE(EXCLUDED.tot_j, smart_heating_platform.fact_station_hourly.tot_j),
+                    tot_f = COALESCE(EXCLUDED.tot_f, smart_heating_platform.fact_station_hourly.tot_f),
+                    tot_water_f254 = COALESCE(EXCLUDED.tot_water_f254, smart_heating_platform.fact_station_hourly.tot_water_f254),
+                    tot_elec_f253 = COALESCE(EXCLUDED.tot_elec_f253, smart_heating_platform.fact_station_hourly.tot_elec_f253),
+                    hour_heat_gj = COALESCE(EXCLUDED.hour_heat_gj, smart_heating_platform.fact_station_hourly.hour_heat_gj),
+                    hour_heat_source = EXCLUDED.hour_heat_source,
+                    hour_flow_t = COALESCE(EXCLUDED.hour_flow_t, smart_heating_platform.fact_station_hourly.hour_flow_t),
+                    hour_flow_source = EXCLUDED.hour_flow_source,
+                    hour_water_t = COALESCE(EXCLUDED.hour_water_t, smart_heating_platform.fact_station_hourly.hour_water_t),
+                    hour_water_source = CASE
+                        WHEN EXCLUDED.hour_water_t IS NOT NULL THEN EXCLUDED.hour_water_source
+                        ELSE smart_heating_platform.fact_station_hourly.hour_water_source END,
+                    hour_elec_kwh = COALESCE(EXCLUDED.hour_elec_kwh, smart_heating_platform.fact_station_hourly.hour_elec_kwh),
+                    hour_elec_source = CASE
+                        WHEN EXCLUDED.hour_elec_kwh IS NOT NULL THEN EXCLUDED.hour_elec_source
+                        ELSE smart_heating_platform.fact_station_hourly.hour_elec_source END,
+                    value_source = EXCLUDED.value_source,
+                    fault_tag = EXCLUDED.fault_tag,
+                    updated_at = NOW()
+                """
+                with engine.begin() as conn:
+                    for offset in range(0, len(all_upsert_rows), 500):
+                        conn.execute(text(sql), all_upsert_rows[offset:offset + 500])
 
-                    if not parsed:
-                        continue
-
-                    seq_j = [(p["ts"], p["f221"]) for p in parsed]
-                    seq_f = [(p["ts"], p["f220"]) for p in parsed]
-                    seq_w = [(p["ts"], p["f254"]) for p in parsed]
-                    seq_e = [(p["ts"], p["f253"]) for p in parsed]
-
-                    upsert_rows: List[Dict[str, Any]] = []
-                    for hr in hours_to_calib:
-                        hr_next = hr + timedelta(hours=1)
-                        j0 = interpolate_meter_at_hour(seq_j, hr)
-                        j1 = interpolate_meter_at_hour(seq_j, hr_next)
-                        f0 = interpolate_meter_at_hour(seq_f, hr)
-                        f1_v = interpolate_meter_at_hour(seq_f, hr_next)
-                        w0 = interpolate_meter_at_hour(seq_w, hr)
-                        w1 = interpolate_meter_at_hour(seq_w, hr_next)
-                        e0 = interpolate_meter_at_hour(seq_e, hr)
-                        e1_v = interpolate_meter_at_hour(seq_e, hr_next)
-
-                        # 15分钟瞬时序列备用积分（用于补全历史小时或表底跳变降级）
-                        win_pts = [p for p in parsed if hr <= p["ts"] <= hr_next]
-                        fb_heat = trapezoidal_hour_integral([(p["ts"], p["f222"]) for p in win_pts])
-                        fb_flow = trapezoidal_hour_integral([(p["ts"], p["f2"]) for p in win_pts])
-
-                        delta_j, jump_j, msg_j = validate_meter_delta(j0, j1, max_hourly_limit=max_hourly_heat)
-                        delta_f, jump_f, _ = validate_meter_delta(f0, f1_v, max_hourly_limit=max_hourly_heat * 12)
-                        delta_w, jump_w, _ = validate_meter_delta(w0, w1, max_hourly_limit=200.0)
-                        delta_e, jump_e, _ = validate_meter_delta(e0, e1_v, max_hourly_limit=5000.0)
-
-                        if jump_j:
-                            jump_faults.append({
-                                "biz_hour": hr,
-                                "entity_type": "STATION",
-                                "entity_id": st_id,
-                                "entity_name": st_name,
-                                "fault_code": FAULT_METER_JUMP,
-                                "owner_party": OWNER_SHARED,
-                                "raw_value_text": msg_j,
-                                "clean_strategy": "丢弃异常表底差，自动降级采用15分钟瞬时热量 f222 积分值",
-                                "rule_desc": "相邻整点累计表底 totJ 出现倒走/清零或超过极限负荷1.5倍",
-                            })
-
-                        if delta_j is not None:
-                            hr_heat, hr_heat_src = delta_j, SRC_METER_DIFF
-                        else:
-                            hr_heat, hr_heat_src = fb_heat, (SRC_FALLBACK_INTEGRAL if jump_j else SRC_INTEGRAL_15M)
-
-                        hr_flow, hr_flow_src = (
-                            (delta_f, SRC_METER_DIFF) if delta_f is not None else (fb_flow, SRC_INTEGRAL_15M)
-                        )
-
-                        # 供回温压代表值 (若表内尚无实时断面则一并补全)
-                        rep = win_pts[-1] if win_pts else None
-                        upsert_rows.append({
-                            "biz_hour": hr,
-                            "station_id": st_id,
-                            "sample_count": len(win_pts),
-                            "online": True,
-                            "e1_raw": rep["f2"] if rep else None,
-                            "e1_clean": rep["f2"] if rep else None,
-                            "e3_raw": rep["f3"] if rep else None,
-                            "e3_clean": rep["f3"] if rep else None,
-                            "e4_raw": rep["f5"] if rep else None,
-                            "e4_clean": rep["f5"] if rep else None,
-                            "e7_raw": rep["f1"] if rep else None,
-                            "e7_clean": rep["f1"] if rep else None,
-                            "e8_raw": rep["f4"] if rep else None,
-                            "e8_clean": rep["f4"] if rep else None,
-                            "e11_raw": rep["f222"] if rep else None,
-                            "e11_clean": rep["f222"] if rep else None,
-                            "tot_j": j0,
-                            "tot_f": f0,
-                            "tot_water_f254": w0,
-                            "tot_elec_f253": e0,
-                            "hour_heat_gj": hr_heat,
-                            "hour_heat_source": hr_heat_src,
-                            "hour_flow_t": hr_flow,
-                            "hour_flow_source": hr_flow_src,
-                            "hour_water_t": delta_w,
-                            "hour_water_source": SRC_METER_DIFF if delta_w is not None else SRC_INTEGRAL_15M,
-                            "hour_elec_kwh": delta_e,
-                            "hour_elec_source": SRC_METER_DIFF if delta_e is not None else "NONE",
-                            "value_source": "REAL",
-                        })
-
-                    if upsert_rows:
-                        with engine.begin() as conn:
-                            sql = """
-                            INSERT INTO smart_heating_platform.fact_station_hourly (
-                                biz_hour, station_id, sample_count, online,
-                                e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean,
-                                e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean,
-                                tot_j, tot_f, tot_water_f254, tot_elec_f253,
-                                hour_heat_gj, hour_heat_source, hour_flow_t, hour_flow_source,
-                                hour_water_t, hour_water_source, hour_elec_kwh, hour_elec_source, value_source
-                            ) VALUES (
-                                :biz_hour, :station_id, :sample_count, :online,
-                                :e1_raw, :e1_clean, :e3_raw, :e3_clean, :e4_raw, :e4_clean,
-                                :e7_raw, :e7_clean, :e8_raw, :e8_clean, :e11_raw, :e11_clean,
-                                :tot_j, :tot_f, :tot_water_f254, :tot_elec_f253,
-                                :hour_heat_gj, :hour_heat_source, :hour_flow_t, :hour_flow_source,
-                                :hour_water_t, :hour_water_source, :hour_elec_kwh, :hour_elec_source, :value_source
-                            )
-                            ON CONFLICT (biz_hour, station_id) DO UPDATE SET
-                                tot_j = COALESCE(EXCLUDED.tot_j, smart_heating_platform.fact_station_hourly.tot_j),
-                                tot_f = COALESCE(EXCLUDED.tot_f, smart_heating_platform.fact_station_hourly.tot_f),
-                                tot_water_f254 = COALESCE(EXCLUDED.tot_water_f254, smart_heating_platform.fact_station_hourly.tot_water_f254),
-                                tot_elec_f253 = COALESCE(EXCLUDED.tot_elec_f253, smart_heating_platform.fact_station_hourly.tot_elec_f253),
-                                hour_heat_gj = COALESCE(EXCLUDED.hour_heat_gj, smart_heating_platform.fact_station_hourly.hour_heat_gj),
-                                hour_heat_source = EXCLUDED.hour_heat_source,
-                                hour_flow_t = COALESCE(EXCLUDED.hour_flow_t, smart_heating_platform.fact_station_hourly.hour_flow_t),
-                                hour_flow_source = EXCLUDED.hour_flow_source,
-                                hour_water_t = COALESCE(EXCLUDED.hour_water_t, smart_heating_platform.fact_station_hourly.hour_water_t),
-                                hour_water_source = CASE
-                                    WHEN EXCLUDED.hour_water_t IS NOT NULL THEN EXCLUDED.hour_water_source
-                                    ELSE smart_heating_platform.fact_station_hourly.hour_water_source END,
-                                hour_elec_kwh = COALESCE(EXCLUDED.hour_elec_kwh, smart_heating_platform.fact_station_hourly.hour_elec_kwh),
-                                hour_elec_source = CASE
-                                    WHEN EXCLUDED.hour_elec_kwh IS NOT NULL THEN EXCLUDED.hour_elec_source
-                                    ELSE smart_heating_platform.fact_station_hourly.hour_elec_source END,
-                                updated_at = NOW()
-                            """
-                            conn.execute(text(sql), upsert_rows)
-                        updated_hours += len(upsert_rows)
-
-            if jump_faults:
+            if all_faults:
+                dedup_faults: Dict[Tuple[datetime, str, str, str], Dict[str, Any]] = {}
+                for flt in all_faults:
+                    key = (flt["biz_hour"], flt["entity_type"], flt["entity_id"], flt["fault_code"])
+                    dedup_faults[key] = flt
                 with engine.begin() as conn:
                     _upsert_batch(
                         conn,
@@ -1276,16 +1178,18 @@ def run_table_bottom_calibration(
                         ],
                         ["biz_hour", "entity_type", "entity_id", "fault_code"],
                         ["entity_name", "owner_party", "raw_value_text", "clean_strategy", "rule_desc"],
-                        jump_faults,
+                        list(dedup_faults.values()),
                         extra_set_clauses=["updated_at = NOW()"],
                     )
 
+            jump_count = sum(1 for f in all_faults if f["fault_code"] == FAULT_METER_JUMP)
             summary = {
                 "target_date": target_d.isoformat(),
                 "stations_total": len(target_stations),
-                "updated_station_hours": updated_hours,
-                "failed_stations": failed_stations[:20],
-                "jump_faults": len(jump_faults),
+                "updated_station_hours": len(all_upsert_rows),
+                "failed_stations": sorted(failed_stations)[:20],
+                "jump_faults": jump_count,
+                "max_workers": max_workers,
             }
             _finish_run_log(run_id, started_perf, "SUCCESS" if not failed_stations else "PARTIAL", None, summary)
             return {"ok": True, "run_id": run_id, **summary}
@@ -1298,7 +1202,7 @@ def run_table_bottom_calibration(
 def run_merchant_daily_cycle(target_date_str: Optional[str] = None, trigger: str = "AUTO") -> Dict[str, Any]:
     """拉取 `/getall_bb_shrb/` 写入商业用户当月日耗量至 `fact_merchant_daily`。"""
     ensure_smart_heating_fact_tables()
-    with _COLLECT_LOCK:
+    with _MERCHANT_DAILY_LOCK:
         started_perf = time.perf_counter()
         now_e8 = datetime.now(EAST_8)
         target_d = date.fromisoformat(target_date_str) if target_date_str else (now_e8.date() - timedelta(days=1))
@@ -1396,11 +1300,11 @@ def run_merchant_hourly_backfill(
     trigger: str = "MANUAL",
 ) -> Dict[str, Any]:
     """
-    利用免 Cookie 历史接口 `/sh_ls_zb/`（5分钟颗粒度）错峰补采商业用户指定日期逐小时指标，
+    受控并行调用免 Cookie 历史接口 `/sh_ls_zb/`（5分钟颗粒度）补采商业用户指定日期逐小时指标，
     基于 `fFlowJ`/`fFlowF` 执行时间加权梯形面积积分写入 `fact_merchant_hourly`。
     """
     ensure_smart_heating_fact_tables()
-    with _COLLECT_LOCK:
+    with _MERCHANT_BACKFILL_LOCK:
         started_perf = time.perf_counter()
         now_e8 = datetime.now(EAST_8)
         target_d = date.fromisoformat(target_date_str) if target_date_str else now_e8.date()
@@ -1409,7 +1313,7 @@ def run_merchant_hourly_backfill(
 
         cfg = _read_raw_config()
         base_url = resolve_effective_base_url(cfg)
-        interval = max(0.8, float(cfg.get("request_interval_seconds", 0.8)))
+        max_workers = max(1, min(16, int(cfg.get("max_workers", 4))))
         timeout = max(20.0, float(cfg.get("request_timeout_seconds", 15.0)))
         run_id = _insert_run_log(
             day_start,
@@ -1425,118 +1329,126 @@ def run_merchant_hourly_backfill(
 
         query_start = day_start.strftime("%Y-%m-%d %H:%M:%S")
         query_end = next_day_start.strftime("%Y-%m-%d %H:%M:%S")
-        updated_hours = 0
         failed_merchants: List[str] = []
+        all_upsert_rows: List[Dict[str, Any]] = []
+
+        def _fetch_one_merchant(mc: Dict[str, Any]) -> Tuple[str, List[Dict[str, Any]], bool]:
+            m_name = mc["name"]
+            try:
+                with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+                    resp = _post_with_retry(
+                        client,
+                        f"{base_url}/sh_ls_zb/",
+                        data={
+                            "name": m_name,
+                            "start_date": query_start,
+                            "end_date": query_end,
+                            "isdownload": "1",
+                        },
+                        headers={"User-Agent": "Phoenix-SmartHeating-Collector/2.0", "Connection": "close"},
+                        retries=2,
+                    )
+                    if resp.status_code != 200:
+                        return m_name, [], False
+                    raw_records = resp.json()
+                    if not isinstance(raw_records, list) or not raw_records:
+                        return m_name, [], True
+            except Exception:
+                return m_name, [], False
+
+            by_hour: Dict[datetime, List[Tuple[datetime, Dict[str, Any]]]] = {}
+            for rec in raw_records:
+                ts = parse_dt_east8(rec.get("tmDate"))
+                if ts is None:
+                    continue
+                cleaned, _ = clean_merchant_point(
+                    {**rec, "name": m_name},
+                    merchant_lookup=caches["merchant_by_name"],
+                    collected_at=now_e8,
+                )
+                by_hour.setdefault(floor_to_hour(ts), []).append((ts, cleaned))
+
+            upsert_rows: List[Dict[str, Any]] = []
+            for bh, pts in sorted(by_hour.items()):
+                pts.sort(key=lambda x: x[0])
+                latest = pts[-1][1]
+                heat_samples = [(ts, p["heat_clean"]) for ts, p in pts]
+                flow_samples = [(ts, p["flow_clean"]) for ts, p in pts]
+                upsert_rows.append({
+                    "biz_hour": bh,
+                    "merchant_id": mc["merchant_id"],
+                    "source_name": m_name,
+                    "is_registered": True,
+                    "sample_count": len(pts),
+                    "online": True,
+                    "flow_raw": latest["flow_raw"],
+                    "flow_clean": latest["flow_clean"],
+                    "return_flow_raw": latest["return_flow_raw"],
+                    "temp_sup_raw": latest["temp_sup_raw"],
+                    "temp_sup_clean": latest["temp_sup_clean"],
+                    "temp_ret_raw": latest["temp_ret_raw"],
+                    "temp_ret_clean": latest["temp_ret_clean"],
+                    "pres_sup_raw": latest["pres_sup_raw"],
+                    "pres_sup_clean": latest["pres_sup_clean"],
+                    "pres_ret_raw": latest["pres_ret_raw"],
+                    "pres_ret_clean": latest["pres_ret_clean"],
+                    "heat_raw": latest["heat_raw"],
+                    "heat_clean": latest["heat_clean"],
+                    "valve_open": latest["valve_open"],
+                    "valve_set": latest["valve_set"],
+                    "hour_heat_gj": trapezoidal_hour_integral(heat_samples),
+                    "hour_heat_source": "INTEGRAL_5M",
+                    "hour_flow_t": trapezoidal_hour_integral(flow_samples),
+                    "hour_flow_source": "INTEGRAL_5M",
+                    "value_source": latest["value_source"],
+                    "fault_tag": latest["fault_tag"],
+                })
+            return m_name, upsert_rows, True
 
         try:
-            with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
-                for idx, mc in enumerate(target_merchants):
-                    if idx > 0:
-                        time.sleep(interval)
-                    m_name = mc["name"]
-                    try:
-                        resp = _post_with_retry(
-                            client,
-                            f"{base_url}/sh_ls_zb/",
-                            data={
-                                "name": m_name,
-                                "start_date": query_start,
-                                "end_date": query_end,
-                                "isdownload": "1",
-                            },
-                            headers={"User-Agent": "Phoenix-SmartHeating-Collector/2.0", "Connection": "close"},
-                            retries=1,
-                        )
-                        if resp.status_code != 200:
-                            failed_merchants.append(m_name)
-                            continue
-                        raw_records = resp.json()
-                        if not isinstance(raw_records, list) or not raw_records:
-                            continue
-                    except Exception:
+            workers = max(1, min(max_workers, len(target_merchants) or 1))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [pool.submit(_fetch_one_merchant, mc) for mc in target_merchants]
+                for fut in as_completed(futures):
+                    m_name, rows_out, ok_flag = fut.result()
+                    if not ok_flag:
                         failed_merchants.append(m_name)
-                        continue
+                    if rows_out:
+                        all_upsert_rows.extend(rows_out)
 
-                    by_hour: Dict[datetime, List[Tuple[datetime, Dict[str, Any]]]] = {}
-                    for rec in raw_records:
-                        ts = parse_dt_east8(rec.get("tmDate"))
-                        if ts is None:
-                            continue
-                        cleaned, _ = clean_merchant_point(
-                            {**rec, "name": m_name},
-                            merchant_lookup=caches["merchant_by_name"],
-                            collected_at=now_e8,
+            if all_upsert_rows:
+                with engine.begin() as conn:
+                    for offset in range(0, len(all_upsert_rows), 500):
+                        _upsert_batch(
+                            conn,
+                            "fact_merchant_hourly",
+                            [
+                                "biz_hour", "merchant_id", "source_name", "is_registered", "sample_count", "online",
+                                "flow_raw", "flow_clean", "return_flow_raw", "temp_sup_raw", "temp_sup_clean",
+                                "temp_ret_raw", "temp_ret_clean", "pres_sup_raw", "pres_sup_clean",
+                                "pres_ret_raw", "pres_ret_clean", "heat_raw", "heat_clean", "valve_open", "valve_set",
+                                "hour_heat_gj", "hour_heat_source", "hour_flow_t", "hour_flow_source",
+                                "value_source", "fault_tag",
+                            ],
+                            ["biz_hour", "source_name"],
+                            [
+                                "merchant_id", "is_registered", "sample_count", "online",
+                                "flow_raw", "flow_clean", "return_flow_raw", "temp_sup_raw", "temp_sup_clean",
+                                "temp_ret_raw", "temp_ret_clean", "pres_sup_raw", "pres_sup_clean",
+                                "pres_ret_raw", "pres_ret_clean", "heat_raw", "heat_clean", "valve_open", "valve_set",
+                                "hour_heat_gj", "hour_heat_source", "hour_flow_t", "hour_flow_source",
+                                "value_source", "fault_tag",
+                            ],
+                            all_upsert_rows[offset:offset + 500],
+                            extra_set_clauses=["updated_at = NOW()"],
                         )
-                        by_hour.setdefault(floor_to_hour(ts), []).append((ts, cleaned))
-
-                    upsert_rows: List[Dict[str, Any]] = []
-                    for bh, pts in sorted(by_hour.items()):
-                        pts.sort(key=lambda x: x[0])
-                        latest = pts[-1][1]
-                        heat_samples = [(ts, p["heat_clean"]) for ts, p in pts]
-                        flow_samples = [(ts, p["flow_clean"]) for ts, p in pts]
-                        upsert_rows.append({
-                            "biz_hour": bh,
-                            "merchant_id": mc["merchant_id"],
-                            "source_name": m_name,
-                            "is_registered": True,
-                            "sample_count": len(pts),
-                            "online": True,
-                            "flow_raw": latest["flow_raw"],
-                            "flow_clean": latest["flow_clean"],
-                            "return_flow_raw": latest["return_flow_raw"],
-                            "temp_sup_raw": latest["temp_sup_raw"],
-                            "temp_sup_clean": latest["temp_sup_clean"],
-                            "temp_ret_raw": latest["temp_ret_raw"],
-                            "temp_ret_clean": latest["temp_ret_clean"],
-                            "pres_sup_raw": latest["pres_sup_raw"],
-                            "pres_sup_clean": latest["pres_sup_clean"],
-                            "pres_ret_raw": latest["pres_ret_raw"],
-                            "pres_ret_clean": latest["pres_ret_clean"],
-                            "heat_raw": latest["heat_raw"],
-                            "heat_clean": latest["heat_clean"],
-                            "valve_open": latest["valve_open"],
-                            "valve_set": latest["valve_set"],
-                            "hour_heat_gj": trapezoidal_hour_integral(heat_samples),
-                            "hour_heat_source": "INTEGRAL_5M",
-                            "hour_flow_t": trapezoidal_hour_integral(flow_samples),
-                            "hour_flow_source": "INTEGRAL_5M",
-                            "value_source": latest["value_source"],
-                            "fault_tag": latest["fault_tag"],
-                        })
-
-                    if upsert_rows:
-                        with engine.begin() as conn:
-                            _upsert_batch(
-                                conn,
-                                "fact_merchant_hourly",
-                                [
-                                    "biz_hour", "merchant_id", "source_name", "is_registered", "sample_count", "online",
-                                    "flow_raw", "flow_clean", "return_flow_raw", "temp_sup_raw", "temp_sup_clean",
-                                    "temp_ret_raw", "temp_ret_clean", "pres_sup_raw", "pres_sup_clean",
-                                    "pres_ret_raw", "pres_ret_clean", "heat_raw", "heat_clean", "valve_open", "valve_set",
-                                    "hour_heat_gj", "hour_heat_source", "hour_flow_t", "hour_flow_source",
-                                    "value_source", "fault_tag",
-                                ],
-                                ["biz_hour", "source_name"],
-                                [
-                                    "merchant_id", "is_registered", "sample_count", "online",
-                                    "flow_raw", "flow_clean", "return_flow_raw", "temp_sup_raw", "temp_sup_clean",
-                                    "temp_ret_raw", "temp_ret_clean", "pres_sup_raw", "pres_sup_clean",
-                                    "pres_ret_raw", "pres_ret_clean", "heat_raw", "heat_clean", "valve_open", "valve_set",
-                                    "hour_heat_gj", "hour_heat_source", "hour_flow_t", "hour_flow_source",
-                                    "value_source", "fault_tag",
-                                ],
-                                upsert_rows,
-                                extra_set_clauses=["updated_at = NOW()"],
-                            )
-                        updated_hours += len(upsert_rows)
 
             summary = {
                 "target_date": target_d.isoformat(),
                 "merchants_total": len(target_merchants),
-                "updated_merchant_hours": updated_hours,
-                "failed_merchants": failed_merchants[:20],
+                "updated_merchant_hours": len(all_upsert_rows),
+                "failed_merchants": sorted(failed_merchants)[:20],
+                "max_workers": max_workers,
             }
             _finish_run_log(run_id, started_perf, "SUCCESS" if not failed_merchants else "PARTIAL", None, summary)
             return {"ok": True, "run_id": run_id, **summary}

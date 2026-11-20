@@ -61,13 +61,18 @@ def test_collector_settings_crud_and_permissions(tmp_path, monkeypatch):
     assert body["ok"] is True
     assert body["data"]["has_cookie"] is False
     assert body["data"]["effective_base_url"] == svc.PUBLIC_SOURCE_URL
+    assert body["data"]["snapshot_interval_minutes"] == 5
+    assert body["data"]["max_workers"] == 4
+    assert body["data"]["table_bottom_sync_hours"] == 1
 
-    # 3. 保存新 Cookie 与间隔
+    # 3. 保存新 Cookie、间隔与并发线程数
     res_put = client.put(
         "/api/v1/projects/smart_heating_platform/settings/collector",
         json={
             "source_mode": "public",
             "cookie": ".eJx9SecretTestSessionCookieValue123456789",
+            "snapshot_interval_minutes": 5,
+            "max_workers": 6,
             "request_interval_seconds": 0.9,
             "hourly_offset_minutes": 8,
         },
@@ -76,9 +81,18 @@ def test_collector_settings_crud_and_permissions(tmp_path, monkeypatch):
     saved = res_put.json()["data"]
     assert saved["has_cookie"] is True
     assert "SecretTestSessionCookieValue" not in saved["cookie_masked"]
+    assert saved["snapshot_interval_minutes"] == 5
+    assert saved["max_workers"] == 6
     assert saved["request_interval_seconds"] == 0.9
     assert saved["hourly_offset_minutes"] == 8
     assert saved["updated_by"] == "ww870411"
+
+    # 3b. 并发线程数越界拦截
+    res_bad_workers = client.put(
+        "/api/v1/projects/smart_heating_platform/settings/collector",
+        json={"max_workers": 32},
+    )
+    assert res_bad_workers.status_code == 400
 
     # 4. 仅修改其他参数时不传 cookie，应保留既有 Cookie
     res_put_partial = client.put(

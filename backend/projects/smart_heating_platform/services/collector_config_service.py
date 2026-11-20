@@ -38,11 +38,12 @@ DEFAULT_COLLECTOR_SETTINGS: Dict[str, Any] = {
     "custom_base_url": "",
     "cookie": "",
     "scheduler_enabled": False,
-    "snapshot_interval_minutes": 15,  # 15 | 30 | 60
+    "snapshot_interval_minutes": 5,  # 5 | 15 | 30 | 60
     "hourly_offset_minutes": 0,
+    "max_workers": 4,  # 并行采集工作线程数 (1~16)
     "request_interval_seconds": 0.8,
     "request_timeout_seconds": 15.0,
-    "table_bottom_sync_hours": 6,
+    "table_bottom_sync_hours": 1,
     "updated_at": "",
     "updated_by": "",
     "last_test_result": None,
@@ -147,11 +148,12 @@ def _to_public_view(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "cookie_masked": mask_cookie(cookie),
         "cookie_length": len(cookie),
         "scheduler_enabled": bool(cfg.get("scheduler_enabled", False)),
-        "snapshot_interval_minutes": int(cfg.get("snapshot_interval_minutes", 15)),
+        "snapshot_interval_minutes": int(cfg.get("snapshot_interval_minutes", 5)),
         "hourly_offset_minutes": int(cfg.get("hourly_offset_minutes", 0)),
+        "max_workers": int(cfg.get("max_workers", 4)),
         "request_interval_seconds": float(cfg.get("request_interval_seconds", 0.8)),
         "request_timeout_seconds": float(cfg.get("request_timeout_seconds", 15.0)),
-        "table_bottom_sync_hours": int(cfg.get("table_bottom_sync_hours", 6)),
+        "table_bottom_sync_hours": int(cfg.get("table_bottom_sync_hours", 1)),
         "updated_at": cfg.get("updated_at") or "",
         "updated_by": cfg.get("updated_by") or "",
         "last_test_result": cfg.get("last_test_result"),
@@ -193,8 +195,8 @@ def update_collector_settings(payload: Dict[str, Any], operator: str) -> Dict[st
 
         if "snapshot_interval_minutes" in payload and payload["snapshot_interval_minutes"] is not None:
             snap_min = int(payload["snapshot_interval_minutes"])
-            if snap_min not in (15, 30, 60):
-                raise ValueError("采样频率仅支持 15 / 30 / 60 分钟")
+            if snap_min not in (5, 15, 30, 60):
+                raise ValueError("采样频率仅支持 5 / 15 / 30 / 60 分钟")
             cfg["snapshot_interval_minutes"] = snap_min
 
         if "hourly_offset_minutes" in payload and payload["hourly_offset_minutes"] is not None:
@@ -202,6 +204,12 @@ def update_collector_settings(payload: Dict[str, Any], operator: str) -> Dict[st
             if not 0 <= offset <= 59:
                 raise ValueError("整点延迟分钟数必须在 0~59 之间")
             cfg["hourly_offset_minutes"] = offset
+
+        if "max_workers" in payload and payload["max_workers"] is not None:
+            workers = int(payload["max_workers"])
+            if not 1 <= workers <= 16:
+                raise ValueError("并行工作线程数必须在 1~16 之间")
+            cfg["max_workers"] = workers
 
         if "request_interval_seconds" in payload and payload["request_interval_seconds"] is not None:
             interval = round(float(payload["request_interval_seconds"]), 2)

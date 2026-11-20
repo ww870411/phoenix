@@ -334,4 +334,17 @@ onMounted(loadAll)
 .modal-fields { display: flex; flex-direction: column; gap: 10px; }
 .modal-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+@media (max-width: 768px) {
+  .shp-main { padding: 12px 10px 28px; gap: 10px; }
+  .topbar, .list-card { padding: 12px; }
+  .topbar h2 { font-size: 16px; }
+  .entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .entity-btn { padding: 10px 11px; }
+  .ent-count { font-size: 16px; }
+  .filter-bar > .ctrl-input { flex: 1 1 160px; min-width: 0; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 7px 8px; }
+  .modal-box { padding: 16px; }
+}
 </style>

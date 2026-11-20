@@ -275,21 +275,21 @@
 
           <div class="rules-grid">
             <div class="rule-box">
-              <h4>1. 单线程限速保护（强制）</h4>
+              <h4>1. 受控并行采集保护</h4>
               <p>
-                源站使用 Python 3.7 + Flask/Werkzeug 单线程开发容器直接暴露端口。任何采集或补采任务<strong>严禁多线程并发</strong>，必须单线程串行执行且每次请求间隔 <code>≥ 0.8s</code>（最低 <code>0.5s</code>）。
+                默认使用受控多线程并发（<code>max_workers = 4</code>，可在设置页 <code>1~16</code> 调节）与单作业独立锁，各调度任务互不阻塞；每次请求保持失败退避重试与 <code>Connection: close</code>。
               </p>
             </div>
             <div class="rule-box">
               <h4>2. 大包断流与代理绕过</h4>
               <p>
-                全网商户接口（约 142KB）与历史宽表接口在长连接下偶发于 13KB 处截断（<code>RemoteProtocolError</code>）。请求需携带 <code>Connection: close</code>、禁用系统代理（<code>trust_env=False</code>），并配置失败退避重试与分片降级。
+                全网商户接口（约 142KB）与历史宽表接口在长连接下偶发于 13KB 处截断（<code>RemoteProtocolError</code>）。请求需携带 <code>Connection: close</code>、禁用系统代理（<code>trust_env=False</code>），并配置失败退避重试与并发分片降级。
               </p>
             </div>
             <div class="rule-box">
-              <h4>3. 鉴权分界与时间格式</h4>
+              <h4>3. 鉴权分界与算完即清</h4>
               <p>
-                全网约 85% 的实时与历史 JSON 接口可<strong>免 Cookie 直接调用</strong>；仅居民室温（<code>/jumin/</code>、<code>/sw_ls_export/</code>）及商业日报（<code>/getall_bb_shrb/</code>）需携带已登录 <code>Session Cookie</code>。注意 <code>/ry_*_xx/get_history</code> 需传 <code>MM/DD/YYYY</code>，其余传 <code>YYYY-MM-DD HH:MM:SS</code>。
+                约 85% 的实时与历史 JSON 接口可<strong>免 Cookie 直接调用</strong>；仅居民室温（<code>/jumin/</code>、<code>/sw_ls_export/</code>）及商业日报（<code>/getall_bb_shrb/</code>）需携带 <code>Session Cookie</code>。5 分钟采样明细采用<strong>2 小时算完即清</strong>（仅留当前小时 + 上一小时）。
               </p>
             </div>
           </div>
@@ -384,8 +384,8 @@
             <div class="ops-card">
               <h4>1. 自动定时调度（`scheduler_service.py`）</h4>
               <ul class="step-list">
-                <li><strong>断面采集（默认每 15 分钟）：</strong>在 <code>:00 / :15 / :30 / :45</code> 依次调用 <code>/gk_get_data/</code>、<code>/get_yw_data/1</code>、9 次 <code>/zx_hrz/</code>、<code>/get_sh_data/0</code>，整点 <code>:00</code> 附带 <code>/jumin/</code>。</li>
-                <li><strong>错峰表底校准（默认每 6 小时整点后 18 分）：</strong>单线程轮询 <code>/hrz_ls_zb/</code> 回刷精确 <code>tot_j/tot_f/水/电</code> 整点差值。</li>
+                <li><strong>高频并行采样（默认每 5 分钟）：</strong>并发拉取上游（<code>/gk_get_data/</code>）与商业用户（<code>/get_sh_data/</code>），整点 <code>:00</code> 附带 <code>/jumin/</code>；跨小时定格积分并自动清理 2 小时前采样明细。</li>
+                <li><strong>换热站整点表底校准（默认每小时 :05）：</strong>路线 B 下彻底不拉换热站实时与二次分区，每小时整点后受控并行拉取 <code>/hrz_ls_zb/</code> 产出上一小时精确表底差值与代表断面。</li>
                 <li><strong>商业日结采集（每日 08:30）：</strong>调用 <code>/getall_bb_shrb/</code> 落盘前一日商业耗量。</li>
               </ul>
             </div>
@@ -469,7 +469,7 @@ const sourceEndpoints = [
     fields: 'dc_dict(58) / sz_dict(54) / yw2_dict(19) / yw_dict(4) / sh_dict(2)：WENDU, YALI, LIULIANG, RELIANG, FUHE, PINLV, SHIJIAN / update_time',
     dataDesc: '同时覆盖北海/香海电厂、4 座首站、5 混水点、12 项分网汇总及造船大户，是实时上游主采集源（替代原 HTML 页 /gk_ssxx/）。',
     usage: 'POST {base}/gk_get_data/（空表单即可）',
-    scheduleAndTable: '每 15 分钟采集 → fact_upstream_15min → 梯形积分至 fact_upstream_hourly',
+    scheduleAndTable: '每 5 分钟并发采集 → fact_upstream_15min（保留 2 小时）→ 整点后梯形积分至 fact_upstream_hourly',
     notes: 'sh_dict 时间字段为 update_time 而非 SHIJIAN；蒸汽测点高温阈值需按 >=600℃ 判定，停运备机流量<=1 时 0℃ 不误报故障。',
   },
   {
@@ -511,7 +511,7 @@ const sourceEndpoints = [
     fields: 'name, xinhaoqiangdu(0=在线), gongshuiliuliang, huishuliuliang, gongshuiwendu, huishuiwendu, gongshuiyali, huishuiyali, shunshireliang, famenkaidu, shedingfamen',
     dataDesc: '实测发现的商业用户批量实时接口，每 15 分钟提供全部商业户瞬时热量与流量用于计算小时积分。',
     usage: '优先 POST {base}/get_sh_data/0 (sh_selected=0, Header Connection: close)；断流时自动降级循环 mn_id=2..16',
-    scheduleAndTable: '每 15 分钟采集 → fact_merchant_15min → 梯形积分至 fact_merchant_hourly',
+    scheduleAndTable: '每 5 分钟并发采集 → fact_merchant_15min（保留 2 小时）→ 整点后梯形积分至 fact_merchant_hourly',
     notes: '全网返回含 4 户未入账测试户与 1 组别名（国际航运中心大厦）；rdry="蒸汽" 商户原值为 kg/h 与 MJ/h，入库自动 ÷1000 折算并屏蔽 -200℃ 回温。',
   },
   {
@@ -539,7 +539,7 @@ const sourceEndpoints = [
     fields: 'create_time, f1..f5, f220(totF 累计流量t), f221(totJ 累计热量GJ), f222(flowJ 瞬时热), f253(IT1 电能累计kWh), f254(IU1 补水累计t)',
     dataDesc: '核心表底校准与历史补采数据源；整点线性插值计算表底差值，覆盖瞬时积分估算值。',
     usage: 'POST {base}/hrz_ls_zb/  Body: name=<站名>&start_date=YYYY-MM-DD HH:MM:SS&end_date=...&isdownload=1',
-    scheduleAndTable: '每 6 小时错峰校准（整点后 18 分）或历史回溯 → fact_station_hourly',
+    scheduleAndTable: '每小时整点后 :05 受控并行校准（路线 B 主来源）→ fact_station_hourly',
     notes: '传 isdownload=1 时压力 f1/f4 已为 MPa；单站 5 天包体约 2.6MB，历史批量回溯建议 5 天分段 + 0.8s 间隔。',
   },
   {
@@ -661,10 +661,10 @@ const entityCategories = [
     hasHourly: true,
     brief: '含小时累计热量/流量/补水/电量，及一网供回温压、折算热指标等。',
     dictTables: 'dict_heating_station',
-    sourceApis: '/zx_hrz/（主） + /get_yw_data/1（辅） + /hrz_ls_zb/（表底校准）',
-    fact15mTable: 'fact_station_15min',
+    sourceApis: '/hrz_ls_zb/（路线 B 唯一主采集源：整点表底差值 + 代表断面 + 坏表底积分兜底）',
+    fact15mTable: '已停用实时拉取（不再写入 fact_station_15min）',
     factOutputTable: 'fact_station_hourly',
-    summary: '换热站是全网核心核算单元。每 15 分钟采集一次瞬时运行断面并先用梯形积分生成实时小时累计；随后由错峰表底校准任务拉取历史累计表底做整点线性插值差值覆盖，以表底为准、瞬时积分为兜底。',
+    summary: '换热站是全网核心核算单元（路线 B）。不再高频拉取实时接口，改为每小时整点后（默认 :05）受控并行拉取 /hrz_ls_zb/，直接按整点线性插值计算表底差值（METER_DIFF）并提取小时末代表断面，坏表底时自动用历史 f222 积分兜底。',
     keyNote: '严禁使用二次网各分区热量之和 Σe12 作为阳面换热站热量！阳面统一采用一次网表底 totJ (f221) 差值或一次网瞬时热量 e11 积分，Σe12 仅留作一二网热平衡失真审计。',
     metrics: [
       {
@@ -818,15 +818,15 @@ const entityCategories = [
   {
     key: 'zone',
     icon: '🔀',
-    title: '二次网供热分区',
-    scale: '580 个分区（挂接在 237 站下，另有 5 站无分区）',
-    hasHourly: true,
-    brief: '展示各换热站高/低/地热区二网运行温压流补水；e12 仅作审计比对。',
+    title: '二次网供热分区（已停用实时采集）',
+    scale: '580 个分区（仅保留静态字典台账，不再参与采集与统计）',
+    hasHourly: false,
+    brief: '按业务决策已停用二次分区实时采集与下钻展示，仅保留 dict_secondary_zone 静态台账。',
     dictTables: 'dict_secondary_zone',
-    sourceApis: '/zx_hrz/（各站返回体中的 Nx[] 数组）',
-    fact15mTable: 'fact_zone_15min',
-    factOutputTable: 'fact_zone_hourly',
-    summary: '二次网分区记录各小区的精细水力与供回温参数。系统每 15 分钟随换热站一并采集写入 fact_zone_15min，并在小时汇总表 fact_zone_hourly 保留最近有效断面。',
+    sourceApis: '已停用采集',
+    fact15mTable: '已停用（每轮 2 小时滚动清理历史残留）',
+    factOutputTable: '已停用（仅保留静态台账）',
+    summary: '由于阳面核心能耗核算严格以一次网为准、二次分区不参与任何上层统计与汇总，系统已彻底停用二次分区的采集落库与前端下钻子表，以降低数据库写入压力。',
     keyNote: '台账中已标识为“常离线”的分区（dict_secondary_zone.is_online = FALSE）在小时层保持 OFFLINE_PERMANENT，不做虚假插值；所有分区的二次网热量 e12 仅用于与站一次网 e11 做热平衡审计比对，严禁向上汇总。',
     metrics: [
       {
