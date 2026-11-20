@@ -16,7 +16,7 @@ import json
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -30,6 +30,7 @@ EAST_8 = timezone(timedelta(hours=8))
 
 PUBLIC_SOURCE_URL = "http://124.93.31.19:6688"
 INTRANET_SOURCE_URL = "http://192.168.1.206:6688"
+DEFAULT_GAP_RECOVERY_START_DATE = "2026-11-01"
 
 _CONFIG_LOCK = threading.RLock()
 
@@ -44,6 +45,11 @@ DEFAULT_COLLECTOR_SETTINGS: Dict[str, Any] = {
     "request_interval_seconds": 0.8,
     "request_timeout_seconds": 15.0,
     "table_bottom_sync_hours": 1,
+    "auto_gap_recovery": True,
+    "gap_recovery_start_date": DEFAULT_GAP_RECOVERY_START_DATE,
+    "auto_heat_audit_fix": True,
+    "heat_audit_time": "00:00",
+    "heat_audit_lookback_days": 3,
     "updated_at": "",
     "updated_by": "",
     "last_test_result": None,
@@ -154,6 +160,11 @@ def _to_public_view(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "request_interval_seconds": float(cfg.get("request_interval_seconds", 0.8)),
         "request_timeout_seconds": float(cfg.get("request_timeout_seconds", 15.0)),
         "table_bottom_sync_hours": int(cfg.get("table_bottom_sync_hours", 1)),
+        "auto_gap_recovery": bool(cfg.get("auto_gap_recovery", True)),
+        "gap_recovery_start_date": str(cfg.get("gap_recovery_start_date") or DEFAULT_GAP_RECOVERY_START_DATE),
+        "auto_heat_audit_fix": bool(cfg.get("auto_heat_audit_fix", True)),
+        "heat_audit_time": str(cfg.get("heat_audit_time") or "00:00"),
+        "heat_audit_lookback_days": int(cfg.get("heat_audit_lookback_days", 3)),
         "updated_at": cfg.get("updated_at") or "",
         "updated_by": cfg.get("updated_by") or "",
         "last_test_result": cfg.get("last_test_result"),
@@ -228,6 +239,39 @@ def update_collector_settings(payload: Dict[str, Any], operator: str) -> Dict[st
             if not 1 <= sync_hours <= 24:
                 raise ValueError("累计表底校准周期必须在 1~24 小时之间")
             cfg["table_bottom_sync_hours"] = sync_hours
+
+        if "auto_gap_recovery" in payload and payload["auto_gap_recovery"] is not None:
+            cfg["auto_gap_recovery"] = bool(payload["auto_gap_recovery"])
+
+        if "gap_recovery_start_date" in payload and payload["gap_recovery_start_date"] is not None:
+            raw_sd = str(payload["gap_recovery_start_date"]).strip()
+            try:
+                parsed_sd = date.fromisoformat(raw_sd)
+            except ValueError as exc:
+                raise ValueError("真空期检查起始日期格式必须为 YYYY-MM-DD") from exc
+            cfg["gap_recovery_start_date"] = parsed_sd.isoformat()
+
+        if "auto_heat_audit_fix" in payload and payload["auto_heat_audit_fix"] is not None:
+            cfg["auto_heat_audit_fix"] = bool(payload["auto_heat_audit_fix"])
+
+        if "heat_audit_time" in payload and payload["heat_audit_time"] is not None:
+            raw_tm = str(payload["heat_audit_time"]).strip()
+            parts = raw_tm.split(":")
+            if len(parts) != 2:
+                raise ValueError("每日回看检测修正时刻格式必须为 HH:MM（例如 00:00）")
+            try:
+                hh, mm = int(parts[0]), int(parts[1])
+            except ValueError as exc:
+                raise ValueError("每日回看检测修正时刻格式必须为 HH:MM（例如 00:00）") from exc
+            if not (0 <= hh <= 23 and 0 <= mm <= 59):
+                raise ValueError("每日回看检测修正时刻必须在 00:00~23:59 之间")
+            cfg["heat_audit_time"] = f"{hh:02d}:{mm:02d}"
+
+        if "heat_audit_lookback_days" in payload and payload["heat_audit_lookback_days"] is not None:
+            lb_days = int(payload["heat_audit_lookback_days"])
+            if not 1 <= lb_days <= 30:
+                raise ValueError("每次定时回看检测天数必须在 1~30 之间")
+            cfg["heat_audit_lookback_days"] = lb_days
 
         cfg["updated_at"] = _now_east8_str()
         cfg["updated_by"] = str(operator or "").strip()

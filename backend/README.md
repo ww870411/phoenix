@@ -1,3 +1,76 @@
+## 2026-11-20 新增单个主体/换热站 24 小时趋势图查询接口 (`/hourly/entity-trend`)
+
+- **`projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：提取 `_build_trend_24h_from_rows` 并新增 `get_entity_trend_24h()` 与 `GET /reports/hourly/entity-trend`，支持按服务中心、主干热网、支线热网及单座换热站维度拉取 24 小时柱形与供回温曲线。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：补充单主体 24h 趋势聚合单测。
+
+## 2026-11-20 收紧异常标红口径为“仅突发跳变标红”并补齐日报 `raw` 口径接口
+
+- **`projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：
+  - 剔除 4 座常规表底倍率换算站（`STATION_METER_SCALE_FACTORS`）、蒸汽商业户固定 `÷1000` 及单日持续 >6 小时常驻坏点的常规标签，仅对突发跳变（`<= 6 小时/日` 或 `>= 100 GJ` 级突跳）生成 `field_notes`/`anomalies` 红标；
+  - `get_daily_report` 及 `/reports/daily`、`/reports/daily/export` 支持 `mode=clean|raw` 参数。
+- **`projects/smart_heating_platform/services/cleaning_engine.py`**：`_clean_station_primary_metrics` 回退历史基准前增加物理上限/下限防呆检查（如一网温度 `<= 150℃`）。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：增加突发跳变与脏温保护单测。
+
+## 2026-11-20 报表查询接口新增异常修正全链路传播标注 (`anomalies` / `field_notes`)
+
+- **`projects/smart_heating_platform/services/report_query_service.py`**：在小时报表（`kpis`、`trend_24h`、`group_summaries`、`stations`、`upstream_points`、`merchants`、`merchant_summary`）及日度报表（`kpis`、`center_comparison`、`station_daily`）返回值中附带测点级 `field_notes` 与汇总级 `anomalies` 传播备注，凡依赖被修正站点的总热量、单万㎡热耗、瞬时负荷、热指标、核对偏差率、加权供回温及补水量均标记原始→修正信息。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：补充 `test_report_anomaly_propagation_and_notes` 单元测试验证异常传播逻辑。
+
+## 2026-11-20 调整 `api/faults.py` 故障分类标签与导出命名
+
+- **`projects/smart_heating_platform/api/faults.py`**：将 `OWNER_LABELS` 与导出列名/文件名由“研究院/高校”调整为中性故障分类（`下位机/传感器故障`、`上位机/台账缺陷`、`现场与平台协同排查`）。
+
+## 2026-11-20 新增热量双轨留痕、实时清洗修正与每日定时回看审计机制
+
+- **`sql/smart_heating_platform_fact_init.sql`**：`fact_station_hourly` 与 `fact_upstream_hourly` 幂等增加 `hour_heat_raw_gj` 保留原始热量，与修正后 `hour_heat_gj` 双轨留痕。
+- **`projects/smart_heating_platform/services/cleaning_engine.py` & `collector_engine.py`**：
+  - 按供暖面积核定单站极限负荷（`station_max_hourly_heat_gj`），补齐 `f222`/`e11` 越限清洗、4 座表底倍率站（`STATION_METER_SCALE_FACTORS`）折算与上游累计量拦截，并向 `fact_fault_ticket` 留痕；
+  - 新增 `run_daily_heat_audit_and_fix()` 回看重算与兜底清洗能力。
+- **`projects/smart_heating_platform/services/{collector_config_service,scheduler_service,report_query_service}.py` & `api/{settings,reports}.py`**：新增 `auto_heat_audit_fix` / `heat_audit_time`（默认 `00:00`）/ `heat_audit_lookback_days` 配置、每日定时调度、手动 `action=heat_audit_fix` 与 `mode=raw` 原始热量对照支持。
+- **`projects/smart_heating_platform/tests/`**：补充热量修正与定时审计单测。
+
+## 2026-11-20 区分“漏采无记录”与“源站本身无数据 (`SOURCE_EMPTY`) 空值占位”
+
+- **`projects/smart_heating_platform/services/cleaning_engine.py`**：新增 `SRC_SOURCE_EMPTY = "SOURCE_EMPTY"`。
+- **`projects/smart_heating_platform/services/collector_engine.py`**：
+  - `_upsert_batch` 支持 `do_nothing_on_conflict`，回溯补采（换热站、商业小时、上游）在 HTTP 200 合法返回但源站本身无数据的已完成整点写入 `SOURCE_EMPTY` 空值行；请求异常时保持不写行，与真实漏采严格区分；
+  - `run_upstream_hourly_backfill()` 增加库内 `dc_dict`/`sz_dict` 测点清单兜底；
+  - `detect_data_gaps()` 通过 `(hour_heat_gj IS NOT NULL OR value_source = 'SOURCE_EMPTY')` 豁免已核实源站空缺。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_source_empty_placeholders_and_gap_distinction()`。
+
+## 2026-11-20 台账接口 `main_networks` 切换为 9 个主干热网 (`rdfz`)
+
+- **`projects/smart_heating_platform/api/dicts.py`**：`/dicts/overview` 与 `/dicts/items/main_networks` 改为基于 `dict_heating_station.rdfz` 与 `dict_merchant.rdfz` 聚合返回 9 个主干热网的站点、面积与商业户统计；`tests/test_cleaning_and_apis.py` 同步补充校验断言。
+
+## 2026-11-20 统一报表 Excel 导出表头“主干热网”
+
+- **`projects/smart_heating_platform/services/report_query_service.py`**：将小时/日度 Excel 导出表头中的 `热源大网` 统一调整为 `主干热网`，并在商业小时明细表中移除冗余的 15 主干网列（接口 JSON 结构保持兼容）。
+
+## 2026-11-20 统一日报导出文件命名为“每日运行报告”
+
+- **`projects/smart_heating_platform/api/reports.py`**：`/reports/daily/export` 下载文件名调整为 `每日运行报告_{date}.xlsx`。
+
+## 2026-11-20 清除 `daily_report_25_26` 中旧版智慧供热中继与内网直通后端模块
+
+- **已删除**：`projects/daily_report_25_26/api/{smart_heating,smart_heating_tunnel}.py`、`projects/daily_report_25_26/{smart_heating_sync.py,dev_relay_pull_sync.py,smart_heating_static_cache/}`、相关 3 份单测以及 `backend_data/projects/daily_report_25_26/{smart_heating_relay_win7.py,smart_heating_tunnel_win7.py,smart_heating/}` 本地存储目录。
+- **已清理 (`projects/daily_report_25_26/api/router.py`)**：移除 `/smart-heating` 与 `/smart-heating-tunnel` 路由挂载；核查 PostgreSQL 确认无对应遗留库表。
+
+## 2026-11-20 新增 `smart_heating_platform` 停机真空期自动检测与补采机制
+
+- **`projects/smart_heating_platform/services/collector_config_service.py` & `api/settings.py`**：新增 `auto_gap_recovery`（默认 `True`）与 `gap_recovery_start_date`（默认 `2026-11-01`，支持 `YYYY-MM-DD`）。
+- **`projects/smart_heating_platform/services/collector_engine.py`**：
+  - 新增 `run_upstream_hourly_backfill()` 并行回溯 `/ry_dcls_xx/get_history`、`/ry_szls_xx/get_history`；`run_table_bottom_calibration()` 与 `run_merchant_hourly_backfill()` 支持 `target_hours` 精确过滤；
+  - 新增 `detect_data_gaps()`（固定自 `gap_recovery_start_date` 默认 `2026-11-01` 扫描至最新已完成整点，识别 0 条缺失、`hour_heat_gj IS NULL` 未定格及覆盖率不足的半残缺整点）、`get_gap_recovery_status()`（含步骤百分比、`heartbeat_age_seconds` 心跳年龄、`recent_logs` 与最近 5 次历史记录）及带 `progress_cb` 实时上报和 24h 冷却防重扫的 `run_gap_recovery()`。
+- **`projects/smart_heating_platform/services/scheduler_service.py`**：增加启动 10 秒宽限后 `AUTO_STARTUP` 检测、休眠跃变 `>20min` 的 `AUTO_WAKE` 补采及每小时 `:15` `AUTO_WATCHDOG` 只读巡检。
+- **`projects/smart_heating_platform/api/reports.py`**：新增 `GET /reports/gap-status` 与 `POST /reports/collect-now` (`action=gap_recovery | upstream_backfill`)。
+- **测试 (`projects/smart_heating_platform/tests/`)**：`pytest` **9 passed**。
+
+## 2026-11-20 对照 20261106 面积表修正换热站供热面积与台账同步
+
+- **`scripts/sync_station_areas_20261106.py`（新增） & `scripts/init_smart_heating_platform_dicts.py`**：按最新面积表补齐 28 座缺失面积、更新 206 座面积（含 `第六干休所` 合并 `62,411.54` 及 4 座指定站）、将 `新农行` 标准站名改为 `农行` 并留存原值备注；PostgreSQL `dict_heating_station` 同步完成（全网总面积 `22,996,487.47 ㎡`，剩余缺面积站 4 座）。
+- **`projects/smart_heating_platform/services/collector_engine.py`**：`_process_station_calibration()` 改用 `name_raw` 调用 `/hrz_ls_zb/`，避免标准站名变更影响源站历史查询。
+- **测试 (`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`)**：放宽 `missing_area_stations` 动态断言，`pytest` **7 passed**。
+
 ## 2026-11-20 升级 `smart_heating_platform` 为路线 B 并行采集、5 分钟高频积分与 2 小时算完即清
 
 - **`projects/smart_heating_platform/services/collector_config_service.py` & `api/settings.py`**：默认采样间隔改为 `5` 分钟（支持 `5/15/30/60`），校准周期默认 `1` 小时，新增受控并发线程数 `max_workers`（默认 `4`，范围 `1~16`）。

@@ -1,16 +1,15 @@
 <template>
-  <nav class="shp-subnav card elevated" aria-label="智慧供热旁路平台功能导航">
+  <nav class="shp-subnav card elevated" aria-label="智慧供热平台精算模块功能导航">
     <div class="subnav-links">
       <button
         v-for="item in navItems"
         :key="item.key"
         type="button"
-        :class="['subnav-btn', { active: current === item.key, 'is-yin': item.yin }]"
+        :class="['subnav-btn', { active: current === item.key }]"
         @click="go(item.path)"
       >
         <span class="nav-icon">{{ item.icon }}</span>
         <span>{{ item.label }}</span>
-        <span v-if="item.badge" :class="['nav-badge', item.yin ? 'badge-yin' : 'badge-yang']">{{ item.badge }}</span>
       </button>
     </div>
   </nav>
@@ -29,10 +28,9 @@ defineProps({
 const router = useRouter()
 
 const navItems = [
-  { key: 'hourly_report', label: '逐小时运行报告', icon: '📊', badge: '阳面', path: '/projects/smart_heating_platform/pages/hourly_report', yin: false },
-  { key: 'daily_report', label: '每日精算日报', icon: '📑', badge: '阳面', path: '/projects/smart_heating_platform/pages/daily_report', yin: false },
-  { key: 'fault_audit', label: '异常巡检督办', icon: '🛡️', badge: '阴面', path: '/projects/smart_heating_platform/pages/fault_audit', yin: true },
-  { key: 'dict_center', label: '八大主体台账', icon: '🗂️', path: '/projects/smart_heating_platform/pages/dict_center', yin: false },
+  { key: 'hourly_report', label: '逐小时运行报告', icon: '📊', path: '/projects/smart_heating_platform/pages/hourly_report' },
+  { key: 'daily_report', label: '每日运行报告', icon: '📑', path: '/projects/smart_heating_platform/pages/daily_report' },
+  { key: 'dict_center', label: '8类主体台账', icon: '🗂️', path: '/projects/smart_heating_platform/pages/dict_center' },
 ]
 
 function go(path) {
@@ -84,34 +82,6 @@ function go(path) {
   color: #ffffff;
 }
 
-.subnav-btn.is-yin.active {
-  background: #991b1b;
-  border-color: #991b1b;
-  color: #ffffff;
-}
-
-.nav-badge {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-.badge-yang {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.badge-yin {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.subnav-btn.active .nav-badge {
-  background: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
-}
-
 @media (max-width: 768px) {
   .shp-subnav {
     padding: 8px 10px;
@@ -119,7 +89,7 @@ function go(path) {
   .subnav-links {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
   }
   .subnav-btn {

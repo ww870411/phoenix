@@ -7,11 +7,11 @@
       <header class="topbar card elevated">
         <div class="topbar-info">
           <div class="title-row">
-            <h2>主体每小时指标算法与源站接口参考手册</h2>
+            <h2>算法说明</h2>
             <span class="role-badge">参考解释 · 仅限 Global_admin</span>
           </div>
           <p class="subtitle">
-            切换上方标签可分别查阅：① 各统计主体每小时代表断面与累计耗量公式、清洗口径与试算器；② 授权源站全量接口清单、返回字段、限速规范与本平台调用方式。
+            数据接口及积算算法规则，确保数据准确无误。切换下方标签可分别查阅各统计主体指标算法与授权源站接口清单。
           </p>
         </div>
         <div class="topbar-actions">
@@ -19,7 +19,7 @@
             ⬅️ 返回功能页
           </button>
           <button class="btn primary" type="button" @click="goWorkbench">
-            📊 前往运行工作台
+            📊 前往全量数据统计与报告
           </button>
         </div>
       </header>
@@ -415,8 +415,8 @@ const router = useRouter()
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
-  { label: '智慧供热旁路精算与质检平台', to: '/projects/smart_heating_platform/pages' },
-  { label: '主体每小时指标算法说明书', to: null },
+  { label: '智慧供热平台精算模块', to: '/projects/smart_heating_platform/pages' },
+  { label: '算法说明', to: null },
 ])
 
 function goBackPages() {

@@ -248,8 +248,6 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   spot_electricity: '15分钟日前/实时电价与走势',
   global_management: '核心运行参数设定',
   dispatch_info: '主城区生产调度全景工况监控',
-  smart_heating: '首站环路、电厂机组与换热站一次网实时监测',
-  smart_heating_tunnel: '办公电脑反向中继穿透，免开发直接操作内网智慧供热平台',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
 function filterVisiblePages(list) {
@@ -265,20 +263,6 @@ function withAdminExclusivePages(pageList, pKey, user) {
     pKey === 'daily_report_25_26' &&
     (auth.isGlobalAdmin || user?.group === 'Global_admin' || user?.username === 'ww870411')
   list = (Array.isArray(list) ? list : []).filter((p) => p.page_key !== 'smart_heating' && p.page_key !== 'smart_heating_tunnel')
-  if (isGlobalAdmin) {
-    list.push({
-      page_key: 'smart_heating',
-      page_name: '智慧供热实时工况',
-      page_description: '首站环路、电厂机组与换热站一次网实时监测',
-      page_url: `/projects/${pKey}/pages/smart_heating`,
-    })
-    list.push({
-      page_key: 'smart_heating_tunnel',
-      page_name: '智慧供热内网直通',
-      page_description: '办公电脑反向中继穿透，免开发直接操作内网智慧供热平台',
-      page_url: `/projects/${pKey}/pages/smart_heating_tunnel`,
-    })
-  }
   if (pKey === 'daily_report_25_26' && (isGlobalAdmin || auth.hasPageAccess(pKey, 'data_entry'))) {
     list = list.filter(p => p.page_key !== 'data_corrections')
     list.push({ page_key: 'data_corrections', page_name: '数据修正申请记录',
@@ -366,7 +350,7 @@ const GROUP_DEFINITIONS = [
     key: 'monitoring_dashboard',
     title: '生产监控与看板',
     description: '全景数据看板、报表展示与调度电价监控',
-    pageKeys: ['dashboard', 'data_show', 'dispatch_info', 'spot_electricity', 'smart_heating', 'smart_heating_tunnel'],
+    pageKeys: ['dashboard', 'data_show', 'dispatch_info', 'spot_electricity'],
   },
   {
     key: 'analysis_management',
@@ -671,22 +655,6 @@ function openPage(page) {
     router.push({
       path: `${base}`,
       query: { pageName: page.page_name || '调度信息' },
-    })
-    return
-  }
-  const isSmartHeating = normalizedKey === 'smart_heating'
-  if (isSmartHeating) {
-    router.push({
-      path: `${base}`,
-      query: { pageName: page.page_name || '智慧供热实时工况' },
-    })
-    return
-  }
-  const isSmartHeatingTunnel = normalizedKey === 'smart_heating_tunnel'
-  if (isSmartHeatingTunnel) {
-    router.push({
-      path: `${base}`,
-      query: { pageName: page.page_name || '智慧供热内网直通' },
     })
     return
   }

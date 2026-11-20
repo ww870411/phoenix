@@ -1,3 +1,104 @@
+## 2026-11-20 支持点击主体/换热站查看对应 24 小时柱形图与曲线
+
+- **`src/projects/smart_heating_platform/{services/api.js,pages/HourlyReportView.vue}`**：新增 `fetchEntityTrend24h()`；支持在“服务中心与热网”或“换热站明细”中点击任意主体行，在上方图表区切换展示该主体 24 小时供热量柱形图与供回温折线（含异常红标、口径/日期联动与“返回全网走势”按钮）。
+
+## 2026-11-20 逐小时温度折线图移除居民“平均室温”系列
+
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：温度趋势折线图 `tempChart` 仅展示 `一网供温` 与 `一网回温`，不再显示 `平均室温` 折线。
+
+## 2026-11-20 修复日期/时间快速步进时异步竞态回跳问题
+
+- **`src/projects/smart_heating_platform/{services/api.js,pages/{HourlyReportView,DailyReportView,FaultAuditView}.vue}`**：为报表与异常监测查询接入 `AbortController` 取消、递增请求序号校验与 `180ms` 步进防抖，防止快速连按日期/小时箭头时旧响应覆盖当前选定时间导致回跳。
+
+## 2026-11-20 报表页面支持“默认修正后数据 / 一键还原原始数据”切换（含日报页）
+
+- **`src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView}.vue`**：默认展示修正后数据，控制台提供 **`🔄 一键还原原始数据` / `✨ 恢复修正后数据`** 一键切换按钮与原始数据模式警示横幅；日报页及其导出接口同步接入 `mode=clean|raw`。
+
+## 2026-11-20 报表与图表接入异常修正红色标识及悬浮备注提示
+
+- **`src/projects/smart_heating_platform/components/AnomalyBadgeValue.vue`**：新增异常数值展示组件，遇到受异常修正影响的指标时以红色 `#dc2626` + `*` 高亮显示并弹出悬浮备注卡片。
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue` & `DailyReportView.vue`**：KPI 卡片、汇总核对表、站点/首站/商业用户明细表全面接入 `AnomalyBadgeValue`；`HourlyReportView.vue` ECharts 24h 柱状/折线图同步将受影响时段柱条或节点标红，并在 Tooltip 中展示异常详情。
+
+## 2026-11-20 移除 `FaultAuditView.vue` 的状态与流转操作
+
+- **`src/projects/smart_heating_platform/pages/FaultAuditView.vue`**：简化为纯异常监测与回看修正视图，移除状态筛选、状态列、流转操作列（派发/办结）及待处理计数。
+
+## 2026-11-20 调整 `FaultAuditView.vue` 问题类别文案（移除“研究院/高校”表述）
+
+- **`src/projects/smart_heating_platform/pages/FaultAuditView.vue`**：副标题、导出按钮、筛选框及列表表头统一调整为 `问题类别`（`下位机/传感器故障`、`上位机/台账缺陷`、`现场与平台协同排查`）。
+
+## 2026-11-20 增加数据异常每日定时回看配置与“异常数据监测”一键回看修正入口
+
+- **`src/projects/smart_heating_platform/pages/SettingsView.vue`**：支持设置每日回看检测开关、`heat_audit_time`（默认 `00:00`）与回看天数。
+- **`src/projects/smart_heating_platform/{pages/FaultAuditView.vue,services/api.js}`**：新增 `triggerHeatAuditFix()`（`🔧 立即回看检测与修正` 按钮）及 `30 天` 查询窗口，并修复缺面积 fallback 默认值。
+
+## 2026-11-20 兼容 `SOURCE_EMPTY`（源站无数据）状态展示
+
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：`sourceLabel()` 与列表状态标签支持展示 `SOURCE_EMPTY`（“源站无数据”），并避免将其误标为清洗平滑星号。
+
+## 2026-11-20 调整 `DailyReportView.vue` 三项报表标签页名称
+
+- **`src/projects/smart_heating_platform/pages/DailyReportView.vue`**：标签页文案统一为 `⚖️ 服务中心汇总日报（9）`、`🏭 换热站消耗量日报（242）`、`🏬 商业用户用量日报（464）`。
+
+## 2026-11-20 调整 `HourlyReportView.vue` 分组维度按钮展示文案
+
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：`groupDimensions` 按钮更名为 `服务中心（9）`、`主干热网（9）`、`支线热网（41）`。
+
+## 2026-11-20 台账中心“主干网”切换为 9 个主干热网展示
+
+- **`src/projects/smart_heating_platform/pages/DictCenterView.vue`**：主体卡片改名为 `主干热网` 并新增专属汇总表展示 9 个 `rdfz` 主干热网，同步更新站点/商户列与编辑弹窗文案为 `主干热网`。
+
+## 2026-11-20 合并去除 `15条主干网` 维度并将 `rdfz` 统一更名为“主干热网”
+
+- **`src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView}.vue`**：`服务中心与热网` 维度切换移除 `by_main` 并将 `by_rdfz` 改名为 `按主干热网`；换热站/商业筛选框与日度表头统一使用 `主干热网`。
+
+## 2026-11-20 精简 `HourlyReportView.vue` 下方报表标签命名
+
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：`reportTabs` 更名为 `服务中心与热网`、`热源与首站`、`换热站明细`、`商业用户明细`、`居民室温统计`。
+
+## 2026-11-20 统一顶部工具栏等高排版与小时跨日连续切换
+
+- **`src/projects/smart_heating_platform/utils/dateUtils.js`（新增）**：封装 `MIN_PLATFORM_DATE`、`todayLocalIso()` 与 `shiftIsoDate()`。
+- **`src/projects/smart_heating_platform/{components/DateStepPicker.vue,pages/HourlyReportView.vue}`**：工具栏全部控件统一为 `34px` 等高、`8px` 圆角、`13px` 字号对齐排布；小时箭头支持 `00:00 ◀ 前一天 23:00` 与 `23:00 ▶ 后一天 00:00` 跨日连续切换。
+
+## 2026-11-20 精简 `HourlyReportView.vue` 小时切换控件（移除轮播按钮）
+
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：移除“▶ 轮播”按钮及对应 `togglePlay()` / `playTimer` 状态。
+
+## 2026-11-20 新增 `DateStepPicker.vue` 公共组件支持日期 `◀ / ▶` 前后步进
+
+- **`src/projects/smart_heating_platform/components/DateStepPicker.vue`（新增）**：组合 `◀` + 原生日期框 + `▶` 控件（支持 `2026-11-01` 至今日范围校验及手机窄屏自适应）。
+- **`src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView,FaultAuditView}.vue`**：统一接入 `<DateStepPicker>` 实现前一天/后一天快捷切换。
+
+## 2026-11-20 更名“每日运行报告”并精简小时下拉选择器展示
+
+- **`src/projects/smart_heating_platform/{components/PlatformSubNav.vue,pages/DailyReportView.vue}` & `src/router/index.js`**：将 `每日精算日报` 统一更名为 `每日运行报告`。
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：小时下拉选项去除 `({station_count}站)` 冗余提示，仅显示时段与 `(暂无)`。
+
+## 2026-11-20 调整 `smart_heating_platform` 顶部导航标签并独立“异常数据监测”页面
+
+- **`src/projects/smart_heating_platform/components/PlatformSubNav.vue`**：精简为 `逐小时运行报告`、`每日精算日报`、`8类主体台账` 3 项，移除 `阳面`/`阴面` 徽标与 `异常巡检督办` 入口（移动端适配为 3 列）。
+- **`src/projects/smart_heating_platform/pages/FaultAuditView.vue` & `src/router/index.js`**：移除 `PlatformSubNav` 嵌套，更名为独立页 `异常数据监测` 并提供“⬅️ 返回功能页”按钮（配套在 `backend_data/shared/项目列表.json` 注册独立卡片）；`HourlyReportView`、`DailyReportView`、`DictCenterView` 同步去除阳面字样并更新为 `8类主体台账`。
+
+## 2026-11-20 统一重命名 `smart_heating_platform` 页面标题、路由标题与面包屑文案
+
+- **`src/router/index.js` & `src/projects/smart_heating_platform/pages/*.vue`**：同步配合 `backend_data/shared/项目列表.json` 将模块名称规范为 `智慧供热平台精算模块`，并将“算法说明”“采集与计算选项”与 6 页面包屑标题全部统一；`npm --prefix frontend run build` 通过（0 错误）。
+
+## 2026-11-20 删除 `daily_report_25_26` 中旧版“智慧供热实时工况”与“智慧供热内网直通”页面
+
+- **已删除**：`src/projects/daily_report_25_26/pages/{SmartHeatingView,SmartHeatingTunnelView}.vue`、`components/{SmartHeatingOverview,SmartHeatingPointCards}.vue`、`constants/{smartHeatingOverview,smartHeatingTaxonomy}.js` 与 `tests/{smartHeatingOverview,smartHeatingTunnel}.test.mjs`。
+- **已清理**：`src/router/index.js`、`src/projects/daily_report_25_26/{pages/PageSelectView.vue,constants/index.js,services/api.js}` 中所有旧路由、卡片、导出与接口调用；`npm --prefix frontend run build` **built in 19.72s（0 错误）**。
+
+## 2026-11-20 接入 `smart_heating_platform` 停机真空期自动补全配置与告警提示条
+
+- **`src/projects/smart_heating_platform/services/api.js`**：新增 `fetchGapStatus()` 对接 `GET /reports/gap-status`。
+- **`src/projects/smart_heating_platform/pages/SettingsView.vue`**：新增“启用停机真空期自动检测与补采”开关与“停机真空期检查起始日期（默认 `2026-11-01`）”配置项。
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：增加停机真空期状态横幅、“📋 查看详情”实况进度抽屉（双层进度条、心跳活跃检测、缺失整点标签、实况执行流水及最近审计表）和运行时 2.5s 自动轮询；`npm --prefix frontend run build` **built in 21.85s（0 错误）**。
+
+## 2026-11-20 台账缺失筛选标签改用实时计数
+
+- **`src/projects/smart_heating_platform/pages/DictCenterView.vue`**：`missingFilterLabel` 改为动态绑定 `overview` 实时统计数（不再硬编码 `(32)`），`npm --prefix frontend run build` **1088 modules transformed，built in 20.84s（0 错误）**。
+
 ## 2026-11-20 同步 `smart_heating_platform` 路线 B 并行采集、5 分钟参数配置与停用二次分区 UI
 
 - **`src/projects/smart_heating_platform/pages/SettingsView.vue`**：新增 `max_workers`（1~16，默认 4）并发线程配置，采样间隔新增并默认 `5` 分钟，表底校准周期默认 `1` 小时。

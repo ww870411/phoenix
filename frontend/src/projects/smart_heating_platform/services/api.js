@@ -101,31 +101,43 @@ export function testCollectorSettings(payload = {}) {
 }
 
 // 2. 阳面逐小时运行报告 & 每日精算日报
-export function fetchHourlyReport(params = {}) {
-  return requestJson(`/reports/hourly${toQuery(params)}`, { method: 'GET' })
+export function fetchHourlyReport(params = {}, options = {}) {
+  return requestJson(`/reports/hourly${toQuery(params)}`, { method: 'GET', ...options })
 }
-export function fetchUpstreamTrend24h(params = {}) {
-  return requestJson(`/reports/hourly/upstream-trend${toQuery(params)}`, { method: 'GET' })
+export function fetchEntityTrend24h(params = {}, options = {}) {
+  return requestJson(`/reports/hourly/entity-trend${toQuery(params)}`, { method: 'GET', ...options })
 }
-export function fetchStationTempDevices(params = {}) {
-  return requestJson(`/reports/hourly/station-temps${toQuery(params)}`, { method: 'GET' })
+export function fetchUpstreamTrend24h(params = {}, options = {}) {
+  return requestJson(`/reports/hourly/upstream-trend${toQuery(params)}`, { method: 'GET', ...options })
 }
-export function fetchDailyReport(params = {}) {
-  return requestJson(`/reports/daily${toQuery(params)}`, { method: 'GET' })
+export function fetchStationTempDevices(params = {}, options = {}) {
+  return requestJson(`/reports/hourly/station-temps${toQuery(params)}`, { method: 'GET', ...options })
+}
+export function fetchDailyReport(params = {}, options = {}) {
+  return requestJson(`/reports/daily${toQuery(params)}`, { method: 'GET', ...options })
 }
 export function triggerManualCollect(payload = {}) {
   return requestJson('/reports/collect-now', { method: 'POST', body: JSON.stringify(payload) })
 }
+export function triggerHeatAuditFix(payload = {}) {
+  return requestJson('/reports/collect-now', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'heat_audit_fix', ...payload }),
+  })
+}
 export function fetchCollectorRuns(limit = 20) {
   return requestJson(`/reports/runs${toQuery({ limit })}`, { method: 'GET' })
 }
+export function fetchGapStatus(params = {}) {
+  return requestJson(`/reports/gap-status${toQuery(params)}`, { method: 'GET' })
+}
 
 // 3. 阴面异常督办中心
-export function fetchFaultSummary(params = {}) {
-  return requestJson(`/faults/summary${toQuery(params)}`, { method: 'GET' })
+export function fetchFaultSummary(params = {}, options = {}) {
+  return requestJson(`/faults/summary${toQuery(params)}`, { method: 'GET', ...options })
 }
-export function fetchFaultTickets(params = {}) {
-  return requestJson(`/faults/tickets${toQuery(params)}`, { method: 'GET' })
+export function fetchFaultTickets(params = {}, options = {}) {
+  return requestJson(`/faults/tickets${toQuery(params)}`, { method: 'GET', ...options })
 }
 export function updateFaultTicketStatus(ticketId, payload) {
   return requestJson(`/faults/tickets/${encodeURIComponent(ticketId)}`, {

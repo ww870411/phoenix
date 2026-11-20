@@ -16,15 +16,20 @@ from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import engine
 from backend.projects.smart_heating_platform.services.cleaning_engine import EAST_8
 from backend.projects.smart_heating_platform.services.collector_engine import (
+    get_gap_recovery_status,
+    run_daily_heat_audit_and_fix,
+    run_gap_recovery,
     run_merchant_daily_cycle,
     run_merchant_hourly_backfill,
     run_snapshot_cycle,
     run_table_bottom_calibration,
+    run_upstream_hourly_backfill,
 )
 from backend.projects.smart_heating_platform.services.report_query_service import (
     build_daily_excel,
     build_hourly_excel,
     get_daily_report,
+    get_entity_trend_24h,
     get_hourly_report,
     get_station_temp_devices,
     get_upstream_point_24h,
@@ -42,10 +47,12 @@ def _require_admin(session: AuthSession) -> None:
 class ManualCollectRequest(BaseModel):
     """手动触发采集/校准请求体。"""
 
-    action: str = Field("snapshot", description="snapshot | calib | merchant")
+    action: str = Field("snapshot", description="snapshot | calib | merchant | merchant_hourly_backfill | upstream_backfill | gap_recovery | heat_audit_fix")
     include_jumin: Optional[bool] = Field(True, description="快照采集时是否顺带采集 /jumin/")
     target_date: Optional[str] = Field(None, description="表底校准或商户日报的目标日期 YYYY-MM-DD")
     station_names: Optional[List[str]] = Field(None, description="可选：指定部分站点名称校准（不传则全量242站）")
+    start_date: Optional[str] = Field(None, description="真空期补采或热量回看检查起始日期 YYYY-MM-DD（默认 2026-11-01）")
+    lookback_days: Optional[int] = Field(None, ge=1, le=60, description="数据异常回看检测天数（默认按配置或截止 target_date 的近 N 天）")
 
 
 @router.get("/hourly", summary="获取逐小时精细化运行报告")
@@ -57,6 +64,22 @@ def api_hourly_report(
 ):
     _require_admin(session)
     data = get_hourly_report(target_date_str=date, hour=hour, mode=mode)
+    return {"ok": True, "data": data}
+
+
+@router.get("/hourly/entity-trend", summary="获取单个主体或换热站当日24小时柱形与曲线")
+def api_entity_trend(
+    date: str = Query(..., description="日期 YYYY-MM-DD"),
+    scope: str = Query(..., description="by_center | by_rdfz | by_branch | station"),
+    key: str = Query(..., description="主体键值或 station_id"),
+    mode: str = Query("clean", description="数据口径: clean | raw"),
+    session: AuthSession = Depends(get_current_session),
+):
+    _require_admin(session)
+    try:
+        data = get_entity_trend_24h(target_date_str=date, scope=scope, key=key, mode=mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, "data": data}
 
 
@@ -107,10 +130,11 @@ def api_export_hourly(
 def api_daily_report(
     date: Optional[str] = Query(None, description="日期 YYYY-MM-DD"),
     period_mode: str = Query("natural", description="natural (00:00~24:00) | shift (08:00~08:00)"),
+    mode: str = Query("clean", description="数据口径: clean | raw"),
     session: AuthSession = Depends(get_current_session),
 ):
     _require_admin(session)
-    data = get_daily_report(target_date_str=date, period_mode=period_mode)
+    data = get_daily_report(target_date_str=date, period_mode=period_mode, mode=mode)
     return {"ok": True, "data": data}
 
 
@@ -118,12 +142,13 @@ def api_daily_report(
 def api_export_daily(
     date: Optional[str] = Query(None),
     period_mode: str = Query("natural"),
+    mode: str = Query("clean", description="数据口径: clean | raw"),
     session: AuthSession = Depends(get_current_session),
 ):
     _require_admin(session)
-    report_data = get_daily_report(target_date_str=date, period_mode=period_mode)
+    report_data = get_daily_report(target_date_str=date, period_mode=period_mode, mode=mode)
     excel_bytes = build_daily_excel(report_data)
-    filename = f"每日生产精算日报_{report_data['meta']['date']}.xlsx"
+    filename = f"每日运行报告_{report_data['meta']['date']}.xlsx"
     encoded = quote(filename)
     return Response(
         content=excel_bytes,
@@ -154,11 +179,42 @@ def api_collect_now(
                 merchant_names=payload.station_names,
                 trigger="MANUAL",
             )
+        elif action == "upstream_backfill":
+            res = run_upstream_hourly_backfill(
+                target_date_str=payload.target_date,
+                trigger="MANUAL",
+            )
+        elif action == "gap_recovery":
+            res = run_gap_recovery(
+                start_date_str=payload.start_date,
+                trigger="MANUAL",
+                include_empty_baseline=True,
+            )
+        elif action == "heat_audit_fix":
+            res = run_daily_heat_audit_and_fix(
+                start_date_str=payload.start_date,
+                end_date_str=payload.target_date,
+                lookback_days=payload.lookback_days,
+                trigger="MANUAL",
+            )
         else:
             res = run_snapshot_cycle(include_jumin=payload.include_jumin, trigger="MANUAL")
         return res
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"采集执行失败: {exc}") from exc
+
+
+@router.get("/gap-status", summary="巡检停机真空期缺失小时与补采状态")
+def api_gap_status(
+    start_date: Optional[str] = Query(None, description="检查起始日期 YYYY-MM-DD（默认按设置，通常为 2026-11-01）"),
+    session: AuthSession = Depends(get_current_session),
+):
+    _require_admin(session)
+    try:
+        data = get_gap_recovery_status(start_date_str=start_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "data": data}
 
 
 @router.get("/runs", summary="查询最近采集运行记录")

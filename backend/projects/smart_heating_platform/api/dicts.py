@@ -24,7 +24,7 @@ def _require_admin(session: AuthSession) -> None:
 
 class StationAreaPatch(BaseModel):
     covered_area: Optional[float] = Field(None, ge=0, description="在网供热面积（㎡）")
-    rdfz: Optional[str] = Field(None, description="热源大网")
+    rdfz: Optional[str] = Field(None, description="主干热网")
 
 
 class MerchantTagsPatch(BaseModel):
@@ -35,13 +35,18 @@ class MerchantTagsPatch(BaseModel):
     rdgz: Optional[str] = None
 
 
-@router.get("/overview", summary="获取八大主体规模与待补录统计")
+@router.get("/overview", summary="获取8类主体规模与待补录统计")
 def api_dict_overview(session: AuthSession = Depends(get_current_session)):
     _require_admin(session)
     with engine.connect() as conn:
         counts = {
             "centers": conn.execute(text("SELECT COUNT(*) FROM smart_heating_platform.dict_service_center")).scalar_one(),
-            "main_networks": conn.execute(text("SELECT COUNT(*) FROM smart_heating_platform.dict_main_network")).scalar_one(),
+            "main_networks": conn.execute(
+                text(
+                    "SELECT COUNT(DISTINCT rdfz) FROM smart_heating_platform.dict_heating_station "
+                    "WHERE rdfz IS NOT NULL AND BTRIM(rdfz) <> ''"
+                )
+            ).scalar_one(),
             "branch_networks": conn.execute(text("SELECT COUNT(*) FROM smart_heating_platform.dict_branch_network")).scalar_one(),
             "stations": conn.execute(text("SELECT COUNT(*) FROM smart_heating_platform.dict_heating_station")).scalar_one(),
             "zones": conn.execute(text("SELECT COUNT(*) FROM smart_heating_platform.dict_secondary_zone")).scalar_one(),
@@ -102,10 +107,26 @@ def api_dict_items(
         elif entity == "main_networks":
             rows = conn.execute(
                 text(
-                    "SELECT mn.main_network_id, mn.name, mn.name_raw, COUNT(bn.branch_network_id) AS branch_count "
-                    "FROM smart_heating_platform.dict_main_network mn "
-                    "LEFT JOIN smart_heating_platform.dict_branch_network bn ON mn.main_network_id = bn.main_network_id "
-                    "GROUP BY mn.main_network_id, mn.name, mn.name_raw ORDER BY mn.main_network_id"
+                    "WITH st_agg AS ("
+                    "  SELECT rdfz, COUNT(*) AS station_count, "
+                    "         ROUND(COALESCE(SUM(covered_area), 0)::numeric, 2) AS covered_area_m2, "
+                    "         COUNT(*) FILTER (WHERE covered_area IS NULL) AS missing_area_stations "
+                    "  FROM smart_heating_platform.dict_heating_station "
+                    "  WHERE rdfz IS NOT NULL AND BTRIM(rdfz) <> '' "
+                    "  GROUP BY rdfz"
+                    "), mc_agg AS ("
+                    "  SELECT rdfz, COUNT(*) AS merchant_count "
+                    "  FROM smart_heating_platform.dict_merchant "
+                    "  WHERE rdfz IS NOT NULL AND BTRIM(rdfz) <> '' "
+                    "  GROUP BY rdfz"
+                    ") "
+                    "SELECT st_agg.rdfz AS name, st_agg.station_count, "
+                    "       st_agg.covered_area_m2::float AS covered_area_m2, "
+                    "       st_agg.missing_area_stations, "
+                    "       COALESCE(mc_agg.merchant_count, 0) AS merchant_count "
+                    "FROM st_agg "
+                    "LEFT JOIN mc_agg ON mc_agg.rdfz = st_agg.rdfz "
+                    "ORDER BY st_agg.station_count DESC, st_agg.rdfz"
                 )
             ).fetchall()
         elif entity == "branch_networks":
@@ -232,7 +253,7 @@ def api_dict_items(
     return {"ok": True, "data": result}
 
 
-@router.patch("/stations/{station_id}", summary="在线补录换热站供热面积或热源大网")
+@router.patch("/stations/{station_id}", summary="在线补录换热站供热面积或主干热网")
 def api_patch_station(
     station_id: str,
     payload: StationAreaPatch = Body(...),

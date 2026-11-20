@@ -64,6 +64,11 @@ def test_collector_settings_crud_and_permissions(tmp_path, monkeypatch):
     assert body["data"]["snapshot_interval_minutes"] == 5
     assert body["data"]["max_workers"] == 4
     assert body["data"]["table_bottom_sync_hours"] == 1
+    assert body["data"]["auto_gap_recovery"] is True
+    assert body["data"]["gap_recovery_start_date"] == "2026-11-01"
+    assert body["data"]["auto_heat_audit_fix"] is True
+    assert body["data"]["heat_audit_time"] == "00:00"
+    assert body["data"]["heat_audit_lookback_days"] == 3
 
     # 3. 保存新 Cookie、间隔与并发线程数
     res_put = client.put(
@@ -75,6 +80,8 @@ def test_collector_settings_crud_and_permissions(tmp_path, monkeypatch):
             "max_workers": 6,
             "request_interval_seconds": 0.9,
             "hourly_offset_minutes": 8,
+            "auto_gap_recovery": False,
+            "gap_recovery_start_date": "2026-11-05",
         },
     )
     assert res_put.status_code == 200
@@ -85,14 +92,22 @@ def test_collector_settings_crud_and_permissions(tmp_path, monkeypatch):
     assert saved["max_workers"] == 6
     assert saved["request_interval_seconds"] == 0.9
     assert saved["hourly_offset_minutes"] == 8
+    assert saved["auto_gap_recovery"] is False
+    assert saved["gap_recovery_start_date"] == "2026-11-05"
     assert saved["updated_by"] == "ww870411"
 
-    # 3b. 并发线程数越界拦截
+    # 3b. 并发线程数及真空期起始日期越界/格式拦截
     res_bad_workers = client.put(
         "/api/v1/projects/smart_heating_platform/settings/collector",
         json={"max_workers": 32},
     )
     assert res_bad_workers.status_code == 400
+
+    res_bad_gap_date = client.put(
+        "/api/v1/projects/smart_heating_platform/settings/collector",
+        json={"gap_recovery_start_date": "2026-99-99"},
+    )
+    assert res_bad_gap_date.status_code == 400
 
     # 4. 仅修改其他参数时不传 cookie，应保留既有 Cookie
     res_put_partial = client.put(

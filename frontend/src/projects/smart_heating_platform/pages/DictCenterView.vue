@@ -7,7 +7,7 @@
 
       <header class="card elevated topbar">
         <div>
-          <h2>全网八大主体标准台账中心</h2>
+          <h2>8类主体标准台账中心</h2>
           <p class="subtitle">
             基于《成果_智慧供热平台基础台账.xlsx》构建，支持在网供热总面积（当前 {{ ((overview.total_covered_area_m2 || 0) / 10000).toFixed(2) }} 万㎡）与缺失标签在线补录。
           </p>
@@ -17,7 +17,7 @@
 
       <div v-if="notice.text" :class="['notice-banner', notice.type]">{{ notice.text }}</div>
 
-      <!-- 八大主体切换卡片 -->
+      <!-- 8类主体切换卡片 -->
       <section class="entity-grid">
         <button
           v-for="e in entityTabs"
@@ -53,7 +53,7 @@
                 <th>站名</th>
                 <th>中心</th>
                 <th>支线网</th>
-                <th>热源大网 (rdfz)</th>
+                <th>主干热网 (rdfz)</th>
                 <th>分表名 (rd_code)</th>
                 <th>供热面积 (㎡)</th>
                 <th>操作</th>
@@ -108,6 +108,31 @@
             </tbody>
           </table>
 
+          <!-- 9大主干热网 (按 rdfz 汇总) -->
+          <table v-else-if="activeEntity === 'main_networks'" class="data-table">
+            <thead>
+              <tr>
+                <th>主干热网名称 (rdfz)</th>
+                <th>下辖换热站数</th>
+                <th>在网供热面积 (㎡)</th>
+                <th>待补面积站数</th>
+                <th>关联商业户数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="items.length === 0">
+                <td colspan="5" class="empty-td">暂无主干热网记录</td>
+              </tr>
+              <tr v-for="r in items" :key="r.name">
+                <td class="font-bold">{{ r.name }}</td>
+                <td>{{ r.station_count }}</td>
+                <td>{{ Number(r.covered_area_m2 || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
+                <td :class="{ 'text-warn font-bold': r.missing_area_stations > 0 }">{{ r.missing_area_stations }}</td>
+                <td>{{ r.merchant_count }}</td>
+              </tr>
+            </tbody>
+          </table>
+
           <!-- 通用只读展示表格 -->
           <table v-else class="data-table">
             <thead>
@@ -137,12 +162,12 @@
               <input v-model.number="editModal.covered_area" type="number" step="0.01" min="0" class="ctrl-input" />
             </label>
             <label>
-              <span>热源大网（rdfz）</span>
+              <span>主干热网（rdfz）</span>
               <input v-model="editModal.rdfz" type="text" class="ctrl-input" />
             </label>
           </div>
           <div v-else-if="editModal.kind === 'merchant'" class="modal-fields">
-            <label><span>rdfz（热源大网）</span><input v-model="editModal.rdfz" type="text" class="ctrl-input" /></label>
+            <label><span>rdfz（主干热网）</span><input v-model="editModal.rdfz" type="text" class="ctrl-input" /></label>
             <label><span>rdry（供热介质）</span><input v-model="editModal.rdry" type="text" class="ctrl-input" /></label>
             <label><span>rdss（产权归属）</span><input v-model="editModal.rdss" type="text" class="ctrl-input" /></label>
             <label><span>rdjg（价格分类）</span><input v-model="editModal.rdjg" type="text" class="ctrl-input" /></label>
@@ -193,8 +218,8 @@ const editModal = reactive({
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
-  { label: '智慧供热旁路精算与质检平台', to: '/projects/smart_heating_platform/pages' },
-  { label: '全网八大主体标准台账中心', to: null },
+  { label: '智慧供热平台精算模块', to: '/projects/smart_heating_platform/pages' },
+  { label: '8类主体台账', to: null },
 ])
 
 const entityTabs = [
@@ -204,7 +229,7 @@ const entityTabs = [
   { key: 'merchants', label: '商业用户', countKey: 'merchants', warnKey: 'missing_tag_merchants', warnText: (n) => `${n} 户缺标签` },
   { key: 'upstream_points', label: '上游核心测点', countKey: 'upstream_points' },
   { key: 'centers', label: '服务中心', countKey: 'centers' },
-  { key: 'main_networks', label: '主干网', countKey: 'main_networks' },
+  { key: 'main_networks', label: '主干热网', countKey: 'main_networks' },
   { key: 'branch_networks', label: '支线网', countKey: 'branch_networks' },
   { key: 'unregistered_temp_devices', label: '未入账室温终端', countKey: 'unregistered_temp_devices' },
 ]
@@ -214,10 +239,10 @@ const canFilterMissing = computed(() =>
 )
 
 const missingFilterLabel = computed(() => {
-  if (activeEntity.value === 'stations') return '仅看缺失供热面积 (32)'
-  if (activeEntity.value === 'zones') return '仅看台账常离线分区 (6)'
-  if (activeEntity.value === 'temp_devices') return '仅看非标别名归口户 (43)'
-  if (activeEntity.value === 'merchants') return '仅看缺失五维标签 (3)'
+  if (activeEntity.value === 'stations') return `仅看缺失供热面积 (${overview.value.missing_area_stations ?? 0})`
+  if (activeEntity.value === 'zones') return `仅看台账常离线分区 (${overview.value.offline_zones ?? 0})`
+  if (activeEntity.value === 'temp_devices') return `仅看非标别名归口户 (${overview.value.alias_groups ?? 0})`
+  if (activeEntity.value === 'merchants') return `仅看缺失五维标签 (${overview.value.missing_tag_merchants ?? 0})`
   return ''
 })
 

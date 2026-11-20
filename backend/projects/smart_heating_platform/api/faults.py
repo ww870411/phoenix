@@ -33,9 +33,9 @@ FAULT_CODE_LABELS = {
 }
 
 OWNER_LABELS = {
-    "RESEARCH_INSTITUTE": "下属研究院（下位机/传感器）",
-    "UNIVERSITY_SOFTWARE": "驻场高校（上位机/台账）",
-    "SHARED": "共同排查（高校/研究院）",
+    "RESEARCH_INSTITUTE": "下位机/传感器故障",
+    "UNIVERSITY_SOFTWARE": "上位机/台账缺陷",
+    "SHARED": "现场与平台协同排查",
 }
 
 
@@ -218,9 +218,9 @@ def api_update_ticket(
     return {"ok": True, "message": "督办单状态已更新"}
 
 
-@router.get("/export", summary="一键导出研究院/高校异常督办单 Excel")
+@router.get("/export", summary="一键导出异常监测清单 Excel")
 def api_export_faults(
-    owner_party: Optional[str] = Query(None, description="RESEARCH_INSTITUTE | UNIVERSITY_SOFTWARE"),
+    owner_party: Optional[str] = Query(None, description="RESEARCH_INSTITUTE | UNIVERSITY_SOFTWARE | SHARED"),
     days: int = Query(1, ge=1, le=30),
     date: Optional[str] = Query(None),
     session: AuthSession = Depends(get_current_session),
@@ -247,10 +247,10 @@ def api_export_faults(
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "异常巡检督办单"
+    ws.title = "异常数据监测清单"
     fill = PatternFill(start_color="991B1B", end_color="991B1B", fill_type="solid")
     font = Font(color="FFFFFF", bold=True)
-    headers = ["发生小时", "主体类别", "站点/测点名称", "故障类型", "权责归属", "原始异常快照", "拦截规则", "阳面处置策略", "状态"]
+    headers = ["发生小时", "主体类别", "站点/测点名称", "故障类型", "问题类别", "原始异常快照", "拦截规则", "数据处置策略", "状态"]
     ws.append(headers)
     for c in ws[1]:
         c.fill = fill
@@ -275,8 +275,8 @@ def api_export_faults(
 
     buf = BytesIO()
     wb.save(buf)
-    tag = "研究院下位机" if owner_party == "RESEARCH_INSTITUTE" else ("高校上位机" if owner_party == "UNIVERSITY_SOFTWARE" else "全量")
-    filename = f"智慧供热异常督办单_{tag}.xlsx"
+    tag = "下位机传感器" if owner_party == "RESEARCH_INSTITUTE" else ("上位机台账" if owner_party == "UNIVERSITY_SOFTWARE" else "全量")
+    filename = f"智慧供热异常监测清单_{tag}.xlsx"
     encoded = quote(filename)
     return Response(
         content=buf.getvalue(),

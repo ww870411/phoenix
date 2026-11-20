@@ -1,5 +1,252 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-20 支持点击任意主体或换热站切换展示其 24 小时柱形图与供回温曲线
+
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：提取 `_build_trend_24h_from_rows` 共享聚合函数，新增 `get_entity_trend_24h()` 与接口 `GET /api/v1/projects/smart_heating_platform/reports/hourly/entity-trend`，支持按 `by_center`、`by_rdfz`、`by_branch` 及 `station` 查询单主体当日 24 小时柱形与折线数据（自动继承突发跳变红标与 `clean`/`raw` 口径切换）。
+  - **`frontend/src/projects/smart_heating_platform/{services/api.js,pages/HourlyReportView.vue}`**：点击“服务中心与热网”主体行或“换热站明细”行后，上方图表切换展示该主体的 24 小时供热量柱形图与加权供回温曲线，支持切换日期/口径时联动刷新及一键“↩ 返回全网走势”。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_build_trend_24h_from_rows_for_single_entity` 单测。
+
+## 2026-11-20 移除逐小时报告温度折线图中的“平均室温”曲线
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：`renderCharts()` 中的 `tempChart` 标题调整为 `一网流量加权供回温 (℃)`，图例与 `series` 仅保留 `一网供温` 与 `一网回温`，移除 `平均室温` 折线；页面 KPI 卡片与“居民室温统计”标签页维持不变。
+
+## 2026-11-20 修复快速连点日期/时间步进箭头时页面往回跳的竞态问题
+
+- **改动缘由**：连续快速点击日期或小时步进箭头时，多个并发查询乱序返回，较早发出的慢请求在后返回后覆写 `reportData` 与 `selectedDate` / `selectedHour`，导致界面日期、小时数值出现“往回跳”现象。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/services/api.js`**：报表与异常监测 GET 接口支持传入 `AbortController` `signal`。
+  - **`frontend/src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView,FaultAuditView}.vue`**：增加 `180ms` 防抖合并（UI 日期/小时立即步进响应，停顿后仅请求最终选定值）、请求递增序号校验与 `AbortController` 取消过时在途请求，并避免旧响应回写覆盖当前选定日期/小时。
+
+## 2026-11-20 优化异常标红口径为“仅突发跳变标红”，并支持“一键还原原始数据”
+
+- **改动缘由**：核查生产库发现，全网指标每天每小时几乎全部标红主要由两类非突发因素引起——4 座常规表底倍率换算站（`南山苑/经典A/联通公司` 0.1GJ 刻度 `÷10`、`恒元公寓` MWh `×3.6`）和少数全天长期传感器坏点站（如 `绿港湾/民权/沁园` 持续 >150℃ 读数、蒸汽商业户固定 `÷1000`）。为避免掩盖真正的突发故障（如 `11-14 07:00 兴工街 15483.87 GJ`、`11-20 15:00/16:00 国运壹号 ±26333 GJ`），需收紧标红判据，并强化前后端一键切换原始数据的对照体验。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - 新增 `_is_scale_only_heat_diff`、`_count_station_day_anomalies`、`_is_burst_metric`，排除台账常规单位/倍率折算（站表底倍率、蒸汽商业户 `÷1000`、上游累计量寄存器）以及单日持续 `> 6` 小时的长期固定坏表，**仅在发生偶发（`<= 6h/d`）或单小时剧烈跳变时标红**；
+    - `get_daily_report()` 与 `api/reports.py` 的 `/daily`、`/daily/export` 新增 `mode=clean|raw` 支持，实现逐小时与每日日报全链路“默认修正后 / 还原原始值”。
+  - **`backend/projects/smart_heating_platform/services/cleaning_engine.py`**：为 `_clean_station_primary_metrics()` 回退 `prev_station_valid` 增加物理上下限防呆校验（防止历史超过 `150℃` 等脏值被继续继承）。
+  - **`frontend/src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView}.vue`**：默认展示修正后数据，控制台提供醒目的 **`🔄 一键还原原始数据` / `✨ 恢复修正后数据`** 按钮与原始模式提示横幅，并同步支持日度报表口径切换与导出。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_only_burst_jump_highlights_red_and_temp_fallback_guard` 单测覆盖。
+
+## 2026-11-20 异常修正数据的全链路红色高亮与悬浮备注提示
+
+- **改动缘由**：当任一测点或站点（如某座换热站的小时热量、表底倍率、温压等）因异常被清洗修正后，不仅单站明细本身需要警示，凡依赖该异常项汇总/推导出的小时报表、日度报表、KPI 指标卡片及 ECharts 24 小时趋势图也应同步标红并悬浮提示原始值与修正说明，避免异常修正“静默生效”。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - 新增 `_build_station_hour_anomalies`、`_pack_agg_anomaly` 等辅助函数，按真实原值 vs 修正值对比或 `value_source`/`fault_tag` 自动生成测点级 `field_notes`；
+    - 在 `_compute_weighted_temp_and_kpis`、`get_hourly_report`（`kpis`、`trend_24h`、`group_summaries`、`stations`、`upstream_points`、`merchants`、`merchant_summary`）以及 `get_daily_report`（`kpis`、`center_comparison`、`station_daily`）中逐层汇总传播 `anomalies` 字典，确保受影响的所有派生指标（小时热量、日热量、单万㎡耗热、瞬时负荷、热指标、核对差额/偏差率、补水、加权供回温）均携带结构化异常备注。
+  - **`frontend/src/projects/smart_heating_platform/components/AnomalyBadgeValue.vue`**：新增统一数值异常徽章组件，存在 `note` 时以红色 `#dc2626` 加 `*` 角标高亮，鼠标悬停或键盘聚焦弹出浮层展示完整异常来源、原值→修正值与说明。
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue` & `DailyReportView.vue`**：全面接入 `AnomalyBadgeValue` 覆盖 KPI 卡片与各类汇总/明细表，并在 `HourlyReportView.vue` 的 `renderCharts()` 中为 24 小时热量柱状图、热指标折线、一网供回温折线增加异常柱/点 `#dc2626` 红色标识及转义安全的悬浮 Tooltip 异常提示。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_report_anomaly_propagation_and_notes` 验证单站热量异常向 KPI/汇总计算字段的精准传播。
+
+## 2026-11-20 移除“异常数据监测”页的状态与流转操作
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/FaultAuditView.vue`**：移除页面中的“待处理”计数、状态筛选下拉框、列表中“状态”与“流转操作（派发/办结）”两列及对应脚本/样式。
+
+## 2026-11-20 调整“异常数据监测”页故障类别命名，移除“研究院/高校”指代
+
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/api/faults.py`**：`OWNER_LABELS`、汇总/导出接口说明及导出 Excel 表头文件名由“下属研究院/驻场高校”调整为中性故障分类（`下位机/传感器故障`、`上位机/台账缺陷`、`现场与平台协同排查`）。
+  - **`frontend/src/projects/smart_heating_platform/pages/FaultAuditView.vue`**：同步更新副标题、导出按钮、筛选下拉框、表头列名为“问题类别/下位机故障/上位机缺陷”。
+
+## 2026-11-20 修复热量异常尖刺与表底倍率问题，落库原始/修正双轨口径与每日定时回看审计
+
+- **改动原因**：排查 `2026-11-14 07:00` 热量暴涨至 `16,257.62 GJ` 问题，定位到 `兴工街` 降级瞬时热量积分 `f222` 未清洗越限极值、`南山苑/经典A/联通公司/恒元公寓` 累计表底倍率失真、小站物理上限 `250 GJ/h` 过松以及上游累计点位直接积分异常。
+- **改动清单**：
+  - **`backend/sql/smart_heating_platform_fact_init.sql`**：为 `fact_station_hourly` 与 `fact_upstream_hourly` 新增 `hour_heat_raw_gj` 字段（保留原始值，`hour_heat_gj` 存修正值），并附幂等 `ALTER TABLE ADD COLUMN IF NOT EXISTS`。
+  - **`backend/projects/smart_heating_platform/services/cleaning_engine.py`**：
+    - 新增 `station_max_hourly_heat_gj()`（按 `125 W/㎡` 核定上限、兜底 `25 GJ/h`）、`STATION_METER_SCALE_FACTORS`（4 座倍率站）与 `UPSTREAM_MAX_HEAT_GJH = 5000.0`；
+    - `_clean_station_primary_metrics()` 与 `clean_upstream_point()` 补齐一次网/上游热量越限及累计寄存器校验并生成 `fact_fault_ticket` 记录。
+  - **`backend/projects/smart_heating_platform/services/collector_engine.py` & `scheduler_service.py`**：
+    - 实时快照与表底校准同步留存 `hour_heat_raw_gj` 与清洗后 `hour_heat_gj`，在 `f222` 积分前过滤越限尖刺，并按站面积上限与倍率修正 `totJ` 差值并记录督办单；
+    - 新增 `run_daily_heat_audit_and_fix()` 支持每日定时（默认 `00:00`，设置页可配）及人工触发全量/近 N 天回看检测与修正。
+  - **`backend/projects/smart_heating_platform/services/{collector_config_service,report_query_service}.py` & `api/{settings,reports}.py`**：
+    - 新增 `auto_heat_audit_fix`、`heat_audit_time`、`heat_audit_lookback_days` 配置、`action=heat_audit_fix` 接口，并使报表 `mode=raw` 对照口径展示 `hour_heat_raw_gj`。
+  - **`frontend/src/projects/smart_heating_platform/{pages/SettingsView.vue,pages/FaultAuditView.vue,services/api.js}`**：设置页增加每日回看检测时间与开关；异常监测页增加“🔧 立即回看检测与修正”按钮与历史回看窗口。
+  - **`backend/projects/smart_heating_platform/tests/{test_cleaning_and_apis,test_collector_settings}.py`**：补充热量清洗、10 倍表底折算、上游累计拦截与 00:00 调度单测。
+
+## 2026-11-20 区分“漏采（无记录）”与“源站本身无数据（`SOURCE_EMPTY` 空值占位）”，消除 `2026-11-08` 永久假缺口
+
+- **改动原因**：`2026-11-08 01:00~04:00` 上游及 `04:00` 半数商业用户在源站本身无历史数据，旧逻辑仅写有值整点导致无记录可循，真空期检测永远报“上游缺 4 时 · 商业缺 1 时”并反复触发无意义重跑。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/cleaning_engine.py`**：新增来源标记常量 `SRC_SOURCE_EMPTY = "SOURCE_EMPTY"`。
+  - **`backend/projects/smart_heating_platform/services/collector_engine.py`**：
+    - `_upsert_batch` 支持 `do_nothing_on_conflict=True`，确保 `SOURCE_EMPTY` 空值占位行仅在库中无记录时写入，绝不覆盖既有实测数据；
+    - `run_table_bottom_calibration()`、`run_merchant_hourly_backfill()`、`run_upstream_hourly_backfill()` 对 HTTP 200 正常返回但源站缺失数据的已完成整点写入 `value_source = 'SOURCE_EMPTY'` 且指标为 `NULL` 的空值记录；请求失败仍保留空缺以便重试；
+    - `run_upstream_hourly_backfill()` 增加 `dict_upstream_point` 与 `fact_upstream_hourly` 清单兜底，避免 `/get_sz_data/1` 偶发 500 导致遗漏 `sz_dict` 测点；
+    - `detect_data_gaps()` 将 `(hour_heat_gj IS NOT NULL OR value_source = 'SOURCE_EMPTY')` 认定为非漏采已覆盖。
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：`sourceLabel()` 及商业/上游列表状态渲染支持显示 `SOURCE_EMPTY`（“源站无数据”）。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_source_empty_placeholders_and_gap_distinction()` 验证占位写入、兜底清单与检测口径。
+
+## 2026-11-20 统一 `DailyReportView.vue` 三项报表标签页名称
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/DailyReportView.vue`**：将每日运行报告 3 个页签名称分别调整为 `⚖️ 服务中心汇总日报（9）`、`🏭 换热站消耗量日报（242）`、`🏬 商业用户用量日报（464）`。
+
+## 2026-11-20 统一 `HourlyReportView.vue` 分组维度按钮文案为“名称（数量）”格式
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：将 `groupDimensions` 选项文案调整为 `服务中心（9）`、`主干热网（9）`、`支线热网（41）`。
+
+## 2026-11-20 将台账中心“主干网”切换为 9 个主干热网 (`rdfz`) 并补充台账工作表
+
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/api/dicts.py`**：`/dicts/overview` 的 `main_networks` 统计数及 `/dicts/items/main_networks` 查询切换为按 `rdfz`（9 个主干热网）聚合，返回下辖换热站数、在网供热面积（㎡）、待补面积站数及关联商业户数。
+  - **`frontend/src/projects/smart_heating_platform/pages/DictCenterView.vue`**：台账切换卡片改名为 `主干热网`（显示 9 个），新增 `main_networks` 专属可读中文表格，并将换热站/商户表头与补录弹窗中的“热源大网”同步改为 `主干热网`。
+  - **`configs/成果_智慧供热平台基础台账_20261120已更新_含9主干热网.xlsx`**：新增子工作表 `2_主干热网(逻辑主体，9个)`（原文件 `成果_智慧供热平台基础台账_20261120已更新.xlsx` 正被占用锁定，故另存带新工作表的完整副本）。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：增加 `/dicts/overview` (`main_networks == 9`) 与 `/dicts/items/main_networks` (`len == 9`) 接口断言。
+
+## 2026-11-20 合并去除 `15条主干网` 汇总维度并将 `9大热源大网 (rdfz)` 统一更名为“主干热网”
+
+- **改动原因**：原报表同时展示“9大热源大网（`rdfz`）”与“15条主干网（`dict_main_network`）”导致同名项（如北海南网/北海北网）交叉产生歧义，按用户要求仅保留 `rdfz` 维度并统一命名为“主干热网”。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：
+    - `groupDimensions` 移除 `按 15 条主干网 (by_main)`，将 `按 9 大热源大网 (by_rdfz)` 更名为 **`按主干热网`**；
+    - 换热站与商业用户明细筛选栏统一改为使用 `rdfz`（`全部主干热网`），移除 `15条主干网 (mainId)` 下拉框。
+  - **`frontend/src/projects/smart_heating_platform/pages/DailyReportView.vue` & `backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - 表格列名、筛选占位符及 Excel 导出表头统一由“热源大网”更新为“主干热网”（商业明细导出移除重复的 15 主干网列，接口 JSON 字段保持兼容）。
+
+## 2026-11-20 调整 `HourlyReportView.vue` 下方 5 个报表页签名称
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：更新 `reportTabs` 文案——`中心/大网小时汇总` → `服务中心与热网`、`242座换热站明细` → `换热站明细`、`464商业用户小时明细` → `商业用户明细`、`居民室温达标分布` → `居民室温统计`。
+
+## 2026-11-20 统一操作栏控件高度排版并实现小时箭头跨日连续切换
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/utils/dateUtils.js`（新增）**：抽取公共日期工具 `MIN_PLATFORM_DATE`、`todayLocalIso()` 与 `shiftIsoDate()`，消除日期步进逻辑重复。
+  - **`frontend/src/projects/smart_heating_platform/components/DateStepPicker.vue`**：接入公共日期工具，并将容器与内部按钮/日期输入框统一为 `34px` 高度、`13px` 字号与 `8px` 圆角。
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：
+    - 统一操作栏内日期选择器、小时切换器、口径切换组及采集/校准/导出按钮为等高 `34px`、同圆角、同字号对齐排版；
+    - 升级 `stepHour()` 与 `canStepPrevHour` / `canStepNextHour`：`00:00` 点击 `◀` 自动切换前一天 `23:00`（下限至 `2026-11-01 00:00`），`23:00` 点击 `▶` 自动切换后一天 `00:00`（上限至今日 `23:00`），实现跨日无缝连续浏览。
+- **验证结果**：
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：生产构建通过（0 错误）。
+
+## 2026-11-20 移除 `HourlyReportView.vue` 小时切换器中的“轮播”按钮与相关定时器
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：移除小时切换组合控件中的“▶ 轮播 / ⏸ 暂停”按钮，以及无用的 `playing` 状态、`playTimer` 定时器和 `togglePlay()` 逻辑，保留 `◀ / 下拉 / ▶ / 最新`。
+
+## 2026-11-20 为 `smart_heating_platform` 报表与监测页日期选择器增加 `◀ / ▶` 前后天步进箭头
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/components/DateStepPicker.vue`（新增）**：抽取公共日期步进选择器组件，保留点击日历弹窗选日的同时支持 `◀`（前一天）/ `▶`（后一天）步进按钮，内置 `2026-11-01` 至当日的边界禁用与手机窄屏弹性自适应。
+  - **`frontend/src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView,FaultAuditView}.vue`**：将原单纯 `<input type="date">` 统一替换为 `<DateStepPicker>`，与小时切换器保持一致交互体验。
+- **验证结果**：
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：生产构建通过（0 错误）。
+
+## 2026-11-20 更名“每日运行报告”并精简小时切换器站点计数展示
+
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/components/PlatformSubNav.vue`、`pages/DailyReportView.vue`、`frontend/src/router/index.js` & `backend/projects/smart_heating_platform/api/reports.py`**：将“每日精算日报 / 每日生产精算日报”统一更名为“每日运行报告”（含子导航、路由标题、面包屑、页面标题与 Excel 导出文件名）。
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：移除小时下拉选择器选项中 `({{ item.station_count }}站)` 字样，仅展示整点时段（无数据时保留 `(暂无)`）。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**9 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**0 错误**（生产打包构建通过）。
+
+## 2026-11-20 精简 `PlatformSubNav` 标签并将“异常数据监测”独立成页
+
+- **改动原因**：
+  - 按用户重构功能排布要求，去掉工作台顶部与页内“阳面 / 阴面”标签字样，将原“异常巡检督办”更名为“异常数据监测”并移出工作台子导航、独立为 `/projects/smart_heating_platform/pages` 入口页卡片，同时将“八大主体台账”更名为“8类主体台账”。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/components/PlatformSubNav.vue`**：移除 `fault_audit` 标签与所有 `阳面`/`阴面` 徽标，`dict_center` 改名为 `8类主体台账`，移动端窄屏网格同步调整为 3 列自适应。
+  - **`backend_data/shared/项目列表.json`**：在 `smart_heating_platform.pages` 下新增独立页面卡片 `fault_audit`（`🛡️ 异常数据监测`）。
+  - **`frontend/src/projects/smart_heating_platform/pages/FaultAuditView.vue`**：移除 `<PlatformSubNav>`，新增“⬅️ 返回功能页”按钮作为独立页面使用，标题与列名改为“异常数据监测 / 清洗处置策略”，去除 `阴面`/`阳面` 用语。
+  - **`frontend/src/projects/smart_heating_platform/pages/{HourlyReportView,DailyReportView,DictCenterView}.vue` & `frontend/src/router/index.js`**：同步去除页面“阳面精算视图 / 阳面日结视图”徽标，并将 `DictCenterView` 与路由元标题更新为 `异常数据监测`、`8类主体台账`。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**9 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**0 错误**（生产打包构建通过）。
+
+## 2026-11-20 重命名并统一 `smart_heating_platform` 入口卡片、路由标题与页面名称
+
+- **改动原因**：按用户整理产品表述与功能排布的要求，统一精简并规范 `smart_heating_platform` 项目页卡片、标题与说明文案。
+- **改动清单**：
+  - **`backend_data/shared/项目列表.json`**：
+    - 项目名称改为 **“智慧供热平台精算模块”**（原“智慧供热旁路精算与质检平台”）；
+    - `hourly_report` 卡片改为 **“📊 全量数据统计与报告”**，描述改为 **“各类供暖主体逐小时、逐日积算结果展示”**；
+    - `algorithm_guide` 卡片改为 **“📐 算法说明”**，描述改为 **“数据接口及积算算法规则，确保数据准确无误”**；
+    - `settings` 卡片改为 **“⚙️ 采集与计算选项”**。
+  - **`frontend/src/router/index.js` & `frontend/src/projects/smart_heating_platform/pages/*.vue`**：
+    - 同步路由元标题（`算法说明`、`采集与计算选项`）、`AlgorithmGuideView.vue` / `SettingsView.vue` 顶栏标题及 6 个子页面面包屑父级名称（统一为 `智慧供热平台精算模块`）。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**9 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**0 错误**（生产打包构建通过）。
+
+## 2026-11-20 下线并彻底清除 `daily_report_25_26` 中旧版“智慧供热实时工况”与“智慧供热内网直通”模块
+
+- **改动原因**：
+  - 全网供热监控已全面收敛迁移至独立项目模块 `smart_heating_platform`，按用户要求彻底清除 `daily_report_25_26` 下不再使用的“智慧供热实时工况（`smart_heating`）”与“智慧供热内网直通（`smart_heating_tunnel`）”全部页面、组件、中继脚本、本地存储及测试文件。
+- **删除清单**：
+  - **前端文件**：
+    - `frontend/src/projects/daily_report_25_26/pages/{SmartHeatingView.vue,SmartHeatingTunnelView.vue}`
+    - `frontend/src/projects/daily_report_25_26/components/{SmartHeatingOverview.vue,SmartHeatingPointCards.vue}`
+    - `frontend/src/projects/daily_report_25_26/constants/{smartHeatingOverview.js,smartHeatingTaxonomy.js}`
+    - `frontend/src/projects/daily_report_25_26/tests/{smartHeatingOverview.test.mjs,smartHeatingTunnel.test.mjs}`
+  - **后端文件与静态缓存**：
+    - `backend/projects/daily_report_25_26/api/{smart_heating.py,smart_heating_tunnel.py}`
+    - `backend/projects/daily_report_25_26/{smart_heating_sync.py,dev_relay_pull_sync.py,smart_heating_static_cache/}`
+    - `backend/projects/daily_report_25_26/tests/{test_smart_heating_overview.py,test_smart_heating_tunnel.py,test_smart_heating_tunnel_performance.py}`
+  - **运行数据与中继客户端脚本**：
+    - `backend_data/projects/daily_report_25_26/{smart_heating_relay_win7.py,smart_heating_tunnel_win7.py,smart_heating/}`（含 `latest.json`、`history.jsonl`、`relay_config.json`、`tunnel_config.json`、`static_cache/`）与 `configs/归档/smart_heating_relay_win7.py`；
+    - 经核查 PostgreSQL `information_schema.tables`，上述两旧页面未建独立关系型数据库表，`smart_heating_platform` schema 全套表结构完整保留。
+- **路由与引用清理**：
+  - `backend/projects/daily_report_25_26/api/router.py`：移除 `smart_heating_router`、`smart_heating_tunnel_router` 及对应 `public_router` 挂载；
+  - `frontend/src/router/index.js`：移除 `/projects/:projectKey/pages/smart_heating` 与 `smart_heating_tunnel` 路由及旧守卫分支；
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`、`constants/index.js` 与 `services/api.js`：移除页面卡片注入、分类导出及 11 个旧版中继/隧道接口函数。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**9 passed（0 错误，6.50s）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 19.72s（0 错误，打包产物已无旧版页 chunk）**；
+  - `daily_report_25_26/tests` 联合收集运行 0 导入错误（既有无关用例 `6 failed / 33 errors` 为历史环境依赖问题）。
+
+## 2026-11-20 新增 `smart_heating_platform` 停机真空期自动检测与补采自愈机制
+
+- **改动原因**：
+  - 解决服务器意外停机、重启或休眠挂起导致的一段“真空期”小时/日耗历史数据缺失问题，在服务恢复后自动检测缺口并并行回填。
+- **后端改动**：
+  - **`backend/projects/smart_heating_platform/services/collector_config_service.py` & `api/settings.py`**：
+    - 新增配置项 `auto_gap_recovery`（默认 `True`）与 `gap_recovery_start_date`（默认 `2026-11-01`，格式 `YYYY-MM-DD`，放弃滑动 180 天改为固定从供暖季起点检查至今）。
+  - **`backend/projects/smart_heating_platform/services/collector_engine.py`**：
+    - 新增 `run_upstream_hourly_backfill()`，受控并行拉取 `/get_dc_data/1`、`/get_sz_data/1` 及 `/ry_dcls_xx/get_history`、`/ry_szls_xx/get_history` 补采电厂与首站小时积分至 `fact_upstream_hourly`；
+    - `run_table_bottom_calibration()` 与 `run_merchant_hourly_backfill()` 支持传入 `target_hours` 仅写入缺失整点，避免重复覆盖完整历史时段；
+    - 新增只读巡检函数 `detect_data_gaps()`（固定自 `gap_recovery_start_date` 默认 `2026-11-01 00:00` 起扫描至最新已完成整点，同时识别 0 条完全缺失、停机前 `hour_heat_gj IS NULL` 未定格小时，以及仅部分写入的半残缺整点）、状态查询 `get_gap_recovery_status()` 与防重入总编排 `run_gap_recovery()`（含 `_GAP_RECOVERY_LOCK` 与源站无数据时段 24 小时冷却 `_GAP_COOLDOWN_UNTIL`，避免自动巡检死循环）；
+    - 为 `run_table_bottom_calibration()`、`run_upstream_hourly_backfill()`、`run_merchant_hourly_backfill()` 注入实时 `progress_cb` 回调，`run_gap_recovery()` 全程更新步骤索引、当前日期/赛道主体完成进度（`sub_done/sub_total`）、最近心跳时间（`last_heartbeat_at` / `heartbeat_age_seconds`）与最多 50 条实况流水日志（`recent_logs`），并在 `get_gap_recovery_status()` 返回最近 5 次 `GAP_RECOVERY` 历史审计记录。
+    - 注：居民室温表 `fact_temp_hourly` 按 48 小时滚动策略且源站 `/sw_ls_export/` 需 2,097 次单户请求，默认不纳入启动自动补采（保留 CLI 手工补采能力）。
+  - **`backend/projects/smart_heating_platform/services/scheduler_service.py`**：
+    - 在 `SmartHeatingSchedulerService._tick()` 增加三层自动自愈触发：① 服务启动满 10 秒宽限期后执行 `AUTO_STARTUP` 真空期检测补采；② 检测到相邻巡检时间跃变 `> 20` 分钟（主机休眠/挂起恢复）时触发 `AUTO_WAKE`；③ 每小时 `:15` 执行快速只读 `detect_data_gaps()` 巡检，仅存在缺口时触发 `AUTO_WATCHDOG`。
+  - **`backend/projects/smart_heating_platform/api/reports.py`**：
+    - 新增 `GET /reports/gap-status` 查询当前真空期缺口、后台运行态与最近 `GAP_RECOVERY` 记录；`POST /reports/collect-now` 新增 `action="upstream_backfill"` 与 `action="gap_recovery"`（支持 `start_date`）。
+  - **`backend/projects/smart_heating_platform/tests/{test_cleaning_and_apis.py,test_collector_settings.py}`**：
+    - 新增 `test_detect_data_gaps_and_recovery_orchestration`、`test_scheduler_gap_recovery_grace_and_wake`、`gap-status` 接口冒烟检查及 `auto_gap_recovery`/`gap_recovery_start_date` 校验测试。
+- **前端改动**：
+  - **`frontend/src/projects/smart_heating_platform/services/api.js`**：新增 `fetchGapStatus()`。
+  - **`frontend/src/projects/smart_heating_platform/pages/SettingsView.vue`**：新增 `auto_gap_recovery` 开关与 `gap_recovery_start_date`（默认 `2026-11-01`）日期选择器。
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：进入页面时自动探测 `gapStatus`，存在缺口或后台补采进行中时展示顶部提醒条与“📋 查看详情 / 🩹 一键补足真空期 / 刷新状态”操作按钮；点击“📋 查看详情”打开实况进度抽屉（双层进度条、心跳活跃/停滞检测、待补整点清单、实时终端风流水日志及最近 5 次历史审计表），并在后台补采运行中每 `2.5s` 自动轮询状态直到完成后自动刷新报表。
+- **验证结果**：
+  - 实库全区间诊断 `detect_data_gaps()`：固定从 `2026-11-01 00:00` 扫描至 `2026-11-20 11:00`，检出 `2026-11-08` 剩余上游 4 时与商业 1 时缺口（换热站缺口 0）；
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**9 passed（0 错误，6.73s）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：生产构建通过（**built in 21.85s，0 错误**）。
+
+## 2026-11-20 对照《20261106年度采暖供热站面积报表》修正换热站台账面积并同步落库
+
+- **改动原因**：
+  - 按最新收费面积表 `configs/20261106年度采暖供热站面积报表2026年(1).xlsx` 修正 `smart_heating_platform` 242 座换热站 `covered_area` 与站名映射，并将修正前原值完整记入台账备注。
+- **脚本与后端改动**：
+  - **`backend/scripts/sync_station_areas_20261106.py`（新增）**：
+    - 写入 230 座直匹/核验别名站点、`第六干休所`（集团+股份之和 `62,411.54 ㎡`），以及人工确认项（`大连港西区 -> 161,390.60`、`海涵庄园 -> 21,226.24`、`达沃斯广场 -> 67,366.62`、`东关街站 -> 61,373.01`、`新农行 -> name 改名农行且保留 name_raw='新农行'`）；记录 `卓锦滨海道 (29,673.88)` 为新建站暂未入平台；
+    - 在 `4_换热站(物理主体，242座)` 新增 `面积与名称修正备注` 列，并新增 `20261120面积修正记录` 审计工作表留存修改前原值（因原文件 `成果_智慧供热平台基础台账.xlsx` 正被 WPS 占用，同步输出至 `configs/成果_智慧供热平台基础台账_20261120已更新.xlsx` 并同步落库）。
+  - **`backend/scripts/init_smart_heating_platform_dicts.py`**：`run_init()` 支持传入可选 `excel_path` 参数。
+  - **`backend/projects/smart_heating_platform/services/collector_engine.py`**：`_process_station_calibration()` 优先使用 `name_raw` 请求 `/hrz_ls_zb/`，避免标准站名调整后源站查无此站。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：将 `missing_area_stations` 断言由固定 `32` 放宽为非负整数校验。
+- **前端改动**：
+  - **`frontend/src/projects/smart_heating_platform/pages/DictCenterView.vue`**：台账缺失筛选文案改用 `overview` 实时统计数（替代写死的 `(32)`）。
+- **验证结果**：
+  - 数据库全网核验：补齐原空缺面积 **28 座**、修正面积 **206 座**、改名 **1 座**，剩余待补面积站降至 **4 座**，全网总供热面积更新为 **`22,996,487.47 ㎡`**；
+  - `python -m pytest backend/projects/smart_heating_platform/tests -v`：**7 passed（0 错误）**；
+  - `npm --prefix frontend run build`：**1088 modules transformed，built in 20.84s（0 错误）**。
+
 ## 2026-11-20 重构 `smart_heating_platform` 为路线 B 并行采集、5 分钟高频积分与 2 小时算完即清架构
 
 - **改动原因**：

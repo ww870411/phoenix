@@ -71,27 +71,27 @@ const routes = [
   {
     path: '/projects/smart_heating_platform/pages/daily_report',
     component: () => import('../projects/smart_heating_platform/pages/DailyReportView.vue'),
-    meta: { title: '每日生产精算日报' },
+    meta: { title: '每日运行报告' },
   },
   {
     path: '/projects/smart_heating_platform/pages/fault_audit',
     component: () => import('../projects/smart_heating_platform/pages/FaultAuditView.vue'),
-    meta: { title: '异常巡检督办中心' },
+    meta: { title: '异常数据监测' },
   },
   {
     path: '/projects/smart_heating_platform/pages/dict_center',
     component: () => import('../projects/smart_heating_platform/pages/DictCenterView.vue'),
-    meta: { title: '八大主体标准台账中心' },
+    meta: { title: '8类主体台账' },
   },
   {
     path: '/projects/smart_heating_platform/pages/algorithm_guide',
     component: () => import('../projects/smart_heating_platform/pages/AlgorithmGuideView.vue'),
-    meta: { title: '主体每小时指标算法说明书' },
+    meta: { title: '算法说明' },
   },
   {
     path: '/projects/smart_heating_platform/pages/settings',
     component: () => import('../projects/smart_heating_platform/pages/SettingsView.vue'),
-    meta: { title: '采集配置与 Cookie 设置' },
+    meta: { title: '采集与计算选项' },
   },
   {
     path: '/projects/:projectKey/pages/:pageKey/sheets',
@@ -136,16 +136,6 @@ const routes = [
     path: '/projects/:projectKey/pages/dispatch_info',
     component: () => import('../projects/daily_report_25_26/pages/DispatchInfoView.vue'),
     meta: { title: '调度信息' },
-  },
-  {
-    path: '/projects/:projectKey/pages/smart_heating',
-    component: () => import('../projects/daily_report_25_26/pages/SmartHeatingView.vue'),
-    meta: { title: '智慧供热实时工况' },
-  },
-  {
-    path: '/projects/:projectKey/pages/smart_heating_tunnel',
-    component: () => import('../projects/daily_report_25_26/pages/SmartHeatingTunnelView.vue'),
-    meta: { title: '智慧供热内网直通' },
   },
   {
     path: '/admin-console',
@@ -326,17 +316,7 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // 5.3 智慧供热实时工况与内网直通专属路由校验：严格仅限 Global_admin (超级管理员本人) 访问
-  if (to.path.endsWith('/pages/smart_heating') || to.path.endsWith('/pages/smart_heating_tunnel')) {
-    const pKey = String(to.params.projectKey || 'daily_report_25_26').trim()
-    const targetKey = to.path.endsWith('/pages/smart_heating_tunnel') ? 'smart_heating_tunnel' : 'smart_heating'
-    if (!auth.hasProjectAccess(pKey) || !auth.isGlobalAdmin) {
-      return makeForbiddenRedirect(to, pKey, targetKey)
-    }
-    return true
-  }
-
-  // 5.4 智慧供热旁路精算与质检平台页面群：严格仅限 Global_admin 访问（直接以角色放行，不因本地旧缓存误拦）
+  // 5.3 智慧供热平台精算模块页面群：严格仅限 Global_admin 访问（直接以角色放行，不因本地旧缓存误拦）
   if (to.path.startsWith('/projects/smart_heating_platform/pages/')) {
     if (!auth.isGlobalAdmin) {
       return makeForbiddenRedirect(to, 'smart_heating_platform', String(to.path.split('/').pop() || ''))

@@ -20,6 +20,9 @@ from typing import Callable, Optional
 from backend.projects.smart_heating_platform.services.cleaning_engine import EAST_8, floor_to_bucket
 from backend.projects.smart_heating_platform.services.collector_config_service import _read_raw_config
 from backend.projects.smart_heating_platform.services.collector_engine import (
+    detect_data_gaps,
+    run_daily_heat_audit_and_fix,
+    run_gap_recovery,
     run_merchant_daily_cycle,
     run_snapshot_cycle,
     run_table_bottom_calibration,
@@ -38,12 +41,20 @@ class SmartHeatingSchedulerService:
         self._last_snapshot_slot: Optional[str] = None
         self._last_calib_slot: Optional[str] = None
         self._last_merchant_date: Optional[str] = None
+        self._last_gap_watch_slot: Optional[str] = None
+        self._last_heat_audit_date: Optional[str] = None
+        self._startup_gap_checked: bool = False
+        self._started_at_monotonic: float = 0.0
+        self._last_tick_e8: Optional[datetime] = None
 
     def start_scheduler(self) -> None:
         with self._lock:
             if self._thread and self._thread.is_alive():
                 return
             self._stop_event.clear()
+            self._startup_gap_checked = False
+            self._started_at_monotonic = time.monotonic()
+            self._last_tick_e8 = None
             self._thread = threading.Thread(
                 target=self._run_loop,
                 name="SmartHeatingCollectorScheduler",
@@ -120,6 +131,53 @@ class SmartHeatingSchedulerService:
             if day_str != self._last_merchant_date:
                 self._last_merchant_date = day_str
                 self._spawn_job("merchant_daily", lambda: run_merchant_daily_cycle(target_date_str=day_str, trigger="AUTO"))
+
+        # 4. 停机真空期自动巡检与补足（启动 10 秒宽限期后执行 + 每小时 :15 或休眠恢复跳变后巡检）
+        if cfg.get("auto_gap_recovery", True):
+            elapsed = time.monotonic() - self._started_at_monotonic
+            tick_jump = (
+                self._last_tick_e8 is not None
+                and (now_e8 - self._last_tick_e8).total_seconds() > 20 * 60
+            )
+            if not self._startup_gap_checked and elapsed >= 10.0:
+                self._startup_gap_checked = True
+                self._spawn_job("gap_recovery_startup", lambda: run_gap_recovery(trigger="AUTO_STARTUP"))
+            elif tick_jump:
+                logger.warning("检测到系统时间跃变超过 20 分钟（疑似休眠/挂起恢复），触发真空期补采巡检。")
+                self._spawn_job("gap_recovery_wake", lambda: run_gap_recovery(trigger="AUTO_WAKE"))
+            elif now_e8.minute == 15:
+                watch_slot = now_e8.strftime("%Y-%m-%d %H")
+                if watch_slot != self._last_gap_watch_slot:
+                    self._last_gap_watch_slot = watch_slot
+                    self._spawn_job("gap_recovery_watchdog", self._run_watchdog_gap_check)
+
+        # 5. 每日定时数据异常回看检测与自动修正（默认 00:00，可在设置页自定义）
+        if cfg.get("auto_heat_audit_fix", True):
+            raw_time = str(cfg.get("heat_audit_time") or "00:00").strip()
+            try:
+                hh_str, mm_str = raw_time.split(":", 1)
+                audit_hh, audit_mm = int(hh_str), int(mm_str)
+            except Exception:
+                audit_hh, audit_mm = 0, 0
+            cur_min_of_day = now_e8.hour * 60 + now_e8.minute
+            target_min_of_day = audit_hh * 60 + audit_mm
+            if target_min_of_day <= cur_min_of_day < target_min_of_day + 15:
+                audit_day_str = now_e8.date().isoformat()
+                if audit_day_str != self._last_heat_audit_date:
+                    self._last_heat_audit_date = audit_day_str
+                    lb_days = int(cfg.get("heat_audit_lookback_days", 3))
+                    self._spawn_job(
+                        "daily_heat_audit_fix",
+                        lambda: run_daily_heat_audit_and_fix(lookback_days=lb_days, trigger="AUTO_DAILY_AUDIT"),
+                    )
+
+        self._last_tick_e8 = now_e8
+
+    def _run_watchdog_gap_check(self) -> None:
+        """每小时整点 15 分快速只读巡检一次缺失整点，仅存在非冷却缺口时才执行自动补采。"""
+        gap_info = detect_data_gaps(respect_cooldown=True)
+        if gap_info.get("has_gaps"):
+            run_gap_recovery(trigger="AUTO_WATCHDOG")
 
 
 smart_heating_scheduler = SmartHeatingSchedulerService()

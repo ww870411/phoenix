@@ -247,15 +247,16 @@ def _transform_upstream_points(raw_rows: List[Dict[str, Any]]) -> List[Dict[str,
     ]
 
 
-def run_init() -> Dict[str, Any]:
+def run_init(excel_path: Optional[Path] = None) -> Dict[str, Any]:
     """执行 DDL 建表、台账数据导入并返回核验汇总统计。"""
+    target_excel = excel_path or EXCEL_FILE
     if not SQL_FILE.exists():
         raise FileNotFoundError(f"未找到建表 SQL 文件: {SQL_FILE}")
-    if not EXCEL_FILE.exists():
-        raise FileNotFoundError(f"未找到台账 Excel 文件: {EXCEL_FILE}")
+    if not target_excel.exists():
+        raise FileNotFoundError(f"未找到台账 Excel 文件: {target_excel}")
 
     ddl_sql = SQL_FILE.read_text(encoding="utf-8")
-    wb = openpyxl.load_workbook(EXCEL_FILE, read_only=True, data_only=True)
+    wb = openpyxl.load_workbook(target_excel, read_only=True, data_only=True)
     try:
         datasets = {
             "dict_service_center": _transform_service_centers(

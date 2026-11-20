@@ -8,8 +8,7 @@
       <header class="card elevated topbar">
         <div>
           <div class="title-row">
-            <h2>每日生产精算日报与手工日报双轨核对</h2>
-            <span class="badge-yang">阳面日结视图</span>
+            <h2>每日运行报告与手工日报双轨核对</h2>
           </div>
           <p class="subtitle">
             结算周期：{{ meta.window_start || '-' }} ~ {{ meta.window_end || '-' }}（系统自动表底抄表/15分钟积分 vs Phoenix 手工填报对比）
@@ -18,12 +17,30 @@
         <div class="topbar-actions">
           <label class="inline-field">
             <span>结算日期</span>
-            <input v-model="selectedDate" type="date" class="ctrl-input" @change="loadReport" />
+            <DateStepPicker v-model="selectedDate" aria-label="选择结算日期" @change="scheduleLoadReport" />
           </label>
           <select v-model="periodMode" class="ctrl-input" @change="loadReport">
             <option value="natural">自然日（00:00 ~ 次日00:00）</option>
             <option value="shift">生产班次（昨日08:00 ~ 今日08:00）</option>
           </select>
+          <div class="mode-switch" role="group" aria-label="数据口径切换">
+            <button
+              type="button"
+              :class="['mode-btn', { active: mode === 'clean' }]"
+              title="默认展示突发异常已修正后日报数据"
+              @click="switchMode('clean')"
+            >
+              修正后数据
+            </button>
+            <button
+              type="button"
+              :class="['mode-btn', { 'raw-active': mode === 'raw' }]"
+              title="一键还原未经清洗修正的原始采集汇总数据"
+              @click="switchMode(mode === 'raw' ? 'clean' : 'raw')"
+            >
+              {{ mode === 'raw' ? '✨ 恢复修正后数据' : '🔄 一键还原原始数据' }}
+            </button>
+          </div>
           <button class="btn secondary btn-sm" type="button" :disabled="calibrating" @click="handleCalibrateToday">
             {{ calibrating ? '校准中(约3分钟)…' : '📏 校准当日表底' }}
           </button>
@@ -33,14 +50,23 @@
         </div>
       </header>
 
+      <div v-if="mode === 'raw'" class="raw-mode-banner">
+        <span>⚠️ 当前已一键还原显示 <strong>原始采集数据</strong>（未修正突发跳变与表底倍率），红色标注表示存在突发跳变原始极值。</span>
+        <button class="btn primary btn-sm" type="button" @click="switchMode('clean')">✨ 恢复修正后数据</button>
+      </div>
+
       <div v-if="notice.text" :class="['notice-banner', notice.type]">{{ notice.text }}</div>
 
       <!-- 日度核心 KPI -->
       <section class="kpi-grid">
         <div class="card elevated kpi-card highlight">
           <span class="kpi-label">系统日精算总供热量</span>
-          <strong class="kpi-val">{{ fmt(kpis.day_heat_gj, ' GJ') }}</strong>
-          <span class="kpi-sub">万平耗热量 {{ fmt(kpis.day_heat_per_wan, ' GJ/万㎡·d') }}</span>
+          <strong class="kpi-val">
+            <AnomalyBadgeValue placement="bottom" :text="fmt(kpis.day_heat_gj, ' GJ')" :note="kpis.anomalies?.day_heat_gj?.note" />
+          </strong>
+          <span class="kpi-sub">
+            万平耗热量 <AnomalyBadgeValue placement="bottom" :text="fmt(kpis.day_heat_per_wan, ' GJ/万㎡·d')" :note="kpis.anomalies?.day_heat_per_wan?.note" />
+          </span>
         </div>
         <div class="card elevated kpi-card">
           <span class="kpi-label">手工日报站内耗热量</span>
@@ -50,13 +76,19 @@
         <div class="card elevated kpi-card">
           <span class="kpi-label">双轨汇总偏差率</span>
           <strong :class="['kpi-val', Math.abs(kpis.overall_diff_pct || 0) > 10 ? 'text-err' : 'text-ok']">
-            {{ kpis.overall_diff_pct != null ? `${kpis.overall_diff_pct > 0 ? '+' : ''}${kpis.overall_diff_pct}%` : '-' }}
+            <AnomalyBadgeValue
+              placement="bottom"
+              :text="kpis.overall_diff_pct != null ? `${kpis.overall_diff_pct > 0 ? '+' : ''}${kpis.overall_diff_pct}%` : '-'"
+              :note="kpis.anomalies?.overall_diff_pct?.note"
+            />
           </strong>
           <span class="kpi-sub">超过 ±10% 自动标红告警</span>
         </div>
         <div class="card elevated kpi-card">
           <span class="kpi-label">系统日累计总补水量</span>
-          <strong class="kpi-val">{{ fmt(kpis.day_water_t, ' t') }}</strong>
+          <strong class="kpi-val">
+            <AnomalyBadgeValue placement="bottom" :text="fmt(kpis.day_water_t, ' t')" :note="kpis.anomalies?.day_water_t?.note" />
+          </strong>
           <span class="kpi-sub">按 24 小时补水表底/积分汇总</span>
         </div>
       </section>
@@ -65,13 +97,13 @@
       <section class="card elevated tabs-card">
         <div class="tab-bar">
           <button type="button" :class="['tab-btn', { active: activeTab === 'compare' }]" @click="activeTab = 'compare'">
-            ⚖️ 9大中心手工日报双轨核对
+            ⚖️ 服务中心汇总日报（9）
           </button>
           <button type="button" :class="['tab-btn', { active: activeTab === 'stations' }]" @click="activeTab = 'stations'">
-            🏭 242座换热站日度能耗明细
+            🏭 换热站消耗量日报（242）
           </button>
           <button type="button" :class="['tab-btn', { active: activeTab === 'merchants' }]" @click="activeTab = 'merchants'">
-            🏬 464户商业用户日耗量
+            🏬 商业用户用量日报（464）
           </button>
         </div>
 
@@ -97,17 +129,30 @@
                 <tr v-for="c in reportData.center_comparison" :key="c.center_id" :class="{ 'row-alert': c.is_heat_alert }">
                   <td class="font-bold">{{ c.center_name }}</td>
                   <td>{{ fmt(c.covered_area_wan) }}</td>
-                  <td class="font-bold">{{ fmt(c.sys_heat_gj) }}</td>
+                  <td class="font-bold">
+                    <AnomalyBadgeValue :text="fmt(c.sys_heat_gj)" :note="c.anomalies?.sys_heat_gj?.note" />
+                  </td>
                   <td>{{ fmt(c.man_heat_gj) }}</td>
-                  <td>{{ fmt(c.heat_diff_gj) }}</td>
                   <td>
-                    <span v-if="c.heat_diff_pct != null" :class="['diff-pill', c.is_heat_alert ? 'pill-err' : 'pill-ok']">
-                      {{ c.heat_diff_pct > 0 ? '+' : '' }}{{ c.heat_diff_pct }}%
-                    </span>
+                    <AnomalyBadgeValue :text="fmt(c.heat_diff_gj)" :note="c.anomalies?.heat_diff_gj?.note" />
+                  </td>
+                  <td>
+                    <AnomalyBadgeValue
+                      v-if="c.heat_diff_pct != null"
+                      :note="c.anomalies?.heat_diff_pct?.note"
+                    >
+                      <span :class="['diff-pill', c.is_heat_alert ? 'pill-err' : 'pill-ok']">
+                        {{ c.heat_diff_pct > 0 ? '+' : '' }}{{ c.heat_diff_pct }}%
+                      </span>
+                    </AnomalyBadgeValue>
                     <span v-else>-</span>
                   </td>
-                  <td>{{ fmt(c.heat_per_wan_gj) }}</td>
-                  <td>{{ fmt(c.sys_water_t) }}</td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(c.heat_per_wan_gj)" :note="c.anomalies?.heat_per_wan_gj?.note" />
+                  </td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(c.sys_water_t)" :note="c.anomalies?.sys_water_t?.note" />
+                  </td>
                   <td>{{ fmt(c.man_water_t) }}</td>
                   <td>{{ fmt(c.avg_room_temp) }}</td>
                 </tr>
@@ -127,7 +172,7 @@
                 <tr>
                   <th>换热站</th>
                   <th>服务中心</th>
-                  <th>热源大网</th>
+                  <th>主干热网</th>
                   <th>面积 (㎡)</th>
                   <th>有效小时 / 表底小时</th>
                   <th>起表底 totJ</th>
@@ -147,9 +192,15 @@
                   <td>{{ s.hours_count }}h / {{ s.meter_diff_hours }}h</td>
                   <td class="mono">{{ fmt(s.start_tot_j) }}</td>
                   <td class="mono">{{ fmt(s.end_tot_j) }}</td>
-                  <td class="font-bold">{{ fmt(s.day_heat_gj) }}</td>
-                  <td>{{ fmt(s.heat_per_wan_gj) }}</td>
-                  <td>{{ fmt(s.day_water_t) }}</td>
+                  <td class="font-bold">
+                    <AnomalyBadgeValue :text="fmt(s.day_heat_gj)" :note="s.anomalies?.day_heat_gj?.note" />
+                  </td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(s.heat_per_wan_gj)" :note="s.anomalies?.heat_per_wan_gj?.note" />
+                  </td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(s.day_water_t)" :note="s.anomalies?.day_water_t?.note" />
+                  </td>
                   <td>{{ fmt(s.day_elec_kwh) }}</td>
                 </tr>
               </tbody>
@@ -160,7 +211,7 @@
         <!-- Tab 3: 464户商业用户 -->
         <div v-if="activeTab === 'merchants'">
           <div class="filter-bar">
-            <input v-model="mcKeyword" type="search" class="ctrl-input" placeholder="筛选商户名称或热源大网…" />
+            <input v-model="mcKeyword" type="search" class="ctrl-input" placeholder="筛选商户名称或主干热网…" />
             <button class="btn secondary btn-sm" type="button" :disabled="syncingMerchant" @click="handleSyncMerchants">
               {{ syncingMerchant ? '拉取中…' : '🔄 立即拉取商户日耗量' }}
             </button>
@@ -170,7 +221,7 @@
               <thead>
                 <tr>
                   <th>商户名称</th>
-                  <th>热源大网 (rdfz)</th>
+                  <th>主干热网 (rdfz)</th>
                   <th>介质 (rdry)</th>
                   <th>产权 (rdss)</th>
                   <th>价格分类 (rdjg)</th>
@@ -204,7 +255,9 @@ import '../../daily_report_25_26/styles/theme.css'
 import AppHeader from '../../daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../../daily_report_25_26/components/Breadcrumbs.vue'
 import PlatformSubNav from '../components/PlatformSubNav.vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import DateStepPicker from '../components/DateStepPicker.vue'
+import AnomalyBadgeValue from '../components/AnomalyBadgeValue.vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { downloadPlatformExcel, fetchDailyReport, triggerManualCollect } from '../services/api'
 
 function yesterdayIso() {
@@ -215,6 +268,7 @@ function yesterdayIso() {
 
 const selectedDate = ref(yesterdayIso())
 const periodMode = ref('natural')
+const mode = ref('clean')
 const activeTab = ref('compare')
 const stKeyword = ref('')
 const mcKeyword = ref('')
@@ -232,8 +286,8 @@ const reportData = ref({
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
-  { label: '智慧供热旁路精算与质检平台', to: '/projects/smart_heating_platform/pages' },
-  { label: '每日生产精算日报', to: null },
+  { label: '智慧供热平台精算模块', to: '/projects/smart_heating_platform/pages' },
+  { label: '每日运行报告', to: null },
 ])
 
 const meta = computed(() => reportData.value.meta || {})
@@ -262,14 +316,53 @@ function fmt(val, suffix = '') {
   return `${num.toFixed(2).replace(/\.00$/, '')}${suffix}`
 }
 
+let dailySeq = 0
+let dailyAbortCtrl = null
+let dailyDebounceTimer = null
+
+function scheduleLoadReport(delayMs = 180) {
+  if (dailyDebounceTimer) {
+    clearTimeout(dailyDebounceTimer)
+    dailyDebounceTimer = null
+  }
+  dailyDebounceTimer = setTimeout(() => {
+    dailyDebounceTimer = null
+    loadReport()
+  }, delayMs)
+}
+
 async function loadReport() {
+  if (dailyDebounceTimer) {
+    clearTimeout(dailyDebounceTimer)
+    dailyDebounceTimer = null
+  }
+  const reqId = ++dailySeq
+  if (dailyAbortCtrl) {
+    dailyAbortCtrl.abort()
+  }
+  dailyAbortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null
   try {
-    const res = await fetchDailyReport({ date: selectedDate.value, period_mode: periodMode.value })
+    const res = await fetchDailyReport(
+      { date: selectedDate.value, period_mode: periodMode.value, mode: mode.value },
+      dailyAbortCtrl ? { signal: dailyAbortCtrl.signal } : {},
+    )
+    if (reqId !== dailySeq) return
     if (res?.data) reportData.value = res.data
   } catch (err) {
+    if (err?.name === 'AbortError' || reqId !== dailySeq) return
     notice.type = 'error'
-    notice.text = `加载每日精算日报失败：${err.message}`
+    notice.text = `加载每日运行报告失败：${err.message}`
   }
+}
+
+onBeforeUnmount(() => {
+  if (dailyDebounceTimer) clearTimeout(dailyDebounceTimer)
+  dailyAbortCtrl?.abort()
+})
+
+function switchMode(nextMode) {
+  mode.value = nextMode
+  loadReport()
 }
 
 async function handleCalibrateToday() {
@@ -307,8 +400,8 @@ async function handleSyncMerchants() {
 async function handleExport() {
   try {
     await downloadPlatformExcel(
-      `/reports/daily/export?date=${encodeURIComponent(selectedDate.value)}&period_mode=${periodMode.value}`,
-      `每日生产精算日报_${selectedDate.value}.xlsx`,
+      `/reports/daily/export?date=${encodeURIComponent(selectedDate.value)}&period_mode=${periodMode.value}&mode=${mode.value}`,
+      `每日运行报告_${selectedDate.value}.xlsx`,
     )
   } catch (err) {
     notice.type = 'error'
@@ -329,6 +422,12 @@ onMounted(loadReport)
 .topbar-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .inline-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .ctrl-input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 13px; background: #fff; }
+.mode-switch { display: inline-flex; align-items: center; height: 34px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #f8fafc; flex-shrink: 0; }
+.mode-btn { height: 100%; box-sizing: border-box; padding: 0 12px; font-size: 13px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; border: none; background: #f8fafc; color: #475569; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.mode-btn + .mode-btn { border-left: 1px solid #e2e8f0; }
+.mode-btn.active { background: #1d4ed8; color: #fff; }
+.mode-btn.raw-active { background: #dc2626; color: #fff; }
+.raw-mode-banner { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; font-size: 13px; }
 .notice-banner { padding: 10px 14px; border-radius: 8px; font-size: 13px; }
 .notice-banner.success { background: #ecfdf5; color: #065f46; }
 .notice-banner.error { background: #fef2f2; color: #991b1b; }

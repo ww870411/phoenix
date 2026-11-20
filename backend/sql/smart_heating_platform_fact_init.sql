@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS smart_heating_platform.fact_upstream_hourly (
     flow_clean      NUMERIC(14, 3),
     heat_raw        NUMERIC(14, 3),
     heat_clean      NUMERIC(14, 3),
-    hour_heat_gj    NUMERIC(14, 3),         -- 基于15分钟样本梯形积分的小时供热量(GJ)
+    hour_heat_raw_gj NUMERIC(14, 3),        -- 原始未清洗小时供热量(GJ)
+    hour_heat_gj    NUMERIC(14, 3),         -- 基于15分钟样本梯形积分的净化小时供热量(GJ)
     hour_flow_t     NUMERIC(14, 3),         -- 基于15分钟样本梯形积分的小时流量(t)
     value_source    VARCHAR(32) NOT NULL DEFAULT 'REAL',
     fault_tag       VARCHAR(64),
@@ -179,6 +180,7 @@ CREATE TABLE IF NOT EXISTS smart_heating_platform.fact_station_hourly (
     tot_water_f254      NUMERIC(16, 4),     -- 整点累计补水表底 (t)
     tot_elec_f253       NUMERIC(16, 4),     -- 整点累计电量表底 (kWh)
     -- 本小时真实累计耗量 (优先表底差值，兜底为15分钟梯形积分)
+    hour_heat_raw_gj    NUMERIC(14, 4),     -- 原始未修正小时供热量 (GJ)
     hour_heat_gj        NUMERIC(14, 4),
     hour_heat_source    VARCHAR(32) NOT NULL DEFAULT 'INTEGRAL_15M',
     hour_flow_t         NUMERIC(14, 4),
@@ -415,5 +417,12 @@ CREATE TABLE IF NOT EXISTS smart_heating_platform.fact_merchant_hourly (
 
 CREATE INDEX IF NOT EXISTS idx_fact_merchant_hourly_hour
     ON smart_heating_platform.fact_merchant_hourly (biz_hour, merchant_id);
+
+-- 兼容已建库的幂等字段补齐：保留原始未修正小时热量用于“原始值对照”与审计追踪
+ALTER TABLE IF EXISTS smart_heating_platform.fact_station_hourly
+    ADD COLUMN IF NOT EXISTS hour_heat_raw_gj NUMERIC(14, 4);
+
+ALTER TABLE IF EXISTS smart_heating_platform.fact_upstream_hourly
+    ADD COLUMN IF NOT EXISTS hour_heat_raw_gj NUMERIC(14, 3);
 
 COMMIT;

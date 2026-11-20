@@ -7,7 +7,7 @@
       <header class="topbar card elevated">
         <div class="topbar-info">
           <div class="title-row">
-            <h2>采集配置与 Cookie 设置</h2>
+            <h2>采集与计算选项</h2>
             <span class="role-badge">仅限 Global_admin</span>
           </div>
           <p class="subtitle">
@@ -221,12 +221,59 @@
                 class="text-input"
               />
             </div>
+
+            <div class="field-group">
+              <label for="gap-start-date-input">停机真空期检查起始日期（默认 2026-11-01 至今）</label>
+              <input
+                id="gap-start-date-input"
+                v-model="form.gap_recovery_start_date"
+                type="date"
+                class="text-input"
+              />
+            </div>
+
+            <div class="field-group">
+              <label for="heat-audit-time-input">每日热量异常回看检测与修正时刻（默认 00:00）</label>
+              <input
+                id="heat-audit-time-input"
+                v-model="form.heat_audit_time"
+                type="time"
+                class="text-input"
+              />
+            </div>
+
+            <div class="field-group">
+              <label for="heat-audit-days-input">每次定时回看检测天数（1~30，默认近 3 天）</label>
+              <input
+                id="heat-audit-days-input"
+                v-model.number="form.heat_audit_lookback_days"
+                type="number"
+                min="1"
+                max="30"
+                step="1"
+                class="text-input"
+              />
+            </div>
           </div>
 
           <div class="field-group switch-row">
             <label class="checkbox-label">
               <input v-model="form.scheduler_enabled" type="checkbox" />
               <span>允许自动定时采集任务运行（后续时序表与采集调度器启用后生效）</span>
+            </label>
+          </div>
+
+          <div class="field-group switch-row">
+            <label class="checkbox-label">
+              <input v-model="form.auto_gap_recovery" type="checkbox" />
+              <span>启用停机真空期自动检测与补采（服务重启 10 秒后及每小时 :15 自动检测缺失整点并补全）</span>
+            </label>
+          </div>
+
+          <div class="field-group switch-row">
+            <label class="checkbox-label">
+              <input v-model="form.auto_heat_audit_fix" type="checkbox" />
+              <span>启用每日定时数据异常回看检测与自动修正（在设定时刻回看越限热量并写入异常监测台账）</span>
             </label>
           </div>
 
@@ -335,12 +382,17 @@ const form = reactive({
   request_interval_seconds: 0.8,
   request_timeout_seconds: 15,
   table_bottom_sync_hours: 1,
+  auto_gap_recovery: true,
+  gap_recovery_start_date: '2026-11-01',
+  auto_heat_audit_fix: true,
+  heat_audit_time: '00:00',
+  heat_audit_lookback_days: 3,
 })
 
 const breadcrumbItems = computed(() => [
   { label: '项目选择', to: '/projects' },
-  { label: '智慧供热旁路精算与质检平台', to: '/projects/smart_heating_platform/pages' },
-  { label: '采集配置与 Cookie 设置', to: null },
+  { label: '智慧供热平台精算模块', to: '/projects/smart_heating_platform/pages' },
+  { label: '采集与计算选项', to: null },
 ])
 
 const testResult = computed(() => settings.value.last_test_result || null)
@@ -379,6 +431,11 @@ function applySettingsToForm(data) {
   form.request_interval_seconds = Number(data.request_interval_seconds ?? 0.8)
   form.request_timeout_seconds = Number(data.request_timeout_seconds ?? 15)
   form.table_bottom_sync_hours = Number(data.table_bottom_sync_hours ?? 1)
+  form.auto_gap_recovery = data.auto_gap_recovery !== false
+  form.gap_recovery_start_date = String(data.gap_recovery_start_date || '2026-11-01')
+  form.auto_heat_audit_fix = data.auto_heat_audit_fix !== false
+  form.heat_audit_time = String(data.heat_audit_time || '00:00')
+  form.heat_audit_lookback_days = Number(data.heat_audit_lookback_days ?? 3)
 }
 
 function setNotice(type, text) {
@@ -414,6 +471,11 @@ async function handleSave() {
       request_interval_seconds: form.request_interval_seconds,
       request_timeout_seconds: form.request_timeout_seconds,
       table_bottom_sync_hours: form.table_bottom_sync_hours,
+      auto_gap_recovery: form.auto_gap_recovery,
+      gap_recovery_start_date: form.gap_recovery_start_date,
+      auto_heat_audit_fix: form.auto_heat_audit_fix,
+      heat_audit_time: form.heat_audit_time,
+      heat_audit_lookback_days: form.heat_audit_lookback_days,
     }
     const trimmedCookie = form.cookieInput.trim()
     if (trimmedCookie) {

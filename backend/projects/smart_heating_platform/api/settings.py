@@ -40,6 +40,11 @@ class CollectorSettingsUpdateRequest(BaseModel):
     request_interval_seconds: Optional[float] = Field(None, description="单线程请求间隔秒数 (0.5~5.0)")
     request_timeout_seconds: Optional[float] = Field(None, description="单次请求超时秒数 (3~60)")
     table_bottom_sync_hours: Optional[int] = Field(None, description="累计表底校准间隔小时数 (1~24)")
+    auto_gap_recovery: Optional[bool] = Field(None, description="是否开启停机真空期自动检测与补采")
+    gap_recovery_start_date: Optional[str] = Field(None, description="真空期自动检查起始日期 YYYY-MM-DD（默认 2026-11-01）")
+    auto_heat_audit_fix: Optional[bool] = Field(None, description="是否开启每日定时数据回看检测与自动修正")
+    heat_audit_time: Optional[str] = Field(None, description="每日回看检测修正执行时刻 HH:MM（默认 00:00）")
+    heat_audit_lookback_days: Optional[int] = Field(None, description="每次定时回看检测的天数 1~30（默认 3 天）")
 
 
 class CollectorTestRequest(BaseModel):

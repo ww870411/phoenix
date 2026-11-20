@@ -37,6 +37,23 @@ SRC_PERM_OFFLINE = "OFFLINE_PERMANENT"
 SRC_METER_DIFF = "METER_DIFF"
 SRC_INTEGRAL_15M = "INTEGRAL_15M"
 SRC_FALLBACK_INTEGRAL = "FALLBACK_INTEGRAL_15M"
+SRC_SOURCE_EMPTY = "SOURCE_EMPTY"
+
+UPSTREAM_MAX_HEAT_GJH = 5000.0
+
+# 经实测核实的站点累计热量表底倍率修正表: {站名: (折算系数, 口径说明)}
+STATION_METER_SCALE_FACTORS: Dict[str, Tuple[float, str]] = {
+    "南山苑": (0.1, "累计表底 totJ 为 0.1GJ 刻度（已自动÷10 折算为 GJ）"),
+    "经典A": (0.1, "累计表底 totJ 为 0.1GJ 刻度（已自动÷10 折算为 GJ）"),
+    "联通公司": (0.1, "累计表底 totJ 为 0.1GJ 刻度（已自动÷10 折算为 GJ）"),
+    "恒元公寓": (3.6, "累计表底 totJ 为 MWh 刻度（已自动×3.6 折算为 GJ）"),
+}
+
+
+def station_max_hourly_heat_gj(covered_area: Optional[float]) -> float:
+    """按供暖面积计算单站小时物理最大合理热负荷上限（125 W/㎡ = 0.00045 GJ/㎡·h，兜底 25 GJ/h）。"""
+    area = float(covered_area) if (covered_area is not None and float(covered_area) > 0) else 100000.0
+    return round(max(25.0, area * 0.00045), 4)
 
 
 def to_float(val: Any) -> Optional[float]:
@@ -280,7 +297,38 @@ def clean_upstream_point(
             "rule_desc": "水压越限(<0 或 >2.5MPa) / 汽压越限(<0 或 >15MPa)",
         })
 
-    # 2. 通讯停滞检查 (> 2 小时)
+    # 2. 上游热量量纲/累计寄存器越限校验
+    is_cumulative_name = "累计" in str(name)
+    if heat_raw is not None and (is_cumulative_name or heat_raw < 0.0 or heat_raw > UPSTREAM_MAX_HEAT_GJH):
+        if is_cumulative_name:
+            fault_tags.append(FAULT_SOFTWARE_DEFECT)
+            heat_clean = None
+            faults.append({
+                "entity_type": "UPSTREAM",
+                "entity_id": f"{data_zone}:{point_meta.get('source_name', name)}",
+                "entity_name": name,
+                "fault_code": FAULT_SOFTWARE_DEFECT,
+                "owner_party": OWNER_UNIVERSITY,
+                "raw_value_text": f"累计热量原值={heat_raw} GJ",
+                "clean_strategy": "保留原始累计读数 heat_raw，避免将累计计数器按瞬时速率做小时积分",
+                "rule_desc": "测点名称为累计量寄存器而非瞬时热量速率",
+            })
+        else:
+            fault_tags.append(FAULT_SENSOR_RANGE)
+            heat_clean = prev_valid.get("heat_clean") if prev_valid else None
+            value_source = SRC_MASKED_PREV
+            faults.append({
+                "entity_type": "UPSTREAM",
+                "entity_id": f"{data_zone}:{point_meta.get('source_name', name)}",
+                "entity_name": name,
+                "fault_code": FAULT_SENSOR_RANGE,
+                "owner_party": OWNER_RESEARCH,
+                "raw_value_text": f"热量={heat_raw} GJ/h",
+                "clean_strategy": "保留原值 heat_raw，超限热量置空/回退前序有效值",
+                "rule_desc": f"上游测点瞬时热量 <0 或 >{UPSTREAM_MAX_HEAT_GJH:.0f} GJ/h（疑似单位混用或传感器极值）",
+            })
+
+    # 3. 通讯停滞检查 (> 2 小时)
     if source_dt is not None and (collected_at - source_dt).total_seconds() > 7200:
         fault_tags.append(FAULT_COMM_OFFLINE)
         faults.append({
@@ -329,8 +377,9 @@ def _clean_station_primary_metrics(
     e11_raw: Optional[float],
     e14_raw: Optional[float],
     prev_station_valid: Optional[Dict[str, Any]] = None,
+    max_hourly_heat: float = 250.0,
 ) -> Tuple[Dict[str, Optional[float]], str, List[str], List[Dict[str, Any]]]:
-    """对换热站一次网瞬时温压流补水执行传感器越限与物理倒挂清洗。"""
+    """对换热站一次网瞬时温压流热量补水执行传感器越限与物理倒挂清洗。"""
     e1_clean, e3_clean, e4_clean = e1_raw, e3_raw, e4_raw
     e7_clean, e8_clean, e11_clean, e14_clean = e7_raw, e8_raw, e11_raw, e14_raw
     value_source = SRC_REAL
@@ -354,9 +403,15 @@ def _clean_station_primary_metrics(
                 "rule_desc": "一网水温 <=0℃ 或 >150℃",
             })
             if lbl == "一网供温" and prev_station_valid:
-                e3_clean = prev_station_valid.get("e3_clean")
+                prev_e3 = prev_station_valid.get("e3_clean")
+                e3_clean = prev_e3 if (prev_e3 is not None and 0.0 < prev_e3 <= 150.0) else None
+            elif lbl == "一网供温":
+                e3_clean = None
             if lbl == "一网回温" and prev_station_valid:
-                e4_clean = prev_station_valid.get("e4_clean")
+                prev_e4 = prev_station_valid.get("e4_clean")
+                e4_clean = prev_e4 if (prev_e4 is not None and 0.0 < prev_e4 <= 150.0) else None
+            elif lbl == "一网回温":
+                e4_clean = None
             value_source = SRC_MASKED_PREV
 
     for lbl, val in (("一网供压", e7_raw), ("一网回压", e8_raw)):
@@ -372,10 +427,12 @@ def _clean_station_primary_metrics(
                 "clean_strategy": "屏蔽越限压力并回退前序正常值",
                 "rule_desc": "压力 <0 或 >2.5MPa",
             })
-            if lbl == "一网供压" and prev_station_valid:
-                e7_clean = prev_station_valid.get("e7_clean")
-            if lbl == "一网回压" and prev_station_valid:
-                e8_clean = prev_station_valid.get("e8_clean")
+            if lbl == "一网供压":
+                prev_e7 = prev_station_valid.get("e7_clean") if prev_station_valid else None
+                e7_clean = prev_e7 if (prev_e7 is not None and 0.0 <= prev_e7 <= 2.5) else None
+            if lbl == "一网回压":
+                prev_e8 = prev_station_valid.get("e8_clean") if prev_station_valid else None
+                e8_clean = prev_e8 if (prev_e8 is not None and 0.0 <= prev_e8 <= 2.5) else None
             value_source = SRC_MASKED_PREV
 
     if e14_raw is not None and (e14_raw < 0.0 or e14_raw > 100.0):
@@ -390,7 +447,26 @@ def _clean_station_primary_metrics(
             "clean_strategy": "屏蔽满量程坏表极值并回退前序正常值（无前值则置空）",
             "rule_desc": "单站瞬时补水量 <0 或 >100 t/h",
         })
-        e14_clean = prev_station_valid.get("e14_clean") if prev_station_valid else None
+        prev_e14 = prev_station_valid.get("e14_clean") if prev_station_valid else None
+        e14_clean = prev_e14 if (prev_e14 is not None and 0.0 <= prev_e14 <= 100.0) else None
+        value_source = SRC_MASKED_PREV
+
+    e11_limit = max_hourly_heat * 1.5
+    if e11_raw is not None and (e11_raw < 0.0 or e11_raw > e11_limit):
+        fault_tags.append(FAULT_SENSOR_RANGE)
+        faults.append({
+            "entity_type": "STATION",
+            "entity_id": station_id,
+            "entity_name": station_name,
+            "fault_code": FAULT_SENSOR_RANGE,
+            "owner_party": OWNER_RESEARCH,
+            "raw_value_text": f"一网瞬时热量={e11_raw} GJ/h (物理上限={e11_limit:.1f} GJ/h)",
+            "clean_strategy": "忠实留存 e11_raw，超限瞬间热量回退前序有效断面（无前值则置空）",
+            "rule_desc": "单站一次网瞬时热量 <0 或超过按供暖面积核定极限热负荷 1.5 倍",
+        })
+        e11_clean = prev_station_valid.get("e11_clean") if prev_station_valid else None
+        if e11_clean is not None and (e11_clean < 0.0 or e11_clean > e11_limit):
+            e11_clean = None
         value_source = SRC_MASKED_PREV
 
     if e1_raw is not None and e1_raw > 1.0 and e3_raw is not None and e4_raw is not None and e3_raw <= e4_raw:
@@ -469,10 +545,12 @@ def clean_station_history_point(
     e7_raw = rep_record.get("f1")
     e8_raw = rep_record.get("f4")
     e11_raw = rep_record.get("f222")
+    max_hourly_heat = station_max_hourly_heat_gj(station_meta.get("covered_area"))
     cleaned_map, value_source, fault_tags, faults = _clean_station_primary_metrics(
         station_id, station_name,
         e1_raw, e3_raw, e4_raw, e7_raw, e8_raw, e11_raw, None,
         prev_station_valid=prev_station_valid,
+        max_hourly_heat=max_hourly_heat,
     )
     return {
         "online": True,
@@ -557,10 +635,12 @@ def clean_station_and_zones(
         else:
             value_source = SRC_PERM_OFFLINE
     else:
+        max_hourly_heat = station_max_hourly_heat_gj(station_meta.get("covered_area"))
         cleaned_map, value_source, p_tags, p_faults = _clean_station_primary_metrics(
             station_id, station_name,
             e1_raw, e3_raw, e4_raw, e7_raw, e8_raw, e11_raw, e14_raw,
             prev_station_valid=prev_station_valid,
+            max_hourly_heat=max_hourly_heat,
         )
         e1_clean = cleaned_map["e1_clean"]
         e3_clean = cleaned_map["e3_clean"]
