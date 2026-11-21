@@ -199,10 +199,12 @@
                   <td class="mono">{{ fmt(s.start_tot_j) }}</td>
                   <td class="mono">{{ fmt(s.end_tot_j) }}</td>
                   <td class="font-bold">
-                    <AnomalyBadgeValue :text="fmt(s.day_heat_gj)" :note="s.anomalies?.day_heat_gj?.note" />
+                    <span v-if="s.day_heat_gj === null" class="text-muted">缺失</span>
+                    <AnomalyBadgeValue v-else :text="fmt(s.day_heat_gj)" :note="s.anomalies?.day_heat_gj?.note" />
                   </td>
                   <td>
-                    <AnomalyBadgeValue :text="fmt(s.heat_per_wan_gj)" :note="s.anomalies?.heat_per_wan_gj?.note" />
+                    <span v-if="s.day_heat_gj === null" class="text-muted">缺失</span>
+                    <AnomalyBadgeValue v-else :text="fmt(s.heat_per_wan_gj)" :note="s.anomalies?.heat_per_wan_gj?.note" />
                   </td>
                   <td>
                     <AnomalyBadgeValue :text="fmt(s.day_water_t)" :note="s.anomalies?.day_water_t?.note" />
@@ -219,8 +221,46 @@
 
         <!-- Tab 3: 464户商业用户 -->
         <div v-if="activeTab === 'merchants'">
+          <div class="mc-summary-bar">
+            <button
+              type="button"
+              :class="['mc-stat-chip', { active: mcStatusFilter === '' }]"
+              @click="mcStatusFilter = ''"
+            >
+              台账商户 <strong>{{ merchantSummary.total_count ?? filteredMerchantsAllCount }}</strong> 户
+            </button>
+            <button
+              type="button"
+              :class="['mc-stat-chip chip-ok', { active: mcStatusFilter === 'VALID' }]"
+              @click="mcStatusFilter = mcStatusFilter === 'VALID' ? '' : 'VALID'"
+            >
+              可算日耗 <strong>{{ merchantSummary.valid_count ?? 0 }}</strong> 户
+            </button>
+            <button
+              type="button"
+              :class="['mc-stat-chip chip-warn', { active: mcStatusFilter === 'MISSING_RECORD' }]"
+              title="源站商业日报接口(/getall_bb_shrb/)未返回日耗记录"
+              @click="mcStatusFilter = mcStatusFilter === 'MISSING_RECORD' ? '' : 'MISSING_RECORD'"
+            >
+              缺日耗记录 <strong>{{ merchantSummary.missing_record_count ?? 0 }}</strong> 户
+            </button>
+            <button
+              type="button"
+              :class="['mc-stat-chip chip-err', { active: mcStatusFilter === 'METER_ROLLBACK' }]"
+              title="表底止码小于起码（倒走/归零）导致无法计算日耗"
+              @click="mcStatusFilter = mcStatusFilter === 'METER_ROLLBACK' ? '' : 'METER_ROLLBACK'"
+            >
+              表读数倒走 <strong>{{ merchantSummary.rollback_count ?? 0 }}</strong> 户
+            </button>
+          </div>
           <div class="filter-bar">
             <input v-model="mcKeyword" type="search" class="ctrl-input" placeholder="筛选商户名称或主干热网…" />
+            <select v-model="mcStatusFilter" class="ctrl-input" aria-label="筛选商业用户日耗状态">
+              <option value="">全部计算状态</option>
+              <option value="VALID">仅看可算日耗</option>
+              <option value="MISSING_RECORD">仅看缺日耗记录</option>
+              <option value="METER_ROLLBACK">仅看表读数倒走</option>
+            </select>
             <button class="btn secondary btn-sm" type="button" :disabled="syncingMerchant" @click="handleSyncMerchants">
               {{ syncingMerchant ? '拉取中…' : '🔄 立即拉取商户日耗量' }}
             </button>
@@ -235,8 +275,10 @@
                   <SortableTh label="产权 (rdss)" sort-key="rdss" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                   <SortableTh label="价格分类 (rdjg)" sort-key="rdjg" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                   <SortableTh label="改造批次 (rdgz)" sort-key="rdgz" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="计算状态" sort-key="status_label" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                   <SortableTh label="日累计消耗量" sort-key="daily_consumption" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                   <SortableTh label="日单耗参考" sort-key="daily_unit_heat" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh label="说明" sort-key="status_note" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                 </tr>
               </thead>
               <tbody>
@@ -247,8 +289,17 @@
                   <td>{{ m.rdss || '待补录' }}</td>
                   <td>{{ m.rdjg || '待补录' }}</td>
                   <td>{{ m.rdgz || '待补录' }}</td>
-                  <td class="font-bold">{{ fmt(m.daily_consumption) }}</td>
+                  <td>
+                    <span :class="['diff-pill', m.calc_status === 'VALID' ? 'pill-ok' : (m.calc_status === 'METER_ROLLBACK' ? 'pill-err' : 'pill-warn')]">
+                      {{ m.status_label || (m.daily_consumption != null ? '正常' : '缺日耗记录') }}
+                    </span>
+                  </td>
+                  <td class="font-bold">
+                    <span v-if="m.daily_consumption === null" class="text-muted">缺失</span>
+                    <template v-else>{{ fmt(m.daily_consumption) }}</template>
+                  </td>
                   <td>{{ fmt(m.daily_unit_heat) }}</td>
+                  <td class="text-muted">{{ m.status_note || '-' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -283,6 +334,7 @@ const mode = ref('clean')
 const activeTab = ref('compare')
 const stKeyword = ref('')
 const mcKeyword = ref('')
+const mcStatusFilter = ref('')
 const calibrating = ref(false)
 const syncingMerchant = ref(false)
 const notice = reactive({ type: 'info', text: '' })
@@ -292,6 +344,7 @@ const reportData = ref({
   kpis: {},
   center_comparison: [],
   station_daily: [],
+  merchant_summary: {},
   merchant_daily: [],
 })
 
@@ -303,6 +356,8 @@ const breadcrumbItems = computed(() => [
 
 const meta = computed(() => reportData.value.meta || {})
 const kpis = computed(() => reportData.value.kpis || {})
+const merchantSummary = computed(() => reportData.value.merchant_summary || {})
+const filteredMerchantsAllCount = computed(() => (reportData.value.merchant_daily || []).length)
 
 const filteredStationDaily = computed(() => {
   const kw = stKeyword.value.trim().toLowerCase()
@@ -314,7 +369,9 @@ const filteredStationDaily = computed(() => {
 
 const filteredMerchants = computed(() => {
   const kw = mcKeyword.value.trim().toLowerCase()
+  const st = mcStatusFilter.value
   return (reportData.value.merchant_daily || []).filter((m) => {
+    if (st && (m.calc_status || (m.daily_consumption != null ? 'VALID' : 'MISSING_RECORD')) !== st) return false
     if (!kw) return true
     return String(m.name || '').toLowerCase().includes(kw) || String(m.rdfz || '').toLowerCase().includes(kw)
   })
@@ -467,10 +524,18 @@ onMounted(loadReport)
 .row-alert td { background: #fef2f2; }
 .diff-pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .pill-ok { background: #dcfce7; color: #166534; }
+.pill-warn { background: #fef3c7; color: #92400e; }
 .pill-err { background: #fee2e2; color: #991b1b; }
+.mc-summary-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.mc-stat-chip { border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; padding: 6px 12px; border-radius: 999px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s ease; }
+.mc-stat-chip.chip-ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.mc-stat-chip.chip-warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.mc-stat-chip.chip-err { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.mc-stat-chip.active { outline: 2px solid #2563eb; outline-offset: 1px; font-weight: 600; }
 .font-bold { font-weight: 600; }
 .text-ok { color: #059669; }
 .text-err { color: #dc2626; }
+.text-muted { color: #64748b; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
 @media (max-width: 768px) {

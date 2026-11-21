@@ -1,3 +1,8 @@
+## 2026-11-21 修复智慧供热日报无热量站缺失显示、止表底与商业用户三类状态显性化
+
+- **`src/projects/smart_heating_platform/pages/DailyReportView.vue`**：换热站日耗在 `day_heat_gj === null` 时直接显示 `缺失`；商业用户标签页顶部增加台账总户数、可算日耗、缺日耗记录、表读数倒走 4 类可点击统计徽标与状态筛选，明细表新增 `计算状态` 与 `说明` 列。
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：停机真空期抽屉无缺口状态文案调整为 `无停机采集缺口`（保留原有停机补采判断口径不变）。
+
 ## 2026-11-20 智慧供热平台全部数据表格接入字段点击排序
 
 - **`src/projects/smart_heating_platform/{utils/tableSort.js,components/SortableTh.vue}`**：新增统一三态表格排序引擎（降序/升序/恢复默认，空值置底与中文自然序）及排序表头组件 `SortableTh`。

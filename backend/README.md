@@ -1,3 +1,11 @@
+## 2026-11-21 修复日报换热站缺失统计、止表底时刻与商业用户三类汇总口径
+
+- **`projects/smart_heating_platform/services/report_query_service.py`**：
+  - `get_daily_report()` 将站点累计指标初值改设为 `None` 且 `hours_count` 仅统计读到热量的小时数，无热量读数站不再显示 `24h / 0`；
+  - `end_tot_j` 改为读取结算结束时刻 `win_end`（自然日次日 `00:00` / 班次当日 `08:00`）的表底读数；
+  - 新增 `merchant_summary`（`total_count` / `valid_count` / `missing_record_count` / `rollback_count`）与单户 `calc_status` / `status_label` / `status_note`，同步在 `build_daily_excel()` 补齐缺失备注、状态列与三类统计汇总。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_daily_report_station_missing_end_meter_and_merchant_breakdown` 单元测试（`pytest` **16 passed**）。
+
 ## 2026-11-20 日报元信息透传系统采集频率 `snapshot_interval_minutes`
 
 - **`projects/smart_heating_platform/services/report_query_service.py`**：`get_daily_report()` 返回的 `meta` 新增 `snapshot_interval_minutes`（读取 `collector_config_service.get_collector_settings_view()`）。

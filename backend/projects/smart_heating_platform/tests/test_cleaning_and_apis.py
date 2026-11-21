@@ -1102,7 +1102,198 @@ def test_hourly_and_daily_excel_export_with_24h_matrix_and_highlights():
     ]
     assert wb_daily["全网逐日统计总览"].cell(row=4, column=1).value == "期间合计/均值"
     assert wb_daily["9大中心_逐日双轨偏差率"].cell(row=2, column=4).fill.start_color.rgb.endswith("FEF3C7")
+    assert wb_daily["11-20_242站日耗"].cell(row=1, column=5).value == "有效热量小时"
     assert wb_daily["11-20_242站日耗"].cell(row=2, column=15).value == 78.5
     assert wb_daily["11-20_464商业用户"].cell(row=1, column=3).value == "介质 (rdry)"
+    assert wb_daily["11-20_464商业用户"].cell(row=1, column=9).value == "计算状态"
     assert wb_daily["11-20_464商业用户"].cell(row=2, column=7).value == 12.34
+    assert wb_daily["11-20_464商业用户"].cell(row=2, column=9).value == "正常"
     assert wb_daily["11-20_464商业用户"].cell(row=3, column=7).value == 12.34
+
+
+def test_daily_report_station_missing_end_meter_and_merchant_breakdown(monkeypatch):
+    """验证无热量读数站不计有效小时且耗热为None、止表取结算结束时刻、商户三类统计精确拆分。"""
+    from types import SimpleNamespace
+    import backend.projects.smart_heating_platform.services.report_query_service as rqs
+
+    class _FakeRes:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+    class _FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "FROM smart_heating_platform.dict_service_center" in sql:
+                return _FakeRes([SimpleNamespace(_mapping={"center_id": 63, "name": "香炉礁中心"})])
+            if "FROM smart_heating_platform.dict_heating_station" in sql:
+                return _FakeRes([
+                    SimpleNamespace(
+                        station_id="ST_XLJ",
+                        _mapping={
+                            "station_id": "ST_XLJ",
+                            "name": "香炉礁",
+                            "center_id": 63,
+                            "center_name": "香炉礁中心",
+                            "covered_area": 100000.0,
+                            "rdfz": "香海",
+                        },
+                    ),
+                    SimpleNamespace(
+                        station_id="ST_EMPTY",
+                        _mapping={
+                            "station_id": "ST_EMPTY",
+                            "name": "东北名苑",
+                            "center_id": 63,
+                            "center_name": "香炉礁中心",
+                            "covered_area": 50000.0,
+                            "rdfz": "北海",
+                        },
+                    ),
+                ])
+            if "WHERE biz_hour = :we" in sql:
+                return _FakeRes([
+                    SimpleNamespace(station_id="ST_XLJ", tot_j=1420527.30),
+                    SimpleNamespace(station_id="ST_EMPTY", tot_j=None),
+                ])
+            if "FROM smart_heating_platform.fact_station_hourly" in sql:
+                rows = []
+                for h in range(24):
+                    bh = datetime(2026, 11, 20, h, 0, tzinfo=EAST_8)
+                    rows.append(
+                        SimpleNamespace(
+                            biz_hour=bh,
+                            station_id="ST_XLJ",
+                            e1_raw=100.0, e1_clean=100.0,
+                            e3_raw=75.0, e3_clean=75.0,
+                            e4_raw=45.0, e4_clean=45.0,
+                            e7_raw=0.8, e7_clean=0.8,
+                            e8_raw=0.5, e8_clean=0.5,
+                            e11_raw=37.0, e11_clean=37.0,
+                            e14_raw=1.0, e14_clean=1.0,
+                            tot_j=1419634.24 if h == 0 else (1420490.01 if h == 23 else 1419634.24 + h * 37.2),
+                            hour_heat_raw_gj=37.2108,
+                            hour_heat_gj=37.2108,
+                            hour_heat_source="METER_DIFF",
+                            hour_flow_t=100.0,
+                            hour_water_t=1.0,
+                            hour_elec_kwh=10.0,
+                            value_source="REAL",
+                            fault_tag=None,
+                            _mapping={
+                                "biz_hour": bh, "station_id": "ST_XLJ",
+                                "e1_raw": 100.0, "e1_clean": 100.0, "e3_raw": 75.0, "e3_clean": 75.0,
+                                "e4_raw": 45.0, "e4_clean": 45.0, "e7_raw": 0.8, "e7_clean": 0.8,
+                                "e8_raw": 0.5, "e8_clean": 0.5, "e11_raw": 37.0, "e11_clean": 37.0,
+                                "e14_raw": 1.0, "e14_clean": 1.0, "tot_j": 1419634.24,
+                                "hour_heat_raw_gj": 37.2108, "hour_heat_gj": 37.2108,
+                                "hour_heat_source": "METER_DIFF", "hour_flow_t": 100.0,
+                                "hour_water_t": 1.0, "hour_elec_kwh": 10.0,
+                                "value_source": "REAL", "fault_tag": None,
+                            },
+                        )
+                    )
+                    # 东北名苑有24条小时记录（如供回温有数），但全天没有热量与表底读数
+                    rows.append(
+                        SimpleNamespace(
+                            biz_hour=bh,
+                            station_id="ST_EMPTY",
+                            e1_raw=None, e1_clean=None,
+                            e3_raw=70.0, e3_clean=70.0,
+                            e4_raw=35.0, e4_clean=35.0,
+                            e7_raw=0.9, e7_clean=0.9,
+                            e8_raw=0.4, e8_clean=0.4,
+                            e11_raw=None, e11_clean=None,
+                            e14_raw=None, e14_clean=None,
+                            tot_j=None,
+                            hour_heat_raw_gj=None,
+                            hour_heat_gj=None,
+                            hour_heat_source="INTEGRAL_15M",
+                            hour_flow_t=None,
+                            hour_water_t=None,
+                            hour_elec_kwh=None,
+                            value_source="REAL",
+                            fault_tag=None,
+                            _mapping={
+                                "biz_hour": bh, "station_id": "ST_EMPTY",
+                                "e1_raw": None, "e1_clean": None, "e3_raw": 70.0, "e3_clean": 70.0,
+                                "e4_raw": 35.0, "e4_clean": 35.0, "e7_raw": 0.9, "e7_clean": 0.9,
+                                "e8_raw": 0.4, "e8_clean": 0.4, "e11_raw": None, "e11_clean": None,
+                                "e14_raw": None, "e14_clean": None, "tot_j": None,
+                                "hour_heat_raw_gj": None, "hour_heat_gj": None,
+                                "hour_heat_source": "INTEGRAL_15M", "hour_flow_t": None,
+                                "hour_water_t": None, "hour_elec_kwh": None,
+                                "value_source": "REAL", "fault_tag": None,
+                            },
+                        )
+                    )
+                return _FakeRes(rows)
+            if "FROM smart_heating_platform.dict_merchant" in sql:
+                return _FakeRes([
+                    SimpleNamespace(_mapping={
+                        "merchant_id": "M1", "name": "正常商户", "rdfz": "南环", "rdry": "高温水",
+                        "rdss": "私有", "rdjg": "商业", "rdgz": "已改",
+                        "fact_id": 1, "daily_consumption": 15.2, "daily_unit_heat": 0.4,
+                        "raw_payload": {"tot_prev": 100.0, "tot_curr": 115.2},
+                    }),
+                    SimpleNamespace(_mapping={
+                        "merchant_id": "M2", "name": "云河会馆", "rdfz": "南环", "rdry": "高温水",
+                        "rdss": "私有", "rdjg": "商业", "rdgz": "已改",
+                        "fact_id": 2, "daily_consumption": None, "daily_unit_heat": -1333.0,
+                        "raw_payload": {"tot_prev": 1333.0, "tot_curr": 0.0, "unit": -1333},
+                    }),
+                    SimpleNamespace(_mapping={
+                        "merchant_id": "M3", "name": "新华医院", "rdfz": "南环", "rdry": "高温水",
+                        "rdss": "私有", "rdjg": "商业", "rdgz": "已改",
+                        "fact_id": None, "daily_consumption": None, "daily_unit_heat": None,
+                        "raw_payload": None,
+                    }),
+                ])
+            return _FakeRes([])
+
+    monkeypatch.setattr(rqs, "engine", SimpleNamespace(connect=lambda: _FakeConn()))
+    monkeypatch.setattr(rqs, "get_collector_settings_view", lambda: {"snapshot_interval_minutes": 5})
+
+    rep = rqs.get_daily_report("2026-11-20", period_mode="natural", mode="clean")
+    st_map = {s["name"]: s for s in rep["station_daily"]}
+
+    # 1. 香炉礁：止表底取到 2026-11-21 00:00 的 1420527.30，与起表底 1419634.24 相差 893.06 GJ
+    xlj = st_map["香炉礁"]
+    assert xlj["hours_count"] == 24
+    assert xlj["start_tot_j"] == 1419634.24
+    assert xlj["end_tot_j"] == 1420527.3
+    assert round(xlj["end_tot_j"] - xlj["start_tot_j"], 2) == 893.06
+    assert xlj["day_heat_gj"] == 893.06
+
+    # 2. 东北名苑：24小时均无热量读数 -> 有效小时 0，日耗/万平/流量/补水/电耗均为 None（不再显示 24h / 0）
+    dmy = st_map["东北名苑"]
+    assert dmy["hours_count"] == 0
+    assert dmy["meter_diff_hours"] == 0
+    assert dmy["day_heat_gj"] is None
+    assert dmy["heat_per_wan_gj"] is None
+    assert dmy["day_flow_t"] is None
+    assert dmy["day_water_t"] is None
+    assert dmy["day_elec_kwh"] is None
+
+    # 3. 商业用户三类拆分汇总及单户状态
+    assert rep["merchant_summary"] == {
+        "total_count": 3,
+        "valid_count": 1,
+        "missing_record_count": 1,
+        "rollback_count": 1,
+    }
+    mc_map = {m["name"]: m for m in rep["merchant_daily"]}
+    assert mc_map["正常商户"]["calc_status"] == "VALID"
+    assert mc_map["云河会馆"]["calc_status"] == "METER_ROLLBACK"
+    assert mc_map["云河会馆"]["daily_unit_heat"] is None
+    assert "1333" in mc_map["云河会馆"]["status_note"]
+    assert mc_map["新华医院"]["calc_status"] == "MISSING_RECORD"
+    assert "/getall_bb_shrb/" in mc_map["新华医院"]["status_note"]

@@ -1,5 +1,23 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-21 修复智慧供热日报换热站缺失/止表底口径并显性化商业用户三类状态
+
+- **改动缘由**：
+  - 核对 11 月 20 日生产库与 Excel 导出发现两类问题：① 7 座全天无热量读数的换热站因按记录行数计数且初值 `0.0`，日报误显示“有效 24 小时、耗热 0”，且日度 `end_tot_j` 取了 `23:00` 起始时刻表底而非结算结束时刻（次日 `00:00`），导致香炉礁站止起差为 `855.77` 而非 `893.06 GJ`；② 464 户商业用户中 `456` 户可算、`6` 户源站 `/getall_bb_shrb/` 未返回、`2` 户表底归零倒走，而页面“全部已补齐”容易让人误以为单户数据已齐。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - `get_daily_report()` 中将 `day_heat_gj`、`day_flow_t`、`day_water_t`、`day_elec_kwh` 累计初值改为 `None`（不新增布尔标志位），仅当 `eff_heat is not None` 时才计入 `hours_count` 并累加，使无热量读数站准确返回 `hours_count=0` 与 `day_heat_gj=None`；
+    - 增补 `biz_hour = win_end` 查询，将换热站 `end_tot_j` 统一取结算结束时刻表底（若末小时已校准但 `win_end` 整点尚未生成则回退 `tot_j + hour_heat_raw_gj`）；
+    - 为 `get_daily_report()` 增加 `merchant_summary`（`total_count` / `valid_count` / `missing_record_count` / `rollback_count`）及单户 `calc_status` / `status_label` / `status_note`（倒走负值日单耗置空并在说明留存起止表底），同步更新 `build_daily_excel()` 站日耗表头（`有效热量小时` + 缺失备注）与商业用户状态/说明列及三类汇总。
+  - **`frontend/src/projects/smart_heating_platform/pages/DailyReportView.vue` & `HourlyReportView.vue`**：
+    - 换热站日报在 `day_heat_gj === null` 时显示“缺失”；商业用户日报顶部增加四项可点击状态徽标与状态筛选下拉，明细表增加 `计算状态` 与 `说明` 列；
+    - 保留 `detect_data_gaps()` 停机补采判断逻辑不变，将 `HourlyReportView.vue` 抽屉徽标文案调整为 `无停机采集缺口`。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_daily_report_station_missing_end_meter_and_merchant_breakdown` 单元测试并更新日报 Excel 导出断言。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**16 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 18.98s（0 错误）**；
+  - 11 月 20 日实库验证：`香炉礁` `start=1419634.24`、`end=1420527.3`、差值与 `day_heat_gj` 均为 `893.06`；7 座无热量读数站均返回 `hours=0` 与 `day_heat=None`；商业用户 `total=464, valid=456, missing_record=6, rollback=2`。
+
 ## 2026-11-20 智慧供热平台全模块表格统一支持表头点击排序
 
 - **改动清单**：

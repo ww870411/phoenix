@@ -693,8 +693,11 @@
           <div v-else-if="drawer.kind === 'gap_detail'" class="gap-detail-box">
             <div class="gap-detail-toolbar">
               <div class="gap-status-badge-row">
-                <span :class="['src-pill', gapStatus?.running ? 'src-interp' : (gapStatus?.has_gaps ? 'src-off' : 'src-real')]">
-                  {{ gapStatus?.running ? '后台运行中' : (gapStatus?.has_gaps ? '存在待补缺口' : '全部已补齐') }}
+                <span
+                  :class="['src-pill', gapStatus?.running ? 'src-interp' : (gapStatus?.has_gaps ? 'src-off' : 'src-real')]"
+                  title="仅用于检测停机真空期漏采小时，不代表单户表计或日报源站缺项"
+                >
+                  {{ gapStatus?.running ? '后台运行中' : (gapStatus?.has_gaps ? '存在待补缺口' : '无停机采集缺口') }}
                 </span>
                 <span
                   v-if="gapStatus?.running"

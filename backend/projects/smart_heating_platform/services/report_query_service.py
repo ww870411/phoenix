@@ -1245,6 +1245,18 @@ def get_daily_report(
             {"ws": win_start, "we": win_end},
         ).fetchall()
 
+        # 止表底应取结算结束时刻 (win_end，如自然日次日 00:00 / 生产班次当日 08:00) 的整点表底
+        end_meter_rows = conn.execute(
+            text(
+                "SELECT station_id, tot_j "
+                "FROM smart_heating_platform.fact_station_hourly "
+                "WHERE biz_hour = :we"
+            ),
+            {"we": win_end},
+        ).fetchall()
+        end_row_stations = {r.station_id for r in end_meter_rows}
+        end_tot_j_map = {r.station_id: _f(r.tot_j) for r in end_meter_rows if r.tot_j is not None}
+
         temp_rows = conn.execute(
             text(
                 "SELECT hs.center_id, AVG(t.temp_clean) AS avg_temp "
@@ -1269,13 +1281,13 @@ def get_daily_report(
             {"biz_date": target_d},
         ).fetchall()
 
-        # 读取商户日耗量
+        # 读取商户日耗量（含入库记录存在性与原始起止表底，用于拆分正常/缺记录/表底倒走三类）
         merchant_rows = [
             dict(r._mapping)
             for r in conn.execute(
                 text(
                     "SELECT m.merchant_id, m.name, m.rdfz, m.rdry, m.rdss, m.rdjg, m.rdgz, "
-                    "f.daily_consumption, f.daily_unit_heat "
+                    "f.id AS fact_id, f.daily_consumption, f.daily_unit_heat, f.raw_payload "
                     "FROM smart_heating_platform.dict_merchant m "
                     "LEFT JOIN smart_heating_platform.fact_merchant_daily f "
                     "ON m.merchant_id = f.merchant_id AND f.biz_date = :biz_date "
@@ -1285,7 +1297,7 @@ def get_daily_report(
             ).fetchall()
         ]
 
-    # 按站汇总 24 小时
+    # 按站汇总 24 小时（累计指标初始为 None，读到有效小时值时再累加，避免无读数误显 0）
     st_agg: Dict[str, Dict[str, Any]] = {}
     for st_id, sm in stations_meta.items():
         st_agg[st_id] = {
@@ -1298,11 +1310,12 @@ def get_daily_report(
             "hours_count": 0,
             "meter_diff_hours": 0,
             "start_tot_j": None,
-            "end_tot_j": None,
-            "day_heat_gj": 0.0,
-            "day_flow_t": 0.0,
-            "day_water_t": 0.0,
-            "day_elec_kwh": 0.0,
+            "end_tot_j": end_tot_j_map.get(st_id),
+            "last_meter_end_tot_j": None,
+            "day_heat_gj": None,
+            "day_flow_t": None,
+            "day_water_t": None,
+            "day_elec_kwh": None,
             "sup_w_sum": 0.0,
             "ret_w_sum": 0.0,
             "flow_w_sum": 0.0,
@@ -1334,22 +1347,29 @@ def get_daily_report(
             st["water_anom_notes"].append(f"{hr_label} {row_anoms['e14'].split(': ', 1)[-1]}")
         if row_anoms.get("e3_e4"):
             st["temp_anom_notes"].append(f"{hr_label} {row_anoms['e3_e4'].split(': ', 1)[-1]}")
-        st["hours_count"] += 1
-        if r.hour_heat_source == "METER_DIFF":
-            st["meter_diff_hours"] += 1
         if st["start_tot_j"] is None and r.tot_j is not None:
             st["start_tot_j"] = _f(r.tot_j)
-        if r.tot_j is not None:
-            st["end_tot_j"] = _f(r.tot_j)
+        if (
+            r.station_id not in end_row_stations
+            and r.tot_j is not None
+            and r.hour_heat_source == "METER_DIFF"
+            and r.hour_heat_raw_gj is not None
+        ):
+            st["last_meter_end_tot_j"] = float(r.tot_j) + float(r.hour_heat_raw_gj)
+        else:
+            st["last_meter_end_tot_j"] = None
         eff_heat = r.hour_heat_raw_gj if (use_raw and r.hour_heat_raw_gj is not None) else r.hour_heat_gj
         if eff_heat is not None:
-            st["day_heat_gj"] += float(eff_heat)
+            st["hours_count"] += 1
+            st["day_heat_gj"] = (st["day_heat_gj"] or 0.0) + float(eff_heat)
+            if r.hour_heat_source == "METER_DIFF":
+                st["meter_diff_hours"] += 1
         if r.hour_flow_t is not None:
-            st["day_flow_t"] += float(r.hour_flow_t)
+            st["day_flow_t"] = (st["day_flow_t"] or 0.0) + float(r.hour_flow_t)
         if r.hour_water_t is not None:
-            st["day_water_t"] += float(r.hour_water_t)
+            st["day_water_t"] = (st["day_water_t"] or 0.0) + float(r.hour_water_t)
         if r.hour_elec_kwh is not None:
-            st["day_elec_kwh"] += float(r.hour_elec_kwh)
+            st["day_elec_kwh"] = (st["day_elec_kwh"] or 0.0) + float(r.hour_elec_kwh)
         raw_or_clean_e1 = r.e1_raw if use_raw else r.e1_clean
         raw_or_clean_e3 = r.e3_raw if use_raw else r.e3_clean
         raw_or_clean_e4 = r.e4_raw if use_raw else r.e4_clean
@@ -1363,7 +1383,8 @@ def get_daily_report(
     for st in st_agg.values():
         area = st["covered_area"]
         area_wan = area / 10000.0 if (area and area > 0) else 0.0
-        heat_per_wan = _round(st["day_heat_gj"] / area_wan, 2) if (area_wan > 0 and st["hours_count"] > 0) else None
+        end_tot_j_val = st["end_tot_j"] if st["end_tot_j"] is not None else st["last_meter_end_tot_j"]
+        heat_per_wan = _round(st["day_heat_gj"] / area_wan, 2) if (area_wan > 0 and st["day_heat_gj"] is not None) else None
         st_anoms: Dict[str, Dict[str, Any]] = {}
         h_pack = _pack_agg_anomaly(st["heat_anom_notes"])
         w_pack = _pack_agg_anomaly(st["water_anom_notes"])
@@ -1386,17 +1407,17 @@ def get_daily_report(
             "hours_count": st["hours_count"],
             "meter_diff_hours": st["meter_diff_hours"],
             "start_tot_j": _round(st["start_tot_j"], 2),
-            "end_tot_j": _round(st["end_tot_j"], 2),
-            "day_heat_gj": _round(st["day_heat_gj"], 2) if st["hours_count"] > 0 else None,
+            "end_tot_j": _round(end_tot_j_val, 2),
+            "day_heat_gj": _round(st["day_heat_gj"], 2),
             "heat_per_wan_gj": heat_per_wan,
-            "day_flow_t": _round(st["day_flow_t"], 2) if st["hours_count"] > 0 else None,
-            "day_water_t": _round(st["day_water_t"], 2) if st["hours_count"] > 0 else None,
-            "day_elec_kwh": _round(st["day_elec_kwh"], 2) if st["hours_count"] > 0 else None,
+            "day_flow_t": _round(st["day_flow_t"], 2),
+            "day_water_t": _round(st["day_water_t"], 2),
+            "day_elec_kwh": _round(st["day_elec_kwh"], 2),
             "avg_sup_temp": _round(st["sup_w_sum"] / st["flow_w_sum"], 2) if st["flow_w_sum"] > 0 else None,
             "avg_ret_temp": _round(st["ret_w_sum"] / st["flow_w_sum"], 2) if st["flow_w_sum"] > 0 else None,
             "anomalies": st_anoms,
         })
-    station_daily.sort(key=lambda x: (x["heat_per_wan_gj"] or -1.0), reverse=True)
+    station_daily.sort(key=lambda x: (x["heat_per_wan_gj"] if x["heat_per_wan_gj"] is not None else -1.0), reverse=True)
 
     # 解析手工日报到 center_id
     manual_by_center: Dict[int, Dict[str, float]] = {}
@@ -1513,6 +1534,54 @@ def get_daily_report(
     except Exception:
         snap_interval = 5
 
+    merchant_items: List[Dict[str, Any]] = []
+    mc_valid_count = 0
+    mc_missing_count = 0
+    mc_rollback_count = 0
+    for m in merchant_rows:
+        cons = _f(m.get("daily_consumption"))
+        unit_heat = _f(m.get("daily_unit_heat"))
+        payload = m.get("raw_payload") if isinstance(m.get("raw_payload"), dict) else {}
+        tot_curr = _f(payload.get("tot_curr"))
+        tot_prev = _f(payload.get("tot_prev"))
+        if cons is not None:
+            calc_status = "VALID"
+            status_label = "正常"
+            status_note = ""
+            mc_valid_count += 1
+        elif m.get("fact_id") is None:
+            calc_status = "MISSING_RECORD"
+            status_label = "缺日耗记录"
+            status_note = "源站商业日报接口(/getall_bb_shrb/)未返回该户记录"
+            mc_missing_count += 1
+        elif tot_curr is not None and tot_prev is not None and tot_curr < tot_prev:
+            calc_status = "METER_ROLLBACK"
+            status_label = "表读数倒走"
+            status_note = f"止表底({_fmt_num(tot_curr)}) < 起表底({_fmt_num(tot_prev)})，无法计算日耗"
+            unit_heat = None
+            mc_rollback_count += 1
+        else:
+            calc_status = "MISSING_RECORD"
+            status_label = "缺日耗记录"
+            status_note = "源站日报起止表底缺失，无法计算"
+            unit_heat = None
+            mc_missing_count += 1
+
+        merchant_items.append({
+            "merchant_id": m["merchant_id"],
+            "name": m["name"],
+            "rdfz": m["rdfz"],
+            "rdry": m["rdry"],
+            "rdss": m["rdss"],
+            "rdjg": m["rdjg"],
+            "rdgz": m["rdgz"],
+            "daily_consumption": cons,
+            "daily_unit_heat": unit_heat,
+            "calc_status": calc_status,
+            "status_label": status_label,
+            "status_note": status_note,
+        })
+
     return {
         "meta": {
             "date": target_d.isoformat(),
@@ -1533,20 +1602,13 @@ def get_daily_report(
         },
         "center_comparison": center_comparison,
         "station_daily": station_daily,
-        "merchant_daily": [
-            {
-                "merchant_id": m["merchant_id"],
-                "name": m["name"],
-                "rdfz": m["rdfz"],
-                "rdry": m["rdry"],
-                "rdss": m["rdss"],
-                "rdjg": m["rdjg"],
-                "rdgz": m["rdgz"],
-                "daily_consumption": _f(m.get("daily_consumption")),
-                "daily_unit_heat": _f(m.get("daily_unit_heat")),
-            }
-            for m in merchant_rows
-        ],
+        "merchant_summary": {
+            "total_count": len(merchant_items),
+            "valid_count": mc_valid_count,
+            "missing_record_count": mc_missing_count,
+            "rollback_count": mc_rollback_count,
+        },
+        "merchant_daily": merchant_items,
     }
 
 
@@ -2752,11 +2814,16 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
         tot_st_w += float(s.get("day_water_t") or 0.0)
         tot_st_e += float(s.get("day_elec_kwh") or 0.0)
 
+        note_parts = [_join_anom_notes(anoms)]
+        if s.get("day_heat_gj") is None:
+            note_parts.append("全天无热量读数（缺失）")
+        st_note = "；".join(p for p in note_parts if p)
+
         st_rows.append([
             s["name"], s["center_name"], s["rdfz"], s["covered_area"], s["hours_count"], s["meter_diff_hours"],
             s["start_tot_j"], s["end_tot_j"], tot_diff, s["day_heat_gj"], s["heat_per_wan_gj"],
             s.get("day_flow_t"), s["day_water_t"], s["day_elec_kwh"],
-            s.get("avg_sup_temp"), s.get("avg_ret_temp"), _join_anom_notes(anoms),
+            s.get("avg_sup_temp"), s.get("avg_ret_temp"), st_note,
         ])
     st_area_wan = tot_st_area / 10000.0
     st_rows.append([
@@ -2766,28 +2833,45 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
     ])
     _style_excel_sheet(
         ws_st,
-        ["站点名称", "服务中心", "主干热网", "面积(㎡)", "采集小时", "表底小时", "起表底(GJ)", "止表底(GJ)", "表底止起差(GJ)", "日供热量(GJ)", "万平耗热", "日累计水量(t)", "日补水(t)", "日电耗(kWh)", "日均供温(℃)", "日均回温(℃)", "突发跳变说明"],
+        ["站点名称", "服务中心", "主干热网", "面积(㎡)", "有效热量小时", "表底小时", "起表底(GJ)", "止表底(GJ)", "表底止起差(GJ)", "日供热量(GJ)", "万平耗热", "日累计水量(t)", "日补水(t)", "日电耗(kWh)", "日均供温(℃)", "日均回温(℃)", "突发跳变/缺失说明"],
         st_rows,
         highlight_cells=st_hl,
         bold_last_row=True,
     )
 
-    # Sheet 7: 选定结算日 464商业用户日耗量（对齐前端准确台账表头与合计行）
+    # Sheet 7: 选定结算日 464商业用户日耗量（对齐前端准确台账表头、三类状态及合计行）
     ws_mc = wb.create_sheet(_safe_sheet_title(f"{sel_date_short}_464商业用户" if export_ctx else "464商业用户日耗量", wb.sheetnames))
     mc_list = report_data.get("merchant_daily") or []
-    mc_rows = [
-        [
+    mc_sum = report_data.get("merchant_summary") or {}
+    mc_rows: List[List[Any]] = []
+    mc_hl: Dict[Tuple[int, int], str] = {}
+    mc_warn: Dict[Tuple[int, int], str] = {}
+    for r_i, m in enumerate(mc_list):
+        c_status = m.get("calc_status") or ("VALID" if m.get("daily_consumption") is not None else "MISSING_RECORD")
+        s_label = m.get("status_label") or ("正常" if c_status == "VALID" else "缺日耗记录")
+        s_note = m.get("status_note") or ""
+        if c_status == "METER_ROLLBACK":
+            mc_hl[(r_i, 8)] = s_note or s_label
+        elif c_status == "MISSING_RECORD":
+            mc_warn[(r_i, 8)] = s_note or s_label
+        mc_rows.append([
             m["name"], m.get("rdfz"), m.get("rdry"), m.get("rdss"), m.get("rdjg"), m.get("rdgz"),
-            m.get("daily_consumption"), m.get("daily_unit_heat"),
-        ]
-        for m in mc_list
-    ]
+            m.get("daily_consumption"), m.get("daily_unit_heat"), s_label, s_note,
+        ])
     tot_mc_heat = sum(float(m.get("daily_consumption") or 0.0) for m in mc_list)
-    mc_rows.append(["合计", "-", "-", "-", "-", "-", round(tot_mc_heat, 2), None])
+    v_cnt = mc_sum.get("valid_count", sum(1 for m in mc_list if m.get("daily_consumption") is not None))
+    m_cnt = mc_sum.get("missing_record_count", sum(1 for m in mc_list if (m.get("calc_status") == "MISSING_RECORD" or (m.get("calc_status") is None and m.get("daily_consumption") is None))))
+    r_cnt = mc_sum.get("rollback_count", sum(1 for m in mc_list if m.get("calc_status") == "METER_ROLLBACK"))
+    mc_rows.append([
+        "合计", "-", "-", "-", "-", "-", round(tot_mc_heat, 2), None,
+        f"共{len(mc_list)}户", f"可算日耗 {v_cnt} 户 · 缺日耗记录 {m_cnt} 户 · 表读数倒走 {r_cnt} 户",
+    ])
     _style_excel_sheet(
         ws_mc,
-        ["商户名称", "主干热网 (rdfz)", "介质 (rdry)", "产权 (rdss)", "价格分类 (rdjg)", "改造批次 (rdgz)", "日累计消耗量(GJ)", "日单耗参考"],
+        ["商户名称", "主干热网 (rdfz)", "介质 (rdry)", "产权 (rdss)", "价格分类 (rdjg)", "改造批次 (rdgz)", "日累计消耗量(GJ)", "日单耗参考", "计算状态", "说明"],
         mc_rows,
+        highlight_cells=mc_hl,
+        warn_cells=mc_warn,
         bold_last_row=True,
     )
 
