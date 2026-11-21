@@ -7,11 +7,11 @@
       <header class="topbar card elevated">
         <div class="topbar-info">
           <div class="title-row">
-            <h2>算法说明</h2>
-            <span class="role-badge">参考解释 · 仅限 Global_admin</span>
+            <h2>算法与取数口径说明</h2>
+            <span class="role-badge">通俗版业务手册 · 仅限 Global_admin</span>
           </div>
           <p class="subtitle">
-            数据接口及积算算法规则，确保数据准确无误。切换下方标签可分别查阅各统计主体指标算法与授权源站接口清单。
+            按「监测主体 × 核心指标」清晰拆解每个数字从哪里来、怎么算、表计坏了或没传数时系统如何自动补救与隔离，方便运行排查与汇报对账。
           </p>
         </div>
         <div class="topbar-actions">
@@ -31,20 +31,20 @@
           :class="['main-tab-btn', { active: activeMainTab === 'algorithms' }]"
           @click="activeMainTab = 'algorithms'"
         >
-          <span>📐 主体每小时指标算法</span>
-          <span class="tab-count">{{ entityCategories.length }} 类主体</span>
+          <span>📐 各主体取数与降级补救逻辑</span>
+          <span class="tab-count">{{ entityCategories.length }} 类业务专题</span>
         </button>
         <button
           type="button"
           :class="['main-tab-btn', { active: activeMainTab === 'apis' }]"
           @click="activeMainTab = 'apis'"
         >
-          <span>🔌 源站接口清单与使用方式</span>
-          <span class="tab-count">{{ sourceEndpoints.length }} 个接口/规范</span>
+          <span>🔌 源站数据接口与调度方式（技术参考）</span>
+          <span class="tab-count">{{ sourceEndpoints.length }} 类接口</span>
         </button>
       </nav>
 
-      <!-- 标签页 1：原有主体每小时指标算法 -->
+      <!-- 标签页 1：各主体指标取数与降级补救说明 -->
       <template v-if="activeMainTab === 'algorithms'">
       <!-- 主体分类选择器 -->
       <section class="entity-selector-grid" aria-label="主体分类选择">
@@ -58,7 +58,7 @@
           <div class="entity-card-top">
             <span class="entity-icon">{{ cat.icon }}</span>
             <span :class="['entity-badge', cat.hasHourly ? 'badge-hourly' : 'badge-daily']">
-              {{ cat.hasHourly ? '有逐小时算法' : '仅日度结算' }}
+              {{ cat.badgeText || (cat.hasHourly ? '逐小时/日度统计' : '专项规则') }}
             </span>
           </div>
           <strong class="entity-title">{{ cat.title }}</strong>
@@ -73,7 +73,7 @@
         <article class="card elevated pipeline-card">
           <div class="pipeline-head">
             <div>
-              <h3>{{ activeCategory.icon }} {{ activeCategory.title }} —— 数据流转与口径总览</h3>
+              <h3>{{ activeCategory.icon }} {{ activeCategory.title }} —— 取数全流程说明</h3>
               <p class="pipeline-summary">{{ activeCategory.summary }}</p>
             </div>
             <div class="filter-controls">
@@ -81,39 +81,39 @@
                 v-model="metricKeyword"
                 type="search"
                 class="ctrl-input"
-                placeholder="筛选指标名称/字段/公式…"
+                placeholder="搜索指标、表计或补救方法…"
               />
             </div>
           </div>
 
           <div class="meta-strip">
             <div class="meta-item">
-              <span class="meta-label">基础台账字典表</span>
-              <code class="meta-code">{{ activeCategory.dictTables }}</code>
+              <span class="meta-label">对应台账范围</span>
+              <span class="meta-text">{{ activeCategory.dictTables }}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">源站采集接口</span>
-              <code class="meta-code">{{ activeCategory.sourceApis }}</code>
+              <span class="meta-label">源站取数来源</span>
+              <span class="meta-text">{{ activeCategory.sourceApis }}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">15分钟采样层</span>
-              <code class="meta-code">{{ activeCategory.fact15mTable }}</code>
+              <span class="meta-label">采集频次与方式</span>
+              <span class="meta-text">{{ activeCategory.fact15mTable }}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">小时/日度产出表</span>
-              <code class="meta-code">{{ activeCategory.factOutputTable }}</code>
+              <span class="meta-label">支撑页面/报表</span>
+              <span class="meta-text">{{ activeCategory.factOutputTable }}</span>
             </div>
           </div>
 
           <div v-if="activeCategory.keyNote" class="note-callout">
-            <strong>💡 核心口径提示：</strong>{{ activeCategory.keyNote }}
+            <strong>💡 核心原则（必看）：</strong>{{ activeCategory.keyNote }}
           </div>
         </article>
 
-        <!-- 该主体的逐小时指标算法列表 -->
+        <!-- 该主体的指标算法列表 -->
         <article class="card elevated metrics-card">
           <div class="section-head">
-            <h3>指标逐项算法明细（共 {{ filteredMetrics.length }} 项）</h3>
+            <h3>逐项指标拆解（当前显示 {{ filteredMetrics.length }} 项）</h3>
             <div class="kind-pills">
               <button
                 v-for="k in kindOptions"
@@ -144,26 +144,26 @@
 
               <div class="metric-body-grid">
                 <div class="formula-box">
-                  <div class="box-title">📐 主算法与计算公式</div>
+                  <div class="box-title">📥 取数逻辑（数从哪来、怎么算）</div>
                   <p class="formula-expr">{{ m.formula }}</p>
                   <p class="formula-steps">{{ m.steps }}</p>
                   <div v-if="m.example" class="formula-example">
-                    <span class="ex-label">举例：</span>{{ m.example }}
+                    <span class="ex-label">算例：</span>{{ m.example }}
                   </div>
                 </div>
 
                 <div class="guard-box">
                   <div class="guard-row">
-                    <span class="guard-label">🔄 降级 / 兜底策略</span>
+                    <span class="guard-label">🔄 缺数/坏表时的降级补救策略</span>
                     <p class="guard-text">{{ m.fallback }}</p>
                   </div>
                   <div class="guard-row">
-                    <span class="guard-label">🧹 异常清洗与阴面拦截</span>
+                    <span class="guard-label">🛡️ 异常识别与安全隔离边界</span>
                     <p class="guard-text">{{ m.cleaning }}</p>
                   </div>
                   <div class="guard-row">
-                    <span class="guard-label">🏷️ 数值来源标记</span>
-                    <p class="guard-text mono-text">{{ m.sourceTags }}</p>
+                    <span class="guard-label">📌 页面查看与来源标记说明</span>
+                    <p class="guard-text">{{ m.sourceTags }}</p>
                   </div>
                 </div>
               </div>
@@ -174,26 +174,26 @@
         <!-- 双轨累计核心原理解析 + 交互试算小工具 -->
         <article class="card elevated explainer-card">
           <div class="section-head">
-            <h3>🔬 核心累计算法直观对比：整点表底差值 vs 15分钟梯形积分</h3>
-            <span class="subtitle-inline">适用于所有“小时累计耗量”指标，理解系统如何把瞬时值/非整点抄表变成精确整点小时值</span>
+            <h3>🔬 两种小时累计计算方法对照（试算演示）</h3>
+            <span class="subtitle-inline">为什么有“表”和“积”两种来源？如何把非整点抄表变成精准的 1 小时耗量</span>
           </div>
 
           <div class="explainer-grid">
             <div class="explainer-panel">
-              <h4>方法 A（首选校准）：整点表底线性插值作差 <code>METER_DIFF</code></h4>
+              <h4>方法 A（首选）：整点表底线性插值作差 <code>METER_DIFF / 表</code></h4>
               <ol class="step-list">
-                <li><strong>抓历史表底：</strong>系统错峰轮询 <code>/hrz_ls_zb/</code>，拿到某站前后约 15 分钟一次的累计表底（<code>f221=totJ</code>、<code>f220=totF</code>、<code>f254=补水</code>、<code>f253=电量</code>）。</li>
-                <li><strong>对齐整点：</strong>对目标整点 <code>H:00</code>（允许前后 ±90 秒直接命中；否则用两侧跨度 ≤50 分钟的点做线性插值；单侧 10 分钟内取最近值）。</li>
-                <li><strong>相减与防跳变：</strong><code>小时累计 = V(H+1:00) - V(H:00)</code>；若出现倒走/清零（<code>&lt; -0.01</code>）或超负荷极限 1.5 倍，则判定表底跳变（<code>METER_JUMP</code>）并写入阴面督办。</li>
+                <li><strong>取表底轨迹：</strong>系统每小时整点后拉取各站约 15 分钟一次的累计表底读数（供热、流量、补水、电表）。</li>
+                <li><strong>精确对齐整点：</strong>因为源站抄表常落在 <code>09:50 / 10:05</code> 这类非整点时刻，系统按时间比例精确推算出 <code>10:00</code> 与 <code>11:00</code> 的整点表底。</li>
+                <li><strong>相减并判坏表：</strong><code>小时累计 = 结束整点表底 - 开始整点表底</code>；若表底倒走或超过本站合理上限 1.5 倍，则立即拦截丢弃并触发降级补救。</li>
               </ol>
             </div>
 
             <div class="explainer-panel">
-              <h4>方法 B（实时估算/兜底）：15分钟梯形面积积分 <code>INTEGRAL_15M</code></h4>
+              <h4>方法 B（缺表底时自动接管）：15 分钟瞬时流量积分 <code>INTEGRAL_15M / 积</code></h4>
               <ol class="step-list">
-                <li><strong>高频采集瞬时速率：</strong>在每小时的 <code>:00 / :15 / :30 / :45</code> 抓取瞬时热量（<code>GJ/h</code>）或瞬时流量（<code>t/h</code>）。</li>
-                <li><strong>计算相邻梯形面积：</strong>相邻两点 <code>(t₀, v₀)</code> 与 <code>(t₁, v₁)</code> 之间面积为 <code>max(0, (v₀ + v₁)/2) × (Δt / 3600)</code>。</li>
-                <li><strong>折算标准 1 小时：</strong>若本小时尚未走完（例如只采到前 30 分钟的 3 个点），将累计面积按 <code>× (3600 / 已覆盖总秒数)</code> 等比外推至整 1 小时；若只有 1 个点，直接按 <code>v₀ × 1.0h</code> 估算。</li>
+                <li><strong>收集小时内瞬时值：</strong>当某站缺少累计表底（如约 135 站无 <code>f254</code> 补水累计表）或累计表突跳时，收集该小时内多条瞬时热量（<code>GJ/h</code>）或瞬时补水流量（<code>t/h</code>）。</li>
+                <li><strong>先滤坏点再算面积：</strong>先剔除超物理极限的坏点，再用“梯形面积累加”把每两段采样之间的用量算出来。</li>
+                <li><strong>等比折算整小时：</strong>若该小时仅采到部分分钟，按覆盖时长等比折算回标准 1 小时，保证不因采样缺失而低估。</li>
               </ol>
             </div>
           </div>
@@ -206,7 +206,7 @@
             </div>
             <div class="calc-grid">
               <div class="calc-col">
-                <h5>1. 表底插值试算（方法 A）</h5>
+                <h5>1. 表底插值试算（方法 A：首选）</h5>
                 <div class="calc-inputs">
                   <label>
                     <span>09:50 表底 (GJ)</span>
@@ -226,14 +226,14 @@
                   </label>
                 </div>
                 <div class="calc-result">
-                  <div>10:00 插值表底：<strong>{{ calcResult.interp10 }} GJ</strong> <span class="muted">(= left + 10/15 × (right - left))</span></div>
-                  <div>11:00 插值表底：<strong>{{ calcResult.interp11 }} GJ</strong> <span class="muted">(= left + 10/15 × (right - left))</span></div>
+                  <div>10:00 插值表底：<strong>{{ calcResult.interp10 }} GJ</strong> <span class="muted">(= 09:50值 + 10/15 × 差值)</span></div>
+                  <div>11:00 插值表底：<strong>{{ calcResult.interp11 }} GJ</strong> <span class="muted">(= 10:50值 + 10/15 × 差值)</span></div>
                   <div class="calc-highlight">10时累计供热量：<strong>{{ calcResult.meterDiff }} GJ</strong></div>
                 </div>
               </div>
 
               <div class="calc-col">
-                <h5>2. 15分钟梯形积分试算（方法 B，4个瞬时热量采样 GJ/h）</h5>
+                <h5>2. 15分钟瞬时梯形积分试算（方法 B：降级兜底）</h5>
                 <div class="calc-inputs">
                   <label>
                     <span>10:00 瞬时 (GJ/h)</span>
@@ -254,7 +254,7 @@
                 </div>
                 <div class="calc-result">
                   <div>三段梯形面积之和（覆盖 45 分钟）：<strong>{{ calcResult.rawArea }} GJ</strong></div>
-                  <div>按 <code>3600 / 2700</code> 外推到整 1 小时：</div>
+                  <div>按 <code>60分钟 / 45分钟</code> 等比外推至整 1 小时：</div>
                   <div class="calc-highlight">积分估算供热量：<strong>{{ calcResult.integralEst }} GJ</strong></div>
                 </div>
               </div>
@@ -269,27 +269,27 @@
         <!-- 使用规范与调用红线总览 -->
         <section class="card elevated api-guide-card">
           <div class="section-head">
-            <h3>🛡️ 源站接入环境与通用调用规范</h3>
+            <h3>🛡️ 源站接入架构与采集保护原则</h3>
             <span class="subtitle-inline">外网直连：<code>http://124.93.31.19:6688</code> ｜ 内网原址：<code>http://192.168.1.206:6688</code></span>
           </div>
 
           <div class="rules-grid">
             <div class="rule-box">
-              <h4>1. 受控并行采集保护</h4>
+              <h4>1. 路线 B 错峰轻量采集</h4>
               <p>
-                默认使用受控多线程并发（<code>max_workers = 4</code>，可在设置页 <code>1~16</code> 调节）与单作业独立锁，各调度任务互不阻塞；每次请求保持失败退避重试与 <code>Connection: close</code>。
+                换热站已彻底停用高频实时接口（<code>/zx_hrz/</code> 与 <code>/get_yw_data/1</code>），统一改为每小时整点后错峰并发拉取历史宽表 <code>/hrz_ls_zb/</code>（超时 45 秒，最大 4 并发），一次兼得表底差值、瞬时补水积分 <code>f209</code> 与代表断面。
               </p>
             </div>
             <div class="rule-box">
-              <h4>2. 大包断流与代理绕过</h4>
+              <h4>2. 大包防断流与短连接</h4>
               <p>
-                全网商户接口（约 142KB）与历史宽表接口在长连接下偶发于 13KB 处截断（<code>RemoteProtocolError</code>）。请求需携带 <code>Connection: close</code>、禁用系统代理（<code>trust_env=False</code>），并配置失败退避重试与并发分片降级。
+                全网商户接口（约 142KB）与历史宽表在长连接下偶发于 13KB 处截断，统一采用短连接（<code>Connection: close</code>）、绕过系统代理并自动退避重试与分片降级。
               </p>
             </div>
             <div class="rule-box">
               <h4>3. 鉴权分界与算完即清</h4>
               <p>
-                约 85% 的实时与历史 JSON 接口可<strong>免 Cookie 直接调用</strong>；仅居民室温（<code>/jumin/</code>、<code>/sw_ls_export/</code>）及商业日报（<code>/getall_bb_shrb/</code>）需携带 <code>Session Cookie</code>。5 分钟采样明细采用<strong>2 小时算完即清</strong>（仅留当前小时 + 上一小时）。
+                约 85% 接口可免 Cookie 直连；仅居民室温（<code>/jumin/</code>、<code>/sw_ls_export/</code>）及商业日报（<code>/getall_bb_shrb/</code>）需配置 <code>Session Cookie</code>。5 分钟临时采样仅保留最近 2 小时，整点积分定格后即自动清理。
               </p>
             </div>
           </div>
@@ -312,16 +312,17 @@
                 </button>
               </div>
               <select v-model="apiAuthFilter" class="ctrl-input compact-select">
-                <option value="all">全部鉴权类型</option>
-                <option value="no_cookie">仅免 Cookie</option>
+                <option value="all">全部状态</option>
+                <option value="no_cookie">免 Cookie（在用）</option>
                 <option value="cookie">需 Session Cookie</option>
+                <option value="deprecated">已停用（切换路线 B）</option>
                 <option value="forbidden">严禁调用 / 失效</option>
               </select>
               <input
                 v-model="apiKeyword"
                 type="search"
                 class="ctrl-input"
-                placeholder="搜索路径、主体、返回字段或用途…"
+                placeholder="搜索路径、主体、字段或用途…"
               />
             </div>
           </div>
@@ -334,7 +335,7 @@
             <div
               v-for="ep in filteredEndpoints"
               :key="ep.id"
-              :class="['metric-item', { 'api-danger-item': ep.auth === 'forbidden' }]"
+              :class="['metric-item', { 'api-danger-item': ep.auth === 'forbidden', 'api-muted-item': ep.auth === 'deprecated' }]"
             >
               <div class="metric-header">
                 <div class="metric-title-wrap">
@@ -376,26 +377,25 @@
         <!-- 本平台调度与运维触发方式 -->
         <section class="card elevated api-guide-card">
           <div class="section-head">
-            <h3>🚀 本旁路平台采集与历史回溯调用方式</h3>
-            <span class="subtitle-inline">无需直接改源站代码，统一由旁路平台调度或管理员手动触发</span>
+            <h3>🚀 平台自动调度与手动重校准入口</h3>
+            <span class="subtitle-inline">由旁路平台自动守护或管理员在界面按需触发，不改造源站系统</span>
           </div>
 
           <div class="ops-grid">
             <div class="ops-card">
-              <h4>1. 自动定时调度（`scheduler_service.py`）</h4>
+              <h4>1. 自动定时任务</h4>
               <ul class="step-list">
-                <li><strong>高频并行采样（默认每 5 分钟）：</strong>并发拉取上游（<code>/gk_get_data/</code>）与商业用户（<code>/get_sh_data/</code>），整点 <code>:00</code> 附带 <code>/jumin/</code>；跨小时定格积分并自动清理 2 小时前采样明细。</li>
-                <li><strong>换热站整点表底校准（默认每小时 :05）：</strong>路线 B 下彻底不拉换热站实时与二次分区，每小时整点后受控并行拉取 <code>/hrz_ls_zb/</code> 产出上一小时精确表底差值与代表断面。</li>
-                <li><strong>商业日结采集（每日 08:30）：</strong>调用 <code>/getall_bb_shrb/</code> 落盘前一日商业耗量。</li>
+                <li><strong>上游与商户采集（默认每 5 分钟）：</strong>并发拉取上游（<code>/gk_get_data/</code>）与商业用户（<code>/get_sh_data/</code>），每小时整点附带采集居民室温（<code>/jumin/</code>）；跨小时后积分定格并自动清理 2 小时前临时采样。</li>
+                <li><strong>换热站整点表底校准（每小时整点后 :05）：</strong>242 座站受控并发拉取 <code>/hrz_ls_zb/</code>，同时产出累计热量/流量/水表/电表差值、<code>f209</code> 补水积分与代表断面。</li>
+                <li><strong>商业日结与每日回看审计（每日 08:30 / 02:30）：</strong>次日 08:30 拉取 <code>/getall_bb_shrb/</code> 日结表底；凌晨自动执行前一日异常回看检测修正。</li>
               </ul>
             </div>
 
             <div class="ops-card">
-              <h4>2. 手动触发接口与历史回溯命令</h4>
+              <h4>2. 手动触发与历史重算方式</h4>
               <ul class="step-list">
-                <li><strong>页面入口：</strong>工作台右上角“⚡ 立即采集当前时段”按钮，或日报页“📏 校准当日表底”。</li>
-                <li><strong>平台 API：</strong><code>POST /api/v1/projects/smart_heating_platform/reports/collect-now</code>，<code>action</code> 可选 <code>snapshot</code> / <code>calib</code> / <code>merchant</code> / <code>merchant_hourly_backfill</code>。</li>
-                <li><strong>全量历史回溯脚本：</strong><code>python backend/scripts/backfill_smart_heating_history.py --start 2026-11-01 --end YYYY-MM-DD --steps all</code>（支持断点续传）。</li>
+                <li><strong>页面入口：</strong>各报表右上角“⚡ 立即采集当前时段”、日报页“📏 校准当日表底”、以及本页旁“异常数据监测”页的“🔧 立即回看检测与修正”。</li>
+                <li><strong>全量历史回溯脚本：</strong><code>python backend/scripts/backfill_smart_heating_history.py --start 2026-11-01 --end YYYY-MM-DD --steps stations</code>（5 天窗口分片并直接复用生产校准引擎）。</li>
               </ul>
             </div>
           </div>
@@ -452,12 +452,27 @@ function groupLabel(g) {
 }
 
 function authLabel(a) {
-  if (a === 'no_cookie') return '免 Cookie'
+  if (a === 'no_cookie') return '免 Cookie（在用）'
   if (a === 'cookie') return '需 Session Cookie'
+  if (a === 'deprecated') return '已停用（改走路线 B）'
   return '严禁 / 失效'
 }
 
 const sourceEndpoints = [
+  {
+    id: 'ep-hrz-ls-zb',
+    group: 'history',
+    method: 'POST',
+    path: '/hrz_ls_zb/',
+    auth: 'no_cookie',
+    entity: '242 座换热站（当前唯一主采集源）',
+    scale: '按单站单次返回 ~96 条/天 × 361 列',
+    fields: 'create_time, f1..f5(一次温压流), f209(瞬时补水流量t/h), f220(totF 累计流量), f221(totJ 累计热量), f222(瞬时热GJ/h), f253(电量累计kWh), f254(补水累计t)',
+    dataDesc: '每小时整点后自动并发拉取，一次同时产出累计表底差值、缺失水表/热表时的瞬时积分补救值以及小时代表断面。',
+    usage: 'POST {base}/hrz_ls_zb/  Body: name=<站名>&start_date=YYYY-MM-DD HH:MM:SS&end_date=...&isdownload=1',
+    scheduleAndTable: '每小时整点后 :05 自动校准（历史批量按 5 天窗口分片重算）→ fact_station_hourly',
+    notes: '传 isdownload=1 时压力 f1/f4 已换算为 MPa；单站请求超时设为 45 秒以兼容“中天央著”等高频上报大站。',
+  },
   {
     id: 'ep-gk-get',
     group: 'realtime',
@@ -466,39 +481,11 @@ const sourceEndpoints = [
     auth: 'no_cookie',
     entity: '上游热源 / 首站 / 混水 / 分网 / 大户',
     scale: '1 次请求获取全网 137 个点位（含《工况一览》82 核心点）',
-    fields: 'dc_dict(58) / sz_dict(54) / yw2_dict(19) / yw_dict(4) / sh_dict(2)：WENDU, YALI, LIULIANG, RELIANG, FUHE, PINLV, SHIJIAN / update_time',
-    dataDesc: '同时覆盖北海/香海电厂、4 座首站、5 混水点、12 项分网汇总及造船大户，是实时上游主采集源（替代原 HTML 页 /gk_ssxx/）。',
+    fields: 'dc_dict / sz_dict / yw2_dict / yw_dict / sh_dict：WENDU, YALI, LIULIANG, RELIANG, FUHE, PINLV, SHIJIAN / update_time',
+    dataDesc: '同时覆盖北海/香海电厂、4 座首站、5 混水点、12 项分网汇总及造船大户，是上游工况实时采集唯一来源。',
     usage: 'POST {base}/gk_get_data/（空表单即可）',
-    scheduleAndTable: '每 5 分钟并发采集 → fact_upstream_15min（保留 2 小时）→ 整点后梯形积分至 fact_upstream_hourly',
-    notes: 'sh_dict 时间字段为 update_time 而非 SHIJIAN；蒸汽测点高温阈值需按 >=600℃ 判定，停运备机流量<=1 时 0℃ 不误报故障。',
-  },
-  {
-    id: 'ep-yw-data',
-    group: 'realtime',
-    method: 'POST',
-    path: '/get_yw_data/1',
-    auth: 'no_cookie',
-    entity: '242 座换热站一次网及时间戳',
-    scale: '1 次请求返回全网全部 242 座站',
-    fields: 'name, update_time, f1(一网供压MPa), f2(一网供流t/h), f3(一网供温℃), f4(一网回压MPa), f5(一网回温℃), f222(一网瞬时热量GJ/h)',
-    dataDesc: '补齐 /zx_hrz/ 无时间戳与 5 座无分区站缺失的一网断面；在 /zx_hrz/ 未覆盖的站上作为辅助来源。',
-    usage: 'POST {base}/get_yw_data/1  Body: yw_selected=1',
-    scheduleAndTable: '每 15 分钟采集 → 联合 /zx_hrz/ 写入 fact_station_15min',
-    notes: '源站中该接口偶发存在全网级时间戳滞后，因此换热站是否掉线以 /zx_hrz/ 的 online 布尔值为核心判据，不直接据此判全网离线。',
-  },
-  {
-    id: 'ep-zx-hrz',
-    group: 'realtime',
-    method: 'POST',
-    path: '/zx_hrz/',
-    auth: 'no_cookie',
-    entity: '237 座换热站 + 580 个二次网分区',
-    scale: '按 center_id 60~68 循环 9 次获取全网站与分区',
-    fields: 'online, e1(一网供流), e3/e4(一网供回温), e7/e8(一网供回压), e11(一网瞬时热), e13(一网回流), e14(自来水补水), e16(水位), Nx[{name, data:{e2,e5,e6,e9,e10,e12,e15}}]',
-    dataDesc: '换热站与二次网最完整实时来源；一二网热平衡校核直接对比 e11 与 Σe12。',
-    usage: 'POST {base}/zx_hrz/  Body: branch_id=60..68（注意 branch_id=0 会返回 HTTP 500）',
-    scheduleAndTable: '每 15 分钟采集 → fact_station_15min & fact_zone_15min → 聚合 hourly',
-    notes: '“香炉礁”站水位 e16 在 Nx[0].data.e16 中；单站 e14 > 100 t/h 判满量程坏表屏蔽；二网 e12 严禁用于阳面热耗累加。',
+    scheduleAndTable: '每 5 分钟并发采集 → 整点后梯形积分并保留代表断面 → fact_upstream_hourly',
+    notes: '自动区分蒸汽测点（高温上限 600℃、高压 15 MPa）与热水测点，停运备机流量<=1 时 0℃ 不误报故障。',
   },
   {
     id: 'ep-sh-data',
@@ -507,12 +494,12 @@ const sourceEndpoints = [
     path: '/get_sh_data/0 与 /get_sh_data/{mn_id}',
     auth: 'no_cookie',
     entity: '464 户商业用户实时运行参数',
-    scale: '0 为全网 1 次返回 468 条；2..16 按主干网分片拉取',
-    fields: 'name, xinhaoqiangdu(0=在线), gongshuiliuliang, huishuliuliang, gongshuiwendu, huishuiwendu, gongshuiyali, huishuiyali, shunshireliang, famenkaidu, shedingfamen',
-    dataDesc: '实测发现的商业用户批量实时接口，每 15 分钟提供全部商业户瞬时热量与流量用于计算小时积分。',
-    usage: '优先 POST {base}/get_sh_data/0 (sh_selected=0, Header Connection: close)；断流时自动降级循环 mn_id=2..16',
-    scheduleAndTable: '每 5 分钟并发采集 → fact_merchant_15min（保留 2 小时）→ 整点后梯形积分至 fact_merchant_hourly',
-    notes: '全网返回含 4 户未入账测试户与 1 组别名（国际航运中心大厦）；rdry="蒸汽" 商户原值为 kg/h 与 MJ/h，入库自动 ÷1000 折算并屏蔽 -200℃ 回温。',
+    scale: '0 为全网 1 次返回 468 条；2..16 按主干网分片降级拉取',
+    fields: 'name, xinhaoqiangdu(0=在线), gongshuiliuliang, gongshuiwendu, huishuiwendu, gongshuiyali, huishuiyali, shunshireliang, famenkaidu, shedingfamen',
+    dataDesc: '每 5~15 分钟提供全部商业户瞬时热量与流量用于梯形积分产出每小时用量。',
+    usage: '优先 POST {base}/get_sh_data/0（短连接，断流时自动降级循环主干网 2..16）',
+    scheduleAndTable: '每 5 分钟并发采集 → 整点后梯形积分至 fact_merchant_hourly',
+    notes: '自动归一化别名并剔除 4 户测试占位户；蒸汽商户原值单位为 kg/h 与 MJ/h，入库自动 ÷1000 折算并屏蔽 -200℃ 未接回温。',
   },
   {
     id: 'ep-jumin',
@@ -521,26 +508,12 @@ const sourceEndpoints = [
     path: '/jumin/',
     auth: 'cookie',
     entity: '2,097 户居民室温测温终端',
-    scale: '1 次请求免分页返回全量 ~2,100 户',
-    fields: 'id(IMEI/ICCID), village_name(门牌), station_name(含15组非标别名), wd1(室温℃), upload_time, zdxh(型号), remark, Beizhu',
-    dataDesc: '居民室内真实温度唯一合法数据源，需配合基础台账与 15 组别名视图完成 100% 归口换热站。',
+    scale: '1 次请求返回全量 ~2,100 户',
+    fields: 'id(设备号), village_name(门牌), station_name(含15组站名别名), wd1(室温℃), upload_time, zdxh(型号)',
+    dataDesc: '居民室内温度唯一数据源，经台账核验、7 天鲜度与超温过滤后归口到 242 座换热站。',
     usage: 'POST {base}/jumin/  Body: department_name=0&filter_level=0&isDownload=1（需 Cookie）',
-    scheduleAndTable: '每小时整点 :00 自动采集 → fact_temp_hourly（自动滚动清理 >48 小时数据）',
-    notes: '未入台账 3 户在阳面剔除并写入阴面督办；upload_time 超过 7 天或室温 <=5℃/>40℃ 均从均温与达标率剔除；室温表默认仅滚动保留最近 48 小时。',
-  },
-  {
-    id: 'ep-hrz-ls-zb',
-    group: 'history',
-    method: 'POST',
-    path: '/hrz_ls_zb/',
-    auth: 'no_cookie',
-    entity: '换热站 15 分钟历史序列与累计表底',
-    scale: '按单站单次返回 ~93 条/天 × 361 列（5 年历史深库）',
-    fields: 'create_time, f1..f5, f220(totF 累计流量t), f221(totJ 累计热量GJ), f222(flowJ 瞬时热), f253(IT1 电能累计kWh), f254(IU1 补水累计t)',
-    dataDesc: '核心表底校准与历史补采数据源；整点线性插值计算表底差值，覆盖瞬时积分估算值。',
-    usage: 'POST {base}/hrz_ls_zb/  Body: name=<站名>&start_date=YYYY-MM-DD HH:MM:SS&end_date=...&isdownload=1',
-    scheduleAndTable: '每小时整点后 :05 受控并行校准（路线 B 主来源）→ fact_station_hourly',
-    notes: '传 isdownload=1 时压力 f1/f4 已为 MPa；单站 5 天包体约 2.6MB，历史批量回溯建议 5 天分段 + 0.8s 间隔。',
+    scheduleAndTable: '每小时整点 :00 自动采集 → fact_temp_hourly（自动滚动保留最近 48 小时）',
+    notes: '未入台账终端、超过 7 天未更新的僵尸终端及 <=5℃ 或 >40℃ 极端值均不计入均温与达标率。',
   },
   {
     id: 'ep-sh-ls-zb',
@@ -549,12 +522,12 @@ const sourceEndpoints = [
     path: '/sh_ls_zb/',
     auth: 'no_cookie',
     entity: '商业用户 5 分钟历史瞬时序列',
-    scale: '单商户约 288 条/天（5 分钟 1 条）',
-    fields: 'tmDate, fTempSupply, fTempReturn, fFlowF(供水流量t/h或kg/h), fFlowJ(瞬时热量GJ/h或MJ/h), ShunShiHuiShuiLiuLiang, GongShuiYaLi, HuiShuiYaLi',
-    dataDesc: '实测发现的隐藏商业用户历史接口，可按时间段回溯计算任意历史小时的商业用热量积分。',
-    usage: 'POST {base}/sh_ls_zb/  Body: name=<商户名>&start_date=YYYY-MM-DD HH:MM:SS&end_date=...&isdownload=1',
-    scheduleAndTable: '手动 merchant_hourly_backfill 或全量历史补采 → fact_merchant_hourly (INTEGRAL_5M)',
-    notes: '该接口不返回累计表底 totJ/totF，仅含瞬时流量与瞬时热量，适合梯形积分；同样需对蒸汽商户 ÷1000 折算。',
+    scale: '单商户约 288 条/天',
+    fields: 'tmDate, fTempSupply, fTempReturn, fFlowF(瞬时流量), fFlowJ(瞬时热量), GongShuiYaLi, HuiShuiYaLi',
+    dataDesc: '在实时采集遗漏或停机补采期间，按 5 分钟历史序列梯形积分还原商业户逐小时热量与流量。',
+    usage: 'POST {base}/sh_ls_zb/  Body: name=<商户名>&start_date=...&end_date=...&isdownload=1',
+    scheduleAndTable: '真空期补采与历史回溯脚本 → fact_merchant_hourly (INTEGRAL_5M)',
+    notes: '仅含瞬时量不含累计表底，蒸汽商户同样自动 ÷1000 折算。',
   },
   {
     id: 'ep-ry-dcls-szls',
@@ -562,27 +535,13 @@ const sourceEndpoints = [
     method: 'POST',
     path: '/ry_dcls_xx/get_history 与 /ry_szls_xx/get_history',
     auth: 'no_cookie',
-    entity: '电厂（58点）与首站（54点）历史序列',
-    scale: '电厂约 5 分钟 1 条（288 条/天）；首站约 10 分钟 1 条（144 条/天）',
-    fields: 'tmDate, WENDU, YALI, LIULIANG, RELIANG；首站另含 PINLV, FUHE；电厂含 ZONGLIULIANG/ZONGRELIANG（实测为0）',
-    dataDesc: '用于填补热源电厂与首站停机漏采期间的历史逐小时断面与梯形积分。',
+    entity: '电厂与首站历史补采序列',
+    scale: '电厂 5 分钟/条；首站 10 分钟/条',
+    fields: 'tmDate, WENDU, YALI, LIULIANG, RELIANG, PINLV, FUHE',
+    dataDesc: '用于自动填补上游电厂与首站因网络波动导致的整点真空期漏采。',
     usage: 'POST  Body: start_date=MM/DD/YYYY&end_date=MM/DD/YYYY&station_name=<点位名>&dc_station_id(或sz_station_id)=<组号>',
-    scheduleAndTable: '历史回溯脚本 backfill_smart_heating_history.py → fact_upstream_hourly',
-    notes: '注意日期格式必须为 MM/DD/YYYY，传 YYYY-MM-DD 会报 HTTP 500；北海 dc_station_id=1，香海=2；yw2_dict 混水汇总点无对应历史表。',
-  },
-  {
-    id: 'ep-sw-ls-export',
-    group: 'history',
-    method: 'POST',
-    path: '/sw_ls_export/',
-    auth: 'cookie',
-    entity: '居民单户历史室温序列',
-    scale: '按户请求，20 天约 200~250 条点位（T401 约每 2 小时上报 1 次）',
-    fields: 'year(上报时间 YYYY-MM-DD HH:MM:SS), value(室温 ℃)',
-    dataDesc: '按终端硬件编码逐户导出历史室温轨迹；实测 /sw_ls_zb/ 返回空数组 []，应统一使用 /sw_ls_export/。',
-    usage: 'POST {base}/sw_ls_export/  Body: user_id=<temp_device_id>&start_date=YYYY-MM-DD HH:MM:SS&end_date=...（需 Cookie）',
-    scheduleAndTable: '历史回溯脚本按 2,097 户慢速单线程补采 → fact_temp_hourly',
-    notes: '需将最近一次有效上报沿用覆盖后续小时并在距业务小时 >7 天时自动置为失效，保持与实时 /jumin/ 相同鲜度口径。',
+    scheduleAndTable: '自动真空期补采与历史回溯脚本 → fact_upstream_hourly',
+    notes: '日期入参必须为 MM/DD/YYYY 格式；yw2_dict 混水点在源站无独立历史表。',
   },
   {
     id: 'ep-bb-shrb',
@@ -590,27 +549,27 @@ const sourceEndpoints = [
     method: 'POST',
     path: '/getall_bb_shrb/',
     auth: 'cookie',
-    entity: '商业用户月度日报（按日表底与日单耗）',
-    scale: '2 次请求返回全月所有商业用户每天的数据列',
+    entity: '商业用户月度日报（按日累计表底与日单耗）',
+    scale: '2 次请求返回全月全部商业用户逐日表底列',
     fields: 'id(merchant_id), Data0(上月末表底), Data1..Data31(每日累计表底或日单耗)',
-    dataDesc: '商业用户日度财务与生产结算基准源：selectof3=0 为累计表底，selectof3=1 为日单位耗热。',
+    dataDesc: '用于次日对 464 户商业用户作精确日表底作差结算，并在日报汇总“正常/缺记录/表底倒走”三类状态。',
     usage: 'POST {base}/getall_bb_shrb/  Body: selectof1=0&selectof2=0&selectof3=0|1&options4=YYYYM&lastDay=月末日（需 Cookie）',
-    scheduleAndTable: '每日 08:30 采集前一日（及整月补采）→ fact_merchant_daily',
-    notes: '必须传 options4（如 202611）与 lastDay，否则源站 Flask 报 500（曾导致连通性探测误判 Cookie 失效）。',
+    scheduleAndTable: '每日 08:30 自动采集前一日 → fact_merchant_daily',
+    notes: '止表底小于起表底时不硬凑数值，明确标注“表读数倒走”。',
   },
   {
-    id: 'ep-sz-dc-nhpm',
-    group: 'daily_ref',
-    method: 'GET/POST',
-    path: '/get_sz_data/1、/get_dc_data/1、/<xx>_nhpm/',
-    auth: 'no_cookie',
-    entity: '首站/电厂分组索引 与 9中心昨日能耗排名',
-    scale: '3 类辅助参考接口',
-    fields: 'get_sz/dc_data 返回点位及所属 id（用于历史接口分组入参）；<xx>_nhpm 返回 res1[{l, name_nhtj}] 与 yesterday_day',
-    dataDesc: '用于获取电厂/首站所属 station_id 组号以及昨日各站万平能耗排名对照。',
-    usage: 'POST /get_sz_data/1 (sz_selected=1)；POST /get_dc_data/1 (dc_selected=1)；GET /hl_nhpm/（hl/bg/sx/xlj/xgj/ch/df/zs/dg）',
-    scheduleAndTable: '按需/历史回溯前置索引查询，不重复写入实时主库',
-    notes: '日常 15 分钟采集已由 /gk_get_data/ 一次囊括首站与电厂实时值，无需重复请求。',
+    id: 'ep-deprecated-zx',
+    group: 'realtime',
+    method: 'POST',
+    path: '/zx_hrz/ 与 /get_yw_data/1（已停用）',
+    auth: 'deprecated',
+    entity: '原换热站实时与二次网分区接口',
+    scale: '已于路线 B 升级后停止定时调用',
+    fields: '曾用于拉取换热站实时断面 e1..e16 与 580 个二次分区',
+    dataDesc: '为彻底减轻源站数据库压力并避免实时接口缺少累计表底与跨天漂移，换热站采集已全面切换至 /hrz_ls_zb/，二次分区停采仅留静态台账。',
+    usage: '调度器中已停止轮询；/hrz_ls_zb/ 中的 f209 已等价替代原 e14 瞬时补水',
+    scheduleAndTable: '停用（零请求负载）',
+    notes: '原依赖 /zx_hrz/ e14 的 135 站瞬时补水现已改由 /hrz_ls_zb/ 中的 f209 统一采集与积分。',
   },
   {
     id: 'ep-forbidden',
@@ -619,12 +578,12 @@ const sourceEndpoints = [
     path: '/terminal_control/、/ewph_tj/、/wd_biao/、/fhrb/、/fhrjl_ssxx/',
     auth: 'forbidden',
     entity: '严禁触碰的控制接口 / 造假 / 失效页面',
-    scale: '安全红线清单（禁止自动采集）',
-    fields: 'control指令 / 阀门下发 / 虚增室温看板 / 500报错 / 5.35MB大页',
-    dataDesc: '① /terminal_control/、/ewph_tj/ 会向现场 PLC/阀门下发控制指令；② /wd_biao/ 后端重复追加虚增 2,250 户；③ /fhrb/ 返回 500；④ /fhrjl_ssxx/ 单页 5.35MB。',
-    usage: '全部严禁写入任何自动调度器、探测函数或回溯脚本',
-    scheduleAndTable: '严格隔离（白名单旁路原则）',
-    notes: '本平台仅限只读采集已核验的 JSON/导出接口，绝不改动源站库表及控制状态。',
+    scale: '安全红线清单',
+    fields: '阀门下发控制指令 / 虚增室温看板 / 500报错 / 5.35MB大页',
+    dataDesc: '严禁向现场设备下发控制指令或采集已知重复虚增室温的失效接口。',
+    usage: '全部严禁进入自动调度或脚本白名单',
+    scheduleAndTable: '严格隔离（只读旁路红线）',
+    notes: '本平台严格坚持只读旁路采集，绝不干扰源站与现场设备控制状态。',
   },
 ]
 
@@ -641,122 +600,183 @@ const filteredEndpoints = computed(() => {
 
 const kindOptions = [
   { value: 'all', label: '全部指标' },
-  { value: 'cumulative', label: '小时累计量' },
-  { value: 'snapshot', label: '小时代表断面' },
-  { value: 'derived', label: '衍生/聚合指标' },
+  { value: 'cumulative', label: '累计用量指标' },
+  { value: 'snapshot', label: '运行断面/工况' },
+  { value: 'derived', label: '对账/榜单/衍生' },
 ]
 
 function kindText(kind) {
-  if (kind === 'cumulative') return '小时累计量'
-  if (kind === 'snapshot') return '小时代表断面'
-  return '衍生/聚合指标'
+  if (kind === 'cumulative') return '累计用量'
+  if (kind === 'snapshot') return '运行断面'
+  return '对账与衍生'
 }
 
 const entityCategories = [
   {
     key: 'station',
     icon: '🏭',
-    title: '换热站（全站及一次网）',
-    scale: '242 座物理站',
+    title: '换热站（242 座核心站）',
+    scale: '供热 · 补水 · 耗电 · 温压',
     hasHourly: true,
-    brief: '含小时累计热量/流量/补水/电量，及一网供回温压、折算热指标等。',
-    dictTables: 'dict_heating_station',
-    sourceApis: '/hrz_ls_zb/（路线 B 唯一主采集源：整点表底差值 + 代表断面 + 坏表底积分兜底）',
-    fact15mTable: '已停用实时拉取（不再写入 fact_station_15min）',
-    factOutputTable: 'fact_station_hourly',
-    summary: '换热站是全网核心核算单元（路线 B）。不再高频拉取实时接口，改为每小时整点后（默认 :05）受控并行拉取 /hrz_ls_zb/，直接按整点线性插值计算表底差值（METER_DIFF）并提取小时末代表断面，坏表底时自动用历史 f222 积分兜底。',
-    keyNote: '严禁使用二次网各分区热量之和 Σe12 作为阳面换热站热量！阳面统一采用一次网表底 totJ (f221) 差值或一次网瞬时热量 e11 积分，Σe12 仅留作一二网热平衡失真审计。',
+    badgeText: '每小时整点校准',
+    brief: '所有站级热量、流量、补水与电耗的真实取数、坏表隔离及缺失补救规则。',
+    dictTables: '242 座站标准台账（含所属服务中心、主干/支线网及供热面积）',
+    sourceApis: '历史宽表接口（/hrz_ls_zb/，每小时整点后错峰拉取）',
+    fact15mTable: '每小时 :05 批量校准一次（无需 5 分钟高频盯源站）',
+    factOutputTable: '驾驶舱 · 逐小时运行报告 · 每日运行报告 · Excel 导出',
+    summary: '换热站是全网热、水、电计量的基础单元。系统在每个整点结束后统一抓取各站近 1 小时约 15 分钟一次的完整抄表轨迹，优先用「前后整点累计表底相减」算出精确耗量；当累计表底缺失或坏表跳变时，能用瞬时量积分补救的自动补救，不能补救的坚决隔离置空而不混入假高值。',
+    keyNote: '计算站点实际供热量一律以「一次网计量」为准！系统绝不使用二次网各分区的参考热量来替代一次网结算，防止二网表计失真扭曲全网热耗。',
     metrics: [
       {
         id: 'st-hour-heat',
         kind: 'cumulative',
-        name: '小时累计供热量',
+        name: '小时供热量（及日供热量累加）',
         unit: 'GJ',
-        field: 'hour_heat_gj / hour_heat_source',
-        formula: '首选：totJ(H+1:00) - totJ(H:00)；兜底：trapezoidal_hour_integral(e11_clean)',
-        steps: '① 表底校准任务拉取 /hrz_ls_zb/ 中的累计热量 f221 (totJ)，按前后点线性插值对齐到 H:00 与 H+1:00；② 校验差值在 [0, max_hourly_heat × 1.5] 内（单站极限负荷上限取 max(250, 面积 × 0.00045)）；③ 通过即锁定 hour_heat_source="METER_DIFF"，后续15分钟采集不会覆盖该表底结果。',
-        example: '若 10:00 插值 totJ = 1200.0 GJ，11:00 插值 totJ = 1248.6 GJ，则 10时供热量 = 48.6 GJ（标记为“表”）。',
-        fallback: '若尚未到校准时间、某整点表底缺失，或表底出现倒走(<-0.01)/跳变(>上限1.5倍)，自动使用本小时内 15 分钟 e11_clean（或 f222）梯形积分结果（INTEGRAL_15M / FALLBACK_INTEGRAL_15M）。',
-        cleaning: '表底倒走/跳变会触发 METER_JUMP 阴面督办单；一二网热量偏差 |(Σe12 - e11)/e11| > 20% 时触发 HEAT_IMBALANCE 督办，但阳面仍坚持一网口径。',
-        sourceTags: 'METER_DIFF（表底差值）｜ INTEGRAL_15M（15分钟积分）｜ FALLBACK_INTEGRAL_15M（跳变降级积分）',
-      },
-      {
-        id: 'st-hour-flow',
-        kind: 'cumulative',
-        name: '小时累计一网流量',
-        unit: 't',
-        field: 'hour_flow_t / hour_flow_source',
-        formula: '首选：totF(H+1:00) - totF(H:00)；兜底：trapezoidal_hour_integral(e1_clean)',
-        steps: '① 优先取 /hrz_ls_zb/ 中 f220 (totF) 的整点插值表底差值，上限放宽至 max_hourly_heat × 12；② 缺失或异常时，对本小时内 :00/:15/:30/:45 的一次网瞬时流量 e1_clean 执行梯形积分并折算至 3600 秒。',
-        example: '10:00~10:45 四个时刻 e1_clean 分别为 120, 122, 124, 122 t/h，覆盖 2700 秒积分面积为 91.5 t，外推整小时 = 91.5 × (3600/2700) = 122.0 t。',
-        fallback: '表底未取到或校验不通过时回退为 15 分钟 e1_clean 梯形积分（INTEGRAL_15M）。',
-        cleaning: '若换热站通讯临时离线（online=false），先沿用最近 6 小时内最后一次在线有效 e1_clean 平滑估值再积分；长期无历史有效值则置空。',
-        sourceTags: 'METER_DIFF ｜ INTEGRAL_15M',
+        field: '表底作差 优先 / 瞬时积分 兜底',
+        formula: '① 首选：结束整点表底(f221) - 开始整点表底(f221)  |  ② 兜底：瞬时热量(f222) 15 分钟梯形积分',
+        steps: '系统先按前后抄表时间线性推算出整点时刻（如 10:00 和 11:00）的累计热量表底，再相减得到本小时实际供热量。对于台账确认存在固定刻度倍率的站（如南山苑等 4 座站固定 ÷10），系统会在清洗值中自动折算到位，同时保留未折算原值以供“原始对照”模式查看。',
+        example: '10:00 表底 1200.0 GJ、11:00 表底 1248.6 GJ，小时供热量即为 48.6 GJ；若南山苑表底差显示 125.0 GJ，清洗精算自动 ÷10 修正为 12.5 GJ。',
+        fallback: '若某小时缺少整点表底，或累计表出现倒走/突然暴涨（超过按本站供热面积核定极限负荷 1.5 倍，或明显背离瞬时热量 4 倍以上），系统会自动放弃坏表差值，降级改用该小时内清洗后的瞬时热量（f222）梯形积分兜底。',
+        cleaning: '计算瞬时积分前，系统先自动剔除瞬时热量 f222 < 0 或超过面积极限 1.5 倍的毛刺尖峰；仅突发跳变或临时缺表时页面才显示红标提示，常规倍率修正不再满屏标红。',
+        sourceTags: '页面标记「表」= 表底直减最准 ｜ 「积 / 补」= 缺表或跳变后改用瞬时积分兜底 ｜ 双缺则留空「-」',
       },
       {
         id: 'st-hour-water',
         kind: 'cumulative',
-        name: '小时累计补水量',
-        unit: 't',
-        field: 'hour_water_t / hour_water_source',
-        formula: '首选：f254(H+1:00) - f254(H:00)；兜底：trapezoidal_hour_integral(e14_clean)',
-        steps: '① 表底校准阶段从 /hrz_ls_zb/ 提取 f254（补水累计表底）做整点线性插值差值（单站小时上限 200 t/h）；② 实时阶段对 e14_clean（自来水瞬时补水）做 15 分钟梯形积分。',
-        example: '10:00 补水表底 512.4 t，11:00 补水表底 513.9 t，小时补水量 = 1.5 t。',
-        fallback: '表底缺失时保留 15 分钟 e14_clean 梯形积分（INTEGRAL_15M）。',
-        cleaning: '单站自来水瞬时补水 e14_raw < 0 或 > 100 t/h 判为坏表满量程死值（如 500/1545.2 t/h），立即屏蔽并回退前序有效值（无前值则置空），同时派发 SENSOR_OUT_OF_RANGE 督办。',
-        sourceTags: 'METER_DIFF ｜ INTEGRAL_15M',
+        name: '小时补水量（及日补水累加）',
+        unit: 't（吨）',
+        field: '累计水表 f254 优先 / 瞬时流量 f209 积分补齐',
+        formula: '① 首选：累计水表差(f254)  |  ② 缺表/跳变补救：自来水瞬时补水流量(f209) 15 分钟梯形积分',
+        steps: '全网仅约 90 余座站配有远传累计补水表（f254），其余约 135 座站只上传了瞬时补水流量（f209，对应原实时口径 e14）。因此系统优先取 f254 整点表底差值；一旦发现 f254 缺失或出现单次跳变/倒走，立即自动切换为对清洗后的瞬时补水流量 f209 做时间加权积分，将缺失站点的补水完整追回。',
+        example: '「泛华领域」站无累计水表 f254，但其瞬时补水 f209 稳定在约 12.5 t/h，系统自动逐时积分后全天准确统计出约 300 吨补水，不再漏统。',
+        fallback: '若某小时内的 f209 瞬时采样混有坏表毛刺（>100 t/h 或 <0），系统会先把异常点滤除后再对正常采样点积分，避免坏表把一小时补水拉成几千吨。',
+        cleaning: '系统同时按站面积核定单小时补水上限（每万㎡ 5 吨，最低保底 80 t/h），若发现整天呈现锯齿状反复倒走（例如「外国语学院」某类坏表）或连续跳变，会直接将其当日补水量置空隔离，绝不让假高水污染榜单和日报。',
+        sourceTags: '页面标记「表」= f254 累计水表 ｜ 「积」= 无 f254 时用 f209 瞬时积分补齐 ｜ 仍有一小部分机械水表无远传（f254空且f209恒0）需现场加装远传',
       },
       {
         id: 'st-hour-elec',
         kind: 'cumulative',
-        name: '小时累计耗电量',
-        unit: 'kWh',
-        field: 'hour_elec_kwh / hour_elec_source',
-        formula: 'f253(H+1:00) - f253(H:00)',
-        steps: '仅来源于 /hrz_ls_zb/ 中的电能累计表底 f253。经整点线性插值后作差（单站小时校验上限 5000 kWh）。',
-        example: '10:00 电能表底 18240.0 kWh，11:00 为 18312.5 kWh，小时耗电 = 72.5 kWh。',
-        fallback: '由于实时接口不返回瞬时功率，表底缺失或校验失败时 hour_elec_kwh 保持为空，hour_elec_source="NONE"。',
-        cleaning: '校验 delta < -0.01 或 > 5000 × 1.5 时丢弃异常差值。',
-        sourceTags: 'METER_DIFF ｜ NONE',
+        name: '小时耗电量（及日电耗累加）',
+        unit: 'kWh（度）',
+        field: '仅累计电表 f253 整点作差（无瞬时功率可替代）',
+        formula: '结束整点累计电表(f253) - 开始整点累计电表(f253)，按面积校验单小时上限',
+        steps: '目前源站只提供一个累计电能字段（f253），没有提供瞬时电功率（kW）或电流字段。对电表正常走字的站点，系统按整点线性插值作差得到小时用电量（kWh）。',
+        example: '10:00 电表读数 18240.0 kWh、11:00 为 18312.5 kWh，小时耗电 = 72.5 kWh；正常有表站日均单耗约 89 kWh/万㎡。',
+        fallback: '重要边界：因为源站不存在瞬时电功率字段，当某个站的 f253 未上传、恒为 0、冻结不动或报 10 亿死值时，软件侧无法凭空推算，该站电耗只能留空显示“-”，并在异常监测中心点名列出排查清单。',
+        cleaning: '系统对每座站按面积核定合理小时电耗上限（每万㎡ 12 kWh，保底 35 kWh/h，放宽 1.5 倍拦截线）。一旦监测到电表整天出现 2 次以上锯齿倒走并突然暴涨上万度（如「信兴花园」「长江杰座」），系统会整日隔离置空其耗电量并自动从高耗榜与日报汇总中剔除。',
+        sourceTags: '正常站直接展示 kWh ｜ 「-」表示源站无有效电表或坏表已屏蔽（可在异常监测中心查看全网 126 座无电表站明细）',
       },
       {
-        id: 'st-instant-snapshot',
-        kind: 'snapshot',
-        name: '小时代表断面（供回温 / 压力 / 瞬时流量 / 瞬时热量 / 水位）',
-        unit: '℃ / MPa / t/h / GJ/h / mm',
-        field: 'e1_clean, e3_clean, e4_clean, e7_clean, e8_clean, e11_clean, e14_clean, e16_raw',
-        formula: '取本小时内最新一次（sample_bucket 最大）经过五重清洗后的 15 分钟采样断面',
-        steps: '每次采集落入 fact_station_15min 后立即按 biz_hour 汇总至 fact_station_hourly：取本小时最后一条清洗断面作为该小时代表瞬时值（若未达整点结束则随采集滚动更新，走完即定格在 :45 断面）。其中“香炉礁”站水位 e16 若顶层缺失会按规范从 Nx[0].data.e16 提取。',
-        example: '10:00、10:15、10:30、10:45 均已采集，则 10时断面展示 10:45 清洗后的供温 e3_clean、回温 e4_clean 等值。',
-        fallback: '若本小时内实时接口漏采但执行过表底校准，则从 /hrz_ls_zb/ 本小时末尾点 f1~f5、f222 补全代表断面。',
-        cleaning: '① 离线：online=false 时回退 6 小时内最近在线值（标记 *）；② 越限：水温 <=0℃ 或 >150℃，压力 <0 或 >2.5MPa 屏蔽并回退；③ 倒挂：e1>1 且 供温<=回温 时回退前序正常温差。',
-        sourceTags: 'REAL ｜ INTERP_TEMP_OFFLINE ｜ MASKED_PREV_HOLD ｜ OFFLINE_PERMANENT',
+        id: 'st-hour-flow',
+        kind: 'cumulative',
+        name: '小时一网流量 & 供回水温压力代表断面',
+        unit: 't / ℃ / MPa / GJ/h',
+        field: '累计流量 f220 + 小时末清洗断面 (e1/e3/e4/e7/e8/e11/e14)',
+        formula: '累计流量首选 f220 作差（缺则 f2 积分）；温压瞬时取该小时末最新有效采样',
+        steps: '一网累计流量优先取累计流量表 f220 作差（缺失回退瞬时流量 f2 积分）；供回水温度、供回水压力、瞬时热量与瞬时补水取该小时末尾最新一次采样值展示。',
+        example: '某站 10:45 一次供温 74.2℃、回温 41.5℃、供压 0.45 MPa、回压 0.31 MPa，即作为 10 时代表工况展示。',
+        fallback: '当某站出现临时通讯掉线（该小时无记录），自动沿用最近 6 小时内最后一次在线正常工况并标 `*` 提示；长期停运站保持离线空值不造数。',
+        cleaning: '自动拦截温度 <=0℃ 或 >150℃ 断路值、压力 <0 或 >2.5 MPa 越限值，以及有流量时供水温度 <= 回水温度的物理倒挂，触发时平滑回退上一有效工况。',
+        sourceTags: 'REAL（实时直采）｜ 带 * 提示（沿用前序有效工况或异常屏蔽修正）',
       },
       {
         id: 'st-heat-index',
         kind: 'derived',
-        name: '单站实时折算热指标',
-        unit: 'W/㎡',
-        field: 'heat_index_wm2',
-        formula: 'e11 × 277777.78 / covered_area',
-        steps: '单位换算关系：1 GJ/h = 10⁹ J ÷ 3600 s = 277,777.78 W。将单站当前小时代表一网瞬时热量 e11（GJ/h）换算为瓦（W），再除以该站在 dict_heating_station 中的供热面积 covered_area（㎡）。',
-        example: '某站面积 100,000 ㎡，e11 = 14.4 GJ/h，则热指标 = 14.4 × 277777.78 / 100000 = 40.0 W/㎡。',
-        fallback: '若该站尚属“缺失面积站”（covered_area 为空或 0）或 e11 为空，则返回空值展示“-”。',
-        cleaning: '使用净化后的 e11_clean 计算，避免坏表或离线 0 值拉偏。',
-        sourceTags: '实时衍生计算（前端“净化精算/原始对照”随 mode 切换）',
+        name: '折算热指标 & 万平耗热/补水/电耗单耗',
+        unit: 'W/㎡ / GJ/万㎡ / t/万㎡ / kWh/万㎡',
+        field: '瞬时热指标 + 单位面积耗量强度',
+        formula: '热指标(W/㎡) = 瞬时热量(GJ/h) × 277777.78 ÷ 供热面积(㎡)；万平耗量 = 累计耗量 ÷ 面积(万㎡)',
+        steps: '将每小时 1 GJ/h 换算为 277,777.78 瓦后除以本站供热面积，即得衡量当前供热强度的实时热指标（W/㎡）；将累计热量、补水或电耗除以面积（万㎡），即可横向对比大站与小站的节能水平。',
+        example: '10 万㎡ 站点瞬时热量 14.4 GJ/h，折算热指标 = 40.0 W/㎡；小时耗热 14.4 GJ，万平耗热 = 1.44 GJ/万㎡·h。',
+        fallback: '当个别站台账尚未补录供热面积（当前 4 座站缺失）时，单耗指标显示“-”并在报表头部显式提示“缺失面积站数”。',
+        cleaning: '全网使用清洗后数据计算；可在报告顶部一键切换「净化精算」与「原始对照」查看清洗前后的数值差异。',
+        sourceTags: '衍生指标（随页面“净化精算 / 原始对照”模式联动重算）',
+      },
+    ],
+  },
+  {
+    key: 'group',
+    icon: '🏛️',
+    title: '全网 / 中心 / 驾驶舱榜单聚合',
+    scale: '全网 · 9大中心 · 热源网 · 主干/支线',
+    hasHourly: true,
+    badgeText: '统一聚合口径',
+    brief: '宏观汇总时的流量加权均温算法、连续 72 小时走势及驾驶舱 Top 5 健康榜单筛选门槛。',
+    dictTables: '9 大服务中心 · 9 大热源大网 · 15 条主干网 · 41 条支线网',
+    sourceApis: '基于 242 座换热站与室温实时事实表统一聚合计算（跨页面同口径）',
+    fact15mTable: '全网 / 中心 / 驾驶舱接口共用一套后端精算汇总器',
+    factOutputTable: '运行驾驶舱 · 逐小时运行报告 · 每日运行报告 · 导出 Excel',
+    summary: '无论是在领导驾驶舱看全网总盘，还是在逐小时/每日报告按服务中心、主干热网、支线热网分组对比，系统均使用完全相同的汇总逻辑，保证同一个中心在不同页面看到的每一度电、每一吨水、每一度温度分毫不差。',
+    keyNote: '全网和各中心的平均供水/回水温度绝不能简单算数平均！如果把已经停运、温差只有 1℃ 的小站跟流量 2000 吨的大站 1:1 平均，温度会被严重拉偏。系统严格按各站一次网瞬时流量大小进行「流量加权平均」。',
+    metrics: [
+      {
+        id: 'gp-weighted-temp',
+        kind: 'derived',
+        name: '流量加权平均供温 / 回温 / 温差',
+        unit: '℃',
+        field: 'avg_sup_temp / avg_ret_temp / avg_temp_diff',
+        formula: '加权供温 = Σ(单站供温 × 单站流量) ÷ Σ单站流量（仅纳入流量 > 0 的在运站）',
+        steps: '系统仅筛选当前有一次网流量（e1 > 0）且供回温合理的运行站，流量越大的站权重越高；平均回压采用非空站点回压的算数平均值。',
+        example: '大站流量 200 t/h 供温 80℃、小站流量 20 t/h 供温 50℃ → 加权供温 = (200×80 + 20×50) ÷ 220 = 77.27℃，远比简单平均 65℃ 真实。',
+        fallback: '若分组内全部站点均已停泵无流量，温度汇总显示“-”。',
+        cleaning: '若某个站点一次温压已被清洗器修正，上层汇总会自动带上异常批注，提示受哪几座站修正影响。',
+        sourceTags: '物理流量加权聚合（跨页一致）',
       },
       {
-        id: 'st-room-temp',
+        id: 'gp-watchlist',
         kind: 'derived',
-        name: '单站平均室温 & 室温达标率',
-        unit: '℃ / %',
-        field: 'avg_room_temp / temp_pass_rate_pct',
-        formula: 'avg_room_temp = AVG(temp_clean)；达标率 = COUNT(temp_clean ≥ 18.0) / COUNT(有效终端) × 100%',
-        steps: '筛选本小时 fact_temp_hourly 中归属该 station_id、且同时满足 is_registered=TRUE 和 is_online_valid=TRUE 的终端，对 temp_clean 求算术平均及 ≥18℃ 达标占比。',
-        example: '某站下有 12 户有效测温终端（另有 1 户掉线超 7 天已剔除），11 户 ≥18℃，均温 21.4℃，达标率 = 11/12 × 100% = 91.7%。',
-        fallback: '该站无有效归口测温终端时返回空（-）。',
-        cleaning: '未入台账终端、掉线超 7 天终端、≤5℃ 或 >40℃ 极端值均已在清洗层将 is_online_valid 置为 FALSE，不参与计算。',
-        sourceTags: '基于 fact_temp_hourly 有效样本实时聚合',
+        name: '驾驶舱「焦点榜单 Top 5」健康准入门槛',
+        unit: 'Top 5（高热 / 高补水 / 高电耗 / 节能低耗）',
+        field: 'watchlists (high_heat / high_water / high_elec / benchmark)',
+        formula: '严格剔除故障站、坏表站与近零/停运站后，仅在健康在运站中按强度排名取前 5',
+        steps: '为了不让“坏表飙高”“停运凑0.01低能耗”霸占领导驾驶舱榜单，所有进榜站点必须同时满足健康体检：① 在线且当日无跳变/异常标签；② 有真实热耗与流量（热量≥0.5 GJ 且热指标≥5 W/㎡、流量>0.5 t/h）；③ 温压合理不倒挂、一二网不严重失调；④ 若看水/电榜则还须排除当日坏水/坏电表。',
+        example: '例如「信兴花园」电表锯齿虚高已被隔离置空，不进 ⚡高电耗榜；「正源」「远洋风景」近零负荷停供站不进 🏆节能低耗榜。',
+        fallback: '驾驶舱右上角“实时室温”独立展示当前全网最新真实测温快照，榜单卡片不再混排室温。',
+        cleaning: '「昨日同期对比」与「连续 72 小时负荷走势」均自动对齐整点并叠加气象实况室外温度曲线。',
+        sourceTags: '仅健康在运站参与排行（防假高/假低误导决策）',
+      },
+    ],
+  },
+  {
+    key: 'daily_reconcile',
+    icon: '📋',
+    title: '每日运行报告与人工日报对账',
+    scale: '自然日(0~24h) · 生产班次(8点~次日8点) · 热/水/电双轨',
+    hasHourly: false,
+    badgeText: '双轨偏差核对',
+    brief: '站级日累积计算、止表底时刻对齐，以及与生产日报手工填报耗热/耗水/耗电的双轨对比规则。',
+    dictTables: '9 大服务中心 ↔ 生产日报填报分支对照映射',
+    sourceApis: '系统站时精算库 + 生产日报库（日耗热 / 日补水 / 日外购电）',
+    fact15mTable: '实时查询动态汇总（支持切换「自然日」与「生产班次」口径）',
+    factOutputTable: '每日运行报告 · 多日横向导出 Excel',
+    summary: '每日运行报告将系统自动化采集算出的「日耗热量、日补水量、日耗电量」与各服务中心每天在《生产日报》中手工填报的数据逐一摆在一起对比，帮助管理层一眼发现哪些中心存在漏表、表计倍率误差或填报偏差。',
+    keyNote: '手工日报中部分单位的耗电量按「万 kWh」填报，系统会自动检测单位并 ×10000 统一折算为 kWh（度），确保双轨处于同一量纲直接相减。',
+    metrics: [
+      {
+        id: 'dr-period-meter',
+        kind: 'cumulative',
+        name: '自然日 vs 生产班次 & 起止表底核对',
+        unit: 'GJ / t / kWh / h',
+        field: 'start_tot_j / end_tot_j / hours_count',
+        formula: '日耗量 = 24 小时清洗累计之和；止表底 = 结算结束整点时刻（次日00:00 或当日08:00）读数',
+        steps: '① 「自然日」统计当日 00:00~次日 00:00；「生产班次」统计昨日 08:00~今日 08:00；② 242 站表的「有效热量小时数」仅计真正读到热量的小时，不再把空站显示成“24h / 0 GJ”；③ 止表底严格取结算窗口结束那个整点的读数，让“止表底 - 起表底”可直接验算日供热量。',
+        example: '11-18 自然日止表底取 11-19 00:00 的 totJ；若某站仅 18 个小时有热量读数，小时数列即如实显示 18h。',
+        fallback: '若结算结束时刻（例如今日尚未过完 24:00）表底未出，止表底留空，日累计仍实时滚动累加已结束小时。',
+        cleaning: '所有异常小时已在底层完成坏表隔离与降级积分，日报页可点击切换“原始值对照”核验差异。',
+        sourceTags: '自然日 00:00~24:00 ｜ 生产班次 08:00~次日08:00',
+      },
+      {
+        id: 'dr-dual-track',
+        kind: 'derived',
+        name: '全网及 9 中心热 / 水 / 电三轨偏差对比',
+        unit: '% / GJ / t / kWh',
+        field: '偏差率 = (系统统计值 - 手工填报值) ÷ 手工填报值 × 100%',
+        formula: '供热偏差（>±10%橙警）｜ 补水偏差（>±10%橙警）｜ 电耗偏差（>±10%橙警）',
+        steps: '系统分别提取手工生产日报中各分公司的「站耗热量(GJ)」「站补水量(t)」「外购电量(自动由万kWh折算为kWh)」，与本系统按 9 大中心汇总出的热/水/电逐一比对并算差值与偏差率。',
+        example: '11-18 全网补水经 f209 追回后系统 4,583.95 t vs 手工 5,242.0 t，偏差仅 -12.55%；电耗因全网仅 116/242 站有电表（其余 126 站源站未传或死值），系统 88,052.9 kWh vs 手工 199,800 kWh，偏低 -55.93%。',
+        fallback: '若某天手工日报尚未提交或某中心未填报该项，对应偏差显示“-”不乱告警。',
+        cleaning: '当中心补水/电耗偏差显著偏低时，请结合「异常数据监测」页的「取数诊断」查看是该中心哪些站无远传水表或无电表。',
+        sourceTags: '偏差超过 ±10% 自动标橙预警（可在导出 Excel 中同步高亮并附说明）',
       },
     ],
   },
@@ -764,261 +784,115 @@ const entityCategories = [
     key: 'upstream',
     icon: '⚡',
     title: '上游热源 / 首站 / 网口',
-    scale: '82 核心监测点',
+    scale: '82 核心监测点（全网 137 点）',
     hasHourly: true,
-    brief: '覆盖电厂、首站、网口五大字典区，区分蒸汽/高温点与热水点阈值。',
-    dictTables: 'dict_upstream_point',
-    sourceApis: '/gk_get_data/（五大内存字典：dc_dict / sz_dict / yw2_dict / yw_dict / sh_dict）',
-    fact15mTable: 'fact_upstream_15min',
-    factOutputTable: 'fact_upstream_hourly',
-    summary: '上游工况点位无独立历史累计表底分页接口，因此每 15 分钟从 /gk_get_data/ 抓取一次瞬时温度、压力、流量、热量，在小时层同时保留最新瞬时断面与 15 分钟梯形积分累计量。',
-    keyNote: '系统会自动识别蒸汽/烟气/高温汽温测点（名称含主汽、进汽、抽汽、排汽、蒸汽、调门、母管，或 dc_dict 非水类点），将其高温阈值放宽至 600℃、高压上限放宽至 15 MPa，防止把电厂高温蒸汽误判为传感器故障。',
+    badgeText: '每5分钟高密采',
+    brief: '覆盖电厂、首站、混水与网口，自动区分蒸汽高温高压点与热水点阈值。',
+    dictTables: '上游点位台账（区分核心《工况一览》82 点与扩展字典点）',
+    sourceApis: '实时全网工况接口（/gk_get_data/）+ 缺采时自动调用电厂/首站历史接口补采',
+    fact15mTable: '每 5 分钟并发采集一次（保留 2 小时算完即清）',
+    factOutputTable: '驾驶舱 · 逐小时报告上游热源表 · 24小时趋势图',
+    summary: '上游电厂与首站没有累计表底接口，系统每 5 分钟拉取一次瞬时温度、压力、流量与瞬时热量，跨小时后通过时间加权梯形积分得到每小时供热量与流量；如遇网络断采，系统支持自动调用历史接口把漏掉的小时补回来。',
+    keyNote: '电厂大量点位是高温高压蒸汽（几百度、数兆帕），如果拿热水管网 150℃ 上限去卡电厂就会满屏报错。系统会自动识别主汽、进汽、抽汽、排汽、蒸汽等测点，将安全范围放宽到 600℃ / 15 MPa；同时停运备用机组（流量 ≤1）温度为 0℃ 时不误报故障。',
     metrics: [
       {
-        id: 'up-hour-heat',
+        id: 'up-hour-heat-flow',
         kind: 'cumulative',
-        name: '小时供热量（积分）',
-        unit: 'GJ',
-        field: 'hour_heat_gj',
-        formula: 'trapezoidal_hour_integral([(t_i, heat_clean_i)])',
-        steps: '汇总该测点在当前 biz_hour 内最多 4 次 15 分钟采样（:00/:15/:30/:45）的清洗后瞬时热量 heat_clean（RELIANG），计算相邻采样梯形面积之和，并按覆盖总秒数等比归一化到标准 1 小时（3600 秒）。',
-        example: '仅采集到 10:00 (210 GJ/h) 与 10:15 (230 GJ/h) 两点，平均负荷 220 GJ/h × 0.25h = 55 GJ，归一化到 1 小时 = 55 × (3600/900) = 220.0 GJ。',
-        fallback: '若本小时仅采到 1 个有效点，直接按 heat_clean × 1.0h 估算；全部为空则返回 None。',
-        cleaning: '上游 RELIANG 若为“-”或空串经 to_float 安全转为 None 不参与积分。',
-        sourceTags: 'INTEGRAL_15M（15分钟梯形积分）',
-      },
-      {
-        id: 'up-hour-flow',
-        kind: 'cumulative',
-        name: '小时累计流量（积分）',
-        unit: 't',
-        field: 'hour_flow_t',
-        formula: 'trapezoidal_hour_integral([(t_i, flow_clean_i)])',
-        steps: '与小时供热量一致，基于本小时内 15 分钟采样的瞬时流量 flow_clean（LIULIANG）执行时间加权梯形面积积分并折算到 1 小时。',
-        example: '4 个采样点流量均值约为 1850 t/h，覆盖完整时段则小时流量约 1850.0 t。',
-        fallback: '单点采样时直接取 flow_clean × 1.0h。',
-        cleaning: '停运备机若流量 <= 1.0 且温度为 0℃，视为正常停机而非断路故障，不触发温度越限误报。',
-        sourceTags: 'INTEGRAL_15M（15分钟梯形积分）',
+        name: '上游小时供热量与累计流量（积分）',
+        unit: 'GJ / t',
+        field: 'hour_heat_gj / hour_flow_t',
+        formula: '对本小时内多点清洗后瞬时热量(RELIANG)与瞬时流量(LIULIANG)做梯形积分并折算至 1 小时',
+        steps: '汇总每小时内的 5~15 分钟实时采样，计算相邻点之间的梯形面积并按实际覆盖时长折算到 60 分钟；历史漏采期间自动从电厂（5分钟粒度）/ 首站（10分钟粒度）历史接口补算。',
+        example: '10:00 负荷 210 GJ/h、10:15 负荷 230 GJ/h，折算整小时约 220.0 GJ。',
+        fallback: '某小时仅有 1 次有效采样时直接按“瞬时值 × 1 小时”估算；源站空值则占位标记不乱估算。',
+        cleaning: '热水点温度 <-10℃ 或 >150℃（且在运带流量时 <=0℃）、压力 >2.5 MPa 触发越限屏蔽；蒸汽点温度 >=600℃ 或压力 >15 MPa 触发越限屏蔽。',
+        sourceTags: '15分钟/5分钟积分 ｜ 触发温度压力越限时回退最近 6 小时前序正常值并标 `*`',
       },
       {
         id: 'up-snapshot',
         kind: 'snapshot',
-        name: '小时代表温度 / 压力 / 瞬时流量 / 瞬时热量',
-        unit: '℃ / MPa / t/h / GJ/h',
-        field: 'temp_clean, pressure_clean, flow_clean, heat_clean',
-        formula: '取本小时内最后一次采样（sample_bucket DESC 第 1 条）的清洗断面',
-        steps: '按 (data_zone, source_name) 分组并按 sample_bucket 升序排列，取 items[-1] 的 temp/pressure/flow/heat 原始值与净化值写入 fact_upstream_hourly，同时关联 dict_upstream_point 标记是否属于《工况一览》82 个核心点（is_core_gk）。',
-        example: '某网口在 14:45 的温度清洗值为 86.2℃，则 14时断面温度展示 86.2℃。',
-        fallback: '温度或压力触发传感器越限时，自动从最近 6 小时前序正常记录回退并标注 *（MASKED_PREV_HOLD）。',
-        cleaning: '① 水温 >150℃ 或 <-10℃ 或带流量<=0℃ 判越限；汽温 >=600℃ 或 <-10℃ 或带流量<=0℃ 判越限；② 水压 [0, 2.5] MPa、汽压 [0, 15.0] MPa 外判越限；③ 源时间 source_time 滞后采集时间 > 2 小时记通讯滞后（COMM_OFFLINE）。',
-        sourceTags: 'REAL ｜ MASKED_PREV_HOLD',
-      },
-    ],
-  },
-  {
-    key: 'zone',
-    icon: '🔀',
-    title: '二次网供热分区（已停用实时采集）',
-    scale: '580 个分区（仅保留静态字典台账，不再参与采集与统计）',
-    hasHourly: false,
-    brief: '按业务决策已停用二次分区实时采集与下钻展示，仅保留 dict_secondary_zone 静态台账。',
-    dictTables: 'dict_secondary_zone',
-    sourceApis: '已停用采集',
-    fact15mTable: '已停用（每轮 2 小时滚动清理历史残留）',
-    factOutputTable: '已停用（仅保留静态台账）',
-    summary: '由于阳面核心能耗核算严格以一次网为准、二次分区不参与任何上层统计与汇总，系统已彻底停用二次分区的采集落库与前端下钻子表，以降低数据库写入压力。',
-    keyNote: '台账中已标识为“常离线”的分区（dict_secondary_zone.is_online = FALSE）在小时层保持 OFFLINE_PERMANENT，不做虚假插值；所有分区的二次网热量 e12 仅用于与站一次网 e11 做热平衡审计比对，严禁向上汇总。',
-    metrics: [
-      {
-        id: 'zn-snapshot',
-        kind: 'snapshot',
-        name: '二网瞬时流量 / 供回水温度 / 供回水压力 / 瞬时补水',
-        unit: 't/h / ℃ / MPa / t/h',
-        field: 'e2_clean, e5_clean, e6_clean, e9_clean, e10_clean, e15_clean',
-        formula: 'SELECT DISTINCT ON (secondary_zone_id) ... ORDER BY secondary_zone_id, sample_bucket DESC',
-        steps: '从当前 biz_hour 所属的 fact_zone_15min 记录中，按采样时间倒序取最新一条清洗后记录作为该分区本小时代表断面，并统计 sample_count 采样次数。',
-        example: '某站“低区”在 16:00~16:45 共采集 4 次，小时断面展示 16:45 清洗后的二网供温 e5_clean=46.5℃、回温 e6_clean=39.1℃。',
-        fallback: '若在线分区发生物理温差倒挂，优先回退 6 小时内最近一次有效断面（MASKED_PREV_HOLD）。',
-        cleaning: '① 物理倒挂1：当二网流量 e2 > 1.0 t/h 且 e5 <= e6 时，回退 e5/e6 并派发 TEMP_INVERSION；② 物理倒挂2（违反热力学第二定律）：当一网供温 e3 > 10℃ 且二网供温 e5 > e3 + 0.5℃ 时，回退 e5 并派发 TEMP_INVERSION。',
-        sourceTags: 'REAL ｜ MASKED_PREV_HOLD ｜ OFFLINE_PERMANENT',
-      },
-      {
-        id: 'zn-e12-audit',
-        kind: 'derived',
-        name: '二网热量审计比对项（e12_audit 与热平衡偏差）',
-        unit: 'GJ/h / %',
-        field: 'e12_raw（分区） / heat_balance_diff_pct（站级）',
-        formula: 'heat_balance_diff_pct = (Σe12_raw - e11_raw) / e11_raw × 100%',
-        steps: '将同一换热站下所有分区原始 e12_raw 求和得到 Σe12，在站级计算相对一次网热量 e11_raw 的偏差百分比，用于排查二网热量表失真或掉零问题。',
-        example: '若某站一网 e11=10.0 GJ/h，二网两分区 Σe12=14.2 GJ/h，则偏差 = +42.0%（超 ±20% 触发 HEAT_IMBALANCE 督办）。',
-        fallback: '当 e11_raw <= 0.05 且站点在线但 Σe12 > 0.2 时，直接针对一网表计掉零发起督办。',
-        cleaning: '阳面主报表严禁引用 e12 参与任何热耗结算，仅在站下钻子表与阴面督办单展示。',
-        sourceTags: '仅阴面/下钻审计参考（RAW）',
-      },
-    ],
-  },
-  {
-    key: 'temp_device',
-    icon: '🌡️',
-    title: '居民室温测温终端',
-    scale: '2,097 户入账终端（含 15 组站名别名归一化）',
-    hasHourly: true,
-    brief: '整点抓取居民户内温度，剔除未入账新增户、长离线僵尸户与超限异常户。',
-    dictTables: 'dict_temp_device + v_temp_station_alias_map',
-    sourceApis: '/jumin/（需有效 Session Cookie，整点 :00 自动采集一次）',
-    fact15mTable: '无（按小时整点直采，不进 15 分钟表）',
-    factOutputTable: 'fact_temp_hourly',
-    summary: '居民室温变化平缓且 /jumin/ 接口需携带 Cookie，系统在每小时整点 :00 触发（或手动触发）全量拉取一次。通过标准台账与 15 组站名别名视图实现 100% 归口到 242 座换热站。',
-    keyNote: '源站若在标准 2,097 户之外临时新增终端（例如多出 3 户），阳面会严格标记 is_registered=FALSE 并从均温与达标率中剔除，同时在阴面派发 SOFTWARE_DEFECT 提醒核实入账。',
-    metrics: [
-      {
-        id: 'tm-clean',
-        kind: 'snapshot',
-        name: '单户小时清洗室温',
-        unit: '℃',
-        field: 'temp_clean / is_online_valid',
-        formula: '准入条件：is_registered == TRUE AND (采集时间 - upload_time ≤ 7天) AND (5.0 < wd1 ≤ 40.0)',
-        steps: '① 用终端 id 查 dict_temp_device，未命中则 is_registered=FALSE；② 检查 upload_time 距当前采集是否超过 7×86400 秒；③ 检查原始温度 wd1 是否在 (5.0, 40.0] ℃ 区间内。三项全部通过才保留 temp_clean 并置 is_online_valid=TRUE。',
-        example: '终端 A 昨晚上传 21.6℃，在 2,097 户台账内 → temp_clean=21.6，有效；终端 B 上传时间是 12 天前 → is_online_valid=FALSE，不计入均温。',
-        fallback: '异常户的 temp_clean 置为 NULL，不做插值伪造，但原始 temp_raw 与备注 remark_snapshot 完整留痕供下钻排查。',
-        cleaning: '① 未入账终端 → 归属高校软件问题(SOFTWARE_DEFECT)；② 掉线>7天 → 僵尸户剔除(COMM_OFFLINE)；③ 室温<=5℃或>40℃或空 → 传感器超限剔除(SENSOR_OUT_OF_RANGE)。',
-        sourceTags: 'is_online_valid=TRUE（有效样本）｜ FALSE（已剔除留痕）',
-      },
-      {
-        id: 'tm-dist',
-        kind: 'derived',
-        name: '全网 / 分站室温分布与舒适率',
-        unit: '户 / %',
-        field: 'avg_room_temp / temp_pass_rate_pct / temp_comfort_rate_pct / room_dist',
-        formula: '均温 = SUM(有效temp_clean)/N；达标率 = Count(≥18℃)/N；舒适率 = Count(20≤T≤25℃)/N',
-        steps: '基于当前 biz_hour 中所有有效样本（is_registered=TRUE 且 is_online_valid=TRUE），按温度落入 <18℃、18~20℃、20~25℃、>25℃ 四个区间计数，并计算算术平均室温与达标/舒适比例。',
-        example: '全网有效样本 1,950 户，其中 ≥18℃ 共 1,890 户（96.9%），20~25℃ 共 1,560 户（80.0%）。',
-        fallback: '若尚未配置有效 Cookie 导致本小时未采 /jumin/，前端展示“暂无样本 / -”。',
-        cleaning: '严格排除未入账 3 户与僵尸/坏表户，防止 -199℃ 或长期未更新的停供户拉低均温。',
-        sourceTags: '基于 fact_temp_hourly 实时聚合',
-      },
-    ],
-  },
-  {
-    key: 'group',
-    icon: '🏛️',
-    title: '聚合管理主体（中心 / 大网 / 主干 / 支线 / 全网）',
-    scale: '全网、9大中心、9大rdfz热源网、15条主干网、41条支线网',
-    hasHourly: true,
-    brief: '由下属换热站与归口测温户按统一口径（面积累加、流量加权温差）实时聚合。',
-    dictTables: 'dict_service_center / dict_main_network / dict_branch_network / dict_heating_station',
-    sourceApis: '无独立源接口（基于本站与测温事实表按归属外键动态汇总）',
-    fact15mTable: '继承 fact_station_15min 清洗结果',
-    factOutputTable: '由 fact_station_hourly 与 fact_temp_hourly 实时聚合产出',
-    summary: '所有宏观管理主体（全网汇总、9大服务中心、9大热源大网 rdfz、15条主干网、41条支线网）均共用后端 _compute_weighted_temp_and_kpis() 统一精算聚合器，确保任意层级、任意页面的口径 100% 一致。',
-    keyNote: '供/回水平均温度绝不采用简单算术平均（否则小流量停运站会把全网均温拉歪），而是严格按各站“一网瞬时流量 e1”进行流量加权平均！',
-    metrics: [
-      {
-        id: 'gp-heat-water-elec',
-        kind: 'cumulative',
-        name: '分组小时累计供热 / 补水 / 耗电',
-        unit: 'GJ / t / kWh',
-        field: 'hour_heat_gj / hour_water_t / hour_elec_kwh',
-        formula: 'SUM(组内各站 hour_heat_gj)；补水优先取 hour_water_t，缺失时回退取 e14_clean',
-        steps: '按 center_id / rdfz / main_network_id / branch_network_id 将 242 座站的小时累计耗量直接求和。若某个站该小时尚无表底或积分记录，不计入累加。',
-        example: '华乐中心共管辖 28 座站，将其本小时 hour_heat_gj 相加即得华乐中心小时供热量。',
-        fallback: '若整个分组尚无任何站的补水表底积分 hour_water_t，单站层自动回退取代表瞬时补水 e14_clean 参与汇总。',
-        cleaning: '底层已过滤坏表与倒挂，保证上层聚合不被单站极值污染。',
-        sourceTags: '基于底层 METER_DIFF / INTEGRAL_15M 加总',
-      },
-      {
-        id: 'gp-area-intensity',
-        kind: 'derived',
-        name: '分组在网面积、折算热指标 & 万平耗热/补水',
-        unit: '万㎡ / W/㎡ / GJ/万㎡·h / t/万㎡',
-        field: 'covered_area_wan / heat_index_wm2 / heat_per_wan_gj / water_per_wan_t',
-        formula: '热指标 = SUM(e11) × 277777.78 / SUM(covered_area)；万平耗热 = SUM(hour_heat_gj) / (SUM(area)/10000)',
-        steps: '① 统计分组内有面积站的 covered_area 之和并记录缺失面积站数 missing_area_count；② 折算热指标反映当前瞬时供热强度（W/㎡）；③ 万平耗热反映本小时实际单位面积累计耗热量（GJ/万㎡·h）。',
-        example: '某中心面积 500 万㎡，本小时耗热 750 GJ、瞬时负荷 720 GJ/h → 万平耗热 = 750/500 = 1.50 GJ/万㎡·h，热指标 = 720×277777.78/5000000 = 40.0 W/㎡。',
-        fallback: '若组内总面积为 0，热指标与万平指标返回 None。',
-        cleaning: '32 座待补录面积的站暂时按 0 计入面积并在界面显式提示“xx站待补面积”，可在台账中心在线补录。',
-        sourceTags: '实时聚合衍生计算',
-      },
-      {
-        id: 'gp-weighted-temp',
-        kind: 'derived',
-        name: '流量加权平均供/回温与温差',
-        unit: '℃',
-        field: 'avg_sup_temp / avg_ret_temp / avg_temp_diff',
-        formula: 'T_供 = Σ(e3_i × e1_i) / Σe1_i；T_回 = Σ(e4_i × e1_i) / Σe1_i（仅统计 e1_i > 0 的站）',
-        steps: '仅纳入一网瞬时流量 e1 > 0 t/h 且温度非空的站点，以各自流量 e1 作为权重计算一次网供水加权均温与回水加权均温，两者相减即得加权平均温差。',
-        example: 'A 站流量 100 t/h、供温 80℃；B 站流量 10 t/h、供温 50℃ → 流量加权供温 = (100×80 + 10×50)/110 = 77.27℃（而非简单平均 65℃）。',
-        fallback: '若组内所有站流量均 <= 0 或缺失，返回 None。',
-        cleaning: '回压 avg_ret_pressure 采用非空 e8 的算术平均值（单位 MPa）。',
-        sourceTags: '流量加权物理聚合',
+        name: '上游代表温度 / 压力 / 瞬时流量',
+        unit: '℃ / MPa / t/h',
+        field: 'temp_clean / pressure_clean / flow_clean / heat_clean',
+        formula: '取本小时内最新一次经过阈值校验与停机判断后的运行断面',
+        steps: '记录小时末最新实况供阳面展示；若源站时间（source_time）滞后采集时间超过 2 小时，自动向异常监测中心派发通讯滞后提示。',
+        example: '某首站网口 14:55 供温 86.2℃，即作为 14 时断面展示。',
+        fallback: '传感器断路或超限值立即屏蔽并沿用 6 小时内前序正常值，原始异常读数仍保留在原始对照中备查。',
+        cleaning: '停运冷备管线（流量 <=1 且温度=0℃）视为正常停机，不触发断路误报。',
+        sourceTags: '实时直采 ｜ 前序回退保持（标 `*`）',
       },
     ],
   },
   {
     key: 'merchant',
     icon: '🏬',
-    title: '商业用户 / 商户（逐小时 + 日度双轨）',
-    scale: '464 户标准商户（挂接在 41 条支线网下）',
+    title: '商业用户 / 商户（464 户）',
+    scale: '464 户标准商户（含蒸汽户自动折算）',
     hasHourly: true,
-    brief: '每 15 分钟批量抓取全网瞬时热量/流量做梯形积分产出每小时值，并可按 /sh_ls_zb/ 5 分钟历史补采。',
-    dictTables: 'dict_merchant',
-    sourceApis: '/get_sh_data/0（免Cookie，断流降级/get_sh_data/2..16）+ /sh_ls_zb/（5分钟历史）+ /getall_bb_shrb/（日表底）',
-    fact15mTable: 'fact_merchant_15min',
-    factOutputTable: 'fact_merchant_hourly（小时精算） + fact_merchant_daily（日结表底）',
-    summary: '实测源站发现：POST /get_sh_data/0 可免 Cookie 一次拉回全部商户瞬时运行参数（含瞬时热量 shunshireliang 与流量 gongshuiliuliang），/sh_ls_zb/ 提供约 5 分钟一条的历史瞬时序列（无累计表底），两者结合梯形积分产出逐小时供热量与流量；次日 08:30 再与 /getall_bb_shrb/ 日表底作差核对。',
-    keyNote: '源站 /get_sh_data/ 返回 468 条记录，系统会自动将别名“国际航运中心大厦”归一化到台账“航运中心大厦”，并将多出的 4 户测试占位符（测试商户/测试商户1/商1户/商户测试）在阳面标记 is_registered=FALSE 剔除、写入阴面督办提醒。',
+    badgeText: '小时积分 + 日结表底',
+    brief: '5分钟实时积分算出每小时用量 + 次日 08:30 拉取日结表底作差核算。',
+    dictTables: '464 户商业用户标准台账（含介质 rdry、主干/支线网分类）',
+    sourceApis: '全网商户实时接口（/get_sh_data/）+ 5分钟历史接口（/sh_ls_zb/）+ 商业日报接口（/getall_bb_shrb/）',
+    fact15mTable: '每 5 分钟实时积分 + 每日 08:30 采集前一日累计日结表底',
+    factOutputTable: '逐小时报告商业用户表 · 每日报告 464 商业用户表与三类状态统计',
+    summary: '商业用户采取“小时看瞬时积分、日度看日结表底”的双轨体制：白天运行靠每 5~15 分钟的瞬时热量与流量梯形积分出逐小时数据（缺失时用 5 分钟历史序列补算）；次日早上 08:30 再从源站商业日报中拉取按天记录的累计表底作差结算，方便财务与运行双核对。',
+    keyNote: '源站实时接口中多出了 4 户未入账的“测试商户”占位记录，系统阳面严格将其隔离不计入 464 户；另有多家「蒸汽商户」源站原值单位是 kg/h 与 MJ/h，入库时系统会自动 ÷1000 统一折算为 t/h 与 GJ/h，并主动屏蔽蒸汽回水未接传感器导致的 -200℃ 假读数。',
     metrics: [
       {
         id: 'mc-hour-heat',
         kind: 'cumulative',
-        name: '商业户小时供热量（积分）',
-        unit: 'GJ',
-        field: 'hour_heat_gj / hour_heat_source',
-        formula: 'trapezoidal_hour_integral([(t_i, heat_clean_i)])；历史补采使用 /sh_ls_zb/ 5 分钟 fFlowJ 梯形积分',
-        steps: '① 每 15 分钟从 /get_sh_data/0（大包被 NAT 截断时自动降级按主干网 2..16 分片）抓取瞬时热量 shunshireliang (GJ/h)；② 经离线/越限清洗后存入 fact_merchant_15min；③ 按时间加权梯形面积积分并折算至 3600 秒写入 fact_merchant_hourly。',
-        example: '1896酒店在 22:00~22:45 瞬时热量稳定在 0.68~0.70 GJ/h，梯形积分折算整小时约 0.69 GJ。',
-        fallback: '若当小时实时采样缺失，可通过 /sh_ls_zb/ 拉取 5 分钟 fFlowJ 序列补算（hour_heat_source="INTEGRAL_5M"）。',
-        cleaning: '① 4 户测试商户在阳面剔除并写入 SOFTWARE_DEFECT；② xinhaoqiangdu != 0 判离线并回退 6 小时前序有效值；③ 蒸汽商户（rdry="蒸汽"）接口原值为 kg/h 与 MJ/h，入库自动 ÷1000 折算为 t/h 与 GJ/h 并屏蔽 -200℃ 未接回温；④ 折算瞬时热量 <0 或 >500 GJ/h 屏蔽回退。',
-        sourceTags: 'INTEGRAL_15M（15分钟实时积分）｜ INTEGRAL_5M（历史5分钟补采）',
-      },
-      {
-        id: 'mc-hour-flow',
-        kind: 'cumulative',
-        name: '商业户小时供水流量（积分）',
-        unit: 't',
-        field: 'hour_flow_t / hour_flow_source',
-        formula: 'trapezoidal_hour_integral([(t_i, flow_clean_i)])',
-        steps: '汇总本小时内各采样时刻的清洗后一网供水流量 flow_clean（gongshuiliuliang 或历史 fFlowF），执行梯形积分并折算到 1 小时。',
-        example: '某商户供水流量约 4.1 t/h，覆盖完整小时后 hour_flow_t ≈ 4.10 t。',
-        fallback: '未入台账测试户不计算小时流量（置空）。',
-        cleaning: '与热量共用离线平滑机制；带流量 > 0.5 t/h 时若出现供温 <= 回温，触发物理倒挂 TEMP_INVERSION 督办。',
-        sourceTags: 'INTEGRAL_15M ｜ INTEGRAL_5M',
-      },
-      {
-        id: 'mc-snapshot',
-        kind: 'snapshot',
-        name: '商业户小时代表断面（供回温 / 压力 / 阀门开度 / 瞬时热量）',
-        unit: '℃ / MPa / % / GJ/h',
-        field: 'flow_clean, temp_sup_clean, temp_ret_clean, pres_sup_clean, pres_ret_clean, heat_clean, valve_open, valve_set',
-        formula: '取本小时内最新一次（sample_bucket DESC）经过清洗的商业户断面',
-        steps: '从 fact_merchant_15min 按 source_name 聚合并取最后一条有效采样写入 fact_merchant_hourly，同时保留阀门开度 valve_open 与设定开度 valve_set 供运行调控参考。',
-        example: '1896酒店 22 时断面展示供温 76.2℃、回温 34.9℃、供流 4.1 t/h、瞬时热量 0.7 GJ/h、阀门开度 93%/80%。',
-        fallback: '离线时回退 6 小时内最后一次 xinhaoqiangdu == "0" 的有效断面（INTERP_TEMP_OFFLINE）。',
-        cleaning: '水温 <-10℃ 或 >150℃（或带流量 <=0℃）、压力 <0 或 >2.5MPa 均屏蔽并回退前序有效值。',
-        sourceTags: 'REAL ｜ INTERP_TEMP_OFFLINE ｜ MASKED_PREV_HOLD ｜ OFFLINE_PERMANENT',
+        name: '商业户小时供热量 & 流量（积分）',
+        unit: 'GJ / t',
+        field: 'hour_heat_gj / hour_flow_t',
+        formula: '实时 5~15 分钟瞬时热量梯形积分；缺失时回退 /sh_ls_zb/ 5 分钟历史积分',
+        steps: '系统每 5 分钟采集全网商户瞬时参数（若整网大包断流则自动改按 15 条主干网分段拉取保活），跨小时积分出每户耗热量与耗水量；单户信号强度非 0 判为离线，沿用最近 6 小时正常工况。',
+        example: '「1896酒店」某小时瞬时热量平稳在 0.69 GJ/h 左右，积分后计入 0.69 GJ。',
+        fallback: '若实时停采，可通过历史回溯按 /sh_ls_zb/ 每 5 分钟一条的精确轨迹无损重算该小时用量。',
+        cleaning: '对蒸汽商户自动 ÷1000 折算单位（常规固定折算不再误标红）；带流量 >0.5 时供温 <= 回温触发物理倒挂审计；瞬间功率 >500 GJ/h 或 <0 屏蔽回退。',
+        sourceTags: 'INTEGRAL_15M（实时积分）｜ INTEGRAL_5M（历史5分钟补采）',
       },
       {
         id: 'mc-daily-cons',
         kind: 'cumulative',
-        name: '商业户日结算耗热量（次日日结表底口径）',
+        name: '商业户次日日结耗热量（表底作差三分类）',
         unit: 'GJ / 日',
-        field: 'daily_consumption / daily_unit_heat',
-        formula: 'daily_consumption = tot[Data{D}] - tot[Data{D-1}]（要求 Data{D} ≥ Data{D-1}）；1号跨月对比 Data0',
-        steps: '由于 /sh_ls_zb/ 无累计表底，每日 08:30 仍保留调用 /getall_bb_shrb/ 获取月度日报中按日记录的累计表底与日单耗，与 24 小时积分结果互相校核。',
-        example: '15 日累计表底为 840.5 GJ，14 日为 828.0 GJ，则 15 日耗热量 = 12.5 GJ。',
-        fallback: '若目标日表底小于前一日（换表/清零）或为空，则 daily_consumption 置为 None，保留 raw_payload。',
-        cleaning: '仅保留匹配 dict_merchant 的 464 户标准商户；未配置有效 Cookie 时跳过日结采集。',
-        sourceTags: '日度表底作差（fact_merchant_daily）',
+        field: 'daily_consumption / calc_status',
+        formula: '当日日耗 = 今日累计表底 - 昨日累计表底（1日减上月末表底）',
+        steps: '每日 08:30 拉取商业用户日表底数据。日报页按 464 户台账严格划分为三类清晰状态：①「正常」（可准确作差）；②「缺日耗记录」（源站接口当天未返回该户或缺起/止表底）；③「表读数倒走」（止表底 < 起表底，不凑假数）。',
+        example: '15 日累计表底 840.5 GJ、14 日 828.0 GJ，即结算 15 日耗热 12.5 GJ；若 15 日表底小于 14 日则标红“表读数倒走”。',
+        fallback: '注意：今日白天的日结表底要等次日 08:30 才出结果，因此查看“今日”日报时商户日结会提示待次日结算。',
+        cleaning: '未配置有效 Session Cookie 时跳过日报接口拉取（小时瞬时积分免 Cookie 仍正常工作）。',
+        sourceTags: '正常 ｜ 缺日耗记录（标橙提示）｜ 表读数倒走（标红提示）',
+      },
+    ],
+  },
+  {
+    key: 'temp_device',
+    icon: '🌡️',
+    title: '居民室温 & 已停采二次分区说明',
+    scale: '2,097 台账终端（另有 580 个二次分区停采留账）',
+    hasHourly: true,
+    badgeText: '7天鲜度 · 48h滚动',
+    brief: '居民测温整点直采、防僵尸户与黑户规则，及二次分区停采后的口径边界。',
+    dictTables: '2,097 户室温标准台账（含 15 组站名别名自动归口） + 580 个二次分区静态台账',
+    sourceApis: '居民室温接口（/jumin/，需有效 Cookie，每小时整点采集一次）',
+    fact15mTable: '每小时整点采集一次，数据自动滚动保留最近 48 小时以控制存储容量',
+    factOutputTable: '驾驶舱当前室温卡片 · 单站室温下钻抽屉 · 异常数据监测',
+    summary: '居民室内温度由各户测温盒上传至源站，系统每小时整点拉取一次，严格经过「已入台账 + 最近 7 天内有上报 + 室温在 (5℃, 40℃] 合理范围」三重过滤后，才参与计算全网及单站平均室温、≥18℃ 达标率与舒适度分布。',
+    keyNote: '① 未录入标准台账的源站多出终端会被阳面剔除并在异常中心提示核对；② 超过 7 天未更新的设备判为“离线僵尸户”绝不拉低均温；③ 580 个二次网分区已停止实时落库以减轻源站负担，仅在静态台账中保留清单对照。',
+    metrics: [
+      {
+        id: 'tm-clean',
+        kind: 'snapshot',
+        name: '居民有效均温、达标率（≥18℃）与舒适率',
+        unit: '℃ / % / 户',
+        field: 'avg_room_temp / temp_pass_rate_pct / temp_comfort_rate_pct',
+        formula: '有效门槛 = 已入台账 且 (距今 ≤ 7 天内上传) 且 (5℃ < 室温 ≤ 40℃)',
+        steps: '三重过滤全部通过的有效终端才进入分站及全网统计：≥18℃ 占比为达标率，20~25℃ 占比为舒适率。驾驶舱“当前室温分布”固定读取库中最新一次有效测温断面展示，不随切换历史日期而变成空。',
+        example: '当前断面在册 2,097 户，有效可用 2,084 户（另有 6 户源站未传、7 户温度超限剔除、8 户未入台账隔离），即按 2,084 户算均温与达标率。',
+        fallback: '异常或离线超 7 天的测温点会被置为无效（不做假温度插值），原始读数和最后上报时间仍可在单站明细抽屉与异常监测页查看。',
+        cleaning: '为控制数据库膨胀，室温明细表仅滚动保留最近 48 小时记录；若未配置或 Cookie 过期，每小时抓取会提示失败且无法更新最新室温。',
+        sourceTags: '仅有效台账样本参与统计（无效与未入台账终端均透明可查）',
       },
     ],
   },
@@ -1332,11 +1206,16 @@ const calcResult = computed(() => {
   color: #64748b;
 }
 
+.meta-code,
+.meta-text {
+  font-size: 12.5px;
+  color: #1e293b;
+  word-break: break-word;
+  line-height: 1.45;
+}
 .meta-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  color: #1e293b;
-  word-break: break-word;
 }
 
 .note-callout {
@@ -1782,6 +1661,12 @@ const calcResult = computed(() => {
   background: #fffafa;
 }
 
+.api-muted-item {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  opacity: 0.92;
+}
+
 .method-tag {
   font-size: 11px;
   font-weight: 700;
@@ -1823,6 +1708,11 @@ const calcResult = computed(() => {
 .auth-cookie {
   background: #fef3c7;
   color: #92400e;
+}
+
+.auth-deprecated {
+  background: #e2e8f0;
+  color: #475569;
 }
 
 .auth-forbidden {

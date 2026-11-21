@@ -1,3 +1,51 @@
+## 2026-11-21 新增「取数完整度与源头缺损诊断」接口 (`/faults/coverage`) 及去重异常汇总
+
+- **`projects/smart_heating_platform/services/report_query_service.py` & `api/faults.py`**：新增 `get_collection_coverage_diagnostics()` 与 `GET /api/v1/projects/smart_heating_platform/faults/coverage`（限 `Global_admin`），按日诊断 242 座换热站（含去重汇总 `station.anomaly_summary`：供热及工况、补水、耗电与全站任一维度异常站数）、464 户商业用户、2,097 台账室温终端及上游测点的有效覆盖与源头缺损明细。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_fault_coverage_diagnostics_and_api`（`pytest` 全部 **20 passed**）。
+
+## 2026-11-21 换热站路线 B 补齐 `f209` 瞬时补水采集、缺失 `f254` 梯形积分兜底与历史重校准
+
+- **`projects/smart_heating_platform/services/cleaning_engine.py`**：`clean_station_history_point()` 新增提取 `f209 -> e14_raw` 并调用 `_clean_station_primary_metrics()` 按 `[0, 100] t/h` 清洗返回 `e14_raw`/`e14_clean`。
+- **`projects/smart_heating_platform/services/collector_engine.py`**：
+  - 抽离 `_parse_station_history_records()`、`_calibrate_station_parsed_hours()` 与 `_upsert_station_calibration_results()` 供实时校准与历史补采共用（`/hrz_ls_zb/` 超时提升至 `45s`）；
+  - 过滤 `f209` 坏点后计算 `fb_water = trapezoidal_hour_integral(...)`，在 `f254` 累计差值缺失或单次跳变（且非整日锯齿震荡 `osc_w`）时自动降级写入 `hour_water_t`（`INTEGRAL_15M` / `FALLBACK_INTEGRAL_15M`）；
+  - 调整 `fact_station_hourly` 冲突更新 SQL 为 `EXCLUDED` 直接覆写 `e14_clean`、`hour_water_*` 与 `hour_elec_*`，确保重校准清理历史坏表虚假值。
+- **`scripts/backfill_smart_heating_history.py`**：重构 `backfill_stations()` 为 5 天窗口分片拉取（`timeout=90s`）+ 按日切片调用上述生产校准函数写库。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_f209_capture_and_hour_water_integral_fallback`（`pytest` **17 passed**），并已完成 `2026-11-01`~`2026-11-21` 全站 `242/242`（`119,064` 站时）历史库校准修正。
+
+## 2026-11-21 电/水表异常锯齿隔离与日报水电双轨核对增强
+
+- **`projects/smart_heating_platform/services/cleaning_engine.py` & `collector_engine.py`**：新增按面积核定小时水/电上限 (`station_max_hourly_elec_kwh` / `station_max_hourly_water_t`) 与表底锯齿倒走检测 (`is_meter_sequence_oscillating`)，异常小时水/电自动置空并记录 `METER_JUMP`。
+- **`projects/smart_heating_platform/services/report_query_service.py`**：新增 `_detect_broken_meter_stations()` 对历史异常表底兜底屏蔽，并修复 `_fmt_num()` 截断整数末尾 `0` 问题；`get_daily_report()`、`build_daily_export_payload()`、`build_daily_excel()` 全面接入 `consumption_station_purchased_power`（自动由 `万kWh` 折算 `kWh`）与补水量双轨偏差及 `±10%` 告警。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_oscillating_elec_water_meter_isolation_and_daily_dual_track`（`pytest` **18 passed**）。
+
+## 2026-11-21 驾驶舱与逐小时报告透传电耗指标、电耗同比及高电耗榜单
+
+- **`projects/smart_heating_platform/services/report_query_service.py`**：
+  - `_build_trend_24h_from_rows()`、`get_hourly_report()`、`get_entity_trend_24h()` 透传站级及 24h `hour_elec_kwh`（含单站 `elec_per_wan_kwh`）；
+  - `get_dashboard_overview()` 新增 `comparison.elec_diff_pct`、`comparison.prev_hour_elec_kwh`、`meta.today_cum_elec_kwh`、`trend_7d[].day_elec_kwh` 及通过健康过滤的 `watchlists.high_elec` Top 5。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：同步断言 `elec_diff_pct` 与 `high_elec`（`pytest` **17 passed**）。
+
+## 2026-11-21 驾驶舱焦点榜单剔除零耗与异常站点并移除室温字段
+
+- **`projects/smart_heating_platform/services/report_query_service.py`**：
+  - `get_hourly_report()` 为站级明细透传 `day_anomaly_count`；新增 `_is_watchlist_station_healthy()` 健康拦截器，过滤离线、`fault_tag`、掩码值、单日异常 `>=3` 次、零/近零耗热（`<0.5 GJ` 或 `<5 W/㎡`）、零流量及供回温压缺失/倒挂/热流严重失衡站点；
+  - `get_dashboard_overview()` 的 `watchlists` 移除 `low_temp` 与 `avg_room_temp` 字段，仅输出健康过滤后的 `high_heat`、`high_water`、`benchmark`。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：更新 `test_dashboard_overview_api_and_deltas` 验证故障站与零能耗站剔除及无室温输出（`pytest` **17 passed**）。
+
+## 2026-11-21 优化驾驶舱接口 `/reports/dashboard`（连续 72h 趋势与当前室温实况口径）
+
+- **`projects/smart_heating_platform/services/report_query_service.py`**：
+  - `get_dashboard_overview()` 新增连续 72 小时趋势数组 `trend_72h`（72 个连续整点槽位与 `is_day_start` 跨日标识）；
+  - 新增独立当前室温实况载荷 `current_temp`（取 `fact_temp_hourly` 最新有效 `biz_hour` 断面，不随历史日期回溯变化），并将其同步合并至 `kpis`、`center_quadrant`、`rdfz_ranking`、`watchlists` 与 `brief`；
+  - 从 `trend_24h`、`trend_7d`（新增 `is_partial` 标记未满 24h 当日）与 `comparison` 中移除历史室温指标。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：同步更新 `test_dashboard_overview_api_and_deltas` 覆盖 `trend_72h` 连续性、独立 `current_temp` 与无历史室温约束（`pytest` **17 passed**）。
+
+## 2026-11-21 新增驾驶舱总览接口 `/reports/dashboard`
+
+- **`projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：新增 `get_dashboard_overview()` 与 `GET /api/v1/projects/smart_heating_platform/reports/dashboard`，输出当期 KPI、昨日同期对比增量、24 小时（含昨日同期对照）及近 7 日气温/供热量走势、9 大服务中心能效散点、主干热网分布、Top 5 焦点榜与自动运行简报。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_dashboard_overview_api_and_deltas`（`pytest` **17 passed**）。
+
 ## 2026-11-21 修复日报换热站缺失统计、止表底时刻与商业用户三类汇总口径
 
 - **`projects/smart_heating_platform/services/report_query_service.py`**：

@@ -94,7 +94,26 @@
           <strong class="kpi-val">
             <AnomalyBadgeValue placement="bottom" :text="fmt(kpis.day_water_t, ' t')" :note="kpis.anomalies?.day_water_t?.note" />
           </strong>
-          <span class="kpi-sub">按 24 小时补水表底/积分汇总</span>
+          <span class="kpi-sub">
+            手工填报 {{ fmt(kpis.manual_total_water_t, ' t') }}
+            · 偏差
+            <span :class="Math.abs(kpis.water_diff_pct || 0) > 10 ? 'text-err' : 'text-ok'">
+              {{ kpis.water_diff_pct != null ? `${kpis.water_diff_pct > 0 ? '+' : ''}${kpis.water_diff_pct}%` : '-' }}
+            </span>
+          </span>
+        </div>
+        <div class="card elevated kpi-card">
+          <span class="kpi-label">系统日累计电耗</span>
+          <strong class="kpi-val">
+            <AnomalyBadgeValue placement="bottom" :text="fmt(kpis.day_elec_kwh, ' kWh')" :note="kpis.anomalies?.day_elec_kwh?.note" />
+          </strong>
+          <span class="kpi-sub">
+            手工填报 {{ fmt(kpis.manual_total_elec_kwh, ' kWh', 0) }}
+            · 偏差
+            <span :class="Math.abs(kpis.elec_diff_pct || 0) > 10 ? 'text-err' : 'text-ok'">
+              {{ kpis.elec_diff_pct != null ? `${kpis.elec_diff_pct > 0 ? '+' : ''}${kpis.elec_diff_pct}%` : '-' }}
+            </span>
+          </span>
         </div>
       </section>
 
@@ -127,6 +146,12 @@
                   <SortableTh label="万平耗热 (GJ/万㎡)" sort-key="heat_per_wan_gj" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                   <SortableTh label="系统补水 (t)" sort-key="sys_water_t" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                   <SortableTh label="手工补水 (t)" sort-key="man_water_t" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="补水偏差 (t)" sort-key="water_diff_t" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="补水偏差率" sort-key="water_diff_pct" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="系统电耗 (kWh)" sort-key="sys_elec_kwh" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="手工耗电 (kWh)" sort-key="man_elec_kwh" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="电耗偏差 (kWh)" sort-key="elec_diff_kwh" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh label="电耗偏差率" sort-key="elec_diff_pct" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                   <SortableTh label="日均室温 (℃)" sort-key="avg_room_temp" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                 </tr>
               </thead>
@@ -159,6 +184,28 @@
                     <AnomalyBadgeValue :text="fmt(c.sys_water_t)" :note="c.anomalies?.sys_water_t?.note" />
                   </td>
                   <td>{{ fmt(c.man_water_t) }}</td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(c.water_diff_t)" :note="c.anomalies?.water_diff_t?.note" />
+                  </td>
+                  <td>
+                    <span v-if="c.water_diff_pct != null" :class="['diff-pill', c.is_water_alert ? 'pill-err' : 'pill-ok']">
+                      {{ c.water_diff_pct > 0 ? '+' : '' }}{{ c.water_diff_pct }}%
+                    </span>
+                    <span v-else>-</span>
+                  </td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(c.sys_elec_kwh)" :note="c.anomalies?.sys_elec_kwh?.note" />
+                  </td>
+                  <td>{{ fmt(c.man_elec_kwh, '', 0) }}</td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(c.elec_diff_kwh)" :note="c.anomalies?.elec_diff_kwh?.note" />
+                  </td>
+                  <td>
+                    <span v-if="c.elec_diff_pct != null" :class="['diff-pill', c.is_elec_alert ? 'pill-err' : 'pill-ok']">
+                      {{ c.elec_diff_pct > 0 ? '+' : '' }}{{ c.elec_diff_pct }}%
+                    </span>
+                    <span v-else>-</span>
+                  </td>
                   <td>{{ fmt(c.avg_room_temp) }}</td>
                 </tr>
               </tbody>
@@ -209,7 +256,9 @@
                   <td>
                     <AnomalyBadgeValue :text="fmt(s.day_water_t)" :note="s.anomalies?.day_water_t?.note" />
                   </td>
-                  <td>{{ fmt(s.day_elec_kwh) }}</td>
+                  <td>
+                    <AnomalyBadgeValue :text="fmt(s.day_elec_kwh)" :note="s.anomalies?.day_elec_kwh?.note" />
+                  </td>
                   <td>
                     <AnomalyBadgeValue :text="`${fmt(s.avg_sup_temp)} / ${fmt(s.avg_ret_temp)}`" :note="s.anomalies?.avg_sup_temp?.note || s.anomalies?.avg_ret_temp?.note" />
                   </td>

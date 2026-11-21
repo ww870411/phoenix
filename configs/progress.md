@@ -1,5 +1,172 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-21 优化「异常总览看板」领导管理向文案口径、去重异常汇总与双图视觉排版
+
+- **改动缘由**：
+  - 按国企管理层阅读习惯对 `FaultAuditView.vue` 首屏 `📌 异常总览看板` 去技术术语、去主观表述（去除“挽回”“f221/f209/f253”“10亿/锯齿”等技术细节与“数据错误”措辞），统一以“可用算法估算 / 数据缺失无法估算 / 始终为 0 / 数据异常的站有 xx 站”的通俗中性口径展示，并重构两张主图的视觉配色与排版。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - `get_collection_coverage_diagnostics()` 新增去重后的 `station.anomaly_summary`（按站点合并统计 `heat_anomaly_stations`、`water_anomaly_stations`、`water_partial_fallback`、`elec_anomaly_stations` 与全站任一维度异常站数 `total_anomaly_stations`），并补充 `anomaly_stations` 明细筛选标记（含仅倍率折算、局部降级及温压/倒挂异常站）。
+  - **`frontend/src/projects/smart_heating_platform/pages/FaultAuditView.vue`**：
+    - 重写首屏顶部图例汇总条与 6 大核心 KPI 卡片（顶部色调条 + 微型三色占比条 + 中性白话描述 + 统一 `数据异常的站有 xx 站` 底栏），移除电耗面积占比强调并显式标出补水 `瞬时流量始终为 0` 站数；
+    - 重绘两张 ECharts 主图：左图采用三态红黄绿胶囊堆叠条（`表计直采可用` / `可用算法估算` / `数据缺失/无法估算`），右图（方案 A）采用全网 242 站浅灰参照背景轨道拆解水/电/热与温压传感器 10 项具体异常原因并支持点击下钻至第二标签页对应筛选器。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：补充断言 `station.anomaly_summary` 去重计数准确性。
+- **验证结果**：
+  - `pytest backend/projects/smart_heating_platform/tests -v`：**20 passed（0 失败）**；
+  - `npm run build`：**built in 24.24s（0 错误）**；
+  - `2026-11-21` 实测：`total_anomaly_stations=203/242`（供热及工况异常 `28` 站、补水异常 `152` 站含局部估算 `4` 站、耗电异常 `125` 站）。
+
+## 2026-11-21 升级「算法说明」通俗业务手册与「异常数据监测」默认取数诊断看板
+
+- **改动缘由**：
+  - 原 `AlgorithmGuideView` 偏向开发术语且残留 `/zx_hrz/` 实时拉取等过时表述，对运营与管理用户不够友好；
+  - 原 `FaultAuditView` 仅展示清洗拦截工单，用户无法一眼看出“当前共有多少站缺失累计热量（又有多少同时缺瞬时热量）、多少站缺累计补水/缺瞬时补水、多少站电表空值/恒0/冻结/锯齿、商业用户与居民室温各自缺多少有效数据”，容易误判为平台自身计算错误。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py` & `api/faults.py`**：
+    - 新增 `get_collection_coverage_diagnostics()` 与鉴权接口 `GET /api/v1/projects/smart_heating_platform/faults/coverage`（仅限 `Global_admin`）；
+    - 按选定日期实时统计四大主体源头缺损与补救细分：① **242 座换热站**（供热量正常/用瞬时 `f222` 补救/累计瞬时双缺；补水量正常/用瞬时 `f209` 补齐/彻底无补水或坏表置空；耗电量正常面积占比及 `f253` 未上传/恒零/冻结十亿/锯齿隔离 4 类原因；缺面积/离线/温压异常站及全部可筛选明细）；② **464 户商业用户**（小时积分缺失/离线/触发清洗/测试户 与 日结表底缺失/倒走）；③ **2,097 户居民室温**（有效样本 vs 源站未返回/超7天离线/超温失效 + 未入台账终端，支持当日无快照时降级附带最近断面提示）；④ **上游测点**（有效采集/全天缺数/越限滞后）。
+  - **`frontend/src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：
+    - 按 6 大业务主题重构所有指标卡为「📥 取数逻辑（数从哪来、怎么算）」+「🔄 缺数/坏表时的降级补救策略」+「🛡️ 异常识别与安全隔离边界」+「📌 页面查看说明」，使用通俗业务语言重写并全面对齐路线 B `/hrz_ls_zb/`（含 `f209` 补水补救、按面积核定电/水锯齿隔离、日报热/水/电双轨对账与驾驶舱健康准入口径），同步更新接口清单页将 `/zx_hrz/` 与 `/get_yw_data/1` 标为已停用。
+  - **`frontend/src/projects/smart_heating_platform/pages/FaultAuditView.vue` & `services/api.js`**：
+    - 新增 `fetchFaultCoverage()` 与顶部三标签页切换，默认首屏新增 **`📌 异常总览看板`**（按「xx 站/总站数（百分比）· 其中使用瞬时积分修正 · 无法修正 · 存在数据错误的站共有 xx 站」直白口径呈现 6 大核心指标卡，并配置 2 张 ECharts 主图：`全网各主体 100% 完整度对比堆叠图` 与 `电表/水表/热表重灾区缺陷拆解图`，均支持点击直达第二标签页明细），原 **`📊 当日取数诊断与源头缺损`** 与 **`🛡️ 异常拦截工单明细`** 顺次排列其后。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_fault_coverage_diagnostics_and_api` 覆盖多主体缺失分类与权限/接口返回断言。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**20 passed（0 失败）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 22.65s（0 错误）**；
+  - 真实生产库实测：`2026-11-21` 换热站热量 `228` 正常/`7` 瞬时补救/`7` 双缺；补水 `94` 累计正常/`133` `f209` 积分补齐/`15` 双缺；耗电 `117` 正常（`43.7%` 面积）/`125` 缺失（未传 `65` + 恒零 `30` + 冻结十亿 `26` + 锯齿隔离 `4`）。
+
+## 2026-11-21 换热站路线 B 补齐 `f209` 瞬时补水采集、缺失 `f254` 梯形积分兜底及 11 月全量历史重校准
+
+- **改动缘由**：
+  - 核查「华乐服务中心」等站点系统补水偏少原因时确认：自停用 `/zx_hrz/` 快照轮询（仅保留路线 B `/hrz_ls_zb/`）及历史回溯补采以来，采集器漏取了 `/hrz_ls_zb/` 中对应的瞬时补水流量字段 **`f209`（即原 `e14`）**，且 `hour_water_t` 仅依赖累计水表 `f254` 表底差计算，导致全网约 151 座无 `f254` 累计表底但有瞬时流量计的换热站（如华乐「泛华领域」`~300 t/d`）补水统计大面积丢失；同时既有用 `COALESCE` 的 SQL 覆写策略无法在重校准时清理历史坏表（如「信兴花园」锯齿电表）的存量假高值。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/cleaning_engine.py`**：
+    - `clean_station_history_point()` 补齐提取 `e14_raw = rep_record.get("f209")`，传入 `_clean_station_primary_metrics()` 按 `[0, 100] t/h` 量程清洗，并在所有分支返回 `"e14_raw"` 与 `"e14_clean"`。
+  - **`backend/projects/smart_heating_platform/services/collector_engine.py`**：
+    - 抽离共享函数 `_parse_station_history_records()`、`_calibrate_station_parsed_hours()` 与 `_upsert_station_calibration_results()`（消除实时校准与历史补采两套脚本之间的重复代码），并将 `/hrz_ls_zb/` 请求超时由 `20s` 提升至 `45s` 兼容高密度报文站点（如「中天央著」）；
+    - 采集 `f209` 并先过滤 `<0` 或 `>100 t/h` 异常采样后再执行时间加权梯形积分 `fb_water = trapezoidal_hour_integral(clean_f209_pts)`；当 `f254` 表底差 `delta_w` 缺失或非震荡单次跳变时，若 `not osc_w` 且 `fb_water` 有效则自动回落写入 `hour_water_t = fb_water`（`hour_water_source = INTEGRAL_15M` / `FALLBACK_INTEGRAL_15M`）；
+    - `_upsert_station_calibration_results()` 的 `ON CONFLICT DO UPDATE SET` 改为直接由 `EXCLUDED` 覆写 `e14_clean`、`hour_water_t`/`hour_water_source`、`hour_elec_kwh`/`hour_elec_source`，确保重校准时历史坏表虚假读数可被彻底置空清零。
+  - **`backend/scripts/backfill_smart_heating_history.py`**：
+    - 重构 `backfill_stations()` 为按 5 天窗口分段拉取 `/hrz_ls_zb/`（`timeout=90s`），按单日窗口切片并复用 `_parse_station_history_records()`、`_calibrate_station_parsed_hours()`（保持按日作用域锯齿检测 `osc_w`/`osc_e` 与跨天 `prev_valid` 递推）及 `_upsert_station_calibration_results()` 写库。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：
+    - 新增 `test_f209_capture_and_hour_water_integral_fallback` 单元测试，验证无 `f254` 仅上报 `f209` 时的 `e14` 采集与 `INTEGRAL_15M` 积分兜底、超上限 `f209 > 100` 滤除及 `f253` 锯齿坏表置空逻辑。
+- **验证与全量历史数据校正结果**：
+  - `pytest backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py -v`：**17 passed（0 错误）**；
+  - 执行 `2026-11-01` 至 `2026-11-21` 全站（`242/242`，`0` 失败）历史重校准，回写 **`119,064`** 条站时记录；
+  - 真实生产库对比验证：
+    - `2026-11-01`~`11-20` 每日 `e14_clean` 有效小时数由 `0`（仅 `11-19/20` 有局部历史残值）恢复至 **`5,136 ~ 5,184` 条/日**，`hour_water_t` 由 `1,900 ~ 2,064` 条提升至 **`5,275 ~ 5,424` 条/日**（`11-21` `00:00~13:00` 已同步覆盖 `216~220` 站 `e14` 与 `226~227` 站 `hour_water_t`）；
+    - 「华乐服务中心」`2026-11-18` 系统补水量（包含「泛华领域」`300.06 t`、`avg e14=12.51 t/h` 等）恢复至 **`315.57 t`**，全网 `11-18` 系统日补水量由 `2,700.3 t` 提升至 **`4,583.95 t`**（对比人工填报 `5,242.0 t` 偏差 `-12.55%`）；
+    - 「信兴花园」`2026-11-01`~`2026-11-21` 全时段 `hour_elec_kwh` 假高值已全部置空清零（`e_cnt=0, sum_e=0.0`），全网 `11-01` 异常电耗由 `124,264.9 kWh` 修正为 `51,061.5 kWh`。
+
+## 2026-11-21 电/水表锯齿倒走超限异常隔离与每日水电双轨对账联动
+
+- **改动缘由**：
+  - 核查发现“信兴花园”等站累计电表 `f253` 在源站呈锯齿倒走并周期跳变 `+25,438`，局部上升沿骗过原有 `5000 kWh` 单小时上限产生 `289.04 kWh` 假高值；同时需要在每日报告中将系统耗电、系统补水与 Phoenix 手工日报（`consumption_station_purchased_power`、`consumption_station_fill_water`）做全面双轨偏差对比。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/cleaning_engine.py` & `collector_engine.py`**：
+    - 新增按面积核定小时基准上限 `station_max_hourly_elec_kwh()`（`12 kWh/万㎡·h`，兜底 `35`）、`station_max_hourly_water_t()`（`5 t/万㎡·h`，兜底 `80`）及表底序列锯齿倒走检测 `is_meter_sequence_oscillating()`；
+    - `_process_station_calibration()` 对整日倒走震荡或超 `1.5` 倍上限的水/电表底直接置空 `hour_water_t`/`hour_elec_kwh` 并写入 `METER_JUMP` 故障单。
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - 新增报告层兜底识别 `_detect_broken_meter_stations()`（覆盖存量库历史行），在逐小时报告、驾驶舱、日报与多日 Excel 导出中自动屏蔽倒走/跳变/超限的站级水/电读数并输出异常提示（同时修复 `_fmt_num()` 误删整数末尾 `0` 的缺陷）；
+    - `get_daily_report()`、`build_daily_export_payload()`、`build_daily_excel()` 接入 `consumption_station_purchased_power`（按 `unit='万kWh'` 自动 `×10000` 折算为 `kWh`）与 `consumption_station_fill_water` 双轨对比，输出 9 大中心及全网 `man_water_t`/`water_diff_t`/`water_diff_pct`/`is_water_alert` 与 `man_elec_kwh`/`elec_diff_kwh`/`elec_diff_pct`/`is_elec_alert`。
+  - **`frontend/src/projects/smart_heating_platform/pages/DailyReportView.vue`**：
+    - KPI 区补充手工补水及偏差率展示，新增 **`系统日累计电耗`** 与手工外购电偏差卡片；
+    - 9 大中心双轨对比表增加可排序 `补水偏差`、`补水偏差率`、`系统电耗`、`手工耗电`、`电耗偏差`、`电耗偏差率` 列；242 站日耗表为 `day_elec_kwh` 接入 `AnomalyBadgeValue` 异常角标。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：
+    - 新增 `test_oscillating_elec_water_meter_isolation_and_daily_dual_track` 单元测试覆盖锯齿倒走拦截、坏水表站隔离与 `万kWh` 折算对比。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**18 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 22.76s（0 错误）**；
+  - 真实生产库验证：`2026-11-21 09:00` 驾驶舱已自动剔除 `信兴花园`，全网小时电耗降至 `3550.68 kWh`（`1.54 kWh/万㎡`），`high_elec` Top 5 为 `金海花园`~`北京公园`；`2026-11-18` 日报已屏蔽 `信兴花园` 等 5 站异常电表并对齐手工水电对比（水 `2700.26` vs `5242.0 t`，电 `88052.9` vs `199800.0 kWh`）。
+
+## 2026-11-21 驾驶舱与逐小时运行报告全面接入电耗统计与对比
+
+- **改动缘由**：
+  - 既有链路仅在「每日报告」展示 `day_elec_kwh`，而生产库 `fact_station_hourly.hour_elec_kwh` 已完整采集，需在领导驾驶舱与逐小时报告中同步显性化全网小时电耗、万平单耗、昨日同期对比及高电耗关注榜。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - `_build_trend_24h_from_rows()`、`get_hourly_report()`、`get_entity_trend_24h()` 补齐站级与 24h 时段 `hour_elec_kwh` 及 `elec_per_wan_kwh` 透传；
+    - `get_dashboard_overview()` 在 `comparison` 增加 `elec_diff_pct` 与 `prev_hour_elec_kwh`，在 `meta` 增加 `today_cum_elec_kwh`，并在 `trend_7d` 增加 `day_elec_kwh`；
+    - `watchlists` 新增经过 `_is_watchlist_station_healthy()` 健康过滤的 **`high_elec`**（Top 5 高电耗正常运行站点，含 `hour_elec_kwh` 与 `elec_per_wan_kwh`）。
+  - **`frontend/src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：
+    - 第 6 张 KPI 卡升级为 **`小时补水 / 耗电`**（双指标主值 + 万平单耗 + 电耗昨日同期对比 `elec_diff_pct`），保持 6 卡 16:9 黄金对齐；
+    - 焦点榜单 Top 5 恢复 4 项页签，新增 **`⚡ 高电耗`**；下钻单站 24h 明细表同步增加 **`电耗 (kWh)`** 列。
+  - **`frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：
+    - KPI 区新增第 8 张 **`小时累计电耗`** 卡片（含 `万平电耗`）；分组汇总表增加 `小时电耗 (kWh)` 列、242 站明细表增加 `电耗 (kWh)` 列（均支持表头排序）。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：更新 `test_dashboard_overview_api_and_deltas` 覆盖 `elec_diff_pct` 与 `high_elec` 健康榜单校验。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**17 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 25.33s（0 错误）**；
+  - 真实生产库 `get_dashboard_overview()`（`2026-11-21 09:00`）：`hour_elec_kwh = 3839.72 kWh`（万平 `1.67 kWh/万㎡`，当日累计 `37234.48 kWh`，较昨同期 `+5.8%`），`high_elec` Top 5 为 `信兴花园 (289.04 kWh)` 至 `风光街 (67.16 kWh)`。
+
+## 2026-11-21 智慧供热驾驶舱焦点榜单剔除异常/零耗站点并移除居民室温展示
+
+- **改动缘由**：
+  - 真实运行数据核查发现：原“全网运行焦点榜单 Top 5”中不仅包含室温排行及单站室温标签，还将 `五一站`（缺回温/回压、`e3=144℃`）、`南山苑`/`经典A`（`SOFTWARE_DEFECT` 掩码站）、`正源`（`0.0 GJ / 0.0 t/h` 补水）、`远洋风景`/`春海站`/`老解放`（`0.02 W/㎡` 近零负荷或传感缺失/回压倒挂）误纳入榜单。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - `get_hourly_report()` 为站级明细增加单日累计异常次数 `day_anomaly_count`（`sum(st_day_counts.values())`）；
+    - 新增站点健康过滤 `_is_watchlist_station_healthy()`，统一剔除离线/无记录、`fault_tag`、掩码值（`MASKED*`/`NO_DATA`）、`field_notes` 非空、单日异常 `>=3` 次、零/近零耗热（`hour_heat_gj < 0.5` 或 `heat_index_wm2 < 5.0`）、零/极低一次流量（`e1 <= 0.5`）、供回温/供回压缺失或物理倒挂越限及热量-流量平衡显著失调站点；
+    - `get_dashboard_overview()` 的 `watchlists` 移除 `low_temp` 分榜，仅输出经过健康过滤的 `high_heat`、`high_water`、`benchmark` 三类运行榜单，并移除所有榜单条目中的 `avg_room_temp` / `temp_pass_rate_pct` 字段。
+  - **`frontend/src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：
+    - “全网运行焦点榜单 Top 5”精简为 `🔥 高热指标`、`💧 高补水`、`🏆 节能低耗` 三项（`.seg-switch.full` 改为 3 列，默认选中 `high_heat`），卡片不再展示任何居民室温数值，点击条目统一下钻当日 24 小时运行负荷曲线（移除冗余室温户明细抽屉）。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：
+    - 扩充 `test_dashboard_overview_api_and_deltas`，增加 `fault_tag` 假高耗站与 `0.0 GJ` 零能耗站用例，验证其均被过滤且 `watchlists` 不含 `low_temp` 与 `avg_room_temp`。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**17 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 18.59s（0 错误）**；
+  - 真实生产库 `get_dashboard_overview()` 实测：`high_heat` 前 5 为 `星光耀`~`海涵庄园`，`high_water` 前 5 为 `先进街`~`广宁`（已跳过 0 耗的 `正源`），`benchmark` 前 5 为 `中海星钻`~`胜利路(唐宁)`（`7.07~9.6 W/㎡`）。
+
+## 2026-11-21 智慧供热运行驾驶舱支持 16:9 全屏一屏完整适配
+
+- **改动缘由**：
+  - 全屏投屏场景下（如 `1920×1080` 会议室大屏及 `125%/150%` 系统缩放的 `16:9` 笔记本屏幕），原流式布局总高度超过 `1100px`，点击「⛶ 全屏投屏」后仍会出现垂直溢出或受 1280px 断点影响折行。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：
+    - 为根节点绑定 `.is-fullscreen` 状态类并与 `:fullscreen` 伪类协同，建立纯原生像素级的 **16:9 零滚动视口网格布局**（`100vw × 100vh; overflow: hidden`）：顶部控制栏单行压缩、简报条单行截断、`.dash-main` 按 `auto / auto / 1.08fr / 0.92fr` 垂直撑满、`9 大主干热网` 切为 2 列紧凑网格、三大 ECharts 图表取消固定像素高度并随 `ResizeObserver` 与延迟重排自适应满格填充；
+    - 为 `toggleFullscreen()` 增加视口固定全屏降级与 `Escape` 退出监听，同时限定 `max-width: 1280px` 折行断点仅作用于非全屏模式，确保 150% 缩放 `16:9` 全屏依然维持 6 卡并排与左右分栏。
+- **验证结果**：
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 31.43s（0 错误）**。
+
+## 2026-11-21 优化「智慧供热运行驾驶舱」连续 72 小时趋势、室温仅展示当前实况与深空排版细节
+
+- **改动缘由**：
+  - 结合生产库实测与界面走查：
+    1. 领导关注连续跨天冷暖演变，需新增**近 72 小时连续趋势图**；
+    2. 居民室温仅用于掌握当前最新室内保障状态，**不再展示历史室温曲线或昨日对比增量**；且针对 `fact_temp_hourly` 滚动清理/末小时尚未落库场景（如当前供热/气象最新在 `11-21 09:00`，而有效室温最新在 `11-20 14:00`），避免因当前小时暂无室温而导致全屏室温、四象限与榜单归零；
+    3. 修正 `DateStepPicker` 深色主题白底冲突、1280~1440px 下 KPI 标签与增量徽标挤压及底部 Bento 卡片等高对齐与“进行中当日”7 日柱状图误读问题。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py`**：
+    - `get_dashboard_overview()` 新增连续 72 小时时间轴 `trend_72h`（以 `sel_end` 为终点构建连续 72 个整点槽位，附带 `is_day_start` 跨日零点标记，关联小时供热量 `hour_heat_gj`、热指标 `heat_index_wm2` 与室外温度 `outdoor_temp`）；
+    - 新增独立查询最新有效室温快照块 `current_temp`（检索 `fact_temp_hourly` 最新有效 `biz_hour`，含全网均温、达标率、舒适率、四档户数分布 `distribution`，以及各中心与各站当前室温均值），无论查看当前缺失末小时还是回溯历史日期，室温均始终展示最新实况；
+    - 从 `trend_24h`（置为 `None`）、`trend_7d`（移除 `avg_room_temp` 并新增 `is_partial` 标识当日累计进行中时段）与 `comparison`（移除 `room_temp_diff_c`/`pass_rate_diff_pct`）彻底剥离历史室温口径，并将 `current_temp` 同步归并至 `kpis`、`center_quadrant`、`rdfz_ranking`、`watchlists`（`low_temp`/`benchmark`）与 `brief`。
+  - **`frontend/src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：
+    - 主趋势图默认展示 `近 72 小时连续`（支持双轴小时供热量/室外气温切换热指标、跨日 `00:00` 垂直标线、鼠标滚轮/拖拽局部缩放及点击任意时段跳转对应日期与小时），并保留 `当日 24 小时` 与 `近 7 日逐日`（进行中当日虚线半透明区分）切换；
+    - 室温 KPI 卡片、室温分布环形图、9 大中心能效四象限与低温/标杆关注榜全面锁定为 `current_temp` 当前实况（标注实况时间戳 `截至 MM-DD HH:00`，不提供历史对比/曲线）；
+    - 优化 `:deep(.date-picker-group)` 深浅双主题融合、将 KPI 环比徽标移至卡片底部 `.kpi-foot` 解决中窄屏挤压，并拉齐主舞台与底部 Bento 卡片高度。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：
+    - 更新 `test_dashboard_overview_api_and_deltas`，断言 `trend_72h` 连续 72 小时输出、`current_temp` 独立最新室温快照回填，以及 `trend_7d` / `trend_24h` / `comparison` 不再返回历史室温。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**17 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 23.96s（0 错误，`ExecutiveDashboardView` 产出 34.38 kB）**；
+  - 生产库只读接口实测：`get_dashboard_overview()` 返回 72 个连续小时点位（`11-18 10:00` 至 `11-21 09:00`），`current_temp` 稳定返回最新实况 `2026-11-20 14:00`（`2084` 户、`22.41℃`、达标率 `93.2%`），且传入历史日期 `2026-11-18 12:00` 时室温仍保持当前实况 `2026-11-20 14:00`；`trend_7d` 当日标记 `is_partial: True`（`10h`）。
+
+## 2026-11-21 新增「智慧供热运行驾驶舱」独立数据看板页面
+
+- **改动缘由**：
+  - 面向公司管理层与生产调度视角，在既有详表报告之外单独提供高视觉对比度、直接展示运行简报、昨日同期对比、小时气温与供热协同趋势及异常焦点的领导驾驶舱页面（支持深空暗色磨砂玻璃 / 极昼明亮双主题与全屏投屏）。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：
+    - 新增 `get_dashboard_overview()` 与接口 `GET /api/v1/projects/smart_heating_platform/reports/dashboard`，一次聚合当期断面 KPI、昨日同小时同比变化、24 小时（含昨日同期曲线）与近 7 日气温/供热量趋势、9 大服务中心能效四象限、9 大主干热网负荷分布、商业占比、室温分布、四类 Top 5 焦点榜单及自动生成的文字运行简报。
+  - **`frontend/src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`（新增）**：
+    - 独立打造深空毛玻璃 Bento 风格驾驶舱（支持 `深空 / 明亮` 主题切换与 `⛶ 全屏投屏`），包含：顶部时空控台与自动运行简报、6 张带昨日同期对比的 KPI 卡片与达标率环形图、**24h 气温×供热量对比（支持点击柱条/刻度条切换小时）与近 7 日走势切换主图**、**9 大中心能效四象限散点/耗热排行切换图**、9 主干网负荷分布与商业用热占比、居民室温环形舱及四维 Top 5 焦点榜（支持点击站点下钻 24h 负荷曲线与单户室温明细）。
+  - **`frontend/src/router/index.js`、`backend_data/shared/项目列表.json`、`frontend/src/projects/smart_heating_platform/{services/api.js,components/PlatformSubNav.vue}`**：
+    - 注册路由 `/projects/smart_heating_platform/pages/dashboard`、项目页卡片 `🖥️ 智慧供热运行驾驶舱`、API 客户端 `fetchDashboardOverview()` 及子导航快捷入口。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_dashboard_overview_api_and_deltas` 单元测试覆盖同比计算、趋势聚合、榜单筛选与权限校验。
+- **验证结果**：
+  - `python -m pytest D:\编程项目\phoenix\backend\projects\smart_heating_platform\tests -v`：**17 passed（0 错误）**；
+  - `npm --prefix D:\编程项目\phoenix\frontend run build`：**built in 23.26s（0 错误）**。
+
 ## 2026-11-21 修复智慧供热日报换热站缺失/止表底口径并显性化商业用户三类状态
 
 - **改动缘由**：

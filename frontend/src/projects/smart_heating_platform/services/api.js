@@ -100,7 +100,10 @@ export function testCollectorSettings(payload = {}) {
   return requestJson('/settings/collector/test', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-// 2. 阳面逐小时运行报告 & 每日精算日报
+// 2. 阳面逐小时运行报告 & 每日精算日报 & 运行驾驶舱
+export function fetchDashboardOverview(params = {}, options = {}) {
+  return requestJson(`/reports/dashboard${toQuery(params)}`, { method: 'GET', ...options })
+}
 export function fetchHourlyReport(params = {}, options = {}) {
   return requestJson(`/reports/hourly${toQuery(params)}`, { method: 'GET', ...options })
 }
@@ -133,6 +136,9 @@ export function fetchGapStatus(params = {}) {
 }
 
 // 3. 阴面异常督办中心
+export function fetchFaultCoverage(params = {}, options = {}) {
+  return requestJson(`/faults/coverage${toQuery(params)}`, { method: 'GET', ...options })
+}
 export function fetchFaultSummary(params = {}, options = {}) {
   return requestJson(`/faults/summary${toQuery(params)}`, { method: 'GET', ...options })
 }

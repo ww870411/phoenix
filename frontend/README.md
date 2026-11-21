@@ -1,3 +1,37 @@
+## 2026-11-21 重构「算法说明」通俗业务手册并升级「异常数据监测」取数诊断首屏 (`AlgorithmGuideView.vue`, `FaultAuditView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：按 6 类业务主体重写全部指标为通俗易懂的「取数逻辑 / 缺数坏表降级补救 / 异常隔离边界 / 页面说明」，全面对齐 `/hrz_ls_zb/` `f209` 补水补救、锯齿电/水表隔离、每日水电对账与驾驶舱健康准入逻辑，并同步标注 `/zx_hrz/` 与 `/get_yw_data/1` 已停用。
+- **`src/projects/smart_heating_platform/pages/FaultAuditView.vue` & `services/api.js`**：新增 `fetchFaultCoverage()`，将异常监测页重构为三标签页并默认打开通俗管理向 **`📌 异常总览看板`**（统一“表计直采可用 / 可用算法估算 / 数据缺失无法估算”三色口径与“数据异常的站有 xx 站”去重统计，配胶囊堆叠来源构成图与 242 站背景参照异常原因拆解图，点击下钻明细），后续顺次为 **`📊 当日取数诊断与源头缺损`** 与 **`🛡️ 异常拦截工单明细`**。
+
+## 2026-11-21 每日运行报告接入水电双轨对比与异常表计角标 (`DailyReportView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/DailyReportView.vue`**：补水 KPI 卡增加手工填报对比与偏差率，新增 `系统日累计电耗` 对比卡片；服务中心双轨核对表新增 `补水偏差 (t)`、`补水偏差率`、`系统电耗 (kWh)`、`手工耗电 (kWh)`、`电耗偏差 (kWh)`、`电耗偏差率` 列；242 站明细 `日电耗 (kWh)` 接入异常角标提示。
+
+## 2026-11-21 驾驶舱与逐小时报告接入小时电耗与万平电耗展示 (`ExecutiveDashboardView.vue`, `HourlyReportView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：第 6 张 KPI 卡升级为 `小时补水 / 耗电`（含万平电耗与电耗昨日同期对比），焦点榜单 Top 5 新增 `⚡ 高电耗` 页签（共 4 项），站点 24h 下钻表增加 `电耗 (kWh)` 列。
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：新增 `小时累计电耗` KPI 卡片，并在分组汇总表与 242 站明细表补充可排序 `小时电耗 (kWh)` / `电耗 (kWh)` 列。
+
+## 2026-11-21 驾驶舱焦点榜单 Top 5 移除室温展示并对齐三类运行榜单 (`ExecutiveDashboardView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：焦点榜单切换项由 4 项精简为 `🔥 高热指标`、`💧 高补水`、`🏆 节能低耗` 3 项（默认 `high_heat`），全面移除居民室温显示，点击统一打开单站当日 24h 负荷曲线抽屉。
+
+## 2026-11-21 驾驶舱支持 16:9 全屏一屏完整适配 (`ExecutiveDashboardView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：新增 `.is-fullscreen` / `:fullscreen` 专享 **16:9 零滚动视口网格排版**（解锁宽度上限至 `1920px`、四区弹性占满 `100vh`、9 大热网切为 2 列网格、三大 ECharts 图表自动撑满剩余高度、1280px 断点不折行且内置受限环境固定全屏与 `ESC` 退出降级）。
+
+## 2026-11-21 升级「智慧供热运行驾驶舱」连续 72h 趋势、当前实况室温与深空排版 (`ExecutiveDashboardView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`**：
+  - 主趋势图默认视图升级为 **近 72 小时连续**（双轴展示室外气温、小时供热量/热指标，带跨日 `00:00` 分界线、`dataZoom` 内部缩放与点击切入指定日期小时），同时支持切换 `当日 24 小时` 与 `近 7 日逐日`（进行中当日柱条虚线半透明区分）。
+  - 严格落实**居民室温只显示当前实况、不展示历史**：室温 KPI、分布环形图、9 大中心四象限及低温/标杆站点榜均绑定 `current_temp`（附带 `截至 MM-DD HH:00` 实况徽标），移除历史室温对比徽标与历史曲线。
+  - 修复 `DateStepPicker` 深色主题白底违和问题（`:deep(.date-picker-group)` 透色重绘）、将 KPI 环比徽标下移至 `.kpi-foot` 避免 1280~1440px 宽度标题挤压，并统一主区与底部 Bento 卡片等高对齐。
+
+## 2026-11-21 新增「智慧供热运行驾驶舱」独立数据看板页面 (`ExecutiveDashboardView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/ExecutiveDashboardView.vue`（新增）**：独立领导驾驶舱视图，采用毛玻璃 Bento 卡片布局并支持深空/明亮双主题与全屏投屏，整合自动运行简报、6 张昨日同期对比 KPI 卡、24h（含昨日同期对照）/ 近 7 日气温与供热量协同趋势主图（支持点击切时段与 24h 刻度条）、9 大服务中心能效四象限与耗热排行切换、主干热网负荷占比、室温环形分布及 Top 5 站点下钻抽屉。
+- **`src/router/index.js`、`src/projects/smart_heating_platform/{services/api.js,components/PlatformSubNav.vue}`**：新增 `/projects/smart_heating_platform/pages/dashboard` 路由、`fetchDashboardOverview()` 接口及顶部子导航入口（同步在 `backend_data/shared/项目列表.json` 注册项目页卡片）。
+
 ## 2026-11-21 修复智慧供热日报无热量站缺失显示、止表底与商业用户三类状态显性化
 
 - **`src/projects/smart_heating_platform/pages/DailyReportView.vue`**：换热站日耗在 `day_heat_gj === null` 时直接显示 `缺失`；商业用户标签页顶部增加台账总户数、可算日耗、缺日耗记录、表读数倒走 4 类可点击统计徽标与状态筛选，明细表新增 `计算状态` 与 `说明` 列。

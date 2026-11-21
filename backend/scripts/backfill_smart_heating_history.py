@@ -20,6 +20,7 @@ import json
 import logging
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -47,10 +48,15 @@ from backend.projects.smart_heating_platform.services.cleaning_engine import (  
     SRC_METER_DIFF,
     SRC_REAL,
     clean_merchant_point,
+    clean_station_history_point,
     clean_upstream_point,
     floor_to_hour,
     interpolate_meter_at_hour,
+    is_meter_sequence_oscillating,
     parse_dt_east8,
+    station_max_hourly_elec_kwh,
+    station_max_hourly_heat_gj,
+    station_max_hourly_water_t,
     to_float,
     trapezoidal_hour_integral,
     validate_meter_delta,
@@ -61,9 +67,12 @@ from backend.projects.smart_heating_platform.services.collector_config_service i
     resolve_effective_base_url,
 )
 from backend.projects.smart_heating_platform.services.collector_engine import (  # noqa: E402
+    _calibrate_station_parsed_hours,
     _load_dict_caches,
+    _parse_station_history_records,
     _post_with_retry,
     _upsert_batch,
+    _upsert_station_calibration_results,
 )
 from backend.projects.smart_heating_platform.services.db_schema import ensure_smart_heating_fact_tables  # noqa: E402
 
@@ -231,250 +240,100 @@ def backfill_stations(
     interval: float,
     cp: Dict[str, Any],
     limit: Optional[int] = None,
+    workers: int = 2,
 ) -> Dict[str, Any]:
     now_e8 = datetime.now(EAST_8)
-    max_hour_global = floor_to_hour(now_e8)
+    max_hour_global = floor_to_hour(now_e8) - timedelta(hours=1)
     stations = caches["stations"][:limit] if limit else caches["stations"]
     chunks = _date_chunks(start_d, end_d, 5)
     headers = {"User-Agent": "Phoenix-Backfill/1.0", "Connection": "close"}
 
     saved_hours = 0
     failed: List[str] = []
+    pending = [st for st in stations if not _is_done(cp, "stations", st["station_id"])]
 
-    for idx, st in enumerate(stations, 1):
-        st_id = st["station_id"]
+    def _run_one_station(st: Dict[str, Any]) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[Dict[str, Any]], bool]:
         st_name = st["name"]
-        covered_area = float(st["covered_area"]) if st.get("covered_area") else 100000.0
-        max_hourly_heat = max(250.0, covered_area * 0.00045)
-
-        if _is_done(cp, "stations", st_id):
-            continue
-
-        all_parsed: List[Dict[str, Any]] = []
+        st_query_name = st.get("name_raw") or st_name
+        dedup_map: Dict[datetime, Dict[str, Any]] = {}
         st_failed = False
-        for c_start, c_end in chunks:
-            time.sleep(interval)
-            q_start = (datetime(c_start.year, c_start.month, c_start.day, 0, 0, tzinfo=EAST_8) - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
-            q_end = (datetime(c_end.year, c_end.month, c_end.day, 0, 0, tzinfo=EAST_8) + timedelta(days=1, minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
-            try:
-                resp = _post_with_retry(
-                    client,
-                    f"{base_url}/hrz_ls_zb/",
-                    data={"name": st_name, "start_date": q_start, "end_date": q_end, "isdownload": "1"},
-                    headers=headers,
-                    retries=2,
-                )
-                if resp.status_code != 200:
+
+        with httpx.Client(timeout=90.0, follow_redirects=False, trust_env=False) as st_client:
+            for c_start, c_end in chunks:
+                time.sleep(interval)
+                q_start = (datetime(c_start.year, c_start.month, c_start.day, 0, 0, tzinfo=EAST_8) - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                q_end = (datetime(c_end.year, c_end.month, c_end.day, 0, 0, tzinfo=EAST_8) + timedelta(days=1, minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                try:
+                    resp = _post_with_retry(
+                        st_client,
+                        f"{base_url}/hrz_ls_zb/",
+                        data={"name": st_query_name, "start_date": q_start, "end_date": q_end, "isdownload": "1"},
+                        headers=headers,
+                        retries=2,
+                    )
+                    if resp.status_code != 200:
+                        st_failed = True
+                        continue
+                    arr = resp.json()
+                    if isinstance(arr, list):
+                        for item in _parse_station_history_records(arr):
+                            dedup_map[item["ts"]] = item
+                    else:
+                        st_failed = True
+                except Exception as exc:
+                    logger.warning("[stations] %s (%s~%s) 拉取失败: %s", st_name, c_start, c_end, exc)
                     st_failed = True
-                    continue
-                arr = resp.json()
-                if isinstance(arr, list):
-                    for rec in arr:
-                        ts = parse_dt_east8(rec.get("create_time"))
-                        if ts is None:
-                            continue
-                        all_parsed.append({
-                            "ts": ts,
-                            "f1": to_float(rec.get("f1")),
-                            "f2": to_float(rec.get("f2")),
-                            "f3": to_float(rec.get("f3")),
-                            "f4": to_float(rec.get("f4")),
-                            "f5": to_float(rec.get("f5")),
-                            "f220": to_float(rec.get("f220")),
-                            "f221": to_float(rec.get("f221")),
-                            "f222": to_float(rec.get("f222")),
-                            "f253": to_float(rec.get("f253")),
-                            "f254": to_float(rec.get("f254")),
-                        })
-            except Exception as exc:
-                logger.warning("[stations] %s (%s~%s) 拉取失败: %s", st_name, c_start, c_end, exc)
-                st_failed = True
 
-        if not all_parsed:
-            if st_failed:
-                failed.append(st_name)
-            else:
-                _mark_done(cp, "stations", st_id, flush=(idx % 10 == 0))
-            continue
-
-        # 去重排序
-        dedup_map = {p["ts"]: p for p in all_parsed}
         parsed = [dedup_map[k] for k in sorted(dedup_map.keys())]
-
-        seq_j = [(p["ts"], p["f221"]) for p in parsed]
-        seq_f = [(p["ts"], p["f220"]) for p in parsed]
-        seq_w = [(p["ts"], p["f254"]) for p in parsed]
-        seq_e = [(p["ts"], p["f253"]) for p in parsed]
-
-        by_hour_pts: Dict[datetime, List[Dict[str, Any]]] = {}
-        for p in parsed:
-            by_hour_pts.setdefault(floor_to_hour(p["ts"]), []).append(p)
-
-        win_start_dt = datetime(start_d.year, start_d.month, start_d.day, 0, 0, tzinfo=EAST_8)
-        win_end_dt = min(
-            max_hour_global,
-            datetime(end_d.year, end_d.month, end_d.day, 23, 0, tzinfo=EAST_8),
-        )
+        if not parsed:
+            return st, [], [], st_failed
 
         upsert_rows: List[Dict[str, Any]] = []
         fault_rows: List[Dict[str, Any]] = []
         prev_valid: Optional[Dict[str, Any]] = None
-
-        cur_hr = win_start_dt
-        while cur_hr <= win_end_dt:
-            hr_next = cur_hr + timedelta(hours=1)
-            pts = by_hour_pts.get(cur_hr, [])
-            if not pts:
-                cur_hr = hr_next
-                continue
-
-            rep = pts[-1]
-            e1_raw, e3_raw, e4_raw = rep["f2"], rep["f3"], rep["f5"]
-            e7_raw, e8_raw, e11_raw = rep["f1"], rep["f4"], rep["f222"]
-            e1_c, e3_c, e4_c, e7_c, e8_c, e11_c = e1_raw, e3_raw, e4_raw, e7_raw, e8_raw, e11_raw
-            val_src = SRC_REAL
-            f_tags: List[str] = []
-
-            if (e3_raw is not None and (e3_raw <= 0 or e3_raw > 150)) or (e4_raw is not None and (e4_raw <= 0 or e4_raw > 150)):
-                f_tags.append(FAULT_SENSOR_RANGE)
-                if prev_valid:
-                    e3_c = prev_valid.get("e3_clean")
-                    e4_c = prev_valid.get("e4_clean")
-                    val_src = SRC_MASKED_PREV
-            if (e7_raw is not None and (e7_raw < 0 or e7_raw > 2.5)) or (e8_raw is not None and (e8_raw < 0 or e8_raw > 2.5)):
-                f_tags.append(FAULT_SENSOR_RANGE)
-                if prev_valid:
-                    e7_c = prev_valid.get("e7_clean")
-                    e8_c = prev_valid.get("e8_clean")
-                    val_src = SRC_MASKED_PREV
-            if e1_raw is not None and e1_raw > 1.0 and e3_raw is not None and e4_raw is not None and e3_raw <= e4_raw:
-                f_tags.append(FAULT_TEMP_INVERSION)
-                if prev_valid:
-                    e3_c = prev_valid.get("e3_clean")
-                    e4_c = prev_valid.get("e4_clean")
-                    val_src = SRC_MASKED_PREV
-
-            if val_src == SRC_REAL:
-                prev_valid = {
-                    "e1_clean": e1_c, "e3_clean": e3_c, "e4_clean": e4_c,
-                    "e7_clean": e7_c, "e8_clean": e8_c, "e11_clean": e11_c,
-                }
-
-            j0 = interpolate_meter_at_hour(seq_j, cur_hr)
-            j1 = interpolate_meter_at_hour(seq_j, hr_next)
-            f0 = interpolate_meter_at_hour(seq_f, cur_hr)
-            f1_v = interpolate_meter_at_hour(seq_f, hr_next)
-            w0 = interpolate_meter_at_hour(seq_w, cur_hr)
-            w1 = interpolate_meter_at_hour(seq_w, hr_next)
-            e0 = interpolate_meter_at_hour(seq_e, cur_hr)
-            e1_v = interpolate_meter_at_hour(seq_e, hr_next)
-
-            win_pts = [p for p in parsed if cur_hr <= p["ts"] <= hr_next]
-            fb_heat = trapezoidal_hour_integral([(p["ts"], p["f222"]) for p in win_pts])
-            fb_flow = trapezoidal_hour_integral([(p["ts"], p["f2"]) for p in win_pts])
-
-            delta_j, jump_j, msg_j = validate_meter_delta(j0, j1, max_hourly_limit=max_hourly_heat)
-            delta_f, _, _ = validate_meter_delta(f0, f1_v, max_hourly_limit=max_hourly_heat * 12)
-            delta_w, _, _ = validate_meter_delta(w0, w1, max_hourly_limit=200.0)
-            delta_e, _, _ = validate_meter_delta(e0, e1_v, max_hourly_limit=5000.0)
-
-            if jump_j:
-                f_tags.append(FAULT_METER_JUMP)
-                fault_rows.append({
-                    "biz_hour": cur_hr,
-                    "entity_type": "STATION",
-                    "entity_id": st_id,
-                    "entity_name": st_name,
-                    "fault_code": FAULT_METER_JUMP,
-                    "owner_party": OWNER_SHARED,
-                    "raw_value_text": msg_j,
-                    "clean_strategy": "历史补采丢弃异常表底差，自动降级采用瞬时热量 f222 积分",
-                    "rule_desc": "相邻整点累计表底 totJ 出现倒走/清零或超过极限负荷1.5倍",
-                })
-
-            hr_heat, hr_heat_src = (
-                (delta_j, SRC_METER_DIFF)
-                if delta_j is not None
-                else (fb_heat, SRC_FALLBACK_INTEGRAL if jump_j else SRC_INTEGRAL_15M)
-            )
-            hr_flow, hr_flow_src = (delta_f, SRC_METER_DIFF) if delta_f is not None else (fb_flow, SRC_INTEGRAL_15M)
-
-            upsert_rows.append({
-                "biz_hour": cur_hr,
-                "station_id": st_id,
-                "sample_count": len(pts),
-                "online": True,
-                "e1_raw": e1_raw, "e1_clean": e1_c,
-                "e3_raw": e3_raw, "e3_clean": e3_c,
-                "e4_raw": e4_raw, "e4_clean": e4_c,
-                "e7_raw": e7_raw, "e7_clean": e7_c,
-                "e8_raw": e8_raw, "e8_clean": e8_c,
-                "e11_raw": e11_raw, "e11_clean": e11_c,
-                "tot_j": j0, "tot_f": f0, "tot_water_f254": w0, "tot_elec_f253": e0,
-                "hour_heat_gj": hr_heat, "hour_heat_source": hr_heat_src,
-                "hour_flow_t": hr_flow, "hour_flow_source": hr_flow_src,
-                "hour_water_t": delta_w,
-                "hour_water_source": SRC_METER_DIFF if delta_w is not None else "NONE",
-                "hour_elec_kwh": delta_e,
-                "hour_elec_source": SRC_METER_DIFF if delta_e is not None else "NONE",
-                "value_source": val_src,
-                "fault_tag": ",".join(dict.fromkeys(f_tags)) if f_tags else None,
-            })
-            cur_hr = hr_next
-
-        if upsert_rows:
-            with engine.begin() as conn:
-                conn.execute(
-                    text(
-                        "INSERT INTO smart_heating_platform.fact_station_hourly ("
-                        "biz_hour, station_id, sample_count, online, "
-                        "e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean, "
-                        "e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean, "
-                        "tot_j, tot_f, tot_water_f254, tot_elec_f253, "
-                        "hour_heat_gj, hour_heat_source, hour_flow_t, hour_flow_source, "
-                        "hour_water_t, hour_water_source, hour_elec_kwh, hour_elec_source, value_source, fault_tag"
-                        ") VALUES ("
-                        ":biz_hour, :station_id, :sample_count, :online, "
-                        ":e1_raw, :e1_clean, :e3_raw, :e3_clean, :e4_raw, :e4_clean, "
-                        ":e7_raw, :e7_clean, :e8_raw, :e8_clean, :e11_raw, :e11_clean, "
-                        ":tot_j, :tot_f, :tot_water_f254, :tot_elec_f253, "
-                        ":hour_heat_gj, :hour_heat_source, :hour_flow_t, :hour_flow_source, "
-                        ":hour_water_t, :hour_water_source, :hour_elec_kwh, :hour_elec_source, :value_source, :fault_tag"
-                        ") ON CONFLICT (biz_hour, station_id) DO UPDATE SET "
-                        "tot_j = COALESCE(EXCLUDED.tot_j, smart_heating_platform.fact_station_hourly.tot_j), "
-                        "tot_f = COALESCE(EXCLUDED.tot_f, smart_heating_platform.fact_station_hourly.tot_f), "
-                        "tot_water_f254 = COALESCE(EXCLUDED.tot_water_f254, smart_heating_platform.fact_station_hourly.tot_water_f254), "
-                        "tot_elec_f253 = COALESCE(EXCLUDED.tot_elec_f253, smart_heating_platform.fact_station_hourly.tot_elec_f253), "
-                        "hour_heat_gj = COALESCE(EXCLUDED.hour_heat_gj, smart_heating_platform.fact_station_hourly.hour_heat_gj), "
-                        "hour_heat_source = EXCLUDED.hour_heat_source, "
-                        "hour_flow_t = COALESCE(EXCLUDED.hour_flow_t, smart_heating_platform.fact_station_hourly.hour_flow_t), "
-                        "hour_flow_source = EXCLUDED.hour_flow_source, "
-                        "hour_water_t = COALESCE(EXCLUDED.hour_water_t, smart_heating_platform.fact_station_hourly.hour_water_t), "
-                        "hour_water_source = CASE WHEN EXCLUDED.hour_water_t IS NOT NULL THEN EXCLUDED.hour_water_source ELSE smart_heating_platform.fact_station_hourly.hour_water_source END, "
-                        "hour_elec_kwh = COALESCE(EXCLUDED.hour_elec_kwh, smart_heating_platform.fact_station_hourly.hour_elec_kwh), "
-                        "hour_elec_source = CASE WHEN EXCLUDED.hour_elec_kwh IS NOT NULL THEN EXCLUDED.hour_elec_source ELSE smart_heating_platform.fact_station_hourly.hour_elec_source END, "
-                        "updated_at = NOW()"
-                    ),
-                    upsert_rows,
-                )
-                if fault_rows:
-                    _upsert_batch(
-                        conn,
-                        "fact_fault_ticket",
-                        ["biz_hour", "entity_type", "entity_id", "entity_name", "fault_code", "owner_party", "raw_value_text", "clean_strategy", "rule_desc"],
-                        ["biz_hour", "entity_type", "entity_id", "fault_code"],
-                        ["entity_name", "owner_party", "raw_value_text", "clean_strategy", "rule_desc"],
-                        fault_rows,
-                        extra_set_clauses=["updated_at = NOW()"],
+        d_cur = start_d
+        while d_cur <= end_d:
+            day_start = datetime(d_cur.year, d_cur.month, d_cur.day, 0, 0, tzinfo=EAST_8)
+            next_day_start = day_start + timedelta(days=1)
+            day_max_hour = min(max_hour_global, next_day_start - timedelta(hours=1))
+            day_hours: List[datetime] = []
+            hr_cur = day_start
+            while hr_cur <= day_max_hour:
+                day_hours.append(hr_cur)
+                hr_cur += timedelta(hours=1)
+            if day_hours:
+                win_lo = day_start - timedelta(minutes=30)
+                win_hi = next_day_start + timedelta(minutes=30)
+                day_parsed = [p for p in parsed if win_lo <= p["ts"] <= win_hi]
+                if day_parsed:
+                    day_rows, day_faults = _calibrate_station_parsed_hours(
+                        st, day_parsed, day_hours, prev_station_db=prev_valid
                     )
-            saved_hours += len(upsert_rows)
+                    for r in reversed(day_rows):
+                        if r.get("online"):
+                            prev_valid = r
+                            break
+                    upsert_rows.extend(day_rows)
+                    fault_rows.extend(day_faults)
+            d_cur += timedelta(days=1)
+        return st, upsert_rows, fault_rows, st_failed
 
-        if not st_failed:
-            _mark_done(cp, "stations", st_id, flush=True)
-        else:
-            failed.append(st_name)
-        if idx % 20 == 0 or idx == len(stations):
-            logger.info("[stations] 进度 %d/%d，已回写站时数=%d，失败=%d", idx, len(stations), saved_hours, len(failed))
+    eff_workers = max(1, min(4, int(workers)))
+    with ThreadPoolExecutor(max_workers=eff_workers) as pool:
+        futures = [pool.submit(_run_one_station, st) for st in pending]
+        for idx, fut in enumerate(as_completed(futures), 1):
+            st, upsert_rows, fault_rows, st_failed = fut.result()
+            st_id = st["station_id"]
+            st_name = st["name"]
+            if upsert_rows or fault_rows:
+                _upsert_station_calibration_results(upsert_rows, fault_rows)
+                saved_hours += len(upsert_rows)
+            if not st_failed:
+                _mark_done(cp, "stations", st_id, flush=(idx % 10 == 0 or idx == len(pending)))
+            else:
+                failed.append(st_name)
+            if idx % 20 == 0 or idx == len(pending):
+                logger.info("[stations] 进度 %d/%d，已回写站时数=%d，失败=%d", idx, len(pending), saved_hours, len(failed))
 
     _save_checkpoint(cp)
     return {"saved_hours": saved_hours, "failed_count": len(failed), "failed": failed[:20]}

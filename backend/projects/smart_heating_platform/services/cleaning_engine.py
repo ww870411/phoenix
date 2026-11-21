@@ -56,6 +56,47 @@ def station_max_hourly_heat_gj(covered_area: Optional[float]) -> float:
     return round(max(25.0, area * 0.00045), 4)
 
 
+def station_max_hourly_elec_kwh(covered_area: Optional[float]) -> float:
+    """按供暖面积计算单站小时基准电耗上限（12 kWh/万㎡·h，兜底 35 kWh/h；校验器按 1.5 倍判跳变）。"""
+    area = float(covered_area) if (covered_area is not None and float(covered_area) > 0) else 100000.0
+    return round(max(35.0, area * 0.0012), 4)
+
+
+def station_max_hourly_water_t(covered_area: Optional[float]) -> float:
+    """按供暖面积计算单站小时基准补水上限（5 t/万㎡·h，兜底 80 t/h；校验器按 1.5 倍判跳变）。"""
+    area = float(covered_area) if (covered_area is not None and float(covered_area) > 0) else 100000.0
+    return round(max(80.0, area * 0.0005), 4)
+
+
+def is_meter_sequence_oscillating(
+    records: Sequence[Tuple[datetime, Optional[float]]],
+    min_reversal: float = 0.5,
+) -> Tuple[bool, Optional[str]]:
+    """
+    检测表底时间序列是否存在频繁锯齿状倒走（如 PLC 寄存器字节错位/通信乱码）。
+
+    当序列中连续出现 >= 2 次明显倒走（后点比前点小超过 min_reversal）时，
+    判为整段表底不可信（避免局部上升沿漏过单小时上限校验生成虚假高值）。
+    """
+    valid = sorted(
+        ((ts, val) for ts, val in records if ts is not None and val is not None),
+        key=lambda x: x[0],
+    )
+    if len(valid) < 3:
+        return False, None
+    reversals: List[str] = []
+    for idx in range(1, len(valid)):
+        prev_ts, prev_v = valid[idx - 1]
+        curr_ts, curr_v = valid[idx]
+        diff = curr_v - prev_v
+        if diff < -abs(min_reversal):
+            reversals.append(f"{curr_ts.strftime('%H:%M')}({diff:+.1f})")
+    if len(reversals) >= 2:
+        preview = "、".join(reversals[:4]) + (" 等" if len(reversals) > 4 else "")
+        return True, f"表底频繁锯齿倒走共{len(reversals)}次: {preview}"
+    return False, None
+
+
 def to_float(val: Any) -> Optional[float]:
     """安全将字符串或数值转为 float，无效空串/NaN 返回 None。"""
     if val is None:
@@ -515,6 +556,7 @@ def clean_station_history_point(
                 "e7_raw": None, "e7_clean": prev_station_valid.get("e7_clean"),
                 "e8_raw": None, "e8_clean": prev_station_valid.get("e8_clean"),
                 "e11_raw": None, "e11_clean": prev_station_valid.get("e11_clean"),
+                "e14_raw": None, "e14_clean": prev_station_valid.get("e14_clean"),
                 "value_source": SRC_TEMP_OFFLINE,
                 "fault_tag": FAULT_COMM_OFFLINE,
             }, [{
@@ -535,6 +577,7 @@ def clean_station_history_point(
             "e7_raw": None, "e7_clean": None,
             "e8_raw": None, "e8_clean": None,
             "e11_raw": None, "e11_clean": None,
+            "e14_raw": None, "e14_clean": None,
             "value_source": SRC_PERM_OFFLINE,
             "fault_tag": FAULT_COMM_OFFLINE,
         }, []
@@ -545,10 +588,11 @@ def clean_station_history_point(
     e7_raw = rep_record.get("f1")
     e8_raw = rep_record.get("f4")
     e11_raw = rep_record.get("f222")
+    e14_raw = rep_record.get("f209")
     max_hourly_heat = station_max_hourly_heat_gj(station_meta.get("covered_area"))
     cleaned_map, value_source, fault_tags, faults = _clean_station_primary_metrics(
         station_id, station_name,
-        e1_raw, e3_raw, e4_raw, e7_raw, e8_raw, e11_raw, None,
+        e1_raw, e3_raw, e4_raw, e7_raw, e8_raw, e11_raw, e14_raw,
         prev_station_valid=prev_station_valid,
         max_hourly_heat=max_hourly_heat,
     )
@@ -560,6 +604,7 @@ def clean_station_history_point(
         "e7_raw": e7_raw, "e7_clean": cleaned_map["e7_clean"],
         "e8_raw": e8_raw, "e8_clean": cleaned_map["e8_clean"],
         "e11_raw": e11_raw, "e11_clean": cleaned_map["e11_clean"],
+        "e14_raw": e14_raw, "e14_clean": cleaned_map["e14_clean"],
         "value_source": value_source,
         "fault_tag": ",".join(dict.fromkeys(fault_tags)) if fault_tags else None,
     }, faults

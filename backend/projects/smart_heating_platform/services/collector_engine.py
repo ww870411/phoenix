@@ -50,8 +50,11 @@ from backend.projects.smart_heating_platform.services.cleaning_engine import (
     floor_to_bucket,
     floor_to_hour,
     interpolate_meter_at_hour,
+    is_meter_sequence_oscillating,
     parse_dt_east8,
+    station_max_hourly_elec_kwh,
     station_max_hourly_heat_gj,
+    station_max_hourly_water_t,
     to_float,
     trapezoidal_hour_integral,
     validate_meter_delta,
@@ -927,62 +930,43 @@ def run_snapshot_cycle(
             raise
 
 
-def _process_station_calibration(
-    st: Dict[str, Any],
-    base_url: str,
-    query_start: str,
-    query_end: str,
-    hours_to_calib: List[datetime],
-    timeout: float,
-    prev_station_db: Optional[Dict[str, Any]],
-) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]], bool]:
-    """拉取单座换热站 `/hrz_ls_zb/` 并计算整点表底差值与代表断面（供多线程并发调用）。"""
-    st_id = st["station_id"]
-    st_name = st["name"]
-    st_query_name = st.get("name_raw") or st_name
-    covered_area = float(st["covered_area"]) if st.get("covered_area") else 100000.0
-    max_hourly_heat = station_max_hourly_heat_gj(covered_area)
-
-    try:
-        with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
-            resp = _post_with_retry(
-                client,
-                f"{base_url}/hrz_ls_zb/",
-                data={
-                    "name": st_query_name,
-                    "start_date": query_start,
-                    "end_date": query_end,
-                    "isdownload": "1",
-                },
-                headers={"User-Agent": "Phoenix-SmartHeating-Collector/2.0", "Connection": "close"},
-                retries=2,
-            )
-            if resp.status_code != 200:
-                return st_name, [], [], False
-            raw_records = resp.json()
-            if not isinstance(raw_records, list):
-                return st_name, [], [], False
-    except Exception:
-        return st_name, [], [], False
-
-    parsed: List[Dict[str, Any]] = []
+def _parse_station_history_records(raw_records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """解析 `/hrz_ls_zb/` 原始数组并按时间戳去重排序。"""
+    dedup_map: Dict[datetime, Dict[str, Any]] = {}
     for rec in raw_records:
+        if not isinstance(rec, dict):
+            continue
         ts = parse_dt_east8(rec.get("create_time"))
         if ts is None:
             continue
-        parsed.append({
+        dedup_map[ts] = {
             "ts": ts,
             "f1": to_float(rec.get("f1")),
             "f2": to_float(rec.get("f2")),
             "f3": to_float(rec.get("f3")),
             "f4": to_float(rec.get("f4")),
             "f5": to_float(rec.get("f5")),
+            "f209": to_float(rec.get("f209")),  # 瞬时补水流量 (t/h)
             "f220": to_float(rec.get("f220")),  # totF
             "f221": to_float(rec.get("f221")),  # totJ
             "f222": to_float(rec.get("f222")),  # flowJ
             "f253": to_float(rec.get("f253")),  # 电能累计
             "f254": to_float(rec.get("f254")),  # 补水累计
-        })
+        }
+    return [dedup_map[k] for k in sorted(dedup_map.keys())]
+
+
+def _calibrate_station_parsed_hours(
+    st: Dict[str, Any],
+    parsed: List[Dict[str, Any]],
+    hours_to_calib: List[datetime],
+    prev_station_db: Optional[Dict[str, Any]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """基于已解析的 `/hrz_ls_zb/` 序列执行单日整点表底差值、坏表隔离与瞬时积分兜底清洗。"""
+    st_id = st["station_id"]
+    st_name = st["name"]
+    covered_area = float(st["covered_area"]) if st.get("covered_area") else 100000.0
+    max_hourly_heat = station_max_hourly_heat_gj(covered_area)
 
     if not parsed:
         empty_rows = [
@@ -997,6 +981,7 @@ def _process_station_calibration(
                 "e7_raw": None, "e7_clean": None,
                 "e8_raw": None, "e8_clean": None,
                 "e11_raw": None, "e11_clean": None,
+                "e14_raw": None, "e14_clean": None,
                 "tot_j": None, "tot_f": None,
                 "tot_water_f254": None, "tot_elec_f253": None,
                 "hour_heat_raw_gj": None,
@@ -1009,12 +994,19 @@ def _process_station_calibration(
             }
             for hr in hours_to_calib
         ]
-        return st_name, empty_rows, [], True
+        return empty_rows, []
 
     seq_j = [(p["ts"], p["f221"]) for p in parsed]
     seq_f = [(p["ts"], p["f220"]) for p in parsed]
     seq_w = [(p["ts"], p["f254"]) for p in parsed]
     seq_e = [(p["ts"], p["f253"]) for p in parsed]
+
+    max_hourly_elec = station_max_hourly_elec_kwh(covered_area)
+    max_hourly_water = station_max_hourly_water_t(covered_area)
+    osc_w, osc_w_msg = is_meter_sequence_oscillating(seq_w, min_reversal=0.5)
+    osc_e, osc_e_msg = is_meter_sequence_oscillating(seq_e, min_reversal=1.0)
+    osc_w_fault_logged = False
+    osc_e_fault_logged = False
 
     upsert_rows: List[Dict[str, Any]] = []
     faults: List[Dict[str, Any]] = []
@@ -1070,6 +1062,14 @@ def _process_station_calibration(
             })
 
         fb_flow = trapezoidal_hour_integral([(p["ts"], p["f2"]) for p in win_pts])
+        clean_f209_pts = [
+            (
+                p["ts"],
+                None if (p["f209"] is not None and (p["f209"] < 0.0 or p["f209"] > 100.0)) else p["f209"],
+            )
+            for p in win_pts
+        ]
+        fb_water = trapezoidal_hour_integral(clean_f209_pts)
 
         raw_delta_j = round(j1 - j0, 4) if (j0 is not None and j1 is not None) else None
         eff_delta_j = raw_delta_j
@@ -1116,8 +1116,54 @@ def _process_station_calibration(
             delta_j = None
 
         delta_f, _, _ = validate_meter_delta(f0, f1_v, max_hourly_limit=max_hourly_heat * 12)
-        delta_w, _, _ = validate_meter_delta(w0, w1, max_hourly_limit=200.0)
-        delta_e, _, _ = validate_meter_delta(e0, e1_v, max_hourly_limit=5000.0)
+        if osc_w:
+            delta_w, jump_w, msg_w = None, True, osc_w_msg
+        else:
+            delta_w, jump_w, msg_w = validate_meter_delta(w0, w1, max_hourly_limit=max_hourly_water)
+        if osc_e:
+            delta_e, jump_e, msg_e = None, True, osc_e_msg
+        else:
+            delta_e, jump_e, msg_e = validate_meter_delta(e0, e1_v, max_hourly_limit=max_hourly_elec)
+
+        if jump_w and (not osc_w or not osc_w_fault_logged):
+            extra_hour_tags.append(FAULT_METER_JUMP)
+            faults.append({
+                "biz_hour": hr,
+                "entity_type": "STATION",
+                "entity_id": st_id,
+                "entity_name": st_name,
+                "fault_code": FAULT_METER_JUMP,
+                "owner_party": OWNER_SHARED,
+                "raw_value_text": f"补水表底 f254 异常: {msg_w}",
+                "clean_strategy": (
+                    f"表底跳过/倒走，自动降级采用清洗后瞬时补水 f209 积分 ({fb_water} t)"
+                    if (not osc_w and fb_water is not None)
+                    else "已置空异常小时补水读数 hour_water_t，避免虚假高补水污染榜单与日报"
+                ),
+                "rule_desc": "站点累计补水表底出现锯齿倒走或超过按面积核定上限 1.5 倍",
+            })
+            if osc_w:
+                osc_w_fault_logged = True
+        elif osc_w:
+            extra_hour_tags.append(FAULT_METER_JUMP)
+
+        if jump_e and (not osc_e or not osc_e_fault_logged):
+            extra_hour_tags.append(FAULT_METER_JUMP)
+            faults.append({
+                "biz_hour": hr,
+                "entity_type": "STATION",
+                "entity_id": st_id,
+                "entity_name": st_name,
+                "fault_code": FAULT_METER_JUMP,
+                "owner_party": OWNER_SHARED,
+                "raw_value_text": f"电表表底 f253 异常: {msg_e}",
+                "clean_strategy": "已置空异常小时电耗读数 hour_elec_kwh，避免虚假高电耗污染榜单与日报",
+                "rule_desc": "站点累计电表表底出现锯齿倒走或超过按面积核定上限 1.5 倍",
+            })
+            if osc_e:
+                osc_e_fault_logged = True
+        elif osc_e:
+            extra_hour_tags.append(FAULT_METER_JUMP)
 
         if jump_j:
             extra_hour_tags.append(FAULT_METER_JUMP)
@@ -1143,6 +1189,12 @@ def _process_station_calibration(
         hr_flow, hr_flow_src = (
             (delta_f, SRC_METER_DIFF) if delta_f is not None else (fb_flow, SRC_INTEGRAL_15M)
         )
+        if delta_w is not None:
+            hr_water, hr_water_src = delta_w, SRC_METER_DIFF
+        elif not osc_w and fb_water is not None:
+            hr_water, hr_water_src = fb_water, (SRC_FALLBACK_INTEGRAL if jump_w else SRC_INTEGRAL_15M)
+        else:
+            hr_water, hr_water_src = None, "NONE"
 
         rep = win_pts[-1] if win_pts else None
         cleaned_rep, rep_faults = clean_station_history_point(st, rep, prev_station_valid=rolling_prev)
@@ -1177,6 +1229,8 @@ def _process_station_calibration(
             "e8_clean": cleaned_rep["e8_clean"],
             "e11_raw": cleaned_rep["e11_raw"],
             "e11_clean": cleaned_rep["e11_clean"],
+            "e14_raw": cleaned_rep["e14_raw"],
+            "e14_clean": cleaned_rep["e14_clean"],
             "tot_j": j0,
             "tot_f": f0,
             "tot_water_f254": w0,
@@ -1186,15 +1240,159 @@ def _process_station_calibration(
             "hour_heat_source": hr_heat_src,
             "hour_flow_t": hr_flow,
             "hour_flow_source": hr_flow_src,
-            "hour_water_t": delta_w,
-            "hour_water_source": SRC_METER_DIFF if delta_w is not None else "NONE",
+            "hour_water_t": hr_water,
+            "hour_water_source": hr_water_src,
             "hour_elec_kwh": delta_e,
             "hour_elec_source": SRC_METER_DIFF if delta_e is not None else "NONE",
             "value_source": eff_value_source,
             "fault_tag": merged_fault_tags,
         })
 
+    return upsert_rows, faults
+
+
+def _process_station_calibration(
+    st: Dict[str, Any],
+    base_url: str,
+    query_start: str,
+    query_end: str,
+    hours_to_calib: List[datetime],
+    timeout: float,
+    prev_station_db: Optional[Dict[str, Any]],
+) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]], bool]:
+    """拉取单座换热站 `/hrz_ls_zb/` 并计算整点表底差值与代表断面（供多线程并发调用）。"""
+    st_name = st["name"]
+    st_query_name = st.get("name_raw") or st_name
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+            resp = _post_with_retry(
+                client,
+                f"{base_url}/hrz_ls_zb/",
+                data={
+                    "name": st_query_name,
+                    "start_date": query_start,
+                    "end_date": query_end,
+                    "isdownload": "1",
+                },
+                headers={"User-Agent": "Phoenix-SmartHeating-Collector/2.0", "Connection": "close"},
+                retries=2,
+            )
+            if resp.status_code != 200:
+                return st_name, [], [], False
+            raw_records = resp.json()
+            if not isinstance(raw_records, list):
+                return st_name, [], [], False
+    except Exception:
+        return st_name, [], [], False
+
+    parsed = _parse_station_history_records(raw_records)
+    upsert_rows, faults = _calibrate_station_parsed_hours(
+        st, parsed, hours_to_calib, prev_station_db=prev_station_db
+    )
     return st_name, upsert_rows, faults, True
+
+
+def _upsert_station_calibration_results(
+    all_upsert_rows: List[Dict[str, Any]],
+    all_faults: List[Dict[str, Any]],
+) -> None:
+    """将换热站整点校准结果与故障事件幂等写入 PostgreSQL。"""
+    if all_upsert_rows:
+        real_station_rows = [r for r in all_upsert_rows if r.get("value_source") != SRC_SOURCE_EMPTY]
+        empty_station_rows = [r for r in all_upsert_rows if r.get("value_source") == SRC_SOURCE_EMPTY]
+        sql = """
+        INSERT INTO smart_heating_platform.fact_station_hourly (
+            biz_hour, station_id, sample_count, online,
+            e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean,
+            e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean, e14_raw, e14_clean,
+            tot_j, tot_f, tot_water_f254, tot_elec_f253,
+            hour_heat_raw_gj, hour_heat_gj, hour_heat_source, hour_flow_t, hour_flow_source,
+            hour_water_t, hour_water_source, hour_elec_kwh, hour_elec_source,
+            value_source, fault_tag
+        ) VALUES (
+            :biz_hour, :station_id, :sample_count, :online,
+            :e1_raw, :e1_clean, :e3_raw, :e3_clean, :e4_raw, :e4_clean,
+            :e7_raw, :e7_clean, :e8_raw, :e8_clean, :e11_raw, :e11_clean, :e14_raw, :e14_clean,
+            :tot_j, :tot_f, :tot_water_f254, :tot_elec_f253,
+            :hour_heat_raw_gj, :hour_heat_gj, :hour_heat_source, :hour_flow_t, :hour_flow_source,
+            :hour_water_t, :hour_water_source, :hour_elec_kwh, :hour_elec_source,
+            :value_source, :fault_tag
+        )
+        ON CONFLICT (biz_hour, station_id) DO UPDATE SET
+            sample_count = EXCLUDED.sample_count,
+            online = EXCLUDED.online,
+            e1_raw = COALESCE(EXCLUDED.e1_raw, smart_heating_platform.fact_station_hourly.e1_raw),
+            e1_clean = EXCLUDED.e1_clean,
+            e3_raw = COALESCE(EXCLUDED.e3_raw, smart_heating_platform.fact_station_hourly.e3_raw),
+            e3_clean = EXCLUDED.e3_clean,
+            e4_raw = COALESCE(EXCLUDED.e4_raw, smart_heating_platform.fact_station_hourly.e4_raw),
+            e4_clean = EXCLUDED.e4_clean,
+            e7_raw = COALESCE(EXCLUDED.e7_raw, smart_heating_platform.fact_station_hourly.e7_raw),
+            e7_clean = EXCLUDED.e7_clean,
+            e8_raw = COALESCE(EXCLUDED.e8_raw, smart_heating_platform.fact_station_hourly.e8_raw),
+            e8_clean = EXCLUDED.e8_clean,
+            e11_raw = COALESCE(EXCLUDED.e11_raw, smart_heating_platform.fact_station_hourly.e11_raw),
+            e11_clean = EXCLUDED.e11_clean,
+            e14_raw = COALESCE(EXCLUDED.e14_raw, smart_heating_platform.fact_station_hourly.e14_raw),
+            e14_clean = EXCLUDED.e14_clean,
+            tot_j = COALESCE(EXCLUDED.tot_j, smart_heating_platform.fact_station_hourly.tot_j),
+            tot_f = COALESCE(EXCLUDED.tot_f, smart_heating_platform.fact_station_hourly.tot_f),
+            tot_water_f254 = COALESCE(EXCLUDED.tot_water_f254, smart_heating_platform.fact_station_hourly.tot_water_f254),
+            tot_elec_f253 = COALESCE(EXCLUDED.tot_elec_f253, smart_heating_platform.fact_station_hourly.tot_elec_f253),
+            hour_heat_raw_gj = COALESCE(EXCLUDED.hour_heat_raw_gj, smart_heating_platform.fact_station_hourly.hour_heat_raw_gj),
+            hour_heat_gj = EXCLUDED.hour_heat_gj,
+            hour_heat_source = EXCLUDED.hour_heat_source,
+            hour_flow_t = COALESCE(EXCLUDED.hour_flow_t, smart_heating_platform.fact_station_hourly.hour_flow_t),
+            hour_flow_source = EXCLUDED.hour_flow_source,
+            hour_water_t = EXCLUDED.hour_water_t,
+            hour_water_source = EXCLUDED.hour_water_source,
+            hour_elec_kwh = EXCLUDED.hour_elec_kwh,
+            hour_elec_source = EXCLUDED.hour_elec_source,
+            value_source = EXCLUDED.value_source,
+            fault_tag = EXCLUDED.fault_tag,
+            updated_at = NOW()
+        """
+        station_cols = [
+            "biz_hour", "station_id", "sample_count", "online",
+            "e1_raw", "e1_clean", "e3_raw", "e3_clean", "e4_raw", "e4_clean",
+            "e7_raw", "e7_clean", "e8_raw", "e8_clean", "e11_raw", "e11_clean", "e14_raw", "e14_clean",
+            "tot_j", "tot_f", "tot_water_f254", "tot_elec_f253",
+            "hour_heat_raw_gj", "hour_heat_gj", "hour_heat_source", "hour_flow_t", "hour_flow_source",
+            "hour_water_t", "hour_water_source", "hour_elec_kwh", "hour_elec_source",
+            "value_source", "fault_tag",
+        ]
+        with engine.begin() as conn:
+            for offset in range(0, len(real_station_rows), 500):
+                conn.execute(text(sql), real_station_rows[offset:offset + 500])
+            for offset in range(0, len(empty_station_rows), 500):
+                _upsert_batch(
+                    conn,
+                    "fact_station_hourly",
+                    station_cols,
+                    ["biz_hour", "station_id"],
+                    [],
+                    empty_station_rows[offset:offset + 500],
+                    do_nothing_on_conflict=True,
+                )
+
+    if all_faults:
+        dedup_faults: Dict[Tuple[datetime, str, str, str], Dict[str, Any]] = {}
+        for flt in all_faults:
+            key = (flt["biz_hour"], flt["entity_type"], flt["entity_id"], flt["fault_code"])
+            dedup_faults[key] = flt
+        with engine.begin() as conn:
+            _upsert_batch(
+                conn,
+                "fact_fault_ticket",
+                [
+                    "biz_hour", "entity_type", "entity_id", "entity_name", "fault_code",
+                    "owner_party", "raw_value_text", "clean_strategy", "rule_desc",
+                ],
+                ["biz_hour", "entity_type", "entity_id", "fault_code"],
+                ["entity_name", "owner_party", "raw_value_text", "clean_strategy", "rule_desc"],
+                list(dedup_faults.values()),
+                extra_set_clauses=["updated_at = NOW()"],
+            )
 
 
 def run_table_bottom_calibration(
@@ -1240,7 +1438,7 @@ def run_table_bottom_calibration(
         cfg = _read_raw_config()
         base_url = resolve_effective_base_url(cfg)
         max_workers = max(1, min(16, int(cfg.get("max_workers", 4))))
-        timeout = max(20.0, float(cfg.get("request_timeout_seconds", 15.0)))
+        timeout = max(45.0, float(cfg.get("request_timeout_seconds", 15.0)))
         run_id = _insert_run_log(day_start, "TABLE_BOTTOM_CALIB" if trigger != "MANUAL" else "MANUAL_CALIB", cfg.get("source_mode", "public"))
 
         if not hours_to_calib or not has_target_overlap:
@@ -1303,104 +1501,7 @@ def run_table_bottom_calibration(
                         else:
                             all_faults.extend(st_faults)
 
-            if all_upsert_rows:
-                real_station_rows = [r for r in all_upsert_rows if r.get("value_source") != SRC_SOURCE_EMPTY]
-                empty_station_rows = [r for r in all_upsert_rows if r.get("value_source") == SRC_SOURCE_EMPTY]
-                sql = """
-                INSERT INTO smart_heating_platform.fact_station_hourly (
-                    biz_hour, station_id, sample_count, online,
-                    e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean,
-                    e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean,
-                    tot_j, tot_f, tot_water_f254, tot_elec_f253,
-                    hour_heat_raw_gj, hour_heat_gj, hour_heat_source, hour_flow_t, hour_flow_source,
-                    hour_water_t, hour_water_source, hour_elec_kwh, hour_elec_source,
-                    value_source, fault_tag
-                ) VALUES (
-                    :biz_hour, :station_id, :sample_count, :online,
-                    :e1_raw, :e1_clean, :e3_raw, :e3_clean, :e4_raw, :e4_clean,
-                    :e7_raw, :e7_clean, :e8_raw, :e8_clean, :e11_raw, :e11_clean,
-                    :tot_j, :tot_f, :tot_water_f254, :tot_elec_f253,
-                    :hour_heat_raw_gj, :hour_heat_gj, :hour_heat_source, :hour_flow_t, :hour_flow_source,
-                    :hour_water_t, :hour_water_source, :hour_elec_kwh, :hour_elec_source,
-                    :value_source, :fault_tag
-                )
-                ON CONFLICT (biz_hour, station_id) DO UPDATE SET
-                    sample_count = EXCLUDED.sample_count,
-                    online = EXCLUDED.online,
-                    e1_raw = COALESCE(EXCLUDED.e1_raw, smart_heating_platform.fact_station_hourly.e1_raw),
-                    e1_clean = EXCLUDED.e1_clean,
-                    e3_raw = COALESCE(EXCLUDED.e3_raw, smart_heating_platform.fact_station_hourly.e3_raw),
-                    e3_clean = EXCLUDED.e3_clean,
-                    e4_raw = COALESCE(EXCLUDED.e4_raw, smart_heating_platform.fact_station_hourly.e4_raw),
-                    e4_clean = EXCLUDED.e4_clean,
-                    e7_raw = COALESCE(EXCLUDED.e7_raw, smart_heating_platform.fact_station_hourly.e7_raw),
-                    e7_clean = EXCLUDED.e7_clean,
-                    e8_raw = COALESCE(EXCLUDED.e8_raw, smart_heating_platform.fact_station_hourly.e8_raw),
-                    e8_clean = EXCLUDED.e8_clean,
-                    e11_raw = COALESCE(EXCLUDED.e11_raw, smart_heating_platform.fact_station_hourly.e11_raw),
-                    e11_clean = EXCLUDED.e11_clean,
-                    tot_j = COALESCE(EXCLUDED.tot_j, smart_heating_platform.fact_station_hourly.tot_j),
-                    tot_f = COALESCE(EXCLUDED.tot_f, smart_heating_platform.fact_station_hourly.tot_f),
-                    tot_water_f254 = COALESCE(EXCLUDED.tot_water_f254, smart_heating_platform.fact_station_hourly.tot_water_f254),
-                    tot_elec_f253 = COALESCE(EXCLUDED.tot_elec_f253, smart_heating_platform.fact_station_hourly.tot_elec_f253),
-                    hour_heat_raw_gj = COALESCE(EXCLUDED.hour_heat_raw_gj, smart_heating_platform.fact_station_hourly.hour_heat_raw_gj),
-                    hour_heat_gj = EXCLUDED.hour_heat_gj,
-                    hour_heat_source = EXCLUDED.hour_heat_source,
-                    hour_flow_t = COALESCE(EXCLUDED.hour_flow_t, smart_heating_platform.fact_station_hourly.hour_flow_t),
-                    hour_flow_source = EXCLUDED.hour_flow_source,
-                    hour_water_t = COALESCE(EXCLUDED.hour_water_t, smart_heating_platform.fact_station_hourly.hour_water_t),
-                    hour_water_source = CASE
-                        WHEN EXCLUDED.hour_water_t IS NOT NULL THEN EXCLUDED.hour_water_source
-                        ELSE smart_heating_platform.fact_station_hourly.hour_water_source END,
-                    hour_elec_kwh = COALESCE(EXCLUDED.hour_elec_kwh, smart_heating_platform.fact_station_hourly.hour_elec_kwh),
-                    hour_elec_source = CASE
-                        WHEN EXCLUDED.hour_elec_kwh IS NOT NULL THEN EXCLUDED.hour_elec_source
-                        ELSE smart_heating_platform.fact_station_hourly.hour_elec_source END,
-                    value_source = EXCLUDED.value_source,
-                    fault_tag = EXCLUDED.fault_tag,
-                    updated_at = NOW()
-                """
-                station_cols = [
-                    "biz_hour", "station_id", "sample_count", "online",
-                    "e1_raw", "e1_clean", "e3_raw", "e3_clean", "e4_raw", "e4_clean",
-                    "e7_raw", "e7_clean", "e8_raw", "e8_clean", "e11_raw", "e11_clean",
-                    "tot_j", "tot_f", "tot_water_f254", "tot_elec_f253",
-                    "hour_heat_raw_gj", "hour_heat_gj", "hour_heat_source", "hour_flow_t", "hour_flow_source",
-                    "hour_water_t", "hour_water_source", "hour_elec_kwh", "hour_elec_source",
-                    "value_source", "fault_tag",
-                ]
-                with engine.begin() as conn:
-                    for offset in range(0, len(real_station_rows), 500):
-                        conn.execute(text(sql), real_station_rows[offset:offset + 500])
-                    for offset in range(0, len(empty_station_rows), 500):
-                        _upsert_batch(
-                            conn,
-                            "fact_station_hourly",
-                            station_cols,
-                            ["biz_hour", "station_id"],
-                            [],
-                            empty_station_rows[offset:offset + 500],
-                            do_nothing_on_conflict=True,
-                        )
-
-            if all_faults:
-                dedup_faults: Dict[Tuple[datetime, str, str, str], Dict[str, Any]] = {}
-                for flt in all_faults:
-                    key = (flt["biz_hour"], flt["entity_type"], flt["entity_id"], flt["fault_code"])
-                    dedup_faults[key] = flt
-                with engine.begin() as conn:
-                    _upsert_batch(
-                        conn,
-                        "fact_fault_ticket",
-                        [
-                            "biz_hour", "entity_type", "entity_id", "entity_name", "fault_code",
-                            "owner_party", "raw_value_text", "clean_strategy", "rule_desc",
-                        ],
-                        ["biz_hour", "entity_type", "entity_id", "fault_code"],
-                        ["entity_name", "owner_party", "raw_value_text", "clean_strategy", "rule_desc"],
-                        list(dedup_faults.values()),
-                        extra_set_clauses=["updated_at = NOW()"],
-                    )
+            _upsert_station_calibration_results(all_upsert_rows, all_faults)
 
             jump_count = sum(1 for f in all_faults if f["fault_code"] == FAULT_METER_JUMP)
             summary = {

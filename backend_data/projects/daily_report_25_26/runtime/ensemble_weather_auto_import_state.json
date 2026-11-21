@@ -1,29 +1,51 @@
 {
-  "last_attempt_time": "2026-11-20 18:00:12",
+  "last_attempt_time": "2026-11-21 12:00:11",
   "last_attempt_status": "SUCCESS",
-  "last_attempt_trigger": "定时自动 (18:00)",
-  "last_attempt_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-20 ~ 2026-12-24）。",
-  "last_success_time": "2026-11-20 18:00:12",
-  "last_success_trigger": "定时自动 (18:00)",
-  "last_success_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-20 ~ 2026-12-24）。",
+  "last_attempt_trigger": "定时自动 (12:00)",
+  "last_attempt_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-21 ~ 2026-12-25）。",
+  "last_success_time": "2026-11-21 12:00:11",
+  "last_success_trigger": "定时自动 (12:00)",
+  "last_success_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-21 ~ 2026-12-25）。",
   "last_success_summary": {
     "inserted_or_updated": 659,
     "skipped_near": 168,
-    "start_time": "2026-11-20T00:00:00+08:00",
-    "end_time": "2026-12-24T10:00:00+08:00",
-    "truncated_at": "2026-12-24T11:00",
+    "start_time": "2026-11-21T00:00:00+08:00",
+    "end_time": "2026-12-25T10:00:00+08:00",
+    "truncated_at": "2026-12-25T11:00",
     "members_count": 31,
     "dates": [
-      "2026-11-20",
-      "2026-12-24"
+      "2026-11-21",
+      "2026-12-25"
     ]
   },
   "last_failure_time": null,
   "last_failure_trigger": null,
   "last_failure_message": null,
   "executed_slots_date": "2026-11-21",
-  "executed_slots_today": {},
+  "executed_slots_today": {
+    "12:00": "2026-11-21 12:00:09"
+  },
   "history": [
+    {
+      "time": "2026-11-21 12:00:11",
+      "status": "SUCCESS",
+      "trigger": "auto",
+      "trigger_label": "定时自动 (12:00)",
+      "scheduled_slot": "12:00",
+      "message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-21 ~ 2026-12-25）。",
+      "summary": {
+        "inserted_or_updated": 659,
+        "skipped_near": 168,
+        "start_time": "2026-11-21T00:00:00+08:00",
+        "end_time": "2026-12-25T10:00:00+08:00",
+        "truncated_at": "2026-12-25T11:00",
+        "members_count": 31,
+        "dates": [
+          "2026-11-21",
+          "2026-12-25"
+        ]
+      }
+    },
     {
       "time": "2026-11-20 18:00:12",
       "status": "SUCCESS",

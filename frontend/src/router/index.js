@@ -64,6 +64,11 @@ const routes = [
     component: () => import('../projects/insulation_pipe_supply_2026/pages/TubeProjectPageRouterView.vue'),
   },
   {
+    path: '/projects/smart_heating_platform/pages/dashboard',
+    component: () => import('../projects/smart_heating_platform/pages/ExecutiveDashboardView.vue'),
+    meta: { title: '智慧供热运行驾驶舱' },
+  },
+  {
     path: '/projects/smart_heating_platform/pages/hourly_report',
     component: () => import('../projects/smart_heating_platform/pages/HourlyReportView.vue'),
     meta: { title: '逐小时精细化运行报告' },

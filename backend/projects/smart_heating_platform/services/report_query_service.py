@@ -19,6 +19,8 @@ from backend.db.database_daily_report_25_26 import engine
 from backend.projects.smart_heating_platform.services.cleaning_engine import (
     EAST_8,
     STATION_METER_SCALE_FACTORS,
+    station_max_hourly_elec_kwh,
+    station_max_hourly_water_t,
 )
 from backend.projects.smart_heating_platform.services.collector_config_service import get_collector_settings_view
 from backend.projects.smart_heating_platform.services.db_schema import ensure_smart_heating_fact_tables
@@ -61,7 +63,99 @@ def _num_differs(raw_val: Any, clean_val: Any, tol: float = 0.05) -> bool:
 
 def _fmt_num(val: Any, digits: int = 2) -> str:
     v = _f(val)
-    return "空" if v is None else f"{v:.{digits}f}".rstrip("0").rstrip(".")
+    if v is None:
+        return "空"
+    s = f"{v:.{digits}f}"
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def _normalize_manual_elec_kwh(val: Optional[float], unit: Optional[str]) -> Optional[float]:
+    """将手工日报外购电量统一折算为 kWh（Phoenix `daily_basic_data` 默认填报口径为 万kWh）。"""
+    if val is None:
+        return None
+    u_txt = str(unit or "").strip()
+    if "万" in u_txt or (not u_txt and abs(val) < 1000.0):
+        return val * 10000.0
+    return val
+
+
+def _detect_broken_meter_stations(
+    rows: Sequence[Dict[str, Any]],
+    area_by_sid: Optional[Dict[str, Optional[float]]] = None,
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    识别单日内累计电表 (f253) 或补水表 (f254) 存在锯齿倒走、异常跳变或超限的站。
+
+    返回 `(broken_elec_notes, broken_water_notes)`，命中站应在汇总与榜单中屏蔽其虚假读数并标注原因。
+    """
+    by_sid: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        sid = r.get("station_id")
+        if sid:
+            by_sid.setdefault(sid, []).append(r)
+
+    broken_elec: Dict[str, str] = {}
+    broken_water: Dict[str, str] = {}
+
+    for sid, srows in by_sid.items():
+        ordered = sorted(
+            srows,
+            key=lambda x: x.get("biz_hour") if x.get("biz_hour") is not None else int(x.get("hr") or 0),
+        )
+        area = (area_by_sid or {}).get(sid)
+        if area is None:
+            area = _f(ordered[0].get("covered_area")) if ordered else None
+        max_elec = station_max_hourly_elec_kwh(area) * 1.5
+        max_water = station_max_hourly_water_t(area) * 1.5
+
+        elec_reasons: List[str] = []
+        water_reasons: List[str] = []
+        prev_tot_e: Optional[float] = None
+        prev_tot_w: Optional[float] = None
+        e_rejected_gaps = 0
+        w_rejected_gaps = 0
+
+        for rm in ordered:
+            cur_tot_e = _f(rm.get("tot_elec_f253"))
+            cur_hr_e = _f(rm.get("hour_elec_kwh"))
+            if cur_hr_e is not None and cur_hr_e > max_elec:
+                elec_reasons.append(f"单小时电耗{_fmt_num(cur_hr_e, 1)}kWh超上限({_fmt_num(max_elec, 0)}kWh)")
+            if prev_tot_e is not None and cur_tot_e is not None:
+                de = cur_tot_e - prev_tot_e
+                if de < -1.0:
+                    elec_reasons.append(f"表底倒走({de:+.1f})")
+                elif de > max_elec:
+                    elec_reasons.append(f"表底跳变({de:+.1f})")
+                if cur_hr_e is None:
+                    e_rejected_gaps += 1
+            if cur_tot_e is not None:
+                prev_tot_e = cur_tot_e
+
+            cur_tot_w = _f(rm.get("tot_water_f254"))
+            cur_hr_w = _f(rm.get("hour_water_t"))
+            if cur_hr_w is not None and cur_hr_w > max_water:
+                water_reasons.append(f"单小时补水{_fmt_num(cur_hr_w, 1)}t超上限({_fmt_num(max_water, 0)}t)")
+            if prev_tot_w is not None and cur_tot_w is not None:
+                dw = cur_tot_w - prev_tot_w
+                if dw < -0.5:
+                    water_reasons.append(f"表底倒走({dw:+.1f})")
+                elif dw > max_water:
+                    water_reasons.append(f"表底跳变({dw:+.1f})")
+                if cur_hr_w is None:
+                    w_rejected_gaps += 1
+            if cur_tot_w is not None:
+                prev_tot_w = cur_tot_w
+
+        if elec_reasons or e_rejected_gaps >= 2:
+            uniq_e = list(dict.fromkeys(elec_reasons))
+            msg = "；".join(uniq_e[:3]) if uniq_e else f"连续{e_rejected_gaps}小时电表差值异常置空"
+            broken_elec[sid] = f"电表异常已屏蔽({msg})"
+        if water_reasons or w_rejected_gaps >= 2:
+            uniq_w = list(dict.fromkeys(water_reasons))
+            msg = "；".join(uniq_w[:3]) if uniq_w else f"连续{w_rejected_gaps}小时水表差值异常置空"
+            broken_water[sid] = f"水表异常已屏蔽({msg})"
+
+    return broken_elec, broken_water
 
 
 BURST_MAX_HOURS_PER_DAY = 6
@@ -405,9 +499,22 @@ def _build_trend_24h_from_rows(
         st_day_maps,
         lambda rm: rm.get("station_name") or rm.get("station_id"),
     )
+    broken_elec_notes, broken_water_notes = _detect_broken_meter_stations(st_day_maps)
     day_bucket: Dict[int, List[Dict[str, Any]]] = {h: [] for h in range(24)}
     for row_map in st_day_maps:
         sid = row_map["station_id"]
+        fn = _build_station_hour_anomalies(
+            row_map,
+            str(row_map.get("station_name") or sid),
+            day_counts=st_day_counts.get(sid),
+            mode=mode,
+        )
+        hr_water = None if sid in broken_water_notes else _f(row_map["hour_water_t"])
+        hr_elec = None if sid in broken_elec_notes else _f(row_map.get("hour_elec_kwh"))
+        if sid in broken_water_notes:
+            fn["e14"] = f"{row_map.get('station_name') or sid}: {broken_water_notes[sid]}"
+        if sid in broken_elec_notes:
+            fn["hour_elec_kwh"] = f"{row_map.get('station_name') or sid}: {broken_elec_notes[sid]}"
         day_bucket[int(row_map["hr"])].append({
             "station_id": sid,
             "online": row_map["online"],
@@ -416,19 +523,15 @@ def _build_trend_24h_from_rows(
             "e3": _f(row_map["e3_raw"] if use_raw else row_map["e3_clean"]),
             "e4": _f(row_map["e4_raw"] if use_raw else row_map["e4_clean"]),
             "e11": _f(row_map["e11_raw"] if use_raw else row_map["e11_clean"]),
-            "e14": _f(row_map["e14_raw"] if use_raw else row_map["e14_clean"]),
+            "e14": None if sid in broken_water_notes else _f(row_map["e14_raw"] if use_raw else row_map["e14_clean"]),
             "hour_heat_gj": _f(
                 row_map["hour_heat_raw_gj"]
                 if (use_raw and row_map["hour_heat_raw_gj"] is not None)
                 else row_map["hour_heat_gj"]
             ),
-            "hour_water_t": _f(row_map["hour_water_t"]),
-            "field_notes": _build_station_hour_anomalies(
-                row_map,
-                str(row_map.get("station_name") or sid),
-                day_counts=st_day_counts.get(sid),
-                mode=mode,
-            ),
+            "hour_water_t": hr_water,
+            "hour_elec_kwh": hr_elec,
+            "field_notes": fn,
         })
 
     trend_24h: List[Dict[str, Any]] = []
@@ -443,6 +546,7 @@ def _build_trend_24h_from_rows(
             "station_count": len(items),
             "hour_heat_gj": k.get("hour_heat_gj"),
             "heat_index_wm2": k.get("heat_index_wm2"),
+            "hour_elec_kwh": k.get("hour_elec_kwh"),
             "avg_sup_temp": k.get("avg_sup_temp"),
             "avg_ret_temp": k.get("avg_ret_temp"),
             "avg_room_temp": temp_map.get(h),
@@ -538,8 +642,8 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
                 "f.station_id, hs.name AS station_name, f.online, f.e1_raw, f.e1_clean, f.e3_raw, f.e3_clean, "
                 "f.e4_raw, f.e4_clean, f.e7_raw, f.e7_clean, f.e8_raw, f.e8_clean, "
                 "f.e11_raw, f.e11_clean, f.e14_raw, f.e14_clean, "
-                "f.hour_heat_raw_gj, f.hour_heat_gj, f.hour_heat_source, f.hour_water_t, "
-                "f.value_source, f.fault_tag, hs.covered_area "
+                "f.hour_heat_raw_gj, f.hour_heat_gj, f.hour_heat_source, f.hour_water_t, f.hour_elec_kwh, "
+                "f.tot_water_f254, f.tot_elec_f253, f.value_source, f.fault_tag, hs.covered_area "
                 "FROM smart_heating_platform.fact_station_hourly f "
                 "JOIN smart_heating_platform.dict_heating_station hs ON f.station_id = hs.station_id "
                 "WHERE f.biz_hour >= :ds AND f.biz_hour < :de"
@@ -673,6 +777,8 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
         st_day_maps,
         lambda rm: rm.get("station_name") or rm.get("station_id"),
     )
+    st_area_by_id = {sm["station_id"]: _f(sm.get("covered_area")) for sm in stations_meta}
+    broken_elec_notes, broken_water_notes = _detect_broken_meter_stations(st_day_maps, st_area_by_id)
     trend_24h = _build_trend_24h_from_rows(
         st_day_maps,
         outdoor_24h,
@@ -738,6 +844,14 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
             if sf
             else {}
         )
+        day_anomaly_count = sum((st_day_counts.get(st_id) or {}).values())
+        hr_water_val = None if st_id in broken_water_notes else _f(sf.get("hour_water_t"))
+        hr_elec_val = None if st_id in broken_elec_notes else _f(sf.get("hour_elec_kwh"))
+        if st_id in broken_water_notes:
+            e14 = None
+            field_notes["e14"] = f"{sm['name']}: {broken_water_notes[st_id]}"
+        if st_id in broken_elec_notes:
+            field_notes["hour_elec_kwh"] = f"{sm['name']}: {broken_elec_notes[st_id]}"
 
         stations_full.append({
             "station_id": st_id,
@@ -771,13 +885,15 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
             "hour_heat_raw_gj": _f(sf.get("hour_heat_raw_gj")),
             "hour_heat_source": sf.get("hour_heat_source"),
             "hour_flow_t": _f(sf.get("hour_flow_t")),
-            "hour_water_t": _f(sf.get("hour_water_t")),
-            "hour_elec_kwh": _f(sf.get("hour_elec_kwh")),
+            "hour_water_t": hr_water_val,
+            "hour_elec_kwh": hr_elec_val,
+            "elec_per_wan_kwh": _round(hr_elec_val / (area / 10000.0), 2) if (hr_elec_val is not None and area and area > 0) else None,
             "zone_heat_sum_e12": _f(sf.get("zone_heat_sum_e12")),
             "heat_balance_diff_pct": _f(sf.get("heat_balance_diff_pct")),
             "value_source": sf.get("value_source") or "NO_DATA",
             "fault_tag": sf.get("fault_tag"),
             "field_notes": field_notes,
+            "day_anomaly_count": day_anomaly_count,
             "avg_room_temp": st_avg_temp,
             "temp_valid_count": len(st_temps),
             "temp_pass_rate_pct": st_pass_pct,
@@ -1049,6 +1165,555 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
     }
 
 
+def _is_watchlist_station_healthy(s: Dict[str, Any]) -> bool:
+    """过滤焦点榜单中的停运/零能耗/故障标记/单日异常频发及传感异常站点。"""
+    if "online" in s and not s["online"]:
+        return False
+    if "has_record" in s and not s["has_record"]:
+        return False
+    if s.get("fault_tag"):
+        return False
+    val_src = str(s.get("value_source") or "")
+    if val_src.startswith("MASKED") or val_src == "NO_DATA":
+        return False
+    if s.get("field_notes"):
+        return False
+    if (s.get("day_anomaly_count") or 0) >= 3:
+        return False
+
+    area = _f(s.get("covered_area"))
+    hr_heat = _f(s.get("hour_heat_gj"))
+    wm2 = _f(s.get("heat_index_wm2"))
+    if area is None or area < 5000.0:
+        return False
+    if hr_heat is None or hr_heat < 0.5:
+        return False
+    if wm2 is None or wm2 < 5.0:
+        return False
+
+    if "e1" in s:
+        e1 = _f(s.get("e1"))
+        if e1 is None or e1 <= 0.5:
+            return False
+    if "e3" in s or "e4" in s:
+        e3 = _f(s.get("e3"))
+        e4 = _f(s.get("e4"))
+        if e3 is None or e4 is None or not (20.0 <= e3 <= 130.0) or not (10.0 <= e4 <= 95.0) or e3 <= e4:
+            return False
+        if "e1" in s:
+            e1 = _f(s.get("e1"))
+            if e1 is not None:
+                q_calc = e1 * 0.0041868 * (e3 - e4)
+                ratio = hr_heat / max(q_calc, 0.25)
+                if (q_calc >= 0.5 or hr_heat >= 2.0) and (ratio > 4.0 or ratio < 0.2):
+                    return False
+    if "e7" in s or "e8" in s:
+        e7 = _f(s.get("e7"))
+        e8 = _f(s.get("e8"))
+        if e7 is None or e8 is None or e7 <= 0.0 or e8 < 0.0 or e8 > e7 + 0.05:
+            return False
+
+    return True
+
+
+def get_dashboard_overview(
+    target_date_str: Optional[str] = None,
+    hour: Optional[int] = None,
+    mode: str = "clean",
+) -> Dict[str, Any]:
+    """构建【领导驾驶舱 / 智慧供热全景数据看板】专用聚合载荷（含昨日同期对比、近72h连续/24h/近7日气温供热趋势、当前最新居民室温、中心能效象限与焦点榜单）。"""
+    curr = get_hourly_report(target_date_str=target_date_str, hour=hour, mode=mode)
+    target_d = date.fromisoformat(curr["meta"]["date"])
+    sel_hour = int(curr["meta"]["hour"])
+    use_raw = curr["meta"].get("mode") == "raw"
+
+    prev_d = target_d - timedelta(days=1)
+    prev_day_start = datetime(prev_d.year, prev_d.month, prev_d.day, 0, 0, 0, tzinfo=EAST_8)
+    prev_day_end = prev_day_start + timedelta(days=1)
+    prev_same_bh = datetime(prev_d.year, prev_d.month, prev_d.day, sel_hour, 0, 0, tzinfo=EAST_8)
+
+    end_72h = datetime(target_d.year, target_d.month, target_d.day, sel_hour, 0, 0, tzinfo=EAST_8)
+    start_72h = end_72h - timedelta(hours=71)
+
+    d7_start_d = max(date(2026, 11, 1), target_d - timedelta(days=6))
+    d7_start = datetime(d7_start_d.year, d7_start_d.month, d7_start_d.day, 0, 0, 0, tzinfo=EAST_8)
+    d7_end = datetime(target_d.year, target_d.month, target_d.day, 0, 0, 0, tzinfo=EAST_8) + timedelta(days=1)
+
+    prev_outdoor_24h = _load_outdoor_temps_24h(prev_d)
+
+    heat_col = "COALESCE(hour_heat_raw_gj, hour_heat_gj)" if use_raw else "hour_heat_gj"
+    e11_col = "e11_raw" if use_raw else "e11_clean"
+
+    with engine.connect() as conn:
+        prev_st_rows = conn.execute(
+            text(
+                "SELECT EXTRACT(HOUR FROM (f.biz_hour AT TIME ZONE 'Asia/Shanghai'))::INT AS hr, "
+                "f.station_id, hs.name AS station_name, f.online, f.e1_raw, f.e1_clean, f.e3_raw, f.e3_clean, "
+                "f.e4_raw, f.e4_clean, f.e7_raw, f.e7_clean, f.e8_raw, f.e8_clean, "
+                "f.e11_raw, f.e11_clean, f.e14_raw, f.e14_clean, "
+                "f.hour_heat_raw_gj, f.hour_heat_gj, f.hour_heat_source, f.hour_water_t, f.hour_elec_kwh, "
+                "f.tot_water_f254, f.tot_elec_f253, f.value_source, f.fault_tag, hs.covered_area "
+                "FROM smart_heating_platform.fact_station_hourly f "
+                "JOIN smart_heating_platform.dict_heating_station hs ON f.station_id = hs.station_id "
+                "WHERE f.biz_hour >= :ds AND f.biz_hour < :de"
+            ),
+            {"ds": prev_day_start, "de": prev_day_end},
+        ).fetchall()
+
+        prev_same_water_row = conn.execute(
+            text(
+                "SELECT SUM(COALESCE(hour_water_t, e14_clean)) AS water_sum, "
+                "SUM(hour_elec_kwh) AS elec_sum "
+                "FROM smart_heating_platform.fact_station_hourly "
+                "WHERE biz_hour = :bh"
+            ),
+            {"bh": prev_same_bh},
+        ).fetchone()
+
+        # 近 72 小时连续逐小时供热量、瞬时热负荷与室外气温
+        h72_st_rows = conn.execute(
+            text(
+                f"SELECT DATE_TRUNC('hour', biz_hour AT TIME ZONE 'Asia/Shanghai') AS bh, "
+                f"SUM({heat_col}) AS hour_heat_gj, "
+                f"SUM({e11_col}) AS instant_load_gjh, "
+                "COUNT(*) AS station_count "
+                "FROM smart_heating_platform.fact_station_hourly "
+                "WHERE biz_hour >= :s72 AND biz_hour <= :e72 "
+                "GROUP BY 1 ORDER BY 1"
+            ),
+            {"s72": start_72h, "e72": end_72h},
+        ).fetchall()
+        h72_out_rows = conn.execute(
+            text(
+                "SELECT DATE_TRUNC('hour', date_time) AS bh, AVG(value) AS val "
+                "FROM public.temperature_data "
+                "WHERE type = 'near' AND date_time >= :s72 AND date_time <= :e72 AND value IS NOT NULL "
+                "GROUP BY 1 ORDER BY 1"
+            ),
+            {"s72": start_72h.replace(tzinfo=None), "e72": end_72h.replace(tzinfo=None)},
+        ).fetchall()
+
+        # 近 7 日逐日供热量、补水量、电耗与室外气温（室温仅展示当前实况，不展示历史趋势）
+        d7_st_rows = conn.execute(
+            text(
+                f"SELECT DATE(biz_hour AT TIME ZONE 'Asia/Shanghai') AS d, "
+                f"SUM({heat_col}) AS day_heat, "
+                "SUM(hour_water_t) AS day_water, "
+                "SUM(hour_elec_kwh) AS day_elec, "
+                "COUNT(DISTINCT EXTRACT(HOUR FROM (biz_hour AT TIME ZONE 'Asia/Shanghai'))::INT) AS hrs_cnt "
+                "FROM smart_heating_platform.fact_station_hourly "
+                "WHERE biz_hour >= :ds AND biz_hour < :de "
+                "GROUP BY 1 ORDER BY 1"
+            ),
+            {"ds": d7_start, "de": d7_end},
+        ).fetchall()
+        d7_out_rows = conn.execute(
+            text(
+                "SELECT DATE(date_time) AS d, AVG(value) AS avg_t, MIN(value) AS min_t, MAX(value) AS max_t "
+                "FROM public.temperature_data "
+                "WHERE type = 'near' AND date_time >= :ds AND date_time < :de AND value IS NOT NULL "
+                "GROUP BY 1 ORDER BY 1"
+            ),
+            {"ds": d7_start.replace(tzinfo=None), "de": d7_end.replace(tzinfo=None)},
+        ).fetchall()
+
+        # 居民室温仅展示最新当前实况（取库内最新有效整点断面，不随历史日期回溯）
+        latest_temp_bh = conn.execute(
+            text(
+                "SELECT MAX(biz_hour) FROM smart_heating_platform.fact_temp_hourly "
+                "WHERE is_online_valid IS TRUE"
+            )
+        ).scalar()
+        latest_temp_rows = (
+            conn.execute(
+                text(
+                    "SELECT t.station_id, hs.name AS station_name, hs.center_id, sc.name AS center_name, "
+                    "hs.rdfz, t.temp_clean "
+                    "FROM smart_heating_platform.fact_temp_hourly t "
+                    "JOIN smart_heating_platform.dict_heating_station hs ON t.station_id = hs.station_id "
+                    "JOIN smart_heating_platform.dict_service_center sc ON hs.center_id = sc.center_id "
+                    "WHERE t.biz_hour = :tbh AND t.is_online_valid IS TRUE AND t.temp_clean IS NOT NULL"
+                ),
+                {"tbh": latest_temp_bh},
+            ).fetchall()
+            if latest_temp_bh is not None
+            else []
+        )
+
+    prev_trend_24h = _build_trend_24h_from_rows(
+        [dict(r._mapping) for r in prev_st_rows],
+        prev_outdoor_24h,
+        mode,
+        temp_24h_map={},
+    )
+    prev_same = prev_trend_24h[sel_hour] if 0 <= sel_hour < len(prev_trend_24h) else {}
+    curr_kpis = dict(curr.get("kpis") or {})
+
+    # 解析最新当前居民室温实况
+    cur_temp_vals: List[float] = []
+    cur_temp_dist = {"under_18": 0, "ok_18_20": 0, "comfort_20_25": 0, "over_25": 0}
+    cur_temp_by_center_raw: Dict[int, List[float]] = {}
+    cur_temp_by_rdfz_raw: Dict[str, List[float]] = {}
+    cur_temp_by_station_raw: Dict[str, Dict[str, Any]] = {}
+    for tr in latest_temp_rows:
+        v = float(tr.temp_clean)
+        cur_temp_vals.append(v)
+        if v < 18.0:
+            cur_temp_dist["under_18"] += 1
+        elif v < 20.0:
+            cur_temp_dist["ok_18_20"] += 1
+        elif v <= 25.0:
+            cur_temp_dist["comfort_20_25"] += 1
+        else:
+            cur_temp_dist["over_25"] += 1
+        if tr.center_id is not None:
+            cur_temp_by_center_raw.setdefault(int(tr.center_id), []).append(v)
+        if tr.rdfz:
+            cur_temp_by_rdfz_raw.setdefault(str(tr.rdfz), []).append(v)
+        if tr.station_id:
+            st_slot = cur_temp_by_station_raw.setdefault(
+                tr.station_id,
+                {"station_id": tr.station_id, "name": tr.station_name, "center_name": tr.center_name, "vals": []},
+            )
+            st_slot["vals"].append(v)
+
+    cur_temp_bh_e8 = (
+        (latest_temp_bh.astimezone(EAST_8) if latest_temp_bh.tzinfo else latest_temp_bh.replace(tzinfo=EAST_8))
+        if latest_temp_bh is not None
+        else None
+    )
+    if cur_temp_vals and cur_temp_bh_e8 is not None:
+        cur_avg_room = round(sum(cur_temp_vals) / len(cur_temp_vals), 2)
+        cur_pass_rate = round(sum(1 for t in cur_temp_vals if t >= 18.0) / len(cur_temp_vals) * 100.0, 1)
+        cur_comfort_rate = round(sum(1 for t in cur_temp_vals if 20.0 <= t <= 25.0) / len(cur_temp_vals) * 100.0, 1)
+        current_temp_info = {
+            "date": cur_temp_bh_e8.date().isoformat(),
+            "hour": cur_temp_bh_e8.hour,
+            "biz_hour_label": cur_temp_bh_e8.strftime("%Y-%m-%d %H:00"),
+            "short_label": cur_temp_bh_e8.strftime("%m-%d %H:00"),
+            "valid_devices": len(cur_temp_vals),
+            "avg_room_temp": cur_avg_room,
+            "temp_pass_rate_pct": cur_pass_rate,
+            "temp_comfort_rate_pct": cur_comfort_rate,
+            "distribution": cur_temp_dist,
+        }
+    else:
+        ts_fallback = curr.get("temp_summary") or {}
+        current_temp_info = {
+            "date": curr["meta"]["date"],
+            "hour": sel_hour,
+            "biz_hour_label": curr["meta"]["biz_hour_label"],
+            "short_label": f"{curr['meta']['date'][-5:]} {sel_hour:02d}:00",
+            "valid_devices": ts_fallback.get("valid_devices", 0),
+            "avg_room_temp": curr_kpis.get("avg_room_temp"),
+            "temp_pass_rate_pct": curr_kpis.get("temp_pass_rate_pct"),
+            "temp_comfort_rate_pct": curr_kpis.get("temp_comfort_rate_pct"),
+            "distribution": ts_fallback.get("distribution") or cur_temp_dist,
+        }
+
+    # 用当前最新居民室温覆写当前看板展示的室温 KPI（确保任何历史时段/缺室温小时都展示当前实况）
+    curr_kpis["avg_room_temp"] = current_temp_info["avg_room_temp"]
+    curr_kpis["temp_pass_rate_pct"] = current_temp_info["temp_pass_rate_pct"]
+    curr_kpis["temp_comfort_rate_pct"] = current_temp_info["temp_comfort_rate_pct"]
+    curr_kpis["valid_temp_count"] = current_temp_info["valid_devices"]
+
+    def _pct_delta(cur_v: Optional[float], prev_v: Optional[float]) -> Optional[float]:
+        if cur_v is None or prev_v is None or prev_v == 0:
+            return None
+        return round((cur_v - prev_v) / abs(prev_v) * 100.0, 1)
+
+    def _abs_delta(cur_v: Optional[float], prev_v: Optional[float], digits: int = 1) -> Optional[float]:
+        if cur_v is None or prev_v is None:
+            return None
+        return round(cur_v - prev_v, digits)
+
+    prev_same_water = _f(prev_same_water_row.water_sum) if prev_same_water_row else None
+    prev_trend_elec = prev_trend_24h[sel_hour].get("hour_elec_kwh") if sel_hour < len(prev_trend_24h) else None
+    prev_same_elec = (
+        _f(prev_trend_elec)
+        if (prev_st_rows and prev_trend_elec is not None)
+        else (_f(getattr(prev_same_water_row, "elec_sum", None)) if prev_same_water_row else None)
+    )
+
+    trend_24h_enriched = []
+    for idx, item in enumerate(curr.get("trend_24h") or []):
+        pv = prev_trend_24h[idx] if idx < len(prev_trend_24h) else {}
+        trend_24h_enriched.append({
+            **item,
+            "avg_room_temp": None,
+            "prev_hour_heat_gj": pv.get("hour_heat_gj"),
+            "prev_outdoor_temp": pv.get("outdoor_temp"),
+            "prev_heat_index_wm2": pv.get("heat_index_wm2"),
+        })
+
+    # 构建连续 72 小时序列（72 个连续整点）
+    tot_area_m2 = _f(curr_kpis.get("covered_area_m2")) or 0.0
+    tot_area_wan = _f(curr_kpis.get("covered_area_wan")) or 0.0
+    h72_st_map: Dict[datetime, Any] = {}
+    for r in h72_st_rows:
+        if r.bh is not None:
+            key_dt = r.bh.replace(tzinfo=None) if isinstance(r.bh, datetime) else r.bh
+            h72_st_map[key_dt] = r
+    h72_out_map: Dict[datetime, float] = {}
+    for r in h72_out_rows:
+        if r.bh is not None and r.val is not None:
+            key_dt = r.bh.replace(tzinfo=None) if isinstance(r.bh, datetime) else r.bh
+            h72_out_map[key_dt] = round(float(r.val), 1)
+
+    trend_72h: List[Dict[str, Any]] = []
+    for i in range(72):
+        slot_e8 = start_72h + timedelta(hours=i)
+        slot_naive = slot_e8.replace(tzinfo=None)
+        sr = h72_st_map.get(slot_naive)
+        hg = _f(sr.hour_heat_gj) if sr else None
+        inst_e11 = _f(sr.instant_load_gjh) if sr else None
+        heat_idx = (inst_e11 * 277777.78 / tot_area_m2) if (inst_e11 is not None and tot_area_m2 > 0) else None
+        trend_72h.append({
+            "date": slot_e8.date().isoformat(),
+            "hour": slot_e8.hour,
+            "label": slot_e8.strftime("%m-%d %H:00"),
+            "short_label": slot_e8.strftime("%m-%d %H时"),
+            "is_day_start": slot_e8.hour == 0,
+            "has_data": sr is not None,
+            "hour_heat_gj": _round(hg, 2),
+            "heat_index_wm2": _round(heat_idx, 2),
+            "outdoor_temp": h72_out_map.get(slot_naive),
+        })
+
+    d7_st_map = {r.d: r for r in d7_st_rows}
+    d7_out_map = {r.d: r for r in d7_out_rows}
+    trend_7d: List[Dict[str, Any]] = []
+    cur_d = d7_start_d
+    while cur_d <= target_d:
+        sr = d7_st_map.get(cur_d)
+        orr = d7_out_map.get(cur_d)
+        dh = _f(sr.day_heat) if sr else None
+        hrs_cnt = int(sr.hrs_cnt or 0) if sr else 0
+        trend_7d.append({
+            "date": cur_d.isoformat(),
+            "label": cur_d.strftime("%m-%d"),
+            "day_heat_gj": _round(dh, 2),
+            "heat_per_wan_gj": _round(dh / tot_area_wan, 2) if (dh is not None and tot_area_wan > 0) else None,
+            "day_water_t": _round(_f(sr.day_water) if sr else None, 2),
+            "day_elec_kwh": _round(_f(getattr(sr, "day_elec", None)) if sr else None, 2),
+            "hours_count": hrs_cnt,
+            "is_partial": 0 < hrs_cnt < 24,
+            "avg_outdoor_temp": _round(_f(orr.avg_t) if orr else None, 1),
+            "min_outdoor_temp": _round(_f(orr.min_t) if orr else None, 1),
+            "max_outdoor_temp": _round(_f(orr.max_t) if orr else None, 1),
+        })
+        cur_d += timedelta(days=1)
+
+    today_cum_heat = round(
+        sum(float(x["hour_heat_gj"]) for x in (curr.get("trend_24h") or []) if x.get("hour_heat_gj") is not None and int(x["hour"]) <= sel_hour),
+        2,
+    )
+    today_cum_elec = round(
+        sum(float(x["hour_elec_kwh"]) for x in (curr.get("trend_24h") or []) if x.get("hour_elec_kwh") is not None and int(x["hour"]) <= sel_hour),
+        2,
+    )
+    outdoor_vals = [float(x["outdoor_temp"]) for x in (curr.get("trend_24h") or []) if x.get("outdoor_temp") is not None]
+
+    # 按站当前室温汇总（若库内无 latest_temp_rows 则回落 curr temp_summary）
+    cur_st_temp_map: Dict[str, Dict[str, Any]] = {}
+    for sid, info in cur_temp_by_station_raw.items():
+        vs = info["vals"]
+        cur_st_temp_map[sid] = {
+            "station_id": sid,
+            "name": info["name"],
+            "center_name": info["center_name"],
+            "valid_count": len(vs),
+            "avg_room_temp": round(sum(vs) / len(vs), 2),
+            "pass_rate_pct": round(sum(1 for x in vs if x >= 18.0) / len(vs) * 100.0, 1),
+        }
+
+    stations_list = curr.get("stations") or []
+    healthy_stations = [s for s in stations_list if _is_watchlist_station_healthy(s)]
+
+    high_heat_stations = sorted(
+        (
+            {
+                "station_id": s["station_id"],
+                "name": s["name"],
+                "center_name": s["center_name"],
+                "heat_index_wm2": s["heat_index_wm2"],
+                "hour_heat_gj": s["hour_heat_gj"],
+                "covered_area": s["covered_area"],
+            }
+            for s in healthy_stations
+            if s.get("heat_index_wm2") is not None
+        ),
+        key=lambda x: x["heat_index_wm2"],
+        reverse=True,
+    )[:5]
+
+    high_water_stations = sorted(
+        (
+            {
+                "station_id": s["station_id"],
+                "name": s["name"],
+                "center_name": s["center_name"],
+                "hour_water_t": s["hour_water_t"] if s.get("hour_water_t") is not None else s.get("e14"),
+                "e14": s.get("e14"),
+                "hour_heat_gj": s.get("hour_heat_gj"),
+                "covered_area": s["covered_area"],
+            }
+            for s in healthy_stations
+            if (s.get("hour_water_t") is not None and s["hour_water_t"] > 0) or (s.get("e14") is not None and s["e14"] > 0)
+        ),
+        key=lambda x: x["hour_water_t"] or 0.0,
+        reverse=True,
+    )[:5]
+
+    high_elec_stations = sorted(
+        (
+            {
+                "station_id": s["station_id"],
+                "name": s["name"],
+                "center_name": s["center_name"],
+                "hour_elec_kwh": round(float(s["hour_elec_kwh"]), 2),
+                "elec_per_wan_kwh": _round(
+                    float(s["hour_elec_kwh"]) / (float(s["covered_area"]) / 10000.0), 2
+                ) if (s.get("covered_area") or 0) > 0 else None,
+                "hour_heat_gj": s["hour_heat_gj"],
+                "covered_area": s["covered_area"],
+            }
+            for s in healthy_stations
+            if s.get("hour_elec_kwh") is not None and float(s["hour_elec_kwh"]) > 0
+        ),
+        key=lambda x: x["hour_elec_kwh"],
+        reverse=True,
+    )[:5]
+
+    if cur_st_temp_map:
+        low_temp_stations = sorted(cur_st_temp_map.values(), key=lambda x: x["avg_room_temp"])[:5]
+    else:
+        low_temp_stations = list((curr.get("temp_summary") or {}).get("station_rankings", [])[:5])
+
+    benchmark_stations = sorted(
+        (
+            {
+                "station_id": s["station_id"],
+                "name": s["name"],
+                "center_name": s["center_name"],
+                "heat_index_wm2": s["heat_index_wm2"],
+                "hour_heat_gj": s["hour_heat_gj"],
+                "covered_area": s["covered_area"],
+            }
+            for s in healthy_stations
+            if s.get("heat_index_wm2") is not None and (s.get("covered_area") or 0) >= 10000
+        ),
+        key=lambda x: x["heat_index_wm2"],
+    )[:5]
+
+    # 9 大服务中心 & 9 大主干热网同步注入当前最新室温实况
+    centers_list = []
+    for c in (curr.get("group_summaries") or {}).get("by_center") or []:
+        cid = int(c["group_key"]) if c.get("group_key") is not None else None
+        ct = cur_temp_by_center_raw.get(cid) if cid is not None else None
+        centers_list.append({
+            **c,
+            "avg_room_temp": round(sum(ct) / len(ct), 2) if ct else c.get("avg_room_temp"),
+            "temp_pass_rate_pct": round(sum(1 for x in ct if x >= 18.0) / len(ct) * 100.0, 1) if ct else c.get("temp_pass_rate_pct"),
+        })
+
+    rdfz_list = []
+    for r in sorted(
+        (curr.get("group_summaries") or {}).get("by_rdfz") or [],
+        key=lambda x: x.get("hour_heat_gj") or 0.0,
+        reverse=True,
+    ):
+        rk = str(r.get("group_key") or "")
+        rt = cur_temp_by_rdfz_raw.get(rk)
+        rdfz_list.append({
+            **r,
+            "avg_room_temp": round(sum(rt) / len(rt), 2) if rt else r.get("avg_room_temp"),
+        })
+
+    heat_delta_pct = _pct_delta(_f(curr_kpis.get("hour_heat_gj")), _f(prev_same.get("hour_heat_gj")))
+    out_delta_c = _abs_delta(_f(curr_kpis.get("outdoor_temp")), _f(prev_same.get("outdoor_temp")), 1)
+    water_delta_pct = _pct_delta(_f(curr_kpis.get("hour_water_t")), prev_same_water)
+    elec_delta_pct = _pct_delta(_f(curr_kpis.get("hour_elec_kwh")), prev_same_elec)
+
+    highest_center = max(
+        (c for c in centers_list if c.get("heat_per_wan_gj") is not None),
+        key=lambda c: c["heat_per_wan_gj"],
+        default=None,
+    )
+    highlights: List[str] = []
+    if highest_center:
+        highlights.append(f"万平耗热最高中心：{highest_center['group_name']}（{highest_center['heat_per_wan_gj']} GJ/万㎡·h）")
+    if high_water_stations:
+        top_w = high_water_stations[0]
+        highlights.append(f"高补水关注站：{top_w['name']}（{_fmt_num(top_w['hour_water_t'], 2)} t/h）")
+    if low_temp_stations and low_temp_stations[0].get("avg_room_temp") is not None and low_temp_stations[0]["avg_room_temp"] < 18.0:
+        low_s = low_temp_stations[0]
+        highlights.append(f"低温预警站：{low_s['name']}（均温 {low_s['avg_room_temp']}℃）")
+
+    heat_trend_txt = (
+        f"较昨日同期 {'+' if heat_delta_pct > 0 else ''}{heat_delta_pct}%"
+        if heat_delta_pct is not None
+        else "暂无昨日同期对照"
+    )
+    out_txt = f"{curr_kpis.get('outdoor_temp')}℃" if curr_kpis.get("outdoor_temp") is not None else "-"
+    if current_temp_info.get("avg_room_temp") is not None:
+        t_lbl = "" if current_temp_info["biz_hour_label"] == curr["meta"]["biz_hour_label"] else f"（截至 {current_temp_info['short_label']}）"
+        room_part = f"，当前居民均温 {current_temp_info['avg_room_temp']}℃（达标率 {current_temp_info['temp_pass_rate_pct']}%）{t_lbl}"
+    else:
+        room_part = "，暂无当前居民室温数据"
+
+    brief_headline = (
+        f"{curr['meta']['biz_hour_label']} 全网室外 {out_txt}，"
+        f"小时供热 {_fmt_num(curr_kpis.get('hour_heat_gj'))} GJ（{heat_trend_txt}），"
+        f"热指标 {_fmt_num(curr_kpis.get('heat_index_wm2'))} W/㎡{room_part}。"
+    )
+
+    return {
+        "meta": {
+            **curr["meta"],
+            "prev_date": prev_d.isoformat(),
+            "today_cum_heat_gj": today_cum_heat,
+            "today_cum_elec_kwh": today_cum_elec,
+            "outdoor_min_c": round(min(outdoor_vals), 1) if outdoor_vals else None,
+            "outdoor_max_c": round(max(outdoor_vals), 1) if outdoor_vals else None,
+        },
+        "brief": {
+            "headline": brief_headline,
+            "highlights": highlights,
+        },
+        "kpis": curr_kpis,
+        "comparison": {
+            "heat_diff_pct": heat_delta_pct,
+            "heat_index_diff_pct": _pct_delta(_f(curr_kpis.get("heat_index_wm2")), _f(prev_same.get("heat_index_wm2"))),
+            "water_diff_pct": water_delta_pct,
+            "elec_diff_pct": elec_delta_pct,
+            "outdoor_diff_c": out_delta_c,
+            "prev_outdoor_temp": prev_same.get("outdoor_temp"),
+            "prev_hour_heat_gj": prev_same.get("hour_heat_gj"),
+            "prev_hour_water_t": _round(prev_same_water, 2),
+            "prev_hour_elec_kwh": _round(prev_same_elec, 2),
+        },
+        "current_temp": current_temp_info,
+        "trend_72h": trend_72h,
+        "trend_24h": trend_24h_enriched,
+        "trend_7d": trend_7d,
+        "center_quadrant": centers_list,
+        "rdfz_ranking": rdfz_list,
+        "merchant_summary": curr.get("merchant_summary") or {},
+        "temp_summary": {
+            **(curr.get("temp_summary") or {}),
+            "valid_devices": current_temp_info["valid_devices"],
+            "distribution": current_temp_info["distribution"],
+        },
+        "watchlists": {
+            "high_heat": high_heat_stations,
+            "high_water": high_water_stations,
+            "high_elec": high_elec_stations,
+            "benchmark": benchmark_stations,
+        },
+    }
+
+
 def get_entity_trend_24h(
     target_date_str: str,
     scope: str,
@@ -1108,8 +1773,8 @@ def get_entity_trend_24h(
                 "f.station_id, hs.name AS station_name, f.online, f.e1_raw, f.e1_clean, f.e3_raw, f.e3_clean, "
                 "f.e4_raw, f.e4_clean, f.e7_raw, f.e7_clean, f.e8_raw, f.e8_clean, "
                 "f.e11_raw, f.e11_clean, f.e14_raw, f.e14_clean, "
-                "f.hour_heat_raw_gj, f.hour_heat_gj, f.hour_heat_source, f.hour_water_t, "
-                "f.value_source, f.fault_tag, hs.covered_area "
+                "f.hour_heat_raw_gj, f.hour_heat_gj, f.hour_heat_source, f.hour_water_t, f.hour_elec_kwh, "
+                "f.tot_water_f254, f.tot_elec_f253, f.value_source, f.fault_tag, hs.covered_area "
                 "FROM smart_heating_platform.fact_station_hourly f "
                 "JOIN smart_heating_platform.dict_heating_station hs ON f.station_id = hs.station_id "
                 f"WHERE f.biz_hour >= :ds AND f.biz_hour < :de AND {where_clause}"
@@ -1238,7 +1903,7 @@ def get_daily_report(
                 "SELECT biz_hour, station_id, e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean, "
                 "e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean, e14_raw, e14_clean, "
                 "tot_j, hour_heat_raw_gj, hour_heat_gj, hour_heat_source, hour_flow_t, hour_water_t, hour_elec_kwh, "
-                "value_source, fault_tag "
+                "tot_water_f254, tot_elec_f253, value_source, fault_tag "
                 "FROM smart_heating_platform.fact_station_hourly "
                 "WHERE biz_hour >= :ws AND biz_hour < :we ORDER BY station_id, biz_hour ASC"
             ),
@@ -1272,7 +1937,7 @@ def get_daily_report(
         # 读取 Phoenix 手工生产日报 (public.daily_basic_data)
         manual_rows = conn.execute(
             text(
-                "SELECT company, item, value "
+                "SELECT company, item, value, unit "
                 "FROM public.daily_basic_data "
                 "WHERE date = :biz_date "
                 "AND (sheet_name = 'GongRe_branches_detail_Sheet' OR company = 'GongRe') "
@@ -1321,6 +1986,7 @@ def get_daily_report(
             "flow_w_sum": 0.0,
             "heat_anom_notes": [],
             "water_anom_notes": [],
+            "elec_anom_notes": [],
             "temp_anom_notes": [],
         }
 
@@ -1329,6 +1995,8 @@ def get_daily_report(
         hourly_row_maps,
         lambda rm: (stations_meta.get(rm.get("station_id")) or {}).get("name") or rm.get("station_id"),
     )
+    st_area_by_id = {sid: _f(sm.get("covered_area")) for sid, sm in stations_meta.items()}
+    broken_elec_notes, broken_water_notes = _detect_broken_meter_stations(hourly_row_maps, st_area_by_id)
 
     for r, row_map in zip(hourly_rows, hourly_row_maps):
         st = st_agg.get(r.station_id)
@@ -1366,9 +2034,9 @@ def get_daily_report(
                 st["meter_diff_hours"] += 1
         if r.hour_flow_t is not None:
             st["day_flow_t"] = (st["day_flow_t"] or 0.0) + float(r.hour_flow_t)
-        if r.hour_water_t is not None:
+        if r.hour_water_t is not None and r.station_id not in broken_water_notes:
             st["day_water_t"] = (st["day_water_t"] or 0.0) + float(r.hour_water_t)
-        if r.hour_elec_kwh is not None:
+        if r.hour_elec_kwh is not None and r.station_id not in broken_elec_notes:
             st["day_elec_kwh"] = (st["day_elec_kwh"] or 0.0) + float(r.hour_elec_kwh)
         raw_or_clean_e1 = r.e1_raw if use_raw else r.e1_clean
         raw_or_clean_e3 = r.e3_raw if use_raw else r.e3_clean
@@ -1379,6 +2047,15 @@ def get_daily_report(
             st["ret_w_sum"] += float(raw_or_clean_e4) * w
             st["flow_w_sum"] += w
 
+    for st_id_b, b_msg in broken_water_notes.items():
+        if st_id_b in st_agg:
+            st_agg[st_id_b]["day_water_t"] = None
+            st_agg[st_id_b]["water_anom_notes"].append(b_msg)
+    for st_id_b, b_msg in broken_elec_notes.items():
+        if st_id_b in st_agg:
+            st_agg[st_id_b]["day_elec_kwh"] = None
+            st_agg[st_id_b]["elec_anom_notes"].append(b_msg)
+
     station_daily: List[Dict[str, Any]] = []
     for st in st_agg.values():
         area = st["covered_area"]
@@ -1388,12 +2065,15 @@ def get_daily_report(
         st_anoms: Dict[str, Dict[str, Any]] = {}
         h_pack = _pack_agg_anomaly(st["heat_anom_notes"])
         w_pack = _pack_agg_anomaly(st["water_anom_notes"])
+        e_pack = _pack_agg_anomaly(st["elec_anom_notes"])
         t_pack = _pack_agg_anomaly(st["temp_anom_notes"])
         if h_pack:
             st_anoms["day_heat_gj"] = h_pack
             st_anoms["heat_per_wan_gj"] = h_pack
         if w_pack:
             st_anoms["day_water_t"] = w_pack
+        if e_pack:
+            st_anoms["day_elec_kwh"] = e_pack
         if t_pack:
             st_anoms["avg_sup_temp"] = t_pack
             st_anoms["avg_ret_temp"] = t_pack
@@ -1419,7 +2099,7 @@ def get_daily_report(
         })
     station_daily.sort(key=lambda x: (x["heat_per_wan_gj"] if x["heat_per_wan_gj"] is not None else -1.0), reverse=True)
 
-    # 解析手工日报到 center_id
+    # 解析手工日报到 center_id（其中外购电量按 kWh 统一口径对比）
     manual_by_center: Dict[int, Dict[str, float]] = {}
     manual_gongre: Dict[str, float] = {}
     for mr in manual_rows:
@@ -1427,23 +2107,32 @@ def get_daily_report(
         val = _f(mr.value)
         if val is None:
             continue
+        if mr.item == "consumption_station_purchased_power":
+            val = _normalize_manual_elec_kwh(val, getattr(mr, "unit", None))
+            if val is None:
+                continue
         if comp == "GongRe":
             manual_gongre[mr.item] = val
         elif comp in CENTER_COMPANY_MAP:
             cid = CENTER_COMPANY_MAP[comp]
             manual_by_center.setdefault(cid, {})[mr.item] = val
 
-    # 9 大中心双轨对比
+    # 9 大中心双轨对比（热量 + 补水量 + 电耗）
     center_comparison: List[Dict[str, Any]] = []
     tot_sys_heat = 0.0
     tot_sys_water = 0.0
+    tot_sys_elec = 0.0
     tot_man_heat = 0.0
     tot_man_water = 0.0
+    tot_man_elec = 0.0
     tot_area = 0.0
     has_man_heat = False
+    has_man_water = False
+    has_man_elec = False
 
     all_heat_anom_stations: List[str] = []
     all_water_anom_stations: List[str] = []
+    all_elec_anom_stations: List[str] = []
 
     for c in centers:
         cid = c["center_id"]
@@ -1455,10 +2144,14 @@ def get_daily_report(
         man = manual_by_center.get(cid, {})
         man_heat = man.get("consumption_station_heat")
         man_water = man.get("consumption_station_fill_water")
+        man_elec = man.get("consumption_station_purchased_power")
 
         diff_heat = (sys_heat - man_heat) if (man_heat is not None and hourly_rows) else None
         diff_pct = (diff_heat / man_heat * 100.0) if (diff_heat is not None and man_heat and man_heat != 0) else None
         diff_water = (sys_water - man_water) if (man_water is not None and hourly_rows) else None
+        water_diff_pct = (diff_water / man_water * 100.0) if (diff_water is not None and man_water and man_water != 0) else None
+        diff_elec = (sys_elec - man_elec) if (man_elec is not None and hourly_rows) else None
+        elec_diff_pct = (diff_elec / man_elec * 100.0) if (diff_elec is not None and man_elec and man_elec != 0) else None
 
         c_heat_notes = [
             f"{s['name']}({s['anomalies']['day_heat_gj']['note']})"
@@ -1470,11 +2163,18 @@ def get_daily_report(
             for s in c_sts
             if (s.get("anomalies") or {}).get("day_water_t")
         ]
+        c_elec_notes = [
+            f"{s['name']}({s['anomalies']['day_elec_kwh']['note']})"
+            for s in c_sts
+            if (s.get("anomalies") or {}).get("day_elec_kwh")
+        ]
         all_heat_anom_stations.extend(c_heat_notes)
         all_water_anom_stations.extend(c_water_notes)
+        all_elec_anom_stations.extend(c_elec_notes)
         c_anoms: Dict[str, Dict[str, Any]] = {}
         ch_pack = _pack_agg_anomaly(c_heat_notes)
         cw_pack = _pack_agg_anomaly(c_water_notes)
+        ce_pack = _pack_agg_anomaly(c_elec_notes)
         if ch_pack:
             c_anoms["sys_heat_gj"] = ch_pack
             c_anoms["heat_per_wan_gj"] = ch_pack
@@ -1483,15 +2183,25 @@ def get_daily_report(
         if cw_pack:
             c_anoms["sys_water_t"] = cw_pack
             c_anoms["water_diff_t"] = cw_pack
+            c_anoms["water_diff_pct"] = cw_pack
+        if ce_pack:
+            c_anoms["sys_elec_kwh"] = ce_pack
+            c_anoms["elec_diff_kwh"] = ce_pack
+            c_anoms["elec_diff_pct"] = ce_pack
 
         tot_area += c_area
         tot_sys_heat += sys_heat
         tot_sys_water += sys_water
+        tot_sys_elec += sys_elec
         if man_heat is not None:
             tot_man_heat += man_heat
             has_man_heat = True
         if man_water is not None:
             tot_man_water += man_water
+            has_man_water = True
+        if man_elec is not None:
+            tot_man_elec += man_elec
+            has_man_elec = True
 
         center_comparison.append({
             "center_id": cid,
@@ -1506,7 +2216,13 @@ def get_daily_report(
             "sys_water_t": _round(sys_water, 2) if hourly_rows else None,
             "man_water_t": _round(man_water, 2),
             "water_diff_t": _round(diff_water, 2),
+            "water_diff_pct": _round(water_diff_pct, 2),
+            "is_water_alert": abs(water_diff_pct) > 10.0 if water_diff_pct is not None else False,
             "sys_elec_kwh": _round(sys_elec, 2) if hourly_rows else None,
+            "man_elec_kwh": _round(man_elec, 2),
+            "elec_diff_kwh": _round(diff_elec, 2),
+            "elec_diff_pct": _round(elec_diff_pct, 2),
+            "is_elec_alert": abs(elec_diff_pct) > 10.0 if elec_diff_pct is not None else False,
             "avg_room_temp": center_temp_map.get(cid),
             "anomalies": c_anoms,
         })
@@ -1518,16 +2234,35 @@ def get_daily_report(
         if (hourly_rows and ref_man_heat and ref_man_heat != 0)
         else None
     )
+    ref_man_water = tot_man_water if has_man_water else manual_gongre.get("consumption_station_fill_water")
+    water_diff_tot = (tot_sys_water - ref_man_water) if (hourly_rows and ref_man_water is not None) else None
+    water_diff_pct_tot = (
+        _round(water_diff_tot / ref_man_water * 100.0, 2)
+        if (water_diff_tot is not None and ref_man_water and ref_man_water != 0)
+        else None
+    )
+    ref_man_elec = tot_man_elec if has_man_elec else manual_gongre.get("consumption_station_purchased_power")
+    elec_diff_tot = (tot_sys_elec - ref_man_elec) if (hourly_rows and ref_man_elec is not None) else None
+    elec_diff_pct_tot = (
+        _round(elec_diff_tot / ref_man_elec * 100.0, 2)
+        if (elec_diff_tot is not None and ref_man_elec and ref_man_elec != 0)
+        else None
+    )
 
     daily_kpi_anomalies: Dict[str, Dict[str, Any]] = {}
     all_h_pack = _pack_agg_anomaly(all_heat_anom_stations)
     all_w_pack = _pack_agg_anomaly(all_water_anom_stations)
+    all_e_pack = _pack_agg_anomaly(all_elec_anom_stations)
     if all_h_pack:
         daily_kpi_anomalies["day_heat_gj"] = all_h_pack
         daily_kpi_anomalies["day_heat_per_wan"] = all_h_pack
         daily_kpi_anomalies["overall_diff_pct"] = all_h_pack
     if all_w_pack:
         daily_kpi_anomalies["day_water_t"] = all_w_pack
+        daily_kpi_anomalies["water_diff_pct"] = all_w_pack
+    if all_e_pack:
+        daily_kpi_anomalies["day_elec_kwh"] = all_e_pack
+        daily_kpi_anomalies["elec_diff_pct"] = all_e_pack
 
     try:
         snap_interval = int(get_collector_settings_view().get("snapshot_interval_minutes", 5))
@@ -1596,6 +2331,13 @@ def get_daily_report(
             "day_heat_gj": _round(tot_sys_heat, 2) if hourly_rows else None,
             "day_heat_per_wan": _round(tot_sys_heat / (tot_area / 10000.0), 2) if (hourly_rows and tot_area > 0) else None,
             "day_water_t": _round(tot_sys_water, 2) if hourly_rows else None,
+            "manual_total_water_t": _round(ref_man_water, 2),
+            "water_diff_t": _round(water_diff_tot, 2),
+            "water_diff_pct": water_diff_pct_tot,
+            "day_elec_kwh": _round(tot_sys_elec, 2) if hourly_rows else None,
+            "manual_total_elec_kwh": _round(ref_man_elec, 2),
+            "elec_diff_kwh": _round(elec_diff_tot, 2),
+            "elec_diff_pct": elec_diff_pct_tot,
             "manual_total_heat_gj": _round(ref_man_heat, 2),
             "overall_diff_pct": overall_diff_pct,
             "anomalies": daily_kpi_anomalies,
@@ -2347,7 +3089,7 @@ def build_daily_export_payload(
             text(
                 "SELECT biz_hour, station_id, e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean, "
                 "e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean, e14_raw, e14_clean, "
-                "hour_heat_raw_gj, hour_heat_gj, hour_water_t, value_source, fault_tag "
+                "hour_heat_raw_gj, hour_heat_gj, hour_water_t, hour_elec_kwh, tot_water_f254, tot_elec_f253, value_source, fault_tag "
                 "FROM smart_heating_platform.fact_station_hourly "
                 "WHERE biz_hour >= :ws AND biz_hour < :we"
             ),
@@ -2355,11 +3097,11 @@ def build_daily_export_payload(
         ).fetchall()
         manual_rows = conn.execute(
             text(
-                "SELECT date, company, item, value "
+                "SELECT date, company, item, value, unit "
                 "FROM public.daily_basic_data "
                 "WHERE date >= :sd AND date <= :ed "
                 "AND (sheet_name = 'GongRe_branches_detail_Sheet' OR company = 'GongRe') "
-                "AND item IN ('consumption_station_heat', 'consumption_station_fill_water')"
+                "AND item IN ('consumption_station_heat', 'consumption_station_fill_water', 'consumption_station_purchased_power')"
             ),
             {"sd": win_start_d, "ed": target_d},
         ).fetchall()
@@ -2405,6 +3147,10 @@ def build_daily_export_payload(
         val = _f(mr.value)
         if val is None:
             continue
+        if mr.item == "consumption_station_purchased_power":
+            val = _normalize_manual_elec_kwh(val, getattr(mr, "unit", None))
+            if val is None:
+                continue
         comp = str(mr.company)
         if comp == "GongRe":
             manual_gongre_by_day.setdefault(mr.date, {})[mr.item] = val
@@ -2431,8 +3177,13 @@ def build_daily_export_payload(
             d_rows,
             lambda rm: (stations_meta.get(rm.get("station_id")) or {}).get("name") or rm.get("station_id"),
         )
+        broken_e_day, broken_w_day = _detect_broken_meter_stations(
+            d_rows,
+            {sid: _f(sm.get("covered_area")) for sid, sm in stations_meta.items()},
+        )
         d_sys_heat = 0.0
         d_sys_water = 0.0
+        d_sys_elec = 0.0
         has_d = len(d_rows) > 0
         c_heat_acc: Dict[int, float] = {}
         c_notes_acc: Dict[int, List[str]] = {}
@@ -2447,13 +3198,16 @@ def build_daily_export_payload(
                 continue
             cid = sm["center_id"]
             eff_h = _f(rm["hour_heat_raw_gj"] if (use_raw and rm.get("hour_heat_raw_gj") is not None) else rm.get("hour_heat_gj"))
-            eff_w = _f(rm.get("hour_water_t"))
+            eff_w = None if sid in broken_w_day else _f(rm.get("hour_water_t"))
+            eff_e = None if sid in broken_e_day else _f(rm.get("hour_elec_kwh"))
             if eff_h is not None:
                 d_sys_heat += eff_h
                 c_heat_acc[cid] = c_heat_acc.get(cid, 0.0) + eff_h
                 st_heat_acc[sid] = st_heat_acc.get(sid, 0.0) + eff_h
             if eff_w is not None:
                 d_sys_water += eff_w
+            if eff_e is not None:
+                d_sys_elec += eff_e
 
             fn = _build_station_hour_anomalies(rm, sm["name"], day_counts=day_counts.get(sid), mode=effective_mode)
             if fn.get("hour_heat_gj"):
@@ -2465,8 +3219,10 @@ def build_daily_export_payload(
 
         d_man_heat = 0.0
         d_man_water = 0.0
+        d_man_elec = 0.0
         has_man_h = False
         has_man_w = False
+        has_man_e = False
         for c in centers:
             cid = c["center_id"]
             ch = round(c_heat_acc[cid], 2) if cid in c_heat_acc else None
@@ -2474,12 +3230,16 @@ def build_daily_export_payload(
             man = manual_by_day_center.get((bd, cid), {})
             mh = man.get("consumption_station_heat")
             mw = man.get("consumption_station_fill_water")
+            me = man.get("consumption_station_purchased_power")
             if mh is not None:
                 d_man_heat += mh
                 has_man_h = True
             if mw is not None:
                 d_man_water += mw
                 has_man_w = True
+            if me is not None:
+                d_man_elec += me
+                has_man_e = True
             if ch is not None and mh is not None and mh != 0:
                 center_day_diff_pct[cid][bd] = round((ch - mh) / mh * 100.0, 2)
             else:
@@ -2494,8 +3254,13 @@ def build_daily_export_payload(
 
         ref_man_h = d_man_heat if has_man_h else (manual_gongre_by_day.get(bd, {}).get("consumption_station_heat"))
         ref_man_w = d_man_water if has_man_w else (manual_gongre_by_day.get(bd, {}).get("consumption_station_fill_water"))
+        ref_man_e = d_man_elec if has_man_e else (manual_gongre_by_day.get(bd, {}).get("consumption_station_purchased_power"))
         diff_h = (d_sys_heat - ref_man_h) if (has_d and ref_man_h is not None) else None
         diff_pct = (diff_h / ref_man_h * 100.0) if (diff_h is not None and ref_man_h and ref_man_h != 0) else None
+        diff_w = (d_sys_water - ref_man_w) if (has_d and ref_man_w is not None) else None
+        diff_w_pct = (diff_w / ref_man_w * 100.0) if (diff_w is not None and ref_man_w and ref_man_w != 0) else None
+        diff_e = (d_sys_elec - ref_man_e) if (has_d and ref_man_e is not None) else None
+        diff_e_pct = (diff_e / ref_man_e * 100.0) if (diff_e is not None and ref_man_e and ref_man_e != 0) else None
         out_list = outdoor_by_day.get(bd) or []
 
         daily_overview.append({
@@ -2508,6 +3273,12 @@ def build_daily_export_payload(
             "heat_per_wan_gj": _round(d_sys_heat / tot_area_wan, 2) if (has_d and tot_area_wan > 0) else None,
             "sys_water_t": round(d_sys_water, 2) if has_d else None,
             "man_water_t": _round(ref_man_w, 2),
+            "water_diff_t": _round(diff_w, 2),
+            "water_diff_pct": _round(diff_w_pct, 2),
+            "sys_elec_kwh": round(d_sys_elec, 2) if has_d else None,
+            "man_elec_kwh": _round(ref_man_e, 2),
+            "elec_diff_kwh": _round(diff_e, 2),
+            "elec_diff_pct": _round(diff_e_pct, 2),
             "merchant_heat_gj": _round(mc_heat_by_day.get(bd), 2),
             "anomaly_note": _pack_agg_anomaly(day_anom_notes)["note"] if day_anom_notes else "",
         })
@@ -2580,8 +3351,8 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
         ov_rows: List[List[Any]] = []
         ov_hl: Dict[Tuple[int, int], str] = {}
         ov_warn: Dict[Tuple[int, int], str] = {}
-        sum_sys_h, sum_man_h, sum_sys_w, sum_man_w, sum_mc_h = 0.0, 0.0, 0.0, 0.0, 0.0
-        has_sh, has_mh, has_sw, has_mw, has_mc = False, False, False, False, False
+        sum_sys_h, sum_man_h, sum_sys_w, sum_man_w, sum_sys_e, sum_man_e, sum_mc_h = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        has_sh, has_mh, has_sw, has_mw, has_se, has_me, has_mc = False, False, False, False, False, False, False
         out_temps: List[float] = []
         wan_vals: List[float] = []
 
@@ -2609,6 +3380,12 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
             if item.get("man_water_t") is not None:
                 sum_man_w += float(item["man_water_t"])
                 has_mw = True
+            if item.get("sys_elec_kwh") is not None:
+                sum_sys_e += float(item["sys_elec_kwh"])
+                has_se = True
+            if item.get("man_elec_kwh") is not None:
+                sum_man_e += float(item["man_elec_kwh"])
+                has_me = True
             if item.get("merchant_heat_gj") is not None:
                 sum_mc_h += float(item["merchant_heat_gj"])
                 has_mc = True
@@ -2616,11 +3393,17 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
             ov_rows.append([
                 item["date"], item["avg_outdoor_temp"], item["sys_heat_gj"], item["man_heat_gj"],
                 item["heat_diff_gj"], item["heat_diff_pct"], item["heat_per_wan_gj"],
-                item["sys_water_t"], item["man_water_t"], item["merchant_heat_gj"], item["anomaly_note"],
+                item["sys_water_t"], item["man_water_t"], item.get("water_diff_t"), item.get("water_diff_pct"),
+                item.get("sys_elec_kwh"), item.get("man_elec_kwh"), item.get("elec_diff_kwh"), item.get("elec_diff_pct"),
+                item["merchant_heat_gj"], item["anomaly_note"],
             ])
 
         tot_diff = (sum_sys_h - sum_man_h) if (has_sh and has_mh) else None
         tot_pct = _round(tot_diff / sum_man_h * 100.0, 2) if (tot_diff is not None and sum_man_h != 0) else None
+        tot_w_diff = (sum_sys_w - sum_man_w) if (has_sw and has_mw) else None
+        tot_w_pct = _round(tot_w_diff / sum_man_w * 100.0, 2) if (tot_w_diff is not None and sum_man_w != 0) else None
+        tot_e_diff = (sum_sys_e - sum_man_e) if (has_se and has_me) else None
+        tot_e_pct = _round(tot_e_diff / sum_man_e * 100.0, 2) if (tot_e_diff is not None and sum_man_e != 0) else None
         ov_rows.append([
             "期间合计/均值",
             _round(sum(out_temps) / len(out_temps), 1) if out_temps else None,
@@ -2631,12 +3414,23 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
             _round(sum(wan_vals) / len(wan_vals), 2) if wan_vals else None,
             round(sum_sys_w, 2) if has_sw else None,
             round(sum_man_w, 2) if has_mw else None,
+            _round(tot_w_diff, 2),
+            tot_w_pct,
+            round(sum_sys_e, 2) if has_se else None,
+            round(sum_man_e, 2) if has_me else None,
+            _round(tot_e_diff, 2),
+            tot_e_pct,
             round(sum_mc_h, 2) if has_mc else None,
             f"结算口径: {'生产班次(08-08)' if meta.get('period_mode') == 'shift' else '自然日(00-24)'} / {'原始' if meta.get('mode') == 'raw' else '修正后'}",
         ])
         _style_excel_sheet(
             ws_ov,
-            ["日期", "近端日均气温(℃)", "系统精算热量(GJ)", "手工日报热量(GJ)", "热量偏差(GJ)", "偏差率(%)", "万平耗热(GJ/万㎡·d)", "系统补水(t)", "手工补水(t)", "商业日耗(GJ)", "突发跳变说明"],
+            [
+                "日期", "近端日均气温(℃)", "系统精算热量(GJ)", "手工日报热量(GJ)", "热量偏差(GJ)", "热量偏差率(%)", "万平耗热(GJ/万㎡·d)",
+                "系统补水(t)", "手工补水(t)", "补水偏差(t)", "补水偏差率(%)",
+                "系统电耗(kWh)", "手工耗电(kWh)", "电耗偏差(kWh)", "电耗偏差率(%)",
+                "商业日耗(GJ)", "突发跳变说明",
+            ],
             ov_rows,
             highlight_cells=ov_hl,
             warn_cells=ov_warn,
@@ -2735,12 +3529,16 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
     cmp_rows: List[List[Any]] = []
     cmp_hl: Dict[Tuple[int, int], str] = {}
     cmp_warn: Dict[Tuple[int, int], str] = {}
-    sum_c_area, sum_c_sh, sum_c_mh, sum_c_sw, sum_c_mw = 0.0, 0.0, 0.0, 0.0, 0.0
-    has_c_mh, has_c_mw = False, False
+    sum_c_area, sum_c_sh, sum_c_mh, sum_c_sw, sum_c_mw, sum_c_se, sum_c_me = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    has_c_mh, has_c_mw, has_c_me = False, False, False
     for r_i, c in enumerate(report_data["center_comparison"]):
         anoms = c.get("anomalies") or {}
         if c.get("is_heat_alert"):
             cmp_warn[(r_i, 5)] = f"热量双轨偏差率 {c['heat_diff_pct']:+.2f}% 超过 ±10% 告警线"
+        if c.get("is_water_alert"):
+            cmp_warn[(r_i, 10)] = f"补水双轨偏差率 {c['water_diff_pct']:+.2f}% 超过 ±10% 告警线"
+        if c.get("is_elec_alert"):
+            cmp_warn[(r_i, 14)] = f"电耗双轨偏差率 {c['elec_diff_pct']:+.2f}% 超过 ±10% 告警线"
         if anoms.get("sys_heat_gj"):
             cmp_hl[(r_i, 2)] = anoms["sys_heat_gj"]["note"]
         if anoms.get("heat_diff_gj"):
@@ -2751,6 +3549,8 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
             cmp_hl[(r_i, 6)] = anoms["heat_per_wan_gj"]["note"]
         if anoms.get("sys_water_t"):
             cmp_hl[(r_i, 7)] = anoms["sys_water_t"]["note"]
+        if anoms.get("sys_elec_kwh"):
+            cmp_hl[(r_i, 11)] = anoms["sys_elec_kwh"]["note"]
         sum_c_area += float(c.get("covered_area_wan") or 0.0)
         if c.get("sys_heat_gj") is not None:
             sum_c_sh += float(c["sys_heat_gj"])
@@ -2762,23 +3562,40 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
         if c.get("man_water_t") is not None:
             sum_c_mw += float(c["man_water_t"])
             has_c_mw = True
+        if c.get("sys_elec_kwh") is not None:
+            sum_c_se += float(c["sys_elec_kwh"])
+        if c.get("man_elec_kwh") is not None:
+            sum_c_me += float(c["man_elec_kwh"])
+            has_c_me = True
 
         cmp_rows.append([
             c["center_name"], c["covered_area_wan"], c["sys_heat_gj"], c["man_heat_gj"],
-            c["heat_diff_gj"], c["heat_diff_pct"], c["heat_per_wan_gj"], c["sys_water_t"],
-            c["man_water_t"], c["avg_room_temp"], _join_anom_notes(anoms),
+            c["heat_diff_gj"], c["heat_diff_pct"], c["heat_per_wan_gj"],
+            c["sys_water_t"], c["man_water_t"], c.get("water_diff_t"), c.get("water_diff_pct"),
+            c.get("sys_elec_kwh"), c.get("man_elec_kwh"), c.get("elec_diff_kwh"), c.get("elec_diff_pct"),
+            c["avg_room_temp"], _join_anom_notes(anoms),
         ])
     c_diff_tot = (sum_c_sh - sum_c_mh) if has_c_mh else None
     c_pct_tot = _round(c_diff_tot / sum_c_mh * 100.0, 2) if (c_diff_tot is not None and sum_c_mh != 0) else None
+    c_w_diff_tot = (sum_c_sw - sum_c_mw) if has_c_mw else None
+    c_w_pct_tot = _round(c_w_diff_tot / sum_c_mw * 100.0, 2) if (c_w_diff_tot is not None and sum_c_mw != 0) else None
+    c_e_diff_tot = (sum_c_se - sum_c_me) if has_c_me else None
+    c_e_pct_tot = _round(c_e_diff_tot / sum_c_me * 100.0, 2) if (c_e_diff_tot is not None and sum_c_me != 0) else None
     cmp_rows.append([
         "全网合计", round(sum_c_area, 2), round(sum_c_sh, 2), round(sum_c_mh, 2) if has_c_mh else None,
         _round(c_diff_tot, 2), c_pct_tot, _round(sum_c_sh / sum_c_area, 2) if sum_c_area > 0 else None,
-        round(sum_c_sw, 2), round(sum_c_mw, 2) if has_c_mw else None, None,
-        f"结算窗口: {meta.get('window_start', '-')} ~ {meta.get('window_end', '-')}",
+        round(sum_c_sw, 2), round(sum_c_mw, 2) if has_c_mw else None, _round(c_w_diff_tot, 2), c_w_pct_tot,
+        round(sum_c_se, 2), round(sum_c_me, 2) if has_c_me else None, _round(c_e_diff_tot, 2), c_e_pct_tot,
+        None, f"结算窗口: {meta.get('window_start', '-')} ~ {meta.get('window_end', '-')}",
     ])
     _style_excel_sheet(
         ws_cmp,
-        ["中心名称", "面积(万㎡)", "系统精算热量(GJ)", "手工日报热量(GJ)", "热量偏差(GJ)", "偏差率(%)", "万平耗热(GJ/万㎡)", "系统补水(t)", "手工补水(t)", "日均室温(℃)", "突发跳变说明"],
+        [
+            "中心名称", "面积(万㎡)", "系统精算热量(GJ)", "手工日报热量(GJ)", "热量偏差(GJ)", "热量偏差率(%)", "万平耗热(GJ/万㎡)",
+            "系统补水(t)", "手工补水(t)", "补水偏差(t)", "补水偏差率(%)",
+            "系统电耗(kWh)", "手工耗电(kWh)", "电耗偏差(kWh)", "电耗偏差率(%)",
+            "日均室温(℃)", "突发跳变说明",
+        ],
         cmp_rows,
         highlight_cells=cmp_hl,
         warn_cells=cmp_warn,
@@ -2878,3 +3695,516 @@ def build_daily_excel(report_data: Dict[str, Any], export_ctx: Optional[Dict[str
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -> Dict[str, Any]:
+    """
+    统计选定日期四大监测主体（换热站/商业用户/居民室温/上游测点）的取数完整度、
+    降级补救占比与源站侧缺损明细，用于异常监测中心默认首屏“取数诊断”看板。
+    """
+    ensure_smart_heating_fact_tables()
+    now_e8 = datetime.now(EAST_8)
+    target_d = date.fromisoformat(target_date_str) if target_date_str else now_e8.date()
+    win_start = datetime(target_d.year, target_d.month, target_d.day, 0, 0, 0, tzinfo=EAST_8)
+    win_end = win_start + timedelta(days=1)
+
+    with engine.connect() as conn:
+        stations_meta = [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT hs.station_id, hs.name, hs.covered_area, hs.rdfz, sc.name AS center_name "
+                    "FROM smart_heating_platform.dict_heating_station hs "
+                    "JOIN smart_heating_platform.dict_service_center sc ON hs.center_id = sc.center_id "
+                    "ORDER BY sc.center_id, hs.name"
+                )
+            ).fetchall()
+        ]
+        st_hourly_rows = [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT biz_hour, station_id, hour_heat_gj, hour_heat_source, "
+                    "hour_water_t, hour_water_source, hour_elec_kwh, hour_elec_source, "
+                    "e14_clean, tot_water_f254, tot_elec_f253, value_source, fault_tag "
+                    "FROM smart_heating_platform.fact_station_hourly "
+                    "WHERE biz_hour >= :ws AND biz_hour < :we ORDER BY station_id, biz_hour ASC"
+                ),
+                {"ws": win_start, "we": win_end},
+            ).fetchall()
+        ]
+
+        merchants_meta = [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT merchant_id, name, rdfz, rdry "
+                    "FROM smart_heating_platform.dict_merchant ORDER BY name"
+                )
+            ).fetchall()
+        ]
+        mc_hourly_rows = [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT merchant_id, source_name, is_registered, online, hour_heat_gj, value_source, fault_tag "
+                    "FROM smart_heating_platform.fact_merchant_hourly "
+                    "WHERE biz_hour >= :ws AND biz_hour < :we"
+                ),
+                {"ws": win_start, "we": win_end},
+            ).fetchall()
+        ]
+        mc_daily_rows = {
+            r.merchant_id: dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT merchant_id, daily_consumption, raw_payload "
+                    "FROM smart_heating_platform.fact_merchant_daily WHERE biz_date = :d"
+                ),
+                {"d": target_d},
+            ).fetchall()
+        }
+
+        temp_dict = [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT td.temp_device_id, td.name AS device_name, td.station_id, "
+                    "COALESCE(hs.name, td.station_name) AS station_name "
+                    "FROM smart_heating_platform.dict_temp_device td "
+                    "LEFT JOIN smart_heating_platform.dict_heating_station hs ON td.station_id = hs.station_id "
+                    "ORDER BY station_name, td.name"
+                )
+            ).fetchall()
+        ]
+        temp_target_bh = conn.execute(
+            text(
+                "SELECT MAX(biz_hour) FROM smart_heating_platform.fact_temp_hourly "
+                "WHERE biz_hour >= :ws AND biz_hour < :we"
+            ),
+            {"ws": win_start, "we": win_end},
+        ).scalar_one()
+        temp_is_fallback = False
+        if temp_target_bh is None:
+            temp_target_bh = conn.execute(
+                text("SELECT MAX(biz_hour) FROM smart_heating_platform.fact_temp_hourly")
+            ).scalar_one()
+            temp_is_fallback = temp_target_bh is not None
+        temp_snapshot_rows = (
+            [
+                dict(r._mapping)
+                for r in conn.execute(
+                    text(
+                        "SELECT temp_device_id, station_id, is_registered, village_name, station_name_raw, "
+                        "temp_raw, upload_time, is_online_valid, fault_tag "
+                        "FROM smart_heating_platform.fact_temp_hourly WHERE biz_hour = :bh"
+                    ),
+                    {"bh": temp_target_bh},
+                ).fetchall()
+            ]
+            if temp_target_bh is not None
+            else []
+        )
+
+        up_dict = [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT point_id, data_zone, source_name, name, category, sub_category "
+                    "FROM smart_heating_platform.dict_upstream_point ORDER BY point_id"
+                )
+            ).fetchall()
+        ]
+        up_hourly_rows = [
+            dict(r._mapping)
+            for r in conn.execute(
+                text(
+                    "SELECT data_zone, source_name, is_core_gk, heat_clean, flow_clean, value_source, fault_tag "
+                    "FROM smart_heating_platform.fact_upstream_hourly "
+                    "WHERE biz_hour >= :ws AND biz_hour < :we"
+                ),
+                {"ws": win_start, "we": win_end},
+            ).fetchall()
+        ]
+
+    # ---- 1. 换热站（242 站）取数与降级细分诊断 ----
+    areas_by_sid = {s["station_id"]: _f(s.get("covered_area")) for s in stations_meta}
+    broken_elec_notes, broken_water_notes = _detect_broken_meter_stations(st_hourly_rows, areas_by_sid)
+    rows_by_sid: Dict[str, List[Dict[str, Any]]] = {}
+    for row in st_hourly_rows:
+        rows_by_sid.setdefault(row["station_id"], []).append(row)
+
+    heat_stats = {"meter_diff_ok": 0, "scaled_ok": 0, "partial_fallback": 0, "missing_cum_total": 0, "fallback_integral": 0, "both_missing": 0}
+    water_stats = {"meter_diff_ok": 0, "missing_cum_total": 0, "fallback_integral": 0, "fallback_nonzero": 0, "fallback_zero": 0, "both_missing": 0}
+    elec_stats = {"meter_ok": 0, "ok_area_wan": 0.0, "missing_total": 0, "f253_none": 0, "f253_const_zero": 0, "f253_frozen_or_overflow": 0, "f253_broken_isolated": 0}
+    other_stats = {"missing_area": 0, "comm_offline": 0, "sensor_or_inversion": 0}
+    anomaly_summary = {
+        "heat_anomaly_stations": 0,
+        "water_anomaly_stations": 0,
+        "water_partial_fallback": 0,
+        "elec_anomaly_stations": 0,
+        "total_anomaly_stations": 0,
+    }
+    total_area_wan = sum((areas_by_sid[sid] or 0.0) / 10000.0 for sid in areas_by_sid)
+    anomaly_stations: List[Dict[str, Any]] = []
+
+    for st in stations_meta:
+        sid = st["station_id"]
+        sname = st["name"]
+        area_wan = round((areas_by_sid[sid] or 0.0) / 10000.0, 2)
+        srows = rows_by_sid.get(sid, [])
+        tags_set = {t for r in srows for t in str(r.get("fault_tag") or "").split(",") if t}
+
+        has_missing_area = st.get("covered_area") is None
+        has_comm_offline = "COMM_OFFLINE" in tags_set
+        has_sensor_or_inv = "SENSOR_OUT_OF_RANGE" in tags_set or "TEMP_INVERSION" in tags_set
+
+        if has_missing_area:
+            other_stats["missing_area"] += 1
+        if has_comm_offline:
+            other_stats["comm_offline"] += 1
+        if has_sensor_or_inv:
+            other_stats["sensor_or_inversion"] += 1
+
+        # 1a. 供热量：METER_DIFF vs 瞬时 f222 积分 vs 双缺
+        h_diff_hrs = sum(1 for r in srows if r.get("hour_heat_source") == "METER_DIFF" and _f(r.get("hour_heat_gj")) is not None)
+        h_int_hrs = sum(1 for r in srows if r.get("hour_heat_source") in ("INTEGRAL_15M", "FALLBACK_INTEGRAL_15M") and _f(r.get("hour_heat_gj")) is not None)
+        h_val_hrs = sum(1 for r in srows if _f(r.get("hour_heat_gj")) is not None)
+        scale_rule = STATION_METER_SCALE_FACTORS.get(sname)
+        if h_diff_hrs > 0:
+            heat_stats["meter_diff_ok"] += 1
+            if scale_rule:
+                heat_stats["scaled_ok"] += 1
+            if h_int_hrs > 0:
+                heat_stats["partial_fallback"] += 1
+            heat_status = "OK"
+            heat_note = f"累计表正常 {h_diff_hrs}h" + (f"（已按台账 {scale_rule[1]}）" if scale_rule else "") + (f"，另 {h_int_hrs}h 降级积分" if h_int_hrs else "")
+        elif h_val_hrs > 0:
+            heat_stats["missing_cum_total"] += 1
+            heat_stats["fallback_integral"] += 1
+            heat_status = "FALLBACK_INT"
+            heat_note = f"无有效累计热量表底，已用瞬时热量 f222 积分兜底 {h_val_hrs}h"
+        else:
+            heat_stats["missing_cum_total"] += 1
+            heat_stats["both_missing"] += 1
+            heat_status = "BOTH_MISSING"
+            heat_note = "累计热量与瞬时热量双缺（全天无有效热计量）"
+        if has_sensor_or_inv:
+            heat_note += "；温压传感器越限或倒挂"
+        if has_comm_offline:
+            heat_note += "；通讯曾离线"
+
+        # 1b. 补水量：f254 METER_DIFF vs 瞬时 f209 积分 vs 双缺/坏表置空
+        w_broken = sid in broken_water_notes
+        w_diff_hrs = 0 if w_broken else sum(1 for r in srows if r.get("hour_water_source") == "METER_DIFF" and _f(r.get("hour_water_t")) is not None)
+        w_int_hrs = 0 if w_broken else sum(1 for r in srows if r.get("hour_water_source") in ("INTEGRAL_15M", "FALLBACK_INTEGRAL_15M") and _f(r.get("hour_water_t")) is not None)
+        w_int_sum = 0.0 if w_broken else sum((_f(r.get("hour_water_t")) or 0.0) for r in srows if r.get("hour_water_source") in ("INTEGRAL_15M", "FALLBACK_INTEGRAL_15M") and _f(r.get("hour_water_t")) is not None)
+        w_partial_fallback = w_diff_hrs > 0 and w_int_hrs > 0
+        w_zero_fallback = False
+        w_nonzero_fallback = False
+        if w_diff_hrs > 0:
+            water_stats["meter_diff_ok"] += 1
+            if w_partial_fallback:
+                anomaly_summary["water_partial_fallback"] += 1
+            water_status = "OK"
+            water_note = f"累计水表 f254 正常 {w_diff_hrs}h" + (f"，另 {w_int_hrs}h 用瞬时估算" if w_partial_fallback else "")
+        elif w_int_hrs > 0:
+            water_stats["missing_cum_total"] += 1
+            water_stats["fallback_integral"] += 1
+            if w_int_sum > 0.01:
+                water_stats["fallback_nonzero"] += 1
+                w_nonzero_fallback = True
+                water_note = f"缺 f254 累计表，已用瞬时 f209 积分补全 {w_int_hrs}h（共 {_round(w_int_sum, 1)} t）"
+            else:
+                water_stats["fallback_zero"] += 1
+                w_zero_fallback = True
+                water_note = f"缺 f254 累计表，瞬时 f209 积分 {w_int_hrs}h 数据始终为 0"
+            water_status = "FALLBACK_INT"
+        else:
+            water_stats["missing_cum_total"] += 1
+            water_stats["both_missing"] += 1
+            water_status = "BOTH_MISSING"
+            water_note = broken_water_notes.get(sid) or "累计水表 f254 与瞬时 f209 均无有效数据"
+
+        # 1c. 耗电量：f253 走字 / 未传 / 恒0 / 冻结十亿 / 锯齿隔离
+        f253_vals = [_f(r.get("tot_elec_f253")) for r in srows if _f(r.get("tot_elec_f253")) is not None]
+        e_broken = sid in broken_elec_notes
+        e_val_hrs = 0 if e_broken else sum(1 for r in srows if _f(r.get("hour_elec_kwh")) is not None)
+        e_sum = 0.0 if e_broken else sum((_f(r.get("hour_elec_kwh")) or 0.0) for r in srows if _f(r.get("hour_elec_kwh")) is not None)
+        e_partial_jump = e_val_hrs > 0 and e_sum > 0.0 and ("METER_JUMP" in tags_set)
+        if e_val_hrs > 0 and e_sum > 0.0:
+            elec_stats["meter_ok"] += 1
+            elec_stats["ok_area_wan"] = round(elec_stats["ok_area_wan"] + area_wan, 2)
+            elec_status = "OK"
+            elec_note = f"累计电表 f253 正常 {e_val_hrs}h（{_round(e_sum, 1)} kWh）" + ("；部分时段表底跳变" if e_partial_jump else "")
+        else:
+            elec_stats["missing_total"] += 1
+            if e_broken or ("METER_JUMP" in tags_set and f253_vals):
+                elec_stats["f253_broken_isolated"] += 1
+                elec_status = "BROKEN_ISOLATED"
+                elec_note = broken_elec_notes.get(sid) or "电表 f253 发生倒走/异常跳变，已清洗置空"
+            elif not f253_vals:
+                elec_stats["f253_none"] += 1
+                elec_status = "F253_NONE"
+                elec_note = "源站未上传电表字段 f253（全天为空，且无瞬时电功率字段）"
+            elif max(f253_vals) == 0.0 and min(f253_vals) == 0.0:
+                elec_stats["f253_const_zero"] += 1
+                elec_status = "F253_CONST_ZERO"
+                elec_note = "源站电表 f253 全天数据始终为 0.0"
+            else:
+                elec_stats["f253_frozen_or_overflow"] += 1
+                elec_status = "F253_FROZEN_OR_OVERFLOW"
+                sample_v = f253_vals[0]
+                elec_note = (
+                    "源站电表 f253 数值溢出（10亿哨兵值）"
+                    if sample_v >= 9.9e8
+                    else f"源站电表 f253 全天冻结不走字（读数={_fmt_num(sample_v, 1)}）"
+                )
+
+        # 按业务维度去重统计“数据异常的站有 xx 站”
+        heat_anomaly = (heat_status != "OK") or bool(scale_rule) or (h_int_hrs > 0) or has_sensor_or_inv or has_comm_offline
+        water_anomaly = (water_status != "OK") or w_partial_fallback or w_broken or has_comm_offline
+        elec_anomaly = (elec_status != "OK") or e_partial_jump or has_comm_offline
+        any_anomaly = heat_anomaly or water_anomaly or elec_anomaly or has_missing_area
+
+        if heat_anomaly:
+            anomaly_summary["heat_anomaly_stations"] += 1
+        if water_anomaly:
+            anomaly_summary["water_anomaly_stations"] += 1
+        if elec_anomaly:
+            anomaly_summary["elec_anomaly_stations"] += 1
+        if any_anomaly:
+            anomaly_summary["total_anomaly_stations"] += 1
+            anomaly_stations.append({
+                "station_id": sid,
+                "name": sname,
+                "center_name": st["center_name"],
+                "area_wan": area_wan,
+                "heat_status": heat_status,
+                "heat_note": heat_note,
+                "water_status": water_status,
+                "water_note": water_note,
+                "elec_status": elec_status,
+                "elec_note": elec_note,
+                "missing_area": has_missing_area,
+                "has_sensor_or_inversion": has_sensor_or_inv,
+                "has_comm_offline": has_comm_offline,
+                "is_scaled": bool(scale_rule),
+                "heat_anomaly": heat_anomaly,
+                "water_anomaly": water_anomaly,
+                "elec_anomaly": elec_anomaly,
+                "water_zero_fallback": w_zero_fallback,
+                "water_nonzero_fallback": w_nonzero_fallback,
+            })
+
+    elec_stats["ok_area_pct"] = round(elec_stats["ok_area_wan"] / total_area_wan * 100.0, 1) if total_area_wan > 0 else 0.0
+
+    # ---- 2. 商业用户（464 户）取数诊断 ----
+    mc_hr_by_id: Dict[str, List[Dict[str, Any]]] = {}
+    mc_unreg_names = set()
+    for r in mc_hourly_rows:
+        if r.get("is_registered") is False:
+            mc_unreg_names.add(r["source_name"])
+        elif r.get("merchant_id"):
+            mc_hr_by_id.setdefault(r["merchant_id"], []).append(r)
+
+    mc_hourly_stats = {"total": len(merchants_meta), "valid_count": 0, "missing_count": 0, "offline_count": 0, "fault_count": 0, "unregistered_test_count": len(mc_unreg_names)}
+    mc_daily_stats = {"has_data": len(mc_daily_rows) > 0, "total": len(merchants_meta), "valid_count": 0, "missing_record_count": 0, "rollback_count": 0}
+    anomaly_merchants: List[Dict[str, Any]] = []
+
+    for mc in merchants_meta:
+        mid = mc["merchant_id"]
+        h_list = mc_hr_by_id.get(mid, [])
+        h_val = [r for r in h_list if _f(r.get("hour_heat_gj")) is not None]
+        h_online = [r for r in h_list if r.get("online") is True]
+        h_faults = {t for r in h_list for t in str(r.get("fault_tag") or "").split(",") if t}
+        if h_faults:
+            mc_hourly_stats["fault_count"] += 1
+
+        if h_val:
+            mc_hourly_stats["valid_count"] += 1
+            h_status = "OK"
+            h_note = f"小时积分正常（{len(h_val)}h）" + (f"；曾触发清洗:{','.join(sorted(h_faults))}" if h_faults else "")
+        elif h_list and not h_online:
+            mc_hourly_stats["missing_count"] += 1
+            mc_hourly_stats["offline_count"] += 1
+            h_status = "OFFLINE"
+            h_note = "当日全天信号离线（未采集到有效热量）"
+        else:
+            mc_hourly_stats["missing_count"] += 1
+            h_status = "MISSING"
+            h_note = "当日无有效小时热量（源站缺记录或占位为空）"
+
+        d_rec = mc_daily_rows.get(mid)
+        if not mc_daily_stats["has_data"]:
+            d_status = "PENDING"
+            d_note = "尚未采集当日日结表底（通常次日 08:30 产出）"
+        elif d_rec is None:
+            mc_daily_stats["missing_record_count"] += 1
+            d_status = "MISSING_RECORD"
+            d_note = "源站商业日报(/getall_bb_shrb/)未返回该户"
+        elif _f(d_rec.get("daily_consumption")) is not None:
+            mc_daily_stats["valid_count"] += 1
+            d_status = "OK"
+            d_note = f"日结表底正常（{_fmt_num(_f(d_rec.get('daily_consumption')), 2)} GJ）"
+        else:
+            pl = d_rec.get("raw_payload") if isinstance(d_rec.get("raw_payload"), dict) else {}
+            tc, tp = _f(pl.get("tot_curr")), _f(pl.get("tot_prev"))
+            if tc is not None and tp is not None and tc < tp:
+                mc_daily_stats["rollback_count"] += 1
+                d_status = "METER_ROLLBACK"
+                d_note = f"日结表底倒走（止 {_fmt_num(tc)} < 起 {_fmt_num(tp)}）"
+            else:
+                mc_daily_stats["missing_record_count"] += 1
+                d_status = "MISSING_RECORD"
+                d_note = "日结起止表底缺失，无法计算日耗"
+
+        if h_status != "OK" or (mc_daily_stats["has_data"] and d_status != "OK") or h_faults:
+            anomaly_merchants.append({
+                "merchant_id": mid,
+                "name": mc["name"],
+                "rdfz": mc.get("rdfz"),
+                "rdry": mc.get("rdry"),
+                "hourly_status": h_status,
+                "hourly_note": h_note,
+                "daily_status": d_status,
+                "daily_note": d_note,
+            })
+
+    # ---- 3. 居民室温（2,097 台账终端）取数诊断 ----
+    temp_snap_map: Dict[str, Dict[str, Any]] = {}
+    temp_unreg: List[Dict[str, Any]] = []
+    for r in temp_snapshot_rows:
+        if r.get("is_registered") is False:
+            temp_unreg.append(r)
+        else:
+            temp_snap_map[r["temp_device_id"]] = r
+
+    temp_stats = {
+        "dict_total": len(temp_dict),
+        "snapshot_hour": temp_target_bh.astimezone(EAST_8).strftime("%Y-%m-%d %H:%M") if temp_target_bh else None,
+        "is_fallback_snapshot": temp_is_fallback,
+        "valid_count": 0,
+        "invalid_or_missing_total": 0,
+        "missing_in_source": 0,
+        "offline_gt7d": 0,
+        "out_of_range": 0,
+        "unregistered_count": len(temp_unreg),
+    }
+    anomaly_temp_devices: List[Dict[str, Any]] = []
+    for dev in temp_dict:
+        did = dev["temp_device_id"]
+        sr = temp_snap_map.get(did)
+        if sr is None:
+            temp_stats["invalid_or_missing_total"] += 1
+            temp_stats["missing_in_source"] += 1
+            if len(anomaly_temp_devices) < 300:
+                anomaly_temp_devices.append({
+                    "temp_device_id": did,
+                    "village_name": dev["device_name"],
+                    "station_name": dev["station_name"],
+                    "status_type": "MISSING_IN_SOURCE",
+                    "temp_raw": None,
+                    "upload_time": None,
+                    "note": "未配置有效 Cookie 或源站 /jumin/ 未返回该在册户" if temp_target_bh is None else "最新 /jumin/ 快照未返回该台账终端",
+                })
+        elif sr.get("is_online_valid") is True:
+            temp_stats["valid_count"] += 1
+        else:
+            temp_stats["invalid_or_missing_total"] += 1
+            ftag = str(sr.get("fault_tag") or "")
+            if "COMM_OFFLINE" in ftag:
+                temp_stats["offline_gt7d"] += 1
+                st_type, msg = "OFFLINE_GT7D", "终端掉线超过 7 天（僵尸户已剔除）"
+            else:
+                temp_stats["out_of_range"] += 1
+                st_type, msg = "OUT_OF_RANGE", f"室温读数越限（原始值={_fmt_num(_f(sr.get('temp_raw')), 1)}℃）"
+            anomaly_temp_devices.append({
+                "temp_device_id": did,
+                "village_name": sr.get("village_name") or dev["device_name"],
+                "station_name": dev["station_name"],
+                "status_type": st_type,
+                "temp_raw": _f(sr.get("temp_raw")),
+                "upload_time": sr["upload_time"].astimezone(EAST_8).strftime("%Y-%m-%d %H:%M") if sr.get("upload_time") else None,
+                "note": msg,
+            })
+
+    for ur in temp_unreg:
+        anomaly_temp_devices.append({
+            "temp_device_id": ur["temp_device_id"],
+            "village_name": ur.get("village_name") or "-",
+            "station_name": ur.get("station_name_raw") or "-",
+            "status_type": "UNREGISTERED",
+            "temp_raw": _f(ur.get("temp_raw")),
+            "upload_time": ur["upload_time"].astimezone(EAST_8).strftime("%Y-%m-%d %H:%M") if ur.get("upload_time") else None,
+            "note": "源站新增但未录入标准台账（阳面已剔除）",
+        })
+
+    # ---- 4. 上游热源/网口取数诊断 ----
+    up_by_key: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    for r in up_hourly_rows:
+        up_by_key.setdefault((r["data_zone"], r["source_name"]), []).append(r)
+
+    upstream_stats = {"total": len(up_dict), "valid_count": 0, "missing_count": 0, "fault_count": 0, "core_total": 0, "core_missing": 0}
+    anomaly_upstream: List[Dict[str, Any]] = []
+    for pt in up_dict:
+        urows = up_by_key.get((pt["data_zone"], pt["source_name"]), [])
+        is_core = any(bool(r.get("is_core_gk")) for r in urows)
+        if is_core:
+            upstream_stats["core_total"] += 1
+        ok_hrs = sum(1 for r in urows if r.get("value_source") != "SOURCE_EMPTY" and (_f(r.get("heat_clean")) is not None or _f(r.get("flow_clean")) is not None))
+        fault_tags = {t for r in urows for t in str(r.get("fault_tag") or "").split(",") if t}
+        if fault_tags:
+            upstream_stats["fault_count"] += 1
+        if ok_hrs > 0:
+            upstream_stats["valid_count"] += 1
+            if fault_tags:
+                anomaly_upstream.append({
+                    "name": pt["name"],
+                    "category": pt["category"],
+                    "sub_category": pt.get("sub_category"),
+                    "data_zone": pt["data_zone"],
+                    "is_core_gk": is_core,
+                    "status": "FAULT",
+                    "note": f"有效采集 {ok_hrs}h，曾触发清洗:{','.join(sorted(fault_tags))}",
+                })
+        else:
+            upstream_stats["missing_count"] += 1
+            if is_core:
+                upstream_stats["core_missing"] += 1
+            anomaly_upstream.append({
+                "name": pt["name"],
+                "category": pt["category"],
+                "sub_category": pt.get("sub_category"),
+                "data_zone": pt["data_zone"],
+                "is_core_gk": is_core,
+                "status": "MISSING",
+                "note": "当日全天源站无有效热/流读数（SOURCE_EMPTY 或未返回）",
+            })
+
+    return {
+        "target_date": target_d.isoformat(),
+        "station": {
+            "total": len(stations_meta),
+            "heat": heat_stats,
+            "water": water_stats,
+            "elec": elec_stats,
+            "other": other_stats,
+            "anomaly_summary": anomaly_summary,
+            "anomaly_stations": anomaly_stations,
+        },
+        "merchant": {
+            "total": len(merchants_meta),
+            "hourly": mc_hourly_stats,
+            "daily": mc_daily_stats,
+            "anomaly_merchants": anomaly_merchants,
+        },
+        "temp_device": {
+            **temp_stats,
+            "anomaly_temp_devices": anomaly_temp_devices,
+        },
+        "upstream": {
+            **upstream_stats,
+            "anomaly_upstream": anomaly_upstream,
+        },
+    }

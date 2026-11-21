@@ -31,6 +31,7 @@ from backend.projects.smart_heating_platform.services.report_query_service impor
     build_hourly_excel,
     build_hourly_export_payload,
     get_daily_report,
+    get_dashboard_overview,
     get_entity_trend_24h,
     get_hourly_report,
     get_station_temp_devices,
@@ -55,6 +56,18 @@ class ManualCollectRequest(BaseModel):
     station_names: Optional[List[str]] = Field(None, description="可选：指定部分站点名称校准（不传则全量242站）")
     start_date: Optional[str] = Field(None, description="真空期补采或热量回看检查起始日期 YYYY-MM-DD（默认 2026-11-01）")
     lookback_days: Optional[int] = Field(None, ge=1, le=60, description="数据异常回看检测天数（默认按配置或截止 target_date 的近 N 天）")
+
+
+@router.get("/dashboard", summary="获取领导驾驶舱全景数据看板载荷")
+def api_dashboard_overview(
+    date: Optional[str] = Query(None, description="日期 YYYY-MM-DD"),
+    hour: Optional[int] = Query(None, ge=0, le=23, description="小时 0~23"),
+    mode: str = Query("clean", description="数据口径: clean | raw"),
+    session: AuthSession = Depends(get_current_session),
+):
+    _require_admin(session)
+    data = get_dashboard_overview(target_date_str=date, hour=hour, mode=mode)
+    return {"ok": True, "data": data}
 
 
 @router.get("/hourly", summary="获取逐小时精细化运行报告")

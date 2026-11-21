@@ -221,6 +221,11 @@
     ],
     "project_name": "智慧供热平台精算模块",
     "pages": {
+      "dashboard": {
+        "页面名称": "🖥️ 智慧供热运行驾驶舱",
+        "数据源": "smart_heating_platform",
+        "页面描述": "全景数据看板：小时气温供热对比走势、服务中心能效象限与风险焦点榜"
+      },
       "hourly_report": {
         "页面名称": "📊 全量数据统计与报告",
         "数据源": "smart_heating_platform",

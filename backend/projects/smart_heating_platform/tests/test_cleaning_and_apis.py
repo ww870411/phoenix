@@ -1297,3 +1297,511 @@ def test_daily_report_station_missing_end_meter_and_merchant_breakdown(monkeypat
     assert "1333" in mc_map["云河会馆"]["status_note"]
     assert mc_map["新华医院"]["calc_status"] == "MISSING_RECORD"
     assert "/getall_bb_shrb/" in mc_map["新华医院"]["status_note"]
+
+
+def test_oscillating_elec_water_meter_isolation_and_daily_dual_track(monkeypatch):
+    """验证电表/水表锯齿倒走序列拦截与超限屏蔽，以及日报手工耗电(万kWh折算)和耗水双轨对比。"""
+    from datetime import timedelta
+    from types import SimpleNamespace
+    import backend.projects.smart_heating_platform.services.cleaning_engine as ce
+    import backend.projects.smart_heating_platform.services.report_query_service as rqs
+
+    # 1. cleaning_engine 锯齿序列识别与按面积上限
+    t0 = datetime(2026, 11, 21, 0, 0, tzinfo=EAST_8)
+    osc_seq = [
+        (t0, 5812412.5),
+        (t0 + timedelta(minutes=15), 5812340.5),
+        (t0 + timedelta(minutes=30), 5812218.0),
+        (t0 + timedelta(minutes=45), 5812750.5),
+    ]
+    is_osc, msg = ce.is_meter_sequence_oscillating(osc_seq, min_reversal=1.0)
+    assert is_osc is True and "2次" in (msg or "")
+    assert ce.station_max_hourly_elec_kwh(83348.24) == round(83348.24 * 0.0012, 4)
+
+    class _FakeRes:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+    class _FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "FROM smart_heating_platform.dict_service_center" in sql:
+                return _FakeRes([SimpleNamespace(_mapping={"center_id": 61, "name": "北岗服务中心"})])
+            if "FROM smart_heating_platform.dict_heating_station" in sql:
+                return _FakeRes([
+                    SimpleNamespace(station_id="ST_NORM", _mapping={"station_id": "ST_NORM", "name": "正常站", "center_id": 61, "center_name": "北岗服务中心", "covered_area": 100000.0, "rdfz": "南环"}),
+                    SimpleNamespace(station_id="ST_BAD_E", _mapping={"station_id": "ST_BAD_E", "name": "信兴花园", "center_id": 61, "center_name": "北岗服务中心", "covered_area": 83348.24, "rdfz": "南环"}),
+                    SimpleNamespace(station_id="ST_BAD_W", _mapping={"station_id": "ST_BAD_W", "name": "坏水表站", "center_id": 61, "center_name": "北岗服务中心", "covered_area": 50000.0, "rdfz": "南环"}),
+                ])
+            if "FROM smart_heating_platform.fact_station_hourly" in sql and "WHERE biz_hour >= :ws" in sql:
+                rows = []
+                for h in range(4):
+                    bh = datetime(2026, 11, 20, h, 0, tzinfo=EAST_8)
+                    rows.append(SimpleNamespace(
+                        biz_hour=bh, station_id="ST_NORM",
+                        e1_raw=40.0, e1_clean=40.0, e3_raw=78.0, e3_clean=78.0, e4_raw=42.0, e4_clean=42.0,
+                        e7_raw=0.8, e7_clean=0.8, e8_raw=0.4, e8_clean=0.4, e11_raw=10.0, e11_clean=10.0,
+                        e14_raw=2.0, e14_clean=2.0, tot_j=100.0 + h * 10.0,
+                        hour_heat_raw_gj=10.0, hour_heat_gj=10.0, hour_heat_source="METER_DIFF",
+                        hour_flow_t=40.0, hour_water_t=2.0, hour_elec_kwh=25.0,
+                        tot_water_f254=1000.0 + h * 2.0, tot_elec_f253=5000.0 + h * 25.0,
+                        value_source="REAL", fault_tag=None,
+                        _mapping={
+                            "biz_hour": bh, "station_id": "ST_NORM", "e1_raw": 40.0, "e1_clean": 40.0,
+                            "e3_raw": 78.0, "e3_clean": 78.0, "e4_raw": 42.0, "e4_clean": 42.0,
+                            "e7_raw": 0.8, "e7_clean": 0.8, "e8_raw": 0.4, "e8_clean": 0.4,
+                            "e11_raw": 10.0, "e11_clean": 10.0, "e14_raw": 2.0, "e14_clean": 2.0,
+                            "tot_j": 100.0 + h * 10.0, "hour_heat_raw_gj": 10.0, "hour_heat_gj": 10.0,
+                            "hour_heat_source": "METER_DIFF", "hour_flow_t": 40.0, "hour_water_t": 2.0,
+                            "hour_elec_kwh": 25.0, "tot_water_f254": 1000.0 + h * 2.0, "tot_elec_f253": 5000.0 + h * 25.0,
+                            "value_source": "REAL", "fault_tag": None,
+                        },
+                    ))
+                    tot_e_bad = [5812441.0, 5812700.3, 5812306.8, 5838037.5][h]
+                    hr_e_bad = [259.3, None, 262.7, None][h]
+                    rows.append(SimpleNamespace(
+                        biz_hour=bh, station_id="ST_BAD_E",
+                        e1_raw=35.0, e1_clean=35.0, e3_raw=78.0, e3_clean=78.0, e4_raw=42.0, e4_clean=42.0,
+                        e7_raw=0.8, e7_clean=0.8, e8_raw=0.4, e8_clean=0.4, e11_raw=5.0, e11_clean=5.0,
+                        e14_raw=0.0, e14_clean=0.0, tot_j=200.0 + h * 5.0,
+                        hour_heat_raw_gj=5.0, hour_heat_gj=5.0, hour_heat_source="METER_DIFF",
+                        hour_flow_t=35.0, hour_water_t=0.0, hour_elec_kwh=hr_e_bad,
+                        tot_water_f254=10.0, tot_elec_f253=tot_e_bad,
+                        value_source="REAL", fault_tag=None,
+                        _mapping={
+                            "biz_hour": bh, "station_id": "ST_BAD_E", "e1_raw": 35.0, "e1_clean": 35.0,
+                            "e3_raw": 78.0, "e3_clean": 78.0, "e4_raw": 42.0, "e4_clean": 42.0,
+                            "e7_raw": 0.8, "e7_clean": 0.8, "e8_raw": 0.4, "e8_clean": 0.4,
+                            "e11_raw": 5.0, "e11_clean": 5.0, "e14_raw": 0.0, "e14_clean": 0.0,
+                            "tot_j": 200.0 + h * 5.0, "hour_heat_raw_gj": 5.0, "hour_heat_gj": 5.0,
+                            "hour_heat_source": "METER_DIFF", "hour_flow_t": 35.0, "hour_water_t": 0.0,
+                            "hour_elec_kwh": hr_e_bad, "tot_water_f254": 10.0, "tot_elec_f253": tot_e_bad,
+                            "value_source": "REAL", "fault_tag": None,
+                        },
+                    ))
+                    tot_w_bad = [300.0, 290.0, 310.0, 295.0][h]
+                    hr_w_bad = [15.0, None, 20.0, None][h]
+                    rows.append(SimpleNamespace(
+                        biz_hour=bh, station_id="ST_BAD_W",
+                        e1_raw=20.0, e1_clean=20.0, e3_raw=78.0, e3_clean=78.0, e4_raw=42.0, e4_clean=42.0,
+                        e7_raw=0.8, e7_clean=0.8, e8_raw=0.4, e8_clean=0.4, e11_raw=4.0, e11_clean=4.0,
+                        e14_raw=1.0, e14_clean=1.0, tot_j=300.0 + h * 4.0,
+                        hour_heat_raw_gj=4.0, hour_heat_gj=4.0, hour_heat_source="METER_DIFF",
+                        hour_flow_t=20.0, hour_water_t=hr_w_bad, hour_elec_kwh=10.0,
+                        tot_water_f254=tot_w_bad, tot_elec_f253=2000.0 + h * 10.0,
+                        value_source="REAL", fault_tag=None,
+                        _mapping={
+                            "biz_hour": bh, "station_id": "ST_BAD_W", "e1_raw": 20.0, "e1_clean": 20.0,
+                            "e3_raw": 78.0, "e3_clean": 78.0, "e4_raw": 42.0, "e4_clean": 42.0,
+                            "e7_raw": 0.8, "e7_clean": 0.8, "e8_raw": 0.4, "e8_clean": 0.4,
+                            "e11_raw": 4.0, "e11_clean": 4.0, "e14_raw": 1.0, "e14_clean": 1.0,
+                            "tot_j": 300.0 + h * 4.0, "hour_heat_raw_gj": 4.0, "hour_heat_gj": 4.0,
+                            "hour_heat_source": "METER_DIFF", "hour_flow_t": 20.0, "hour_water_t": hr_w_bad,
+                            "hour_elec_kwh": 10.0, "tot_water_f254": tot_w_bad, "tot_elec_f253": 2000.0 + h * 10.0,
+                            "value_source": "REAL", "fault_tag": None,
+                        },
+                    ))
+                return _FakeRes(rows)
+            if "FROM public.daily_basic_data" in sql:
+                return _FakeRes([
+                    SimpleNamespace(company="BeiGang_Center", item="consumption_station_heat", value=80.0, unit="GJ"),
+                    SimpleNamespace(company="BeiGang_Center", item="consumption_station_fill_water", value=10.0, unit="吨"),
+                    SimpleNamespace(company="BeiGang_Center", item="consumption_station_purchased_power", value=0.02, unit="万kWh"),
+                ])
+            return _FakeRes([])
+
+    monkeypatch.setattr(rqs, "engine", SimpleNamespace(connect=lambda: _FakeConn()))
+    monkeypatch.setattr(rqs, "get_collector_settings_view", lambda: {"snapshot_interval_minutes": 5})
+
+    rep = rqs.get_daily_report("2026-11-20", period_mode="natural", mode="clean")
+    st_map = {s["name"]: s for s in rep["station_daily"]}
+    # 信兴花园电表被隔离，不贡献虚假 522 kWh；正常站(100) + 坏水表站电表(40) = 140 kWh
+    assert st_map["信兴花园"]["day_elec_kwh"] is None
+    assert "day_elec_kwh" in st_map["信兴花园"]["anomalies"]
+    assert st_map["坏水表站"]["day_water_t"] is None
+    assert "day_water_t" in st_map["坏水表站"]["anomalies"]
+
+    # 日报手工水/电双轨对比：手工 0.02 万kWh -> 200 kWh，系统 140 kWh -> 偏差 -60 kWh (-30%)
+    cc = rep["center_comparison"][0]
+    assert cc["sys_water_t"] == 8.0 and cc["man_water_t"] == 10.0
+    assert cc["water_diff_t"] == -2.0 and cc["water_diff_pct"] == -20.0 and cc["is_water_alert"] is True
+    assert cc["sys_elec_kwh"] == 140.0 and cc["man_elec_kwh"] == 200.0
+    assert cc["elec_diff_kwh"] == -60.0 and cc["elec_diff_pct"] == -30.0 and cc["is_elec_alert"] is True
+    assert rep["kpis"]["manual_total_elec_kwh"] == 200.0
+    assert rep["kpis"]["elec_diff_pct"] == -30.0
+    assert rep["kpis"]["manual_total_water_t"] == 10.0
+    assert rep["kpis"]["water_diff_pct"] == -20.0
+
+
+
+def test_dashboard_overview_api_and_deltas(monkeypatch):
+    """验证领导驾驶舱 /reports/dashboard 载荷包含昨日同期对比、24h/7d 气温供热趋势与重点榜单。"""
+    from types import SimpleNamespace
+    import backend.projects.smart_heating_platform.services.report_query_service as rqs
+
+    fake_curr = {
+        "meta": {"date": "2026-11-20", "hour": 10, "biz_hour_label": "2026-11-20 10:00", "mode": "clean"},
+        "kpis": {
+            "outdoor_temp": 2.0,
+            "covered_area_m2": 23000000.0,
+            "covered_area_wan": 2300.0,
+            "online_stations": 240,
+            "total_stations": 242,
+            "hour_heat_gj": 1500.0,
+            "heat_index_wm2": 36.2,
+            "heat_per_wan_gj": 0.65,
+            "hour_water_t": 120.0,
+            "water_per_wan_t": 0.05,
+            "hour_elec_kwh": 240.0,
+            "elec_per_wan_kwh": 0.1,
+            "avg_sup_temp": 78.0,
+            "avg_ret_temp": 44.0,
+            "avg_temp_diff": 34.0,
+            "avg_room_temp": None,
+            "temp_pass_rate_pct": None,
+            "temp_comfort_rate_pct": None,
+        },
+        "trend_24h": [
+            {
+                "hour": h,
+                "label": f"{h:02d}:00",
+                "has_data": h <= 10,
+                "hour_heat_gj": 100.0 + h if h <= 10 else None,
+                "heat_index_wm2": 35.0 if h <= 10 else None,
+                "outdoor_temp": 1.0 + h * 0.1 if h <= 10 else None,
+            }
+            for h in range(24)
+        ],
+        "group_summaries": {
+            "by_center": [
+                {
+                    "group_key": 60, "group_name": "华乐服务中心", "covered_area_wan": 300.0,
+                    "online_stations": 30, "total_stations": 30, "hour_heat_gj": 200.0,
+                    "heat_per_wan_gj": 0.67, "heat_index_wm2": 37.0, "avg_room_temp": None,
+                    "temp_pass_rate_pct": None,
+                }
+            ],
+            "by_rdfz": [
+                {
+                    "group_key": "香海", "group_name": "香海", "covered_area_wan": 1000.0,
+                    "hour_heat_gj": 700.0, "heat_per_wan_gj": 0.7, "avg_room_temp": None,
+                }
+            ],
+        },
+        "stations": [
+            {
+                "station_id": "S1", "name": "高热测试站", "center_name": "华乐服务中心",
+                "covered_area": 50000.0, "heat_index_wm2": 65.0, "hour_heat_gj": 11.7,
+                "hour_water_t": 8.0, "e14": 8.0, "hour_elec_kwh": 88.0, "avg_room_temp": None, "temp_pass_rate_pct": None,
+            },
+            {
+                "station_id": "S2", "name": "标杆测试站", "center_name": "华乐服务中心",
+                "covered_area": 50000.0, "heat_index_wm2": 28.0, "hour_heat_gj": 5.0,
+                "hour_water_t": 0.5, "e14": 0.5, "hour_elec_kwh": 24.0, "avg_room_temp": None, "temp_pass_rate_pct": None,
+            },
+            {
+                "station_id": "S_FAULT", "name": "故障高耗假站点", "center_name": "华乐服务中心",
+                "covered_area": 50000.0, "heat_index_wm2": 120.0, "hour_heat_gj": 22.0,
+                "hour_water_t": 20.0, "e14": 20.0, "hour_elec_kwh": 300.0, "fault_tag": "SOFTWARE_DEFECT", "day_anomaly_count": 8,
+            },
+            {
+                "station_id": "S_ZERO", "name": "零能耗异常站", "center_name": "华乐服务中心",
+                "covered_area": 50000.0, "heat_index_wm2": 0.0, "hour_heat_gj": 0.0,
+                "hour_water_t": 15.0, "e14": 15.0, "hour_elec_kwh": 180.0,
+            },
+        ],
+        "merchant_summary": {"total_merchants": 464, "active_heat_merchants": 300, "total_hour_heat_gj": 180.0},
+        "temp_summary": {
+            "valid_devices": 0,
+            "distribution": {"under_18": 0, "ok_18_20": 0, "comfort_20_25": 0, "over_25": 0},
+            "station_rankings": [],
+        },
+    }
+
+    monkeypatch.setattr(rqs, "get_hourly_report", lambda **kw: fake_curr)
+    monkeypatch.setattr(rqs, "_load_outdoor_temps_24h", lambda d: {10: 4.0})
+    monkeypatch.setattr(
+        rqs,
+        "_build_trend_24h_from_rows",
+        lambda rows, out, mode, temp_24h_map=None: [
+            {
+                "hour": h,
+                "label": f"{h:02d}:00",
+                "has_data": h == 10,
+                "hour_heat_gj": 1250.0 if h == 10 else None,
+                "heat_index_wm2": 30.0 if h == 10 else None,
+                "outdoor_temp": 4.0 if h == 10 else None,
+            }
+            for h in range(24)
+        ],
+    )
+
+    class _MockRes:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+        def fetchone(self):
+            return self._rows[0] if self._rows else None
+
+        def scalar(self):
+            return self._rows[0] if self._rows else None
+
+    class _MockConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, stmt, params=None):
+            s = str(stmt)
+            if "SUM(COALESCE(hour_water_t" in s:
+                return _MockRes([SimpleNamespace(water_sum=100.0, elec_sum=200.0)])
+            if "MAX(biz_hour) FROM smart_heating_platform.fact_temp_hourly" in s:
+                return _MockRes([datetime(2026, 11, 20, 14, 0, tzinfo=EAST_8)])
+            if "FROM smart_heating_platform.fact_temp_hourly t" in s:
+                return _MockRes([
+                    SimpleNamespace(station_id="S2", station_name="标杆测试站", center_id=60, center_name="华乐服务中心", rdfz="香海", temp_clean=21.2),
+                    SimpleNamespace(station_id="S3", station_name="低温关注站", center_id=60, center_name="华乐服务中心", rdfz="香海", temp_clean=17.4),
+                ])
+            if "DATE_TRUNC('hour', biz_hour" in s:
+                return _MockRes([SimpleNamespace(bh=datetime(2026, 11, 20, 10, 0), hour_heat_gj=1500.0, instant_load_gjh=1500.0, station_count=242)])
+            if "DATE_TRUNC('hour', date_time)" in s:
+                return _MockRes([SimpleNamespace(bh=datetime(2026, 11, 20, 10, 0), val=2.0)])
+            if "GROUP BY 1 ORDER BY 1" in s and "fact_station_hourly" in s:
+                from datetime import date
+                return _MockRes([SimpleNamespace(d=date(2026, 11, 20), day_heat=35000.0, day_water=4000.0, hrs_cnt=24)])
+            return _MockRes([])
+
+    monkeypatch.setattr(rqs, "engine", SimpleNamespace(connect=lambda: _MockConn()))
+    ov = rqs.get_dashboard_overview("2026-11-20", 10, "clean")
+
+    assert ov["comparison"]["heat_diff_pct"] == 20.0
+    assert ov["comparison"]["outdoor_diff_c"] == -2.0
+    assert ov["comparison"]["water_diff_pct"] == 20.0
+    assert ov["comparison"]["elec_diff_pct"] == 20.0
+    assert len(ov["trend_72h"]) == 72
+    assert any(pt["hour_heat_gj"] == 1500.0 and pt["outdoor_temp"] == 2.0 for pt in ov["trend_72h"])
+    assert len(ov["trend_24h"]) == 24
+    assert ov["trend_24h"][10]["prev_hour_heat_gj"] == 1250.0
+    assert ov["trend_24h"][10]["avg_room_temp"] is None
+    assert len(ov["trend_7d"]) == 7
+    assert "avg_room_temp" not in ov["trend_7d"][0]
+    assert ov["current_temp"]["biz_hour_label"] == "2026-11-20 14:00"
+    assert ov["current_temp"]["avg_room_temp"] == 19.3
+    assert ov["watchlists"]["high_heat"][0]["name"] == "高热测试站"
+    assert ov["watchlists"]["high_water"][0]["name"] == "高热测试站"
+    assert ov["watchlists"]["high_elec"][0]["name"] == "高热测试站"
+    assert ov["watchlists"]["benchmark"][0]["name"] == "标杆测试站"
+    assert "low_temp" not in ov["watchlists"]
+    for wl_key in ("high_heat", "high_water", "high_elec", "benchmark"):
+        names = {it["name"] for it in ov["watchlists"][wl_key]}
+        assert "故障高耗假站点" not in names
+        assert "零能耗异常站" not in names
+        assert all("avg_room_temp" not in it for it in ov["watchlists"][wl_key])
+    assert "低温预警站" in " ".join(ov["brief"]["highlights"])
+
+    app = create_app()
+    client = TestClient(app)
+    app.dependency_overrides[get_current_session] = lambda: _session("Group_admin")
+    assert client.get("/api/v1/projects/smart_heating_platform/reports/dashboard").status_code == 403
+    app.dependency_overrides[get_current_session] = lambda: _session("Global_admin")
+    resp = client.get("/api/v1/projects/smart_heating_platform/reports/dashboard?date=2026-11-20&hour=10")
+    assert resp.status_code == 200 and resp.json()["ok"] is True
+    assert resp.json()["data"]["comparison"]["heat_diff_pct"] == 20.0
+
+
+def test_f209_capture_and_hour_water_integral_fallback(monkeypatch):
+    import backend.projects.smart_heating_platform.services.collector_engine as ce
+
+    class _FakeResp:
+        def __init__(self, payload):
+            self.status_code = 200
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(ce.httpx, "Client", _FakeClient)
+    hr07 = datetime(2026, 11, 18, 7, 0, tzinfo=EAST_8)
+
+    # 1. 无 f254 累计水表，仅上报瞬时补水流量 f209：应采集至 e14_raw/e14_clean 且 hour_water_t 回落 INTEGRAL_15M 积分
+    def _fake_f209_only(client, url, data=None, headers=None, retries=2):
+        return _FakeResp([
+            {"create_time": "2026-11-18 07:00:00", "f1": 0.4, "f2": 100.0, "f3": 65.0, "f4": 0.3, "f5": 40.0, "f209": 10.0, "f220": 500.0, "f221": 1000.0, "f222": 10.0, "f253": None, "f254": None},
+            {"create_time": "2026-11-18 07:30:00", "f1": 0.4, "f2": 100.0, "f3": 65.0, "f4": 0.3, "f5": 40.0, "f209": 14.0, "f220": 550.0, "f221": 1005.0, "f222": 10.0, "f253": None, "f254": None},
+            {"create_time": "2026-11-18 08:00:00", "f1": 0.4, "f2": 100.0, "f3": 65.0, "f4": 0.3, "f5": 40.0, "f209": 10.0, "f220": 600.0, "f221": 1010.0, "f222": 10.0, "f253": None, "f254": None},
+        ])
+
+    monkeypatch.setattr(ce, "_post_with_retry", _fake_f209_only)
+    _, rows1, faults1, ok1 = ce._process_station_calibration(
+        {"station_id": "st_fhly", "name": "泛华领域", "covered_area": 100000.0},
+        "http://mock",
+        "2026-11-18 06:30:00",
+        "2026-11-18 08:30:00",
+        [hr07],
+        10.0,
+        prev_station_db=None,
+    )
+    assert ok1 is True and len(rows1) == 1
+    assert rows1[0]["e14_raw"] == 10.0
+    assert rows1[0]["e14_clean"] == 10.0
+    assert rows1[0]["hour_water_t"] == 12.0
+    assert rows1[0]["hour_water_source"] == "INTEGRAL_15M"
+    assert faults1 == []
+
+    # 2. f209 超上限 (>100 t/h) 满量程坏表样本应被过滤（e14_clean 置空、积分不带入坏值），
+    # 且 f253 锯齿坏表应置空 hour_elec_kwh 并记录 METER_JUMP
+    def _fake_bad_f209_and_osc_e(client, url, data=None, headers=None, retries=2):
+        return _FakeResp([
+            {"create_time": "2026-11-18 07:00:00", "f1": 0.4, "f2": 80.0, "f3": 60.0, "f4": 0.3, "f5": 40.0, "f209": 6.0, "f220": 200.0, "f221": 300.0, "f222": 8.0, "f253": 100.0, "f254": None},
+            {"create_time": "2026-11-18 07:15:00", "f1": 0.4, "f2": 80.0, "f3": 60.0, "f4": 0.3, "f5": 40.0, "f209": 999.0, "f220": 220.0, "f221": 302.0, "f222": 8.0, "f253": 108.0, "f254": None},
+            {"create_time": "2026-11-18 07:30:00", "f1": 0.4, "f2": 80.0, "f3": 60.0, "f4": 0.3, "f5": 40.0, "f209": 8.0, "f220": 240.0, "f221": 304.0, "f222": 8.0, "f253": 100.0, "f254": None},
+            {"create_time": "2026-11-18 07:45:00", "f1": 0.4, "f2": 80.0, "f3": 60.0, "f4": 0.3, "f5": 40.0, "f209": 7.0, "f220": 260.0, "f221": 306.0, "f222": 8.0, "f253": 109.0, "f254": None},
+            {"create_time": "2026-11-18 08:00:00", "f1": 0.4, "f2": 80.0, "f3": 60.0, "f4": 0.3, "f5": 40.0, "f209": 200.0, "f220": 280.0, "f221": 308.0, "f222": 8.0, "f253": 100.0, "f254": None},
+        ])
+
+    monkeypatch.setattr(ce, "_post_with_retry", _fake_bad_f209_and_osc_e)
+    _, rows2, faults2, ok2 = ce._process_station_calibration(
+        {"station_id": "st_xxhy", "name": "信兴花园", "covered_area": 50000.0},
+        "http://mock",
+        "2026-11-18 06:30:00",
+        "2026-11-18 08:30:00",
+        [hr07],
+        10.0,
+        prev_station_db={"e14_clean": 5.5},
+    )
+    assert ok2 is True and len(rows2) == 1
+    assert rows2[0]["e14_raw"] == 200.0
+    assert rows2[0]["e14_clean"] == 5.5
+    assert rows2[0]["hour_water_t"] == 7.1667
+    assert rows2[0]["hour_water_source"] == "INTEGRAL_15M"
+    assert rows2[0]["hour_elec_kwh"] is None
+    assert rows2[0]["hour_elec_source"] == "NONE"
+    assert any(f["fault_code"] == FAULT_SENSOR_RANGE for f in faults2)
+    assert any(f["fault_code"] == ce.FAULT_METER_JUMP for f in faults2)
+
+
+def test_fault_coverage_diagnostics_and_api(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    from backend.main import create_app
+    from backend.services.auth_manager import get_current_session
+    import backend.projects.smart_heating_platform.services.report_query_service as rqs
+
+    class _Row(SimpleNamespace):
+        @property
+        def _mapping(self):
+            return self.__dict__
+
+    def _session(group):
+        return _Row(username="tester", group=group, company="GongRe", has_project_access=lambda pid: True)
+
+    class _MockRes:
+        def __init__(self, rows=None, scalar=None):
+            self._rows = rows or []
+            self._scalar = scalar
+
+        def fetchall(self):
+            return self._rows
+
+        def scalar_one(self):
+            return self._scalar
+
+    class _MockConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, stmt, params=None):
+            s = str(stmt)
+            if "FROM smart_heating_platform.dict_heating_station" in s:
+                return _MockRes([
+                    _Row(station_id="S1", name="正常站", covered_area=100000.0, rdfz="香海", center_name="华乐服务中心"),
+                    _Row(station_id="S2", name="缺表积分站", covered_area=100000.0, rdfz="香海", center_name="华乐服务中心"),
+                    _Row(station_id="S3", name="双缺坏表站", covered_area=None, rdfz="香海", center_name="华乐服务中心"),
+                ])
+            if "FROM smart_heating_platform.fact_station_hourly" in s:
+                return _MockRes([
+                    _Row(biz_hour=datetime(2026, 11, 18, 10, 0, tzinfo=EAST_8), station_id="S1", hour_heat_gj=20.0, hour_heat_source="METER_DIFF", hour_water_t=2.0, hour_water_source="METER_DIFF", hour_elec_kwh=40.0, hour_elec_source="METER_DIFF", e14_clean=2.0, tot_water_f254=100.0, tot_elec_f253=500.0, value_source="REAL", fault_tag=None),
+                    _Row(biz_hour=datetime(2026, 11, 18, 11, 0, tzinfo=EAST_8), station_id="S1", hour_heat_gj=21.0, hour_heat_source="METER_DIFF", hour_water_t=2.0, hour_water_source="METER_DIFF", hour_elec_kwh=42.0, hour_elec_source="METER_DIFF", e14_clean=2.0, tot_water_f254=102.0, tot_elec_f253=542.0, value_source="REAL", fault_tag=None),
+                    _Row(biz_hour=datetime(2026, 11, 18, 10, 0, tzinfo=EAST_8), station_id="S2", hour_heat_gj=15.0, hour_heat_source="INTEGRAL_15M", hour_water_t=12.0, hour_water_source="INTEGRAL_15M", hour_elec_kwh=None, hour_elec_source="NONE", e14_clean=12.0, tot_water_f254=None, tot_elec_f253=0.0, value_source="REAL", fault_tag=None),
+                    _Row(biz_hour=datetime(2026, 11, 18, 10, 0, tzinfo=EAST_8), station_id="S3", hour_heat_gj=None, hour_heat_source="SOURCE_EMPTY", hour_water_t=None, hour_water_source="NONE", hour_elec_kwh=None, hour_elec_source="NONE", e14_clean=None, tot_water_f254=None, tot_elec_f253=1000000000.0, value_source="SOURCE_EMPTY", fault_tag="COMM_OFFLINE"),
+                ])
+            if "FROM smart_heating_platform.dict_merchant" in s:
+                return _MockRes([_Row(merchant_id="M1", name="正常商户", rdfz="香海", rdry="热水"), _Row(merchant_id="M2", name="缺数商户", rdfz="香海", rdry="蒸汽")])
+            if "FROM smart_heating_platform.fact_merchant_hourly" in s:
+                return _MockRes([_Row(merchant_id="M1", source_name="正常商户", is_registered=True, online=True, hour_heat_gj=1.2, value_source="REAL", fault_tag=None)])
+            if "FROM smart_heating_platform.fact_merchant_daily" in s:
+                return _MockRes([_Row(merchant_id="M1", daily_consumption=15.0, raw_payload={"tot_curr": 115.0, "tot_prev": 100.0}), _Row(merchant_id="M2", daily_consumption=None, raw_payload={"tot_curr": 5.0, "tot_prev": 20.0})])
+            if "FROM smart_heating_platform.dict_temp_device" in s:
+                return _MockRes([_Row(temp_device_id="T1", device_name="1-101", station_id="S1", station_name="正常站"), _Row(temp_device_id="T2", device_name="1-102", station_id="S1", station_name="正常站")])
+            if "SELECT MAX(biz_hour) FROM smart_heating_platform.fact_temp_hourly" in s:
+                return _MockRes(scalar=datetime(2026, 11, 18, 14, 0, tzinfo=EAST_8))
+            if "FROM smart_heating_platform.fact_temp_hourly WHERE" in s:
+                return _MockRes([
+                    _Row(temp_device_id="T1", station_id="S1", is_registered=True, village_name="1-101", station_name_raw="正常站", temp_raw=21.5, upload_time=datetime(2026, 11, 18, 13, 0, tzinfo=EAST_8), is_online_valid=True, fault_tag=None),
+                    _Row(temp_device_id="T2", station_id="S1", is_registered=True, village_name="1-102", station_name_raw="正常站", temp_raw=-50.0, upload_time=datetime(2026, 11, 18, 13, 0, tzinfo=EAST_8), is_online_valid=False, fault_tag="SENSOR_OUT_OF_RANGE"),
+                ])
+            if "FROM smart_heating_platform.dict_upstream_point" in s:
+                return _MockRes([_Row(point_id=1, data_zone="dc_dict", source_name="点A", name="点A", category="电厂", sub_category="香海")])
+            if "FROM smart_heating_platform.fact_upstream_hourly" in s:
+                return _MockRes([_Row(data_zone="dc_dict", source_name="点A", is_core_gk=True, heat_clean=100.0, flow_clean=500.0, value_source="REAL", fault_tag=None)])
+            return _MockRes([])
+
+    monkeypatch.setattr(rqs, "ensure_smart_heating_fact_tables", lambda: None)
+    monkeypatch.setattr(rqs, "engine", SimpleNamespace(connect=lambda: _MockConn()))
+
+    diag = rqs.get_collection_coverage_diagnostics("2026-11-18")
+    assert diag["station"]["heat"] == {"meter_diff_ok": 1, "scaled_ok": 0, "partial_fallback": 0, "missing_cum_total": 2, "fallback_integral": 1, "both_missing": 1}
+    assert diag["station"]["anomaly_summary"] == {
+        "heat_anomaly_stations": 2,
+        "water_anomaly_stations": 2,
+        "water_partial_fallback": 0,
+        "elec_anomaly_stations": 2,
+        "total_anomaly_stations": 2,
+    }
+    assert diag["station"]["water"]["meter_diff_ok"] == 1
+    assert diag["station"]["water"]["missing_cum_total"] == 2
+    assert diag["station"]["water"]["fallback_integral"] == 1
+    assert diag["station"]["water"]["both_missing"] == 1
+    assert diag["station"]["elec"]["meter_ok"] == 1
+    assert diag["station"]["elec"]["f253_const_zero"] == 1
+    assert diag["station"]["elec"]["f253_frozen_or_overflow"] == 1
+    assert diag["merchant"]["hourly"]["missing_count"] == 1
+    assert diag["merchant"]["daily"]["rollback_count"] == 1
+    assert diag["temp_device"]["valid_count"] == 1
+    assert diag["temp_device"]["out_of_range"] == 1
+
+    app = create_app()
+    client = TestClient(app)
+    app.dependency_overrides[get_current_session] = lambda: _session("Group_admin")
+    assert client.get("/api/v1/projects/smart_heating_platform/faults/coverage").status_code == 403
+    app.dependency_overrides[get_current_session] = lambda: _session("Global_admin")
+    resp = client.get("/api/v1/projects/smart_heating_platform/faults/coverage?date=2026-11-18")
+    assert resp.status_code == 200 and resp.json()["ok"] is True
+    assert resp.json()["data"]["station"]["elec"]["missing_total"] == 2

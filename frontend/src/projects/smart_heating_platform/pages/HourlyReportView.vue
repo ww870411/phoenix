@@ -197,6 +197,11 @@
           </span>
         </div>
         <div class="card elevated kpi-card">
+          <span class="kpi-label">小时累计电耗</span>
+          <strong class="kpi-val">{{ fmt(kpis.hour_elec_kwh, ' kWh') }}</strong>
+          <span class="kpi-sub">万平电耗 {{ fmt(kpis.elec_per_wan_kwh, ' kWh/万㎡') }}</span>
+        </div>
+        <div class="card elevated kpi-card">
           <span class="kpi-label">一网流量加权均温</span>
           <strong class="kpi-val">
             <AnomalyBadgeValue placement="bottom" :text="`${fmt(kpis.avg_sup_temp)} / ${fmt(kpis.avg_ret_temp)} ℃`" :note="kpis.anomalies?.avg_sup_temp?.note" />
@@ -349,6 +354,7 @@
                   <SortableTh label="折算热指标 (W/㎡)" sort-key="heat_index_wm2" :sort-state="groupSort.state" @sort="groupSort.toggle" />
                   <SortableTh label="万平耗热 (GJ/万㎡)" sort-key="heat_per_wan_gj" :sort-state="groupSort.state" @sort="groupSort.toggle" />
                   <SortableTh label="小时补水 (t)" sort-key="hour_water_t" :sort-state="groupSort.state" @sort="groupSort.toggle" />
+                  <SortableTh label="小时电耗 (kWh)" sort-key="hour_elec_kwh" :sort-state="groupSort.state" @sort="groupSort.toggle" />
                   <SortableTh label="加权供/回温 (℃)" sort-key="avg_sup_temp" :sort-state="groupSort.state" @sort="groupSort.toggle" />
                   <SortableTh label="平均室温 (℃)" sort-key="avg_room_temp" :sort-state="groupSort.state" @sort="groupSort.toggle" />
                   <SortableTh label="室温达标率" sort-key="temp_pass_rate_pct" :sort-state="groupSort.state" @sort="groupSort.toggle" />
@@ -383,6 +389,7 @@
                   <td>
                     <AnomalyBadgeValue :text="fmt(g.hour_water_t)" :note="g.anomalies?.hour_water_t?.note" />
                   </td>
+                  <td>{{ fmt(g.hour_elec_kwh) }}</td>
                   <td>
                     <AnomalyBadgeValue :text="`${fmt(g.avg_sup_temp)} / ${fmt(g.avg_ret_temp)}`" :note="g.anomalies?.avg_sup_temp?.note" />
                   </td>
@@ -431,6 +438,7 @@
                   <SortableTh label="小时供热 (GJ)" sort-key="hour_heat_gj" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                   <SortableTh label="热指标 (W/㎡)" sort-key="heat_index_wm2" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                   <SortableTh label="补水 (t)" sort-key="e14" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh label="电耗 (kWh)" sort-key="hour_elec_kwh" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                   <SortableTh label="均温 (℃)" sort-key="avg_room_temp" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                 </tr>
               </thead>
@@ -481,6 +489,7 @@
                     <td>
                       <AnomalyBadgeValue :text="fmt(s.e14)" :note="s.field_notes?.e14" />
                     </td>
+                    <td>{{ fmt(s.hour_elec_kwh) }}</td>
                     <td>{{ fmt(s.avg_room_temp) }}</td>
                   </tr>
                 </template>

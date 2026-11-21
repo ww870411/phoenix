@@ -19,6 +19,7 @@ from sqlalchemy import text
 
 from backend.db.database_daily_report_25_26 import engine
 from backend.projects.smart_heating_platform.services.cleaning_engine import EAST_8
+from backend.projects.smart_heating_platform.services.report_query_service import get_collection_coverage_diagnostics
 from backend.services.auth_manager import AuthSession, get_current_session
 
 router = APIRouter(prefix="/faults", tags=["smart_heating_platform_faults"])
@@ -59,6 +60,15 @@ def _resolve_range(days: int, target_date: Optional[str]) -> Tuple[datetime, dat
     end_dt = now_e8 + timedelta(hours=1)
     start_dt = datetime(now_e8.year, now_e8.month, now_e8.day, 0, 0, 0, tzinfo=EAST_8) - timedelta(days=max(0, days - 1))
     return start_dt, end_dt
+
+
+@router.get("/coverage", summary="获取各主体当日取数完整度、降级补救与源头缺损诊断")
+def api_fault_coverage(
+    date: Optional[str] = Query(None),
+    session: AuthSession = Depends(get_current_session),
+):
+    _require_admin(session)
+    return {"ok": True, "data": get_collection_coverage_diagnostics(date)}
 
 
 @router.get("/summary", summary="获取阴面异常分类与三方权责汇总")
