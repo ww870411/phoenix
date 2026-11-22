@@ -1061,6 +1061,7 @@ function renderBoardCharts() {
   const tdTot = td.dict_total || 2097
   const upTot = up.total || 82
   const toPct = (v, tot) => (tot > 0 ? Number(((Number(v || 0) / tot) * 100).toFixed(1)) : 0)
+  const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640
 
   if (boardCoverageChartEl.value) {
     if (!boardCoverageChart) {
@@ -1145,17 +1146,17 @@ function renderBoardCharts() {
       legend: {
         top: 2,
         left: 'center',
-        itemWidth: 12,
-        itemHeight: 12,
-        itemGap: 18,
+        itemWidth: isNarrow ? 10 : 12,
+        itemHeight: isNarrow ? 10 : 12,
+        itemGap: isNarrow ? 10 : 18,
         icon: 'roundRect',
-        textStyle: { fontSize: 12.5, color: '#334155', fontWeight: 600 },
+        textStyle: { fontSize: isNarrow ? 11 : 12.5, color: '#334155', fontWeight: 600 },
       },
-      grid: { left: 10, right: 18, top: 44, bottom: 16, containLabel: true },
+      grid: { left: isNarrow ? 4 : 10, right: isNarrow ? 8 : 18, top: isNarrow ? 40 : 44, bottom: 16, containLabel: true },
       xAxis: {
         type: 'value',
         max: 100,
-        axisLabel: { formatter: '{value}%', color: '#64748b', fontSize: 11.5 },
+        axisLabel: { formatter: '{value}%', color: '#64748b', fontSize: isNarrow ? 10.5 : 11.5 },
         splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } },
       },
       yAxis: {
@@ -1165,10 +1166,10 @@ function renderBoardCharts() {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          lineHeight: 17,
+          lineHeight: isNarrow ? 15 : 17,
           rich: {
-            t: { fontSize: 12.5, fontWeight: 700, color: '#0f172a' },
-            s: { fontSize: 11, color: '#64748b' },
+            t: { fontSize: isNarrow ? 11 : 12.5, fontWeight: 700, color: '#0f172a' },
+            s: { fontSize: isNarrow ? 10 : 11, color: '#64748b' },
           },
         },
       },
@@ -1177,28 +1178,28 @@ function renderBoardCharts() {
           name: '表计直采可用',
           type: 'bar',
           stack: 'total',
-          barWidth: 24,
+          barWidth: isNarrow ? 20 : 24,
           data: okPcts,
           itemStyle: { color: '#10b981', borderColor: '#ffffff', borderWidth: 2, borderRadius: 4 },
-          label: { show: true, formatter: (p) => (p.value >= 10 ? `${p.value}%` : ''), color: '#fff', fontWeight: 700, fontSize: 11.5 },
+          label: { show: true, formatter: (p) => (p.value >= (isNarrow ? 14 : 10) ? `${p.value}%` : ''), color: '#fff', fontWeight: 700, fontSize: isNarrow ? 10.5 : 11.5 },
         },
         {
           name: '可用算法估算',
           type: 'bar',
           stack: 'total',
-          barWidth: 24,
+          barWidth: isNarrow ? 20 : 24,
           data: estPcts,
           itemStyle: { color: '#f59e0b', borderColor: '#ffffff', borderWidth: 2, borderRadius: 4 },
-          label: { show: true, formatter: (p) => (p.value >= 9 ? `${p.value}%` : ''), color: '#fff', fontWeight: 700, fontSize: 11.5 },
+          label: { show: true, formatter: (p) => (p.value >= (isNarrow ? 14 : 9) ? `${p.value}%` : ''), color: '#fff', fontWeight: 700, fontSize: isNarrow ? 10.5 : 11.5 },
         },
         {
           name: '数据缺失/无法估算',
           type: 'bar',
           stack: 'total',
-          barWidth: 24,
+          barWidth: isNarrow ? 20 : 24,
           data: missPcts,
           itemStyle: { color: '#ef4444', borderColor: '#ffffff', borderWidth: 2, borderRadius: 4 },
-          label: { show: true, formatter: (p) => (p.value >= 6 ? `${p.value}%` : ''), color: '#fff', fontWeight: 700, fontSize: 11.5 },
+          label: { show: true, formatter: (p) => (p.value >= (isNarrow ? 12 : 6) ? `${p.value}%` : ''), color: '#fff', fontWeight: 700, fontSize: isNarrow ? 10.5 : 11.5 },
         },
       ],
     }, true)
@@ -1243,11 +1244,11 @@ function renderBoardCharts() {
             + `<div style="color:#cbd5e1;font-size:11.5px;margin-top:2px">性质：${item.tag} · 点击查看明细站点</div>`
         },
       },
-      grid: { left: 10, right: 88, top: 10, bottom: 20, containLabel: true },
+      grid: { left: isNarrow ? 4 : 10, right: isNarrow ? 54 : 88, top: 10, bottom: 20, containLabel: true },
       xAxis: {
         type: 'value',
         max: stTot,
-        axisLabel: { color: '#64748b', fontSize: 11, formatter: '{value}站' },
+        axisLabel: { color: '#64748b', fontSize: isNarrow ? 10 : 11, formatter: '{value}站' },
         splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } },
       },
       yAxis: {
@@ -1256,12 +1257,12 @@ function renderBoardCharts() {
         data: items.map((x) => x.name),
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { fontSize: 12, color: '#1e293b', fontWeight: 500 },
+        axisLabel: { fontSize: isNarrow ? 10.5 : 12, color: '#1e293b', fontWeight: 500 },
       },
       series: [
         {
           type: 'bar',
-          barWidth: 16,
+          barWidth: isNarrow ? 14 : 16,
           showBackground: true,
           backgroundStyle: { color: '#f1f5f9', borderRadius: [0, 6, 6, 0] },
           data: items.map((x) => ({
@@ -1272,10 +1273,10 @@ function renderBoardCharts() {
           label: {
             show: true,
             position: 'right',
-            fontSize: 11.5,
+            fontSize: isNarrow ? 10.5 : 11.5,
             fontWeight: 700,
             color: '#334155',
-            formatter: (p) => `${p.value}站 (${toPct(p.value, stTot)}%)`,
+            formatter: (p) => (isNarrow ? `${p.value}站` : `${p.value}站 (${toPct(p.value, stTot)}%)`),
           },
         },
       ],
@@ -1461,15 +1462,30 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .shp-main { padding: 12px 10px 28px; gap: 10px; }
-  .topbar, .list-card, .chart-card, .diag-card { padding: 12px; }
+  .topbar, .list-card, .chart-card, .diag-card, .board-chart-card { padding: 12px; }
   .title-row { flex-wrap: wrap; gap: 6px; }
   .title-row h2 { font-size: 16px; }
   .topbar-actions { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
   .topbar-actions > .ctrl-input, .topbar-actions > .btn { width: 100%; justify-content: center; }
+  .tab-bar { padding: 8px 10px; display: grid; grid-template-columns: 1fr; gap: 6px; }
+  .tab-btn { width: 100%; justify-content: space-between; padding: 9px 12px; font-size: 13px; }
+  .board-overview-bar { padding: 10px 12px; gap: 8px; }
+  .legend-pills { gap: 8px 14px; font-size: 12px; }
+  .board-overview-summary { font-size: 12.5px; }
+  .kpi-mini-val { font-size: 21px; }
+  .board-panel-head h3 { font-size: 14.5px; }
+  .sub-tab-pills { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .kind-pill { text-align: center; padding: 7px 6px; font-size: 12px; }
   .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .stat-card { padding: 11px 12px; }
-  .filter-bar > .ctrl-input { flex: 1 1 140px; min-width: 0; }
-  .data-table { font-size: 12px; }
+  .filter-bar { width: 100%; gap: 8px; }
+  .filter-bar > .ctrl-input { flex: 1 1 140px; min-width: 0 !important; }
+  .filter-bar > .btn { width: 100%; justify-content: center; }
+  .data-table { font-size: 12px; white-space: nowrap; }
   .data-table th, .data-table td { padding: 7px 8px; }
+  .data-table td:first-child,
+  .data-table th:first-child { position: sticky; left: 0; background: #fff; z-index: 3; max-width: 120px; overflow: hidden; text-overflow: ellipsis; box-shadow: 3px 0 6px -2px rgba(15, 23, 42, 0.08); }
+  .data-table thead th:first-child { background: #f8fafc; z-index: 6; }
+  .raw-cell, .muted-cell { max-width: 210px; white-space: normal; }
 }
 </style>

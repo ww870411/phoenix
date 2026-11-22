@@ -1,3 +1,14 @@
+## 2026-11-22 电力现货市场负电价时点数分列“日前 / 实时”展示 (`SpotElectricityView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：将「负电价时点数」KPI 卡片、区间（按日/按月/按时段）图表柱状系列与 Tooltip、桌面端汇总表格、移动端卡片及 Excel 导出拆分为「日前负电价」与「实时负电价」两列独立展示与占比统计。
+
+## 2026-11-21 智慧供热平台全页面与多标签窄屏手机端响应式适配
+
+- **`src/projects/daily_report_25_26/pages/PageSelectView.vue` & `src/projects/smart_heating_platform/components/{DateStepPicker,PlatformSubNav}.vue`**：修复 `theme.css` 全局 `input[type="date"]` 最小宽度导致的窄屏挤压，优化功能入口页与公用子导航的手机单/双列触控排版。
+- **`src/projects/smart_heating_platform/pages/{ExecutiveDashboardView,HourlyReportView,DailyReportView,FaultAuditView,DictCenterView,AlgorithmGuideView,SettingsView}.vue`**：
+  - 统一重构顶部控制台网格排版、折行可见式多标签切换栏、宽表首列 `sticky-col` 冻结阴影、全屏抽屉/弹窗与紧凑型多卡布局（重点修复逐小时报表分组切换器在手机端的定高裁剪缺陷、算法页长路径换行与试算器溢界）；
+  - 为驾驶舱（`72h`/`24h`/`7d`/四象限/排行/下钻曲线）及异常看板两张 ECharts 主图补充 `≤640px` 动态自适应边距与精简标签。
+
 ## 2026-11-21 重构「算法说明」通俗业务手册并升级「异常数据监测」取数诊断首屏 (`AlgorithmGuideView.vue`, `FaultAuditView.vue`)
 
 - **`src/projects/smart_heating_platform/pages/AlgorithmGuideView.vue`**：按 6 类业务主体重写全部指标为通俗易懂的「取数逻辑 / 缺数坏表降级补救 / 异常隔离边界 / 页面说明」，全面对齐 `/hrz_ls_zb/` `f209` 补水补救、锯齿电/水表隔离、每日水电对账与驾驶舱健康准入逻辑，并同步标注 `/zx_hrz/` 与 `/get_yw_data/1` 已停用。

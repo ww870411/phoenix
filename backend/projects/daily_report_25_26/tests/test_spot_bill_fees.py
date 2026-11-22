@@ -154,6 +154,39 @@ class BillFeeTests(unittest.TestCase):
         # 实时账单计算不受日前电价缺失影响
         self.assertEqual(partial['sum_beihai_spot_fee'], -1920)
 
+    def test_negative_price_counts_split_day_ahead_and_real_time(self):
+        # point 1..30 仅日前为负；point 31..50 仅实时为负；point 51..60 日前与实时同时为负
+        self.connection.execute(text(
+            "UPDATE public.spot_electricity_15min_data "
+            "SET day_ahead_price = CASE WHEN point_index <= 30 OR (point_index BETWEEN 51 AND 60) THEN -5 ELSE 100 END, "
+            "    real_time_price = CASE WHEN point_index BETWEEN 31 AND 60 THEN -8 ELSE 100 END "
+            "WHERE trade_date=:day"
+        ), {'day': self.day})
+        summary = self.summary()
+        self.assertEqual(summary['day_ahead_negative_points'], 40)
+        self.assertEqual(summary['real_time_negative_points'], 30)
+        self.assertEqual(summary['negative_price_points'], 60)
+        self.assertEqual(summary['day_ahead_negative_days'], 1)
+        self.assertEqual(summary['real_time_negative_days'], 1)
+
+        with patch.object(api, 'SessionLocal', self.factory):
+            day_str = self.day.isoformat()
+            daily = api.get_spot_electricity_daily_trends(day_str, day_str, session=None)['days'][0]
+            monthly = api.get_spot_electricity_monthly_trends(day_str, day_str, session=None)['months'][0]
+            periods = api.get_spot_electricity_period_trends(day_str, day_str, session=None)['periods']
+
+        for agg in (daily, monthly):
+            self.assertEqual(agg['day_ahead_negative_count'], 40)
+            self.assertEqual(agg['real_time_negative_count'], 30)
+            self.assertEqual(agg['negative_count'], 60)
+
+        p1 = next(p for p in periods if p['point_index'] == 1)
+        p31 = next(p for p in periods if p['point_index'] == 31)
+        p55 = next(p for p in periods if p['point_index'] == 55)
+        self.assertEqual((p1['day_ahead_negative_days_count'], p1['real_time_negative_days_count']), (1, 0))
+        self.assertEqual((p31['day_ahead_negative_days_count'], p31['real_time_negative_days_count']), (0, 1))
+        self.assertEqual((p55['day_ahead_negative_days_count'], p55['real_time_negative_days_count']), (1, 1))
+
 
 if __name__ == '__main__':
     unittest.main()

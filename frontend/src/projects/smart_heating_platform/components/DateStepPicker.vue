@@ -145,7 +145,7 @@ function onInputChange(event) {
   line-height: 32px;
   color: #0f172a;
   background: #ffffff;
-  min-width: 0;
+  min-width: 0 !important;
   box-sizing: border-box;
   outline: none;
 }
@@ -153,11 +153,20 @@ function onInputChange(event) {
 @media (max-width: 768px) {
   .date-picker-group {
     flex: 1;
+    width: 100%;
+    height: 36px;
     min-width: 0;
+  }
+  .date-step-btn {
+    padding: 0 11px;
   }
   .date-step-input {
     flex: 1;
     width: 100%;
+    min-width: 0 !important;
+    padding: 0 6px;
+    font-size: 13px;
+    line-height: 34px;
   }
 }
 </style>

@@ -1557,13 +1557,112 @@ const calcResult = computed(() => {
   .calc-grid {
     grid-template-columns: 1fr;
   }
+  .rules-grid,
+  .ops-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .shp-main {
+    padding: 12px 10px 28px;
+    gap: 12px;
+  }
+  .topbar,
+  .pipeline-card,
+  .metrics-card,
+  .explainer-card,
+  .api-guide-card {
+    padding: 14px 12px;
+  }
+  .title-row h2 {
+    font-size: 17px;
+  }
+  .topbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .topbar-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .main-tab-bar {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .main-tab-btn {
+    width: 100%;
+    justify-content: space-between;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .filter-controls,
+  .api-filter-row {
+    width: 100%;
+  }
+  .ctrl-input,
+  .compact-select {
+    width: 100%;
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+  .metric-item {
+    padding: 12px;
+  }
+  .formula-expr,
+  .metric-field,
+  .api-path-code,
+  .guard-text,
+  .formula-steps,
+  .formula-example {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  .calc-inputs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .calc-inputs label {
+    min-width: 0;
+  }
 }
 
 @media (max-width: 640px) {
-  .entity-selector-grid,
+  .entity-selector-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .entity-card {
+    padding: 11px 10px;
+    gap: 4px;
+  }
+  .entity-icon {
+    font-size: 18px;
+  }
+  .entity-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+  .entity-title {
+    font-size: 14px;
+  }
+  .entity-brief {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   .meta-strip,
   .rules-grid,
   .ops-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 380px) {
+  .calc-inputs {
     grid-template-columns: 1fr;
   }
 }

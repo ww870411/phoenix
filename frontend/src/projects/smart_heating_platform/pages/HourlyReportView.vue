@@ -331,7 +331,7 @@
         <!-- Tab 2: 9中心 / 9大网 / 15主干 / 41支线 -->
         <div v-if="activeTab === 'groups'" class="tab-panel">
           <div class="filter-bar">
-            <div class="mode-switch">
+            <div class="mode-switch group-dim-switch">
               <button
                 v-for="dim in groupDimensions"
                 :key="dim.key"
@@ -1910,32 +1910,42 @@ onBeforeUnmount(() => {
   .control-left { gap: 6px; }
   .control-left h2 { font-size: 16px; line-height: 1.35; }
   .control-right { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
-  .inline-field { width: 100%; justify-content: space-between; }
+  .inline-field { width: 100%; height: auto; justify-content: space-between; }
   .inline-field .ctrl-input { flex: 1; min-width: 0; }
-  .hour-picker-group { width: 100%; display: flex; }
-  .hour-select { flex: 1; min-width: 0; }
-  .mode-switch { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
-  .control-right > .btn { width: 100%; justify-content: center; }
+  .hour-picker-group { width: 100%; height: 36px; display: flex; }
+  .hour-select { flex: 1; min-width: 0; line-height: 34px; }
+  .mode-switch { width: 100%; height: auto; min-height: 36px; display: grid; grid-template-columns: 1fr 1fr; }
+  .mode-switch.group-dim-switch { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mode-btn { padding: 8px 6px; font-size: 12px; }
+  .control-right > .btn { width: 100%; justify-content: center; height: 36px; }
+  .gap-banner-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .gap-banner-actions > .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .gap-banner-actions > .btn { width: 100%; justify-content: center; }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .kpi-grid > .kpi-card:last-child { grid-column: 1 / -1; }
   .kpi-card { padding: 11px 12px; }
   .kpi-val { font-size: 16px; }
   .chart-section, .report-tabs-card { padding: 12px; }
   .chart-pair { grid-template-columns: 1fr; gap: 12px; }
   .chart-box { height: 220px; }
-  .tab-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; padding-bottom: 8px; }
-  .tab-btn { flex-shrink: 0; padding: 7px 12px; font-size: 12px; }
+  .tab-bar { flex-wrap: wrap; gap: 6px; padding-bottom: 10px; }
+  .tab-btn { flex: 1 1 calc(50% - 6px); padding: 8px 8px; font-size: 12px; text-align: center; }
+  .tab-btn:last-child:nth-child(odd) { flex-basis: 100%; }
   .filter-bar { gap: 8px; }
-  .filter-bar > .ctrl-input { flex: 1 1 140px; min-width: 0; }
+  .filter-bar > .ctrl-input { flex: 1 1 140px; min-width: 0 !important; }
   .data-table { font-size: 12px; }
   .data-table th, .data-table td { padding: 7px 8px; }
-  .sticky-col { max-width: 132px; overflow: hidden; text-overflow: ellipsis; }
+  .sticky-col { max-width: 124px; overflow: hidden; text-overflow: ellipsis; box-shadow: 3px 0 6px -2px rgba(15, 23, 42, 0.08); }
   .temp-stat-badges { grid-template-columns: 1fr; }
   .pie-box { height: 240px; }
-  .drawer-panel { width: 100vw; padding: 14px; }
+  .drawer-panel { width: 100vw; max-width: 100vw; padding: 14px 12px; }
+  .gap-meta-grid { grid-template-columns: 1fr; }
+  .gap-detail-btns { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+  .gap-detail-btns > .btn { width: 100%; justify-content: center; }
+  .gap-log-line { flex-wrap: wrap; word-break: break-word; }
 }
 
 @media (max-width: 420px) {
   .hour-step-btn, .hour-action-btn { padding: 0 8px; font-size: 12px; }
+  .mode-switch.group-dim-switch .mode-btn { font-size: 11px; padding: 7px 4px; }
 }
 </style>

@@ -911,8 +911,35 @@ onMounted(() => {
   .stat-card {
     padding: 12px;
   }
+  .radio-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .radio-option,
+  .checkbox-label {
+    align-items: flex-start;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .radio-option input,
+  .checkbox-label input {
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
   .numeric-fields {
     grid-template-columns: 1fr;
+  }
+  .probe-table {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .probe-table th,
+  .probe-table td {
+    padding: 8px 9px;
+  }
+  .probe-table td:last-child {
+    min-width: 160px;
+    white-space: normal;
   }
   .form-actions {
     flex-direction: column;
@@ -920,6 +947,12 @@ onMounted(() => {
   .form-actions > .btn {
     width: 100%;
     justify-content: center;
+  }
+}
+
+@media (max-width: 420px) {
+  .status-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

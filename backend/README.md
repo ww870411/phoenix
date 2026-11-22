@@ -1,3 +1,8 @@
+## 2026-11-22 电力现货市场负电价计数分列“日前电价 / 实时电价”口径 (`spot_electricity.py`)
+
+- **`projects/daily_report_25_26/api/spot_electricity.py`**：在 `/spot_electricity/summary`、`/daily_trends`、`/monthly_trends`、`/period_trends` 保留既有合并字段的同时，新增 `day_ahead_negative_*` 与 `real_time_negative_*` 分列统计字段。
+- **`projects/daily_report_25_26/tests/test_spot_bill_fees.py`**：新增 `test_negative_price_counts_split_day_ahead_and_real_time` 单元测试（9 tests OK）。
+
 ## 2026-11-21 新增「取数完整度与源头缺损诊断」接口 (`/faults/coverage`) 及去重异常汇总
 
 - **`projects/smart_heating_platform/services/report_query_service.py` & `api/faults.py`**：新增 `get_collection_coverage_diagnostics()` 与 `GET /api/v1/projects/smart_heating_platform/faults/coverage`（限 `Global_admin`），按日诊断 242 座换热站（含去重汇总 `station.anomaly_summary`：供热及工况、补水、耗电与全站任一维度异常站数）、464 户商业用户、2,097 台账室温终端及上游测点的有效覆盖与源头缺损明细。

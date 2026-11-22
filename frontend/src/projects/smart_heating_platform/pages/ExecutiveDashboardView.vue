@@ -42,7 +42,7 @@
         >
           {{ themeMode === 'dark' ? '☀️ 明亮' : '🌙 深空' }}
         </button>
-        <button type="button" class="cmd-btn" @click="toggleFullscreen">
+        <button type="button" class="cmd-btn desktop-only-btn" @click="toggleFullscreen">
           {{ isFullscreen ? '🗗 退出全屏' : '⛶ 全屏投屏' }}
         </button>
         <button type="button" class="cmd-btn accent" @click="goPage('/projects/smart_heating_platform/pages/hourly_report')">
@@ -809,6 +809,7 @@ function renderMainTrendChart() {
   }
   const p = palette()
   const isDark = themeMode.value === 'dark'
+  const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640
 
   if (trendView.value === '72h') {
     const rows = trend72h.value
@@ -830,12 +831,14 @@ function renderMainTrendChart() {
       },
       legend: {
         top: 0,
-        right: 4,
-        textStyle: { color: p.subText, fontSize: 12 },
+        left: isNarrow ? 'center' : undefined,
+        right: isNarrow ? undefined : 4,
+        type: isNarrow ? 'scroll' : 'plain',
+        textStyle: { color: p.subText, fontSize: isNarrow ? 11 : 12 },
         data: ['小时供热量(GJ)', '室外气温(℃)', '热指标(W/㎡)'],
       },
       dataZoom: [{ type: 'inside', xAxisIndex: 0 }],
-      grid: { left: 48, right: 48, top: 38, bottom: 32 },
+      grid: { left: isNarrow ? 6 : 48, right: isNarrow ? 6 : 48, top: isNarrow ? 34 : 38, bottom: isNarrow ? 24 : 32, containLabel: isNarrow },
       xAxis: {
         type: 'category',
         data: rows.map((r) => r.label),
@@ -843,23 +846,23 @@ function renderMainTrendChart() {
         axisLabel: {
           color: p.subText,
           fontSize: 10,
-          interval: 5,
+          interval: isNarrow ? 11 : 5,
           formatter: (val) => String(val).slice(0, 8),
         },
       },
       yAxis: [
         {
           type: 'value',
-          name: 'GJ / W/㎡',
+          name: isNarrow ? '' : 'GJ / W/㎡',
           nameTextStyle: { color: p.subText, fontSize: 11 },
-          axisLabel: { color: p.subText, fontSize: 11 },
+          axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
           splitLine: { lineStyle: { color: p.gridLine } },
         },
         {
           type: 'value',
-          name: '℃',
+          name: isNarrow ? '' : '℃',
           nameTextStyle: { color: '#22d3ee', fontSize: 11 },
-          axisLabel: { color: '#22d3ee', fontSize: 11 },
+          axisLabel: { color: '#22d3ee', fontSize: isNarrow ? 10 : 11 },
           splitLine: { show: false },
         },
       ],
@@ -906,8 +909,8 @@ function renderMainTrendChart() {
             ]),
           },
           markPoint: {
-            symbolSize: 34,
-            label: { fontSize: 10, color: '#0f172a', fontWeight: 700 },
+            symbolSize: isNarrow ? 28 : 34,
+            label: { fontSize: isNarrow ? 9 : 10, color: '#0f172a', fontWeight: 700 },
             itemStyle: { color: '#67e8f9' },
             data: [
               { type: 'max', name: '最高' },
@@ -938,11 +941,13 @@ function renderMainTrendChart() {
       },
       legend: {
         top: 0,
-        right: 4,
-        textStyle: { color: p.subText, fontSize: 12 },
+        left: isNarrow ? 'center' : undefined,
+        right: isNarrow ? undefined : 4,
+        type: isNarrow ? 'scroll' : 'plain',
+        textStyle: { color: p.subText, fontSize: isNarrow ? 11 : 12 },
         data: ['今日供热量(GJ)', '昨日同期(GJ)', '室外气温(℃)', '热指标(W/㎡)'],
       },
-      grid: { left: 48, right: 48, top: 38, bottom: 26 },
+      grid: { left: isNarrow ? 6 : 48, right: isNarrow ? 6 : 48, top: isNarrow ? 34 : 38, bottom: 26, containLabel: isNarrow },
       xAxis: {
         type: 'category',
         data: rows.map((r) => r.label),
@@ -950,22 +955,22 @@ function renderMainTrendChart() {
         axisLabel: {
           color: (val) => (val === activeLbl ? '#38bdf8' : p.subText),
           fontWeight: (val) => (val === activeLbl ? 700 : 400),
-          fontSize: 11,
+          fontSize: isNarrow ? 10 : 11,
         },
       },
       yAxis: [
         {
           type: 'value',
-          name: 'GJ / W/㎡',
+          name: isNarrow ? '' : 'GJ / W/㎡',
           nameTextStyle: { color: p.subText, fontSize: 11 },
-          axisLabel: { color: p.subText, fontSize: 11 },
+          axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
           splitLine: { lineStyle: { color: p.gridLine } },
         },
         {
           type: 'value',
-          name: '℃',
+          name: isNarrow ? '' : '℃',
           nameTextStyle: { color: '#38bdf8', fontSize: 11 },
-          axisLabel: { color: '#38bdf8', fontSize: 11 },
+          axisLabel: { color: '#38bdf8', fontSize: isNarrow ? 10 : 11 },
           splitLine: { show: false },
         },
       ],
@@ -1013,8 +1018,8 @@ function renderMainTrendChart() {
             ]),
           },
           markPoint: {
-            symbolSize: 34,
-            label: { fontSize: 10, color: '#0f172a', fontWeight: 700 },
+            symbolSize: isNarrow ? 28 : 34,
+            label: { fontSize: isNarrow ? 9 : 10, color: '#0f172a', fontWeight: 700 },
             itemStyle: { color: '#67e8f9' },
             data: [
               { type: 'max', name: '最高' },
@@ -1044,30 +1049,32 @@ function renderMainTrendChart() {
       },
       legend: {
         top: 0,
-        right: 4,
-        textStyle: { color: p.subText, fontSize: 12 },
+        left: isNarrow ? 'center' : undefined,
+        right: isNarrow ? undefined : 4,
+        type: isNarrow ? 'scroll' : 'plain',
+        textStyle: { color: p.subText, fontSize: isNarrow ? 11 : 12 },
         data: ['日供热量(GJ)', '日均气温(℃)', '日最低温(℃)'],
       },
-      grid: { left: 56, right: 48, top: 38, bottom: 26 },
+      grid: { left: isNarrow ? 6 : 56, right: isNarrow ? 6 : 48, top: isNarrow ? 34 : 38, bottom: 26, containLabel: isNarrow },
       xAxis: {
         type: 'category',
         data: rows.map((r) => (r.is_partial ? `${r.label}(${r.hours_count}h)` : r.label)),
         axisLine: { lineStyle: { color: p.gridLine } },
-        axisLabel: { color: p.subText, fontSize: 11 },
+        axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
       },
       yAxis: [
         {
           type: 'value',
-          name: '日供热 (GJ)',
+          name: isNarrow ? '' : '日供热 (GJ)',
           nameTextStyle: { color: p.subText, fontSize: 11 },
-          axisLabel: { color: p.subText, fontSize: 11 },
+          axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
           splitLine: { lineStyle: { color: p.gridLine } },
         },
         {
           type: 'value',
-          name: '℃',
+          name: isNarrow ? '' : '℃',
           nameTextStyle: { color: '#22d3ee', fontSize: 11 },
-          axisLabel: { color: '#22d3ee', fontSize: 11 },
+          axisLabel: { color: '#22d3ee', fontSize: isNarrow ? 10 : 11 },
           splitLine: { show: false },
         },
       ],
@@ -1119,6 +1126,7 @@ function renderCenterChart() {
   if (!centerChart) centerChart = echarts.init(centerChartEl.value)
   const p = palette()
   const list = centerList.value
+  const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640
 
   if (centerView.value === 'quadrant') {
     const valid = list.filter((c) => c.heat_per_wan_gj != null && c.avg_room_temp != null)
@@ -1143,22 +1151,22 @@ function renderCenterChart() {
           `
         },
       },
-      grid: { left: 44, right: 20, top: 24, bottom: 36 },
+      grid: { left: isNarrow ? 8 : 44, right: isNarrow ? 12 : 20, top: 24, bottom: 36, containLabel: isNarrow },
       xAxis: {
         type: 'value',
         name: '万平耗热 (GJ/万㎡·h)',
         nameLocation: 'middle',
         nameGap: 22,
-        nameTextStyle: { color: p.subText, fontSize: 11 },
-        axisLabel: { color: p.subText, fontSize: 11 },
+        nameTextStyle: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
+        axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
         splitLine: { lineStyle: { color: p.gridLine } },
         scale: true,
       },
       yAxis: {
         type: 'value',
-        name: '室温 (℃)',
+        name: isNarrow ? '' : '室温 (℃)',
         nameTextStyle: { color: p.subText, fontSize: 11 },
-        axisLabel: { color: p.subText, fontSize: 11 },
+        axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
         splitLine: { lineStyle: { color: p.gridLine } },
         scale: true,
       },
@@ -1172,7 +1180,7 @@ function renderCenterChart() {
             if (h <= avgHeatPerWan && t >= targetRoom) color = '#34d399'
             else if (h > avgHeatPerWan && t >= targetRoom) color = '#fbbf24'
             else if (h > avgHeatPerWan && t < targetRoom) color = '#f87171'
-            const size = Math.max(18, Math.min(46, Math.sqrt(Number(c.covered_area_wan || 100)) * 2.1))
+            const size = Math.max(isNarrow ? 14 : 18, Math.min(isNarrow ? 34 : 46, Math.sqrt(Number(c.covered_area_wan || 100)) * 2.1))
             return {
               name: c.group_name,
               value: [h, t],
@@ -1193,7 +1201,7 @@ function renderCenterChart() {
             position: 'top',
             formatter: (pr) => String(pr.data?.name || '').replace('服务中心', ''),
             color: p.text,
-            fontSize: 11,
+            fontSize: isNarrow ? 10 : 11,
           },
           markLine: {
             silent: true,
@@ -1218,16 +1226,16 @@ function renderCenterChart() {
         borderColor: p.tooltipBorder,
         textStyle: { color: p.tooltipText, fontSize: 12 },
       },
-      grid: { left: 84, right: 44, top: 14, bottom: 24 },
+      grid: { left: isNarrow ? 6 : 84, right: isNarrow ? 42 : 44, top: 14, bottom: 24, containLabel: isNarrow },
       xAxis: {
         type: 'value',
-        axisLabel: { color: p.subText, fontSize: 11 },
+        axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 },
         splitLine: { lineStyle: { color: p.gridLine } },
       },
       yAxis: {
         type: 'category',
         data: sorted.map((c) => String(c.group_name || '').replace('服务中心', '')),
-        axisLabel: { color: p.text, fontSize: 11 },
+        axisLabel: { color: p.text, fontSize: isNarrow ? 10.5 : 11 },
         axisLine: { lineStyle: { color: p.gridLine } },
       },
       series: [
@@ -1324,14 +1332,15 @@ function renderDrawerChart(rows) {
   if (!drawerChartEl.value) return
   if (!drawerChart) drawerChart = echarts.init(drawerChartEl.value)
   const p = palette()
+  const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 640
   drawerChart.setOption({
     tooltip: { trigger: 'axis', backgroundColor: p.tooltipBg, borderColor: p.tooltipBorder, textStyle: { color: p.tooltipText, fontSize: 12 } },
-    legend: { top: 0, textStyle: { color: p.subText, fontSize: 11 }, data: ['供热量(GJ)', '一网供温(℃)', '一网回温(℃)'] },
-    grid: { left: 42, right: 42, top: 34, bottom: 24 },
-    xAxis: { type: 'category', data: rows.map((r) => r.label), axisLabel: { color: p.subText, fontSize: 11 } },
+    legend: { top: 0, type: isNarrow ? 'scroll' : 'plain', textStyle: { color: p.subText, fontSize: 11 }, data: ['供热量(GJ)', '一网供温(℃)', '一网回温(℃)'] },
+    grid: { left: isNarrow ? 6 : 42, right: isNarrow ? 6 : 42, top: 34, bottom: 24, containLabel: isNarrow },
+    xAxis: { type: 'category', data: rows.map((r) => r.label), axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 } },
     yAxis: [
-      { type: 'value', name: 'GJ', axisLabel: { color: p.subText, fontSize: 11 }, splitLine: { lineStyle: { color: p.gridLine } } },
-      { type: 'value', name: '℃', axisLabel: { color: p.subText, fontSize: 11 }, splitLine: { show: false } },
+      { type: 'value', name: isNarrow ? '' : 'GJ', axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 }, splitLine: { lineStyle: { color: p.gridLine } } },
+      { type: 'value', name: isNarrow ? '' : '℃', axisLabel: { color: p.subText, fontSize: isNarrow ? 10 : 11 }, splitLine: { show: false } },
     ],
     series: [
       { name: '供热量(GJ)', type: 'bar', itemStyle: { color: '#fb923c', borderRadius: [4, 4, 0, 0] }, data: rows.map((r) => r.hour_heat_gj) },
@@ -2347,10 +2356,62 @@ onBeforeUnmount(() => {
   .bottom-grid { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 768px) {
+  .dash-root { padding: 10px 10px 26px; }
+  .desktop-only-btn { display: none; }
+  .cmd-header { padding: 12px; gap: 10px; }
+  .cmd-title-wrap h1 { font-size: 16px; line-height: 1.3; }
+  .cmd-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .cmd-actions :deep(.date-picker-group),
+  .cmd-actions .hour-ctrl {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 36px;
+    display: flex;
+  }
+  .hour-select { flex: 1; min-width: 0; }
+  .cmd-actions .cmd-btn {
+    width: 100%;
+    height: 36px;
+    justify-content: center;
+    padding: 0 8px;
+  }
+  .brief-bar { padding: 10px 12px; gap: 8px; }
+  .brief-highlights { gap: 6px; }
+  .stage-card, .sub-card { padding: 12px; }
+  .card-head { gap: 8px; }
+  .seg-switch { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+  .seg-btn { padding: 7px 6px; font-size: 11.5px; text-align: center; }
+  .seg-switch.full { grid-auto-flow: initial; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .rdfz-meta { flex-wrap: wrap; }
+  .ms-row { flex-wrap: wrap; }
+  .drawer-panel { width: 100vw; max-width: 100vw; padding: 14px 12px; }
+  .drawer-head h3 { font-size: 14.5px; }
+  .drawer-chart { height: 210px; }
+}
+
 @media (max-width: 640px) {
-  .dash-root { padding: 10px 10px 24px; }
-  .kpi-deck { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .kpi-value { font-size: 19px; }
-  .hour-scrubber { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .kpi-deck { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kpi-card { padding: 11px 12px; gap: 6px; }
+  .kpi-label { font-size: 11.5px; white-space: normal; }
+  .kpi-value { font-size: 18px; }
+  .split-pair { font-size: 15px; flex-wrap: wrap; white-space: normal; }
+  .ring-wrap, .ring-svg { width: 46px; height: 46px; }
+  .ring-center { font-size: 10px; }
+  .chart-hero, .chart-hero.with-scrubber { height: 245px; }
+  .chart-side { height: 255px; }
+  .chart-donut { height: 205px; min-height: 190px; }
+  .hour-scrubber { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+  .scrub-dot { padding: 6px 0; font-size: 11px; }
+}
+
+@media (max-width: 380px) {
+  .temp-dist-pills { grid-template-columns: 1fr; }
+  .kpi-value { font-size: 16.5px; }
 }
 </style>

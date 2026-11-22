@@ -1,5 +1,41 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-22 电力现货市场负电价时点数按“日前电价 / 实时电价”分列统计与展示
+
+- **改动缘由**：
+  - 原电力现货页面（`SpotElectricityView.vue`）及对应后端接口仅以 `real_time_price < 0 OR day_ahead_price < 0` 合并统计“负电价时点数/天数”，无法区分负电价究竟发生在日前出清还是实时出清阶段。
+- **改动清单**：
+  - **`backend/projects/daily_report_25_26/api/spot_electricity.py`**：
+    - 在 `/spot_electricity/summary`、`/daily_trends`、`/monthly_trends` 与 `/period_trends` 接口中保留原有合并字段（兼容驾驶舱等既有调用），新增分列指标：`day_ahead_negative_points` / `real_time_negative_points`、`day_ahead_negative_days` / `real_time_negative_days`、`day_ahead_negative_count` / `real_time_negative_count` 及 `day_ahead_negative_days_count` / `real_time_negative_days_count`。
+  - **`backend/projects/daily_report_25_26/tests/test_spot_bill_fees.py`**：
+    - 新增 `test_negative_price_counts_split_day_ahead_and_real_time`，覆盖仅日前为负、仅实时为负、双负重叠及跨日/月/时段聚合接口断言。
+  - **`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+    - 顶部 KPI 卡片「负电价时点数」改为“日前 / 实时”双列主数值与各自占比/天数对比；
+    - 区间走势图（按日、按月、按时段）及指标切换标签将原单一负电价系列拆分为「日前负电价点数/天数」（蓝）与「实时负电价点数/天数」（红），同步更新 Tooltip；
+    - 日度汇总表、月度聚合表、时段聚合表、移动端卡片及 Excel 导出均拆分为日前、实时两列展示。
+- **验证结果**：
+  - `docker exec phoenix_backend python -m unittest backend.projects.daily_report_25_26.tests.test_spot_bill_fees -v`：**9 tests OK**；
+  - `docker exec phoenix_frontend npm run build`：**`✓ built in 29.11s`（0 错误）**。
+
+## 2026-11-21 智慧供热平台全模块窄屏手机响应式排版适配
+
+- **改动缘由**：
+  - 围绕手机端（`≤768px` / `≤640px` / `≤420px`）使用体验，全面排查 `/projects/smart_heating_platform/pages` 入口及其下全部 7 个页面与多标签页、抽屉弹窗及 ECharts 图表，解决窄屏下日期输入框最小宽度撑破、逐小时分组切换 `.mode-switch` 固定高度裁剪、多标签隐藏难察觉、宽表横滑丢失首列主体名、驾驶舱混合指标换行溢出与 ECharts 坐标拥挤等问题。
+- **改动清单**：
+  - **入口与公用组件**：
+    - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`：窄屏下 `.card-grid` 单列全宽排布、允许长标题自然换行、卡片高度自适应。
+    - `frontend/src/projects/smart_heating_platform/components/DateStepPicker.vue` & `PlatformSubNav.vue`：覆写全局 `theme.css` 的 `input[type="date"] { min-width: 180px }` 避免窄屏挤压溢出，增大手机端触控高度与 2×2 子导航适配。
+  - **7 大业务页面与全部标签页**：
+    - `ExecutiveDashboardView.vue`（驾驶舱）：手机端隐藏 16:9 投屏按钮并用 2 列控制网格式重排顶栏控件；修复 `补水/耗电` 双数值在半卡内的换行溢界；将 `24h` 刻度条从极细 12 列改为 8 列舒适触控格、4 榜单标签改为 2×2 网格；全面升级 `72h`/`24h`/`7d`/四象限/排行/下钻抽屉图表的 `isNarrow` 自适应布局与全屏抽屉宽度。
+    - `HourlyReportView.vue`（逐小时 5 标签 + 3 抽屉）：修复「服务中心与热网」标签页 `group-dim-switch` 3 项分组受 `.mode-switch` 定高 `34px` 裁剪的严重截断问题；改为可见折行式多标签按钮、补齐 `sticky-col` 左侧阴影指示及真空期缺口抽屉单列元信息排版。
+    - `DailyReportView.vue`（日报 3 标签）：为全部 3 个报表首列（服务中心/换热站/商业户）增加 `sticky-col` 固定左侧，补全 `mode-switch` 2 列适配、5 张 KPI 卡末项通栏与商户 4 态统计徽标 2×2 布局。
+    - `FaultAuditView.vue`（异常监测 3 标签）：3 个主标签页改为全宽清晰切换条，第 2 页 4 类主体子标签改为 2×2 网格、全表格首列 `sticky` 固定，并针对窄屏缩小两张 ECharts 主图的边距、图例与柱右标签防遮挡。
+    - `DictCenterView.vue`（8 类台账 + 弹窗）：9 类主体末项跨列防孤立、补齐全表格首列 `sticky-col`、弹窗按钮全宽适配。
+    - `AlgorithmGuideView.vue`（2 标签 + 试算器）：新增完整 `≤768px` / `≤640px` 响应式规则（6 专题改 2 列紧凑网格减少首屏下滑深度、清理 `.ctrl-input` 的 `min-width: 220px` 溢出、长代码/接口路径自动折行与 2 列表单防溢出）。
+    - `SettingsView.vue`（采集选项）：单选接入模式改为纵向易于点击的选项排布，复选框顶部对齐且连通性探针明细表支持横向滑动。
+- **验证结果**：
+  - `cd frontend && npm run build`：**`✓ built`（0 错误）**。
+
 ## 2026-11-21 优化「异常总览看板」领导管理向文案口径、去重异常汇总与双图视觉排版
 
 - **改动缘由**：

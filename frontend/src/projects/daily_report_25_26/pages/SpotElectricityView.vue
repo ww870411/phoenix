@@ -254,37 +254,53 @@
               <span>负电价时点数</span>
               <span class="kpi-unit">个时段 (15min)</span>
             </div>
-            <div class="kpi-value text-blue">
-              {{ summary?.negative_price_points ?? 0 }}
+            <div class="kpi-neg-split">
+              <div class="kpi-neg-col" title="日前电价 < 0 的 15 分钟时点数">
+                <span class="kpi-neg-tag text-blue">日前</span>
+                <span class="kpi-value text-blue kpi-neg-num">
+                  {{ dayAheadNegPoints }}
+                </span>
+              </div>
+              <div class="kpi-neg-divider"></div>
+              <div class="kpi-neg-col" title="实时电价 < 0 的 15 分钟时点数">
+                <span class="kpi-neg-tag text-orange">实时</span>
+                <span class="kpi-value text-orange kpi-neg-num">
+                  {{ realTimeNegPoints }}
+                </span>
+              </div>
             </div>
-            <!-- 单日模式：展示时段占比与分子分母 -->
-            <div v-if="viewMode === 'single'" class="kpi-sub">
-              <span>占全天时段:</span>
-              <span v-if="(summary?.negative_price_points ?? 0) > 0" class="badge-blue">
-                {{ negativePointRatioText }} ({{ summary?.negative_price_points ?? 0 }}/{{ totalQueryPoints.toLocaleString() }})
+            <!-- 单日模式：分列展示日前与实时全天时段占比 -->
+            <div v-if="viewMode === 'single'" class="kpi-sub kpi-sub-dual">
+              <span
+                class="sub-item"
+                :title="`日前负电价时段占比：${dayAheadNegPoints}/${totalQueryPoints.toLocaleString()} (${dayAheadNegRatioText})`"
+              >
+                日前: <span :class="dayAheadNegPoints > 0 ? 'badge-blue' : 'text-muted'">{{ dayAheadNegRatioText }} ({{ dayAheadNegPoints }}/{{ totalQueryPoints.toLocaleString() }})</span>
               </span>
-              <span v-else class="text-muted">
-                0.0% (0/{{ totalQueryPoints.toLocaleString() }})
+              <span
+                class="sub-item"
+                :title="`实时负电价时段占比：${realTimeNegPoints}/${totalQueryPoints.toLocaleString()} (${realTimeNegRatioText})`"
+              >
+                实时: <span :class="realTimeNegPoints > 0 ? 'badge-orange' : 'text-muted'">{{ realTimeNegRatioText }} ({{ realTimeNegPoints }}/{{ totalQueryPoints.toLocaleString() }})</span>
               </span>
             </div>
 
-            <!-- 区间走势分析：单行双指标（左侧时段占比，右侧天数及占比），高度与前序卡片严丝合缝对齐 -->
+            <!-- 区间走势分析：分列展示日前与实时各自的时段占比及出现天数 -->
             <div
               v-else
               class="kpi-sub kpi-sub-dual"
             >
               <span
                 class="sub-item"
-                :title="`选定区间负电价时点数：${summary?.negative_price_points ?? 0}点，占总查询时段(${totalQueryPoints.toLocaleString()}点)的 ${negativePointRatioText}`"
+                :title="`日前负电价：${dayAheadNegPoints}点 / ${totalQueryPoints.toLocaleString()}点（${dayAheadNegRatioText}）；出现 ${dayAheadNegDaysCount} 天 / ${totalQueryDays} 天（${dayAheadNegDaysRatioText}）`"
               >
-                时段占比: <strong class="text-blue">{{ negativePointRatioText }}</strong>
+                日前: <span :class="dayAheadNegPoints > 0 ? 'badge-blue' : 'text-muted'">{{ dayAheadNegRatioText }} · {{ dayAheadNegDaysCount }}天</span>
               </span>
               <span
                 class="sub-item"
-                :title="`选定区间出现负电价的天数：${negativeDaysCount}天，占总查询天数(${totalQueryDays}天)的 ${negativeDaysRatioText}`"
+                :title="`实时负电价：${realTimeNegPoints}点 / ${totalQueryPoints.toLocaleString()}点（${realTimeNegRatioText}）；出现 ${realTimeNegDaysCount} 天 / ${totalQueryDays} 天（${realTimeNegDaysRatioText}）`"
               >
-                天数: <span v-if="negativeDaysCount > 0" class="badge-blue">{{ negativeDaysCount }}天 (占比{{ negativeDaysRatioText }})</span>
-                <span v-else class="text-muted">0天 (占比0.0%)</span>
+                实时: <span :class="realTimeNegPoints > 0 ? 'badge-orange' : 'text-muted'">{{ realTimeNegRatioText }} · {{ realTimeNegDaysCount }}天</span>
               </span>
             </div>
           </div>
@@ -688,13 +704,22 @@
                 实时日均价
               </button>
               <button
-                :class="['indicator-chip', 'chip-red', { active: visibleRangeSeries.negativeCount }]"
+                :class="['indicator-chip', 'chip-blue', { active: visibleRangeSeries.dayAheadNegCount }]"
                 type="button"
-                title="点击切换负电价时点数显示"
-                @click="toggleRangeSeries('negativeCount')"
+                title="点击切换日前负电价时点数柱状图显示"
+                @click="toggleRangeSeries('dayAheadNegCount')"
               >
                 <span class="chip-bar"></span>
-                负电价时点数
+                日前负电价点数
+              </button>
+              <button
+                :class="['indicator-chip', 'chip-red', { active: visibleRangeSeries.realTimeNegCount }]"
+                type="button"
+                title="点击切换实时负电价时点数柱状图显示"
+                @click="toggleRangeSeries('realTimeNegCount')"
+              >
+                <span class="chip-bar"></span>
+                实时负电价点数
               </button>
             </template>
             <!-- 区间模式：按每月平均值 -->
@@ -727,13 +752,22 @@
                 月均价差
               </button>
               <button
-                :class="['indicator-chip', 'chip-red', { active: visibleMonthlySeries.negativeCount }]"
+                :class="['indicator-chip', 'chip-blue', { active: visibleMonthlySeries.dayAheadNegCount }]"
                 type="button"
-                title="点击切换负电价时点数显示"
-                @click="toggleMonthlySeries('negativeCount')"
+                title="点击切换日前负电价时点数柱状图显示"
+                @click="toggleMonthlySeries('dayAheadNegCount')"
               >
                 <span class="chip-bar"></span>
-                负电价时点数
+                日前负电价点数
+              </button>
+              <button
+                :class="['indicator-chip', 'chip-red', { active: visibleMonthlySeries.realTimeNegCount }]"
+                type="button"
+                title="点击切换实时负电价时点数柱状图显示"
+                @click="toggleMonthlySeries('realTimeNegCount')"
+              >
+                <span class="chip-bar"></span>
+                实时负电价点数
               </button>
             </template>
             <!-- 区间模式：按时段平均值 (0:15~24:00) -->
@@ -766,13 +800,22 @@
                 平均价差
               </button>
               <button
-                :class="['indicator-chip', 'chip-red', { active: visiblePeriodSeries.negativeDays }]"
+                :class="['indicator-chip', 'chip-blue', { active: visiblePeriodSeries.dayAheadNegDays }]"
                 type="button"
-                title="点击切换负电价发生天数柱状图显示"
-                @click="togglePeriodSeries('negativeDays')"
+                title="点击切换日前负电价发生天数柱状图显示"
+                @click="togglePeriodSeries('dayAheadNegDays')"
               >
                 <span class="chip-bar"></span>
-                负电价天数
+                日前负电价天数
+              </button>
+              <button
+                :class="['indicator-chip', 'chip-red', { active: visiblePeriodSeries.realTimeNegDays }]"
+                type="button"
+                title="点击切换实时负电价发生天数柱状图显示"
+                @click="togglePeriodSeries('realTimeNegDays')"
+              >
+                <span class="chip-bar"></span>
+                实时负电价天数
               </button>
             </template>
           </div>
@@ -895,8 +938,8 @@
               </div>
 
               <div class="card-bottom-info">
-                <span>负电价: {{ item.negative_days_count }} 天</span>
-                <span>北海均值: {{ item.avg_beihai_sales != null ? `${item.avg_beihai_sales} MWh` : '—' }}</span>
+                <span>日前负电价: {{ item.day_ahead_negative_days_count ?? 0 }} 天</span>
+                <span>实时负电价: {{ item.real_time_negative_days_count ?? 0 }} 天</span>
               </div>
             </div>
           </template>
@@ -919,7 +962,7 @@
                   <span class="period-text">{{ item.day_count }} 天 / {{ item.point_count }} 点位</span>
                 </div>
                 <div class="status-wrap">
-                  <span v-if="isMonthlyNegative(item)" class="badge-neg">❄️ 负电价 ({{ item.negative_count }}点)</span>
+                  <span v-if="isMonthlyNegative(item)" class="badge-neg">❄️ 日前{{ item.day_ahead_negative_count ?? 0 }} / 实时{{ item.real_time_negative_count ?? 0 }}</span>
                 </div>
               </div>
 
@@ -945,8 +988,8 @@
               </div>
 
               <div class="card-bottom-info">
-                <span>负电价: {{ item.negative_count }} 时点</span>
-                <span>北海售电: {{ item.beihai_sales != null ? `${formatNum(item.beihai_sales)} MWh` : '—' }}</span>
+                <span>日前负电价: {{ item.day_ahead_negative_count ?? 0 }} 点</span>
+                <span>实时负电价: {{ item.real_time_negative_count ?? 0 }} 点</span>
               </div>
             </div>
           </template>
@@ -968,7 +1011,7 @@
                   <span class="time-text font-bold">{{ item.trade_date }}</span>
                 </div>
                 <div class="status-wrap">
-                  <span v-if="(item.negative_count || 0) > 0" class="badge-neg">❄️ 负电价 ({{ item.negative_count }}点)</span>
+                  <span v-if="(item.negative_count || 0) > 0" class="badge-neg">❄️ 日前{{ item.day_ahead_negative_count ?? 0 }} / 实时{{ item.real_time_negative_count ?? 0 }}</span>
                 </div>
               </div>
 
@@ -1064,7 +1107,8 @@
                 <th class="col-right">日前均价 (元/MWh)</th>
                 <th class="col-right">实时均价 (元/MWh)</th>
                 <th class="col-right">平均价差 (元/MWh)</th>
-                <th class="col-right">负电价天数</th>
+                <th class="col-right">日前负电价 (天)</th>
+                <th class="col-right">实时负电价 (天)</th>
                 <th class="col-right">北海平均 (MWh)</th>
                 <th class="col-right">香海平均 (MWh)</th>
               </tr>
@@ -1100,8 +1144,13 @@
                 <td :class="['col-right mono font-bold', getSpreadColorClass(item.avg_price_spread)]">
                   {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
                 </td>
-                <td class="col-right mono font-bold text-danger">
-                  {{ item.negative_days_count }} 天
+                <td class="col-right mono font-bold text-blue">
+                  <span v-if="(item.day_ahead_negative_days_count ?? 0) > 0">{{ item.day_ahead_negative_days_count }} 天</span>
+                  <span v-else class="text-muted">0 天</span>
+                </td>
+                <td class="col-right mono font-bold text-orange">
+                  <span v-if="(item.real_time_negative_days_count ?? 0) > 0">{{ item.real_time_negative_days_count }} 天</span>
+                  <span v-else class="text-muted">0 天</span>
                 </td>
                 <td class="col-right mono text-muted">
                   {{ item.avg_beihai_sales != null ? formatNum(item.avg_beihai_sales) : '—' }}
@@ -1123,7 +1172,8 @@
                 <th class="col-right">日前月均价 (元/MWh)</th>
                 <th class="col-right">实时月均价 (元/MWh)</th>
                 <th class="col-right">月均价差 (元/MWh)</th>
-                <th class="col-right">负电价时点数</th>
+                <th class="col-right">日前负电价 (点)</th>
+                <th class="col-right">实时负电价 (点)</th>
                 <th class="col-right">北海总售电 (MWh)</th>
                 <th class="col-right">香海总售电 (MWh)</th>
               </tr>
@@ -1159,8 +1209,13 @@
                 <td :class="['col-right mono font-bold', getSpreadColorClass(item.avg_price_spread)]">
                   {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
                 </td>
-                <td class="col-right mono font-bold text-danger">
-                  {{ item.negative_count }}
+                <td class="col-right mono font-bold text-blue">
+                  <span v-if="(item.day_ahead_negative_count ?? 0) > 0" class="badge-neg-inline">❄️ {{ item.day_ahead_negative_count }}</span>
+                  <span v-else class="text-muted">0</span>
+                </td>
+                <td class="col-right mono font-bold text-orange">
+                  <span v-if="(item.real_time_negative_count ?? 0) > 0" class="badge-neg-inline">❄️ {{ item.real_time_negative_count }}</span>
+                  <span v-else class="text-muted">0</span>
                 </td>
                 <td class="col-right mono text-muted">
                   {{ item.beihai_sales != null ? formatNum(item.beihai_sales) : '—' }}
@@ -1181,7 +1236,8 @@
                 <th class="col-right">日前日均价 (元/MWh)</th>
                 <th class="col-right">实时日均价 (元/MWh)</th>
                 <th class="col-right">日均价差 (元/MWh)</th>
-                <th class="col-right">负电价时点数</th>
+                <th class="col-right">日前负电价 (点)</th>
+                <th class="col-right">实时负电价 (点)</th>
                 <th class="col-right">北海总售电 (MWh)</th>
                 <th class="col-right">香海总售电 (MWh)</th>
                 <th class="col-right">两厂总售电 (MWh)</th>
@@ -1217,8 +1273,12 @@
                 <td :class="['col-right mono font-bold', getSpreadColorClass(item.avg_price_spread)]">
                   {{ (item.avg_price_spread ?? 0) > 0 ? '+' : '' }}{{ formatNum(item.avg_price_spread) }}
                 </td>
-                <td class="col-right mono font-bold text-danger">
-                  <span v-if="item.negative_count > 0" class="badge-neg-inline">❄️ {{ item.negative_count }} 点</span>
+                <td class="col-right mono font-bold text-blue">
+                  <span v-if="(item.day_ahead_negative_count ?? 0) > 0" class="badge-neg-inline">❄️ {{ item.day_ahead_negative_count }} 点</span>
+                  <span v-else class="text-muted">0</span>
+                </td>
+                <td class="col-right mono font-bold text-orange">
+                  <span v-if="(item.real_time_negative_count ?? 0) > 0" class="badge-neg-inline">❄️ {{ item.real_time_negative_count }} 点</span>
                   <span v-else class="text-muted">0</span>
                 </td>
                 <td class="col-right mono text-muted">
@@ -1695,13 +1755,21 @@ const totalQueryPoints = computed(() => {
   return summary.value?.point_count || points.value?.length || 0
 })
 
-const negativePointRatioText = computed(() => {
-  const neg = summary.value?.negative_price_points ?? 0
-  const total = totalQueryPoints.value
-  if (!total || total <= 0) return '0.0%'
-  const pct = (neg / total) * 100
-  return `${pct.toFixed(1)}%`
-})
+function formatRatioPercent(numerator, denominator) {
+  if (!denominator || denominator <= 0) return '0.0%'
+  return `${(((numerator || 0) / denominator) * 100).toFixed(1)}%`
+}
+
+function sumNegFromDailyTrends(field) {
+  return Array.isArray(dailyTrends.value)
+    ? dailyTrends.value.filter((d) => (d[field] || 0) > 0).length
+    : 0
+}
+
+const dayAheadNegPoints = computed(() => summary.value?.day_ahead_negative_points ?? 0)
+const realTimeNegPoints = computed(() => summary.value?.real_time_negative_points ?? 0)
+const dayAheadNegRatioText = computed(() => formatRatioPercent(dayAheadNegPoints.value, totalQueryPoints.value))
+const realTimeNegRatioText = computed(() => formatRatioPercent(realTimeNegPoints.value, totalQueryPoints.value))
 
 // 区间走势分析：总查询天数
 const totalQueryDays = computed(() => {
@@ -1714,25 +1782,23 @@ const totalQueryDays = computed(() => {
   return 0
 })
 
-// 区间走势分析：负电价天数（优先后端权威统计，兜底由前端日走势聚合）
-const negativeDaysCount = computed(() => {
-  if (summary.value?.negative_price_days != null) {
-    return Number(summary.value.negative_price_days)
+// 区间走势分析：分口径负电价天数（优先后端权威统计，兜底由前端日走势聚合）
+const dayAheadNegDaysCount = computed(() => {
+  if (summary.value?.day_ahead_negative_days != null) {
+    return Number(summary.value.day_ahead_negative_days)
   }
-  if (Array.isArray(dailyTrends.value) && dailyTrends.value.length > 0) {
-    return dailyTrends.value.filter((d) => (d.negative_count || 0) > 0).length
-  }
-  return 0
+  return sumNegFromDailyTrends('day_ahead_negative_count')
 })
 
-// 区间走势分析：负电价天数占比文本
-const negativeDaysRatioText = computed(() => {
-  const days = totalQueryDays.value
-  if (!days || days <= 0) return '0.0%'
-  const negDays = negativeDaysCount.value
-  const pct = (negDays / days) * 100
-  return `${pct.toFixed(1)}%`
+const realTimeNegDaysCount = computed(() => {
+  if (summary.value?.real_time_negative_days != null) {
+    return Number(summary.value.real_time_negative_days)
+  }
+  return sumNegFromDailyTrends('real_time_negative_count')
 })
+
+const dayAheadNegDaysRatioText = computed(() => formatRatioPercent(dayAheadNegDaysCount.value, totalQueryDays.value))
+const realTimeNegDaysRatioText = computed(() => formatRatioPercent(realTimeNegDaysCount.value, totalQueryDays.value))
 
 const chartRef = ref(null)
 let chartInstance = null
@@ -1747,21 +1813,24 @@ const visibleSeries = ref({
 const visibleRangeSeries = ref({
   dayAheadAvg: true,
   realTimeAvg: true,
-  negativeCount: false,
+  dayAheadNegCount: false,
+  realTimeNegCount: false,
 })
 
 const visibleMonthlySeries = ref({
   dayAheadAvg: true,
   realTimeAvg: true,
   spread: false,
-  negativeCount: false,
+  dayAheadNegCount: false,
+  realTimeNegCount: false,
 })
 
 const visiblePeriodSeries = ref({
   dayAheadAvg: true,
   realTimeAvg: true,
   spread: false,
-  negativeDays: false,
+  dayAheadNegDays: false,
+  realTimeNegDays: false,
 })
 
 function toggleSeries(key) {
@@ -2728,10 +2797,11 @@ function renderChart() {
     const dates = dailyTrends.value.map(d => d.trade_date)
     const daAver = dailyTrends.value.map(d => d.avg_day_ahead_price)
     const rtAver = dailyTrends.value.map(d => d.avg_real_time_price)
-    const negCounts = dailyTrends.value.map(d => d.negative_count)
+    const daNegCounts = dailyTrends.value.map(d => d.day_ahead_negative_count ?? 0)
+    const rtNegCounts = dailyTrends.value.map(d => d.real_time_negative_count ?? 0)
 
     const hasRangePrice = visibleRangeSeries.value.dayAheadAvg || visibleRangeSeries.value.realTimeAvg
-    const hasNegCount = visibleRangeSeries.value.negativeCount
+    const hasNegCount = visibleRangeSeries.value.dayAheadNegCount || visibleRangeSeries.value.realTimeNegCount
 
     const series = []
 
@@ -2761,12 +2831,23 @@ function renderChart() {
       })
     }
 
-    if (visibleRangeSeries.value.negativeCount) {
+    if (visibleRangeSeries.value.dayAheadNegCount) {
       series.push({
-        name: '负电价时点数',
+        name: '日前负电价时点数',
         type: 'bar',
         yAxisIndex: 1,
-        data: negCounts,
+        data: daNegCounts,
+        itemStyle: { color: '#3b82f6' },
+        markPoint: createMinMaxMarkPoint('#2563eb', true),
+      })
+    }
+
+    if (visibleRangeSeries.value.realTimeNegCount) {
+      series.push({
+        name: '实时负电价时点数',
+        type: 'bar',
+        yAxisIndex: 1,
+        data: rtNegCounts,
         itemStyle: { color: '#ef4444' },
         markPoint: createMinMaxMarkPoint('#ef4444', true),
       })
@@ -2837,14 +2918,18 @@ function renderChart() {
       if (onlyNegative.value && !isMonthlyItemNegativeBySelection(m)) return null
       return m.avg_price_spread
     })
-    const negCounts = monthlyTrends.value.map(m => {
+    const daNegCounts = monthlyTrends.value.map(m => {
       if (onlyNegative.value && !isMonthlyItemNegativeBySelection(m)) return null
-      return m.negative_count
+      return m.day_ahead_negative_count ?? 0
+    })
+    const rtNegCounts = monthlyTrends.value.map(m => {
+      if (onlyNegative.value && !isMonthlyItemNegativeBySelection(m)) return null
+      return m.real_time_negative_count ?? 0
     })
 
     const hasPrice = visibleMonthlySeries.value.dayAheadAvg || visibleMonthlySeries.value.realTimeAvg
     const hasSpread = visibleMonthlySeries.value.spread
-    const hasNegCount = visibleMonthlySeries.value.negativeCount
+    const hasNegCount = visibleMonthlySeries.value.dayAheadNegCount || visibleMonthlySeries.value.realTimeNegCount
     const hasRightAxis = hasSpread || hasNegCount
 
     const series = []
@@ -2909,12 +2994,23 @@ function renderChart() {
       })
     }
 
-    if (visibleMonthlySeries.value.negativeCount) {
+    if (visibleMonthlySeries.value.dayAheadNegCount) {
       series.push({
-        name: '负电价时点数',
+        name: '日前负电价时点数',
         type: 'bar',
         yAxisIndex: 1,
-        data: negCounts,
+        data: daNegCounts,
+        itemStyle: { color: '#3b82f6' },
+        markPoint: createMinMaxMarkPoint('#2563eb', true),
+      })
+    }
+
+    if (visibleMonthlySeries.value.realTimeNegCount) {
+      series.push({
+        name: '实时负电价时点数',
+        type: 'bar',
+        yAxisIndex: 1,
+        data: rtNegCounts,
         itemStyle: { color: '#ef4444' },
         markPoint: createMinMaxMarkPoint('#ef4444', true),
       })
@@ -2944,8 +3040,11 @@ function renderChart() {
           if (visibleMonthlySeries.value.spread) {
             tip += `<div style="color: ${(item.avg_price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 月均价差: <strong>${(item.avg_price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.avg_price_spread)}</strong> 元/MWh</div>`
           }
-          if (visibleMonthlySeries.value.negativeCount) {
-            tip += `<div style="color: #ef4444;">● 负电价时点数: <strong>${item.negative_count}</strong> 次</div>`
+          if (visibleMonthlySeries.value.dayAheadNegCount) {
+            tip += `<div style="color: #2563eb;">● 日前负电价时点数: <strong>${item.day_ahead_negative_count ?? 0}</strong> 点</div>`
+          }
+          if (visibleMonthlySeries.value.realTimeNegCount) {
+            tip += `<div style="color: #ef4444;">● 实时负电价时点数: <strong>${item.real_time_negative_count ?? 0}</strong> 点</div>`
           }
           return tip
         },
@@ -3012,14 +3111,18 @@ function renderChart() {
       if (onlyNegative.value && !isPeriodItemNegativeBySelection(p)) return null
       return p.avg_price_spread
     })
-    const negDays = periodTrends.value.map(p => {
+    const daNegDays = periodTrends.value.map(p => {
       if (onlyNegative.value && !isPeriodItemNegativeBySelection(p)) return null
-      return p.negative_days_count
+      return p.day_ahead_negative_days_count ?? 0
+    })
+    const rtNegDays = periodTrends.value.map(p => {
+      if (onlyNegative.value && !isPeriodItemNegativeBySelection(p)) return null
+      return p.real_time_negative_days_count ?? 0
     })
 
     const hasPrice = visiblePeriodSeries.value.dayAheadAvg || visiblePeriodSeries.value.realTimeAvg
     const hasSpread = visiblePeriodSeries.value.spread
-    const hasNegDays = visiblePeriodSeries.value.negativeDays
+    const hasNegDays = visiblePeriodSeries.value.dayAheadNegDays || visiblePeriodSeries.value.realTimeNegDays
     const hasRightAxis = hasSpread || hasNegDays
 
     const series = []
@@ -3084,12 +3187,23 @@ function renderChart() {
       })
     }
 
-    if (visiblePeriodSeries.value.negativeDays) {
+    if (visiblePeriodSeries.value.dayAheadNegDays) {
       series.push({
-        name: '负电价发生天数',
+        name: '日前负电价天数',
         type: 'bar',
         yAxisIndex: 1,
-        data: negDays,
+        data: daNegDays,
+        itemStyle: { color: '#3b82f6' },
+        markPoint: createMinMaxMarkPoint('#2563eb', true),
+      })
+    }
+
+    if (visiblePeriodSeries.value.realTimeNegDays) {
+      series.push({
+        name: '实时负电价天数',
+        type: 'bar',
+        yAxisIndex: 1,
+        data: rtNegDays,
         itemStyle: { color: '#ef4444' },
         markPoint: createMinMaxMarkPoint('#ef4444', true),
       })
@@ -3120,8 +3234,11 @@ function renderChart() {
           if (visiblePeriodSeries.value.spread) {
             tip += `<div style="color: ${(item.avg_price_spread ?? 0) >= 0 ? '#ef4444' : '#10b981'};">● 平均价差: <strong>${(item.avg_price_spread ?? 0) > 0 ? '+' : ''}${formatNum(item.avg_price_spread)}</strong> 元/MWh</div>`
           }
-          if (visiblePeriodSeries.value.negativeDays) {
-            tip += `<div style="color: #ef4444;">● 负电价天数: <strong>${item.negative_days_count}</strong> 天</div>`
+          if (visiblePeriodSeries.value.dayAheadNegDays) {
+            tip += `<div style="color: #2563eb;">● 日前负电价天数: <strong>${item.day_ahead_negative_days_count ?? 0}</strong> 天</div>`
+          }
+          if (visiblePeriodSeries.value.realTimeNegDays) {
+            tip += `<div style="color: #ef4444;">● 实时负电价天数: <strong>${item.real_time_negative_days_count ?? 0}</strong> 天</div>`
           }
           return tip
         },
@@ -3201,7 +3318,8 @@ function exportCurrentData() {
       '日前月均电价（元/兆瓦时）': p.avg_day_ahead_price,
       '实时月均电价（元/兆瓦时）': p.avg_real_time_price,
       '月均价差（元/兆瓦时）': p.avg_price_spread,
-      '负电价时点数（次）': p.negative_count,
+      '日前负电价时点数（次）': p.day_ahead_negative_count ?? 0,
+      '实时负电价时点数（次）': p.real_time_negative_count ?? 0,
       '北海月度总售电量(MWh)': p.beihai_sales,
       '香海月度总售电量(MWh)': p.xianghai_sales,
       '两厂月度总售电量(MWh)': p.total_sales,
@@ -3233,7 +3351,8 @@ function exportCurrentData() {
       '实时最高电价（元/兆瓦时）': p.max_real_time_price,
       '实时最低电价（元/兆瓦时）': p.min_real_time_price,
       '时段平均价差（元/兆瓦时）': p.avg_price_spread,
-      '负电价发生天数（天）': p.negative_days_count,
+      '日前负电价天数（天）': p.day_ahead_negative_days_count ?? 0,
+      '实时负电价天数（天）': p.real_time_negative_days_count ?? 0,
       '北海时段平均售电量(MWh)': p.avg_beihai_sales,
       '香海时段平均售电量(MWh)': p.avg_xianghai_sales,
       '两厂时段平均总售电量(MWh)': p.avg_total_sales,
@@ -3259,7 +3378,8 @@ function exportCurrentData() {
       '日前日均电价（元/兆瓦时）': p.avg_day_ahead_price,
       '实时日均电价（元/兆瓦时）': p.avg_real_time_price,
       '日均价差（元/兆瓦时）': p.avg_price_spread,
-      '负电价时点数（次）': p.negative_count,
+      '日前负电价时点数（次）': p.day_ahead_negative_count ?? 0,
+      '实时负电价时点数（次）': p.real_time_negative_count ?? 0,
       '北海日总售电量(MWh)': p.beihai_sales,
       '香海日总售电量(MWh)': p.xianghai_sales,
       '两厂日总售电量(MWh)': p.total_sales,
@@ -4676,8 +4796,40 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+.kpi-neg-split {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kpi-neg-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.kpi-neg-tag {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kpi-neg-num {
+  margin: 0;
+}
+
+.kpi-neg-divider {
+  width: 1px;
+  height: 22px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
+
 .kpi-sub-dual .badge-alert,
-.kpi-sub-dual .badge-blue {
+.kpi-sub-dual .badge-blue,
+.kpi-sub-dual .badge-orange {
   padding: 1px 5px;
   font-size: 10.5px;
 }
@@ -4709,6 +4861,15 @@ onBeforeUnmount(() => {
   color: #2563eb;
   font-weight: 600;
   background: #eff6ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.badge-orange {
+  color: #ea580c;
+  font-weight: 600;
+  background: #fff7ed;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;
@@ -4883,7 +5044,8 @@ onBeforeUnmount(() => {
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.08);
 }
-.indicator-chip.chip-blue.active .chip-dot {
+.indicator-chip.chip-blue.active .chip-dot,
+.indicator-chip.chip-blue.active .chip-bar {
   background-color: #2563eb;
   box-shadow: 0 0 4px rgba(37, 99, 235, 0.4);
 }
@@ -5457,7 +5619,8 @@ onBeforeUnmount(() => {
     gap: 3px;
   }
   .badge-alert,
-  .badge-blue {
+  .badge-blue,
+  .badge-orange {
     padding: 2px 5px;
     font-size: 9.5px;
     line-height: 1.2;

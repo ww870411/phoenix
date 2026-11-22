@@ -28,12 +28,8 @@
   "last_failure_time": "2026-11-20 16:00:24",
   "last_failure_trigger": "定时自动 (16:00)",
   "last_failure_message": "气温获取或入库失败：请求 Open-Meteo 失败: _ssl.c:994: The handshake operation timed out",
-  "executed_slots_date": "2026-11-21",
-  "executed_slots_today": {
-    "10:00": "2026-11-21 10:00:09",
-    "14:00": "2026-11-21 14:00:06",
-    "16:00": "2026-11-21 16:00:13"
-  },
+  "executed_slots_date": "2026-11-22",
+  "executed_slots_today": {},
   "history": [
     {
       "time": "2026-11-21 16:00:14",

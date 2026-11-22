@@ -137,7 +137,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <SortableTh label="服务中心" sort-key="center_name" :sort-state="compareSort.state" @sort="compareSort.toggle" />
+                  <SortableTh class="sticky-col" label="服务中心" sort-key="center_name" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                   <SortableTh label="在网面积 (万㎡)" sort-key="covered_area_wan" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                   <SortableTh label="系统精算热量 (GJ)" sort-key="sys_heat_gj" :sort-state="compareSort.state" @sort="compareSort.toggle" />
                   <SortableTh label="手工填报热量 (GJ)" sort-key="man_heat_gj" :sort-state="compareSort.state" @sort="compareSort.toggle" />
@@ -157,7 +157,7 @@
               </thead>
               <tbody>
                 <tr v-for="c in compareSort.sortedRows.value" :key="c.center_id" :class="{ 'row-alert': c.is_heat_alert }">
-                  <td class="font-bold">{{ c.center_name }}</td>
+                  <td class="sticky-col font-bold">{{ c.center_name }}</td>
                   <td>{{ fmt(c.covered_area_wan) }}</td>
                   <td class="font-bold">
                     <AnomalyBadgeValue :text="fmt(c.sys_heat_gj)" :note="c.anomalies?.sys_heat_gj?.note" />
@@ -222,7 +222,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <SortableTh label="换热站" sort-key="name" :sort-state="stationSort.state" @sort="stationSort.toggle" />
+                  <SortableTh class="sticky-col" label="换热站" sort-key="name" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                   <SortableTh label="服务中心" sort-key="center_name" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                   <SortableTh label="主干热网" sort-key="rdfz" :sort-state="stationSort.state" @sort="stationSort.toggle" />
                   <SortableTh label="面积 (㎡)" sort-key="covered_area" :sort-state="stationSort.state" @sort="stationSort.toggle" />
@@ -238,7 +238,7 @@
               </thead>
               <tbody>
                 <tr v-for="s in stationSort.sortedRows.value" :key="s.station_id">
-                  <td class="font-bold">{{ s.name }}</td>
+                  <td class="sticky-col font-bold">{{ s.name }}</td>
                   <td>{{ s.center_name }}</td>
                   <td>{{ s.rdfz }}</td>
                   <td>{{ s.covered_area ? s.covered_area.toLocaleString() : '待补' }}</td>
@@ -318,7 +318,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <SortableTh label="商户名称" sort-key="name" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
+                  <SortableTh class="sticky-col" label="商户名称" sort-key="name" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                   <SortableTh label="主干热网 (rdfz)" sort-key="rdfz" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                   <SortableTh label="介质 (rdry)" sort-key="rdry" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
                   <SortableTh label="产权 (rdss)" sort-key="rdss" :sort-state="merchantSort.state" @sort="merchantSort.toggle" />
@@ -332,7 +332,7 @@
               </thead>
               <tbody>
                 <tr v-for="m in merchantSort.sortedRows.value" :key="m.merchant_id">
-                  <td class="font-bold">{{ m.name }}</td>
+                  <td class="sticky-col font-bold">{{ m.name }}</td>
                   <td>{{ m.rdfz || '待补录' }}</td>
                   <td>{{ m.rdry || '待补录' }}</td>
                   <td>{{ m.rdss || '待补录' }}</td>
@@ -566,10 +566,12 @@ onMounted(loadReport)
 .tab-btn { padding: 8px 16px; border: none; border-radius: 8px; background: #f1f5f9; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; }
 .tab-btn.active { background: #0f172a; color: #fff; }
 .filter-bar { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-.table-wrap { overflow-x: auto; max-height: 560px; }
+.table-wrap { overflow-x: auto; max-height: 560px; -webkit-overflow-scrolling: touch; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
 .data-table th, .data-table td { padding: 9px 11px; border-bottom: 1px solid #e2e8f0; text-align: left; }
 .data-table thead th { position: sticky; top: 0; background: #f8fafc; font-weight: 600; z-index: 4; }
+.sticky-col { position: sticky; left: 0; background: #fff; z-index: 3; }
+.data-table thead th.sticky-col { z-index: 6; background: #f8fafc; }
 .row-alert td { background: #fef2f2; }
 .diff-pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .pill-ok { background: #dcfce7; color: #166534; }
@@ -595,14 +597,23 @@ onMounted(loadReport)
   .topbar-actions { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
   .inline-field { width: 100%; justify-content: space-between; }
   .inline-field .ctrl-input { flex: 1; min-width: 0; }
-  .topbar-actions > .btn { width: 100%; justify-content: center; }
+  .topbar-actions > .ctrl-input { width: 100%; min-width: 0; box-sizing: border-box; }
+  .mode-switch { width: 100%; height: auto; min-height: 36px; display: grid; grid-template-columns: 1fr 1fr; }
+  .mode-btn { padding: 8px 6px; font-size: 12.5px; }
+  .topbar-actions > .btn { width: 100%; justify-content: center; min-height: 36px; }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kpi-grid > .kpi-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .kpi-card { padding: 11px 12px; }
   .kpi-val { font-size: 16px; }
-  .tab-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; }
-  .tab-btn { flex-shrink: 0; padding: 7px 12px; font-size: 12px; }
-  .filter-bar > .ctrl-input { flex: 1 1 160px; min-width: 0; }
+  .tab-bar { flex-wrap: wrap; gap: 6px; padding-bottom: 10px; }
+  .tab-btn { flex: 1 1 calc(50% - 6px); padding: 8px 10px; font-size: 12px; text-align: center; }
+  .tab-btn:last-child:nth-child(odd) { flex-basis: 100%; }
+  .mc-summary-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .mc-stat-chip { justify-content: center; padding: 6px 8px; }
+  .filter-bar > .ctrl-input { flex: 1 1 160px; min-width: 0 !important; }
+  .filter-bar > .btn { width: 100%; justify-content: center; }
   .data-table { font-size: 12px; }
   .data-table th, .data-table td { padding: 7px 8px; }
+  .sticky-col { max-width: 124px; overflow: hidden; text-overflow: ellipsis; box-shadow: 3px 0 6px -2px rgba(15, 23, 42, 0.08); }
 }
 </style>

@@ -95,10 +95,18 @@ function go(path) {
   }
   .subnav-btn {
     justify-content: center;
+    min-height: 38px;
     padding: 8px 6px;
-    font-size: 12px;
-    gap: 4px;
+    font-size: 12.5px;
+    gap: 5px;
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .subnav-btn {
+    font-size: 12px;
+    padding: 7px 4px;
   }
 }
 </style>

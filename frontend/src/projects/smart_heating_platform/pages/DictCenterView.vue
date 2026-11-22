@@ -50,7 +50,7 @@
           <table v-if="activeEntity === 'stations'" class="data-table">
             <thead>
               <tr>
-                <SortableTh label="站名" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh class="sticky-col" label="站名" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="中心" sort-key="center_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="支线网" sort-key="branch_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="主干热网 (rdfz)" sort-key="rdfz" :sort-state="dictSort.state" @sort="dictSort.toggle" />
@@ -61,7 +61,7 @@
             </thead>
             <tbody>
               <tr v-for="r in dictSort.sortedRows.value" :key="r.station_id">
-                <td class="font-bold">{{ r.name }}</td>
+                <td class="sticky-col font-bold">{{ r.name }}</td>
                 <td>{{ r.center_name }}</td>
                 <td>{{ r.branch_name }}</td>
                 <td>{{ r.rdfz }}</td>
@@ -80,7 +80,7 @@
           <table v-else-if="activeEntity === 'merchants'" class="data-table">
             <thead>
               <tr>
-                <SortableTh label="商户名" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh class="sticky-col" label="商户名" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="支线网" sort-key="branch_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="分表名" sort-key="table_name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="rdfz" sort-key="rdfz" :sort-state="dictSort.state" @sort="dictSort.toggle" />
@@ -93,7 +93,7 @@
             </thead>
             <tbody>
               <tr v-for="r in dictSort.sortedRows.value" :key="r.merchant_id">
-                <td class="font-bold">{{ r.name }}</td>
+                <td class="sticky-col font-bold">{{ r.name }}</td>
                 <td>{{ r.branch_name }}</td>
                 <td class="mono">{{ r.table_name }}</td>
                 <td>{{ r.rdfz || '缺失' }}</td>
@@ -112,7 +112,7 @@
           <table v-else-if="activeEntity === 'main_networks'" class="data-table">
             <thead>
               <tr>
-                <SortableTh label="主干热网名称 (rdfz)" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
+                <SortableTh class="sticky-col" label="主干热网名称 (rdfz)" sort-key="name" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="下辖换热站数" sort-key="station_count" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="在网供热面积 (㎡)" sort-key="covered_area_m2" :sort-state="dictSort.state" @sort="dictSort.toggle" />
                 <SortableTh label="待补面积站数" sort-key="missing_area_stations" :sort-state="dictSort.state" @sort="dictSort.toggle" />
@@ -124,7 +124,7 @@
                 <td colspan="5" class="empty-td">暂无主干热网记录</td>
               </tr>
               <tr v-for="r in dictSort.sortedRows.value" :key="r.name">
-                <td class="font-bold">{{ r.name }}</td>
+                <td class="sticky-col font-bold">{{ r.name }}</td>
                 <td>{{ r.station_count }}</td>
                 <td>{{ Number(r.covered_area_m2 || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
                 <td :class="{ 'text-warn font-bold': r.missing_area_stations > 0 }">{{ r.missing_area_stations }}</td>
@@ -356,31 +356,40 @@ onMounted(loadAll)
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .ctrl-input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 13px; background: #fff; }
 .check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
-.table-wrap { overflow-x: auto; max-height: 540px; }
+.table-wrap { overflow-x: auto; max-height: 540px; -webkit-overflow-scrolling: touch; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
 .data-table th, .data-table td { padding: 9px 11px; border-bottom: 1px solid #e2e8f0; text-align: left; }
 .data-table thead th { position: sticky; top: 0; background: #f8fafc; font-weight: 600; z-index: 4; }
+.sticky-col { position: sticky; left: 0; background: #fff; z-index: 3; }
+.data-table thead th.sticky-col { z-index: 6; background: #f8fafc; }
 .font-bold { font-weight: 600; }
 .text-warn { color: #d97706; }
 .empty-td { text-align: center !important; color: #64748b; padding: 28px !important; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.modal-box { width: min(460px, 92vw); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 12px; }
+.modal-box { width: min(460px, 94vw); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow-y: auto; }
 .modal-box h3 { margin: 0; font-size: 16px; }
 .modal-fields { display: flex; flex-direction: column; gap: 10px; }
 .modal-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.modal-fields .ctrl-input { width: 100%; min-width: 0 !important; box-sizing: border-box; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 @media (max-width: 768px) {
   .shp-main { padding: 12px 10px 28px; gap: 10px; }
   .topbar, .list-card { padding: 12px; }
   .topbar h2 { font-size: 16px; }
+  .topbar > .btn { width: 100%; justify-content: center; }
   .entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .entity-grid > .entity-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .entity-btn { padding: 10px 11px; }
   .ent-count { font-size: 16px; }
-  .filter-bar > .ctrl-input { flex: 1 1 160px; min-width: 0; }
+  .filter-bar { gap: 8px; }
+  .filter-bar > .ctrl-input { flex: 1 1 180px; min-width: 0 !important; }
+  .filter-bar > .btn { width: 100%; justify-content: center; }
   .data-table { font-size: 12px; }
   .data-table th, .data-table td { padding: 7px 8px; }
-  .modal-box { padding: 16px; }
+  .sticky-col { max-width: 126px; overflow: hidden; text-overflow: ellipsis; box-shadow: 3px 0 6px -2px rgba(15, 23, 42, 0.08); }
+  .modal-box { padding: 16px 14px; }
+  .modal-actions > .btn { flex: 1; justify-content: center; }
 }
 </style>

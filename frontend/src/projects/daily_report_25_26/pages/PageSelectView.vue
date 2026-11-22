@@ -1086,12 +1086,30 @@ function openPage(page) {
 /* 手机窄屏响应式优化：审批状态与页面容器紧凑排版 */
 @media (max-width: 640px) {
   .page-select-main {
-    padding: 12px;
+    padding: 12px 10px 24px;
     gap: 12px;
   }
 
   .page-block {
-    padding: 14px;
+    padding: 14px 12px;
+    gap: 16px;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .page-card {
+    height: auto;
+    min-height: 76px;
+    padding: 12px 14px;
+  }
+
+  .page-card-title-text {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   .status-block {
