@@ -1,3 +1,9 @@
+## 2026-11-23 升级「数据查询与分析」Excel (.xlsx) 导出商务样式 (`DataAnalysisView.vue`, `analysisExcelExport.js`)
+
+- **`src/projects/daily_report_25_26/utils/analysisExcelExport.js`（新增）**：基于 `xlsx-js-style` 参照 `insulation_pipe_supply_2026` 样式规范实现专业导出渲染（合并大标题与摘要栏、板块标题条、深石板蓝表头、斑马纹、原生千分位数字格式、同比/环比正负着色、计划状态徽章、总计双实线底栏及黄金自适应列宽/行高）。
+- **`src/projects/daily_report_25_26/pages/DataAnalysisView.vue`**：`downloadExcel()` 切换为调用 `exportAnalysisExcelFile()`。
+- **`src/projects/daily_report_25_26/tests/analysisExcelExport.test.mjs`（新增）**：Excel 样式构建与工作簿序列化单元测试。
+
 ## 2026-11-23 修复「综合数据查询中心」管件基准与流转 Excel 导出作用域错误 (`HistoryQueryView.vue`)
 
 - **`src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`**：修复 `exportCurrentTabExcel()` 中 `baseline_progress` 标签下 `activeDims` 与 `dimHeaders` 仅定义在保温管（`pipe`）块作用域内导致管件（`fitting`）分支导出抛出 `ReferenceError` 的问题，并同步透传管件子型号 `sub_model_spec`。

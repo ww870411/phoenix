@@ -1,5 +1,17 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-23 优化「数据查询与分析」Excel 导出表格商务样式排版
+
+- **改动缘由**：
+  - 原 `DataAnalysisView.vue` 使用基础 `xlsx` 导出纯裸数据，无标题横幅、无表头/边框/底色/对齐/千分位格式及自适应列宽，打开后观感粗糙且数值易截断；参照 `insulation_pipe_supply_2026` 项目的 `xlsx-js-style` 样式规范进行全面美化升级。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/utils/analysisExcelExport.js`（新增）**：
+    - 抽离样式化 Excel 导出工具，统一渲染顶部合并大标题与摘要信息栏、板块小标题条（「📊 核心指标对比汇总」「🔄 环比比较」「🎯 月度计划对比」「📅 区间逐日明细」「ℹ️ 查询信息与口径说明」）、深石板蓝（`#1E293B`）白字表头、斑马纹、`Microsoft YaHei` 字体与全边框、数值右对齐与动态小数千分位 `numFmt`、同比/环比正负涨跌红绿着色、月度计划状态徽章着色、总计双实线底栏、黄金自适应列宽与行高，并将文件名规范为 `数据分析_{单日|累计}_{日期}.xlsx`。
+  - **`frontend/src/projects/daily_report_25_26/pages/DataAnalysisView.vue`**：
+    - 移除原无样式 `xlsx` 导出拼装逻辑，改为调用 `exportAnalysisExcelFile()`。
+  - **`frontend/src/projects/daily_report_25_26/tests/analysisExcelExport.test.mjs`（新增）**：
+    - 覆盖 Sheet 名称合法化、合并区/列宽/行高、千分位 `numFmt`、涨跌语义色及 `.xlsx` 缓冲回读测试。
+
 ## 2026-11-23 修复智慧供热平台居民室温停采与上游 `±1e9` 溢出阻断整批采集问题
 
 - **改动缘由**：

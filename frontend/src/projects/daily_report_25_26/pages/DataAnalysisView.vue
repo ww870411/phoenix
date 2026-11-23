@@ -617,13 +617,13 @@
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import RevoGrid from '@revolist/vue3-datagrid'
-import * as XLSX from 'xlsx'
 import AppHeader from '../components/AppHeader.vue'
 import AiAgentSettingsDialog from '../components/AiAgentSettingsDialog.vue'
 import AiChatWorkspace from '../components/AiChatWorkspace.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { getProjectNameById } from '../composables/useProjects'
 import { comparisonLabels } from '../composables/analysisPresentation'
+import { exportAnalysisExcelFile } from '../utils/analysisExcelExport'
 import { classifyAnalysisMetrics, isMetricCategorySelected, toggleMetricCategory } from '../constants/analysisMetricCategories'
 import {
   getDataAnalysisSchema,
@@ -2746,165 +2746,18 @@ function buildTimelineGrid(rows) {
   return { columns, rows: gridRows }
 }
 
-function formatExportNumber(value, decimals = 2) {
-  if (value === null || value === undefined || value === '—') return ''
-  const num = Number(value)
-  if (Number.isNaN(num)) return value
-  return Number(num.toFixed(decimals))
-}
-
-function buildSummarySheetData(rows, meta) {
-  const labels = comparisonLabels(meta, analysisMode.value)
-  const header = ['指标', labels.current, labels.peer, '同比', '计量单位']
-  const source = Array.isArray(rows) ? rows : []
-  const mapped = source.map((row) => [
-    row.label,
-    formatExportNumber(resolveValue(row, 'current'), row.decimals ?? 2),
-    formatExportNumber(resolveValue(row, 'peer'), row.decimals ?? 2),
-    formatPercentValue(resolveDelta(row)) || '',
-    row.unit || '',
-  ])
-  return [header, ...mapped]
-}
-
-function buildRingSheetData(result) {
-  const prevTotals = result?.ringCompare?.prevTotals
-  const range = result?.ringCompare?.range
-  if (!prevTotals || !range) return null
-  const rows = Array.isArray(result?.rows) ? result.rows : []
-  const labels = comparisonLabels(result?.meta, analysisMode.value)
-  const header = ['指标', labels.previous, labels.current, '环比', '单位']
-  const mapped = rows.map((row) => {
-    const current = resolveTotalCurrentFromRow(row)
-    const prev = prevTotals[row.key]
-    const rate =
-      Number.isFinite(prev) && prev !== 0 && Number.isFinite(current)
-        ? ((current - prev) / prev) * 100
-        : null
-    return [
-      row.label,
-      formatExportNumber(prev, row.decimals ?? 2),
-      formatExportNumber(current, row.decimals ?? 2),
-      formatPercentValue(rate) || '',
-      row.unit || '',
-    ]
-  })
-  return [header, ...mapped]
-}
-
-function buildPlanSheetData(result) {
-  const entries = mapPlanComparisonEntries(result?.planComparison, result?.rows || [])
-  if (!entries.length) return null
-  const header = ['指标', '截至本期末完成', '月度计划', '完成率', '状态', '计量单位']
-  const mapped = entries.map((entry) => [
-    entry.label,
-    formatExportNumber(entry.actualValue, entry.decimals),
-    formatExportNumber(entry.planValue, entry.decimals),
-    formatPercentValue(entry.completionRate) || '',
-    formatPlanStatusLabel(entry.completionRate),
-    entry.unit || '',
-  ])
-  const payload = [header, ...mapped]
-  if (result?.planComparison?.month_label) {
-    payload.push([])
-    payload.push(['计划月份', result.planComparison.month_label])
-  }
-  return payload
-}
-
-function buildTimelineSheetData(timeline) {
-  if (!timeline || !Array.isArray(timeline.columns) || !timeline.columns.length) return null
-  const columns = timeline.columns
-  const header = columns.map((col) => col.name || col.prop)
-  const rows = (timeline.rows || []).map((record) =>
-    columns.map((col) => extractTimelineCellText(record[col.prop])),
-  )
-  return [header, ...rows]
-}
-
-function buildMetaSheetData(meta) {
-  const data = [
-    ['项目', pageDisplayName.value],
-    ['单位', meta?.unit_label || activeUnitLabel.value],
-    ['分析模式', meta?.analysis_mode_label || analysisModeLabel.value],
-    [
-      '日期范围',
-      meta && meta.start_date && meta.end_date ? `${meta.start_date} ~ ${meta.end_date}` : `${startDate.value} ~ ${endDate.value}`,
-    ],
-    ['生成时间', new Date().toLocaleString()],
-    ['指标数量', selectedMetrics.value.size],
-  ]
-  return data
-}
-
-function buildUnitSheetData(result) {
-  const sheetData = []
-  const summary = buildSummarySheetData(result?.rows, result?.meta)
-  summary.forEach((row) => sheetData.push(row))
-  const ringData = buildRingSheetData(result)
-  if (ringData && ringData.length) {
-    sheetData.push([])
-    sheetData.push(['环比比较'])
-    ringData.forEach((row) => sheetData.push(row))
-  } else if (result?.ringCompare?.note) {
-    sheetData.push([])
-    sheetData.push(['环比比较'])
-    sheetData.push([result.ringCompare.note])
-  }
-  const planData = buildPlanSheetData(result)
-  if (planData && planData.length) {
-    sheetData.push([])
-    sheetData.push(['计划比较'])
-    planData.forEach((row) => sheetData.push(row))
-  }
-  const timelineData = buildTimelineSheetData(result?.timeline)
-  if (timelineData && timelineData.length) {
-    sheetData.push([])
-    sheetData.push(['区间明细'])
-    timelineData.forEach((row) => sheetData.push(row))
-  }
-  sheetData.push([])
-  sheetData.push(['查询信息'])
-  buildMetaSheetData(result?.meta).forEach((row) => sheetData.push(row))
-  return sheetData
-}
-
-function sanitizeSheetName(name) {
-  if (!name) return 'Sheet'
-  return name.replace(/[\\/?*\\[\\]:]/g, '_').slice(0, 31) || 'Sheet'
-}
-
-function resolveSheetName(baseName, usedNames) {
-  const sanitized = sanitizeSheetName(baseName)
-  if (!usedNames.has(sanitized)) {
-    usedNames.add(sanitized)
-    return sanitized
-  }
-  let counter = 2
-  while (true) {
-    const candidate = sanitizeSheetName(`${sanitized}_${counter}`)
-    if (!usedNames.has(candidate)) {
-      usedNames.add(candidate)
-      return candidate
-    }
-    counter += 1
-  }
-}
-
 function downloadExcel() {
   if (!resultUnitKeys.value.length) return
-  const wb = XLSX.utils.book_new()
-  const usedSheetNames = new Set()
-  resultUnitKeys.value.forEach((unitKey) => {
-    const result = unitResults.value[unitKey]
-    if (!result) return
-    const unitName = result.meta?.unit_label || resolveUnitLabel(unitKey)
-    const sheet = XLSX.utils.aoa_to_sheet(buildUnitSheetData(result))
-    const sheetName = resolveSheetName(unitName, usedSheetNames)
-    XLSX.utils.book_append_sheet(wb, sheet, sheetName)
+  exportAnalysisExcelFile(resultUnitKeys.value, unitResults.value, {
+    analysisMode: analysisMode.value,
+    pageDisplayName: pageDisplayName.value,
+    startDate: startDate.value,
+    endDate: endDate.value,
+    resolveUnitLabel,
+    resolveTotalCurrent: resolveTotalCurrentFromRow,
+    resolvePlanEntries: (result) => mapPlanComparisonEntries(result?.planComparison, result?.rows || []),
+    formatPlanStatus: formatPlanStatusLabel,
   })
-  const filename = `数据分析_${analysisMode.value === 'range' ? '累计' : '单日'}_${Date.now()}.xlsx`
-  XLSX.writeFile(wb, filename)
 }
 
 async function triggerAiReport() {
