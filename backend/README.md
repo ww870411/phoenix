@@ -1,3 +1,8 @@
+## 2026-11-23 放开「数据查询与分析」接口单位口径过滤 (`legacy_full.py`)
+
+- **`projects/daily_report_25_26/api/legacy_full.py`**：`get_data_analysis_schema()` 移除按 `session.resolve_allowed_units(PROJECT_KEY)` 过滤 `unit_dict`、`unit_options`、`display_unit_options` 的限制，面向所有有权访问该页面的账号返回全量单位配置（审批/填报/数据修正等接口的 `resolve_allowed_units` 隔离保持不变）。
+- **`projects/daily_report_25_26/tests/test_viewer_readonly.py`**：补充 `test_all_accounts_unrestricted_units_in_data_analysis_schema` 单元测试覆盖受限账号的全量单位 Schema 返回与项目单位隔离回归断言。
+
 ## 2026-11-22 电力现货市场负电价计数分列“日前电价 / 实时电价”口径 (`spot_electricity.py`)
 
 - **`projects/daily_report_25_26/api/spot_electricity.py`**：在 `/spot_electricity/summary`、`/daily_trends`、`/monthly_trends`、`/period_trends` 保留既有合并字段的同时，新增 `day_ahead_negative_*` 与 `real_time_negative_*` 分列统计字段。

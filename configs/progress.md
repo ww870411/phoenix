@@ -1,5 +1,25 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-23 修复综合数据查询中心「设计量、采购量与采购价格 -> 管件」无法导出 Excel (.xlsx) 问题
+
+- **改动缘由**：
+  - 在 `HistoryQueryView.vue` 的 `exportCurrentTabExcel()` 中，当处于 `activeTab === 'baseline_progress'`（设计量、采购量与采购价格）标签页时，`activeDims` 与 `dimHeaders` 错误地声明在 `subMaterialType === 'pipe'`（保温管）的局部块级作用域内；切换至 `subMaterialType === 'fitting'`（管件）导出“管件设计与采购基准”或“管件全周期流转库存”时，会直接抛出 `ReferenceError: dimHeaders is not defined` 导致无法导出 `.xlsx` 文件。
+- **改动清单**：
+  - **`frontend/src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`**：
+    - 在 `exportCurrentTabExcel()` 的 `baseline_progress` 分支中，将 `activeDims` 与 `dimHeaders` 提升至 `pipe` 与 `fitting` 共享的外层块级作用域；并在管件基准明细型号列中同步兼容附加 `sub_model_spec`。
+
+## 2026-11-23 放开「数据查询与分析」页面全部账号的可见与可选单位口径限制
+
+- **改动缘由**：
+  - 原 `GET /api/v1/projects/daily_report_25_26/data_analysis/schema` 接口会根据 `session.resolve_allowed_units('daily_report_25_26')` 过滤 `unit_dict`、`unit_options` 与 `display_unit_options`，导致分单位账号（如 `beihai_filler`、`beihai_admin`、`zhuchengqu_admin`）仅能看到各自所属单位，同时 `shoudian_filler` 因 `ShouDian` 不在配置 `显示单位` 中触发前端回退展示全部英文 Key、`Global_admin`/`Group_admin`/`Group_viewer` 因 `*` 展开规则将无对应账号的 10 个供热中心从 `unit_dict` 剔除。
+- **改动清单**：
+  - **`backend/projects/daily_report_25_26/api/legacy_full.py`**：
+    - 在 `get_data_analysis_schema()` 中移除按 `session.resolve_allowed_units(PROJECT_KEY)` 过滤 `unit_dict`、`unit_options` 与 `display_unit_options` 的逻辑，使所有有权进入「数据查询与分析」页面的生产日报账号均可获取全量单位口径；同时保留审批、填报、数据修正等页面原有的 `units_access` 隔离。
+  - **`backend/projects/daily_report_25_26/tests/test_viewer_readonly.py`**：
+    - 新增 `test_all_accounts_unrestricted_units_in_data_analysis_schema`，验证 `zhuchengqu_admin`、`beihai_admin`、`beihai_filler`、`shoudian_filler` 在 `/data_analysis/schema` 中均返回完整展示单位与 `unit_dict`，且其 `resolve_allowed_units` 仍维持原有项目级单位隔离。
+- **影响面**：
+  - 仅影响 `daily_report_25_26` 的「数据查询与分析」页面可选单位清单；审批工作流、数据填报、数据修正与现货结算等页面的单位权限不受影响。
+
 ## 2026-11-22 电力现货市场负电价时点数按“日前电价 / 实时电价”分列统计与展示
 
 - **改动缘由**：

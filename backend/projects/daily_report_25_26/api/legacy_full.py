@@ -4027,25 +4027,8 @@ def get_data_analysis_schema(
             content={"ok": False, "message": "无法生成数据分析配置"},
         )
 
-    allowed_units = session.resolve_allowed_units(PROJECT_KEY)
-    if "*" not in allowed_units:
-        if "unit_dict" in content and isinstance(content["unit_dict"], dict):
-            content["unit_dict"] = {
-                k: v for k, v in content["unit_dict"].items()
-                if k in allowed_units
-            }
-
-        if "unit_options" in content and isinstance(content["unit_options"], list):
-            content["unit_options"] = [
-                opt for opt in content["unit_options"]
-                if isinstance(opt, dict) and opt.get("value") in allowed_units
-            ]
-
-        if "display_unit_options" in content and isinstance(content["display_unit_options"], list):
-            content["display_unit_options"] = [
-                opt for opt in content["display_unit_options"]
-                if isinstance(opt, dict) and opt.get("value") in allowed_units
-            ]
+    # 数据查询与分析页面向所有有权进入该页面的账号开放全部单位口径，不再按所属单位过滤；
+    # 审批、填报、数据修正等页面的单位权限隔离仍由各自接口通过 resolve_allowed_units 独立控制。
 
     flags = _safe_read_ai_settings()
     content["ai_report_flags"] = {

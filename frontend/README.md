@@ -1,3 +1,11 @@
+## 2026-11-23 修复「综合数据查询中心」管件基准与流转 Excel 导出作用域错误 (`HistoryQueryView.vue`)
+
+- **`src/projects/insulation_pipe_supply_2026/pages/HistoryQueryView.vue`**：修复 `exportCurrentTabExcel()` 中 `baseline_progress` 标签下 `activeDims` 与 `dimHeaders` 仅定义在保温管（`pipe`）块作用域内导致管件（`fitting`）分支导出抛出 `ReferenceError` 的问题，并同步透传管件子型号 `sub_model_spec`。
+
+## 2026-11-23 「数据查询与分析」单位口径展示说明 (`DataAnalysisView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/DataAnalysisView.vue`**：前端无需代码改动；伴随后端 `/data_analysis/schema` 放开单位过滤，所有生产日报账号在「数据查询与分析」页面的“单位选择（多选）”均直接展示配置文件中的全量显示单位，不再触发 `shoudian_filler` 的英文 Key 回退展示。
+
 ## 2026-11-22 电力现货市场负电价时点数分列“日前 / 实时”展示 (`SpotElectricityView.vue`)
 
 - **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：将「负电价时点数」KPI 卡片、区间（按日/按月/按时段）图表柱状系列与 Tooltip、桌面端汇总表格、移动端卡片及 Excel 导出拆分为「日前负电价」与「实时负电价」两列独立展示与占比统计。

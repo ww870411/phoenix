@@ -1,7 +1,7 @@
 {
-  "last_sync_date": "2026-11-21",
-  "last_run_time": "2026-11-22 16:48:20",
+  "last_sync_date": "2026-11-22",
+  "last_run_time": "2026-11-23 09:59:14",
   "last_run_status": "SUCCESS",
-  "last_run_message": "【2026-11-21】现货电价数据已在库中完整存储，等待明日自动拉取",
-  "next_run_time": "2026-11-23 07:40:00"
+  "last_run_message": "成功入库【2026-11-22】电力现货数据，共写入 96 个 15 分钟时点！",
+  "next_run_time": "2026-11-24 07:40:00"
 }

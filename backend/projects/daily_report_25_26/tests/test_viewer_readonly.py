@@ -75,3 +75,38 @@ class ViewerReadonlyTests(TestCase):
         for unit in target_units:
             with self.subTest(unit_schema=unit):
                 self.assertIn(unit, unit_dict)
+
+    def test_all_accounts_unrestricted_units_in_data_analysis_schema(self):
+        """验证受限账号在数据分析 Schema 中也能获取全部单位口径，且不影响其他页面的 units_access 隔离。"""
+        import json
+
+        expected_display_units = [
+            'Group', 'ZhuChengQu', 'BeiHai', 'XiangHai', 'GongRe',
+            'JinZhou', 'BeiFang', 'JinPu', 'ZhuangHe', 'YanJiuYuan',
+        ]
+        cases = [
+            ('zhuchengqu_admin', {'ZhuChengQu', 'BeiHai', 'XiangHai', 'GongRe'}),
+            ('beihai_admin', {'BeiHai'}),
+            ('beihai_filler', {'BeiHai'}),
+            ('shoudian_filler', {'ShouDian'}),
+        ]
+        for username, expected_project_units in cases:
+            with self.subTest(username=username):
+                record = self.manager._users_by_name[username]
+                sess = self.manager._build_session(
+                    record, self.manager._groups[record.group], f'test-{username}',
+                    datetime.now(timezone.utc), None, False,
+                )
+                # 其他页面（审批/修正等）的单位权限隔离保持不变
+                self.assertEqual(sess.resolve_allowed_units('daily_report_25_26'), expected_project_units)
+
+                response = api.get_data_analysis_schema(
+                    config='projects/daily_report_25_26/config/数据结构_数据分析表.json',
+                    session=sess,
+                )
+                body = json.loads(response.body)
+                display_values = [item.get('value') for item in body.get('display_unit_options', [])]
+                self.assertEqual(display_values, expected_display_units)
+                unit_dict = body.get('unit_dict', {})
+                for unit in expected_display_units + ['ShouDian', 'HuaLe_Center', 'GuanWang_Center']:
+                    self.assertIn(unit, unit_dict)

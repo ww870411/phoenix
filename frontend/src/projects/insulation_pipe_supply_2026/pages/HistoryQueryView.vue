@@ -7464,126 +7464,128 @@ async function exportCurrentTabExcel() {
         XLSX.utils.book_append_sheet(wb, wsPrice, '物料采购单价字典')
         defaultFilename = `保温管与管件物料采购价格基准字典_${new Date().toISOString().split('T')[0]}.xlsx`
 
-      } else if (subMaterialType.value === 'pipe') {
-        const isPipe = true
+      } else {
         const activeDims = baselineDimensions.value
         const dimHeaders = activeDims.map(d => getDimensionDef(d).colHeader)
-        // 1. 分供给方基准汇总
-        const supMap = new Map()
-        sortedBaselinePipeRows.value.forEach(r => {
-          const sup = r.supplier_name || '未知供货单位'
-          if (!supMap.has(sup)) supMap.set(sup, { sup, design: 0, plan: 0, ship: 0, arr: 0, use: 0, stock: 0 })
-          const item = supMap.get(sup)
-          item.design += Number(r.design_qty) || 0
-          item.plan += Number(r.purchase_plan_qty) || 0
-          item.ship += Number(r.total_shipped_qty) || 0
-          item.arr += Number(r.total_arrived_qty) || 0
-          item.use += Number(r.total_usage_qty) || 0
-          item.stock += Number(r.stock_qty) || 0
-        })
 
-        const sHeaders = ['供给方', '设计总量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
-        const sRows = []
-        let gDes = 0, gPlan = 0, gShip = 0, gArr = 0, gUse = 0, gStock = 0
-
-        supMap.forEach(s => {
-          gDes += s.design; gPlan += s.plan; gShip += s.ship; gArr += s.arr; gUse += s.use; gStock += s.stock
-          const pRate = s.plan > 0 ? ((s.arr / s.plan) * 100).toFixed(1) : '0.0'
-          const iRate = s.design > 0 ? ((s.use / s.design) * 100).toFixed(1) : '0.0'
-          sRows.push([s.sup, Number(s.design.toFixed(2)), Number(s.plan.toFixed(2)), Number(s.ship.toFixed(2)), Number(s.arr.toFixed(2)), Number(s.use.toFixed(2)), Number(s.stock.toFixed(2)), `${pRate}%`, `${iRate}%`])
-        })
-        const gpRate = gPlan > 0 ? ((gArr / gPlan) * 100).toFixed(1) : '0.0'
-        const giRate = gDes > 0 ? ((gUse / gDes) * 100).toFixed(1) : '0.0'
-        sRows.push(['【全项目总计】', Number(gDes.toFixed(2)), Number(gPlan.toFixed(2)), Number(gShip.toFixed(2)), Number(gArr.toFixed(2)), Number(gUse.toFixed(2)), Number(gStock.toFixed(2)), `${gpRate}%`, `${giRate}%`])
-
-        const wsSup = buildStyledWorksheet(sHeaders, sRows, [], sRows.length)
-        XLSX.utils.book_append_sheet(wb, wsSup, '分供给方基准汇总')
-
-        // 2. 明细 Sheet
-        const dHeaders = [...dimHeaders, '设计量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
-        const dRows = sortedBaselinePipeRows.value.map(r => {
-          const dimVals = activeDims.map(d => {
-            if (d === 'section') return r.section_1_name || '—'
-            if (d === 'model') return r.pipe_model_name || '—'
-            if (d === 'supplier') return r.supplier_name || '—'
-            return '—'
+        if (subMaterialType.value === 'pipe') {
+          // 1. 分供给方基准汇总
+          const supMap = new Map()
+          sortedBaselinePipeRows.value.forEach(r => {
+            const sup = r.supplier_name || '未知供货单位'
+            if (!supMap.has(sup)) supMap.set(sup, { sup, design: 0, plan: 0, ship: 0, arr: 0, use: 0, stock: 0 })
+            const item = supMap.get(sup)
+            item.design += Number(r.design_qty) || 0
+            item.plan += Number(r.purchase_plan_qty) || 0
+            item.ship += Number(r.total_shipped_qty) || 0
+            item.arr += Number(r.total_arrived_qty) || 0
+            item.use += Number(r.total_usage_qty) || 0
+            item.stock += Number(r.stock_qty) || 0
           })
-          return [...dimVals, Number((Number(r.design_qty) || 0).toFixed(2)), Number((Number(r.purchase_plan_qty) || 0).toFixed(2)), Number((Number(r.total_shipped_qty) || 0).toFixed(2)), Number((Number(r.total_arrived_qty) || 0).toFixed(2)), Number((Number(r.total_usage_qty) || 0).toFixed(2)), Number((Number(r.stock_qty) || 0).toFixed(2)), `${r.purchase_rate}%`, `${r.install_rate}%`]
-        })
 
-        // 补上基准进度明细表末尾【全项目总计】行
-        const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
-        const sum = baselinePipeSummary.value
-        dRows.push([
-          ...grandDimVals,
-          Number((Number(sum.total_design_qty) || 0).toFixed(2)),
-          Number((Number(sum.total_purchase_plan_qty) || 0).toFixed(2)),
-          Number((Number(sum.total_shipped_qty) || 0).toFixed(2)),
-          Number((Number(sum.total_arrived_qty) || 0).toFixed(2)),
-          Number((Number(sum.total_usage_qty) || 0).toFixed(2)),
-          Number((Number(sum.total_stock_qty) || 0).toFixed(2)),
-          `${sum.overall_purchase_rate}%`,
-          `${sum.overall_install_rate}%`
-        ])
+          const sHeaders = ['供给方', '设计总量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
+          const sRows = []
+          let gDes = 0, gPlan = 0, gShip = 0, gArr = 0, gUse = 0, gStock = 0
 
-        const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
-        XLSX.utils.book_append_sheet(wb, wsDetail, '基准进度明细')
-        defaultFilename = '保温管设计采购基准进度综合报表.xlsx'
-
-      } else if (fittingTab2SubView.value === 'baseline') {
-        // 管件基准表
-        const dHeaders = [...dimHeaders, '单位', '设计使用量', '计划采购量']
-        const dRows = sortedFittingBaselineRows.value.map(r => {
-          const dimVals = activeDims.map(d => {
-            if (d === 'section') return r.section_1_name || '—'
-            if (d === 'model') return `${r.fitting_type || r.standard_name || r.category || ''} ${r.model_spec || ''}`.trim() || '—'
-            if (d === 'supplier') return r.supplier_name || '—'
-            return '—'
+          supMap.forEach(s => {
+            gDes += s.design; gPlan += s.plan; gShip += s.ship; gArr += s.arr; gUse += s.use; gStock += s.stock
+            const pRate = s.plan > 0 ? ((s.arr / s.plan) * 100).toFixed(1) : '0.0'
+            const iRate = s.design > 0 ? ((s.use / s.design) * 100).toFixed(1) : '0.0'
+            sRows.push([s.sup, Number(s.design.toFixed(2)), Number(s.plan.toFixed(2)), Number(s.ship.toFixed(2)), Number(s.arr.toFixed(2)), Number(s.use.toFixed(2)), Number(s.stock.toFixed(2)), `${pRate}%`, `${iRate}%`])
           })
-          return [...dimVals, r.unit || '个', Number(r.design_qty) || 0, Number(r.purchase_plan_qty) || 0]
-        })
+          const gpRate = gPlan > 0 ? ((gArr / gPlan) * 100).toFixed(1) : '0.0'
+          const giRate = gDes > 0 ? ((gUse / gDes) * 100).toFixed(1) : '0.0'
+          sRows.push(['【全项目总计】', Number(gDes.toFixed(2)), Number(gPlan.toFixed(2)), Number(gShip.toFixed(2)), Number(gArr.toFixed(2)), Number(gUse.toFixed(2)), Number(gStock.toFixed(2)), `${gpRate}%`, `${giRate}%`])
 
-        // 补上管件设计与采购基准表末尾【全项目总计】行
-        const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
-        const sum = baselineFittingSummary.value
-        dRows.push([
-          ...grandDimVals,
-          '件',
-          Number(sum.total_design_qty) || 0,
-          Number(sum.total_purchase_plan_qty) || 0
-        ])
+          const wsSup = buildStyledWorksheet(sHeaders, sRows, [], sRows.length)
+          XLSX.utils.book_append_sheet(wb, wsSup, '分供给方基准汇总')
 
-        const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
-        XLSX.utils.book_append_sheet(wb, wsDetail, '管件设计与采购基准')
-        defaultFilename = '管件设计与计划采购基准表.xlsx'
-      } else {
-        // 管件全周期流转
-        const dHeaders = [...dimHeaders, '单位', '累计发货量', '累计到货量', '现场安装量', '现场库存余量']
-        const dRows = sortedFittingFlowRows.value.map(r => {
-          const dimVals = activeDims.map(d => {
-            if (d === 'section') return r.section_1_name || '—'
-            if (d === 'model') return `${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—'
-            if (d === 'supplier') return r.supplier_name || '—'
-            return '—'
+          // 2. 明细 Sheet
+          const dHeaders = [...dimHeaders, '设计量(米)', '计划采购量(米)', '累计发货(米)', '累计到货(米)', '累计使用(米)', '现场库存(米)', '采购完成率', '施工进度率']
+          const dRows = sortedBaselinePipeRows.value.map(r => {
+            const dimVals = activeDims.map(d => {
+              if (d === 'section') return r.section_1_name || '—'
+              if (d === 'model') return r.pipe_model_name || '—'
+              if (d === 'supplier') return r.supplier_name || '—'
+              return '—'
+            })
+            return [...dimVals, Number((Number(r.design_qty) || 0).toFixed(2)), Number((Number(r.purchase_plan_qty) || 0).toFixed(2)), Number((Number(r.total_shipped_qty) || 0).toFixed(2)), Number((Number(r.total_arrived_qty) || 0).toFixed(2)), Number((Number(r.total_usage_qty) || 0).toFixed(2)), Number((Number(r.stock_qty) || 0).toFixed(2)), `${r.purchase_rate}%`, `${r.install_rate}%`]
           })
-          return [...dimVals, '件', Number(r.total_shipped_qty) || 0, Number(r.total_arrived_qty) || 0, Number(r.total_usage_qty) || 0, Number(r.stock_qty) || 0]
-        })
 
-        // 补上管件全周期流转与库存表末尾【全项目总计】行
-        const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
-        const sum = baselineFittingSummary.value
-        dRows.push([
-          ...grandDimVals,
-          '件',
-          Number(sum.total_shipped_qty) || 0,
-          Number(sum.total_arrived_qty) || 0,
-          Number(sum.total_usage_qty) || 0,
-          Number(sum.total_stock_qty) || 0
-        ])
+          // 补上基准进度明细表末尾【全项目总计】行
+          const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+          const sum = baselinePipeSummary.value
+          dRows.push([
+            ...grandDimVals,
+            Number((Number(sum.total_design_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_purchase_plan_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_shipped_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_arrived_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_usage_qty) || 0).toFixed(2)),
+            Number((Number(sum.total_stock_qty) || 0).toFixed(2)),
+            `${sum.overall_purchase_rate}%`,
+            `${sum.overall_install_rate}%`
+          ])
 
-        const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
-        XLSX.utils.book_append_sheet(wb, wsDetail, '管件全周期流转库存')
-        defaultFilename = '管件全周期累计流转与现场库存表.xlsx'
+          const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
+          XLSX.utils.book_append_sheet(wb, wsDetail, '基准进度明细')
+          defaultFilename = '保温管设计采购基准进度综合报表.xlsx'
+
+        } else if (fittingTab2SubView.value === 'baseline') {
+          // 管件基准表
+          const dHeaders = [...dimHeaders, '单位', '设计使用量', '计划采购量']
+          const dRows = sortedFittingBaselineRows.value.map(r => {
+            const dimVals = activeDims.map(d => {
+              if (d === 'section') return r.section_1_name || '—'
+              if (d === 'model') return `${r.fitting_type || r.standard_name || r.category || ''} ${r.model_spec || ''} ${r.sub_model_spec || ''}`.trim() || '—'
+              if (d === 'supplier') return r.supplier_name || '—'
+              return '—'
+            })
+            return [...dimVals, r.unit || '个', Number(r.design_qty) || 0, Number(r.purchase_plan_qty) || 0]
+          })
+
+          // 补上管件设计与采购基准表末尾【全项目总计】行
+          const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+          const sum = baselineFittingSummary.value
+          dRows.push([
+            ...grandDimVals,
+            '件',
+            Number(sum.total_design_qty) || 0,
+            Number(sum.total_purchase_plan_qty) || 0
+          ])
+
+          const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
+          XLSX.utils.book_append_sheet(wb, wsDetail, '管件设计与采购基准')
+          defaultFilename = '管件设计与计划采购基准表.xlsx'
+        } else {
+          // 管件全周期流转
+          const dHeaders = [...dimHeaders, '单位', '累计发货量', '累计到货量', '现场安装量', '现场库存余量']
+          const dRows = sortedFittingFlowRows.value.map(r => {
+            const dimVals = activeDims.map(d => {
+              if (d === 'section') return r.section_1_name || '—'
+              if (d === 'model') return `${r.fitting_type || ''} ${r.model_spec || ''}`.trim() || '—'
+              if (d === 'supplier') return r.supplier_name || '—'
+              return '—'
+            })
+            return [...dimVals, '件', Number(r.total_shipped_qty) || 0, Number(r.total_arrived_qty) || 0, Number(r.total_usage_qty) || 0, Number(r.stock_qty) || 0]
+          })
+
+          // 补上管件全周期流转与库存表末尾【全项目总计】行
+          const grandDimVals = activeDims.map((d, i) => i === 0 ? '【全项目总计】' : '—')
+          const sum = baselineFittingSummary.value
+          dRows.push([
+            ...grandDimVals,
+            '件',
+            Number(sum.total_shipped_qty) || 0,
+            Number(sum.total_arrived_qty) || 0,
+            Number(sum.total_usage_qty) || 0,
+            Number(sum.total_stock_qty) || 0
+          ])
+
+          const wsDetail = buildStyledWorksheet(dHeaders, dRows, [], dRows.length)
+          XLSX.utils.book_append_sheet(wb, wsDetail, '管件全周期流转库存')
+          defaultFilename = '管件全周期累计流转与现场库存表.xlsx'
+        }
       }
 
     } else if (activeTab.value === 'supplier_ledger') {
