@@ -1,3 +1,9 @@
+## 2026-11-23 修复智慧供热平台居民室温整点偏移调度死锁与 `±1e9` 溢出回滚 (`scheduler_service.py`, `cleaning_engine.py`)
+
+- **`projects/smart_heating_platform/services/scheduler_service.py`**：解耦 5/15/30 分钟断面触发与整点后延迟偏移 `hourly_offset_minutes`，新增 `_last_jumin_hour_slot` 确保到达偏移分钟后每小时稳定触发一次 `/jumin/` 室温采集。
+- **`projects/smart_heating_platform/services/cleaning_engine.py`**：新增 `sanitize_db_numeric()` 在 `clean_upstream_point`、`clean_temp_device`、`clean_merchant_point` 中拦截超出 PostgreSQL `NUMERIC(p, s)` 容量（如 `±1e9`）的坏表极值，避免单点极值拖垮整轮快照入库事务并在督办单保留原始证据。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：新增 `test_scheduler_hourly_offset_and_upstream_overflow_guard` 单元测试。
+
 ## 2026-11-23 放开「数据查询与分析」接口单位口径过滤 (`legacy_full.py`)
 
 - **`projects/daily_report_25_26/api/legacy_full.py`**：`get_data_analysis_schema()` 移除按 `session.resolve_allowed_units(PROJECT_KEY)` 过滤 `unit_dict`、`unit_options`、`display_unit_options` 的限制，面向所有有权访问该页面的账号返回全量单位配置（审批/填报/数据修正等接口的 `resolve_allowed_units` 隔离保持不变）。

@@ -39,6 +39,7 @@ class SmartHeatingSchedulerService:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
         self._last_snapshot_slot: Optional[str] = None
+        self._last_jumin_hour_slot: Optional[str] = None
         self._last_calib_slot: Optional[str] = None
         self._last_merchant_date: Optional[str] = None
         self._last_gap_watch_slot: Optional[str] = None
@@ -99,22 +100,25 @@ class SmartHeatingSchedulerService:
         offset_min = int(cfg.get("hourly_offset_minutes", 0))
         calib_hours = max(1, int(cfg.get("table_bottom_sync_hours", 1)))
 
-        # 1. 5/15/30/60 分钟上游与商户并行断面采集（整点 :00 附带 /jumin/）
+        # 1. 5/15/30/60 分钟上游与商户并行断面采集（每小时在到达 hourly_offset_minutes 后附带一次 /jumin/ 室温）
+        due_min = offset_min % 60
         if snap_interval == 60:
-            due_min = offset_min % 60
-            if now_e8.minute == due_min:
+            if now_e8.minute >= due_min:
                 slot = now_e8.strftime("%Y-%m-%d %H")
                 if slot != self._last_snapshot_slot:
                     self._last_snapshot_slot = slot
+                    self._last_jumin_hour_slot = slot
                     self._spawn_job("snapshot", lambda: run_snapshot_cycle(include_jumin=True, trigger="AUTO"))
         else:
             bucket = floor_to_bucket(now_e8, snap_interval)
-            target_trigger = bucket + timedelta(minutes=offset_min if bucket.minute == 0 else 0)
-            if now_e8 >= target_trigger:
+            if now_e8 >= bucket:
                 slot = bucket.strftime("%Y-%m-%d %H:%M")
                 if slot != self._last_snapshot_slot:
                     self._last_snapshot_slot = slot
-                    inc_jm = bucket.minute == 0
+                    hour_slot = now_e8.strftime("%Y-%m-%d %H")
+                    inc_jm = now_e8.minute >= due_min and hour_slot != self._last_jumin_hour_slot
+                    if inc_jm:
+                        self._last_jumin_hour_slot = hour_slot
                     self._spawn_job("snapshot", lambda: run_snapshot_cycle(include_jumin=inc_jm, trigger="AUTO"))
 
         # 2. 每小时整点后第 5 分钟触发换热站表底并行校准（路线 B：计算上一已完成小时）

@@ -1,5 +1,19 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-23 修复智慧供热平台居民室温停采与上游 `±1e9` 溢出阻断整批采集问题
+
+- **改动缘由**：
+  - 核查 `/projects/smart_heating_platform/pages/hourly_report` 居民室温缺失问题时发现两处叠加故障：
+    1. **调度偏移死锁（11-20 14:59 起停采室温）**：当配置 `snapshot_interval_minutes = 5` 且 `hourly_offset_minutes = 5` 时，`scheduler_service._tick()` 对 `:00` 桶加上 `offset_min` 延迟，导致 `:00`～`:04` 不满足触发条件、到 `:05` 时 `floor_to_bucket` 已切到 `:05` 桶（`bucket.minute != 0`），使 `include_jumin` 永远为 `False`，连续 3 天未再采集 `/jumin/`（原 48h 历史随保留策略自然删空）。
+    2. **坏表极值溢出阻断入库事务（11-23 11:05 起 `SNAPSHOT_5M` 连续失败）**：源站 `/gk_get_data/` 对 `香首_2#热网循环泵`/`香首_4#热网循环泵`（`PINLV=±1000000000.0`）与 `香首_高温水回水`（`WENDU=1000000000.0`）上报极值，超出 PostgreSQL `NUMERIC(12,3)` 上限（`<10^9`），导致整轮采集事务回滚，手动触发室温采集同样失败。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/scheduler_service.py`**：
+    - 新增 `_last_jumin_hour_slot` 按小时追踪室温采集；当 `snapshot_interval_minutes < 60` 时按固定步长正常触发全部 5/15/30 分钟断面，并在当前小时达到 `hourly_offset_minutes` 后首次附带执行一次 `/jumin/` 室温采集（超时或重启后同小时内也会自动补齐一次）。
+  - **`backend/projects/smart_heating_platform/services/cleaning_engine.py`**：
+    - 新增 `sanitize_db_numeric(val, precision, scale)` 保护 `clean_upstream_point`、`clean_temp_device`、`clean_merchant_point` 的落库字段不超出对应 `NUMERIC(p, s)` 精度上限（同时在 `fact_fault_ticket` 中忠实留存原始极值文本并新增频/荷/流超限告警）。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：
+    - 新增 `test_scheduler_hourly_offset_and_upstream_overflow_guard` 单测覆盖上述调度偏移与 `±1e9` 防溢出逻辑。
+
 ## 2026-11-23 修复综合数据查询中心「设计量、采购量与采购价格 -> 管件」无法导出 Excel (.xlsx) 问题
 
 - **改动缘由**：

@@ -1805,3 +1805,78 @@ def test_fault_coverage_diagnostics_and_api(monkeypatch):
     resp = client.get("/api/v1/projects/smart_heating_platform/faults/coverage?date=2026-11-18")
     assert resp.status_code == 200 and resp.json()["ok"] is True
     assert resp.json()["data"]["station"]["elec"]["missing_total"] == 2
+
+
+def test_scheduler_hourly_offset_and_upstream_overflow_guard(monkeypatch):
+    """验证 5 分钟采样叠加 hourly_offset_minutes=5 时不跳过整点桶且整点后按偏移触发 /jumin/，并防护 ±1e9 溢出。"""
+    import backend.projects.smart_heating_platform.services.scheduler_service as ss
+    from backend.projects.smart_heating_platform.services.cleaning_engine import (
+        clean_temp_device,
+        clean_upstream_point,
+    )
+
+    sched = ss.SmartHeatingSchedulerService()
+    calls = []
+
+    def _capture_spawn(name, fn):
+        if name == "snapshot":
+            # 拦截 run_snapshot_cycle 确认 include_jumin 参数
+            fn()
+
+    monkeypatch.setattr(sched, "_spawn_job", _capture_spawn)
+    monkeypatch.setattr(
+        ss,
+        "run_snapshot_cycle",
+        lambda include_jumin=None, trigger="AUTO": calls.append(bool(include_jumin)),
+    )
+    monkeypatch.setattr(
+        ss,
+        "_read_raw_config",
+        lambda: {
+            "scheduler_enabled": True,
+            "auto_gap_recovery": False,
+            "auto_heat_audit_fix": False,
+            "snapshot_interval_minutes": 5,
+            "hourly_offset_minutes": 5,
+            "table_bottom_sync_hours": 6,
+        },
+    )
+
+    current_dt = [datetime(2026, 11, 23, 14, 1, tzinfo=EAST_8)]
+
+    class _FakeDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return current_dt[0]
+
+    monkeypatch.setattr(ss, "datetime", _FakeDatetime)
+    sched._tick()  # 14:01 -> 命中 14:00 桶，尚未到 offset=5，仅采上游/商户
+    current_dt[0] = datetime(2026, 11, 23, 14, 5, tzinfo=EAST_8)
+    sched._tick()  # 14:05 -> 命中 14:05 桶，到达 offset=5，附带 /jumin/
+    current_dt[0] = datetime(2026, 11, 23, 14, 10, tzinfo=EAST_8)
+    sched._tick()  # 14:10 -> 命中 14:10 桶，同小时已采过 /jumin/，不再重复
+    assert calls == [False, True, False]
+
+    # 验证 ±1e9 寄存器极值不会溢出 NUMERIC(12,3) / NUMERIC(8,2)
+    cleaned_up, up_faults = clean_upstream_point(
+        {"item_name": "香首_高温水回水", "WENDU": 1000000000.0, "PINLV": -1000000000.0, "YALI": 0.45},
+        {"point_id": None, "data_zone": "sz_dict", "source_name": "香首_高温水回水", "name": "香首_高温水回水", "category": "首站"},
+        datetime(2026, 11, 23, 14, 40, tzinfo=EAST_8),
+        prev_valid={"temp_clean": 55.2},
+    )
+    assert cleaned_up["temp_raw"] is None
+    assert cleaned_up["temp_clean"] == 55.2
+    assert cleaned_up["freq_val"] is None
+    assert cleaned_up["pressure_raw"] == 0.45
+    assert any("1000000000.0" in f["raw_value_text"] for f in up_faults)
+
+    cleaned_jm, jm_faults = clean_temp_device(
+        {"id": "T_OVF", "wd1": 1000000000.0, "upload_time": "2026-11-23 14:00:00"},
+        {"T_OVF": {"station_id": "S1", "station_name": "正常站"}},
+        {},
+        datetime(2026, 11, 23, 14, 40, tzinfo=EAST_8),
+    )
+    assert cleaned_jm["temp_raw"] is None
+    assert cleaned_jm["temp_clean"] is None
+    assert cleaned_jm["is_online_valid"] is False
+    assert any("1000000000.0" in f["raw_value_text"] for f in jm_faults)

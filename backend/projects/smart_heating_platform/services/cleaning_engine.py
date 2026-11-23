@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import math
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 EAST_8 = timezone(timedelta(hours=8))
@@ -112,9 +113,20 @@ def to_float(val: Any) -> Optional[float]:
         return None
     try:
         num = float(text)
-        return None if num != num else num
+        return None if not math.isfinite(num) else num
     except (ValueError, TypeError):
         return None
+
+
+def sanitize_db_numeric(val: Optional[float], precision: int, scale: int) -> Optional[float]:
+    """确保浮点数在落入 PostgreSQL NUMERIC(precision, scale) 列时不会触发 numeric field overflow。"""
+    if val is None or not math.isfinite(val):
+        return None
+    limit = float(10 ** (precision - scale))
+    rounded = round(val, scale)
+    if abs(rounded) >= limit:
+        return None
+    return val
 
 
 def parse_dt_east8(val: Any) -> Optional[datetime]:
@@ -383,6 +395,31 @@ def clean_upstream_point(
             "rule_desc": "热源/首站采集时间戳滞后超过 2 小时",
         })
 
+    # 4. 寄存器极值防溢出检查（如频率/负荷/流量 ±1e9 导致 PostgreSQL NUMERIC 溢出中断整批写入）
+    for lbl, val, prec, scale, unit in (
+        ("频率", freq_val, 12, 3, "Hz"),
+        ("负荷", load_val, 12, 3, ""),
+        ("流量", flow_raw, 14, 3, "t/h"),
+    ):
+        if val is not None and sanitize_db_numeric(val, prec, scale) is None:
+            fault_tags.append(FAULT_SENSOR_RANGE)
+            faults.append({
+                "entity_type": "UPSTREAM",
+                "entity_id": f"{data_zone}:{point_meta.get('source_name', name)}",
+                "entity_name": name,
+                "fault_code": FAULT_SENSOR_RANGE,
+                "owner_party": OWNER_RESEARCH,
+                "raw_value_text": f"{lbl}={val}{unit}",
+                "clean_strategy": "寄存器极大异常值超库字段上限，写入前自动置空隔离保护入库事务",
+                "rule_desc": f"上游测点{lbl}超出 NUMERIC({prec},{scale}) 合理量程",
+            })
+
+    flow_clean_safe = sanitize_db_numeric(flow_clean, 14, 3)
+    if flow_raw is not None and sanitize_db_numeric(flow_raw, 14, 3) is None:
+        flow_clean_safe = prev_valid.get("flow_clean") if prev_valid else None
+        flow_clean_safe = sanitize_db_numeric(flow_clean_safe, 14, 3)
+        value_source = SRC_MASKED_PREV
+
     cleaned = {
         "point_id": point_meta.get("point_id"),
         "data_zone": data_zone,
@@ -391,16 +428,16 @@ def clean_upstream_point(
         "category": point_meta.get("category") or data_zone,
         "sub_category": sub_cat,
         "source_time": source_dt,
-        "temp_raw": temp_raw,
-        "temp_clean": temp_clean,
-        "pressure_raw": pres_raw,
-        "pressure_clean": pres_clean,
-        "flow_raw": flow_raw,
-        "flow_clean": flow_clean,
-        "heat_raw": heat_raw,
-        "heat_clean": heat_clean,
-        "load_val": load_val,
-        "freq_val": freq_val,
+        "temp_raw": sanitize_db_numeric(temp_raw, 12, 3),
+        "temp_clean": sanitize_db_numeric(temp_clean, 12, 3),
+        "pressure_raw": sanitize_db_numeric(pres_raw, 12, 4),
+        "pressure_clean": sanitize_db_numeric(pres_clean, 12, 4),
+        "flow_raw": sanitize_db_numeric(flow_raw, 14, 3),
+        "flow_clean": flow_clean_safe,
+        "heat_raw": sanitize_db_numeric(heat_raw, 14, 3),
+        "heat_clean": sanitize_db_numeric(heat_clean, 14, 3),
+        "load_val": sanitize_db_numeric(load_val, 12, 3),
+        "freq_val": sanitize_db_numeric(freq_val, 12, 3),
         "value_source": value_source,
         "fault_tag": ",".join(dict.fromkeys(fault_tags)) if fault_tags else None,
     }
@@ -925,8 +962,8 @@ def clean_temp_device(
         "village_name": village_name[:128],
         "station_name_raw": station_name_raw[:128],
         "zdxh": zdxh[:32],
-        "temp_raw": temp_raw,
-        "temp_clean": temp_clean,
+        "temp_raw": sanitize_db_numeric(temp_raw, 8, 2),
+        "temp_clean": sanitize_db_numeric(temp_clean, 8, 2),
         "upload_time": upload_dt,
         "is_online_valid": is_valid,
         "remark_snapshot": remark,
@@ -1149,21 +1186,21 @@ def clean_merchant_point(
         "source_name": meta["name"],
         "is_registered": True,
         "online": online,
-        "flow_raw": flow_raw,
-        "flow_clean": flow_clean,
-        "return_flow_raw": ret_flow_raw,
-        "temp_sup_raw": temp_sup_raw,
-        "temp_sup_clean": temp_sup_clean,
-        "temp_ret_raw": temp_ret_raw,
-        "temp_ret_clean": temp_ret_clean,
-        "pres_sup_raw": pres_sup_raw,
-        "pres_sup_clean": pres_sup_clean,
-        "pres_ret_raw": pres_ret_raw,
-        "pres_ret_clean": pres_ret_clean,
-        "heat_raw": heat_raw,
-        "heat_clean": heat_clean,
-        "valve_open": valve_open,
-        "valve_set": valve_set,
+        "flow_raw": sanitize_db_numeric(flow_raw, 12, 3),
+        "flow_clean": sanitize_db_numeric(flow_clean, 12, 3),
+        "return_flow_raw": sanitize_db_numeric(ret_flow_raw, 12, 3),
+        "temp_sup_raw": sanitize_db_numeric(temp_sup_raw, 10, 2),
+        "temp_sup_clean": sanitize_db_numeric(temp_sup_clean, 10, 2),
+        "temp_ret_raw": sanitize_db_numeric(temp_ret_raw, 10, 2),
+        "temp_ret_clean": sanitize_db_numeric(temp_ret_clean, 10, 2),
+        "pres_sup_raw": sanitize_db_numeric(pres_sup_raw, 10, 4),
+        "pres_sup_clean": sanitize_db_numeric(pres_sup_clean, 10, 4),
+        "pres_ret_raw": sanitize_db_numeric(pres_ret_raw, 10, 4),
+        "pres_ret_clean": sanitize_db_numeric(pres_ret_clean, 10, 4),
+        "heat_raw": sanitize_db_numeric(heat_raw, 12, 3),
+        "heat_clean": sanitize_db_numeric(heat_clean, 12, 3),
+        "valve_open": sanitize_db_numeric(valve_open, 8, 2),
+        "valve_set": sanitize_db_numeric(valve_set, 8, 2),
         "value_source": value_source,
         "fault_tag": ",".join(dict.fromkeys(fault_tags)) if fault_tags else None,
     }, faults
