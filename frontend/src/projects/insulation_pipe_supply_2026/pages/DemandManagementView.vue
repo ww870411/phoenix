@@ -4443,6 +4443,7 @@ const optionsError = ref('')
 const section1Options = ref([])
 const pipeModelOptions = ref([])
 const currentGroup = ref('')
+const currentGroups = ref([])
 
 const initialSelection = getInitialCategoryAndTab()
 const selectedSection1Id = ref('')
@@ -6759,6 +6760,20 @@ let nowTimer = null
 const actionMessage = ref(null)
 const canSubmitCurrentProject = computed(() => auth.canSubmitFor(PROJECT_KEY))
 const normalizedGroupKey = computed(() => String(currentGroup.value || '').trim())
+const userGroupSet = computed(() => {
+  const result = new Set()
+  const addGroup = (val) => {
+    const normalized = String(val || '').trim().toLowerCase()
+    if (normalized) result.add(normalized)
+  }
+  addGroup(currentGroup.value)
+  addGroup(auth.user?.group)
+  addGroup(auth.session?.group)
+  for (const grp of currentGroups.value || []) addGroup(grp)
+  for (const grp of auth.user?.groups || []) addGroup(grp)
+  for (const grp of auth.session?.groups || []) addGroup(grp)
+  return result
+})
 const isGlobalAdmin = computed(() => {
   const group = normalizedGroupKey.value.toLowerCase()
   return group === 'global_admin' || group === 'globaladmin' || group === '系统管理员' || group === '管理员'
@@ -6775,6 +6790,12 @@ const currentGroupLabel = computed(() => {
   }
   if (isGlobalAdmin.value) {
     return '全局管理员'
+  }
+  if (group === 'tube_global_viewer' || (group === 'Group_admin' && userGroupSet.value.has('tube_global_viewer'))) {
+    return '项目全局浏览'
+  }
+  if (group === 'tube_data_viewer' || (group === 'Group_admin' && userGroupSet.value.has('tube_data_viewer'))) {
+    return '项目全局浏览(含导出)'
   }
   return group
 })
@@ -7067,6 +7088,7 @@ function normalizeOptionsPayload(response) {
     section1Options: response.section_1s || [],
     pipeModelOptions: response.pipe_model_options || response.pipe_models || [],
     currentGroup: response.current_group || response.user?.group || '',
+    currentGroups: Array.isArray(response.user?.groups) ? response.user.groups : [],
     showDate: response.show_date || response.biz_date || '',
     planStartDate: response.plan_start_date || '',
     planEditableDays: Number(response.plan_editable_days ?? 3),
@@ -7085,6 +7107,7 @@ async function loadOptions() {
     section1Options.value = normalized.section1Options
     pipeModelOptions.value = normalized.pipeModelOptions
     currentGroup.value = normalized.currentGroup
+    currentGroups.value = normalized.currentGroups
     showDate.value = normalized.showDate || getTodayString(-1)
     planEditableDays.value = Number.isFinite(normalized.planEditableDays) ? normalized.planEditableDays : 3
     if (response && response.fitting_config && Array.isArray(response.fitting_config.standard_types) && response.fitting_config.standard_types.length) {

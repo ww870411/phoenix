@@ -78,7 +78,7 @@
         "can_revoke": true,
         "can_publish": true,
         "can_unlimited_ai_usage": true,
-        "can_submit": true,
+        "can_submit": false,
         "can_manage_ai_sheet_switch": true,
         "can_access_admin_console": false,
         "can_approve": true,

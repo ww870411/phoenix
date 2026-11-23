@@ -1,3 +1,8 @@
+## 2026-11-23 保温管供货系统适配多用户组 `user.groups` 只读观察员识别 (`SupplyManagementView.vue`, `DemandManagementView.vue`, `TubeProjectPageRouterView.vue`)
+
+- **`src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`**：`canSwitchSupplyEntity`、`isReadOnlyViewer` 与 `currentGroupLabel` 合并识别 `response.user.groups` 与 `auth.user.groups`，使兼职 `tube_global_viewer` 的 `group_admin` 完整同步 `tube_viewer` 的全网供给主体切换、只读锁定状态与身份标签展示。
+- **`src/projects/insulation_pipe_supply_2026/pages/DemandManagementView.vue` & `TubeProjectPageRouterView.vue`**：适配多用户组展示口径与 403 无权提示中的多角色拼接展示。
+
 ## 2026-11-23 升级「数据查询与分析」Excel (.xlsx) 导出商务样式 (`DataAnalysisView.vue`, `analysisExcelExport.js`)
 
 - **`src/projects/daily_report_25_26/utils/analysisExcelExport.js`（新增）**：基于 `xlsx-js-style` 参照 `insulation_pipe_supply_2026` 样式规范实现专业导出渲染（合并大标题与摘要栏、板块标题条、深石板蓝表头、斑马纹、原生千分位数字格式、同比/环比正负着色、计划状态徽章、总计双实线底栏及黄金自适应列宽/行高）。

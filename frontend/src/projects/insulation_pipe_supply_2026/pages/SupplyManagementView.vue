@@ -3428,6 +3428,7 @@ const allSupplyEntityOptions = computed(() => {
 const section1Options = ref([])
 const allPipeModelOptions = ref([])
 const currentGroup = ref('')
+const currentGroups = ref([])
 const isGlobalAdmin = computed(() => {
   const g = String(currentGroup.value || '').trim().toLowerCase()
   return g === 'global_admin' || g === 'dev_admin'
@@ -7131,7 +7132,12 @@ const canSwitchSupplyEntity = computed(() => {
   const u1 = String(auth.user?.username || auth.session?.username || '').trim().toLowerCase()
   const allowedGroups = new Set(['global_admin', 'dev_admin', 'tube_supplier_admin', 'tube_global_viewer', 'tube_data_viewer'])
   const allowedUsers = new Set(['tube_viewer'])
-  return allowedGroups.has(g1) || allowedGroups.has(g2) || allowedUsers.has(u1)
+  const groupSet = new Set(
+    [currentGroup.value, auth.user?.group, auth.session?.group, ...(currentGroups.value || []), ...(auth.user?.groups || []), ...(auth.session?.groups || [])]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean)
+  )
+  return Array.from(allowedGroups).some((g) => groupSet.has(g)) || allowedUsers.has(u1)
 })
 const isReadOnlyViewer = computed(() => {
   const g1 = String(currentGroup.value || '').trim().toLowerCase()
@@ -7141,7 +7147,14 @@ const isReadOnlyViewer = computed(() => {
   const viewerGroups = new Set(['tube_global_viewer', 'tube_data_viewer', 'tube_viewer', 'group_viewer', 'viewer'])
   const viewerUsers = new Set(['tube_viewer', 'viewer', 'guest'])
   
-  return viewerGroups.has(g1) || viewerGroups.has(g2) || viewerUsers.has(u1)
+  const groupSet = new Set(
+    [currentGroup.value, auth.user?.group, auth.session?.group, ...(currentGroups.value || []), ...(auth.user?.groups || []), ...(auth.session?.groups || [])]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean)
+  )
+  const writerGroups = ['global_admin', 'dev_admin', 'tube_supplier_admin', 'tube_supplier']
+  if (writerGroups.some((g) => groupSet.has(g))) return false
+  return Array.from(viewerGroups).some((g) => groupSet.has(g)) || viewerUsers.has(u1)
 })
 
 const switchToCustomMode = () => {
@@ -7201,6 +7214,13 @@ const currentGroupLabel = computed(() => {
   if (currentGroup.value === 'tube_supplier') return '供给主体'
   if (currentGroup.value === 'tube_global_viewer') return '项目全局浏览'
   if (currentGroup.value === 'tube_data_viewer') return '项目全局浏览(含导出)'
+  const allGroups = new Set(
+    [currentGroup.value, auth.user?.group, auth.session?.group, ...(currentGroups.value || []), ...(auth.user?.groups || []), ...(auth.session?.groups || [])]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean)
+  )
+  if (allGroups.has('tube_data_viewer')) return '项目全局浏览(含导出)'
+  if (allGroups.has('tube_global_viewer')) return '项目全局浏览'
   return currentGroup.value
 })
 
@@ -7570,6 +7590,7 @@ function formatDateTimeDisplay(value) {
 function normalizeOptionsPayload(response) {
   return {
     currentGroup: response.user?.group || '',
+    currentGroups: Array.isArray(response.user?.groups) ? response.user.groups : [],
     supplyEntities: response.supply_entities || [],
     supplyEntityContacts: response.supply_entity_contacts || {},
     section_1s: response.section_1s || [],
@@ -7692,6 +7713,7 @@ async function loadOptions() {
     const response = await getTubeSupplyManagementOptions(PROJECT_KEY)
     const normalized = normalizeOptionsPayload(response)
     currentGroup.value = normalized.currentGroup
+    currentGroups.value = normalized.currentGroups
     supplyEntityOptions.value = normalized.supplyEntities
     supplyEntityContactsMap.value = normalized.supplyEntityContacts || {}
     section1Options.value = normalized.section_1s

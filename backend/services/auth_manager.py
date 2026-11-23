@@ -42,7 +42,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from pathlib import Path
 
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 
 
@@ -236,6 +236,53 @@ class UserRecord:
     project_roles: Dict[str, str] = field(default_factory=dict)
     groups: List[str] = field(default_factory=list)
 
+def get_session_groups(session: Any) -> List[str]:
+    """提取会话关联的所有用户组名称（保持主组在前的去重顺序，兼容单组 Mock 对象）。"""
+    ordered: List[str] = []
+    seen: Set[str] = set()
+
+    def _add(raw_value: Any) -> None:
+        text = str(raw_value or "").strip()
+        if text and text not in seen:
+            seen.add(text)
+            ordered.append(text)
+
+    if session is None:
+        return ordered
+
+    _add(getattr(session, "group", None))
+
+    raw_groups = getattr(session, "groups", None)
+    if isinstance(raw_groups, (list, tuple, set)):
+        for item in raw_groups:
+            _add(item)
+
+    permissions = getattr(session, "permissions", None)
+    perm_name = getattr(permissions, "name", None) if permissions is not None else None
+    if isinstance(perm_name, str) and perm_name:
+        for part in perm_name.split(","):
+            _add(part)
+
+    return ordered
+
+
+def session_has_any_group(
+    session: Any,
+    target_groups: Iterable[str],
+    *,
+    case_sensitive: bool = False,
+) -> bool:
+    """判断会话任一所属用户组是否命中目标用户组集合。"""
+    session_groups = get_session_groups(session)
+    if not session_groups:
+        return False
+    if case_sensitive:
+        targets = {str(item or "").strip() for item in target_groups if str(item or "").strip()}
+        return any(group in targets for group in session_groups)
+    targets_lower = {str(item or "").strip().lower() for item in target_groups if str(item or "").strip()}
+    return any(group.lower() in targets_lower for group in session_groups)
+
+
 @dataclass
 class AuthSession:
 
@@ -261,14 +308,16 @@ class AuthSession:
 
     allowed_units_by_project: Dict[str, Set[str]] = field(default_factory=dict)
 
+    groups: List[str] = field(default_factory=list)
 
+
+
+    def has_any_group(self, *target_groups: str, case_sensitive: bool = False) -> bool:
+        """判断当前会话所属用户组集合中是否包含指定任一用户组。"""
+        return session_has_any_group(self, target_groups, case_sensitive=case_sensitive)
 
     def to_user_payload(self) -> Dict[str, object]:
-        groups = (
-            [g.strip() for g in self.permissions.name.split(",") if g.strip()]
-            if getattr(self, "permissions", None) and self.permissions.name
-            else [self.group]
-        )
+        groups = get_session_groups(self) or ([self.group] if self.group else [])
         return {
             "username": self.username,
             "group": self.group,
@@ -844,6 +893,8 @@ class AuthManager:
 
         }
 
+        session_groups = list(record.groups) if getattr(record, "groups", None) else ([record.group] if record.group else [])
+
         return AuthSession(
 
             username=record.username,
@@ -867,6 +918,8 @@ class AuthManager:
             expires_at=expires_at,
 
             persistent=persistent,
+
+            groups=session_groups,
 
         )
 

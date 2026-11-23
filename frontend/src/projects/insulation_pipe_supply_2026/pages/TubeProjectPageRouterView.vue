@@ -63,7 +63,12 @@ const pageTitleMap = {
 }
 
 const pageTitle = computed(() => pageTitleMap[pageKey.value] || pageKey.value)
-const userGroupLabel = computed(() => auth.user?.group || auth.session?.group || '未分配角色')
+const userGroupLabel = computed(() => {
+  const groups = Array.isArray(auth.user?.groups) && auth.user.groups.length
+    ? auth.user.groups
+    : [auth.user?.group || auth.session?.group].filter(Boolean)
+  return groups.length ? groups.join(' / ') : '未分配角色'
+})
 
 // 严格基于 permissions/insulation_pipe_supply_2026.json 中的 page_access 进行校验
 const isAuthorized = computed(() => {

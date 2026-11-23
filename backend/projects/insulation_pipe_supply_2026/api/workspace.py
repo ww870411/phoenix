@@ -21,7 +21,13 @@ def _get_client_ip(request: Optional[Request]) -> str:
         return forwarded.split(",")[0].strip()
     return request.client.host if hasattr(request, "client") and request.client else "unknown"
 
-from backend.services.auth_manager import AuthSession, get_current_session, get_current_session_optional
+from backend.services.auth_manager import (
+    AuthSession,
+    get_current_session,
+    get_current_session_optional,
+    get_session_groups,
+    session_has_any_group,
+)
 from backend.projects.insulation_pipe_supply_2026.services.config_service import (
     BEIJING_TZ,
     CONFIG_PATH,
@@ -703,9 +709,43 @@ def _ensure_global_admin(session: AuthSession) -> None:
         raise HTTPException(status_code=403, detail="只有 Global_admin 可以访问该页面")
 
 
+def _is_readonly_viewer_session(session: AuthSession) -> bool:
+    """判断会话在当前项目中是否为只读观察员或未获提交授权。"""
+    is_viewer_only = session_has_any_group(
+        session,
+        {"tube_global_viewer", "tube_data_viewer"},
+        case_sensitive=False,
+    ) and not session_has_any_group(
+        session,
+        {
+            "Global_admin",
+            "dev_admin",
+            "tube_supplier_admin",
+            "tube_warehouse_admin",
+            "tube_demand_admin",
+            "tube_supplier",
+            "tube_site_manager",
+            "tube_construction_unit",
+            "tube_warehouse_keeper",
+        },
+        case_sensitive=False,
+    )
+    if is_viewer_only:
+        return True
+    if hasattr(session, "get_project_action_flags"):
+        return not session.get_project_action_flags(PROJECT_KEY).can_submit
+    return False
+
+
+def _ensure_writable_session(session: AuthSession, detail: str = "只读账号无权提交数据") -> None:
+    """阻断只读观察员或未获得项目提交权限的账号执行写入操作。"""
+    if _is_readonly_viewer_session(session):
+        raise HTTPException(status_code=403, detail=detail)
+
+
 def _ensure_warehouse_access(session: AuthSession) -> None:
     group = str(session.group or "").strip()
-    if group not in {"Global_admin", "tube_warehouse_keeper", "tube_global_viewer", "tube_data_viewer"}:
+    if not session_has_any_group(session, {"Global_admin", "tube_warehouse_keeper", "tube_global_viewer", "tube_data_viewer"}, case_sensitive=False):
         raise HTTPException(status_code=403, detail="当前账号无库管页面访问权限")
 
 
@@ -2900,7 +2940,7 @@ def get_demand_management_options(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     show_date = get_configured_show_date(payload)
     plan_start_date = get_configured_plan_start_date(payload)
     usage_collection_date = get_usage_collection_date(payload)
@@ -2913,6 +2953,7 @@ def get_demand_management_options(
         "user": {
             "username": session.username,
             "group": session.group,
+            "groups": get_session_groups(session),
             "unit": session.unit,
         },
         "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
@@ -2931,8 +2972,8 @@ def get_supply_management_options(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, get_session_groups(session))
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
 
     # 严格按照配置文件 tube_config.json 中的 supply_entities 预设顺序排列
     ordered_accessible_ids: List[str] = [
@@ -2950,6 +2991,7 @@ def get_supply_management_options(
         "user": {
             "username": session.username,
             "group": session.group,
+            "groups": get_session_groups(session),
             "unit": session.unit,
         },
         "supply_entities": _serialize_supply_entity_options(payload, accessible_supply_entity_ids),
@@ -2968,6 +3010,7 @@ def save_supply_entity_contact_endpoint(
     payload: SupplyContactSavePayload,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    _ensure_writable_session(session, "只读账号无权修改供给侧联系人或发货信息")
     record_supply_entity_contact(
         payload.supply_entity_id,
         payload.contact_name,
@@ -3056,7 +3099,7 @@ def get_supplier_inventory_endpoint(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_entities = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+    accessible_entities = resolve_accessible_supply_entity_ids(payload, session.username, get_session_groups(session))
 
     target_entity_id = str(supply_entity_id or "").strip()
     if not target_entity_id:
@@ -3081,7 +3124,7 @@ def save_supplier_inventory_endpoint(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     cfg = load_tube_config()
-    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, session.group)
+    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, get_session_groups(session))
     target_entity_id = str(payload.supply_entity_id or "").strip()
     if not target_entity_id:
         raise HTTPException(status_code=422, detail="供给主体标识不能为空")
@@ -3090,6 +3133,7 @@ def save_supplier_inventory_endpoint(
         raise HTTPException(status_code=403, detail="无权保存该供给主体的库存盘点数据")
 
     items_dict = [it.dict() for it in payload.items]
+    _ensure_writable_session(session, "只读账号无权保存供给主体库存盘点数据")
     res = save_supplier_inventory(
         supply_entity_id=target_entity_id,
         report_date=payload.report_date,
@@ -3133,7 +3177,7 @@ def get_fitting_supplier_inventory_endpoint(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_entities = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+    accessible_entities = resolve_accessible_supply_entity_ids(payload, session.username, get_session_groups(session))
 
     target_entity_id = str(supply_entity_id or "").strip()
     if not target_entity_id:
@@ -3158,7 +3202,7 @@ def save_fitting_supplier_inventory_endpoint(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     cfg = load_tube_config()
-    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, session.group)
+    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, get_session_groups(session))
     target_entity_id = str(payload.supply_entity_id or "").strip()
     if not target_entity_id:
         raise HTTPException(status_code=422, detail="供给主体标识不能为空")
@@ -3167,6 +3211,7 @@ def save_fitting_supplier_inventory_endpoint(
         raise HTTPException(status_code=403, detail="无权保存该供给主体的管件库存盘点数据")
 
     items_dict = [it.dict() for it in payload.items]
+    _ensure_writable_session(session, "只读账号无权保存供给主体管件库存盘点数据")
     res = save_fitting_supplier_inventory(
         supply_entity_id=target_entity_id,
         report_date=payload.report_date,
@@ -3475,7 +3520,7 @@ def get_supply_management_deliveries(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, session.group)
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(payload, session.username, get_session_groups(session))
     if not accessible_supply_entity_ids:
         return {"ok": True, "project_key": PROJECT_KEY, "rows": []}
 
@@ -3503,10 +3548,10 @@ def create_supply_management_delivery(
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
-    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
+    if _is_readonly_viewer_session(session):
         raise HTTPException(status_code=403, detail="只读账号无权提交发货数据")
     config_payload = load_tube_config()
-    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, get_session_groups(session))
     if payload.supply_entity_id not in accessible_supply_entity_ids and not _is_admin_or_supplier_admin(session.group):
         raise HTTPException(status_code=403, detail="当前账号无该供给主体的发货权限")
     created = _create_supply_delivery_entry(
@@ -3565,10 +3610,10 @@ def create_supply_management_delivery_batch(
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
-    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
+    if _is_readonly_viewer_session(session):
         raise HTTPException(status_code=403, detail="只读账号无权批量提交发货数据")
     config_payload = load_tube_config()
-    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, get_session_groups(session))
     if payload.supply_entity_id not in accessible_supply_entity_ids and not _is_admin_or_supplier_admin(session.group):
         raise HTTPException(status_code=403, detail="当前账号无该供给主体的发货权限")
     items = list(payload.items or [])
@@ -3647,10 +3692,10 @@ def cancel_supply_management_delivery(
     request: Request,
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
-    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
+    if _is_readonly_viewer_session(session):
         raise HTTPException(status_code=403, detail="只读账号无权撤销发货数据")
     config_payload = load_tube_config()
-    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, session.group)
+    accessible_supply_entity_ids = resolve_accessible_supply_entity_ids(config_payload, session.username, get_session_groups(session))
     
     before_val = get_delivery_record_basic(delivery_id)
     allowed_ids = set(accessible_supply_entity_ids)
@@ -3813,8 +3858,8 @@ def get_warehouse_management_options(
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
-    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
+    if not accessible_section_1_ids and session_has_any_group(session, {"tube_warehouse_keeper"}):
         accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
 
     return {
@@ -3823,6 +3868,7 @@ def get_warehouse_management_options(
         "user": {
             "username": session.username,
             "group": session.group,
+            "groups": get_session_groups(session),
             "unit": session.unit,
         },
         "section_1s": _serialize_section_1_options(payload, accessible_section_1_ids),
@@ -3855,8 +3901,8 @@ def get_warehouse_management_deliveries(
     payload = load_tube_config()
     all_supply_entity_ids = [item.get("entity_id") for item in get_config_list(payload, "supply_entities")]
     
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
-    if not accessible_section_1_ids and session.group == "tube_warehouse_keeper":
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
+    if not accessible_section_1_ids and session_has_any_group(session, {"tube_warehouse_keeper"}):
         accessible_section_1_ids = set(_build_section_1_name_map(payload).keys())
 
     # 逗号分隔解析多选值
@@ -3922,7 +3968,7 @@ def confirm_warehouse_delivery_warehouse(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     _ensure_warehouse_access(session)
-    if str(session.group or "").strip() in ("tube_global_viewer", "tube_data_viewer"):
+    if _is_readonly_viewer_session(session):
         raise HTTPException(status_code=403, detail="只读账号无权提交数据")
     before_val = get_delivery_record_basic(delivery_id)
     update_delivery_warehouse_record(
@@ -3950,7 +3996,7 @@ def get_demand_management_baseline(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     section_1_name_map = _build_section_1_name_map(payload)
@@ -3990,7 +4036,7 @@ def get_demand_management_fitting_baseline(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     section_1_name_map = _build_section_1_name_map(payload)
@@ -4013,7 +4059,7 @@ def get_demand_management_plan_matrix(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     plan_dates = build_plan_dates(get_configured_plan_start_date(payload))
@@ -4091,10 +4137,11 @@ def save_demand_management_plan_matrix(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, get_session_groups(session))
     _ensure_section_1_access(payload.section_1_id, accessible_section_1_ids)
  
     # 严格流程顺序锁后台强拦截
+    _ensure_writable_session(session, "只读账号无权保存需求侧三日计划")
     strict_planning_flow_control = bool(config_payload.get("strict_planning_flow_control", True))
     if strict_planning_flow_control:
         usage_date = get_usage_collection_date(config_payload)
@@ -4161,7 +4208,7 @@ def get_demand_management_usage_sheet(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     _ensure_section_1_access(section_1_id, accessible_section_1_ids)
  
     pipe_model_map = _build_pipe_model_map(payload)
@@ -4201,10 +4248,11 @@ def save_demand_management_usage_sheet(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, get_session_groups(session))
     _ensure_section_1_access(payload.section_1_id, accessible_section_1_ids)
  
     # 获取修改前快照
+    _ensure_writable_session(session, "只读账号无权保存需求侧使用量")
     before_usages = list_usage_records(payload.section_1_id, payload.usage_date)
     before_serialized = {}
     for k, v in before_usages.items():
@@ -4258,9 +4306,10 @@ def submit_demand_management_section_1_status(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, get_session_groups(session))
     _ensure_section_1_access(payload.section_1_id, accessible_section_1_ids)
  
+    _ensure_writable_session(session, "只读账号无权提交需求填报状态")
     section_1_name_map = _build_section_1_name_map(config_payload)
     plan_start_date = get_configured_plan_start_date(config_payload)
     show_date = get_configured_show_date(config_payload)
@@ -4333,7 +4382,7 @@ def handle_list_pipe_usage_history(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     config_payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(config_payload, session.username, get_session_groups(session))
     _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     rows = list_pipe_usage_history(
@@ -4351,7 +4400,7 @@ def get_demand_management_pending_arrivals(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     rows = list_pending_arrivals(section_1_id)
@@ -4379,7 +4428,7 @@ def get_demand_management_logistics_records(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     _ensure_section_1_access(section_1_id, accessible_section_1_ids)
 
     all_supply_entity_ids = [item.get("entity_id") for item in get_config_list(payload, "supply_entities")]
@@ -4441,7 +4490,7 @@ def get_demand_management_pending_deliveries_summary(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
     if not accessible_section_1_ids:
         return {
             "ok": True,
@@ -4820,7 +4869,7 @@ def get_demand_management_governance_overview(
     5. 综合闭环状态与责任主体信息。
     """
     payload = load_tube_config()
-    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(payload, session.username, get_session_groups(session))
 
     # 1. 确保触发超时自动流转与表自愈
     try:
@@ -5264,7 +5313,7 @@ def confirm_demand_management_delivery_arrival(
     delivery = get_delivery_record_basic(delivery_id)
     if not delivery:
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
-    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, get_session_groups(session))
     _ensure_section_1_access(delivery["section_1_id"], accessible_section_1_ids)
     
     before_val = _to_json_serializable(delivery)
@@ -5303,7 +5352,7 @@ def confirm_demand_management_delivery_receipt(
     delivery = get_delivery_record_basic(delivery_id)
     if not delivery:
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
-    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, get_session_groups(session))
     _ensure_section_1_access(delivery["section_1_id"], accessible_section_1_ids)
     
     before_val = _to_json_serializable(delivery)
@@ -5349,7 +5398,7 @@ def approve_delivery_difference(
     if not delivery:
         raise HTTPException(status_code=404, detail=f"发货记录不存在：{delivery_id}")
         
-    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, session.group)
+    accessible_section_1_ids = resolve_accessible_section_1_ids(load_tube_config(), session.username, get_session_groups(session))
     _ensure_section_1_access(delivery["section_1_id"], accessible_section_1_ids)
     
     if delivery["status"] != 'pending_diff_approve':
@@ -5812,7 +5861,7 @@ def get_global_management_history(
         "tube_global_viewer",
         "tube_data_viewer",
     }
-    if group_lower not in allowed_groups:
+    if not session_has_any_group(session, allowed_groups, case_sensitive=False):
         raise HTTPException(status_code=403, detail="无权查看历史数据")
         
     try:
@@ -5873,7 +5922,7 @@ def export_global_management_history(
         "tube_warehouse_keeper",
         "tube_data_viewer",
     }
-    if group_lower not in allowed_groups:
+    if not session_has_any_group(session, allowed_groups, case_sensitive=False):
         raise HTTPException(status_code=403, detail="无权导出历史数据")
         
     try:
@@ -6327,7 +6376,7 @@ def handle_presence_logout(
 
 def _ensure_fitting_role(session: AuthSession, allowed_groups: Set[str], action_name: str) -> None:
     group = str(session.group or "").strip().lower()
-    if group not in allowed_groups:
+    if not session_has_any_group(session, allowed_groups, case_sensitive=False):
         raise HTTPException(status_code=403, detail=f"当前账号无{action_name}权限")
 
 
@@ -6337,7 +6386,7 @@ def _normalized_access_ids(values: Set[str]) -> Set[str]:
 
 def _ensure_fitting_section_access(rows: List[Dict[str, Any]], session: AuthSession) -> None:
     config = load_tube_config()
-    allowed_ids = _normalized_access_ids(resolve_accessible_section_1_ids(config, session.username, session.group))
+    allowed_ids = _normalized_access_ids(resolve_accessible_section_1_ids(config, session.username, get_session_groups(session)))
     denied = sorted({str(row.get("section_1_id") or "").strip() for row in rows if str(row.get("section_1_id") or "").strip().lower() not in allowed_ids})
     if denied:
         raise HTTPException(status_code=403, detail=f"当前账号无以下标段的管件操作权限：{', '.join(denied)}")
@@ -6345,7 +6394,7 @@ def _ensure_fitting_section_access(rows: List[Dict[str, Any]], session: AuthSess
 
 def _ensure_fitting_supply_access(rows: List[Dict[str, Any]], session: AuthSession) -> None:
     config = load_tube_config()
-    allowed_ids = _normalized_access_ids(resolve_accessible_supply_entity_ids(config, session.username, session.group))
+    allowed_ids = _normalized_access_ids(resolve_accessible_supply_entity_ids(config, session.username, get_session_groups(session)))
     denied = sorted({str(row.get("supply_entity_id") or "").strip() for row in rows if str(row.get("supply_entity_id") or "").strip().lower() not in allowed_ids})
     if denied:
         raise HTTPException(status_code=403, detail=f"当前账号无以下供给主体的管件操作权限：{', '.join(denied)}")
@@ -6374,7 +6423,7 @@ def handle_submit_fitting_delivery(
 ) -> Dict[str, Any]:
     _ensure_fitting_role(session, {"global_admin", "tube_supplier_admin", "tube_supplier"}, "管件发货")
     config = load_tube_config()
-    accessible_supply_ids = resolve_accessible_supply_entity_ids(config, session.username, session.group)
+    accessible_supply_ids = resolve_accessible_supply_entity_ids(config, session.username, get_session_groups(session))
     if payload.supply_entity_id.strip().lower() not in _normalized_access_ids(accessible_supply_ids):
         raise HTTPException(status_code=403, detail="当前账号无该供给主体的管件发货权限")
     allowed_section_ids = resolve_supply_entity_allowed_section_ids(config, payload.supply_entity_id)
@@ -6500,13 +6549,13 @@ def handle_list_fitting_deliveries(
         },
         "管件发货记录查询",
     )
-    accessible_section_ids = resolve_accessible_section_1_ids(config, session.username, session.group)
-    accessible_supply_ids = resolve_accessible_supply_entity_ids(config, session.username, session.group)
+    accessible_section_ids = resolve_accessible_section_1_ids(config, session.username, get_session_groups(session))
+    accessible_supply_ids = resolve_accessible_supply_entity_ids(config, session.username, get_session_groups(session))
     section_scoped_groups = {"tube_supplier", "tube_site_manager", "tube_construction_unit", "tube_warehouse_keeper"}
     supply_scoped_groups = {"tube_supplier"}
     
-    apply_section_scope = (group in section_scoped_groups) and (not public_view)
-    apply_supply_scope = (group in supply_scoped_groups) and (not public_view)
+    apply_section_scope = (not session_has_any_group(session, {"global_admin", "tube_global_viewer", "tube_data_viewer", "tube_supplier_admin", "tube_warehouse_admin"})) and session_has_any_group(session, section_scoped_groups) and (not public_view)
+    apply_supply_scope = (not session_has_any_group(session, {"global_admin", "tube_global_viewer", "tube_data_viewer", "tube_supplier_admin", "tube_warehouse_admin"})) and session_has_any_group(session, supply_scoped_groups) and (not public_view)
 
     result = list_fitting_deliveries(
         section_1_id=section_1_id,
@@ -6621,7 +6670,7 @@ def handle_submit_fitting_usage(
         "管件安装使用量填报",
     )
     config = load_tube_config()
-    accessible_section_ids = resolve_accessible_section_1_ids(config, session.username, session.group)
+    accessible_section_ids = resolve_accessible_section_1_ids(config, session.username, get_session_groups(session))
     if session.group not in ("global_admin", "dev_admin"):
         if payload.section_1_id.strip().lower() not in _normalized_access_ids(accessible_section_ids):
             raise HTTPException(status_code=403, detail="当前账号无该标段的管件使用量填报权限")
@@ -6916,14 +6965,14 @@ def handle_comprehensive_supplier_inventory(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
     cfg = load_tube_config()
-    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, session.group)
+    accessible_entities = resolve_accessible_supply_entity_ids(cfg, session.username, get_session_groups(session))
 
     raw_sup_list = [s.strip() for s in supplier_ids.split(",") if s.strip()] if supplier_ids else []
     
     # 权限管控：若账号受管辖主体限制（非管理员且非全网观察员），则必须限制在其管辖实体内
-    is_global_role = session.group in (
+    is_global_role = session_has_any_group(session, [
         "Global_admin", "global_admin", "tube_supplier_admin", 
-        "tube_global_viewer", "tube_viewer", "tube_data_viewer", "system"
+        "tube_global_viewer", "tube_viewer", "tube_data_viewer", "system"], case_sensitive=False
     )
     if not is_global_role and accessible_entities:
         if raw_sup_list:
@@ -7065,6 +7114,7 @@ def handle_get_material_prices(
 def handle_import_material_prices(
     session: AuthSession = Depends(get_current_session),
 ) -> Dict[str, Any]:
+    _ensure_writable_session(session, "只读账号无权导入物料单价")
     res = import_prices_from_excel(operator=session.username or "ADMIN")
     return res
 

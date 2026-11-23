@@ -11,7 +11,8 @@
     "group_admin": {
       "password": "password",
       "groups": [
-        "Group_admin"
+        "Group_admin",
+        "tube_global_viewer"
       ],
       "unit": "Group",
       "project_roles": {}

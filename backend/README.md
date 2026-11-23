@@ -1,3 +1,16 @@
+## 2026-11-23 取消用户组 `Group_admin` 在 `daily_report_25_26` 的数据提交权限 (`daily_report_25_26.json`)
+
+- **`backend_data/shared/auth/permissions/daily_report_25_26.json`**：将 `Group_admin` 的 `actions.can_submit` 设为 `false`，由 `legacy_full.submit_debug()`、`data_correction.ensure_access()` 与前端 `DataEntryView.vue` 自动执行只读展示与 403 提交拦截，同时保留 `can_approve` / `can_revoke` / `can_publish`。
+- **`projects/daily_report_25_26/tests/test_auth_sheet_rules.py` & `projects/insulation_pipe_supply_2026/tests/test_group_admin_tube_viewer.py`**：补充 `Group_admin` 提交拦截与审批权限保留回归测试。
+
+## 2026-11-23 认证多用户组全链路识别与 `group_admin` 兼职 `tube_global_viewer` 同权接入 (`auth_manager.py`, `routes.py`, `config_service.py`, `workspace.py`)
+
+- **`services/auth_manager.py`**：新增 `get_session_groups()`、`session_has_any_group()` 及 `AuthSession.groups` / `AuthSession.has_any_group()`，支持全链路识别账号多用户组并兼容单组 Mock 对象。
+- **`api/v1/routes.py`**：新增 `_is_project_enabled_for_session()`，使 `/api/v1/projects` 与 `/api/v1/projects/{project_id}/pages` 基于账号所有用户组判定项目 `availability`。
+- **`projects/insulation_pipe_supply_2026/services/config_service.py`**：升级 `resolve_accessible_section_1_ids()` 与 `resolve_accessible_supply_entity_ids()` 支持多用户组集合输入。
+- **`projects/insulation_pipe_supply_2026/api/workspace.py`**：将各页 `/options`、库管/历史/管件/综合库存读鉴权切换为多组识别并透传 `user.groups`，补充 `_is_readonly_viewer_session()` 与 `_ensure_writable_session()` 对只读观察员与无提交权限会话统一拦截后端写操作。
+- **`projects/insulation_pipe_supply_2026/tests/test_group_admin_tube_viewer.py`（新增）**：回归验证 `group_admin` 兼职 `tube_global_viewer` 与 `tube_viewer` 同权及日报既有权限隔离。
+
 ## 2026-11-23 修复智慧供热平台居民室温整点偏移调度死锁与 `±1e9` 溢出回滚 (`scheduler_service.py`, `cleaning_engine.py`)
 
 - **`projects/smart_heating_platform/services/scheduler_service.py`**：解耦 5/15/30 分钟断面触发与整点后延迟偏移 `hourly_offset_minutes`，新增 `_last_jumin_hour_slot` 确保到达偏移分钟后每小时稳定触发一次 `/jumin/` 室温采集。

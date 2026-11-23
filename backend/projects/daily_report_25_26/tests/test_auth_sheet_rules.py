@@ -1,5 +1,12 @@
 """验证真实账号的项目表单范围及兼职规则合并，不登录、不连接业务数据库。"""
+import asyncio
 import unittest
+from types import SimpleNamespace
+
+from fastapi import HTTPException
+
+from backend.projects.daily_report_25_26.api import legacy_full
+from backend.projects.daily_report_25_26.services import data_correction
 from backend.services.auth_manager import AuthManager, SheetRule, auth_manager
 
 
@@ -60,6 +67,36 @@ class AuthSheetRuleTests(unittest.TestCase):
         result = AuthManager._merge_sheet_rule_maps([unit, viewer])
         self.assertEqual(result["data_entry"].mode, "by_unit")
         self.assertEqual(AuthManager._merge_sheet_rule_maps([unit, {"data_entry": SheetRule("all")}])["data_entry"].mode, "all")
+
+    def test_group_admin_cannot_submit_data_entry_or_correction(self):
+        record = auth_manager._users_by_name["group_admin"]
+        session = auth_manager._build_session(
+            record=record,
+            group_permissions=auth_manager._groups[record.group],
+            token="unit-test-group-admin-readonly-entry",
+            issued_at=auth_manager._now(),
+            expires_at=None,
+            persistent=False,
+        )
+        flags = session.get_project_action_flags(PROJECT)
+        self.assertFalse(flags.can_submit)
+        self.assertTrue(flags.can_approve)
+        self.assertTrue(flags.can_revoke)
+        self.assertTrue(flags.can_publish)
+        self.assertIn("data_entry", session.get_project_page_access(PROJECT))
+
+        with self.assertRaises(HTTPException) as submit_denied:
+            asyncio.run(legacy_full.submit_debug(request=SimpleNamespace(), sheet_key="BeiHai_co_generation_Sheet", session=session))
+        self.assertEqual(submit_denied.exception.status_code, 403)
+
+        with self.assertRaises(HTTPException) as correction_denied:
+            data_correction.ensure_access(
+                session,
+                sheet_key="BeiHai_co_generation_Sheet",
+                unit_id="BeiHai",
+                submit=True,
+            )
+        self.assertEqual(correction_denied.exception.status_code, 403)
 
 
 if __name__ == "__main__":

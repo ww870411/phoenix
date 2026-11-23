@@ -546,8 +546,20 @@ def _extract_normalized_ids(raw_value: Any) -> Set[str]:
     return result
 
 
-def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
-    normalized_group = str(group or "").strip().lower()
+def _normalize_group_names(group: Any) -> Set[str]:
+    """将单字符串、逗号分隔字符串或用户组集合规整为小写用户组集合。"""
+    if isinstance(group, str):
+        return {part.strip().lower() for part in group.split(",") if part.strip()}
+    if isinstance(group, (list, tuple, set, frozenset)):
+        normalized: Set[str] = set()
+        for item in group:
+            normalized.update(_normalize_group_names(item))
+        return normalized
+    return set()
+
+
+def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, group: Any) -> Set[str]:
+    normalized_groups = _normalize_group_names(group)
     normalized_username = str(username or "").strip().lower()
     demand_entities = get_config_list(payload, "demand_entities")
     all_section_1_ids = {
@@ -555,7 +567,7 @@ def resolve_accessible_section_1_ids(payload: Dict[str, Any], username: str, gro
         for item in demand_entities
         if str(item.get("section_1_id") or "").strip()
     }
-    if normalized_group in ("global_admin", "tube_global_viewer", "tube_data_viewer", "tube_supplier_admin", "tube_warehouse_admin"):
+    if normalized_groups & {"global_admin", "tube_global_viewer", "tube_data_viewer", "tube_supplier_admin", "tube_warehouse_admin"}:
         return all_section_1_ids
 
     manager_assignments = get_config_list(payload, "manager_assignments")
@@ -619,8 +631,8 @@ def resolve_supply_entity_allowed_section_ids(payload: Dict[str, Any], supply_en
     return set()
 
 
-def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str, group: str) -> Set[str]:
-    normalized_group = str(group or "").strip().lower()
+def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str, group: Any) -> Set[str]:
+    normalized_groups = _normalize_group_names(group)
     normalized_username = str(username or "").strip().lower()
     supply_entities = get_config_list(payload, "supply_entities")
     all_entity_ids = {
@@ -628,7 +640,7 @@ def resolve_accessible_supply_entity_ids(payload: Dict[str, Any], username: str,
         for item in supply_entities
         if str(item.get("entity_id") or "").strip()
     }
-    if normalized_group in ("global_admin", "tube_global_viewer", "tube_data_viewer", "tube_supplier_admin", "tube_warehouse_admin", "tube_warehouse_keeper"):
+    if normalized_groups & {"global_admin", "tube_global_viewer", "tube_data_viewer", "tube_supplier_admin", "tube_warehouse_admin", "tube_warehouse_keeper"}:
         return all_entity_ids
 
     allowed_entity_ids: Set[str] = set()

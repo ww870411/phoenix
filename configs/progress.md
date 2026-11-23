@@ -1,5 +1,37 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-23 取消用户组 `Group_admin` 在 `daily_report_25_26` 每日数据填报中的提交权限
+
+- **改动缘由**：
+  - 需取消用户组 `Group_admin` 在 `/projects/daily_report_25_26/pages/data_entry/sheets`（每日数据填报页面）中的一切数据提交权限，使其进入填报页保持只读查看状态，同时保留既有审批、撤销、发布与查看权限。
+- **改动清单**：
+  - **`backend_data/shared/auth/permissions/daily_report_25_26.json`**：
+    - 将 `Group_admin` 在 `daily_report_25_26` 中的 `actions.can_submit` 由 `true` 调整为 `false`（`page_access` 中 `"data_entry"` 与 `can_approve` / `can_revoke` / `can_publish` 等权限保持不变）。
+    - 联动效果：后端 `/data_entry/sheets/{sheet_key}/submit` 与 `data_correction.ensure_access(..., submit=True)` 对 `Group_admin` 返回 `403`；前端 `DataEntryView.vue` 自动切为「只读查看：当前账号不可修改或提交数据」并禁用提交、一并提交、修正申请、能效导入及投诉同步填入。
+  - **`backend/projects/daily_report_25_26/tests/test_auth_sheet_rules.py` & `backend/projects/insulation_pipe_supply_2026/tests/test_group_admin_tube_viewer.py`**：
+    - 新增并更新断言验证 `Group_admin` / `group_admin` 在 `daily_report_25_26` 中 `can_submit == False`（`submit_debug` 与 `data_correction` 提交均被 403 拦截），同时 `can_approve`、`can_revoke`、`can_publish` 保持为 `True`。
+
+## 2026-11-23 开放 `group_admin` 访问 `insulation_pipe_supply_2026`（方案 A：多用户组兼职与全局多组识别）
+
+- **改动缘由**：
+  - 需为集团管理账号 `group_admin` 开放访问 `https://platform.smartview.top/projects/insulation_pipe_supply_2026/pages`，且在该项目中的页面可见范围、数据查询范围及只读限制与 `tube_viewer`（角色组 `tube_global_viewer`）完全一致，同时保留其在 `daily_report_25_26` 等既有项目中的 `Group_admin` 权限。
+  - 原架构中 `AuthManager._build_merged_permissions` 已支持按项目合并多用户组权限，但 `账户信息.json` 中 `group_admin` 仅配置单组 `["Group_admin"]`，且 `routes.py` 项目可见性检查与 `insulation_pipe_supply_2026` 前后端部分鉴权逻辑仅识别单字段 `session.group`（主组），导致副组 `tube_global_viewer` 在项目入口列表、实体范围和部分只读界面状态中无法生效。
+- **改动清单**：
+  - **`backend_data/shared/auth/账户信息.json`**：
+    - 为 `group_admin` 的 `groups` 追加 `"tube_global_viewer"`（调整为 `["Group_admin", "tube_global_viewer"]`），保持主组 `"Group_admin"` 位于首位。
+  - **`backend/services/auth_manager.py`**：
+    - 新增 `get_session_groups()`、`session_has_any_group()` 与 `AuthSession.groups` / `AuthSession.has_any_group()`，在 `_build_session()` 与 `to_user_payload()` 中完整保留并提取多用户组列表，兼容仅含单组 `group` 的测试 Mock 对象。
+  - **`backend/api/v1/routes.py`**：
+    - 新增 `_is_project_enabled_for_session()`，使 `list_projects` 与 `_ensure_project_visible_and_accessible` 在账号任一所属用户组命中项目 `availability` 时放行访问。
+  - **`backend/projects/insulation_pipe_supply_2026/services/config_service.py`**：
+    - 新增 `_normalize_group_names()`，升级 `resolve_accessible_section_1_ids()` 与 `resolve_accessible_supply_entity_ids()` 支持单组字符串、逗号串或多用户组集合并集判定。
+  - **`backend/projects/insulation_pipe_supply_2026/api/workspace.py`**：
+    - 全量切换需求/供给/库管/历史查询/管件/综合库存等读写鉴权与 `/options` 接口改用 `get_session_groups()`、`session_has_any_group()`，新增 `_is_readonly_viewer_session()` 与 `_ensure_writable_session()` 统一阻断只读或未获 `can_submit` 授权账号的后端写入操作，并在 `/demand-management/options`、`/supply-management/options`、`/warehouse-management/options` 响应中透传 `user.groups`。
+  - **`frontend/src/projects/insulation_pipe_supply_2026/pages/{SupplyManagementView,DemandManagementView,TubeProjectPageRouterView}.vue`**：
+    - 同步识别 `user.groups`，使兼职 `tube_global_viewer` 的 `group_admin` 与 `tube_viewer` 一致获得全网供给主体切换器、只读观察员禁用状态、角色标签展示与 403 提示。
+  - **`backend/projects/insulation_pipe_supply_2026/tests/test_group_admin_tube_viewer.py`（新增）**：
+    - 验证 `group_admin` 与 `tube_viewer` 在项目列表、页面列表、需求/供给实体范围、选项/查询/管件接口、所有只读写拦截以及 `daily_report_25_26` 原有权限保留上的完整一致性。
+
 ## 2026-11-23 优化「数据查询与分析」Excel 导出表格商务样式排版
 
 - **改动缘由**：

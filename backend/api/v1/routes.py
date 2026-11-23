@@ -14,7 +14,7 @@ from backend.services.project_modularization import resolve_project_modularizati
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from backend.services.auth_manager import AuthSession, get_current_session
+from backend.services.auth_manager import AuthSession, get_current_session, get_session_groups
 from .auth import router as auth_router
 from .admin_console import router as admin_console_router
 from .project_router_registry import PROJECT_ROUTER_REGISTRY
@@ -149,12 +149,20 @@ def _extract_json_response_message(error: JSONResponse, fallback: str) -> str:
     return str(payload.get("message") or fallback)
 
 
+def _is_project_enabled_for_session(project_entry: Dict[str, Any], session: AuthSession) -> bool:
+    """只要会话所属任一用户组命中项目 availability 配置，即允许可见。"""
+    session_groups = get_session_groups(session)
+    if not session_groups:
+        return _is_project_enabled_for_group(project_entry, "")
+    return any(_is_project_enabled_for_group(project_entry, group_name) for group_name in session_groups)
+
+
 def _ensure_project_visible_and_accessible(
     project_id: str,
     project_entry: Dict[str, Any],
     session: AuthSession,
 ) -> None:
-    if not _is_project_enabled_for_group(project_entry, session.group):
+    if not _is_project_enabled_for_session(project_entry, session):
         raise HTTPException(status_code=403, detail=f"项目 {project_id} 当前不可用")
     if not session.has_project_access(project_id):
         raise HTTPException(status_code=403, detail=f"当前账号无项目 {project_id} 的访问权限")
@@ -196,7 +204,7 @@ def list_projects(session: AuthSession = Depends(get_current_session)):
     for project_id, cfg in entries.items():
         if not isinstance(project_id, str) or not isinstance(cfg, dict):
             continue
-        if not _is_project_enabled_for_group(cfg, session.group):
+        if not _is_project_enabled_for_session(cfg, session):
             continue
         # 允许多种命名回落
         raw_name = (
