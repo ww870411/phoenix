@@ -4126,6 +4126,29 @@ export async function exportCompetitionExcel(month, payload = {}, projectKey = '
   return { blob, filename }
 }
 
+// 主城区供热运行联合评价模型测算接口（仅限 Global_admin）
+export async function getJointEvaluation(projectKey = 'daily_report_25_26', params = {}) {
+  const search = new URLSearchParams()
+  if (params.mode) search.set('mode', params.mode)
+  if (params.biz_date) search.set('biz_date', params.biz_date)
+  if (params.start_date) search.set('start_date', params.start_date)
+  if (params.end_date) search.set('end_date', params.end_date)
+  if (params.period_days != null) search.set('period_days', String(params.period_days))
+  if (params.period_count != null) search.set('period_count', String(params.period_count))
+  const qs = search.toString()
+  const response = await authAwareFetch(
+    `${projectPath(projectKey)}/joint-evaluation${qs ? `?${qs}` : ''}`,
+    {
+      headers: attachAuthHeaders({ Accept: 'application/json' }),
+      cache: 'no-store',
+    },
+  )
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response, '获取主城区供热联合评价模型数据失败'))
+  }
+  return response.json()
+}
+
 
 
 

@@ -1,22 +1,34 @@
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_DEFAULT_TIMEOUT=180 \
+    PIP_INDEX_URL=https://pypi.org/simple \
+    PIP_EXTRA_INDEX_URL=https://mirrors.aliyun.com/pypi/simple \
+    PIP_TRUSTED_HOST=mirrors.aliyun.com
 
 WORKDIR /app
 
-# 可选：加速国内源（按需启用）
-# RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+# 切换阿里云 Debian APT 源（替代超时的中科大源），安装 postgresql-client
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eu; \
+    for source_file in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+        if [ -f "$source_file" ]; then \
+            sed -i -e 's|https\?://deb\.debian\.org|https://mirrors.aliyun.com|g' \
+                -e 's|https\?://security\.debian\.org|https://mirrors.aliyun.com|g' "$source_file"; \
+        fi; \
+    done \
+    && apt-get update -o Acquire::Retries=5 \
+    && apt-get install -y --no-install-recommends postgresql-client
 
-# 安装 postgresql-client 工具包以支持全量备份 pg_dump 与恢复 pg_restore
-RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
-
-# 复制依赖文件并优先安装，便于充分利用缓存
+# 使用 BuildKit 持久缓存挂载安装依赖（不增大镜像体积，且重编时已下载包秒级复用）
 COPY backend/requirements.txt /tmp/backend_requirements.txt
-RUN pip install --no-cache-dir -r /tmp/backend_requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --retries 10 -r /tmp/backend_requirements.txt
 
-# 再复制全部源代码
-COPY . /app
+# 仅复制后端源码目录，避免无关文件打断构建缓存
+COPY backend /app/backend
 
 EXPOSE 8000
 

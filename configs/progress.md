@@ -1,5 +1,34 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-24 优化本地 Docker 构建上下文与国内开源镜像源 (`backend/Dockerfile`, `.dockerignore`)
+
+- **改动缘由**：
+  - 本地执行 `docker compose up --build` 时出现构建上下文传输达 `5.25 GB`（耗时 `168s`）及 `pip install` 访问海外官方源速度缓慢（耗时 `826.5s`、约 `89.5 kB/s`）的严重卡顿问题。
+- **改动清单**：
+  - **`backend/Dockerfile`**：
+    - 根据本地实测吞吐结果，将 SSL 超时的中科大 APT 源替换为阿里云 Debian APT 源（`https://mirrors.aliyun.com`），将较慢的清华 PyPI 源切换为实测更快的 `https://pypi.org/simple` + 阿里云备用源（`https://mirrors.aliyun.com/pypi/simple`），并设置 `PIP_DEFAULT_TIMEOUT=180` 与 `--retries 10`；
+    - 启用 BuildKit 缓存挂载（`--mount=type=cache,target=/root/.cache/pip` 与 `/var/cache/apt`），在不增大最终镜像体积的前提下实现二次构建依赖零重复下载；
+    - 将全量 `COPY . /app` 调整为 `COPY backend /app/backend`，减少无关文件变更导致的镜像缓存失效。
+  - **`.dockerignore`**：
+    - 补充忽略 `.git/`（约 4.7 GB）、`outputs/`（约 726 MB）、`configs/`、`node_modules/`、`**/node_modules/`、`frontend/dist/`、`.serena/`、`__pycache__/`、`scratch/`、`tmp/` 与外部导入目录，同时保留 `frontend/` 源码与 `deploy/` 配置以兼容前端及 Nginx 镜像构建。
+
+## 2026-11-24 新增「主城区供热联合评价模型」模块（生产监控与看板）
+
+- **改动缘由**：
+  - 将研究成果《大连洁净能源集团主城区供热运行联合评价模型》落地为生产日报平台的在线交互监控模块，挂载于 `/projects/daily_report_25_26/pages` 的 **「生产监控与看板」** 栏目下，暂时仅限 `Global_admin` 访问。
+  - 模型基于 `HDD20` 三日滞后参考单耗方程与同月单位面积参考投诉率构建“气象修正供热偏差率 × 用户投诉强度指数”四象限联合评价体系；主城区口径严格对齐 `ZhuChengQu`（`consumption_station_heat` 与 `amount_daily_service_complaints` 均归口 `GongRe`），供暖收费面积直接读取数据库 `constant_data` 中 `GongRe` 的 `amount_heating_fee_area`，并自动剔除 11.1–11.4 与 4.1–4.5 测算外日期。
+- **改动清单**：
+  - **`backend/projects/daily_report_25_26/services/joint_evaluation.py`（新增）**：
+    - 实现 `is_valid_eval_date()`、`split_date_range()`、`collect_rolling_periods()`、`_normalize_area_to_10k_m2()`、`build_daily_eval_row()`、`aggregate_eval_rows()` 与 `build_joint_evaluation()`，冻结参考单耗模型参数（截距 `3.3730`、当日 HDD20 `0.5137`、前 3 日均值 `0.3521`、11–3 月修正量）、分月投诉率基准与 1/7/14/18/30 日历史经验波动参考带；其中 `constant_data` 中的 `amount_heating_fee_area` 默认以“万㎡”存储，统一经 `_normalize_area_to_10k_m2()` 校验并按总表 `GongRe_constant_Sheet` 优先提取；支持 `single`、`rolling` 与 `range` 三种计算模式。
+  - **`backend/projects/daily_report_25_26/api/joint_evaluation.py`（新增） & `backend/projects/daily_report_25_26/api/router.py`**：
+    - 暴露 `GET /api/v1/projects/daily_report_25_26/joint-evaluation` 接口，强制校验 `session.group == "Global_admin"`。
+  - **`backend/projects/daily_report_25_26/tests/test_joint_evaluation.py`（新增）**：
+    - 覆盖 11.1–11.4 / 4.1–4.5 测算外日期剔除、跨边界滚动周期切分以及研究汇报 11 月 5 日—22 日 18 天算例对账验证。
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`（新增）**：
+    - 基于 ECharts 6 与 `xlsx-js-style` 构建诊断 KPI 卡、四象限色彩渐变演进轨迹图（叠加 5%~95% 经验波动带、时间渐变箭头路径、末点脉冲光环与区间星标）、单耗与投诉双区联动趋势图、可筛选/高亮联合明细表（支持 Excel 导出）及可折叠模型参数基准面板；支持“四象限图 ↔ 趋势图 ↔ 明细表”三向悬浮预览与点击锁定联动。
+  - **`frontend/src/projects/daily_report_25_26/composables/dailyBriefPresentation.js`、`PageSelectView.vue`、`services/api.js`、`frontend/src/router/index.js`**：
+    - 新增 `canAccessJointEvaluation()`、`getJointEvaluation()`，将 `joint_evaluation` 挂载至 `monitoring_dashboard`（生产监控与看板）分组并配置前后端 `Global_admin` 权限拦截。
+
 ## 2026-11-23 取消用户组 `Group_admin` 在 `daily_report_25_26` 每日数据填报中的提交权限
 
 - **改动缘由**：

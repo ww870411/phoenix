@@ -1,11 +1,33 @@
-# 本地 PostgreSQL 挂载目录：禁止进入任何生产/部署镜像构建上下文
+# 版本控制与本地工具缓存（不进入任何镜像构建上下文）
+.git/
+.github/
+.serena/
+.pytest_cache/
+.vscode/
+.idea/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# 本地 PostgreSQL 挂载目录与业务运行数据（通过卷/绑定挂载注入）
 db_data
 db_data/
 **/db_data
 **/db_data/**
-
-# 业务数据使用服务器绑定挂载，不随应用镜像发布。
 backend_data/
 
-# 前端依赖由镜像构建阶段 npm ci 安装，不复制本机依赖。
-frontend/node_modules/
+# 文档、产物、临时文件与外部独立工具目录
+configs/
+docs/
+outputs/
+scratch/
+tmp/
+*.log
+*.png
+外部导入项目-*/
+
+# 前端依赖与构建产物（保留 frontend/src 等源码以兼容 frontend/Dockerfile）
+node_modules/
+**/node_modules/
+frontend/dist/
+frontend/.vite/

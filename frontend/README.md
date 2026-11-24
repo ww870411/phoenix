@@ -1,3 +1,8 @@
+## 2026-11-24 新增「主城区供热联合评价模型」前端模块 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`（新增）**：实现主城区供热运行联合评价看板，默认读取业务日期单日情况，支持切换单日诊断（可选近期轨迹天数）、周期滚动对比（周期跨度 × 显示周期数量）与自定义时段；内置 ECharts 6 四象限渐变演进轨迹图（含 5%~95% 历史经验波动带）、单耗与投诉双轴联动趋势图（支持两图及明细表三向悬浮预览与点击锁定联动）、可筛选联合明细表及 `xlsx-js-style` Excel 导出。
+- **`src/projects/daily_report_25_26/{composables/dailyBriefPresentation.js,pages/PageSelectView.vue,services/api.js}` & `src/router/index.js`**：新增 `canAccessJointEvaluation()`、`getJointEvaluation()` 与 `/projects/daily_report_25_26/pages/joint_evaluation` 路由，仅向 `Global_admin` 展示于「生产监控与看板」栏目下。
+
 ## 2026-11-23 保温管供货系统适配多用户组 `user.groups` 只读观察员识别 (`SupplyManagementView.vue`, `DemandManagementView.vue`, `TubeProjectPageRouterView.vue`)
 
 - **`src/projects/insulation_pipe_supply_2026/pages/SupplyManagementView.vue`**：`canSwitchSupplyEntity`、`isReadOnlyViewer` 与 `currentGroupLabel` 合并识别 `response.user.groups` 与 `auth.user.groups`，使兼职 `tube_global_viewer` 的 `group_admin` 完整同步 `tube_viewer` 的全网供给主体切换、只读锁定状态与身份标签展示。

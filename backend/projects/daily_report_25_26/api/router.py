@@ -30,6 +30,7 @@ from .complaint_optimizer import router as complaint_optimizer_router
 from .complaint_optimizer import public_router as complaint_optimizer_public_router
 from .global_management import router as global_management_router
 from .data_correction import router as data_correction_router
+from .joint_evaluation import router as joint_evaluation_router
 
 router = APIRouter()
 router.include_router(legacy_router)
@@ -43,6 +44,7 @@ router.include_router(period_report_router)
 router.include_router(complaint_optimizer_router)
 router.include_router(global_management_router)
 router.include_router(data_correction_router)
+router.include_router(joint_evaluation_router)
 
 public_router = APIRouter()
 public_router.include_router(legacy_public_router)

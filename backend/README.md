@@ -1,3 +1,14 @@
+## 2026-11-24 优化后端本地 Docker 构建镜像源与构建上下文 (`Dockerfile`, `.dockerignore`)
+
+- **`backend/Dockerfile`**：配置阿里云 Debian APT 源（`https://mirrors.aliyun.com`）、实测最快的 PyPI 官方+阿里云双源、`PIP_DEFAULT_TIMEOUT=180` 与 BuildKit `--mount=type=cache` 持久依赖缓存，并将源码拷贝收口为 `COPY backend /app/backend`。
+- **`.dockerignore`**：排除 `.git/`、`outputs/`、`configs/`、`**/node_modules/`、`frontend/dist/`、`.serena/` 等无关大目录，将上下文体积从 `5.25 GB` 降至几十 MB 量级。
+
+## 2026-11-24 新增「主城区供热联合评价模型」后端计算服务与接口 (`joint_evaluation.py`)
+
+- **`projects/daily_report_25_26/services/joint_evaluation.py`（新增）**：封装 HDD20 三日滞后参考单耗与分月面积折算参考投诉率模型，读取 `constant_data`（`GongRe_constant_Sheet` 优先，`万㎡` 口径规范化）中 `GongRe` 的 `amount_heating_fee_area`、`ZhuChengQu` 日度耗热/投诉与 `DailyDashboardEngine` 逐日气温，自动剔除 11.1–11.4 与 4.1–4.5 测算外日期，提供单日、周期滚动（`period_days × period_count`）与自定义区间三种先累加再求比值的联合评价汇总。
+- **`projects/daily_report_25_26/api/{joint_evaluation.py,router.py}`**：新增 `GET /api/v1/projects/daily_report_25_26/joint-evaluation`（仅限 `Global_admin` 访问）。
+- **`projects/daily_report_25_26/tests/test_joint_evaluation.py`（新增）**：覆盖测算外日期剔除、滚动周期边界及 18 天算例对账测试。
+
 ## 2026-11-23 取消用户组 `Group_admin` 在 `daily_report_25_26` 的数据提交权限 (`daily_report_25_26.json`)
 
 - **`backend_data/shared/auth/permissions/daily_report_25_26.json`**：将 `Group_admin` 的 `actions.can_submit` 设为 `false`，由 `legacy_full.submit_debug()`、`data_correction.ensure_access()` 与前端 `DataEntryView.vue` 自动执行只读展示与 403 提交拦截，同时保留 `can_approve` / `can_revoke` / `can_publish`。

@@ -248,6 +248,7 @@ const PAGE_DESCRIPTION_MAP = Object.freeze({
   spot_electricity: '15分钟日前/实时电价与走势',
   global_management: '核心运行参数设定',
   dispatch_info: '主城区生产调度全景工况监控',
+  joint_evaluation: '基于 HDD20 参考单耗与投诉强度指数的四象限联合诊断看板',
   debug_runtime_eval: '运行时表达式调试工具，仅限技术人员',
 })
 function filterVisiblePages(list) {
@@ -350,7 +351,7 @@ const GROUP_DEFINITIONS = [
     key: 'monitoring_dashboard',
     title: '生产监控与看板',
     description: '全景数据看板、报表展示与调度电价监控',
-    pageKeys: ['dashboard', 'data_show', 'dispatch_info', 'spot_electricity'],
+    pageKeys: ['dashboard', 'data_show', 'dispatch_info', 'spot_electricity', 'joint_evaluation'],
   },
   {
     key: 'analysis_management',
