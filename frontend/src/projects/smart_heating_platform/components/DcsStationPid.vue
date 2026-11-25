@@ -14,6 +14,8 @@
       </div>
     </div>
 
+    <div v-if="target" class="mobile-pan-hint">← 左右滑动查看完整设备工艺组态图 →</div>
+
     <!-- 单座换热站：全矢量 P&ID 工艺组态图 -->
     <div v-if="target?.kind === 'station'" class="pid-canvas-wrap">
       <svg class="pid-svg" viewBox="0 0 840 370" role="img" :aria-label="`${target.title} 工艺组态图`">
@@ -812,6 +814,7 @@ const emit = defineEmits(['select-upstream'])
 
 const recorderChartEl = ref(null)
 let recorderChart = null
+let recorderResizeObserver = null
 
 const st = computed(() => props.target?.raw || {})
 
@@ -1064,34 +1067,38 @@ function renderRecorder() {
   const labels = rows.map((r) => r.label || `${String(r.hour).padStart(2, '0')}:00`)
   const isSt = props.target?.kind === 'station'
   const isMc = props.target?.kind === 'merchant'
+  const isNarrow = (recorderChartEl.value.clientWidth || 600) <= 520
 
   recorderChart.setOption({
     backgroundColor: '#e5ebf2',
-    grid: { left: 42, right: 42, top: 28, bottom: 22 },
+    grid: isNarrow
+      ? { left: 36, right: 36, top: 34, bottom: 22 }
+      : { left: 42, right: 42, top: 28, bottom: 22 },
     tooltip: { trigger: 'axis', confine: true },
     legend: {
       top: 2,
-      textStyle: { fontSize: 11, color: '#334155' },
-      itemWidth: 12,
-      itemHeight: 8,
+      textStyle: { fontSize: isNarrow ? 10 : 11, color: '#334155' },
+      itemWidth: isNarrow ? 10 : 12,
+      itemHeight: isNarrow ? 7 : 8,
+      itemGap: isNarrow ? 8 : 12,
     },
     xAxis: {
       type: 'category',
       data: labels,
-      axisLabel: { fontSize: 10, color: '#475569' },
+      axisLabel: { fontSize: 10, color: '#475569', interval: isNarrow ? 3 : 'auto' },
       axisLine: { lineStyle: { color: '#94a3b8' } },
     },
     yAxis: [
       {
         type: 'value',
-        name: '热量 (GJ)',
+        name: isNarrow ? 'GJ' : '热量 (GJ)',
         nameTextStyle: { fontSize: 10, color: '#475569' },
         axisLabel: { fontSize: 10, color: '#475569' },
         splitLine: { lineStyle: { color: '#cfd8e3' } },
       },
       {
         type: 'value',
-        name: '温度 (℃)',
+        name: isNarrow ? '℃' : '温度 (℃)',
         nameTextStyle: { fontSize: 10, color: '#475569' },
         axisLabel: { fontSize: 10, color: '#475569' },
         splitLine: { show: false },
@@ -1139,16 +1146,25 @@ watch(
 )
 
 function onResize() {
+  renderRecorder()
   recorderChart?.resize()
 }
 
 onMounted(() => {
   window.addEventListener('resize', onResize)
+  if (recorderChartEl.value && typeof ResizeObserver !== 'undefined') {
+    recorderResizeObserver = new ResizeObserver(() => {
+      recorderChart?.resize()
+    })
+    recorderResizeObserver.observe(recorderChartEl.value)
+  }
   nextTick(renderRecorder)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  recorderResizeObserver?.disconnect()
+  recorderResizeObserver = null
   recorderChart?.dispose()
 })
 </script>
@@ -1212,9 +1228,17 @@ onBeforeUnmount(() => {
 .pid-canvas-wrap {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid #9aa7b7;
   border-radius: 2px;
   background: #dae1e9;
+}
+
+.mobile-pan-hint {
+  display: none;
+  font-size: 11px;
+  color: #475569;
+  text-align: center;
 }
 
 .pid-svg {
@@ -1386,4 +1410,33 @@ onBeforeUnmount(() => {
 }
 
 .muted-mini { font-size: 11px; color: #64748b; font-weight: 500; }
+
+@media (max-width: 768px) {
+  .pid-stage-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  .pid-title-left h3 {
+    font-size: 13.5px;
+  }
+  .pid-sub {
+    font-size: 11px;
+  }
+  .mobile-pan-hint {
+    display: block;
+  }
+  .pid-recorder-box {
+    padding: 6px 8px;
+  }
+  .recorder-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    font-size: 11px;
+  }
+  .recorder-chart {
+    height: 176px;
+  }
+}
 </style>

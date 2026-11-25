@@ -1,3 +1,13 @@
+## 2026-11-25 精简「DCS 工艺监控台」冗余展示并优化手机窄屏排版 (`DcsWorkbenchView.vue`, `DcsNetworkPfd.vue`, `DcsStationPid.vue`)
+
+- **`src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`**：
+  - 将顶栏口径按钮精简为标准的二态切换（`净化工艺值` / `原始信号(RAW)`），修复 `RAW` 模式下两个按钮均切回 `clean` 的重复逻辑；
+  - 将 `LEVEL 1 · 全网工艺总貌组态 (PFD)` 改造成可折叠面板（`showNetworkPfd`，手机端默认折叠），仅在折叠态显示 4 项总览指标胶囊（消除与 PFD Stage 4 数值重复），并将 `LEVEL 2 · 设备工艺实景 (P&ID)` 与 `辅助参数数值表` 切换下沉至中央舞台 `.center-stage-head`；
+  - 精简右侧 `Faceplate`，保留模拟量量程带（`DcsAnalogBar`）、诊断备注与单户室温下钻，移除与 P&ID 重复的 `.fp-kv-grid` 及同屏模式下的重复副标题/状态徽章；
+  - 完善 `<= 768px` / `<= 420px` 窄屏响应式布局（控件双列/全宽网格、报警计数三列排布与警报条防溢出、折叠 KPI 2×2 网格、点击联动自动滚动定位主工艺区）。
+- **`src/projects/smart_heating_platform/components/{DcsNetworkPfd,DcsStationPid}.vue`**：
+  - 补充移动端横向滑动提示条与触控惯性滚动；`DcsStationPid.vue` 趋势记录仪补充 `ResizeObserver` 与窄屏紧凑坐标轴/图例适配。
+
 ## 2026-11-25 优化「电力现货市场数据」上网电量自动勾选与两厂分布顺序 (`SpotElectricityView.vue`)
 
 - **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：

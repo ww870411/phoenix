@@ -1,10 +1,10 @@
 {
-  "last_attempt_time": "2026-11-25 12:00:03",
+  "last_attempt_time": "2026-11-25 18:00:02",
   "last_attempt_status": "SUCCESS",
-  "last_attempt_trigger": "定时自动 (12:00)",
+  "last_attempt_trigger": "定时自动 (18:00)",
   "last_attempt_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-25 ~ 2026-12-29）。",
-  "last_success_time": "2026-11-25 12:00:03",
-  "last_success_trigger": "定时自动 (12:00)",
+  "last_success_time": "2026-11-25 18:00:02",
+  "last_success_trigger": "定时自动 (18:00)",
   "last_success_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-25 ~ 2026-12-29）。",
   "last_success_summary": {
     "inserted_or_updated": 659,
@@ -24,9 +24,30 @@
   "executed_slots_date": "2026-11-25",
   "executed_slots_today": {
     "06:30": "2026-11-25 06:30:12",
-    "12:00": "2026-11-25 12:00:00"
+    "12:00": "2026-11-25 12:00:00",
+    "18:00": "2026-11-25 18:00:00"
   },
   "history": [
+    {
+      "time": "2026-11-25 18:00:02",
+      "status": "SUCCESS",
+      "trigger": "auto",
+      "trigger_label": "定时自动 (18:00)",
+      "scheduled_slot": "18:00",
+      "message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-25 ~ 2026-12-29）。",
+      "summary": {
+        "inserted_or_updated": 659,
+        "skipped_near": 168,
+        "start_time": "2026-11-25T00:00:00+08:00",
+        "end_time": "2026-12-29T10:00:00+08:00",
+        "truncated_at": "2026-12-29T11:00",
+        "members_count": 31,
+        "dates": [
+          "2026-11-25",
+          "2026-12-29"
+        ]
+      }
+    },
     {
       "time": "2026-11-25 12:00:03",
       "status": "SUCCESS",

@@ -16,11 +16,11 @@
           </div>
           <div class="topbar-title-block">
             <h1>主城区智慧供热 · DCS 工艺监控试验台</h1>
-            <span class="meta-mono">
-              断面：<strong>{{ meta.biz_hour_label || '--' }}</strong>
-              ｜ 在网：<strong>{{ kpis.online_stations ?? 0 }}/{{ kpis.total_stations ?? 242 }} 站</strong>
-              <template v-if="meta.last_run?.finished_at"> ｜ 末次采数：{{ meta.last_run.finished_at }}</template>
-            </span>
+            <div class="meta-mono">
+              <span class="meta-item">断面：<strong>{{ meta.biz_hour_label || '--' }}</strong></span>
+              <span class="meta-item">在网：<strong>{{ kpis.online_stations ?? 0 }}/{{ kpis.total_stations ?? 242 }} 站</strong></span>
+              <span v-if="meta.last_run?.finished_at" class="meta-item">末次采数：{{ meta.last_run.finished_at }}</span>
+            </div>
           </div>
         </div>
 
@@ -50,13 +50,13 @@
               type="button"
               :class="['dcs-btn', { 'is-raw': mode === 'raw' }]"
               title="切换至未清洗原始传感器值，直观观察原始故障报警"
-              @click="switchMode(mode === 'raw' ? 'clean' : 'raw')"
+              @click="switchMode('raw')"
             >
-              {{ mode === 'raw' ? '还原净化值' : '原始信号(RAW)' }}
+              原始信号(RAW)
             </button>
           </div>
 
-          <button type="button" class="dcs-btn" :disabled="loading" @click="loadReport">🔄 刷新</button>
+          <button type="button" class="dcs-btn topbar-refresh-btn" :disabled="loading" @click="loadReport">🔄 刷新</button>
           <button type="button" class="dcs-btn desktop-only" @click="toggleFullscreen">
             {{ isFullscreen ? '退出全屏' : '⛶ 全屏台' }}
           </button>
@@ -165,47 +165,32 @@
 
       <div v-if="errorMsg" class="dcs-error-strip">⚠️ 接口加载异常：{{ errorMsg }}</div>
 
-      <!-- 主工艺画布切换：全网PFD工艺总貌 vs 单站P&ID设备实景组态 -->
+      <!-- LEVEL 1：全网工艺总貌组态 (PFD) 可折叠面板 -->
       <section class="dcs-panel stage-switch-panel">
-        <div class="panel-head">
-          <div class="stage-tabs">
-            <button
-              type="button"
-              :class="['dcs-tab', { active: mainCanvasMode === 'network_pfd' }]"
-              @click="mainCanvasMode = 'network_pfd'"
-            >
-              🔀 LEVEL 1 · 全网工艺总貌组态 (PFD)
-            </button>
-            <button
-              type="button"
-              :class="['dcs-tab', { active: mainCanvasMode === 'unit_pid' }]"
-              @click="mainCanvasMode = 'unit_pid'"
-            >
-              🏭 LEVEL 2 · 单站/节点设备工艺实景图 (P&amp;ID)
-            </button>
-            <button
-              type="button"
-              :class="['dcs-tab', { active: mainCanvasMode === 'aux_table' }]"
-              @click="mainCanvasMode = 'aux_table'"
-            >
-              ▤ 辅助参数数值表
-            </button>
-          </div>
-          <div class="panel-right-chips">
+        <div :class="['panel-head', { 'is-collapsed': !showNetworkPfd }]">
+          <div class="pfd-head-left">
+            <span class="pfd-title-badge">🔀 LEVEL 1 · 全网工艺总貌组态 (PFD)</span>
             <span v-if="selectedRdfz" class="filter-chip">
               管网聚焦：<strong>{{ selectedRdfz }}</strong>
-              <button type="button" class="chip-clear" @click="selectedRdfz = ''">✕</button>
+              <button type="button" class="chip-clear" aria-label="清除管网聚焦" @click="selectedRdfz = ''">✕</button>
             </span>
-            <span class="l1-chip">室外 <strong>{{ fmt(kpis.outdoor_temp, '℃', 1) }}</strong></span>
-            <span class="l1-chip">总供热 <strong>{{ fmt(kpis.hour_heat_gj, ' GJ', 1) }}</strong></span>
-            <span class="l1-chip">热指标 <strong>{{ fmt(kpis.heat_index_wm2, ' W/㎡', 1) }}</strong></span>
-            <span class="l1-chip">室温 <strong>{{ fmt(kpis.avg_room_temp, '℃', 2) }}</strong></span>
+          </div>
+          <div class="panel-right-actions">
+            <!-- 仅在收起 PFD 时展示 4 项核心指标胶囊，避免与 PFD Stage 4 重复 -->
+            <div v-if="!showNetworkPfd" class="panel-right-chips">
+              <span class="l1-chip">室外 <strong>{{ fmt(kpis.outdoor_temp, '℃', 1) }}</strong></span>
+              <span class="l1-chip">总供热 <strong>{{ fmt(kpis.hour_heat_gj, ' GJ', 1) }}</strong></span>
+              <span class="l1-chip">热指标 <strong>{{ fmt(kpis.heat_index_wm2, ' W/㎡', 1) }}</strong></span>
+              <span class="l1-chip">室温 <strong>{{ fmt(kpis.avg_room_temp, '℃', 2) }}</strong></span>
+            </div>
+            <button type="button" class="dcs-btn-xs pfd-toggle-btn" @click="showNetworkPfd = !showNetworkPfd">
+              {{ showNetworkPfd ? '▾ 收起总貌' : '▸ 展开总貌' }}
+            </button>
           </div>
         </div>
 
-        <!-- 画面 A：全网工艺流向总貌 PFD（默认上方常驻或全画幅，这里支持单独切换或上下并排） -->
         <DcsNetworkPfd
-          v-if="mainCanvasMode === 'network_pfd'"
+          v-if="showNetworkPfd"
           :plant-nodes="plantNodes"
           :hub-nodes="hubNodes"
           :rdfz-blocks="rdfzBlocks"
@@ -361,10 +346,29 @@
           </div>
         </aside>
 
-        <!-- 中央主区：单站/热源实时 P&ID 设备工艺组态图（或可选辅助明细表） -->
-        <section class="dcs-panel center-stage">
+        <!-- 中央主区：单站/热源实时 P&ID 设备工艺组态图 或 辅助明细表 -->
+        <section ref="centerStageEl" class="dcs-panel center-stage">
+          <div class="center-stage-head">
+            <div class="stage-tabs">
+              <button
+                type="button"
+                :class="['dcs-tab', { active: centerCanvasMode === 'pid' }]"
+                @click="centerCanvasMode = 'pid'"
+              >
+                🏭 LEVEL 2 · 设备工艺实景 (P&amp;ID)
+              </button>
+              <button
+                type="button"
+                :class="['dcs-tab', { active: centerCanvasMode === 'aux_table' }]"
+                @click="centerCanvasMode = 'aux_table'"
+              >
+                ▤ 辅助参数数值表
+              </button>
+            </div>
+          </div>
+
           <DcsStationPid
-            v-if="mainCanvasMode !== 'aux_table'"
+            v-if="centerCanvasMode === 'pid'"
             :target="selectedTarget"
             :upstream-points="upstreamWithMeta"
             :trend-rows="fpTrendRows"
@@ -374,8 +378,7 @@
 
           <div v-else class="aux-table-wrap">
             <div class="aux-head">
-              <h3>辅助工艺参数列表（点击行切回单站 P&amp;ID 工艺图）</h3>
-              <button type="button" class="dcs-btn-xs" @click="mainCanvasMode = 'network_pfd'">↩ 返回工艺组态</button>
+              <h3>辅助工艺参数列表（点击任意行切回设备 P&amp;ID 工艺图）</h3>
             </div>
             <div class="l2-table-scroll">
               <table v-if="navKind === 'stations'" class="dcs-table">
@@ -475,18 +478,18 @@
           </div>
         </section>
 
-        <!-- 右侧：Experion 标准 Faceplate 面板 -->
+        <!-- 右侧：Experion 标准 Faceplate 面板（聚焦量程带、诊断明细与室温下钻，避免重复 P&ID 标牌数值） -->
         <aside v-if="selectedTarget" class="dcs-panel faceplate-panel" aria-label="DCS 标准对象面板">
           <div class="fp-header">
             <div class="fp-tag-row">
-              <span class="fp-tag-id">{{ selectedTarget.tagId }}</span>
-              <span :class="['fp-mode-pill', `sev-${selectedTarget.severity}`]">
+              <span class="fp-tag-id">FACEPLATE · {{ selectedTarget.tagId }}</span>
+              <span v-if="centerCanvasMode === 'aux_table'" :class="['fp-mode-pill', `sev-${selectedTarget.severity}`]">
                 只读 · {{ selectedTarget.modeLabel }}
               </span>
               <button type="button" class="dcs-btn-xs" title="关闭面板" @click="selectedTarget = null">✕</button>
             </div>
             <h3 class="fp-title">{{ selectedTarget.title }}</h3>
-            <p class="fp-subtitle">{{ selectedTarget.subtitle }}</p>
+            <p v-if="centerCanvasMode === 'aux_table'" class="fp-subtitle">{{ selectedTarget.subtitle }}</p>
           </div>
 
           <template v-if="selectedTarget.kind === 'station'">
@@ -531,25 +534,6 @@
                   :decimals="3"
                   unit=" MPa"
                 />
-              </div>
-
-              <div class="fp-kv-grid">
-                <div class="fp-kv">
-                  <span>小时供热 ({{ selectedTarget.raw.hour_heat_source === 'METER_DIFF' ? '表底' : '积分' }})</span>
-                  <strong>{{ fmt(selectedTarget.raw.hour_heat_gj, ' GJ', 2) }}</strong>
-                </div>
-                <div class="fp-kv">
-                  <span>表底 totJ</span>
-                  <strong>{{ fmt(selectedTarget.raw.tot_j, ' GJ', 1) }}</strong>
-                </div>
-                <div class="fp-kv">
-                  <span>小时补水</span>
-                  <strong>{{ fmt(selectedTarget.raw.hour_water_t ?? selectedTarget.raw.e14, ' t', 2) }}</strong>
-                </div>
-                <div class="fp-kv">
-                  <span>小时电耗</span>
-                  <strong>{{ fmt(selectedTarget.raw.hour_elec_kwh, ' kWh', 1) }}</strong>
-                </div>
               </div>
 
               <div v-if="selectedTarget.notesList.length" class="fp-alarm-notes">
@@ -652,24 +636,6 @@
                   unit="℃"
                 />
               </div>
-              <div class="fp-kv-grid">
-                <div class="fp-kv">
-                  <span>小时积分热量</span>
-                  <strong>{{ fmt(selectedTarget.raw.hour_heat_gj, ' GJ', 3) }}</strong>
-                </div>
-                <div class="fp-kv">
-                  <span>小时流量</span>
-                  <strong>{{ fmt(selectedTarget.raw.hour_flow_t, ' t', 2) }}</strong>
-                </div>
-                <div class="fp-kv">
-                  <span>瞬时流量 / 热量</span>
-                  <strong>{{ fmt(selectedTarget.raw.flow, ' t/h', 2) }} / {{ fmt(selectedTarget.raw.heat, ' GJ/h', 2) }}</strong>
-                </div>
-                <div class="fp-kv">
-                  <span>供热介质</span>
-                  <strong>{{ selectedTarget.raw.rdry || '高温水' }}</strong>
-                </div>
-              </div>
               <div v-if="selectedTarget.notesList.length" class="fp-alarm-notes">
                 <div v-for="(nt, idx) in selectedTarget.notesList" :key="idx" class="fp-note-item">
                   ▲ {{ nt }}
@@ -705,6 +671,7 @@ import {
 } from '../services/api'
 
 const dcsRootEl = ref(null)
+const centerStageEl = ref(null)
 const isFullscreen = ref(false)
 const selectedDate = ref('')
 const selectedHour = ref(null)
@@ -712,7 +679,9 @@ const mode = ref('clean')
 const loading = ref(false)
 const errorMsg = ref('')
 
-const mainCanvasMode = ref('network_pfd') // network_pfd | unit_pid | aux_table
+// 桌面端默认展开全网 PFD 总貌，手机窄屏默认折叠以优先呈现报警横幅与操作区（可随时点击展开）
+const showNetworkPfd = ref(typeof window === 'undefined' ? true : window.innerWidth > 768)
+const centerCanvasMode = ref('pid') // pid | aux_table
 const navKind = ref('stations') // stations | upstream | merchants
 const alarmDrawerOpen = ref(false)
 const alarmSeverityFilter = ref('ALL')
@@ -1033,12 +1002,21 @@ const merchantSort = useTableSort(filteredMerchants, {
   branch_name: (m) => `${m.rdfz}/${m.branch_name}`,
 })
 
+function scrollToCenterStageOnMobile() {
+  if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+    nextTick(() => {
+      centerStageEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+}
+
 function toggleRdfz(name) {
   selectedRdfz.value = selectedRdfz.value === name ? '' : name
   navKind.value = 'stations'
   if (filteredStations.value.length && selectedTarget.value?.raw?.rdfz !== selectedRdfz.value) {
     openStationFaceplate(filteredStations.value[0])
   }
+  scrollToCenterStageOnMobile()
 }
 
 function toggleStatusFilter(code) {
@@ -1053,6 +1031,7 @@ function onSelectPlant(plant) {
   if (filteredUpstream.value.length) {
     openUpstreamFaceplate(filteredUpstream.value[0])
   }
+  scrollToCenterStageOnMobile()
 }
 
 function onSelectHub(hub) {
@@ -1062,33 +1041,38 @@ function onSelectHub(hub) {
   if (filteredUpstream.value.length) {
     openUpstreamFaceplate(filteredUpstream.value[0])
   }
+  scrollToCenterStageOnMobile()
 }
 
 function onOpenMerchants() {
   navKind.value = 'merchants'
-  if (mainCanvasMode.value === 'aux_table') mainCanvasMode.value = 'unit_pid'
+  if (centerCanvasMode.value === 'aux_table') centerCanvasMode.value = 'pid'
   const firstMc = filteredMerchants.value.find((m) => m.online && (m.heat > 0 || m.hour_heat_gj > 0)) || filteredMerchants.value[0]
   if (firstMc) openMerchantFaceplate(firstMc)
+  scrollToCenterStageOnMobile()
 }
 
 function selectStationFromNav(s) {
-  if (mainCanvasMode.value === 'aux_table') mainCanvasMode.value = 'unit_pid'
+  if (centerCanvasMode.value === 'aux_table') centerCanvasMode.value = 'pid'
   openStationFaceplate(s)
+  scrollToCenterStageOnMobile()
 }
 
 function selectUpstreamFromNav(u) {
-  if (mainCanvasMode.value === 'aux_table') mainCanvasMode.value = 'unit_pid'
+  if (centerCanvasMode.value === 'aux_table') centerCanvasMode.value = 'pid'
   openUpstreamFaceplate(u)
+  scrollToCenterStageOnMobile()
 }
 
 function selectMerchantFromNav(m) {
-  if (mainCanvasMode.value === 'aux_table') mainCanvasMode.value = 'unit_pid'
+  if (centerCanvasMode.value === 'aux_table') centerCanvasMode.value = 'pid'
   openMerchantFaceplate(m)
+  scrollToCenterStageOnMobile()
 }
 
 function focusAlarm(alm) {
   alarmDrawerOpen.value = false
-  mainCanvasMode.value = 'unit_pid'
+  centerCanvasMode.value = 'pid'
   if (alm.kind === 'station') {
     navKind.value = 'stations'
     openStationFaceplate(alm.raw)
@@ -1096,6 +1080,7 @@ function focusAlarm(alm) {
     navKind.value = 'upstream'
     openUpstreamFaceplate(alm.raw)
   }
+  scrollToCenterStageOnMobile()
 }
 
 async function openStationFaceplate(s) {
@@ -1291,6 +1276,7 @@ function stepHour(delta) {
 }
 
 function switchMode(m) {
+  if (mode.value === m) return
   mode.value = m
   loadReport()
 }
@@ -1384,7 +1370,17 @@ onBeforeUnmount(() => {
 .led-busy { background: #f59e0b; }
 
 .topbar-title-block h1 { margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; }
-.meta-mono { font-size: 12px; color: #475569; font-variant-numeric: tabular-nums; }
+.meta-mono {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  font-size: 12px;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.meta-item { white-space: nowrap; }
 
 .topbar-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dcs-step-group, .dcs-mode-group { display: inline-flex; align-items: center; gap: 2px; }
@@ -1467,6 +1463,19 @@ onBeforeUnmount(() => {
 /* Stage Switch & PFD */
 .stage-switch-panel { padding: 8px 12px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.panel-head.is-collapsed { margin-bottom: 0; }
+.pfd-head-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.pfd-title-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #233042;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 2px;
+}
+.panel-right-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .stage-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .dcs-tab {
   border: 1px solid #96a4b5;
@@ -1562,7 +1571,6 @@ onBeforeUnmount(() => {
 .micro-item.sev-critical.active { background: #fecaca; }
 .micro-item.sev-warning { background: #fffbeb; }
 .micro-item.sev-offline { color: #64748b; }
-.micro-item.static-micro { cursor: default; }
 
 .micro-led { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .micro-led.led-normal { background: #3b6b8f; }
@@ -1589,6 +1597,17 @@ onBeforeUnmount(() => {
 .center-stage {
   padding: 10px 12px;
   min-width: 0;
+}
+
+.center-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #c5ced9;
 }
 
 .aux-head {
@@ -1668,15 +1687,11 @@ onBeforeUnmount(() => {
   border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px;
 }
 .fp-gauges { display: flex; flex-direction: column; gap: 7px; }
-.fp-kv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.fp-kv { background: #e3e8ef; border: 1px solid #c5ced9; padding: 4px 7px; border-radius: 2px; display: flex; flex-direction: column; }
-.fp-kv span { font-size: 10px; color: #475569; }
-.fp-kv strong { font-family: Consolas, monospace; font-size: 12px; color: #0f172a; }
 
 .fp-alarm-notes { display: flex; flex-direction: column; gap: 4px; }
 .fp-note-item { font-size: 11px; background: #fef3c7; border: 1px solid #f59e0b; color: #78350f; padding: 4px 6px; border-radius: 2px; line-height: 1.4; }
 .fp-temp-list { max-height: 140px; overflow-y: auto; border-top: 1px solid #cbd5e1; padding-top: 5px; display: flex; flex-direction: column; gap: 3px; }
-.fp-temp-row { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 4px; background: #e5eaf0; }
+.fp-temp-row { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; padding: 3px 4px; background: #e5eaf0; }
 .fp-temp-addr { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .muted-mini { font-size: 10.5px; color: #64748b; }
 
@@ -1689,7 +1704,106 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
-  .dcs-main { padding: 10px 8px 24px; }
+  .dcs-main { padding: 8px 8px 24px; gap: 8px; }
   .desktop-only { display: none; }
+
+  .dcs-topbar { padding: 10px; gap: 8px; flex-direction: column; align-items: stretch; }
+  .topbar-brand { gap: 6px; flex-direction: column; align-items: flex-start; }
+  .topbar-title-block h1 { font-size: 14.5px; line-height: 1.35; }
+  .meta-mono { gap: 3px 10px; font-size: 11.5px; }
+
+  .topbar-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .topbar-controls :deep(.date-picker-group),
+  .dcs-step-group,
+  .dcs-mode-group,
+  .topbar-refresh-btn {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .dcs-step-group { display: flex; gap: 4px; }
+  .dcs-select { flex: 1; min-width: 0; height: 36px; font-size: 12.5px; }
+  .dcs-btn, .dcs-btn-sq { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+  .dcs-mode-group { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .dcs-mode-group .dcs-btn { width: 100%; }
+
+  .dcs-alarm-banner {
+    padding: 8px 10px;
+    gap: 7px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .alarm-counts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .alm-pill {
+    padding: 6px 4px;
+    font-size: 11px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .alarm-ticker {
+    min-width: 0;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .alarm-strip-item {
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+  }
+  .alarm-actions { width: 100%; }
+  .alarm-actions .dcs-btn { width: 100%; }
+
+  .alarm-drawer { padding: 8px 10px; }
+  .alarm-drawer .panel-head { flex-direction: column; align-items: stretch; gap: 6px; }
+  .alarm-drawer .panel-head h3 { margin: 0; font-size: 12.5px; line-height: 1.35; }
+  .alarm-filter-inline { display: flex; flex-wrap: wrap; gap: 4px; }
+  .alarm-table-scroll { -webkit-overflow-scrolling: touch; }
+
+  .stage-switch-panel { padding: 8px 10px; }
+  .panel-head { gap: 6px; }
+  .pfd-title-badge { font-size: 11.5px; padding: 4px 8px; }
+  .panel-right-actions { width: 100%; flex-direction: column; align-items: stretch; gap: 6px; }
+  .panel-right-chips {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    width: 100%;
+  }
+  .l1-chip { padding: 4px 7px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
+  .pfd-toggle-btn { width: 100%; min-height: 34px; font-size: 12px; }
+
+  .nav-rail { height: auto; max-height: 256px; padding: 8px; }
+  .rail-tab { padding: 6px 2px; min-height: 32px; }
+  .micro-item { padding: 7px 8px; min-height: 34px; font-size: 12px; }
+
+  .center-stage { padding: 8px 10px; }
+  .center-stage-head .stage-tabs { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .center-stage-head .dcs-tab { padding: 7px 6px; font-size: 11.5px; text-align: center; }
+  .l2-table-scroll { max-height: 380px; -webkit-overflow-scrolling: touch; }
+  .dcs-table { font-size: 11.5px; }
+  .dcs-table th, .dcs-table td { padding: 6px; }
+
+  .faceplate-panel { padding: 8px 10px; gap: 8px; }
+  .fp-temp-addr { max-width: none; flex: 1; min-width: 0; }
+}
+
+@media (max-width: 420px) {
+  .topbar-title-block h1 { font-size: 13.5px; }
+  .dcs-btn, .dcs-btn-sq { font-size: 11.5px; padding: 5px 7px; }
+  .alm-pill { font-size: 10.5px; padding: 5px 2px; }
+  .center-stage-head .dcs-tab { font-size: 11px; padding: 6px 4px; }
 }
 </style>

@@ -1,5 +1,7 @@
 <template>
-  <div class="pfd-wrap">
+  <div class="pfd-shell">
+    <div class="mobile-pan-hint">← 左右滑动查看完整全网工艺总貌图（点击节点可联动下钻） →</div>
+    <div class="pfd-wrap">
     <svg
       class="pfd-svg"
       viewBox="0 0 1280 374"
@@ -302,6 +304,7 @@
         <line x1="1234" y1="292" x2="1254" y2="292" stroke="#dc2626" stroke-width="1.5" />
       </g>
     </svg>
+    </div>
   </div>
 </template>
 
@@ -396,12 +399,32 @@ const soloNetBadges = computed(() =>
 </script>
 
 <style scoped>
+.pfd-shell {
+  width: 100%;
+  min-width: 0;
+}
+
+.mobile-pan-hint {
+  display: none;
+  font-size: 11px;
+  color: #475569;
+  text-align: center;
+  padding: 2px 0 5px;
+}
+
 .pfd-wrap {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   background: #dce2ea;
   border: 1px solid #9faab8;
   border-radius: 2px;
+}
+
+@media (max-width: 768px) {
+  .mobile-pan-hint {
+    display: block;
+  }
 }
 
 .pfd-svg {

@@ -1,5 +1,25 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-25 精简「DCS 工艺监控台」冗余展示并优化手机窄屏排版 (`DcsWorkbenchView.vue`, `DcsNetworkPfd.vue`, `DcsStationPid.vue`)
+
+- **排查与改动缘由**：
+  - 梳理 DCS 风格界面后发现 4 处信息与交互冗余：
+    1. 顶部数据口径切换在 `RAW` 模式下同时出现 `净化工艺值` 与 `还原净化值` 两个均切回 `clean` 的重复按钮；
+    2. 顶栏 `LEVEL 1 / LEVEL 2 / 辅助参数数值表` 三标签与下方常驻 P&ID 错位——选中 `LEVEL 1` 时下方仍渲染 `LEVEL 2`，点 `LEVEL 2` 仅隐藏上方的 `LEVEL 1` 并留下空栏；同时 `LEVEL 1` 右侧 `室外/总供热/热指标/室温` 胶囊与 `DcsNetworkPfd` Stage 4 重复展示同一组数值；
+    3. 右侧 `Faceplate` 的 `.fp-header` 副标题/状态徽章及 `.fp-kv-grid`（换热站小时供热/表底 `totJ`/补水/电耗，商业户小时积分热/流量/瞬时流量与热量/供热介质）与中央 `DcsStationPid` SVG 标牌完全重复；
+    4. 手机窄屏（`<= 768px`）下顶栏控件挤压换行、报警滚动条溢出、980px 全网 PFD 默认展开挤压首屏、P&ID/趋势图缺少触控滑动提示与容器 `ResizeObserver`。
+- **改动点与实现逻辑**：
+  - **`frontend/src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`**：
+    - 顶栏数据口径改为标准的二态分段按钮（`净化工艺值` / `原始信号(RAW)`），点击已激活口径直接返回不重复请求；
+    - 将顶部 `LEVEL 1 · 全网工艺总貌组态 (PFD)` 独立为可折叠面板（`showNetworkPfd`，桌面默认展开、手机窄屏 `<= 768px` 默认折叠），仅在折叠时显示 4 项核心指标胶囊，避免与 PFD Stage 4 重复；将 `LEVEL 2 · 设备工艺实景 (P&ID)` 与 `辅助参数数值表` 切换下沉至中央操作台 `.center-stage-head`，彻底消除空切换栏与重复返回按钮；
+    - 精简右侧 `Faceplate`，聚焦 HPHMI 量程带（`DcsAnalogBar`）、字段诊断提示（`fp-alarm-notes`）与站区单户室温下钻，移除与 P&ID SVG 重复的 `.fp-kv-grid` 及同屏模式下的重复副标题/状态徽章；
+    - 新增 `<= 768px` 与 `<= 420px` 手机窄屏样式：顶栏日期/小时/口径/刷新采用全宽等分网格、报警计数三列均分且警报条全宽截断、折叠态 4 项 KPI 2×2 卡片化、列表触控行高放大，并在手机端点击 PFD/列表/报警定位对象时自动平滑滚动至工艺主视图。
+  - **`frontend/src/projects/smart_heating_platform/components/{DcsNetworkPfd,DcsStationPid}.vue`**：
+    - 为全网 PFD 与单站 P&ID 横向画布补充 `-webkit-overflow-scrolling: touch` 及仅窄屏可见的左右滑动提示条；
+    - `DcsStationPid.vue` 趋势记录仪新增 `ResizeObserver` 自适应重排，并在窄屏容器（`<= 520px`）自动收紧留白、图例字号与 X 轴刻度间隔。
+- **验证结果与影响面**：
+  - `npm --prefix frontend run build`：`1099 modules transformed`，`built in 25.21s`（0 错误，`DcsWorkbenchView` JS `101.49 kB` / CSS `26.48 kB`）；无后端接口或数据库改动。
+
 ## 2026-11-25 优化「电力现货市场数据」上网电量默认勾选与分布胶囊电厂顺序 (`SpotElectricityView.vue`)
 
 - **改动缘由**：
