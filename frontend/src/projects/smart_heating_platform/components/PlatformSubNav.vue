@@ -29,6 +29,7 @@ const router = useRouter()
 
 const navItems = [
   { key: 'dashboard', label: '运行驾驶舱', icon: '🖥️', path: '/projects/smart_heating_platform/pages/dashboard' },
+  { key: 'dcs_workbench', label: 'DCS工艺监控', icon: '🎛️', path: '/projects/smart_heating_platform/pages/dcs_workbench' },
   { key: 'hourly_report', label: '逐小时运行报告', icon: '📊', path: '/projects/smart_heating_platform/pages/hourly_report' },
   { key: 'daily_report', label: '每日运行报告', icon: '📑', path: '/projects/smart_heating_platform/pages/daily_report' },
   { key: 'dict_center', label: '8类主体台账', icon: '🗂️', path: '/projects/smart_heating_platform/pages/dict_center' },

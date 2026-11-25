@@ -69,10 +69,12 @@ test('切换日期时旧响应不能覆盖新范围的电量状态或提前结�
     projectKey: 'daily_report_25_26', selectedDate: ref('2026-01-12'), rangeStartDate: ref(''), rangeEndDate: ref(''),
     viewMode: ref('single'), onlyNegative: ref(false), loading: ref(false), loadError: ref(''),
     summary: ref(null), points: ref([]), dailyTrends: ref([]), monthlyTrends: ref([]), periodTrends: ref([]), showPlantSales: ref(false),
+    hasPlantSalesData: null,
     getSpotElectricitySummary: () => new Promise(resolve => pending.push(resolve)),
     getSpotElectricityPoints: async (_p, options) => ({ ok: true, items: [{ trade_date: options.startDate }] }),
     nextTick: async () => {}, renderChart: () => {}, setTimeout: () => {}, chartInstance: null, chartRef: ref(null),
   }
+  deps.hasPlantSalesData = computed(() => Boolean(deps.summary.value?.has_plant_sales_data))
   const fetchData = new Function('deps', `const { ${Object.keys(deps).join(',')} }=deps; ${source}; return fetchData`)(deps)
   const first = fetchData()
   deps.selectedDate.value = '2026-01-13'
@@ -81,11 +83,45 @@ test('切换日期时旧响应不能覆盖新范围的电量状态或提前结�
   await first
   assert.equal(deps.loading.value, true)
   assert.equal(deps.summary.value, null)
+  assert.equal(deps.showPlantSales.value, false)
   pending[1]({ ok: true, data: { has_plant_sales_data: false } })
   await second
   assert.equal(deps.loading.value, false)
   assert.equal(deps.summary.value.has_plant_sales_data, false)
+  assert.equal(deps.showPlantSales.value, false)
   assert.equal(deps.points.value[0].trade_date, '2026-01-13')
+})
+
+test('当存在该日电厂上网电量数据时自动勾选“显示两厂上网电量”，无数据时取消勾选', async () => {
+  const page = readFileSync(new URL('../src/projects/daily_report_25_26/pages/SpotElectricityView.vue', import.meta.url), 'utf8')
+  const source = page.slice(page.indexOf('let dataRequest = 0'), page.indexOf('// 渲染 ECharts'))
+  let hasData = true
+  const deps = {
+    projectKey: 'daily_report_25_26', selectedDate: ref('2026-01-14'), rangeStartDate: ref(''), rangeEndDate: ref(''),
+    viewMode: ref('single'), onlyNegative: ref(false), loading: ref(false), loadError: ref(''),
+    summary: ref(null), points: ref([]), dailyTrends: ref([]), monthlyTrends: ref([]), periodTrends: ref([]), showPlantSales: ref(false),
+    hasPlantSalesData: null,
+    getSpotElectricitySummary: async () => ({ ok: true, data: { has_plant_sales_data: hasData } }),
+    getSpotElectricityPoints: async (_p, options) => ({ ok: true, items: [{ trade_date: options.startDate }] }),
+    nextTick: async () => {}, renderChart: () => {}, setTimeout: () => {}, chartInstance: null, chartRef: ref(null),
+  }
+  deps.hasPlantSalesData = computed(() => Boolean(deps.summary.value?.has_plant_sales_data))
+  const fetchData = new Function('deps', `const { ${Object.keys(deps).join(',')} }=deps; ${source}; return fetchData`)(deps)
+
+  await fetchData()
+  assert.equal(deps.showPlantSales.value, true)
+
+  // 手动取消勾选后，切换到另一个有数据的日期应重新自动勾选
+  deps.showPlantSales.value = false
+  deps.selectedDate.value = '2026-01-15'
+  await fetchData()
+  assert.equal(deps.showPlantSales.value, true)
+
+  // 切换到无电厂上网电量数据的日期时应自动取消勾选
+  hasData = false
+  deps.selectedDate.value = '2026-01-16'
+  await fetchData()
+  assert.equal(deps.showPlantSales.value, false)
 })
 
 test('支持单独筛选北海或香海电厂上网电量曲线、图例与提示', () => {

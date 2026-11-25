@@ -31,12 +31,11 @@
         <div class="hero-left">
           <div class="hero-badges">
             <span class="badge-season">{{ seasonPeriodLabel }} 供暖期</span>
-            <span class="badge-admin">Global_admin 专享</span>
-            <span class="badge-window">有效评价窗口：11月5日 — 次年3月31日</span>
+            <span class="badge-window">有效评价窗口：{{ seasonWindowLabel }}</span>
           </div>
           <h1 class="hero-title">主城区供热联合评价模型</h1>
           <p class="hero-subtitle">
-            以主城区（ZhuChengQu / GongRe）实际站内耗热量与省市平台投诉量为核心，结合 HDD20 三日滞后参考单耗与同月面积折算投诉基准，构建“投入偏差 × 服务效果”双维联合诊断体系。
+            以采暖度日数HDD20为基础，构建“投入偏差 × 服务效果”双维联合诊断体系
           </p>
         </div>
 
@@ -123,7 +122,7 @@
               <span class="param-label">附带轨迹周期数（自当日向前）</span>
               <div class="pill-group">
                 <button
-                  v-for="n in [1, 7, 14, 18, 30]"
+                  v-for="n in [1, 7, 14]"
                   :key="`single-trace-${n}`"
                   type="button"
                   :class="['count-pill', { active: queryState.singleTraceDays === n }]"
@@ -371,12 +370,11 @@
               </div>
             </header>
 
-            <!-- 四象限色标图例 -->
-            <div class="quadrant-legend-strip">
-              <span v-for="q in quadrantLegendList" :key="q.code" class="q-legend-item">
-                <i class="q-dot" :style="{ backgroundColor: q.color }"></i>
-                <span>{{ q.name }}（{{ q.diagnosis }}）</span>
-              </span>
+            <div v-if="chartOptions.colorByTime && trajectoryTimeMeta" class="time-order-strip">
+              <span class="time-order-badge start">起点 {{ trajectoryTimeMeta.firstLabel }}</span>
+              <span class="time-order-bar" aria-hidden="true"></span>
+              <span class="time-order-badge end">最新 {{ trajectoryTimeMeta.lastLabel }}</span>
+              <span class="time-order-hint">点位由小到大、颜色由晴空蓝渐变至珊瑚红，箭头指示推进方向</span>
             </div>
 
             <div ref="quadrantChartEl" class="chart-canvas quadrant-canvas"></div>
@@ -445,6 +443,7 @@
             </div>
           </header>
 
+          <p class="mobile-scroll-hint">← 左右滑动查看全列指标，轻触行可锁定图内联动 →</p>
           <div class="table-scroll">
             <table class="eval-table">
               <thead>
@@ -511,7 +510,7 @@
               </tbody>
               <tfoot v-if="summaryForTableFoot">
                 <tr class="summary-foot-row">
-                  <td><strong>{{ summaryForTableFoot.label }}（总量比值汇总）</strong></td>
+                  <td><strong>合计</strong></td>
                   <td class="num font-mono">{{ formatNum(summaryForTableFoot.avg_temp, 2) }}</td>
                   <td class="num font-mono">{{ formatNum(summaryForTableFoot.avg_hdd20_today, 2) }}</td>
                   <td class="num font-mono">{{ formatNum(summaryForTableFoot.avg_hdd20_prev3, 2) }}</td>
@@ -550,7 +549,7 @@
             :aria-expanded="showModelSpec"
             @click="showModelSpec = !showModelSpec"
           >
-            <span>📐 模型公式与冻结基准参数说明（点击{{ showModelSpec ? '收起' : '展开' }}）</span>
+            <span>📐 模型公式与参数</span>
             <span class="spec-chevron">{{ showModelSpec ? '▲' : '▼' }}</span>
           </button>
 
@@ -566,46 +565,50 @@
             <div class="spec-tables-grid">
               <div class="spec-mini-box">
                 <h4>分月参考修正与投诉率基准</h4>
-                <table class="mini-spec-table">
-                  <thead>
-                    <tr>
-                      <th>月份</th>
-                      <th class="num">耗热月份修正 (GJ/万㎡·日)</th>
-                      <th class="num">参考投诉率 (件/万㎡·日)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(adj, idx) in payload.model_spec.month_heat_adjustments" :key="adj.month">
-                      <td>{{ adj.label }}</td>
-                      <td class="num font-mono">{{ adj.adjustment > 0 ? `+${adj.adjustment.toFixed(4)}` : adj.adjustment.toFixed(4) }}</td>
-                      <td class="num font-mono">{{ payload.model_spec.month_complaint_rates[idx]?.rate_per_10k_m2_day?.toFixed(6) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <div class="mini-table-scroll">
+                  <table class="mini-spec-table">
+                    <thead>
+                      <tr>
+                        <th>月份</th>
+                        <th class="num">耗热月份修正 (GJ/万㎡·日)</th>
+                        <th class="num">参考投诉率 (件/万㎡·日)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(adj, idx) in payload.model_spec.month_heat_adjustments" :key="adj.month">
+                        <td>{{ adj.label }}</td>
+                        <td class="num font-mono">{{ adj.adjustment > 0 ? `+${adj.adjustment.toFixed(4)}` : adj.adjustment.toFixed(4) }}</td>
+                        <td class="num font-mono">{{ payload.model_spec.month_complaint_rates[idx]?.rate_per_10k_m2_day?.toFixed(6) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div class="spec-mini-box">
                 <h4>历史经验波动参考带（5%—95% 分位）</h4>
-                <table class="mini-spec-table">
-                  <thead>
-                    <tr>
-                      <th>评价周期</th>
-                      <th class="num">5%下界(%)</th>
-                      <th class="num">中位数(%)</th>
-                      <th class="num">95%上界(%)</th>
-                      <th class="num">偏差率RMSE(%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="band in payload.model_spec.empirical_bands" :key="band.period_days">
-                      <td>{{ band.label }}</td>
-                      <td class="num font-mono">{{ band.p5.toFixed(2) }}</td>
-                      <td class="num font-mono">{{ band.median > 0 ? `+${band.median.toFixed(2)}` : band.median.toFixed(2) }}</td>
-                      <td class="num font-mono">+{{ band.p95.toFixed(2) }}</td>
-                      <td class="num font-mono">{{ band.rmse.toFixed(2) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <div class="mini-table-scroll">
+                  <table class="mini-spec-table">
+                    <thead>
+                      <tr>
+                        <th>评价周期</th>
+                        <th class="num">5%下界(%)</th>
+                        <th class="num">中位数(%)</th>
+                        <th class="num">95%上界(%)</th>
+                        <th class="num">偏差率RMSE(%)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="band in payload.model_spec.empirical_bands" :key="band.period_days">
+                        <td>{{ band.label }}</td>
+                        <td class="num font-mono">{{ band.p5.toFixed(2) }}</td>
+                        <td class="num font-mono">{{ band.median > 0 ? `+${band.median.toFixed(2)}` : band.median.toFixed(2) }}</td>
+                        <td class="num font-mono">+{{ band.p95.toFixed(2) }}</td>
+                        <td class="num font-mono">{{ band.rmse.toFixed(2) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -639,10 +642,14 @@ const quadrantChartEl = ref(null)
 const trendChartEl = ref(null)
 let quadrantChart = null
 let trendChart = null
+let chartResizeObserver = null
+let resizeRafId = 0
 let quadrantIndexByRowKey = new Map()
 let trendIndexByRowKey = new Map()
 let trendRowKeys = []
 let activeSyncSource = null
+const isMobileViewport = () => typeof window !== 'undefined' && window.innerWidth <= 640
+let lastMobileChartMode = isMobileViewport()
 
 const queryState = reactive({
   mode: 'single',
@@ -695,6 +702,15 @@ const seasonPeriodLabel = computed(() => {
     return `20${parts[0]}–20${parts[1]}`
   }
   return code
+})
+
+const seasonWindowLabel = computed(() => {
+  const code = String(payload.value?.season_period || '26-27')
+  const parts = code.split('-')
+  if (parts.length === 2) {
+    return `20${parts[0]}年11月5日 — 20${parts[1]}年3月31日`
+  }
+  return '2026年11月5日 — 2027年3月31日'
 })
 
 const areaMissing = computed(() => Boolean(payload.value?.area_source?.area_missing))
@@ -786,6 +802,17 @@ const hasAggregatePoint = computed(() => {
     return dailyRows.value.length > 1 && Boolean(trajectorySummary.value)
   }
   return (queryState.mode === 'rolling' ? periods.value.length : dailyRows.value.length) > 1
+})
+
+const trajectoryTimeMeta = computed(() => {
+  const pts = getTrajectoryPoints()
+  if (pts.length <= 1) return null
+  const usePeriods = queryState.mode === 'rolling' && queryState.periodDays > 1
+  return {
+    count: pts.length,
+    firstLabel: usePeriods ? pts[0].name : pts[0].shortLabel,
+    lastLabel: usePeriods ? pts[pts.length - 1].name : pts[pts.length - 1].shortLabel,
+  }
 })
 
 const activeTableSourceRows = computed(() => {
@@ -1025,13 +1052,12 @@ async function fetchEvaluation() {
   }
 }
 
-// 计算渐变时间色盘（冷靛蓝 -> 湖蓝 -> 翠绿 -> 琥珀 -> 珊瑚红）
+// 计算明亮单调时间色盘（晴空蓝(最早) -> 亮靛蓝 -> 亮洋红 -> 珊瑚红(最新)）
 function interpolateColor(ratio) {
   const stops = [
-    [99, 102, 241],
     [14, 165, 233],
-    [16, 185, 129],
-    [245, 158, 11],
+    [99, 102, 241],
+    [217, 70, 239],
     [239, 68, 68],
   ]
   const clamped = Math.max(0, Math.min(1, ratio))
@@ -1064,6 +1090,7 @@ function getTrajectoryPoints() {
         actualComplaints: p.actual_complaints,
         refComplaints: p.ref_complaints,
         quadrant: p.quadrant,
+        seq: idx + 1,
       }))
   }
   return dailyRows.value
@@ -1197,23 +1224,58 @@ function renderQuadrantChart() {
   const scatterData = pts.map((p, idx) => {
     const ratio = totalPts <= 1 ? 1 : idx / (totalPts - 1)
     const color = chartOptions.colorByTime ? interpolateColor(ratio) : (p.quadrant?.color || '#3b82f6')
+    const isStart = idx === 0
     const isLatest = idx === totalPts - 1
     const isFocused = highlightedRowKey.value === p.key
+    const baseSize = chartOptions.colorByTime
+      ? 10 + Math.round(ratio * 7)
+      : (isLatest ? 16 : 11)
+    const labelText = isFocused
+      ? `📌 ${p.shortLabel}`
+      : chartOptions.colorByTime && totalPts > 1 && isLatest
+        ? `最新 ${p.shortLabel}`
+        : chartOptions.colorByTime && totalPts > 1 && isStart
+          ? `起 ${p.shortLabel}`
+          : p.shortLabel
+    const labelColor = isFocused
+      ? '#6d28d9'
+      : chartOptions.colorByTime && totalPts > 1 && isLatest
+        ? '#dc2626'
+        : chartOptions.colorByTime && totalPts > 1 && isStart
+          ? '#0369a1'
+          : '#334155'
+    const labelBg = isFocused
+      ? 'rgba(245, 243, 255, 0.96)'
+      : chartOptions.colorByTime && totalPts > 1 && isLatest
+        ? 'rgba(254, 242, 242, 0.96)'
+        : chartOptions.colorByTime && totalPts > 1 && isStart
+          ? 'rgba(224, 242, 254, 0.94)'
+          : 'rgba(255, 255, 255, 0.88)'
+    const labelBorder = isFocused
+      ? '#c4b5fd'
+      : chartOptions.colorByTime && totalPts > 1 && isLatest
+        ? '#fca5a5'
+        : chartOptions.colorByTime && totalPts > 1 && isStart
+          ? '#7dd3fc'
+          : 'transparent'
+
     return {
       value: [p.x, p.y],
       rowKey: p.key,
       meta: p,
-      symbolSize: isFocused ? 19 : isLatest ? 16 : 11,
+      symbolSize: isFocused ? Math.max(baseSize + 3, 20) : baseSize,
       itemStyle: {
         color,
+        opacity: chartOptions.colorByTime ? Number((0.84 + ratio * 0.16).toFixed(2)) : 1,
         borderColor: isFocused ? '#7c3aed' : '#ffffff',
         borderWidth: isFocused ? 3.5 : 2,
         shadowBlur: isFocused ? 18 : isLatest ? 14 : 6,
         shadowColor: isFocused ? 'rgba(124, 58, 237, 0.72)' : `${color}88`,
       },
       emphasis: {
-        scale: 1.45,
+        scale: 1.4,
         itemStyle: {
+          opacity: 1,
           borderColor: '#0f172a',
           borderWidth: 3,
           shadowBlur: 18,
@@ -1221,31 +1283,38 @@ function renderQuadrantChart() {
         },
       },
       label: {
-        show: totalPts <= 22 || isLatest || isFocused || idx === 0,
+        show: totalPts <= 22 || isLatest || isFocused || isStart,
         position: 'top',
-        distance: 6,
-        formatter: isFocused ? `📌 ${p.shortLabel}` : p.shortLabel,
-        fontSize: isFocused || isLatest ? 12 : 10,
-        fontWeight: isFocused || isLatest ? 700 : 500,
-        color: isFocused ? '#6d28d9' : '#1e293b',
-        backgroundColor: isFocused ? 'rgba(245, 243, 255, 0.96)' : 'rgba(255,255,255,0.78)',
-        padding: [1, 4],
-        borderRadius: 3,
+        distance: isLatest || isFocused ? 8 : 6,
+        formatter: labelText,
+        fontSize: isFocused || isLatest ? 11.5 : 10,
+        fontWeight: isFocused || isLatest || isStart ? 700 : 500,
+        color: labelColor,
+        backgroundColor: labelBg,
+        borderColor: labelBorder,
+        borderWidth: labelBorder === 'transparent' ? 0 : 1,
+        padding: [2, 5],
+        borderRadius: 4,
       },
     }
   })
 
-  // 构造带方向箭头的平滑分步轨迹线
+  // 构造带方向箭头的平滑分步轨迹线（线宽与透明度随时间递增）
   const lineEdges = []
   for (let i = 0; i < pts.length - 1; i += 1) {
-    const ratio = pts.length <= 2 ? 0.5 : i / (pts.length - 2)
+    const ratio = pts.length <= 2 ? 1 : i / (pts.length - 2)
     const segColor = chartOptions.colorByTime ? interpolateColor(ratio) : '#6366f1'
     lineEdges.push({
       coords: [
         [pts[i].x, pts[i].y],
         [pts[i + 1].x, pts[i + 1].y],
       ],
-      lineStyle: { color: segColor, width: 2.2, opacity: 0.78, curveness: 0.08 },
+      lineStyle: {
+        color: segColor,
+        width: chartOptions.colorByTime ? Number((1.8 + ratio * 1.6).toFixed(2)) : 2.2,
+        opacity: chartOptions.colorByTime ? Number((0.62 + ratio * 0.36).toFixed(2)) : 0.78,
+        curveness: 0.12,
+      },
     })
   }
 
@@ -1254,6 +1323,10 @@ function renderQuadrantChart() {
     ? scatterData.find(item => item.rowKey === highlightedRowKey.value) || null
     : null
 
+  const isMobile = isMobileViewport()
+  const areaLabelSize = isMobile ? 10 : 12
+  const areaLabelPad = isMobile ? [6, 6] : [10, 12]
+
   const markAreas = [
     [
       {
@@ -1261,7 +1334,7 @@ function renderQuadrantChart() {
         xAxis: 0,
         yAxis: 100,
         itemStyle: { color: 'rgba(254, 226, 226, 0.52)' },
-        label: { position: 'insideTopRight', color: '#dc2626', fontSize: 12, fontWeight: 700, padding: [10, 12] },
+        label: { position: 'insideTopRight', color: '#dc2626', fontSize: areaLabelSize, fontWeight: 700, padding: areaLabelPad },
       },
       { xAxis: xMax, yAxis: yMax },
     ],
@@ -1271,7 +1344,7 @@ function renderQuadrantChart() {
         xAxis: xMin,
         yAxis: 100,
         itemStyle: { color: 'rgba(254, 243, 199, 0.55)' },
-        label: { position: 'insideTopLeft', color: '#d97706', fontSize: 12, fontWeight: 700, padding: [10, 12] },
+        label: { position: 'insideTopLeft', color: '#d97706', fontSize: areaLabelSize, fontWeight: 700, padding: areaLabelPad },
       },
       { xAxis: 0, yAxis: yMax },
     ],
@@ -1281,7 +1354,7 @@ function renderQuadrantChart() {
         xAxis: xMin,
         yAxis: yMin,
         itemStyle: { color: 'rgba(209, 250, 229, 0.52)' },
-        label: { position: 'insideBottomLeft', color: '#059669', fontSize: 12, fontWeight: 700, padding: [10, 12] },
+        label: { position: 'insideBottomLeft', color: '#059669', fontSize: areaLabelSize, fontWeight: 700, padding: areaLabelPad },
       },
       { xAxis: 0, yAxis: 100 },
     ],
@@ -1291,15 +1364,15 @@ function renderQuadrantChart() {
         xAxis: 0,
         yAxis: yMin,
         itemStyle: { color: 'rgba(219, 234, 254, 0.52)' },
-        label: { position: 'insideBottomRight', color: '#2563eb', fontSize: 12, fontWeight: 700, padding: [10, 12] },
+        label: { position: 'insideBottomRight', color: '#2563eb', fontSize: areaLabelSize, fontWeight: 700, padding: areaLabelPad },
       },
       { xAxis: xMax, yAxis: 100 },
     ],
   ]
 
   const markLines = [
-    { xAxis: 0, lineStyle: { color: '#334155', width: 1.8, type: 'dashed' }, label: { formatter: '偏差率 0%', position: 'insideEndTop', color: '#334155', fontWeight: 600 } },
-    { yAxis: 100, lineStyle: { color: '#334155', width: 1.8, type: 'dashed' }, label: { formatter: '投诉指数 100', position: 'insideEndTop', color: '#334155', fontWeight: 600 } },
+    { xAxis: 0, lineStyle: { color: '#334155', width: 1.8, type: 'dashed' }, label: { formatter: '偏差率 0%', position: 'insideEndTop', color: '#334155', fontSize: isMobile ? 10 : 11, fontWeight: 600 } },
+    { yAxis: 100, lineStyle: { color: '#334155', width: 1.8, type: 'dashed' }, label: { formatter: '投诉指数 100', position: 'insideEndTop', color: '#334155', fontSize: isMobile ? 10 : 11, fontWeight: 600 } },
   ]
 
   if (chartOptions.showEmpiricalBand && band) {
@@ -1334,7 +1407,7 @@ function renderQuadrantChart() {
       type: 'lines',
       coordinateSystem: 'cartesian2d',
       symbol: ['none', 'arrow'],
-      symbolSize: 8,
+      symbolSize: 10,
       data: lineEdges,
       silent: true,
       z: 3,
@@ -1343,6 +1416,7 @@ function renderQuadrantChart() {
       name: '运行点位',
       type: 'scatter',
       data: scatterData,
+      labelLayout: { hideOverlap: true },
       z: 5,
     },
   ]
@@ -1353,8 +1427,8 @@ function renderQuadrantChart() {
       type: 'effectScatter',
       coordinateSystem: 'cartesian2d',
       data: [{ value: latestPoint.value, meta: latestPoint.meta }],
-      symbolSize: 18,
-      rippleEffect: { brushType: 'stroke', scale: 2.4, period: 3.5 },
+      symbolSize: 19,
+      rippleEffect: { brushType: 'stroke', scale: 2.4, period: 3.2 },
       itemStyle: { color: latestPoint.itemStyle.color, borderColor: '#fff', borderWidth: 2 },
       silent: true,
       z: 4,
@@ -1410,9 +1484,12 @@ function renderQuadrantChart() {
   quadrantChart.setOption(
     {
       animationDuration: 550,
-      grid: { left: 56, right: 28, top: 24, bottom: 44 },
+      grid: isMobile
+        ? { left: 40, right: 14, top: 20, bottom: 38 }
+        : { left: 56, right: 28, top: 24, bottom: 44 },
       tooltip: {
         trigger: 'item',
+        confine: true,
         backgroundColor: 'rgba(15, 23, 42, 0.94)',
         borderColor: '#334155',
         borderWidth: 1,
@@ -1431,8 +1508,9 @@ function renderQuadrantChart() {
           }
           const m = params.data?.meta
           if (!m) return ''
+          const seqHint = totalPts > 1 && m.seq ? `（第 ${m.seq} / ${totalPts} 步）` : ''
           return [
-            `<div style="font-weight:700;margin-bottom:6px">${m.name}</div>`,
+            `<div style="font-weight:700;margin-bottom:6px">${m.name} <span style="color:#94a3b8;font-weight:500">${seqHint}</span></div>`,
             `<div>象限归属：<b style="color:${m.quadrant?.color || '#fff'}">${m.quadrant?.name || '—'}</b></div>`,
             `<div>供热偏差率：<b>${formatSignedPercent(m.x)}</b></div>`,
             `<div>投诉强度指数：<b>${formatNum(m.y, 1)}</b></div>`,
@@ -1446,19 +1524,21 @@ function renderQuadrantChart() {
         type: 'value',
         name: '气象修正供热偏差率 (%)',
         nameLocation: 'middle',
-        nameGap: 26,
+        nameGap: isMobile ? 22 : 26,
+        nameTextStyle: { color: '#475569', fontSize: isMobile ? 11 : 12 },
         min: xMin,
         max: xMax,
         splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.22)' } },
-        axisLabel: { color: '#475569', formatter: '{value}%' },
+        axisLabel: { color: '#475569', fontSize: isMobile ? 10 : 12, formatter: '{value}%' },
       },
       yAxis: {
         type: 'value',
         name: '投诉强度指数',
+        nameTextStyle: { color: '#475569', fontSize: isMobile ? 11 : 12 },
         min: yMin,
         max: yMax,
         splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.22)' } },
-        axisLabel: { color: '#475569' },
+        axisLabel: { color: '#475569', fontSize: isMobile ? 10 : 12 },
       },
       series,
     },
@@ -1534,6 +1614,7 @@ function renderTrendChart() {
           symbol: ['none', 'none'],
           lineStyle: { color: '#7c3aed', width: 2, type: 'dashed' },
           label: {
+            position: 'insideEndTop',
             formatter: `📌 ${xLabels[focusedTrendIndex]}`,
             color: '#6d28d9',
             fontWeight: 700,
@@ -1556,11 +1637,14 @@ function renderTrendChart() {
         }
       : undefined
 
+  const isMobile = isMobileViewport()
+
   trendChart.setOption(
     {
       animationDuration: 450,
       tooltip: {
         trigger: 'axis',
+        confine: true,
         axisPointer: { type: 'cross' },
         backgroundColor: 'rgba(15, 23, 42, 0.94)',
         borderColor: '#334155',
@@ -1569,16 +1653,34 @@ function renderTrendChart() {
       axisPointer: { link: [{ xAxisIndex: 'all' }] },
       legend: [
         {
-          top: 0,
+          top: 2,
           left: 'center',
-          textStyle: { color: '#334155', fontSize: 11 },
-          data: ['实际单耗', 'HDD20参考单耗', '日均气温', '实际投诉量', '参考投诉基准'],
+          itemGap: isMobile ? 8 : 14,
+          itemWidth: isMobile ? 12 : 16,
+          itemHeight: isMobile ? 9 : 10,
+          textStyle: { color: '#334155', fontSize: isMobile ? 10.5 : 11 },
+          data: ['实际单耗', 'HDD20参考单耗', '日均气温'],
+        },
+        {
+          top: isMobile ? 222 : 250,
+          left: 'center',
+          itemGap: isMobile ? 10 : 16,
+          itemWidth: isMobile ? 14 : 18,
+          itemHeight: isMobile ? 9 : 10,
+          textStyle: { color: '#334155', fontSize: isMobile ? 10.5 : 11 },
+          formatter: name => (name === '实际投诉量' ? '实际投诉量(按象限着色)' : name),
+          data: ['实际投诉量', '参考投诉基准'],
         },
       ],
-      grid: [
-        { left: 50, right: 48, top: 38, height: '38%' },
-        { left: 50, right: 48, top: '57%', height: '31%' },
-      ],
+      grid: isMobile
+        ? [
+            { left: 38, right: 38, top: 50, height: 154 },
+            { left: 38, right: 38, top: 272, height: 138 },
+          ]
+        : [
+            { left: 50, right: 48, top: 56, height: 174 },
+            { left: 50, right: 48, top: 304, height: 158 },
+          ],
       xAxis: [
         {
           type: 'category',
@@ -1591,7 +1693,11 @@ function renderTrendChart() {
           type: 'category',
           data: xLabels,
           gridIndex: 1,
-          axisLabel: { color: '#475569', fontSize: 11 },
+          axisLabel: {
+            color: '#475569',
+            fontSize: isMobile ? 10 : 11,
+            rotate: isMobile && xLabels.length > 7 ? 35 : 0,
+          },
           axisLine: { lineStyle: { color: '#cbd5e1' } },
         },
       ],
@@ -1599,26 +1705,29 @@ function renderTrendChart() {
         {
           type: 'value',
           name: '单耗',
+          nameGap: isMobile ? 8 : 10,
           gridIndex: 0,
-          nameTextStyle: { color: '#64748b', fontSize: 11 },
+          nameTextStyle: { color: '#64748b', fontSize: isMobile ? 10 : 11 },
           splitLine: { lineStyle: { color: '#f1f5f9' } },
-          axisLabel: { color: '#475569', fontSize: 11 },
+          axisLabel: { color: '#475569', fontSize: isMobile ? 10 : 11 },
         },
         {
           type: 'value',
           name: '气温℃',
+          nameGap: isMobile ? 8 : 10,
           gridIndex: 0,
-          nameTextStyle: { color: '#0284c7', fontSize: 11 },
+          nameTextStyle: { color: '#0284c7', fontSize: isMobile ? 10 : 11 },
           splitLine: { show: false },
-          axisLabel: { color: '#0284c7', fontSize: 11, formatter: '{value}℃' },
+          axisLabel: { color: '#0284c7', fontSize: isMobile ? 10 : 11, formatter: '{value}℃' },
         },
         {
           type: 'value',
           name: '投诉(件)',
+          nameGap: isMobile ? 8 : 10,
           gridIndex: 1,
-          nameTextStyle: { color: '#64748b', fontSize: 11 },
+          nameTextStyle: { color: '#64748b', fontSize: isMobile ? 10 : 11 },
           splitLine: { lineStyle: { color: '#f1f5f9' } },
-          axisLabel: { color: '#475569', fontSize: 11 },
+          axisLabel: { color: '#475569', fontSize: isMobile ? 10 : 11 },
         },
       ],
       series: [
@@ -1668,6 +1777,15 @@ function renderTrendChart() {
           xAxisIndex: 1,
           yAxisIndex: 2,
           barMaxWidth: 26,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0, color: '#ef4444' },
+              { offset: 0.34, color: '#f59e0b' },
+              { offset: 0.67, color: '#10b981' },
+              { offset: 1, color: '#3b82f6' },
+            ]),
+            borderRadius: [4, 4, 0, 0],
+          },
           data: actualComplaints,
           markLine: focusMarkLineBottom,
         },
@@ -1690,11 +1808,43 @@ function renderTrendChart() {
 function renderAllCharts() {
   renderQuadrantChart()
   renderTrendChart()
+  ensureChartResizeObserver()
+}
+
+function syncChartViewportLayout() {
+  const nextMobile = isMobileViewport()
+  const modeChanged = nextMobile !== lastMobileChartMode
+  lastMobileChartMode = nextMobile
+  quadrantChart?.resize()
+  trendChart?.resize()
+  if (modeChanged && hasValidEvaluation.value) {
+    renderAllCharts()
+    quadrantChart?.resize()
+    trendChart?.resize()
+  }
+}
+
+function scheduleChartResize() {
+  if (resizeRafId) cancelAnimationFrame(resizeRafId)
+  resizeRafId = requestAnimationFrame(() => {
+    resizeRafId = 0
+    syncChartViewportLayout()
+  })
+}
+
+function ensureChartResizeObserver() {
+  if (typeof ResizeObserver === 'undefined') return
+  if (!chartResizeObserver) {
+    chartResizeObserver = new ResizeObserver(() => {
+      scheduleChartResize()
+    })
+  }
+  if (quadrantChartEl.value) chartResizeObserver.observe(quadrantChartEl.value)
+  if (trendChartEl.value) chartResizeObserver.observe(trendChartEl.value)
 }
 
 function handleResize() {
-  quadrantChart?.resize()
-  trendChart?.resize()
+  scheduleChartResize()
 }
 
 function exportExcel() {
@@ -1761,6 +1911,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  if (resizeRafId) cancelAnimationFrame(resizeRafId)
+  chartResizeObserver?.disconnect()
+  chartResizeObserver = null
   quadrantChart?.dispose()
   trendChart?.dispose()
   quadrantChart = null
@@ -1853,6 +2006,7 @@ onBeforeUnmount(() => {
 
 .hero-left {
   flex: 1 1 560px;
+  min-width: 0;
 }
 
 .hero-badges {
@@ -1863,7 +2017,6 @@ onBeforeUnmount(() => {
 }
 
 .badge-season,
-.badge-admin,
 .badge-window {
   font-size: 11px;
   font-weight: 600;
@@ -1875,12 +2028,6 @@ onBeforeUnmount(() => {
   background: rgba(56, 189, 248, 0.22);
   color: #bae6fd;
   border: 1px solid rgba(56, 189, 248, 0.4);
-}
-
-.badge-admin {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fde68a;
-  border: 1px solid rgba(251, 191, 36, 0.42);
 }
 
 .badge-window {
@@ -2256,6 +2403,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .chart-header {
@@ -2332,28 +2480,56 @@ onBeforeUnmount(() => {
   border-radius: 999px;
 }
 
-.quadrant-legend-strip {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 6px 10px;
-  background: #f8fafc;
-  border-radius: 10px;
-  font-size: 12px;
-  color: #334155;
-}
-
-.q-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .q-dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   display: inline-block;
+}
+
+.time-order-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 11.5px;
+  color: #475569;
+}
+
+.time-order-badge {
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.time-order-badge.start {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+}
+
+.time-order-badge.end {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.time-order-bar {
+  width: 88px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5e9 0%, #6366f1 35%, #d946ef 70%, #ef4444 100%);
+  display: inline-block;
+}
+
+.time-order-hint {
+  color: #64748b;
+  font-size: 11px;
 }
 
 .chart-canvas {
@@ -2444,6 +2620,19 @@ onBeforeUnmount(() => {
 
 .table-scroll {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-scroll-hint {
+  display: none;
+  margin: 0;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.mini-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .eval-table {
@@ -2663,14 +2852,186 @@ onBeforeUnmount(() => {
 
 @media (max-width: 720px) {
   .joint-eval-main {
+    padding: 12px 12px 36px;
+    gap: 14px;
+  }
+  .top-nav-bar {
+    align-items: stretch;
+  }
+  .header-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .header-actions .btn {
+    justify-content: center;
+    padding: 8px 10px;
+  }
+  .hero-banner {
+    padding: 16px;
+    border-radius: 14px;
+    gap: 14px;
+  }
+  .hero-title {
+    font-size: 19px;
+    line-height: 1.3;
+  }
+  .hero-subtitle {
+    font-size: 12.5px;
+  }
+  .hero-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+  .meta-tile {
+    padding: 8px 11px;
+  }
+  .meta-tile:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+  .meta-value {
+    font-size: 13px;
+  }
+  .control-deck {
     padding: 14px;
+    gap: 12px;
+  }
+  .mode-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+  .mode-tab {
+    justify-content: center;
+    padding: 8px 4px;
+    font-size: 12px;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .quick-presets {
+    width: 100%;
+    gap: 6px;
+  }
+  .preset-title {
+    width: 100%;
+  }
+  .preset-chip {
+    padding: 5px 10px;
+    font-size: 11.5px;
+  }
+  .params-row {
+    gap: 12px;
+  }
+  .param-field {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .param-input {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .pill-group {
+    width: 100%;
+  }
+  .count-pill {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 6px 8px;
   }
   .kpi-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
-  .hero-meta-grid {
-    grid-template-columns: 1fr;
+  .kpi-card {
+    padding: 14px 15px;
+  }
+  .kpi-main {
+    flex-wrap: wrap;
+  }
+  .kpi-value {
+    font-size: 24px;
+  }
+  .kpi-details {
+    gap: 6px;
+  }
+  .chart-card,
+  .table-card {
+    padding: 14px;
+  }
+  .chart-title {
+    font-size: 15px;
+  }
+  .quadrant-canvas {
+    height: 360px;
+  }
+  .trend-canvas {
+    height: 456px;
+  }
+  .quadrant-filters {
     width: 100%;
+    gap: 6px;
+  }
+  .q-filter-btn {
+    padding: 5px 9px;
+    font-size: 11.5px;
+  }
+  .mobile-scroll-hint {
+    display: block;
+  }
+  .table-scroll {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+  }
+  .eval-table th:first-child,
+  .eval-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    box-shadow: 2px 0 6px rgba(15, 23, 42, 0.06);
+  }
+  .eval-table thead th:first-child {
+    z-index: 3;
+    background: #f8fafc;
+  }
+  .eval-table tbody td:first-child {
+    background: #ffffff;
+  }
+  .eval-table tbody tr.row-incomplete td:first-child {
+    background: #fefce8;
+  }
+  .eval-table tbody tr.row-hovered td:first-child {
+    background: #eff6ff;
+  }
+  .eval-table tbody tr.row-highlighted td:first-child {
+    background: #ede9fe;
+  }
+  .eval-table tfoot tr.summary-foot-row td:first-child {
+    background: #f1f5f9;
+  }
+  .spec-toggle-btn {
+    padding: 12px 14px;
+    font-size: 13px;
+    text-align: left;
+    gap: 8px;
+  }
+  .spec-body {
+    padding: 12px 14px 16px;
+  }
+  .formula-code {
+    font-size: 12px;
+    word-break: break-word;
+  }
+}
+
+@media (max-width: 420px) {
+  .mode-tab {
+    font-size: 11.5px;
+    padding: 7px 2px;
   }
 }
 </style>

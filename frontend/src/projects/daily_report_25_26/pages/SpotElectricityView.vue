@@ -451,18 +451,18 @@
               <button
                 type="button"
                 class="capsule-btn"
-                :class="{ active: selectedDistributionPlant === 'xianghai' }"
-                @click="selectedDistributionPlant = 'xianghai'"
-              >
-                香海热电厂 (4台机)
-              </button>
-              <button
-                type="button"
-                class="capsule-btn"
                 :class="{ active: selectedDistributionPlant === 'beihai' }"
                 @click="selectedDistributionPlant = 'beihai'"
               >
                 北海热电厂 (3台机)
+              </button>
+              <button
+                type="button"
+                class="capsule-btn"
+                :class="{ active: selectedDistributionPlant === 'xianghai' }"
+                @click="selectedDistributionPlant = 'xianghai'"
+              >
+                香海热电厂 (4台机)
               </button>
             </div>
 
@@ -2050,13 +2050,13 @@ const plantDistributionStats = computed(() => {
   const plantMode = selectedDistributionPlant.value // 'all' | 'xianghai' | 'beihai'
 
   const allUnits = [
+    { key: 'beihai_unit1', name: '北海 #1 机组', plant: 'beihai', prop: 'beihai_unit1_sales' },
+    { key: 'beihai_unit2', name: '北海 #2 机组', plant: 'beihai', prop: 'beihai_unit2_sales' },
+    { key: 'beihai_unit3', name: '北海 #3 机组', plant: 'beihai', prop: 'beihai_unit3_sales' },
     { key: 'xianghai_unit1', name: '香海 #1 机组', plant: 'xianghai', prop: 'xianghai_unit1_sales' },
     { key: 'xianghai_unit2', name: '香海 #2 机组', plant: 'xianghai', prop: 'xianghai_unit2_sales' },
     { key: 'xianghai_unit3', name: '香海 #3 机组', plant: 'xianghai', prop: 'xianghai_unit3_sales' },
     { key: 'xianghai_unit4', name: '香海 #4 机组', plant: 'xianghai', prop: 'xianghai_unit4_sales' },
-    { key: 'beihai_unit1', name: '北海 #1 机组', plant: 'beihai', prop: 'beihai_unit1_sales' },
-    { key: 'beihai_unit2', name: '北海 #2 机组', plant: 'beihai', prop: 'beihai_unit2_sales' },
-    { key: 'beihai_unit3', name: '北海 #3 机组', plant: 'beihai', prop: 'beihai_unit3_sales' },
   ]
 
   const targetUnits = plantMode === 'all'
@@ -2527,6 +2527,9 @@ async function fetchData() {
         monthlyTrends.value = mTrendData.months || []
       }
     }
+
+    // 当数据库中存在所选日期/区间的电厂上网电量数据时，自动勾选；无数据时自动取消
+    showPlantSales.value = hasPlantSalesData.value
 
     // 数据加载完毕后在 finally 中进行渲染
   } catch (err) {

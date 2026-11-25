@@ -74,6 +74,11 @@ const routes = [
     meta: { title: '智慧供热运行驾驶舱' },
   },
   {
+    path: '/projects/smart_heating_platform/pages/dcs_workbench',
+    component: () => import('../projects/smart_heating_platform/pages/DcsWorkbenchView.vue'),
+    meta: { title: 'DCS工艺监控台（试验）' },
+  },
+  {
     path: '/projects/smart_heating_platform/pages/hourly_report',
     component: () => import('../projects/smart_heating_platform/pages/HourlyReportView.vue'),
     meta: { title: '逐小时精细化运行报告' },

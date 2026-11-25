@@ -1,3 +1,8 @@
+## 2026-11-25 新增商业用户 24 小时趋势接口并注册 DCS 试验页权限 (`reports.py`, `report_query_service.py`, `项目列表.json`, `smart_heating_platform.json`)
+
+- **`projects/smart_heating_platform/{services/report_query_service.py,api/reports.py}`**：新增 `get_merchant_point_24h()` 与 `GET /api/v1/projects/smart_heating_platform/reports/hourly/merchant-trend`（限 `Global_admin`），返回单户商业用户当日 24 小时供回温、压力、流量、阀位与积分耗热曲线；`tests/test_cleaning_and_apis.py` 补充接口冒烟断言（21 passed）。
+- **`backend_data/shared/项目列表.json` & `backend_data/shared/auth/permissions/smart_heating_platform.json`**：在 `smart_heating_platform.pages` 中紧随 `dashboard` 注册 `dcs_workbench`（`🎛️ DCS 工艺监控台（试验）`），并在 `Global_admin.page_access` 中补齐 `dashboard`、`dcs_workbench` 授权。
+
 ## 2026-11-24 优化后端本地 Docker 构建镜像源与构建上下文 (`Dockerfile`, `.dockerignore`)
 
 - **`backend/Dockerfile`**：配置阿里云 Debian APT 源（`https://mirrors.aliyun.com`）、实测最快的 PyPI 官方+阿里云双源、`PIP_DEFAULT_TIMEOUT=180` 与 BuildKit `--mount=type=cache` 持久依赖缓存，并将源码拷贝收口为 `COPY backend /app/backend`。

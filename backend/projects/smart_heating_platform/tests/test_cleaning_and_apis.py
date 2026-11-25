@@ -213,6 +213,11 @@ def test_platform_endpoints_smoke_and_permissions():
     assert len(r_h.json()["data"]["merchants"]) == 464
     assert r_h.json()["data"]["merchant_summary"]["total_merchants"] == 464
 
+    first_mc_id = r_h.json()["data"]["merchants"][0]["merchant_id"]
+    mc_date = r_h.json()["data"]["meta"]["date"]
+    r_mt = client.get(f"/api/v1/projects/smart_heating_platform/reports/hourly/merchant-trend?date={mc_date}&merchant_id={first_mc_id}")
+    assert r_mt.status_code == 200 and r_mt.json()["ok"] is True and isinstance(r_mt.json()["data"], list)
+
     # 校验无参数调用默认定位到最新有数据的日期和小时
     from backend.projects.smart_heating_platform.services.report_query_service import _resolve_latest_available_biz_hour
     from backend.db.database_daily_report_25_26 import engine

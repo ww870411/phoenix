@@ -113,6 +113,9 @@ export function fetchEntityTrend24h(params = {}, options = {}) {
 export function fetchUpstreamTrend24h(params = {}, options = {}) {
   return requestJson(`/reports/hourly/upstream-trend${toQuery(params)}`, { method: 'GET', ...options })
 }
+export function fetchMerchantTrend24h(params = {}, options = {}) {
+  return requestJson(`/reports/hourly/merchant-trend${toQuery(params)}`, { method: 'GET', ...options })
+}
 export function fetchStationTempDevices(params = {}, options = {}) {
   return requestJson(`/reports/hourly/station-temps${toQuery(params)}`, { method: 'GET', ...options })
 }

@@ -1,3 +1,44 @@
+## 2026-11-25 优化「电力现货市场数据」上网电量自动勾选与两厂分布顺序 (`SpotElectricityView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+  - `fetchData()` 在拉取 `summary` 与 `points` 后依据 `hasPlantSalesData.value` 自动同步 `showPlantSales.value`：数据库存在所选日期/区间的电厂上网电量数据时自动勾选「显示两厂上网电量」并渲染叠加曲线，无数据时自动取消勾选；
+  - 将「现货单价区间 · 上网电量分布分析」胶囊切换条顺序调整为 `两厂总计`、`北海热电厂 (3台机)`、`香海热电厂 (4台机)`，并同步将 `plantDistributionStats` 的 `allUnits` 穿透明细顺序调整为 `北海 #1~#3 机组` 在前、`香海 #1~#4 机组` 在后。
+- **`tests/spot-plant-sales-chart.test.mjs`**：补充 `fetchData` 对 `showPlantSales` 自动勾选/取消勾选的回归测试。
+
+## 2026-11-25 新增霍尼韦尔 ASM 冷灰风「DCS 工艺监控台（试验）」(`DcsWorkbenchView.vue`, `DcsNetworkPfd.vue`, `DcsStationPid.vue`, `DcsAnalogBar.vue`)
+
+- **`src/projects/smart_heating_platform/components/{DcsNetworkPfd,DcsStationPid,DcsAnalogBar}.vue`（新增）**：分别实现全网热力 SVG 工艺流向图 PFD（北海热电体系 / 独立小站 / 香海热电体系分区布局与各自独立集分水母管、`香-北联络` 跨区虚线支管、电厂锅炉/汽轮机/发电机转子动画、9 大主干管网蝴蝶阀与末端楼宇室温液柱）、换热站 / 母管制电厂汽轮机（仅显示机侧主汽/进汽/抽汽/排汽，左侧来汽端呈主蒸汽母管，依本机实测流热驱动各级动叶、主轴、联轴器与发电机转子旋转动画） / 母管制全厂锅炉群与高压主蒸汽母管（同屏展示该厂全部锅炉图形、主汽温度/压力/流量及并汽汇入母管合流工况） / 首站水网 / 商业用户五态 SVG P&ID 实景组态图以及 ASM 模拟量量程/阈值刻度条。
+- **`src/projects/smart_heating_platform/{pages/DcsWorkbenchView.vue,services/api.js}`（新增/更新）**：新增 `fetchMerchantTrend24h()`；采用“左 242 站/137 上游/464 商业户微缩导览 + 中全网 PFD / 单元 P&ID 工艺组态画布 + 右标准只读 Faceplate”三栏组态布局（数值表格退为可选辅助标签），配 ISA-18.2 常驻报警横幅与 `净化工艺值 / 原始信号(RAW)` 一键对比。
+- **`src/projects/smart_heating_platform/{components/PlatformSubNav.vue,pages/ExecutiveDashboardView.vue}` & `src/router/index.js`**：在「运行驾驶舱」后新增 `🎛️ DCS工艺监控` 标签页与 `/projects/smart_heating_platform/pages/dcs_workbench` 路由（仅限 `Global_admin`）。
+
+## 2026-11-25 修复「主城区供热联合评价模型」跨端切换图表尺寸不还原 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：新增容器 `ResizeObserver` 与 `requestAnimationFrame` 防抖重绘，确保桌面与手机模式互切时同步触发 ECharts `resize()` 与断点重渲染。
+
+## 2026-11-25 精简「主城区供热联合评价模型」汇总与参数栏文案 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：明细表汇总行首列改为 `合计`，底部折叠面板标题改为 `📐 模型公式与参数`。
+
+## 2026-11-25 优化「主城区供热联合评价模型」手机窄屏适配 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：补充 `<= 720px` 移动端排版（等分操作按钮、防溢出日期输入、三等分模式栏、`sticky` 首列冻结明细表与参数附表滚动容器）及 `<= 640px` ECharts 紧凑留白/防裁切浮层适配。
+
+## 2026-11-25 修正「单耗对照与投诉强度联动走势」实际投诉量图例色标 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：将 `实际投诉量` 图例图标由 ECharts 默认单蓝色改为四象限四色渐变（红/橙/绿/蓝），并标注为 `实际投诉量(按象限着色)`。
+
+## 2026-11-25 修复「单耗对照与投诉强度联动走势」图例重叠 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：将右侧 `trendChart` 拆分为上下子图独立单行图例（`top: 2` 与 `top: 250`），并拉开 `grid[0]`/`grid[1]` 与坐标轴标题间距，消除图例与图形、轴标题重叠。
+
+## 2026-11-25 增强「主城区供热联合评价模型」四象限时间渐变轨迹辨识度 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：升级「时间渐变轨迹」为明亮单调递进色盘（晴空蓝→亮靛蓝→亮洋红→珊瑚红）、保留节点上方日期标签（含 `起`/`最新` 胶囊标注与重叠自动避让 `hideOverlap`）、点径/线宽随时间递增及顶部时间次序渐变条（`.time-order-strip`）。
+
+## 2026-11-25 精简「主城区供热联合评价模型」页面文案与选项 (`JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：移除 `Global_admin 专享` 徽标及四象限图上方重复图例条，更新顶部有效评价窗口为随供暖期动态显示（默认 `2026年11月5日 — 2027年3月31日`）、简化模型副标题，并将单日轨迹天数按钮精简为 `仅当日` / `近 7 日` / `近 14 日`。
+
 ## 2026-11-24 新增「主城区供热联合评价模型」前端模块 (`JointEvaluationView.vue`)
 
 - **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`（新增）**：实现主城区供热运行联合评价看板，默认读取业务日期单日情况，支持切换单日诊断（可选近期轨迹天数）、周期滚动对比（周期跨度 × 显示周期数量）与自定义时段；内置 ECharts 6 四象限渐变演进轨迹图（含 5%~95% 历史经验波动带）、单耗与投诉双轴联动趋势图（支持两图及明细表三向悬浮预览与点击锁定联动）、可筛选联合明细表及 `xlsx-js-style` Excel 导出。

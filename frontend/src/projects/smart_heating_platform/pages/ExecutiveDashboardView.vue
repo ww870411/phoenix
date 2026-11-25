@@ -45,6 +45,9 @@
         <button type="button" class="cmd-btn desktop-only-btn" @click="toggleFullscreen">
           {{ isFullscreen ? '🗗 退出全屏' : '⛶ 全屏投屏' }}
         </button>
+        <button type="button" class="cmd-btn" @click="goPage('/projects/smart_heating_platform/pages/dcs_workbench')">
+          🎛️ DCS工艺
+        </button>
         <button type="button" class="cmd-btn accent" @click="goPage('/projects/smart_heating_platform/pages/hourly_report')">
           📊 详表报告
         </button>

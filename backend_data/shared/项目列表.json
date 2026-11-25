@@ -226,6 +226,11 @@
         "数据源": "smart_heating_platform",
         "页面描述": "全景数据看板：小时气温供热对比走势、服务中心能效象限与风险焦点榜"
       },
+      "dcs_workbench": {
+        "页面名称": "🎛️ DCS 工艺监控台（试验）",
+        "数据源": "smart_heating_platform",
+        "页面描述": "霍尼韦尔 ASM 冷灰高对比工艺视图：全网热力拓扑、异常报警横幅与单站标准 Faceplate"
+      },
       "hourly_report": {
         "页面名称": "📊 全量数据统计与报告",
         "数据源": "smart_heating_platform",

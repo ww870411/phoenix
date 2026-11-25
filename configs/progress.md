@@ -1,5 +1,193 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-25 优化「电力现货市场数据」上网电量默认勾选与分布胶囊电厂顺序 (`SpotElectricityView.vue`)
+
+- **改动缘由**：
+  - 浏览电力现货市场单日或区间数据时，需在数据库存在电厂上网电量记录时自动勾选“显示两厂上网电量”以便直接呈现电量曲线；同时将下方“现货单价区间 · 上网电量分布分析”中的两厂切换胶囊顺序统一为先北海、后香海。
+- **改动点与实现逻辑**：
+  - **`frontend/src/projects/daily_report_25_26/pages/SpotElectricityView.vue`**：
+    - `fetchData()` 在完成汇总 `summary` 与 15 分钟点位 `points` 拉取且未过期/未报错时，根据 `hasPlantSalesData.value` 自动同步 `showPlantSales.value = hasPlantSalesData.value`（存在上网电量数据时自动勾选并随后的 `renderChart()` 自动叠加绘制上网电量曲线，无数据时保持取消勾选并禁用）；
+    - 将 `.dist-capsule-tabs` 中的电厂切换按钮顺序由 `两厂总计 / 香海热电厂 (4台机) / 北海热电厂 (3台机)` 调整为 `两厂总计 / 北海热电厂 (3台机) / 香海热电厂 (4台机)`，并同步调整 `plantDistributionStats` 内 `allUnits` 数组为 `北海 #1~#3 机组` 在前、`香海 #1~#4 机组` 在后。
+  - **`frontend/tests/spot-plant-sales-chart.test.mjs`**：
+    - 为 `fetchData` 竞态用例补充 `hasPlantSalesData` 依赖及 `showPlantSales` 断言，并新增自动勾选与无数据取消勾选回归用例。
+- **验证结果与影响面**：
+  - `npm --prefix frontend run build`：`1099 modules transformed`，`built in 18.26s`（0 错误）；
+  - `node --test frontend/tests/spot-plant-sales-chart.test.mjs frontend/tests/spot-settlement-import.test.mjs`：共 14 项测试通过 13 项（含新增自动勾选用例）；唯一失败的 1 项为既有 `spot-plant-sales-chart.test.mjs:48` 单行正则截取多行 `hasPlantSalesData` 导致的 `SyntaxError`（本次未改该既有断言）；无后端接口或数据库变更。
+
+## 2026-11-25 分离全网工艺总貌 PFD 北海与香海热源管网流向 (`DcsNetworkPfd.vue`, `DcsWorkbenchView.vue`)
+
+- **排查定位**：原 `LEVEL 1 · 全网工艺总貌组态 (PFD)` 将 `北海#1/水炉首站`、`北海#2首站` 与 `香海首站/网口` 同时焊接到同一根竖向贯穿全画布的 `主母管`（以及末端右端一根总收集管），且 `hubNodes` 中 `香海首站/网口` 匹配规则未排除无 `sub_category` 的北海网口点位，导致外观上把北海与香海两大电厂供热体系混连在一起。
+- **改动点与实现逻辑**：
+  - `frontend/src/projects/smart_heating_platform/components/DcsNetworkPfd.vue`：
+    - 拆掉贯穿全图的单一 `主母管`，在 `Stage 2 -> Stage 3` 分别建立 **北海#2母管**（`北海北网` / `北海南网`）、**中心区母管**（`东环` / `南环`）、**独立源** 徽章（`老热泵` / `电锅炉`，脱离两电厂直接连线）及 **香海母管**（`香海#1低真空` / `香海#3低真空` / `香海蒸汽网`），并用分界区带与 `香-北联络` 虚线跨区支管标明真实联络混水界关系，不再使北海电厂与香海电厂共用一根全网混合母管。
+    - `hubPositions` 与 `RDFZ_LAYOUT_ORDER` 按物理体系顺序固定排列，消除跨系统交叉管线。
+  - `frontend/src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`：收紧 `hubNodes` 首站/网口聚合匹配口径（`b2`、`b1`、`xh` 按北网/东环南环/香海严格切分），避免 `香海首站/低真空` 混计北海网口测点。
+- **验证结果与影响面**：前端构建 `npm --prefix frontend run build` 通过（1099 modules，耗时 17.93s，`DcsWorkbenchView` JS `101.66 kB` / CSS `21.67 kB`）；后端 `pytest` 21/21 全部通过（耗时 7.26s）；无后端改动。
+
+## 2026-11-25 改造母管制机炉分离组态并新增电厂锅炉群汇入母管视图 (`DcsStationPid.vue`)
+
+- **改造背景**：北海、香海两座热电厂均为典型“母管制”运行架构，全厂锅炉产汽汇入公用高压主蒸汽母管后再分配至各台汽轮机，锅炉与汽轮机并非一一对应。
+- **改动点与实现逻辑**：
+  - `frontend/src/projects/smart_heating_platform/components/DcsStationPid.vue`：
+    - **机侧完全剔除锅炉主汽参数**：从 `turbinePorts` 移除 `boilerMain`，铭牌 ① 仅绑定本机组 `机主汽`（无测点时显 `本机未设机主汽表计`）；左侧来汽端由单机锅炉图形改为公用 **主蒸汽母管（母管制来汽）** 节点（支持点击快捷切转至炉侧母管视图）；`isTurbineRunning` 汇总同号机组全部机侧测点判定运转态（含 `#3机` 左/右进汽及抽汽），停机时同步停止对应蒸汽管流向动画。
+    - **新增全厂锅炉群与主蒸汽母管视图 (`isBoilerHeaderView`)**：点击任意 `炉主汽` 测点（`/炉.*主汽/`，如 `北海#1~4炉主汽`、`香海#1~4炉主汽`）自动进入母管制锅炉群 SVG 组态画布，同屏绘制该电厂全部锅炉单元（汽包 + 水冷壁/过热器 + 在运燃烧火焰动画 + 运行态标牌）、各自 `主汽温度 / 主汽压力 / 瞬时流量` 参数卡、各路主汽上行支管与隔离/并汽阀，以及汇入顶部横向 **高压主蒸汽母管** 的合流总况卡（合流总汽量、并汽炉数、母管均温/均压及切回机侧入口）。
+- **验证结果与影响面**：前端构建 `npm --prefix frontend run build` 通过（1099 modules，耗时 18.91s，`DcsWorkbenchView` JS `98.93 kB` / CSS `21.41 kB`）；后端 `pytest` 21/21 全部通过（耗时 6.82s）；无后端接口或数据库结构变更。
+
+## 2026-11-25 修复汽轮机跨机组串点与母管炉汽误判运转问题 (`DcsStationPid.vue`)
+
+- **排查缘由与实测定位**：直查 `smart_heating_platform.fact_upstream_hourly` 最新实测小时（`2026-11-25 08:00:00+00:00`，东八区 16:00）全部热源明细后发现，停止机组 `北海#1机进汽`（`T=0.000 / P=0.0000 / F=0.000 / H=0.000`）、`香海#2机主汽`（`T=0.000 / P=0.0000 / F=0.000 / H=0.000`）与 `香海#2机抽汽`（`T=143.000 / P=0.0010 / F=0.000`）均未通汽运转，但先前前端全部误亮运转态，存在三处缺陷：
+  1. `pickPort()` 在当前机组缺少某蒸汽口时跨机组回退全厂池子（如 `香海#2机` 缺少 `进汽` 点位时错抓了 `香海#4机进汽 F=128.300`）；
+  2. `ports.main` 匹配正则包含母管侧 `炉.*主汽`（如运行时炉侧母管 `北海#1炉主汽 F=157.000`、`香海#2炉主汽 F=114.700`），在汽轮机未投运时把锅炉母管流量误判为汽轮机运转；
+  3. 运转判据包含 `temp > 120 && pressure > 0.05` 兜底分支，易把带压伴热/热备死水或静止蒸汽误判为运转。
+- **改动点与实现逻辑**：
+  - `frontend/src/projects/smart_heating_platform/components/DcsStationPid.vue`：
+    - 重构 `turbinePorts` 计算属性：基于 `#${unit}` / `${unit}号` 建立严格同机组 `unitPool`，彻底禁用跨机组借点；分离 `turbineMain = pickInUnit(/机.*主汽/)` 与 `boilerMain = pickInUnit(/炉.*主汽/)`，并在四口标牌上明确标示缺失测点（`本机组未配该测点` / `本机组未设进汽点` / `本机组未设抽汽点` / `本机组未设排汽点`）。
+    - 重构 `isTurbineRunning` 计算属性：仅检查汽轮机本体四口（`[ports.turbineMain, ports.inlet, ports.extract, ports.exhaust]`，仅四口皆无数据时回退 `[st.value]`），剔除 `boilerMain` 与温压兜底分支，仅当实时流量 `flow > 2.0` 或热量 `heat > 1.0` / `hrHeat > 1.0` 时才判定为运转并驱动转子旋转。
+- **验证结果与影响面**：前端构建 `npm --prefix frontend run build` 通过（1099 modules，耗时 17.58s，`DcsWorkbenchView` JS `87.94 kB` / CSS `21.07 kB`）；后端 `pytest` 21/21 全部通过（耗时 8.05s）；修正后停运机组（`北海#1机`、`香海#2机`）与实际运转机组（`北海#2机`、`北海#3机`、`香海#1机`、`香海#3机`、`香海#4机`）在 16:00 实测数据下实现准确区分，无后端接口或数据库结构变更。
+
+## 2026-11-25 汽轮机接入实测运转态自动判定与转子旋转动画 (`DcsStationPid.vue`, `DcsNetworkPfd.vue`, `DcsWorkbenchView.vue`)
+
+- **改动缘由**：
+  - 按用户要求，根据实时采集的流量、热量、温度与压力自动判断汽轮机组处于「运转中」还是「停机/冷备」，在运转状态下驱动转子与发电机动效。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/components/DcsStationPid.vue`**：
+    - 新增 `isTurbineRunning` 计算属性：结合当前测点及同机组主汽/进汽/抽汽/排汽四口实测数据，当任一蒸汽口满足 `flow > 1 t/h` / `heat > 1 GJ/h` / `hour_heat_gj > 1 GJ` 或 `temp > 120℃ 且 pressure > 0.05 MPa` 时判为 `● 运转中`，否则判为 `○ 停机/冷备`；
+    - 运转时自动触发高压缸/中低压缸各级动叶片滚动脉冲、贯通转子中心轴螺旋动画、联轴器脉冲及发电机 `G` 磁极转子环旋转动画；停机/冷备态下全部静止并灰显标识。
+  - **`frontend/src/projects/smart_heating_platform/{pages/DcsWorkbenchView.vue,components/DcsNetworkPfd.vue}`**：
+    - 在 Stage 1 北海/香海电厂节点同步计算 `running` 状态并驱动微型汽轮机转子与发电机 `G` 外环同步旋转。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1099 modules transformed，built in 29.08s（0 错误，`DcsWorkbenchView` `87.72 kB` + CSS `21.07 kB`）**；
+  - `$env:PYTHONPATH="D:\编程项目\phoenix;D:\编程项目\phoenix\backend"; python -m pytest backend/projects/smart_heating_platform/tests -v`：**21 passed（0 失败，11.74s）**。
+
+## 2026-11-25 为「DCS 工艺监控台」热源蒸汽测点新增汽轮机四口联动 P&ID 结构图 (`DcsStationPid.vue`, `DcsNetworkPfd.vue`)
+
+- **改动缘由**：
+  - 原热源电厂测点仅以单条直线断面展示，未能还原电厂「主汽 / 进汽 / 抽汽 / 排汽」的汽轮机真实热电联产工艺结构。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/components/DcsNetworkPfd.vue`**：
+    - Stage 1 北海/香海电厂设备符号升级为「锅炉 + 梯形扩压汽轮机 + 同轴发电机 `G`」矢量图。
+  - **`frontend/src/projects/smart_heating_platform/components/DcsStationPid.vue` & `pages/DcsWorkbenchView.vue`**：
+    - 当选中任意含 `主汽 / 进汽 / 抽汽 / 排汽 / 蒸汽 / 低真空 / 尖峰` 的上游测点时，自动渲染**锅炉汽包 → 主汽调节阀 → 高压缸 + 中低压缸梯形扩压汽轮机（含中心转子与各级动叶）→ 发电机 `G` / 凝汽低真空**完整矢量工艺图；
+    - 自动从 `upstreamPoints` 中匹配同厂同机组的**① 主汽、② 进汽、③ 抽汽、④ 排汽/低真空**四路蒸汽口铭牌并支持点击切换，当前聚焦管路以蓝色脉冲流向高亮。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1099 modules transformed，built in 21.32s（0 错误，`DcsWorkbenchView` `85.30 kB` + CSS `19.91 kB`）**；
+  - `$env:PYTHONPATH="D:\编程项目\phoenix;D:\编程项目\phoenix\backend"; python -m pytest backend/projects/smart_heating_platform/tests -v`：**21 passed（0 失败，9.43s）**。
+
+## 2026-11-25 补齐「DCS 工艺监控台」464 户商业用户点击调阅与专属 P&ID 工艺组态图 (`/hourly/merchant-trend`)
+
+- **改动缘由**：
+  - 初版中左侧商户导览（且仅展示前 120 条）与辅助明细表均不可点击，也缺少单户 24 小时历史趋势接口。
+- **改动清单**：
+  - **`backend/projects/smart_heating_platform/services/report_query_service.py` & `api/reports.py`**：
+    - 新增 `get_merchant_point_24h()` 与鉴权接口 `GET /api/v1/projects/smart_heating_platform/reports/hourly/merchant-trend`（仅限 `Global_admin`），按日查询单户 `fact_merchant_hourly` 的 24 小时热量、流量、供回温、压力与阀位开度。
+  - **`backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：
+    - 在 `test_platform_endpoints_smoke_and_permissions` 补充 `/reports/hourly/merchant-trend` 接口冒烟断言。
+  - **`frontend/src/projects/smart_heating_platform/{services/api.js,components/DcsStationPid.vue,pages/DcsWorkbenchView.vue}`**：
+    - 新增 `fetchMerchantTrend24h()`；为 `DcsStationPid.vue` 增加商业户支路专属 SVG P&ID 工艺组态图（进/回水管道、电动调节阀及开度条、商业换热终端、小时积算热量与 24h 过程记录仪曲线）；
+    - 解锁左侧全部 464 户商业导览列表（增加有用热/异常状态筛选）、辅助表行点击及 Level 1「464 户商业用户」卡片点击直达，并在右侧 Faceplate 展示阀位开度/供回温模拟量条与异常备注。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1099 modules transformed，built in 21.30s（0 错误，`DcsWorkbenchView` `73.68 kB`）**；
+  - `$env:PYTHONPATH="D:\编程项目\phoenix;D:\编程项目\phoenix\backend"; python -m pytest backend/projects/smart_heating_platform/tests -v`：**21 passed（0 失败，7.21s）**。
+
+## 2026-11-25 升级「DCS 工艺监控台」为全矢量 PFD/P&ID 工艺组态界面 (`DcsNetworkPfd.vue`, `DcsStationPid.vue`, `DcsWorkbenchView.vue`)
+
+- **改动缘由**：
+  - 消除初版中卡片网格与表格占比过重的问题，彻底还原霍尼韦尔 Experion PKS 工业工艺组态图体验（默认突出设备/管道/仪表铭牌，数值表格退为可选辅助标签）。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/components/DcsNetworkPfd.vue`（新增）**：
+    - 全矢量 SVG Level 1 全网工艺流向图：绘制北海/香海电厂冷却塔与锅炉、首站板换与循环泵、9 大主干热网实心供水管线（含蝴蝶调节阀符号、选中管线动态流向脉冲、嵌入式热指标条）以及末端换热群/商业直供/居民楼宇液柱温度计（含 `18℃` 红线）。
+  - **`frontend/src/projects/smart_heating_platform/components/DcsStationPid.vue`（新增）**：
+    - 全矢量 SVG 单站及上游测点 P&ID 设备实景组态图：绘制一次网供回水管道与调节阀、板式换热机组、按 `e16` 水位动态升降液面的补水箱、补水泵与水电计量铭牌、居民楼宇及室温柱、异常挂牌标识，并内置 ECharts 24 小时过程记录仪曲线。
+  - **`frontend/src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`（重构）**：
+    - 改为「上：Level 1 全网 PFD 组态（可切单站 P&ID 独占或辅助表格）+ 下：左 242 站极简光点导览 rail + 中单站设备 P&ID 工艺实景图 + 右 Experion 只读 Faceplate」三栏工业控制台布局。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1099 modules transformed，built in 24.93s（0 错误，`DcsWorkbenchView` 产出 `64.40 kB` + CSS `19.58 kB`）**；
+  - `$env:PYTHONPATH="D:\编程项目\phoenix;D:\编程项目\phoenix\backend"; python -m pytest backend/projects/smart_heating_platform/tests -v`：**21 passed（0 失败，10.53s）**。
+
+## 2026-11-25 新增霍尼韦尔 ASM 冷灰风「DCS 工艺监控台（试验）」页面 (`DcsWorkbenchView.vue`)
+
+- **改动缘由**：
+  - 在 `smart_heating_platform` 现有「运行驾驶舱」之后新增独立试验标签页，按照霍尼韦尔 Experion PKS（ASM 高性能 HMI）冷灰标准提供面向调度与运行视角的工艺流程总貌、报警横幅与单站 Faceplate 面板，零改造复用既有逐小时精算接口。
+- **改动清单**：
+  - **`frontend/src/projects/smart_heating_platform/components/DcsAnalogBar.vue`（新增）**：
+    - 实现 ASM 模拟量带界限刻度条组件（`min/max` 量程、`safeMin/safeMax` 正常带、`warnHigh/alarmLow` 阈值刻度线与正常/警告/严重/离线四态指示）。
+  - **`frontend/src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`（新增）**：
+    - 顶层控台与 ISA-18.2 报警横幅：支持日期/小时步进与 `净化工艺值 / 原始信号(RAW)` 切换，自动汇总全网换热站与上游测点的严重异常/降级警告/离线计数并支持可展开报警表一键定位；
+    - Level 1 全网热力工艺流向主图：以冷灰矢量管线串联「上游电厂（北海/香海）→ 首站与混水关口 → 9 大主干热网分流母管 → 242 站汇总/464 商业户/2,097 居民室温」，支持点击热网高亮流向并联动过滤明细；
+    - Level 2 高密度状态矩阵与工艺列表：支持 242 座换热站（瓦片矩阵/数值列表双视图）、137 上游测点与 464 商业用户切换筛选与表头排序；
+    - Level 3 右侧停靠标准 Faceplate 面板：只读展示一次网温压/热指标模拟量条、小时精算与表底校核、ECharts 24 小时工艺趋势及站区居民室温实况与单户明细展开。
+  - **`frontend/src/projects/smart_heating_platform/{components/PlatformSubNav.vue,pages/ExecutiveDashboardView.vue}` & `frontend/src/router/index.js`**：
+    - 在 `PlatformSubNav` 的「运行驾驶舱」后紧邻增加 `🎛️ DCS工艺监控` 标签页，在驾驶舱顶栏增加 `🎛️ DCS工艺` 快捷入口，并注册受 `Global_admin` 守卫保护的 `/projects/smart_heating_platform/pages/dcs_workbench` 路由。
+  - **`backend_data/shared/项目列表.json` & `backend_data/shared/auth/permissions/smart_heating_platform.json`**：
+    - 在 `smart_heating_platform.pages` 中紧随 `dashboard` 注册 `dcs_workbench` 项目大厅卡片，并同步补充 `Global_admin.page_access`。
+- **验证结果**：
+  - `npm --prefix frontend run build`：**1095 modules transformed，built in 26.86s（0 错误，`DcsWorkbenchView` 产出 `46.80 kB` + CSS `17.90 kB`）**；
+  - `$env:PYTHONPATH="D:\编程项目\phoenix;D:\编程项目\phoenix\backend"; python -m pytest backend/projects/smart_heating_platform/tests -v`：**21 passed（0 失败，6.84s）**。
+
+## 2026-11-25 修复桌面/手机视口切换时 ECharts 画布未随容器恢复尺寸问题 (`JointEvaluationView.vue`)
+
+- **改动缘由**：
+  - 从手机模式切回电脑桌面模式时，原 `handleResize()` 在跨断点重绘后直接 `return`，未调用 `quadrantChart.resize()` 与 `trendChart.resize()`，且缺少容器尺寸变化监听，导致图表面板仍维持窄屏小尺寸。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：
+    - 拆分 `syncChartViewportLayout()`、`scheduleChartResize()` 与 `ensureChartResizeObserver()`，为四象限图与趋势图容器接入 `ResizeObserver` 并在跨 `640px` 断点时经 `requestAnimationFrame` 重排后同步调用 `resize()` + `renderAllCharts()` + `resize()`，在 `onBeforeUnmount()` 中释放监听与帧调度。
+
+## 2026-11-25 精简「主城区供热联合评价模型」表格汇总行与公式折叠栏文案 (`JointEvaluationView.vue`)
+
+- **改动缘由**：
+  - 按用户反馈精简页面底部明细表汇总行和可折叠模型参数面板标题。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：
+    - 将联合评价明细表 `<tfoot>` 汇总行首列文案由 `{{ summaryForTableFoot.label }}（总量比值汇总）` 统一精简为 `合计`；
+    - 将模型公式折叠按钮文案由 `📐 模型公式与冻结基准参数说明（点击展开/收起）` 精简为 `📐 模型公式与参数`。
+
+## 2026-11-25 优化「主城区供热联合评价模型」手机窄屏响应式排版 (`JointEvaluationView.vue`)
+
+- **改动缘由**：
+  - 需适配手机等窄屏设备访问 `/projects/daily_report_25_26/pages/joint_evaluation`，消除日期输入框 `min-width: 180px` 挤压、顶部信息过长、图表宽高与字号拥挤、Tooltip 溢界以及宽表横向滚动难对照日期等问题。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：
+    - 响应式 CSS（`@media (max-width: 720px)` / `420px`）：优化顶部操作按钮双列等分、横幅标题与 2 列元信息网格（收费面积占满整行）、模式切换三等分网格、覆写 `theme.css` 全局 `input[type="date"]` 的 `min-width` 限制、精简 KPI 与卡片内边距、为底部宽明细表新增 `sticky` 首列（含各状态实心底色）与滑动提示，并为模型参数附表补充横向滚动容器与公式折行；
+    - 图表自适应（`isMobileViewport()` + `handleResize()`）：在 `<= 640px` 窄屏下动态收紧 `quadrantChart` 与 `trendChart` 网格留白、图例间距/字号、象限角标字号与旋转 X 轴日期，开启 `tooltip.confine = true` 防止浮层裁切，并在跨断点缩放时自动重绘。
+
+## 2026-11-25 修正「单耗对照与投诉强度联动走势」实际投诉量图例色标 (`JointEvaluationView.vue`)
+
+- **改动缘由**：
+  - 下方子图「实际投诉量」柱条按当日/当期所属四象限动态着色（红/橙/绿/蓝），但系列未显式配置图例色标，导致 ECharts 默认回退为单一蓝色块，易误解为固定蓝色。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：
+    - 在 `renderTrendChart()` 中为 `实际投诉量` 系列配置四象限四色横向渐变（`#ef4444 → #f59e0b → #10b981 → #3b82f6`）作为图例图标颜色，同时保持逐根柱条仍按各自象限精确着色；并在 `legend[1]` 中将展示文案格式化为 `实际投诉量(按象限着色)`。
+
+## 2026-11-25 修复「单耗对照与投诉强度联动走势」图例与图表重叠问题 (`JointEvaluationView.vue`)
+
+- **改动缘由**：
+  - 右侧 `trendChart` 卡片较窄时，顶部单组 5 项图例发生换行，与 `grid[0]`（`top: 38`）及 `单耗` / `气温℃` 纵轴标题直接重叠。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：
+    - 在 `renderTrendChart()` 中将图例拆分为上下两区各自独立图例（上方 `top: 2` 展示 `实际单耗 / HDD20参考单耗 / 日均气温`，中部 `top: 250` 展示 `实际投诉量 / 参考投诉基准`）；
+    - 配合 `498px` 画布固定像素布局调整 `grid[0]`（`top: 56, height: 174`）、`grid[1]`（`top: 304, height: 158`）与 `yAxis.nameGap: 10`，同时将锁定垂直标线标签设为 `position: 'insideEndTop'`，消除一切图例、轴标题与图形重叠。
+
+## 2026-11-25 增强四象限演进轨迹「时间渐变轨迹」时序辨识度 (`JointEvaluationView.vue`)
+
+- **改动缘由**：
+  - 原五段彩虹渐变色盘（靛蓝→湖蓝→翠绿→琥珀→珊瑚红）叠加在四色象限底图上对比度不足，且散点与连线尺寸均一、起止锚点不突出，导致多日轨迹的先后次序不够直观。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：
+    - 将 `interpolateColor()` 调整为明亮且单调递进的四段色盘（晴空蓝 `#0ea5e9` → 亮靛蓝 `#6366f1` → 亮洋红 `#d946ef` → 珊瑚红 `#ef4444`），避免暗沉灰调并保持高辨识度；
+    - 保留节点上方原生日期/期次标签，使用 `labelLayout: { hideOverlap: true }` 自动避让重叠，并为首尾点提供 `起 日期`（天蓝胶囊）与 `最新 日期`（珊瑚红胶囊）标签，同时节点大小（10px→17px）、连线线宽（1.8px→3.4px）及箭头（`symbolSize: 10`）随时间同步递增，Tooltip 标题补充 `第 X / N 步`；
+    - 在四象限图上方展示配套明亮渐变次序条（`.time-order-strip`），直接标明 `起点` 与 `最新` 日期。
+
+## 2026-11-25 精简「主城区供热联合评价模型」页面顶部表述、轨迹时段选项与图上方图例 (`JointEvaluationView.vue`)
+
+- **改动缘由**：
+  - 按用户反馈精简 `/projects/daily_report_25_26/pages/joint_evaluation` 页面顶部徽标、模型简介文案、单日模式轨迹周期选项与四象限图上方重复图例。
+- **改动清单**：
+  - **`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：
+    - 移除顶部 `Global_admin 专享` 徽标及 `.badge-admin` 样式，并将有效评价窗口徽标由静态“11月5日 — 次年3月31日”调整为随供暖期动态展示（`2026–2027` 供暖期展示为 `有效评价窗口：2026年11月5日 — 2027年3月31日`）；
+    - 将顶部模型副标题简化为“以采暖度日数HDD20为基础，构建“投入偏差 × 服务效果”双维联合诊断体系”；
+    - 单日诊断模式「附带轨迹周期数」按钮组移除 `近 18 日` 与 `近 30 日`，保留 `仅当日`、`近 7 日`、`近 14 日`；
+    - 移除四象限演进轨迹图上方重复的 `.quadrant-legend-strip` 象限说明条（各象限背景 `markArea` 内已包含完整中文定性说明）。
+
 ## 2026-11-24 优化本地 Docker 构建上下文与国内开源镜像源 (`backend/Dockerfile`, `.dockerignore`)
 
 - **改动缘由**：

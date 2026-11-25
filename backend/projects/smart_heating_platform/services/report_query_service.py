@@ -1828,6 +1828,44 @@ def get_upstream_point_24h(target_date_str: str, data_zone: str, source_name: st
     ]
 
 
+def get_merchant_point_24h(target_date_str: str, merchant_id: str, mode: str = "clean") -> List[Dict[str, Any]]:
+    """查询单个商业用户当日 24 小时供回温、流量、阀位与积分耗热趋势。"""
+    target_d = date.fromisoformat(target_date_str)
+    day_start = datetime(target_d.year, target_d.month, target_d.day, 0, 0, 0, tzinfo=EAST_8)
+    day_end = day_start + timedelta(days=1)
+    use_raw = str(mode).lower() == "raw"
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT EXTRACT(HOUR FROM (biz_hour AT TIME ZONE 'Asia/Shanghai'))::INT AS hr, "
+                "flow_raw, flow_clean, temp_sup_raw, temp_sup_clean, temp_ret_raw, temp_ret_clean, "
+                "pres_sup_raw, pres_sup_clean, heat_raw, heat_clean, valve_open, valve_set, "
+                "hour_heat_gj, hour_flow_t, value_source "
+                "FROM smart_heating_platform.fact_merchant_hourly "
+                "WHERE biz_hour >= :ds AND biz_hour < :de AND merchant_id = :mid "
+                "ORDER BY biz_hour ASC"
+            ),
+            {"ds": day_start, "de": day_end, "mid": merchant_id},
+        ).fetchall()
+    return [
+        {
+            "hour": int(r.hr),
+            "label": f"{int(r.hr):02d}:00",
+            "flow": _f(r.flow_raw if use_raw else r.flow_clean),
+            "temp_sup": _f(r.temp_sup_raw if use_raw else r.temp_sup_clean),
+            "temp_ret": _f(r.temp_ret_raw if use_raw else r.temp_ret_clean),
+            "pressure": _f(r.pres_sup_raw if use_raw else r.pres_sup_clean),
+            "heat": _f(r.heat_raw if use_raw else r.heat_clean),
+            "valve_open": _f(r.valve_open),
+            "valve_set": _f(r.valve_set),
+            "hour_heat_gj": _f(r.hour_heat_gj),
+            "hour_flow_t": _f(r.hour_flow_t),
+            "value_source": r.value_source,
+        }
+        for r in rows
+    ]
+
+
 def get_station_temp_devices(target_date_str: str, hour: int, station_id: str) -> List[Dict[str, Any]]:
     """下钻查看某座换热站下属居民室温终端单户明细及现场备注。"""
     target_d = date.fromisoformat(target_date_str)

@@ -3,6 +3,8 @@
   "groups": {
     "Global_admin": {
       "page_access": [
+        "dashboard",
+        "dcs_workbench",
         "hourly_report",
         "daily_report",
         "fault_audit",

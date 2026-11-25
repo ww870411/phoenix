@@ -34,6 +34,7 @@ from backend.projects.smart_heating_platform.services.report_query_service impor
     get_dashboard_overview,
     get_entity_trend_24h,
     get_hourly_report,
+    get_merchant_point_24h,
     get_station_temp_devices,
     get_upstream_point_24h,
 )
@@ -107,6 +108,18 @@ def api_upstream_trend(
 ):
     _require_admin(session)
     rows = get_upstream_point_24h(date, data_zone, source_name)
+    return {"ok": True, "data": rows}
+
+
+@router.get("/hourly/merchant-trend", summary="获取单个商业用户当日24小时趋势")
+def api_merchant_trend(
+    date: str = Query(..., description="日期 YYYY-MM-DD"),
+    merchant_id: str = Query(..., description="商业用户主键ID"),
+    mode: str = Query("clean", description="数据口径: clean | raw"),
+    session: AuthSession = Depends(get_current_session),
+):
+    _require_admin(session)
+    rows = get_merchant_point_24h(date, merchant_id, mode=mode)
     return {"ok": True, "data": rows}
 
 
