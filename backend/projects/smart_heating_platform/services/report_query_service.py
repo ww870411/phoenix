@@ -18,7 +18,9 @@ from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import engine
 from backend.projects.smart_heating_platform.services.cleaning_engine import (
     EAST_8,
+    FAULT_HEAT_METER_ZERO,
     STATION_METER_SCALE_FACTORS,
+    detect_station_zero_heat_fault,
     station_max_hourly_elec_kwh,
     station_max_hourly_water_t,
 )
@@ -156,6 +158,74 @@ def _detect_broken_meter_stations(
             broken_water[sid] = f"水表异常已屏蔽({msg})"
 
     return broken_elec, broken_water
+
+
+def _detect_zero_heat_station_days(
+    rows: Sequence[Dict[str, Any]],
+    use_raw: bool = False,
+) -> Dict[str, str]:
+    """
+    识别单日内持续在线但全天累计/瞬时耗热量均为 0 或缺失的异常站点。
+
+    兼顾两种场景：
+    1. 存在供热温差/流量/瞬时热或全表计为空（命中小时级热表挂零判据）；
+    2. 全天在线且小时耗热量始终 <= 0.01 GJ，累计表底 totJ 冻结或恒零不走字（如万众里、景润）。
+    """
+    by_sid: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        sid = r.get("station_id")
+        if sid:
+            by_sid.setdefault(sid, []).append(r)
+
+    zero_notes: Dict[str, str] = {}
+    for sid, srows in by_sid.items():
+        online_rows = [
+            r for r in srows
+            if (True if r.get("online") is None else bool(r.get("online")))
+        ]
+        if not online_rows:
+            continue
+
+        pos_heat_hrs = 0
+        hourly_reason: Optional[str] = None
+        tot_j_vals: List[float] = []
+
+        for r in srows:
+            hr_heat = _f(
+                r.get("hour_heat_raw_gj")
+                if (use_raw and r.get("hour_heat_raw_gj") is not None)
+                else r.get("hour_heat_gj")
+            )
+            if hr_heat is not None and hr_heat > 0.01:
+                pos_heat_hrs += 1
+
+            tj = _f(r.get("tot_j"))
+            if tj is not None:
+                tot_j_vals.append(tj)
+
+            if hourly_reason is None:
+                on_flag = True if r.get("online") is None else bool(r.get("online"))
+                e1 = _f(r.get("e1_raw") if use_raw else r.get("e1_clean"))
+                e3 = _f(r.get("e3_raw") if use_raw else r.get("e3_clean"))
+                e4 = _f(r.get("e4_raw") if use_raw else r.get("e4_clean"))
+                e11 = _f(r.get("e11_raw") if use_raw else r.get("e11_clean"))
+                hit, msg = detect_station_zero_heat_fault(on_flag, e1, e3, e4, e11, hr_heat)
+                if hit and msg:
+                    hourly_reason = msg
+
+        if pos_heat_hrs > 0:
+            continue
+
+        if hourly_reason:
+            zero_notes[sid] = hourly_reason
+        elif tot_j_vals and max(tot_j_vals) == min(tot_j_vals) and max(tot_j_vals) > 0:
+            zero_notes[sid] = f"累计热量表底全天冻结不走字（读数={_fmt_num(tot_j_vals[0], 1)} GJ），全天耗热量为0"
+        elif tot_j_vals:
+            zero_notes[sid] = "累计热量表底全天恒为 0，全天无有效耗热量"
+        else:
+            zero_notes[sid] = "全天在线但无有效耗热量读数"
+
+    return zero_notes
 
 
 BURST_MAX_HOURS_PER_DAY = 6
@@ -779,6 +849,7 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
     )
     st_area_by_id = {sm["station_id"]: _f(sm.get("covered_area")) for sm in stations_meta}
     broken_elec_notes, broken_water_notes = _detect_broken_meter_stations(st_day_maps, st_area_by_id)
+    day_zero_heat_notes = _detect_zero_heat_station_days(st_day_maps, use_raw=use_raw)
     trend_24h = _build_trend_24h_from_rows(
         st_day_maps,
         outdoor_24h,
@@ -853,6 +924,21 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
         if st_id in broken_elec_notes:
             field_notes["hour_elec_kwh"] = f"{sm['name']}: {broken_elec_notes[st_id]}"
 
+        eff_hr_heat = _f(sf.get("hour_heat_raw_gj") if (use_raw and sf.get("hour_heat_raw_gj") is not None) else sf.get("hour_heat_gj"))
+        is_online_row = bool(sf.get("online")) if sf else False
+        is_hr_zero, hr_zero_msg = (
+            detect_station_zero_heat_fault(is_online_row, e1, e3, e4, e11, eff_hr_heat)
+            if sf
+            else (False, None)
+        )
+        day_zero_msg = day_zero_heat_notes.get(st_id) if (is_online_row and (eff_hr_heat is None or eff_hr_heat <= 0.01)) else None
+        raw_ftags = [t for t in str(sf.get("fault_tag") or "").split(",") if t]
+        if is_hr_zero or day_zero_msg:
+            if FAULT_HEAT_METER_ZERO not in raw_ftags:
+                raw_ftags.append(FAULT_HEAT_METER_ZERO)
+            field_notes.setdefault("hour_heat_gj", f"{sm['name']}: 在线零耗热异常（{hr_zero_msg or day_zero_msg}）")
+        eff_fault_tag = ",".join(dict.fromkeys(raw_ftags)) or None
+
         stations_full.append({
             "station_id": st_id,
             "name": sm["name"],
@@ -891,7 +977,7 @@ def get_hourly_report(target_date_str: Optional[str], hour: Optional[int], mode:
             "zone_heat_sum_e12": _f(sf.get("zone_heat_sum_e12")),
             "heat_balance_diff_pct": _f(sf.get("heat_balance_diff_pct")),
             "value_source": sf.get("value_source") or "NO_DATA",
-            "fault_tag": sf.get("fault_tag"),
+            "fault_tag": eff_fault_tag,
             "field_notes": field_notes,
             "day_anomaly_count": day_anomaly_count,
             "avg_room_temp": st_avg_temp,
@@ -1938,7 +2024,7 @@ def get_daily_report(
         }
         hourly_rows = conn.execute(
             text(
-                "SELECT biz_hour, station_id, e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean, "
+                "SELECT biz_hour, station_id, online, e1_raw, e1_clean, e3_raw, e3_clean, e4_raw, e4_clean, "
                 "e7_raw, e7_clean, e8_raw, e8_clean, e11_raw, e11_clean, e14_raw, e14_clean, "
                 "tot_j, hour_heat_raw_gj, hour_heat_gj, hour_heat_source, hour_flow_t, hour_water_t, hour_elec_kwh, "
                 "tot_water_f254, tot_elec_f253, value_source, fault_tag "
@@ -2035,6 +2121,7 @@ def get_daily_report(
     )
     st_area_by_id = {sid: _f(sm.get("covered_area")) for sid, sm in stations_meta.items()}
     broken_elec_notes, broken_water_notes = _detect_broken_meter_stations(hourly_row_maps, st_area_by_id)
+    day_zero_heat_notes = _detect_zero_heat_station_days(hourly_row_maps, use_raw=use_raw)
 
     for r, row_map in zip(hourly_rows, hourly_row_maps):
         st = st_agg.get(r.station_id)
@@ -2093,6 +2180,9 @@ def get_daily_report(
         if st_id_b in st_agg:
             st_agg[st_id_b]["day_elec_kwh"] = None
             st_agg[st_id_b]["elec_anom_notes"].append(b_msg)
+    for st_id_z, z_msg in day_zero_heat_notes.items():
+        if st_id_z in st_agg:
+            st_agg[st_id_z]["heat_anom_notes"].append(z_msg)
 
     station_daily: List[Dict[str, Any]] = []
     for st in st_agg.values():
@@ -3762,7 +3852,8 @@ def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -
             dict(r._mapping)
             for r in conn.execute(
                 text(
-                    "SELECT biz_hour, station_id, hour_heat_gj, hour_heat_source, "
+                    "SELECT biz_hour, station_id, online, e1_clean, e3_clean, e4_clean, e11_clean, tot_j, "
+                    "hour_heat_gj, hour_heat_source, "
                     "hour_water_t, hour_water_source, hour_elec_kwh, hour_elec_source, "
                     "e14_clean, tot_water_f254, tot_elec_f253, value_source, fault_tag "
                     "FROM smart_heating_platform.fact_station_hourly "
@@ -3868,6 +3959,7 @@ def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -
     # ---- 1. 换热站（242 站）取数与降级细分诊断 ----
     areas_by_sid = {s["station_id"]: _f(s.get("covered_area")) for s in stations_meta}
     broken_elec_notes, broken_water_notes = _detect_broken_meter_stations(st_hourly_rows, areas_by_sid)
+    day_zero_heat_notes = _detect_zero_heat_station_days(st_hourly_rows)
     rows_by_sid: Dict[str, List[Dict[str, Any]]] = {}
     for row in st_hourly_rows:
         rows_by_sid.setdefault(row["station_id"], []).append(row)
@@ -3875,7 +3967,7 @@ def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -
     heat_stats = {"meter_diff_ok": 0, "scaled_ok": 0, "partial_fallback": 0, "missing_cum_total": 0, "fallback_integral": 0, "both_missing": 0}
     water_stats = {"meter_diff_ok": 0, "missing_cum_total": 0, "fallback_integral": 0, "fallback_nonzero": 0, "fallback_zero": 0, "both_missing": 0}
     elec_stats = {"meter_ok": 0, "ok_area_wan": 0.0, "missing_total": 0, "f253_none": 0, "f253_const_zero": 0, "f253_frozen_or_overflow": 0, "f253_broken_isolated": 0}
-    other_stats = {"missing_area": 0, "comm_offline": 0, "sensor_or_inversion": 0}
+    other_stats = {"missing_area": 0, "comm_offline": 0, "sensor_or_inversion": 0, "heat_zero_frozen": 0}
     anomaly_summary = {
         "heat_anomaly_stations": 0,
         "water_anomaly_stations": 0,
@@ -3904,12 +3996,28 @@ def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -
         if has_sensor_or_inv:
             other_stats["sensor_or_inversion"] += 1
 
-        # 1a. 供热量：METER_DIFF vs 瞬时 f222 积分 vs 双缺
+        # 1a. 供热量：METER_DIFF vs 瞬时 f222 积分 vs 在线零耗热/冻结 vs 双缺
         h_diff_hrs = sum(1 for r in srows if r.get("hour_heat_source") == "METER_DIFF" and _f(r.get("hour_heat_gj")) is not None)
+        h_diff_sum = sum((_f(r.get("hour_heat_gj")) or 0.0) for r in srows if r.get("hour_heat_source") == "METER_DIFF" and _f(r.get("hour_heat_gj")) is not None)
         h_int_hrs = sum(1 for r in srows if r.get("hour_heat_source") in ("INTEGRAL_15M", "FALLBACK_INTEGRAL_15M") and _f(r.get("hour_heat_gj")) is not None)
-        h_val_hrs = sum(1 for r in srows if _f(r.get("hour_heat_gj")) is not None)
+        h_int_sum = sum((_f(r.get("hour_heat_gj")) or 0.0) for r in srows if r.get("hour_heat_source") in ("INTEGRAL_15M", "FALLBACK_INTEGRAL_15M") and _f(r.get("hour_heat_gj")) is not None)
+        has_hourly_zero_heat = (
+            (FAULT_HEAT_METER_ZERO in tags_set)
+            or any(
+                detect_station_zero_heat_fault(
+                    True if r.get("online") is None else bool(r.get("online")),
+                    r.get("e1_clean"),
+                    r.get("e3_clean"),
+                    r.get("e4_clean"),
+                    r.get("e11_clean"),
+                    r.get("hour_heat_gj"),
+                )[0]
+                for r in srows
+            )
+        )
+        zero_day_note = day_zero_heat_notes.get(sid)
         scale_rule = STATION_METER_SCALE_FACTORS.get(sname)
-        if h_diff_hrs > 0:
+        if h_diff_hrs > 0 and h_diff_sum > 0.01:
             heat_stats["meter_diff_ok"] += 1
             if scale_rule:
                 heat_stats["scaled_ok"] += 1
@@ -3917,11 +4025,19 @@ def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -
                 heat_stats["partial_fallback"] += 1
             heat_status = "OK"
             heat_note = f"累计表正常 {h_diff_hrs}h" + (f"（已按台账 {scale_rule[1]}）" if scale_rule else "") + (f"，另 {h_int_hrs}h 降级积分" if h_int_hrs else "")
-        elif h_val_hrs > 0:
+            if has_hourly_zero_heat:
+                heat_note += "；部分时段存在有温差/流量但耗热量挂零异常"
+        elif h_int_hrs > 0 and h_int_sum > 0.01:
             heat_stats["missing_cum_total"] += 1
             heat_stats["fallback_integral"] += 1
             heat_status = "FALLBACK_INT"
-            heat_note = f"无有效累计热量表底，已用瞬时热量 f222 积分兜底 {h_val_hrs}h"
+            heat_note = f"无有效累计热量表底，已用瞬时热量 f222 积分兜底 {h_int_hrs}h"
+        elif zero_day_note or h_diff_hrs > 0 or h_int_hrs > 0:
+            heat_stats["missing_cum_total"] += 1
+            heat_stats["both_missing"] += 1
+            other_stats["heat_zero_frozen"] += 1
+            heat_status = "HEAT_ZERO_FROZEN"
+            heat_note = zero_day_note or "累计与瞬时耗热量全天为 0（热表冻结/挂零）"
         else:
             heat_stats["missing_cum_total"] += 1
             heat_stats["both_missing"] += 1
@@ -4000,7 +4116,7 @@ def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -
                 )
 
         # 按业务维度去重统计“数据异常的站有 xx 站”
-        heat_anomaly = (heat_status != "OK") or bool(scale_rule) or (h_int_hrs > 0) or has_sensor_or_inv or has_comm_offline
+        heat_anomaly = (heat_status != "OK") or bool(scale_rule) or (h_int_hrs > 0) or has_sensor_or_inv or has_comm_offline or has_hourly_zero_heat
         water_anomaly = (water_status != "OK") or w_partial_fallback or w_broken or has_comm_offline
         elec_anomaly = (elec_status != "OK") or e_partial_jump or has_comm_offline
         any_anomaly = heat_anomaly or water_anomaly or elec_anomaly or has_missing_area
@@ -4027,6 +4143,7 @@ def get_collection_coverage_diagnostics(target_date_str: Optional[str] = None) -
                 "missing_area": has_missing_area,
                 "has_sensor_or_inversion": has_sensor_or_inv,
                 "has_comm_offline": has_comm_offline,
+                "has_heat_zero_frozen": heat_status == "HEAT_ZERO_FROZEN",
                 "is_scaled": bool(scale_rule),
                 "heat_anomaly": heat_anomaly,
                 "water_anomaly": water_anomaly,

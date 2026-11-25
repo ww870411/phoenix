@@ -24,6 +24,7 @@ FAULT_HEAT_IMBALANCE = "HEAT_IMBALANCE"
 FAULT_TEMP_INVERSION = "TEMP_INVERSION"
 FAULT_METER_JUMP = "METER_JUMP"
 FAULT_SOFTWARE_DEFECT = "SOFTWARE_DEFECT"
+FAULT_HEAT_METER_ZERO = "HEAT_METER_ZERO"
 
 # 权责归属方
 OWNER_RESEARCH = "RESEARCH_INSTITUTE"
@@ -1204,3 +1205,41 @@ def clean_merchant_point(
         "value_source": value_source,
         "fault_tag": ",".join(dict.fromkeys(fault_tags)) if fault_tags else None,
     }, faults
+
+
+def detect_station_zero_heat_fault(
+    online: Any,
+    e1: Any,
+    e3: Any,
+    e4: Any,
+    e11: Any,
+    hour_heat_gj: Any,
+) -> Tuple[bool, Optional[str]]:
+    """
+    识别在线换热站存在明确供热工况（或全量表计缺失）但小时耗热量为 0 或空的异常。
+
+    排除离线站，避免与通讯掉线告警重复；对低温停运（如供温 <30℃ 且无流量无瞬时热）
+    则留给日级全天零耗热冻结检查进一步判别。
+    """
+    if not online:
+        return False, None
+    hr_v = to_float(hour_heat_gj)
+    if hr_v is not None and hr_v > 0.01:
+        return False, None
+
+    e1_v = to_float(e1)
+    e3_v = to_float(e3)
+    e4_v = to_float(e4)
+    e11_v = to_float(e11)
+    hr_txt = f"{hr_v:.2f}" if hr_v is not None else "空"
+
+    if e11_v is not None and e11_v > 0.5:
+        return True, f"小时耗热量={hr_txt} GJ，但瞬时热量={e11_v:.2f} GJ/h（累计热表未走字）"
+    if e1_v is not None and e1_v > 0.5:
+        return True, f"小时耗热量={hr_txt} GJ，但一次网流量={e1_v:.2f} t/h（热表异常或未走字）"
+    if e3_v is not None and e3_v >= 30.0 and (e4_v is None or (e3_v - e4_v) >= 2.0):
+        ret_txt = f"{e4_v:.1f}℃" if e4_v is not None else "空"
+        return True, f"一次网供温={e3_v:.1f}℃/回温={ret_txt}存在供热工况，但小时耗热量与流量均为0/空"
+    if e1_v is None and e3_v is None and e4_v is None and e11_v is None:
+        return True, "在线换热站温压流与热量表计读数全部缺失"
+    return False, None

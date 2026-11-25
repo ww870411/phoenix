@@ -1885,3 +1885,85 @@ def test_scheduler_hourly_offset_and_upstream_overflow_guard(monkeypatch):
     assert cleaned_jm["temp_clean"] is None
     assert cleaned_jm["is_online_valid"] is False
     assert any("1000000000.0" in f["raw_value_text"] for f in jm_faults)
+
+
+def test_zero_heat_station_classified_as_abnormal(monkeypatch):
+    """验证在线但有供热温差/流量却零耗热的站点在清洗校准与取数诊断中全平台标为异常。"""
+    from datetime import timedelta
+    from types import SimpleNamespace
+    from backend.projects.smart_heating_platform.services import (
+        cleaning_engine as ce,
+        collector_engine as col,
+        report_query_service as rqs,
+    )
+
+    # 1. 小时级零耗热判据：有供回温差但耗热为0 -> 命中；离线或低温停运 -> 单小时不误报
+    hit, msg = ce.detect_station_zero_heat_fault(True, 0.0, 44.3, 36.9, None, 0.0)
+    assert hit is True and "存在供热工况" in msg
+    assert ce.detect_station_zero_heat_fault(False, 0.0, 44.3, 36.9, None, 0.0)[0] is False
+    assert ce.detect_station_zero_heat_fault(True, 0.0, 14.5, 14.7, 0.0, 0.0)[0] is False
+
+    # 2. 表底校准链路：良运缤纷类型点位自动挂上 HEAT_METER_ZERO 标签并生成异常工单
+    hr = datetime(2026, 11, 25, 10, 0, tzinfo=EAST_8)
+    parsed = [
+        {"ts": hr, "f1": 0.5, "f2": 0.0, "f3": 44.3, "f4": 0.4, "f5": 36.9, "f221": 0.0, "f220": 0.0, "f254": 0.0, "f253": 0.0, "f222": None, "f209": 0.0},
+        {"ts": hr + timedelta(hours=1), "f1": 0.5, "f2": 0.0, "f3": 44.5, "f4": 0.4, "f5": 37.0, "f221": 0.0, "f220": 0.0, "f254": 0.0, "f253": 0.0, "f222": None, "f209": 0.0},
+    ]
+    st_meta = {"station_id": "S_LYBF", "name": "良运缤纷", "covered_area": 173950.34}
+    rows, faults = col._calibrate_station_parsed_hours(st_meta, parsed, [hr])
+    assert len(rows) == 1
+    assert ce.FAULT_HEAT_METER_ZERO in (rows[0]["fault_tag"] or "")
+    assert any(f["fault_code"] == ce.FAULT_HEAT_METER_ZERO for f in faults)
+
+    # 3. 取数诊断接口：表底全天恒零的在线站不再被误判为 OK，而是标为 HEAT_ZERO_FROZEN + heat_anomaly=True
+    class _Row(SimpleNamespace):
+        def __init__(self, **kw):
+            super().__init__(**kw)
+            self._mapping = kw
+
+    class _Res:
+        def __init__(self, r):
+            self._r = r
+
+        def fetchall(self):
+            return self._r
+
+        def scalar_one(self):
+            return None
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, sql, params=None):
+            q = str(sql)
+            if "FROM smart_heating_platform.dict_heating_station" in q:
+                return _Res([_Row(station_id="S_LYBF", name="良运缤纷", covered_area=173950.34, rdfz="香海#1低真空", center_name="香炉礁服务中心")])
+            if "FROM smart_heating_platform.fact_station_hourly" in q:
+                return _Res([
+                    _Row(
+                        biz_hour=hr, station_id="S_LYBF", online=True,
+                        e1_clean=0.0, e3_clean=44.3, e4_clean=36.9, e11_clean=None, tot_j=0.0,
+                        hour_heat_gj=0.0, hour_heat_source="METER_DIFF",
+                        hour_water_t=0.0, hour_water_source="METER_DIFF",
+                        hour_elec_kwh=None, hour_elec_source="NONE",
+                        e14_clean=0.0, tot_water_f254=0.0, tot_elec_f253=None,
+                        value_source="REAL", fault_tag=None,
+                    )
+                ])
+            return _Res([])
+
+    monkeypatch.setattr(rqs, "ensure_smart_heating_fact_tables", lambda: None)
+    monkeypatch.setattr(rqs, "engine", SimpleNamespace(connect=lambda: _Conn()))
+    diag = rqs.get_collection_coverage_diagnostics("2026-11-25")
+    assert diag["station"]["heat"]["meter_diff_ok"] == 0
+    assert diag["station"]["heat"]["both_missing"] == 1
+    assert diag["station"]["other"]["heat_zero_frozen"] == 1
+    assert diag["station"]["anomaly_summary"]["heat_anomaly_stations"] == 1
+    st_item = diag["station"]["anomaly_stations"][0]
+    assert st_item["heat_status"] == "HEAT_ZERO_FROZEN"
+    assert st_item["has_heat_zero_frozen"] is True
+    assert st_item["heat_anomaly"] is True

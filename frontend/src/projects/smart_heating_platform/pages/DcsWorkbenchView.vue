@@ -748,12 +748,21 @@ function classifyStation(s) {
       notes,
     }
   }
-  if (notes.length > 0 || (s.value_source && s.value_source !== 'REAL') || ftag.includes('METER_JUMP') || ftag.includes('HEAT_IMBALANCE') || s.covered_area == null) {
+  if (
+    notes.length > 0
+    || (s.value_source && s.value_source !== 'REAL')
+    || ftag.includes('METER_JUMP')
+    || ftag.includes('HEAT_IMBALANCE')
+    || ftag.includes('HEAT_METER_ZERO')
+    || s.covered_area == null
+  ) {
     return {
       severity: 'warning',
       sevOrder: 1,
       statusCode: 'WRN',
-      modeLabel: s.value_source === 'REAL' ? '告警/隔离' : '降级估值(*)',
+      modeLabel: ftag.includes('HEAT_METER_ZERO')
+        ? '热表挂零/无耗热'
+        : (s.value_source === 'REAL' ? '告警/隔离' : '降级估值(*)'),
       notes,
     }
   }

@@ -1,3 +1,11 @@
+## 2026-11-25 全平台接入「在线站零耗热/热表挂零」异常识别 (`cleaning_engine.py`, `collector_engine.py`, `report_query_service.py`, `faults.py`)
+
+- **`projects/smart_heating_platform/services/cleaning_engine.py`**：新增 `FAULT_HEAT_METER_ZERO = "HEAT_METER_ZERO"` 与 `detect_station_zero_heat_fault()`，在换热站在线但 `hour_heat_gj` 缺失或 `<= 0.01` 时结合一网流量、阀门、供回温度/温差或四项全缺条件识别零耗热故障（排除离线站及 `<30℃` 低温停运）。
+- **`projects/smart_heating_platform/api/faults.py`**：在 `FAULT_CODE_LABELS` 中注册 `"HEAT_METER_ZERO": "7.在线站零耗热/热表挂零"`，扩展故障工单、汇总与覆盖率诊断接口。
+- **`projects/smart_heating_platform/services/collector_engine.py`**：在 `_calibrate_station_parsed_hours`、`run_heat_audit_and_fix` 及工单窗口统计查询中接入 `FAULT_HEAT_METER_ZERO` 标记与 `fact_fault_ticket` 派单逻辑，并覆盖全天在线但传感器冻结/表底不动场景。
+- **`projects/smart_heating_platform/services/report_query_service.py`**：新增 `_detect_zero_heat_station_days()`；在 `get_hourly_report()`、`get_daily_report()` 与 `get_collection_coverage_diagnostics()` 中动态补充零耗热标注，并在覆盖率诊断将零增量/表底冻结 `METER_DIFF` 站标记为 `HEAT_ZERO_FROZEN`（计入 `heat_zero_frozen`、`both_missing`、`missing_cum_total` 及 `heat_anomaly`，保持 `diag["station"]["heat"]` 既有 6 键结构兼容）。
+- **`projects/smart_heating_platform/tests/test_cleaning_and_apis.py`**：补充 `test_zero_heat_station_classified_as_abnormal` 单测。
+
 ## 2026-11-25 新增商业用户 24 小时趋势接口并注册 DCS 试验页权限 (`reports.py`, `report_query_service.py`, `项目列表.json`, `smart_heating_platform.json`)
 
 - **`projects/smart_heating_platform/{services/report_query_service.py,api/reports.py}`**：新增 `get_merchant_point_24h()` 与 `GET /api/v1/projects/smart_heating_platform/reports/hourly/merchant-trend`（限 `Global_admin`），返回单户商业用户当日 24 小时供回温、压力、流量、阀位与积分耗热曲线；`tests/test_cleaning_and_apis.py` 补充接口冒烟断言（21 passed）。

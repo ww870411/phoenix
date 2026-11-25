@@ -31,6 +31,7 @@ FAULT_CODE_LABELS = {
     "TEMP_INVERSION": "4.供回水物理倒挂",
     "METER_JUMP": "5.累计表底跳变/清零",
     "SOFTWARE_DEFECT": "6.上位机接口与台账缺陷",
+    "HEAT_METER_ZERO": "7.在线站零耗热/热表挂零",
 }
 
 OWNER_LABELS = {

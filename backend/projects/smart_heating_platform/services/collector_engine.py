@@ -29,6 +29,7 @@ from sqlalchemy import text
 from backend.db.database_daily_report_25_26 import engine
 from backend.projects.smart_heating_platform.services.cleaning_engine import (
     EAST_8,
+    FAULT_HEAT_METER_ZERO,
     FAULT_METER_JUMP,
     FAULT_SENSOR_RANGE,
     FAULT_SOFTWARE_DEFECT,
@@ -55,6 +56,7 @@ from backend.projects.smart_heating_platform.services.cleaning_engine import (
     station_max_hourly_elec_kwh,
     station_max_hourly_heat_gj,
     station_max_hourly_water_t,
+    detect_station_zero_heat_fault,
     to_float,
     trapezoidal_hour_integral,
     validate_meter_delta,
@@ -1203,6 +1205,27 @@ def _calibrate_station_parsed_hours(
             faults.append(rf)
         if cleaned_rep["online"]:
             rolling_prev = cleaned_rep
+            is_zero_heat, zero_heat_msg = detect_station_zero_heat_fault(
+                cleaned_rep["online"],
+                cleaned_rep["e1_clean"],
+                cleaned_rep["e3_clean"],
+                cleaned_rep["e4_clean"],
+                cleaned_rep["e11_clean"],
+                hr_heat,
+            )
+            if is_zero_heat and zero_heat_msg:
+                extra_hour_tags.append(FAULT_HEAT_METER_ZERO)
+                faults.append({
+                    "biz_hour": hr,
+                    "entity_type": "STATION",
+                    "entity_id": st_id,
+                    "entity_name": st_name,
+                    "fault_code": FAULT_HEAT_METER_ZERO,
+                    "owner_party": OWNER_RESEARCH,
+                    "raw_value_text": zero_heat_msg,
+                    "clean_strategy": "保留原始零/空耗热量并在全平台标记热表挂零异常",
+                    "rule_desc": "在线换热站存在供热工况或全量表计缺失，但小时耗热量为0或空",
+                })
 
         rep_tags = [t for t in str(cleaned_rep.get("fault_tag") or "").split(",") if t]
         merged_fault_tags = ",".join(dict.fromkeys([*rep_tags, *extra_hour_tags])) or None
@@ -2842,8 +2865,9 @@ def run_daily_heat_audit_and_fix(
             with engine.begin() as conn:
                 still_rows = conn.execute(
                     text(
-                        "SELECT f.id, f.biz_hour, f.station_id, d.name, d.covered_area, "
-                        "f.e11_raw, f.e11_clean, f.hour_heat_raw_gj, f.hour_heat_gj, f.hour_heat_source, f.fault_tag "
+                        "SELECT f.id, f.biz_hour, f.station_id, d.name, d.covered_area, f.online, "
+                        "f.e1_clean, f.e3_clean, f.e4_clean, f.e11_raw, f.e11_clean, f.tot_j, "
+                        "f.hour_heat_raw_gj, f.hour_heat_gj, f.hour_heat_source, f.fault_tag "
                         "FROM smart_heating_platform.fact_station_hourly f "
                         "JOIN smart_heating_platform.dict_heating_station d ON f.station_id = d.station_id "
                         "WHERE f.biz_hour >= :ws AND f.biz_hour < :we"
@@ -2851,15 +2875,30 @@ def run_daily_heat_audit_and_fix(
                     {"ws": win_start, "we": win_end},
                 ).fetchall()
 
+                # 识别窗口内整天在线但全天零耗热/表底冻结站点（如供回温传感器也同步冻结的站点）
+                day_st_rows: Dict[Tuple[str, str], List[Any]] = {}
+                for r in still_rows:
+                    bh_e8 = _to_east8_hour(r.biz_hour)
+                    if bh_e8 is not None:
+                        day_st_rows.setdefault((bh_e8.date().isoformat(), r.station_id), []).append(r)
+                zero_day_keys: set[Tuple[str, str]] = set()
+                for dk, drows in day_st_rows.items():
+                    if any(bool(dr.online) for dr in drows) and all(
+                        (float(dr.hour_heat_gj) if dr.hour_heat_gj is not None else 0.0) <= 0.01
+                        for dr in drows
+                    ):
+                        zero_day_keys.add(dk)
+
                 for r in still_rows:
                     max_lim = station_max_hourly_heat_gj(float(r.covered_area) if r.covered_area is not None else None)
                     hr_val = float(r.hour_heat_gj) if r.hour_heat_gj is not None else None
                     raw_val = float(r.hour_heat_raw_gj) if r.hour_heat_raw_gj is not None else hr_val
                     e11_val = float(r.e11_clean) if r.e11_clean is not None else None
-                    if hr_val is None and e11_val is None:
-                        continue
+                    bh_e8 = _to_east8_hour(r.biz_hour)
+                    dk = (bh_e8.date().isoformat(), r.station_id) if bh_e8 is not None else None
 
                     changed = False
+                    zero_tag_only = False
                     new_hr = hr_val
                     new_e11 = e11_val
                     tags = [t for t in str(r.fault_tag or "").split(",") if t]
@@ -2918,17 +2957,46 @@ def run_daily_heat_audit_and_fix(
                         tags.append(FAULT_METER_JUMP if r.hour_heat_source == SRC_METER_DIFF else FAULT_SENSOR_RANGE)
                         changed = True
 
-                    if changed:
+                    is_zero_heat, zero_heat_msg = detect_station_zero_heat_fault(
+                        r.online, r.e1_clean, r.e3_clean, r.e4_clean, new_e11, new_hr
+                    )
+                    if not is_zero_heat and bool(r.online) and dk in zero_day_keys:
+                        is_zero_heat = True
+                        tot_j_v = float(r.tot_j) if r.tot_j is not None else None
+                        zero_heat_msg = (
+                            f"全天在线但耗热量始终为0（表底totJ冻结={tot_j_v:.1f}）"
+                            if tot_j_v is not None and tot_j_v > 0
+                            else "全天在线但累计与瞬时耗热量始终为0/空"
+                        )
+                    if is_zero_heat and zero_heat_msg:
+                        fault_tickets.append({
+                            "biz_hour": r.biz_hour,
+                            "entity_type": "STATION",
+                            "entity_id": r.station_id,
+                            "entity_name": r.name,
+                            "fault_code": FAULT_HEAT_METER_ZERO,
+                            "owner_party": OWNER_RESEARCH,
+                            "raw_value_text": zero_heat_msg,
+                            "clean_strategy": "保留原始零/空耗热量并在全平台标记热表挂零异常",
+                            "rule_desc": "在线换热站存在供热工况/全天零耗热或全量表计缺失",
+                        })
+                        if FAULT_HEAT_METER_ZERO not in tags:
+                            tags.append(FAULT_HEAT_METER_ZERO)
+                            zero_tag_only = True
+
+                    if changed or zero_tag_only:
                         conn.execute(
                             text(
                                 "UPDATE smart_heating_platform.fact_station_hourly "
-                                "SET hour_heat_raw_gj = COALESCE(hour_heat_raw_gj, :raw_v), "
-                                "hour_heat_gj = :hr_v, e11_clean = :e11_v, "
-                                "value_source = CASE WHEN value_source = 'REAL' THEN 'MASKED_PREV_HOLD' ELSE value_source END, "
+                                "SET hour_heat_raw_gj = CASE WHEN :changed THEN COALESCE(hour_heat_raw_gj, :raw_v) ELSE hour_heat_raw_gj END, "
+                                "hour_heat_gj = CASE WHEN :changed THEN :hr_v ELSE hour_heat_gj END, "
+                                "e11_clean = CASE WHEN :changed THEN :e11_v ELSE e11_clean END, "
+                                "value_source = CASE WHEN :changed AND value_source = 'REAL' THEN 'MASKED_PREV_HOLD' ELSE value_source END, "
                                 "fault_tag = :ft, updated_at = NOW() "
                                 "WHERE id = :rid"
                             ),
                             {
+                                "changed": changed,
                                 "raw_v": raw_val,
                                 "hr_v": new_hr,
                                 "e11_v": new_e11,
@@ -2936,7 +3004,8 @@ def run_daily_heat_audit_and_fix(
                                 "rid": r.id,
                             },
                         )
-                        fixed_station_hours += 1
+                        if changed:
+                            fixed_station_hours += 1
 
                 # 5. 回看检测上游表 fact_upstream_hourly 中的累计量/超限热源值并留痕
                 up_bad_rows = conn.execute(
@@ -3002,7 +3071,7 @@ def run_daily_heat_audit_and_fix(
                     text(
                         "SELECT COUNT(*) FROM smart_heating_platform.fact_fault_ticket "
                         "WHERE biz_hour >= :ws AND biz_hour < :we "
-                        "AND fault_code IN ('SENSOR_OUT_OF_RANGE', 'METER_JUMP', 'SOFTWARE_DEFECT')"
+                        "AND fault_code IN ('SENSOR_OUT_OF_RANGE', 'METER_JUMP', 'SOFTWARE_DEFECT', 'HEAT_METER_ZERO')"
                     ),
                     {"ws": win_start, "we": win_end},
                 ).scalar_one()

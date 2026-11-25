@@ -1,3 +1,9 @@
+## 2026-11-25 全平台异常站视图接入「在线零耗热/热表挂零」分类与筛选 (`DcsWorkbenchView.vue`, `FaultAuditView.vue`, `HourlyReportView.vue`)
+
+- **`src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`**：`classifyStation(s)` 新增 `HEAT_METER_ZERO` 识别逻辑，将在线零耗热/热表挂零换热站纳入告警列表（`severity: 'warning'`、`statusCode: 'WRN'`、`modeLabel: '热表挂零/无耗热'`）。
+- **`src/projects/smart_heating_platform/pages/FaultAuditView.vue`**：覆盖率诊断区域新增 `heat_zero_frozen`（在线零耗热/表底冻结）状态胶囊、站点筛选选项、工单故障类型筛选（`HEAT_METER_ZERO`，覆盖全部 7 类故障）及 `boardStationPie` 图表分项（从 `both_missing` 中扣除以保持数量一致）。
+- **`src/projects/smart_heating_platform/pages/HourlyReportView.vue`**：在换热站小时明细筛选器新增 `仅异常/故障站`（`value="ABNORMAL"`）及对应 `filteredStations` 过滤分支，方便快速定位包含零耗热在内的异常站。
+
 ## 2026-11-25 精简「DCS 工艺监控台」冗余展示并优化手机窄屏排版 (`DcsWorkbenchView.vue`, `DcsNetworkPfd.vue`, `DcsStationPid.vue`)
 
 - **`src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`**：

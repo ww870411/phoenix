@@ -295,8 +295,11 @@
                   <button type="button" class="stat-pill pill-info clickable" @click="jumpStationFilter('heat_fallback')">
                     └ 已用瞬时 f222 补救 {{ coverage.station.heat.fallback_integral }} 站
                   </button>
+                  <button type="button" class="stat-pill pill-err clickable" @click="jumpStationFilter('heat_zero_frozen')">
+                    └ 在线零耗热/表底冻结 {{ coverage.station.other.heat_zero_frozen ?? 0 }} 站
+                  </button>
                   <button type="button" class="stat-pill pill-err clickable" @click="jumpStationFilter('heat_both_missing')">
-                    └ 无正确瞬时热量（彻底无热）{{ coverage.station.heat.both_missing }} 站
+                    └ 无正确瞬时热量（彻底无热）{{ Math.max(0, (coverage.station.heat.both_missing || 0) - (coverage.station.other.heat_zero_frozen || 0)) }} 站
                   </button>
                 </div>
               </div>
@@ -470,6 +473,7 @@
                 <option value="heat_anomaly">🔥 供热及工况数据异常（全部）</option>
                 <option value="heat_missing_cum">└ 无正确累计供热量</option>
                 <option value="heat_fallback">└ 仅用瞬时热量估算</option>
+                <option value="heat_zero_frozen">└ 在线零耗热/热表冻结</option>
                 <option value="heat_both_missing">❌ 供热量累计与瞬时均缺失</option>
                 <option value="sensor_anomaly">🌡️ 温压越限/供回水倒挂</option>
                 <option value="water_anomaly">💧 补水数据异常（全部）</option>
@@ -667,13 +671,14 @@
               <option value="SHARED">现场与平台协同排查</option>
             </select>
             <select v-model="filters.fault_code" class="ctrl-input" @change="loadTickets">
-              <option value="">全部 6 类故障</option>
+              <option value="">全部 7 类故障</option>
               <option value="SENSOR_OUT_OF_RANGE">1.传感器断路/越限</option>
               <option value="COMM_OFFLINE">2.通讯中断与僵尸死数</option>
               <option value="HEAT_IMBALANCE">3.一二网热平衡失真</option>
               <option value="TEMP_INVERSION">4.供回水物理倒挂</option>
               <option value="METER_JUMP">5.累计表底跳变/清零</option>
               <option value="SOFTWARE_DEFECT">6.上位机接口与台账缺陷</option>
+              <option value="HEAT_METER_ZERO">7.在线站零耗热/热表挂零</option>
             </select>
             <input v-model="filters.keyword" type="search" class="ctrl-input" placeholder="搜索站点、测点或异常值…" @keyup.enter="loadTickets" />
             <button class="btn secondary btn-sm" type="button" @click="loadTickets">🔍 查询</button>
@@ -789,6 +794,7 @@ const stationAnomaliesFiltered = computed(() => {
     if (f === 'heat_anomaly' && !s.heat_anomaly) return false
     if (f === 'heat_missing_cum' && s.heat_status === 'OK') return false
     if (f === 'heat_fallback' && s.heat_status !== 'FALLBACK_INT') return false
+    if (f === 'heat_zero_frozen' && !s.has_heat_zero_frozen) return false
     if (f === 'heat_both_missing' && s.heat_status !== 'BOTH_MISSING') return false
     if (f === 'sensor_anomaly' && !s.has_sensor_or_inversion) return false
     if (f === 'water_anomaly' && !s.water_anomaly) return false
@@ -1224,7 +1230,8 @@ function renderBoardCharts() {
       { name: '水表·累计与瞬时均缺失', value: st.water?.both_missing || 0, color: '#dc2626', tag: '数据缺失/无法估算', filterKey: 'water_both_missing' },
       { name: '供热·温压越限或倒挂', value: st.other?.sensor_or_inversion || 0, color: '#f59e0b', tag: '传感器/工况异常', filterKey: 'sensor_anomaly' },
       { name: '供热·仅瞬时热量可用', value: st.heat?.fallback_integral || 0, color: '#f59e0b', tag: '可用算法估算', filterKey: 'heat_fallback' },
-      { name: '供热·累计与瞬时均缺失', value: st.heat?.both_missing || 0, color: '#dc2626', tag: '数据缺失/无法估算', filterKey: 'heat_both_missing' },
+      { name: '供热·在线零耗热/表底冻结', value: st.other?.heat_zero_frozen || 0, color: '#dc2626', tag: '数据缺失/无法估算', filterKey: 'heat_zero_frozen' },
+      { name: '供热·累计与瞬时均缺失', value: Math.max(0, (st.heat?.both_missing || 0) - (st.other?.heat_zero_frozen || 0)), color: '#dc2626', tag: '数据缺失/无法估算', filterKey: 'heat_both_missing' },
       { name: '电表·表底跳变异常', value: st.elec?.f253_broken_isolated || 0, color: '#dc2626', tag: '数据缺失/无法估算', filterKey: 'elec_broken' },
     ].sort((a, b) => b.value - a.value)
 

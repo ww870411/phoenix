@@ -419,6 +419,7 @@
             <select v-model="stationFilter.statusFilter" class="ctrl-input">
               <option value="">全部状态</option>
               <option value="REAL">仅在线实测</option>
+              <option value="ABNORMAL">仅异常/故障站</option>
               <option value="INTERP">含平滑估值</option>
               <option value="NO_AREA">缺失面积站</option>
             </select>
@@ -997,6 +998,14 @@ const filteredStations = computed(() => {
     if (stationFilter.rdfz && s.rdfz !== stationFilter.rdfz) return false
     if (stationFilter.branchId && String(s.branch_network_id) !== stationFilter.branchId) return false
     if (stationFilter.statusFilter === 'REAL' && s.value_source !== 'REAL') return false
+    if (
+      stationFilter.statusFilter === 'ABNORMAL'
+      && !s.fault_tag
+      && Object.keys(s.field_notes || {}).length === 0
+      && s.online
+      && s.value_source === 'REAL'
+      && s.covered_area != null
+    ) return false
     if (stationFilter.statusFilter === 'INTERP' && (s.value_source === 'REAL' || s.value_source === 'NO_DATA')) return false
     if (stationFilter.statusFilter === 'NO_AREA' && s.covered_area != null) return false
     if (kw && !String(s.name || '').toLowerCase().includes(kw)) return false

@@ -1,5 +1,20 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-25 全平台纳入「在线站零耗热/热表挂零」异常站判定与展示 (`smart_heating_platform`)
+
+- **缘由与背景**：现场排查“良运缤纷站”及同类换热站时发现，部分站 `online=True` 且一网供回存在有效温差/运行特征（甚至单日或连续多小时供热），但 `hour_heat_gj`、`e1`（一网瞬时流量）始终为 `0` 或表底 `tot_j` 冻结，此前既未打入 `fault_tag` / 故障工单，采集覆盖率诊断也将 `METER_DIFF` 且累计增量 `<= 0.01` 的站误归为 `OK`。本次将其统一纳入全平台异常站体系。
+- **后端清洗、采集审计与接口改动**：
+  - `backend/projects/smart_heating_platform/services/cleaning_engine.py`：新增故障常量 `FAULT_HEAT_METER_ZERO = "HEAT_METER_ZERO"` 与逐小时检测函数 `detect_station_zero_heat_fault(online, e1, e3, e4, e11, hour_heat_gj)`（覆盖在线零耗热且一网流量/回水阀开/一网供温与温差活跃或四项遥测全缺四类场景，排除离线站与低温停机站）。
+  - `backend/projects/smart_heating_platform/api/faults.py`：在 `FAULT_CODE_LABELS` 新增 `"HEAT_METER_ZERO": "7.在线站零耗热/热表挂零"`，并使其同步参与 `/coverage`、`/summary` 与 `/tickets` 统计筛选。
+  - `backend/projects/smart_heating_platform/services/collector_engine.py`：在 `_calibrate_station_parsed_hours`、`run_heat_audit_and_fix` 与工单统计 SQL (`ticket_count_in_win`) 中接入 `FAULT_HEAT_METER_ZERO` 标记与 `fact_fault_ticket`（归属 `OWNER_RESEARCH`）生成，同时覆盖全天在线但冻结零耗热站。
+  - `backend/projects/smart_heating_platform/services/report_query_service.py`：新增 `_detect_zero_heat_station_days`；在 `get_hourly_report`、`get_daily_report`（补充 `online` 字段与 `day_zero_heat_notes`）及 `get_collection_coverage_diagnostics` 中识别并标红零耗热/表底冻结站；覆盖率诊断下将 `heat_status` 设为 `"HEAT_ZERO_FROZEN"`，在 `other_stats["heat_zero_frozen"]` 单独计数并计入 `missing_cum_total` / `both_missing` / `heat_anomaly`（保持 `diag["station"]["heat"]` 原有 6 键兼容性）。
+  - `backend/projects/smart_heating_platform/tests/test_cleaning_and_apis.py`：新增 `test_zero_heat_station_classified_as_abnormal` 覆盖清洗判定与校准流程。
+- **前端展示与筛选改动**：
+  - `frontend/src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`：`classifyStation` 识别 `HEAT_METER_ZERO` 并以告警状态（`WRN` / `热表挂零/无耗热`）展示。
+  - `frontend/src/projects/smart_heating_platform/pages/FaultAuditView.vue`：新增 `heat_zero_frozen` 统计胶囊与过滤选项、`HEAT_METER_ZERO` 工单筛选项及图表分项展示（从 `both_missing` 条形图中拆分展示避免重复计数）。
+  - `frontend/src/projects/smart_heating_platform/pages/HourlyReportView.vue`：`filteredStations` 新增 `ABNORMAL`（“仅异常/故障站”）筛选模式。
+- **影响面**：不影响历史离线站或正常有耗热站，也不破坏既有诊断 API 字段兼容；线上已存历史小时表的持久化 `fault_tag` / `fact_fault_ticket` 需触发一次回看检测（`run_heat_audit_and_fix`）或待下轮定时审计补齐，实时查询接口（小时报/日报/覆盖率诊断）已即时生效。
+
 ## 2026-11-25 精简「DCS 工艺监控台」冗余展示并优化手机窄屏排版 (`DcsWorkbenchView.vue`, `DcsNetworkPfd.vue`, `DcsStationPid.vue`)
 
 - **排查与改动缘由**：
