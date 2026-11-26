@@ -10,14 +10,17 @@ export function canAccessPeriodReport(projectKey, user) {
   return projectKey === 'daily_report_25_26' && (grp === 'global_admin' || grp === 'group_admin')
 }
 
-// 主城区供热联合评价模型暂时仅对 Global_admin 开放。
-export function canAccessJointEvaluation(projectKey, user) {
-  const grp = String(user?.group || user?.role || '').trim()
-  return projectKey === 'daily_report_25_26' && grp === 'Global_admin'
+// 主城区供热联合评价模型开放给所有有权访问生产日报项目的用户组。
+export function canAccessJointEvaluation(projectKey, user, hasProjectAccess) {
+  if (projectKey !== 'daily_report_25_26') return false
+  if (typeof hasProjectAccess === 'function') {
+    return Boolean(hasProjectAccess(projectKey))
+  }
+  return Boolean(String(user?.group || user?.role || '').trim() || (Array.isArray(user?.groups) && user.groups.length))
 }
 
 export function withDailyBriefPage(pages, projectKey, user) {
-  const existing = (Array.isArray(pages) ? pages : []).filter(page => !['daily_brief', 'period_report', 'joint_evaluation'].includes(page.page_key))
+  const existing = (Array.isArray(pages) ? pages : []).filter(page => !['daily_brief', 'period_report'].includes(page.page_key))
   const additions = []
   if (canAccessDailyBrief(projectKey, user)) {
     additions.push({
@@ -33,14 +36,6 @@ export function withDailyBriefPage(pages, projectKey, user) {
       page_name: '生产运行汇报',
       page_description: '自选周期生成分析材料，左文右表整页汇报',
       page_url: '/projects/daily_report_25_26/pages/period_report'
-    })
-  }
-  if (canAccessJointEvaluation(projectKey, user)) {
-    additions.push({
-      page_key: 'joint_evaluation',
-      page_name: '主城区供热联合评价模型',
-      page_description: '基于 HDD20 参考单耗与投诉强度指数的四象限联合诊断看板',
-      page_url: '/projects/daily_report_25_26/pages/joint_evaluation'
     })
   }
   return [...additions, ...existing]

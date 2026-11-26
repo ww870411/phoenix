@@ -127,22 +127,29 @@ def test_report_nov5_to_nov22_reconciliation() -> None:
     assert summary["quadrant"]["code"] == "I"
 
 
-def test_joint_evaluation_api_requires_global_admin() -> None:
-    """确认 /joint-evaluation 接口对非 Global_admin 返回 403，对 Global_admin 正常放行。"""
+def test_joint_evaluation_api_allows_project_members_and_denies_outsiders() -> None:
+    """确认 /joint-evaluation 对无项目权限账号返回 403，对有权访问生产日报项目的用户组正常放行。"""
     app = FastAPI()
     app.include_router(joint_eval_router)
     client = TestClient(app)
 
-    app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group="Group_admin")
+    app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(
+        group="tube_supplier",
+        has_project_access=lambda project_key: False,
+    )
     denied = client.get("/joint-evaluation")
     assert denied.status_code == 403
 
-    app.dependency_overrides[get_current_session] = lambda: SimpleNamespace(group="Global_admin")
-    with patch("backend.projects.daily_report_25_26.api.joint_evaluation.SessionLocal"), patch(
-        "backend.projects.daily_report_25_26.api.joint_evaluation.build_joint_evaluation",
-        return_value={"ok": True, "mode": "single"},
-    ):
-        allowed = client.get("/joint-evaluation")
-    assert allowed.status_code == 200
-    assert allowed.json()["ok"] is True
+    for group in ("Global_admin", "Group_admin", "ZhuChengQu_admin", "Unit_admin", "unit_filler", "shoudian_filler", "Group_viewer"):
+        app.dependency_overrides[get_current_session] = lambda g=group: SimpleNamespace(
+            group=g,
+            has_project_access=lambda project_key: project_key == "daily_report_25_26",
+        )
+        with patch("backend.projects.daily_report_25_26.api.joint_evaluation.SessionLocal"), patch(
+            "backend.projects.daily_report_25_26.api.joint_evaluation.build_joint_evaluation",
+            return_value={"ok": True, "mode": "single"},
+        ):
+            allowed = client.get("/joint-evaluation")
+        assert allowed.status_code == 200
+        assert allowed.json()["ok"] is True
 

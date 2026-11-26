@@ -1,0 +1,156 @@
+{
+  "time": "2026-11-26T01:13:20.921644+00:00",
+  "biz_date": "2026-03-28",
+  "database": {
+    "port": 5432,
+    "database": "phoenix"
+  },
+  "before": {
+    "operations_and_tickets": [
+      {
+        "time": "20:05",
+        "action": "启动投运",
+        "location": "",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "#2高减投运 。",
+        "responsible_org": "北海电厂"
+      },
+      {
+        "time": "27日17:30",
+        "action": "运行操作",
+        "location": "因道路",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "锅炉停运（因道路施工管网停运）,29日2:30锅炉恢复运行。",
+        "responsible_org": "庄河环海"
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "20:05",
+        "action": "启动投运",
+        "location": "",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "#2高减投运 。",
+        "responsible_org": "北海电厂"
+      },
+      {
+        "time": "27日17:30",
+        "action": "运行操作",
+        "location": "因道路",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "锅炉停运（因道路施工管网停运）,29日2:30锅炉恢复运行。",
+        "responsible_org": "庄河环海"
+      }
+    ]
+  },
+  "after": {
+    "operations_and_tickets": [
+      {
+        "time": "20:05",
+        "action": "启动投运",
+        "location": "",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "#2高减投运 。",
+        "responsible_org": "北海电厂",
+        "source_description": "#2高减投运 。",
+        "source_time": "20:05",
+        "operation_split_version": 2,
+        "event_date": "2026-03-28",
+        "event_clock": "20:05",
+        "exclude_main_inference": true
+      },
+      {
+        "time": "17:30",
+        "action": "运行操作",
+        "location": "因道路",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "锅炉停运（因道路施工管网停运）",
+        "responsible_org": "庄河环海",
+        "source_time": "17:30",
+        "source_description": "锅炉停运（因道路施工管网停运）,29日2:30锅炉恢复运行。",
+        "operation_split_version": 2,
+        "event_date": "2026-03-28",
+        "event_clock": "17:30",
+        "exclude_main_inference": true
+      },
+      {
+        "time": "29日2:30",
+        "action": "运行操作",
+        "location": "因道路",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "锅炉恢复运行",
+        "responsible_org": "庄河环海",
+        "source_time": "17:30",
+        "source_description": "锅炉停运（因道路施工管网停运）,29日2:30锅炉恢复运行。",
+        "operation_split_version": 2,
+        "event_date": "2026-03-29",
+        "event_clock": "02:30",
+        "exclude_main_inference": true
+      }
+    ],
+    "log_items_json": [
+      {
+        "time": "20:05",
+        "action": "启动投运",
+        "location": "",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "#2高减投运 。",
+        "responsible_org": "北海电厂",
+        "source_description": "#2高减投运 。",
+        "source_time": "20:05",
+        "operation_split_version": 2,
+        "event_date": "2026-03-28",
+        "event_clock": "20:05",
+        "exclude_main_inference": true
+      },
+      {
+        "time": "17:30",
+        "action": "运行操作",
+        "location": "因道路",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "锅炉停运（因道路施工管网停运）",
+        "responsible_org": "庄河环海",
+        "source_time": "17:30",
+        "source_description": "锅炉停运（因道路施工管网停运）,29日2:30锅炉恢复运行。",
+        "operation_split_version": 2,
+        "event_date": "2026-03-28",
+        "event_clock": "17:30",
+        "exclude_main_inference": true
+      },
+      {
+        "time": "29日2:30",
+        "action": "运行操作",
+        "location": "因道路",
+        "is_ticket": false,
+        "pipe_size": "",
+        "time_range": "",
+        "raw_description": "锅炉恢复运行",
+        "responsible_org": "庄河环海",
+        "source_time": "17:30",
+        "source_description": "锅炉停运（因道路施工管网停运）,29日2:30锅炉恢复运行。",
+        "operation_split_version": 2,
+        "event_date": "2026-03-29",
+        "event_clock": "02:30",
+        "exclude_main_inference": true
+      }
+    ]
+  }
+}

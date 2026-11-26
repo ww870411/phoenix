@@ -621,11 +621,11 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import XLSX from 'xlsx-js-style'
 import AppHeader from '../components/AppHeader.vue'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { ensureProjectsLoaded, getProjectNameById } from '../composables/useProjects'
 import { getJointEvaluation } from '../services/api'
+import { exportJointEvaluationExcelFile } from '../utils/jointEvaluationExcelExport'
 
 const PROJECT_KEY = 'daily_report_25_26'
 
@@ -1849,51 +1849,12 @@ function handleResize() {
 
 function exportExcel() {
   if (!dailyRows.value.length) return
-  const wb = XLSX.utils.book_new()
-
-  const summaryRows = []
-  if (summary.value) {
-    summaryRows.push({
-      评价范围: summary.value.label,
-      有效天数: summary.value.valid_days,
-      '供暖面积(㎡)': payload.value?.area_source?.area_m2 ?? '',
-      '平均气温(℃)': summary.value.avg_temp ?? '',
-      '实际平均单耗(GJ/万㎡·日)': summary.value.actual_unit_heat_avg ?? '',
-      '参考平均单耗(GJ/万㎡·日)': summary.value.ref_unit_heat_avg ?? '',
-      '实际总耗热(GJ)': summary.value.actual_heat_gj ?? '',
-      '参考总耗热(GJ)': summary.value.ref_heat_gj ?? '',
-      '供热偏差率(%)': summary.value.heat_deviation_pct ?? '',
-      '实际投诉(件)': summary.value.actual_complaints ?? '',
-      '参考投诉(件)': summary.value.ref_complaints ?? '',
-      投诉强度指数: summary.value.complaint_index ?? '',
-      象限归属: summary.value.quadrant?.name ?? '',
-      经验带状态: summary.value.band_status?.label ?? '',
-    })
-  }
-  const wsSummary = XLSX.utils.json_to_sheet(summaryRows)
-  XLSX.utils.book_append_sheet(wb, wsSummary, '区间诊断汇总')
-
-  const detailExport = dailyRows.value.map(r => ({
-    日期: r.date,
-    '日均气温(℃)': r.avg_temp ?? '',
-    '当日HDD20': r.hdd20_today ?? '',
-    '前3日均值HDD20': r.hdd20_prev3 ?? '',
-    '实际单耗(GJ/万㎡·日)': r.actual_unit_heat ?? '',
-    '参考单耗(GJ/万㎡·日)': r.ref_unit_heat ?? '',
-    '实际耗热(GJ)': r.actual_heat_gj ?? '',
-    '参考耗热(GJ)': r.ref_heat_gj ?? '',
-    '供热偏差率(%)': r.heat_deviation_pct ?? '',
-    '实际投诉(件)': r.actual_complaints ?? '',
-    '参考投诉(件)': r.ref_complaints ?? '',
-    投诉强度指数: r.complaint_index ?? '',
-    象限归属: r.quadrant?.name ?? '',
-    数据完整性: r.is_complete ? '完整' : (r.missing_reasons || []).join('；'),
-  }))
-  const wsDetail = XLSX.utils.json_to_sheet(detailExport)
-  XLSX.utils.book_append_sheet(wb, wsDetail, '逐日联合评价明细')
-
-  const stamp = payload.value?.anchor_date || new Date().toISOString().slice(0, 10)
-  XLSX.writeFile(wb, `主城区供热联合评价_${stamp}.xlsx`)
+  exportJointEvaluationExcelFile(payload.value, {
+    mode: queryState.mode,
+    singleTraceDays: queryState.singleTraceDays,
+    periodDays: queryState.periodDays,
+    periodCount: queryState.periodCount,
+  })
 }
 
 watch(hasValidEvaluation, async (ready) => {

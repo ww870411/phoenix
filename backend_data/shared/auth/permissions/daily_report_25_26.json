@@ -12,6 +12,7 @@
         "dynamic_plan",
         "global_management",
         "dispatch_info",
+        "joint_evaluation",
         "placeholder"
       ],
       "sheet_rules": {
@@ -55,6 +56,7 @@
         "data_analysis",
         "dynamic_plan",
         "dispatch_info",
+        "joint_evaluation",
         "placeholder"
       ],
       "sheet_rules": {
@@ -96,7 +98,8 @@
         "data_entry",
         "data_analysis",
         "dynamic_plan",
-        "dispatch_info"
+        "dispatch_info",
+        "joint_evaluation"
       ],
       "sheet_rules": {
         "data_show": {
@@ -154,7 +157,8 @@
         "data_entry",
         "data_analysis",
         "dynamic_plan",
-        "dispatch_info"
+        "dispatch_info",
+        "joint_evaluation"
       ],
       "sheet_rules": {
         "data_show": {
@@ -191,7 +195,8 @@
         "data_entry",
         "data_analysis",
         "dynamic_plan",
-        "dispatch_info"
+        "dispatch_info",
+        "joint_evaluation"
       ],
       "sheet_rules": {
         "data_show": {
@@ -225,7 +230,8 @@
         "data_entry",
         "data_analysis",
         "dynamic_plan",
-        "dispatch_info"
+        "dispatch_info",
+        "joint_evaluation"
       ],
       "sheet_rules": {
         "data_show": {
@@ -265,6 +271,7 @@
         "data_analysis",
         "dynamic_plan",
         "dispatch_info",
+        "joint_evaluation",
         "placeholder"
       ],
       "sheet_rules": {

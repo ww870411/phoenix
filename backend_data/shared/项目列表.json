@@ -64,6 +64,12 @@
         "数据源":"public.dispatch_daily_reports",
         "页面描述":"主城区生产调度全景工况监控"
       },
+      "joint_evaluation":
+      {
+        "页面名称":"主城区供热联合评价模型（测试）",
+        "数据源":"public.daily_basic_data",
+        "页面描述":"基于 HDD20 参考单耗与投诉强度指数的四象限联合诊断看板"
+      },
       "/debug/runtime-eval":
       {
         "页面名称":"运行时表达式求值（调试）",

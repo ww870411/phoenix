@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { canAccessDailyBrief, withDailyBriefPage, formatBriefNumber, changeText, briefDeltaClass, briefComparisonParts, selectBriefMetricPanels } from '../src/projects/daily_report_25_26/composables/dailyBriefPresentation.js'
+import { canAccessDailyBrief, canAccessJointEvaluation, withDailyBriefPage, formatBriefNumber, changeText, briefDeltaClass, briefComparisonParts, selectBriefMetricPanels } from '../src/projects/daily_report_25_26/composables/dailyBriefPresentation.js'
 
 test('仅本子项目的 Global_admin 能看到入口', () => {
   assert.equal(canAccessDailyBrief('daily_report_25_26', { group: 'Global_admin' }), true)
@@ -75,4 +75,12 @@ test('缺少指标不借用其他指标值或退回按位置切片', () => {
   assert.deepEqual(panels.primary, [])
   assert.deepEqual(panels.supplement.map(metric => metric.key), ['amount_heat_supply'])
   assert.deepEqual(selectBriefMetricPanels(null), { primary: [], supplement: [] })
+})
+
+test('主城区供热联合评价模型对所有具备生产日报项目权限的用户组开放', () => {
+  for (const group of ['Global_admin', 'Group_admin', 'ZhuChengQu_admin', 'Unit_admin', 'unit_filler', 'shoudian_filler', 'Group_viewer']) {
+    assert.equal(canAccessJointEvaluation('daily_report_25_26', { group }, key => key === 'daily_report_25_26'), true)
+  }
+  assert.equal(canAccessJointEvaluation('daily_report_25_26', { group: 'tube_supplier' }, () => false), false)
+  assert.equal(canAccessJointEvaluation('other_project', { group: 'Global_admin' }, () => true), false)
 })

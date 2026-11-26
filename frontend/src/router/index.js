@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../projects/daily_report_25_26/store/auth'
-import { canAccessDailyBrief, canAccessPeriodReport, canAccessJointEvaluation } from '../projects/daily_report_25_26/composables/dailyBriefPresentation'
+import { canAccessDailyBrief, canAccessPeriodReport } from '../projects/daily_report_25_26/composables/dailyBriefPresentation'
 
 const routes = [
   {
@@ -62,7 +62,7 @@ const routes = [
   {
     path: '/projects/daily_report_25_26/pages/joint_evaluation',
     component: () => import('../projects/daily_report_25_26/pages/JointEvaluationView.vue'),
-    meta: { title: '主城区供热联合评价模型', globalAdminOnly: true },
+    meta: { title: '主城区供热联合评价模型' },
   },
   {
     path: '/projects/insulation_pipe_supply_2026/pages/:pageKey',
@@ -220,9 +220,9 @@ router.beforeEach(async (to) => {
       ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'daily_brief')
   }
 
-  // 主城区供热联合评价模型独立校验，仅限 Global_admin
+  // 主城区供热联合评价模型独立校验：凡是有权访问生产日报项目的用户组均可进入
   if (to.path === '/projects/daily_report_25_26/pages/joint_evaluation') {
-    return canAccessJointEvaluation('daily_report_25_26', auth.user)
+    return auth.hasProjectAccess('daily_report_25_26')
       ? true : makeForbiddenRedirect(to, 'daily_report_25_26', 'joint_evaluation')
   }
 

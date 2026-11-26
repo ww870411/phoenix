@@ -1,5 +1,59 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-26 为「主城区供热联合评价模型（测试）」升级商务样式化 Excel 导出 (`styledExcelBase.js`, `jointEvaluationExcelExport.js`, `JointEvaluationView.vue`)
+
+- **缘由与目标**：对齐「数据查询与分析」页（`analysisExcelExport.js`）的专业商务表格导出风格，替换 `JointEvaluationView.vue` 原先无样式的 `json_to_sheet` 扁平导出。
+- **改动点与实现逻辑**：
+  - 新增 `frontend/src/projects/daily_report_25_26/utils/styledExcelBase.js`：抽离共享的 `xlsx-js-style` 样式渲染基座（`Microsoft YaHei` 字体、顶部横幅与副标题、蓝底板块条、深色表头 `#1E293B`、斑马纹数据行、双底线 `total` 汇总行、千分位原生数值格式与自适应列宽行高），并由 `analysisExcelExport.js` 复用以避免重复代码。
+  - 新增 `frontend/src/projects/daily_report_25_26/utils/jointEvaluationExcelExport.js`：实现 `buildJointEvaluationSummarySheet()`（联合评价诊断汇总：含单日/区间核心诊断结论、单日模式下的附带轨迹累计对照表、滚动周期对比汇总表、模型口径说明）与 `buildJointEvaluationDetailSheet()`（14 列逐日测算明细 + 供热偏差/投诉指数/象限/完整性语义着色 + 底部区间合计双底线总计行）。
+  - 修改 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`：`exportExcel()` 切换为调用 `exportJointEvaluationExcelFile()`。
+  - 新增 `frontend/src/projects/daily_report_25_26/tests/jointEvaluationExcelExport.test.mjs`。
+- **验证结果**：`node --test frontend/src/projects/daily_report_25_26/tests/analysisExcelExport.test.mjs frontend/src/projects/daily_report_25_26/tests/jointEvaluationExcelExport.test.mjs` 4/4 通过。
+
+## 2026-11-26 将「主城区供热联合评价模型」入口卡片更名为「主城区供热联合评价模型（测试）」 (`项目列表.json`, `PageSelectView.vue`)
+
+- **改动点**：将 `backend_data/shared/项目列表.json` 中 `daily_report_25_26.pages.joint_evaluation.页面名称` 及 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue` 兜底卡片的 `page_name` 统一改为 `主城区供热联合评价模型（测试）`。
+
+## 2026-11-26 向所有生产日报项目授权用户组开放「主城区供热联合评价模型」模块 (`joint_evaluation`)
+
+- **缘由与目标**：此前「主城区供热联合评价模型」模块在前后端路由、入口卡片与接口权限层均限制为仅 `Global_admin` 可见及访问。本次将其统一调整为对所有拥有 `daily_report_25_26`（生产日报项目）访问权限的用户组（`Global_admin`、`Group_admin`、`ZhuChengQu_admin`、`Unit_admin`、`unit_filler`、`shoudian_filler`、`Group_viewer`）开放，并继续拦截无生产日报项目权限的外部用户组（如 `tube_*`）。
+- **后端与配置改动**：
+  - `backend/projects/daily_report_25_26/api/joint_evaluation.py`：移除 `session.group != "Global_admin"` 限制，改为校验 `session.has_project_access("daily_report_25_26")`（配合 `backend/api/v1/routes.py` 项目级路由依赖）。
+  - `backend/api/v1/routes.py`：将 `"joint_evaluation"` 纳入 `special_pages` 白名单，确保 `GET /api/v1/projects/daily_report_25_26/pages` 对所有具备项目访问权的用户组返回该页面。
+  - `backend_data/shared/项目列表.json` 与 `backend_data/shared/auth/permissions/daily_report_25_26.json`：在 `daily_report_25_26.pages` 补充 `joint_evaluation` 注册信息，并为生产日报全部 7 个用户组的 `page_access` 补齐 `"joint_evaluation"`。
+  - `backend/projects/daily_report_25_26/tests/test_joint_evaluation.py`：更新接口权限单测为 `test_joint_evaluation_api_allows_project_members_and_denies_outsiders`。
+- **前端改动**：
+  - `frontend/src/projects/daily_report_25_26/store/auth.js`：在 `hasPageAccess()` 中将 `joint_evaluation` 纳入 `hasProjectAccess(projectKey)` 放行列表，兼容旧登录缓存。
+  - `frontend/src/router/index.js`：移除 `/projects/daily_report_25_26/pages/joint_evaluation` 的 `globalAdminOnly: true`，改用 `auth.hasProjectAccess('daily_report_25_26')` 校验。
+  - `frontend/src/projects/daily_report_25_26/composables/dailyBriefPresentation.js` & `PageSelectView.vue` & `services/api.js`：更新 `canAccessJointEvaluation()` 与接口注释；将 `joint_evaluation` 从 `withDailyBriefPage()` 的管理员特权注入移至 `PageSelectView.vue` `withAdminExclusivePages()` 的项目权限兜底展示，并在 `openPage()` 补充 `normalizedKey === 'joint_evaluation'` 专属分支直接跳转 `/projects/.../pages/joint_evaluation`（修复后端返回 `page_url="joint_evaluation"` 时误落入 `.../sheets` 触发 404 的问题；同时修复既有 `period-report.test.mjs` 断言顺序）。
+  - `frontend/tests/daily-brief.test.mjs`：补充 `canAccessJointEvaluation` 权限放行与隔离测试。
+- **验证结果**：`python -m pytest backend/projects/daily_report_25_26/tests/test_joint_evaluation.py backend/projects/daily_report_25_26/tests/test_auth_sheet_rules.py` 12/12 通过；`node --test frontend/tests/daily-brief.test.mjs frontend/tests/period-report.test.mjs` 14/14 通过；`npm --prefix frontend run build` 通过（`1099 modules transformed`，`built in 27.57s`）。
+
+## 2026-11-26 定向修正 `2026-03-28` 跨月误判操作时刻 (`repair_dispatch_20260328.py`)
+
+- **缘由与目标**：`2026-03-28` 庄河环海“锅炉停运（因道路施工管网停运）”原记录 `time="27日17:30"`，经 `event_time_fields()` 跨月逻辑误推算为 `2026-04-27 17:30`。按用户确认将其修正为 `2026-03-28 17:30`。
+- **改动点与结果**：新增 `backend/scripts/repair_dispatch_20260328.py`（`build_after()` 将该条 `time`/`source_time` 改为 `17:30`，经 `reconcile_report()` 固化 `event_date="2026-03-28"`、`event_clock="17:30"` 及 `operation_split_version=2` 并校验幂等），在 `phoenix_backend` 容器 `--apply` 更新 `operations_and_tickets` 与 `log_items_json`，快照保存于 `backend_data/projects/daily_report_25_26/runtime/dispatch-repair-20260328.json`。复核全量 192 天记录：`operations_and_tickets == log_items_json` 为 `192/192`，异常跨月 `event_date` 归零。
+
+## 2026-11-26 定向修复 `public.dispatch_daily_reports` 调度事件断句残片与工作票起止时间戳 (`repair_dispatch_ops_20261126.py`)
+
+- **缘由与目标**：排查 `public.dispatch_daily_reports` 全量 192 天历史日报的 `operations_and_tickets` 与 `log_items_json` 字段后，发现跨行断句（24 个日期 26 处，如 `2026-11-23` 人民广场公安局门前街 `DN400` 关门与恢复、`2026-11-24` 工期断成四段、`2026-01-11` `#3炉` 与 `停炉` 断开）、多时刻拆分后无主语短句（44 个日期 64 处，如 `恢复`、`停运`、`退出运行`、`并电网`、`接带负荷`）、工作票内嵌恢复事件及起止时间缺失等问题。本次经用户确认后执行全量数据清洗并保持双字段同步。
+- **改动点与实现逻辑**：
+  - 新增 [`backend/scripts/repair_dispatch_ops_20261126.py`](file:///D:/编程项目/phoenix/backend/scripts/repair_dispatch_ops_20261126.py)：
+    - 通过 `_apply_structural_fixes()` 合并跨行断句碎片、修复 `2025-11-05`/`2026-02-04` 等附注瑕疵、修正 `2026-11-21` `#3高减停运` 跨日归属至 `22日3:30`、提取 `2026-11-23` `21:53` 为起始操作时刻并合并 `23:30` 恢复记录，同时将所有内含恢复/结束时间的工作票拆分为独立的“起始（工作票/操作）+ 结束（恢复）”两条带时间戳事件；
+    - 通过 `_fix_ticket_start_time_and_range()` 规范化工作票 `time_range`，并为缺少 `time` 的工作票按工期起始时间（严格区分 `M月D日` 与 `DD/MM`）补全起始时间戳；
+    - 通过 `CAT2_FIXES` 补全全部 62 个键对应的 64 条无主语短句并清除残留的“主设备操作缺少明确主体”告警，调用 `reconcile_report()` 校验幂等性与人工状态确认留痕；
+    - 支持默认预览、`--apply` 备份快照并事务更新 `phoenix` 库（5432）、`--restore` 精确回滚。
+- **执行与验证结果**：
+  - 在 `phoenix_backend` 容器内执行 `python -B -m backend.scripts.repair_dispatch_ops_20261126 --apply --backup data/projects/daily_report_25_26/runtime/dispatch-ops-repair-20261126-v2.json`，事务更新 **77 天**记录，快照保存于 `backend_data/projects/daily_report_25_26/runtime/dispatch-ops-repair-20261126-v2.json`；
+  - 复核全量 192 条数据库记录与 `query_dispatch_reports()` 接口返回结果：`operations_and_tickets == log_items_json` 为 `192/192`，残片与无主语告警清零，前端及接口无需改动。
+
+## 2026-11-25 将 `daily_report_25_26`「数据查询与分析」功能卡片调整为绿色渐变卡片 (`PageSelectView.vue`)
+
+- **缘由与目标**：按用户进一步明确的视觉要求，仿照“每日数据填报页面”的饱和渐变高亮卡风格，将 `/projects/daily_report_25_26/pages` 中“数据查询与分析”卡片调整为绿色渐变效果。
+- **改动点**：
+  - `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue`：在 `getCardCustomClass(groupKey, page)` 中针对 `projectKey === 'daily_report_25_26' && key === 'data_analysis'` 返回自定义样式类 `card-primary-analysis`，并新增 `.page-card.card-primary-analysis` 绿色渐变背景（`#16a34a -> #22c55e -> #4ade80`）、边框、阴影、悬停加深效果及白色标题/描述文字样式。
+- **影响面**：仅影响 `daily_report_25_26` 功能选择页下“数据查询与分析”卡片的视觉配色，不涉及路由、权限及数据接口变更。
+
 ## 2026-11-25 全平台纳入「在线站零耗热/热表挂零」异常站判定与展示 (`smart_heating_platform`)
 
 - **缘由与背景**：现场排查“良运缤纷站”及同类换热站时发现，部分站 `online=True` 且一网供回存在有效温差/运行特征（甚至单日或连续多小时供热），但 `hour_heat_gj`、`e1`（一网瞬时流量）始终为 `0` 或表底 `tot_j` 冻结，此前既未打入 `fault_tag` / 故障工单，采集覆盖率诊断也将 `METER_DIFF` 且累计增量 `<= 0.01` 的站误归为 `OK`。本次将其统一纳入全平台异常站体系。

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-24T08:51:29.448170+00:00",
+  "updated_at": "2026-11-26T01:56:34.653382+00:00",
   "biz_date": {
-    "set_biz_date": "2026-11-23"
+    "set_biz_date": "2026-11-24"
   },
   "season": {
     "active_period": "26-27",

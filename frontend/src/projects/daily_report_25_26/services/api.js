@@ -4126,7 +4126,7 @@ export async function exportCompetitionExcel(month, payload = {}, projectKey = '
   return { blob, filename }
 }
 
-// 主城区供热运行联合评价模型测算接口（仅限 Global_admin）
+// 主城区供热运行联合评价模型测算接口（面向所有有权访问生产日报项目的用户组）
 export async function getJointEvaluation(projectKey = 'daily_report_25_26', params = {}) {
   const search = new URLSearchParams()
   if (params.mode) search.set('mode', params.mode)

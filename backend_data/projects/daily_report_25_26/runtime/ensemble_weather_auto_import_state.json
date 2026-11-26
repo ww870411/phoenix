@@ -21,12 +21,8 @@
   "last_failure_time": null,
   "last_failure_trigger": null,
   "last_failure_message": null,
-  "executed_slots_date": "2026-11-25",
-  "executed_slots_today": {
-    "06:30": "2026-11-25 06:30:12",
-    "12:00": "2026-11-25 12:00:00",
-    "18:00": "2026-11-25 18:00:00"
-  },
+  "executed_slots_date": "2026-11-26",
+  "executed_slots_today": {},
   "history": [
     {
       "time": "2026-11-25 18:00:02",

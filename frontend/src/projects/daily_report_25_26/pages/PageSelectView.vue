@@ -264,6 +264,14 @@ function withAdminExclusivePages(pageList, pKey, user) {
     pKey === 'daily_report_25_26' &&
     (auth.isGlobalAdmin || user?.group === 'Global_admin' || user?.username === 'ww870411')
   list = (Array.isArray(list) ? list : []).filter((p) => p.page_key !== 'smart_heating' && p.page_key !== 'smart_heating_tunnel')
+  if (pKey === 'daily_report_25_26' && auth.hasProjectAccess(pKey) && !list.some((p) => p.page_key === 'joint_evaluation')) {
+    list.push({
+      page_key: 'joint_evaluation',
+      page_name: '主城区供热联合评价模型（测试）',
+      page_description: '基于 HDD20 参考单耗与投诉强度指数的四象限联合诊断看板',
+      page_url: '/projects/daily_report_25_26/pages/joint_evaluation',
+    })
+  }
   if (pKey === 'daily_report_25_26' && (isGlobalAdmin || auth.hasPageAccess(pKey, 'data_entry'))) {
     list = list.filter(p => p.page_key !== 'data_corrections')
     list.push({ page_key: 'data_corrections', page_name: '数据修正申请记录',
@@ -370,6 +378,9 @@ function getCardCustomClass(groupKey, page) {
   const key = String(page?.page_key || page?.page_url || '').trim().toLowerCase()
   if (key === 'dashboard') {
     return 'card-primary-dashboard'
+  }
+  if (projectKey === 'daily_report_25_26' && key === 'data_analysis') {
+    return 'card-primary-analysis'
   }
   if (groupKey === 'entry_approval') {
     if (key === 'data_entry') {
@@ -656,6 +667,12 @@ function openPage(page) {
     router.push({
       path: `${base}`,
       query: { pageName: page.page_name || '调度信息' },
+    })
+    return
+  }
+  if (normalizedKey === 'joint_evaluation') {
+    router.push({
+      path: `${base}`,
     })
     return
   }
@@ -1082,6 +1099,29 @@ function openPage(page) {
 
 .page-card.card-primary-dashboard .page-card-desc {
   color: rgba(255, 255, 255, 0.94);
+}
+
+/* 第三组重点卡片：数据查询与分析（轻快通透渐变绿，风格同每日数据填报） */
+.page-card.card-primary-analysis {
+  background: linear-gradient(135deg, #16a34a 0%, #22c55e 45%, #4ade80 100%);
+  border: 1px solid #4ade80;
+  box-shadow: 0 3px 12px rgba(34, 197, 94, 0.18);
+  position: relative;
+}
+
+.page-card.card-primary-analysis:hover {
+  background: linear-gradient(135deg, #15803d 0%, #16a34a 45%, #22c55e 100%);
+  box-shadow: 0 6px 18px rgba(34, 197, 94, 0.28);
+  transform: translateY(-2px);
+  border-color: #86efac;
+}
+
+.page-card.card-primary-analysis .page-card-title {
+  color: #ffffff;
+}
+
+.page-card.card-primary-analysis .page-card-desc {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 /* 手机窄屏响应式优化：审批状态与页面容器紧凑排版 */

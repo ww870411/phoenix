@@ -1,3 +1,23 @@
+## 2026-11-26 将 `joint_evaluation` 入口卡片名称调整为「主城区供热联合评价模型（测试）」 (`项目列表.json`)
+
+- **`backend_data/shared/项目列表.json`**：将 `daily_report_25_26.pages.joint_evaluation.页面名称` 更新为 `主城区供热联合评价模型（测试）`。
+
+## 2026-11-26 向所有生产日报项目授权用户组开放「主城区供热联合评价模型」接口与页面清单 (`joint_evaluation.py`, `routes.py`, `项目列表.json`, `daily_report_25_26.json`)
+
+- **`projects/daily_report_25_26/api/joint_evaluation.py`**：`get_joint_evaluation()` 放开 `Global_admin` 独占限制，改为校验 `session.has_project_access("daily_report_25_26")`。
+- **`api/v1/routes.py` & `backend_data/shared/{项目列表.json,auth/permissions/daily_report_25_26.json}`**：在 `daily_report_25_26.pages` 注册 `joint_evaluation`，将其加入 `routes.py` `special_pages` 及生产日报全部 7 个用户组的 `page_access`。
+- **`projects/daily_report_25_26/tests/test_joint_evaluation.py`**：更新权限测试用例覆盖 7 个生产日报用户组放行与无项目权限组 403 拦截。
+
+## 2026-11-26 定向修正 `2026-03-28` 跨月误判操作时刻 (`repair_dispatch_20260328.py`)
+
+- **`scripts/repair_dispatch_20260328.py`（新增）**：将 `phoenix`（5432）库 `2026-03-28` 庄河环海“锅炉停运（因道路施工管网停运）”的 `time` 从 `27日17:30` 修正为 `17:30`（`event_date=2026-03-28`、`event_clock=17:30`），同步更新 `operations_and_tickets` 与 `log_items_json` 并校验 `reconcile_report()` 幂等。
+- **备份与回滚**：快照位于 `backend_data/projects/daily_report_25_26/runtime/dispatch-repair-20260328.json`，可通过 `docker exec phoenix_backend python -B -m backend.scripts.repair_dispatch_20260328 --restore data/projects/daily_report_25_26/runtime/dispatch-repair-20260328.json --apply` 回滚。
+
+## 2026-11-26 定向修复 `public.dispatch_daily_reports` 调度事件断句与工作票起止时间戳 (`repair_dispatch_ops_20261126.py`)
+
+- **`scripts/repair_dispatch_ops_20261126.py`（新增）**：默认只读预览，传 `--apply` 后备份快照并事务更新 `phoenix`（5432）库 `public.dispatch_daily_reports` 的 `operations_and_tickets` 与 `log_items_json`（共修正 77 天）：合并第一类跨行断句碎片、补全第二类多时刻拆分无主语短句并清除残留主体缺失告警、拆出工作票内嵌恢复事件为独立带时间戳记录、补全缺省工期起始时刻并规范 `time_range`、修正 `2026-11-21` `#3高减停运` 至 `22日3:30` 及 `2026-11-23` `21:53`/`23:30` 起止操作记录；执行前后通过 `reconcile_report()` 幂等校验与人工确认保护。
+- **备份与回滚**：快照位于 `backend_data/projects/daily_report_25_26/runtime/dispatch-ops-repair-20261126-v2.json`，可通过 `docker exec phoenix_backend python -B -m backend.scripts.repair_dispatch_ops_20261126 --restore data/projects/daily_report_25_26/runtime/dispatch-ops-repair-20261126-v2.json --apply` 事务回滚。
+
 ## 2026-11-25 全平台接入「在线站零耗热/热表挂零」异常识别 (`cleaning_engine.py`, `collector_engine.py`, `report_query_service.py`, `faults.py`)
 
 - **`projects/smart_heating_platform/services/cleaning_engine.py`**：新增 `FAULT_HEAT_METER_ZERO = "HEAT_METER_ZERO"` 与 `detect_station_zero_heat_fault()`，在换热站在线但 `hour_heat_gj` 缺失或 `<= 0.01` 时结合一网流量、阀门、供回温度/温差或四项全缺条件识别零耗热故障（排除离线站及 `<30℃` 低温停运）。

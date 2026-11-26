@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""主城区供热运行联合评价模型接口；严格限定 Global_admin 访问。"""
+"""主城区供热运行联合评价模型接口；面向所有有权访问生产日报项目的用户组开放。"""
 
 from __future__ import annotations
 
@@ -25,9 +25,10 @@ def get_joint_evaluation(
     period_count: int = Query(default=7, ge=1, le=60, description="显示周期数量（单日模式控制附带轨迹天数）"),
     session: AuthSession = Depends(get_current_session),
 ):
-    """仅允许 Global_admin 访问的主城区供热联合评价计算接口。"""
-    if session.group != "Global_admin":
-        raise HTTPException(status_code=403, detail="主城区供热联合评价模型仅限 Global_admin 访问")
+    """允许所有具备 daily_report_25_26 项目访问权限的用户组访问主城区供热联合评价接口。"""
+    has_project_access = getattr(session, "has_project_access", None)
+    if callable(has_project_access) and not has_project_access("daily_report_25_26"):
+        raise HTTPException(status_code=403, detail="当前账号无权访问主城区供热联合评价模型")
 
     try:
         with SessionLocal() as db:

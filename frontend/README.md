@@ -1,3 +1,24 @@
+## 2026-11-26 升级「主城区供热联合评价模型（测试）」商务样式化 Excel 导出 (`styledExcelBase.js`, `jointEvaluationExcelExport.js`, `JointEvaluationView.vue`)
+
+- **`src/projects/daily_report_25_26/utils/styledExcelBase.js`（新增）**：从 `analysisExcelExport.js` 抽离共享的 `xlsx-js-style` 商务表格样式渲染与列宽计算逻辑（`renderStyledRowsToSheet`、`appendSectionTable`、`makeCell`、`makeNumberCell`、`makeRateCell` 等），`analysisExcelExport.js` 保持原有导出接口不变并复用该基座。
+- **`src/projects/daily_report_25_26/utils/jointEvaluationExcelExport.js`（新增）**：生成「联合评价诊断汇总」与「逐日联合评价明细」双工作表商务样式 Excel（含合并横幅/副标题、深色表头、千分位数值格式、四象限/经验带/偏差率/投诉指数语义着色及双底线合计行）。
+- **`src/projects/daily_report_25_26/pages/JointEvaluationView.vue`**：`exportExcel()` 改用 `exportJointEvaluationExcelFile()` 导出。
+- **`src/projects/daily_report_25_26/tests/jointEvaluationExcelExport.test.mjs`（新增）**：覆盖汇总表、轨迹对照、明细表样式及双底线总计行单测（与 `analysisExcelExport.test.mjs` 4/4 全部通过）。
+
+## 2026-11-26 将「主城区供热联合评价模型」入口卡片更名为「主城区供热联合评价模型（测试）」 (`PageSelectView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/PageSelectView.vue`**：将 `withAdminExclusivePages()` 中 `joint_evaluation` 兜底卡片的 `page_name` 更新为 `主城区供热联合评价模型（测试）`（与后端 `项目列表.json` 保持一致）。
+
+## 2026-11-26 向所有生产日报项目授权用户组开放「主城区供热联合评价模型」前端入口与路由 (`auth.js`, `router/index.js`, `PageSelectView.vue`, `dailyBriefPresentation.js`)
+
+- **`src/projects/daily_report_25_26/store/auth.js`**：`hasPageAccess()` 新增对 `joint_evaluation` 的项目权限放行（`hasProjectAccess(projectKey)`）。
+- **`src/router/index.js`**：移除 `/projects/daily_report_25_26/pages/joint_evaluation` 的 `globalAdminOnly: true`，改由 `auth.hasProjectAccess('daily_report_25_26')` 校验。
+- **`src/projects/daily_report_25_26/{pages/PageSelectView.vue,composables/dailyBriefPresentation.js,services/api.js}`**：更新 `canAccessJointEvaluation()` 为项目级访问控制，将 `joint_evaluation` 入口注入移至 `PageSelectView.vue` `withAdminExclusivePages()` 兜底，并在 `openPage()` 增加 `normalizedKey === 'joint_evaluation'` 路由直跳避免误走 `/sheets` 通用分支（同时兼容 `withDailyBriefPage()` 原有单测结构）；`tests/daily-brief.test.mjs` 补充联合评价权限断言。
+
+## 2026-11-25 为「数据查询与分析」入口卡片增加绿色渐变高亮样式 (`PageSelectView.vue`)
+
+- **`src/projects/daily_report_25_26/pages/PageSelectView.vue`**：在 `getCardCustomClass` 中为 `daily_report_25_26` 的 `data_analysis` 卡片分配 `.card-primary-analysis`，仿照 `.card-primary-entry` 的饱和渐变风格配置绿色渐变背景、边框阴影、悬停态与白色文字。
+
 ## 2026-11-25 全平台异常站视图接入「在线零耗热/热表挂零」分类与筛选 (`DcsWorkbenchView.vue`, `FaultAuditView.vue`, `HourlyReportView.vue`)
 
 - **`src/projects/smart_heating_platform/pages/DcsWorkbenchView.vue`**：`classifyStation(s)` 新增 `HEAT_METER_ZERO` 识别逻辑，将在线零耗热/热表挂零换热站纳入告警列表（`severity: 'warning'`、`statusCode: 'WRN'`、`modeLabel: '热表挂零/无耗热'`）。
