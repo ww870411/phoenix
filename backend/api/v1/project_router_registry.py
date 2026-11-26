@@ -32,6 +32,10 @@ from backend.projects.smart_heating_platform.api.router import (
     public_router as smart_heating_platform_public_router,
     router as smart_heating_platform_router,
 )
+from backend.projects.meeting_seating.api.router import (
+    public_router as meeting_seating_public_router,
+    router as meeting_seating_router,
+)
 
 
 PROJECT_ROUTER_REGISTRY: Dict[str, Dict[str, Optional[object]]] = {
@@ -62,5 +66,9 @@ PROJECT_ROUTER_REGISTRY: Dict[str, Dict[str, Optional[object]]] = {
     "smart_heating_platform": {
         "router": smart_heating_platform_router,
         "public_router": smart_heating_platform_public_router,
+    },
+    "meeting_seating": {
+        "router": meeting_seating_router,
+        "public_router": meeting_seating_public_router,
     },
 }

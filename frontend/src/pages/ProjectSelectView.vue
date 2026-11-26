@@ -42,6 +42,7 @@ import AppHeader from '../projects/daily_report_25_26/components/AppHeader.vue'
 import Breadcrumbs from '../projects/daily_report_25_26/components/Breadcrumbs.vue'
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../projects/daily_report_25_26/store/auth'
 import {
   projects,
   projectsLoading,
@@ -50,14 +51,22 @@ import {
   resetProjectsState,
 } from '../projects/daily_report_25_26/composables/useProjects'
 const router = useRouter()
+const auth = useAuthStore()
 
-const projectList = computed(() => projects.value)
+const projectList = computed(() => {
+  const list = Array.isArray(projects.value) ? projects.value : []
+  const filtered = list.filter((p) => p?.project_id !== 'meeting_seating' || auth.isGlobalAdmin)
+  const seatingCard = filtered.find((p) => p?.project_id === 'meeting_seating')
+  if (!seatingCard) return filtered
+  return [...filtered.filter((p) => p?.project_id !== 'meeting_seating'), seatingCard]
+})
 const loading = computed(() => projectsLoading.value)
 const error = computed(() => (projectsError.value ? '无法加载项目列表，请稍后重试。' : ''))
 const DIRECT_ENTRY_PROJECTS = new Set([
   'daily_report_spring_festval_2026',
   'monthly_data_pull',
   'page_showcase',
+  'meeting_seating',
 ])
 
 function enter(project) {

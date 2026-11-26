@@ -202,7 +202,8 @@ function getCurrentPageName() {
       monthly_data_pull: '月度数据拉取',
       monthly_data_show: '月度数据展示',
       insulation_pipe_supply_2026: '2026保温管供给大盘',
-      page_showcase: '页面展示中心'
+      page_showcase: '页面展示中心',
+      meeting_seating: '会议排座助手'
     }
     const name = projectMap[route.params.projectKey]
     return name ? `${name}入口` : '项目入口'

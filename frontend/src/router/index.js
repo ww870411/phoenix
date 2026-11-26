@@ -345,6 +345,14 @@ router.beforeEach(async (to) => {
     return true
   }
 
+  // 5.4 会议排座助手：严格仅限 Global_admin 访问
+  if (to.path === '/projects/meeting_seating' || to.path.startsWith('/projects/meeting_seating/')) {
+    if (!auth.isGlobalAdmin) {
+      return makeForbiddenRedirect(to, 'meeting_seating', 'workspace')
+    }
+    return true
+  }
+
   // 6. 通用项目子页面路由（含 sheets、dashboard、data-entry、approval、display、data-analysis 等）
   const projectKey = String(to.params.projectKey || '').trim()
   const pageKey = String(to.params.pageKey || '').trim()

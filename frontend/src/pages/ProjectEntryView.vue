@@ -10,6 +10,7 @@ import { useRoute, useRouter } from 'vue-router'
 import SpringFestivalEntryView from '../projects/daily_report_spring_festval_2026/pages/SpringFestivalEntryView.vue'
 import MonthlyDataPullEntryView from '../projects/monthly_data_pull/pages/MonthlyDataPullEntryView.vue'
 import PageShowcaseEntryView from '../projects/page_showcase/pages/PageShowcaseEntryView.vue'
+import MeetingSeatingEntryView from '../projects/meeting_seating/pages/MeetingSeatingEntryView.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,6 +20,7 @@ const entryComponentMap = {
   daily_report_spring_festval_2026: SpringFestivalEntryView,
   monthly_data_pull: MonthlyDataPullEntryView,
   page_showcase: PageShowcaseEntryView,
+  meeting_seating: MeetingSeatingEntryView,
 }
 
 const entryComponent = computed(() => entryComponentMap[projectKey.value] || null)

@@ -1,3 +1,15 @@
+## 2026-11-26 更新「会议排座助手 (`meeting_seating`)」默认纵向纸张与左上角设备室配置 (`profile_store.py`)
+- **`projects/meeting_seating/services/profile_store.py`**：将默认布局 `paper` 调整为 `portrait`（A4 纵向），并在 `room` 结构中新增 `equipmentRoom` 配置及校验支持。
+
+## 2026-11-26 精简「会议排座助手 (`meeting_seating`)」存储结构为按边/排管理 (`profile_store.py`)
+- **`projects/meeting_seating/services/profile_store.py`**：将布局模型调整为按边/排 `rows` 管理（每边默认 3 桌拼接共 6 席，支持 `0~24` 座与整排/单座 `hidden` 标记），并保留 `plants` 坐标及历史 v2 `tables` 数据自动迁移。
+
+## 2026-11-26 新增「会议排座助手 (`meeting_seating`)」后端存档配置与鉴权接口 (`profile_store.py`, `router.py`)
+- **`projects/meeting_seating/services/profile_store.py`（新增）**：管理 `backend_data/projects/meeting_seating/config/seating_profiles.json` 多方案配置文件，提供实景回字默认布局生成（右上外开门、两侧窗、每边 3 桌拼接、左右竖边略长于上下横边、4 盆可移动绿植）及线程安全的存档增删改查、重命名与激活切换。
+- **`projects/meeting_seating/api/router.py`（新增）**：提供 `/api/v1/projects/meeting_seating/profiles` 系列 REST 接口，全端点严格校验 `Global_admin` 权限并注册至 `api/v1/project_router_registry.py`。
+- **`backend_data/shared/{项目列表.json,auth/permissions/meeting_seating.json}`**：在项目列表末尾注册 `meeting_seating`，`availability` 与权限矩阵仅授权 `Global_admin`。
+- **`projects/meeting_seating/tests/test_meeting_seating_api.py`（新增）**：覆盖配置文件 CRUD、几何约束与 `Global_admin` 独占鉴权单测（2/2 通过）。
+
 ## 2026-11-26 将 `joint_evaluation` 预报基准对照日 `offset_label` 更名为「业务日对照」 (`joint_evaluation.py`)
 
 - **`projects/daily_report_25_26/services/joint_evaluation.py`**：将 `build_forecast_payload()` 返回的 `baseline.offset_label` 从 `业务日(基准)` 更新为 `业务日对照`。

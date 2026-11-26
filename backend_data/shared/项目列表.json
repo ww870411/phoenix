@@ -258,5 +258,18 @@
         "页面描述": "设置源站连接地址、Session Cookie、采样与真空期自动补齐选项"
       }
     }
+  },
+  "meeting_seating": {
+    "availability": [
+      "Global_admin"
+    ],
+    "project_name": "会议排座助手",
+    "pages": {
+      "workspace": {
+        "页面名称": "会议排座工作台",
+        "数据源": "backend_data/projects/meeting_seating/config/seating_profiles.json",
+        "页面描述": "交互式会场平面排座、桌椅自由编排、多方案存档与 A4 打印工作台"
+      }
+    }
   }
 }

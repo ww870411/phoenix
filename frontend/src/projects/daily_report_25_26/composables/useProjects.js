@@ -66,6 +66,7 @@ const KNOWN_PROJECT_NAMES = {
   monthly_data_show: '月报导入与查询',
   insulation_pipe_supply_2026: '2026年度保温管、管件物流链管理系统',
   page_showcase: '页面展示',
+  meeting_seating: '会议排座助手',
 };
 
 export function getProjectNameById(projectId) {

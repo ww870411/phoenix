@@ -1,5 +1,74 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-26 整体下移「会议排座助手 (`meeting_seating`)」桌椅排布约一个座位高度 (`seatingLayout.js`, `profile_store.py`)
+- **缘由**：按用户要求将所有桌椅整体向下方微调约一个座位的尺寸，拉大主席席与正前方大屏/左上角设备室之间的前区通道空间。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/utils/seatingLayout.js`：将 `computeRoomScene()` 中 `ty` 从 `wallTop + 116` 调整为 `wallTop + 160`（下移 `44px`，约一个座位高度 `40px` + 间距），同步更新 `defaultPlants()` 初始花盆 `y` 坐标（`392`/`584`）。
+  - `backend/projects/meeting_seating/services/profile_store.py`：同步默认花盆 `y` 坐标为 `392`/`584`。
+  - `frontend/src/projects/meeting_seating/tests/seatingLayout.test.mjs`：同步断言新花盆默认纵坐标。
+- **影响面**：直接作用于 `meeting_seating` 渲染画布，现有存档中已录入人员及自定义花盆位置不受破坏。
+
+## 2026-11-26 改用物理毫米锁定 `meeting_seating` 打印根容器高度以杜绝横向/纵向空白第二页 (`MeetingSeatingEntryView.vue`)
+- **缘由**：此前在 `@media print` 中使用 `95vh`，部分桌面浏览器仍按屏幕视口高度计算 `vh`，导致在横向纸张或高屏下溢出第 2 页空白页、在矮屏下纵向预览偏小。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`：改用精确物理高度（`A4 纵向 276mm`、`A4 横向 188mm`，`margin: 6mm`）同步锁定 `html`、`body`、`#app`、`.seating-app` 与 `.print-sheet`，并显式隐藏 `body > *:not(#app)`（如 Vite DevTools 锚点）与 `#app > *:not(.seating-app)`，同时缩减页眉/页脚留白使会场图充分铺满页面。
+- **影响面**：仅完善 `meeting_seating` 打印单页与页面占比效果。
+
+## 2026-11-26 调整「会议排座助手 (`meeting_seating`)」默认为 A4 纵向单页打印并新增左上角「设备室」 (`profile_store.py`, `seatingLayout.js`, `SeatingCanvas.vue`, `MeetingSeatingEntryView.vue`)
+- **缘由**：会场平面图默认比例偏竖长（约 `870×1174`），切换为 `A4 纵向` 更贴合纸张比例；同时消除不同纸张方向/弹窗节点残留引起的打印第 2 页空白页，并在会场左上角按实景增加「设备室」构造展示。
+- **改动点**：
+  - `backend/projects/meeting_seating/services/profile_store.py` & `frontend/src/projects/meeting_seating/utils/seatingLayout.js`：将默认 `paper` 调整为 `'portrait'`（A4 纵向），并在 `room` 配置下新增 `equipmentRoom`（`enabled: true, label: '设备室'`），左留白与花盆点位同步对齐。
+  - `frontend/src/projects/meeting_seating/components/SeatingCanvas.vue`：在会场左上角绘制带木质隔墙、玻璃观察窗、内侧机柜示意及开门弧线的「设备室」，左侧窗户自动下移至设备室下方避免重叠，并补充黑白打印适配样式。
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`：打印样式改用 `95vh` 自适应纸张安全高度（同时兼容纵向与横向）、隐藏 `#app > *:not(.seating-app)` 全局叠加层、锁定 `#app` 打印最大高度防止第 2 页空白页，并在会场设定区增加「左上角设备室」开关。
+  - `backend/projects/meeting_seating/tests/test_meeting_seating_api.py` & `frontend/src/projects/meeting_seating/tests/seatingLayout.test.mjs`：同步验证 `portrait` 默认值与 `equipmentRoom` 布局结构。
+- **影响面**：仅增强 `meeting_seating` 会场平面细节与打印单页稳定性，历史方案自动兼容。
+
+## 2026-11-26 修复「会议排座助手 (`meeting_seating`)」A4 打印多出一页空白页问题 (`MeetingSeatingEntryView.vue`)
+- **缘由**：全局 `theme.css` 对 `html, body, #app` 设置了 `height: 100%`，且此前 `--seating-print-height`（`190mm`/`278mm`）贴近纸张可打印上限及 `.seating-svg` 的 `overflow: visible`，导致打印预览多出第 2 页空白页。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`：在 `updatePagePrintStyle()` 动态全局样式中增加 `@media print` 下 `html, body, #app` 高度复位（`height: auto !important; min-height: 0 !important; overflow: hidden !important;`）；将安全打印高度收敛为 `184mm`（横向）/ `270mm`（纵向）并收紧 SVG `overflow: hidden !important`；打印期间 `sheetStyle` 自动忽略界面缩放比例并监听 `afterprint` 复位状态。
+- **影响面**：仅修复 `meeting_seating` 打印单页收敛效果，不影响页面交互与其他模块样式。
+
+## 2026-11-26 修复「会议排座助手 (`meeting_seating`)」下方横排标签与下一排桌子重合遮挡问题 (`seatingLayout.js`)
+- **缘由**：此前 `computeRoomScene()` 中 `rearStep = 90`，而横排桌面（`38`）+ 座椅（`40`）+ 标签中心偏移（`54`）占高超出 `90`，导致「后方第1排」「后方第2排」文字标签落入下一排桌面上被遮挡。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/utils/seatingLayout.js`：将 `rearStartOffset` 设为 `84`、`rearStep` 提升至 `114`（底部留白 `44`），使每排标签与下一排桌子之间保持清晰间隔；
+  - `frontend/src/projects/meeting_seating/tests/seatingLayout.test.mjs`：补充防重叠校验断言。
+- **影响面**：仅修复 `meeting_seating` 画布下方横排间距与可读性，不影响数据存储与接口。
+
+## 2026-11-26 精简「会议排座助手 (`meeting_seating`)」交互，取消自由拖桌并改为按边/排设置座位数 (`profile_store.py`, `seatingLayout.js`, `SeatingCanvas.vue`, `MeetingSeatingEntryView.vue`)
+- **缘由**：按用户反馈简化排布操作，移除复杂的自由拖动单桌/旋转/桌长调整功能，改为直观的按边/排统一设置座位数，同时保留每边 3 桌拼接缝线显示、左右竖边略长于上下横边、右上外开门、双侧窗户、隐藏整排/单座、花盆拖动调整、多存档配置、排座/布局初始化、A4 打印及手机窄屏排版。
+- **改动点**：
+  - `backend/projects/meeting_seating/services/profile_store.py` & `tests/test_meeting_seating_api.py`：重构配置存储为简洁的按排 `rows` 模型（每边默认 3 桌拼接共 6 席，支持 0~24 座及整排/单座 `hidden` 标记），并兼容自动迁移历史 v2 `tables` 数据。
+  - `frontend/src/projects/meeting_seating/utils/seatingLayout.js` & `components/SeatingCanvas.vue`：新增 `computeRoomScene()` 根据各边座位数实时计算中央方形 3 桌拼接及外围排几何位置，保持左右竖边外沿始终略长于上下横边；画布支持拖动座位互换、直接拖动花盆调整位置及隐藏轮廓预览。
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue` & `tests/seatingLayout.test.mjs`：移除「布局编排模式」与单桌坐标面板，改回按排增减座位数、改名、新增/删除外围排、整排/单座显隐及复位花盆操作。
+- **影响面**：仅调整 `meeting_seating` 模块交互与布局数据模型，自动向后兼容旧版 JSON 与已保存的 v2 数据。
+
+## 2026-11-26 为「会议排座助手 (`meeting_seating`)」增加排座与布局初始化功能 (`seatingLayout.js`, `MeetingSeatingEntryView.vue`)
+- **缘由**：支持在排座与布局编排过程中一键初始化排座名单或初始化会场默认布局，且全操作可撤销。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/utils/seatingLayout.js`：新增 `resetSeatingNames()`（仅清空全部座位姓名、保留现有桌椅/花盆/隐藏布局）与 `resetRoomLayout()`（恢复默认实景回字布局，可选按分组优先回填已排姓名或完全清空）。
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`：在顶部工具栏及对应编辑分栏新增「初始化排座」与「初始化布局」入口（弹窗可选「仅初始化布局（尽量保留已排姓名）」或「全部初始化（恢复布局并清空姓名）」），操作均纳入撤销/重做栈并自动同步配置文件。
+  - `frontend/src/projects/meeting_seating/tests/seatingLayout.test.mjs`：补充排座初始化与布局初始化（保留/清空姓名）单测。
+- **影响面**：仅增强 `meeting_seating` 前端工作台的初始化交互，不影响后端接口与其他项目。
+
+## 2026-11-26 集成「会议排座助手 (`meeting_seating`)」至平台 `/projects` 末位卡片（仅限 `Global_admin`）
+- **缘由**：将 `configs/会议排座助手.html` 全面升级并集成到凤凰平台中，放置于 `/projects` 最后一张卡片且严格限制仅 `Global_admin` 可见与访问，同时按实际会场布局与灵活用座需求完成重构。
+- **改动点**：
+  - **项目与权限配置**：在 `backend_data/shared/项目列表.json` 末尾注册 `meeting_seating`（`availability: ["Global_admin"]`），新增 `backend_data/shared/auth/permissions/meeting_seating.json`（仅授权 `Global_admin`）。
+  - **后端服务与路由**：新增 `backend/projects/meeting_seating/services/profile_store.py` 与 `api/router.py`（注册至 `backend/api/v1/project_router_registry.py`），将多方案配置持久化至 `backend_data/projects/meeting_seating/config/seating_profiles.json`，提供新建、切换、保存、重命名与删除存档接口，并全量校验 `Global_admin`。
+  - **前端平面图与工作台**：新增 `frontend/src/projects/meeting_seating/`（`MeetingSeatingEntryView.vue`、`SeatingCanvas.vue`、`utils/seatingLayout.js`、`services/api.js` 及实景照片资源），接入 `router/index.js`、`ProjectSelectView.vue`、`ProjectEntryView.vue`、`useProjects.js`、`AppHeader.vue`：
+    1. 门位于会议室右上角并朝上方外开，右侧墙体与最左侧墙体均配备对称窗户；
+    2. 中央方形由每边 3 张桌子拼接并清晰绘制拼接缝线，左右两竖边因桌角对齐略长于上下两横边；
+    3. 每张桌默认 2 把紧凑椅子（3 桌 6 席），支持单桌 0~8 座及整组快捷设座；
+    4. 支持跨设备服务端配置文件多存档（新建、命名、重命名、删除）及 JSON/CSV 导入导出；
+    5. 「布局编排」模式支持自由拖动桌子/花盆、旋转、新增/复制/删除及套用 U 型/课桌式/研讨岛屿格局；
+    6. 保留 A4 横/纵向及黑白打印模式，自动隐藏非打印控件与已隐藏桌椅；
+    7. 支持隐藏整桌、整排或单把椅子并可开启隐藏轮廓预览恢复；
+    8. 针对手机窄屏提供画布置顶、底部快捷姓名录入条及 4 分栏控制面板。
+  - **单测与构建**：`pytest`（`test_meeting_seating_api.py` 2/2 通过）、`node --test`（`seatingLayout.test.mjs` 3/3 通过）、`npm --prefix frontend run build` 通过。
+- **影响面**：仅新增 `meeting_seating` 独立项目模块及 `Global_admin` 专属入口，不影响其他业务项目与已有权限组。
+
 ## 2026-11-26 移除数据审批页、数据展示页与常量指标页子表填报状态数字标签 (`Sheets.vue`)
 - **缘由**：数据审批页面（`data_approval`，`数据结构_审批用表.json`）、数据展示页面（`data_show`，`数据结构_全口径展示表.json`）与常量指标页面（`constant_data`，`数据结构_常量指标表.json`）不适用每日数据填报进度的数量提示标签。
 - **改动点**：
