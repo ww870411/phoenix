@@ -18,9 +18,11 @@ if str(ROOT_DIR) not in sys.path:
 
 from backend.projects.daily_report_25_26.api.joint_evaluation import router as joint_eval_router  # noqa: E402
 from backend.projects.daily_report_25_26.services.joint_evaluation import (  # noqa: E402
+    _fetch_near_temperature_daily_map,
     _normalize_area_to_10k_m2,
     aggregate_eval_rows,
     build_daily_eval_row,
+    build_forecast_payload,
     collect_rolling_periods,
     is_valid_eval_date,
     split_date_range,
@@ -152,4 +154,79 @@ def test_joint_evaluation_api_allows_project_members_and_denies_outsiders() -> N
             allowed = client.get("/joint-evaluation")
         assert allowed.status_code == 200
         assert allowed.json()["ok"] is True
+
+
+def test_forecast_payload_uses_five_days_after_biz_date_excluding_base() -> None:
+    """确认预报固定展示业务日之后 5 日（不含业务日自身），且逐日滚算前 3 日热惯性基准。"""
+    near_map = {
+        "2026-11-21": {"avg_temp": 0.0, "min_temp": -2.0, "max_temp": 2.0, "hours_count": 24},
+        "2026-11-22": {"avg_temp": 4.34, "min_temp": -1.8, "max_temp": 10.1, "hours_count": 24},
+        "2026-11-23": {"avg_temp": 6.86, "min_temp": 3.3, "max_temp": 10.1, "hours_count": 24},
+        "2026-11-24": {"avg_temp": 0.56, "min_temp": -1.0, "max_temp": 2.0, "hours_count": 24},
+        "2026-11-25": {"avg_temp": 7.82, "min_temp": 1.4, "max_temp": 11.0, "hours_count": 24},
+        "2026-11-26": {"avg_temp": 10.78, "min_temp": 9.6, "max_temp": 12.7, "hours_count": 24},
+        "2026-11-27": {"avg_temp": 8.86, "min_temp": 6.4, "max_temp": 11.7, "hours_count": 24},
+        "2026-11-28": {"avg_temp": 3.73, "min_temp": 3.0, "max_temp": 5.6, "hours_count": 24},
+        "2026-11-29": {"avg_temp": 7.20, "min_temp": 2.6, "max_temp": 10.5, "hours_count": 24},
+        # 第 6 日（11-30）即使存在也不应进入固定 5 日预报列表
+        "2026-11-30": {"avg_temp": 10.76, "min_temp": 9.1, "max_temp": 14.4, "hours_count": 24},
+    }
+    area_map = {"26-27": 2323.0925}
+
+    forecast = build_forecast_payload(
+        base_date=date(2026, 11, 24),
+        near_temp_map=near_map,
+        fallback_avg_temp_map={},
+        area_map=area_map,
+        base_actual_heat_gj=40876.0,
+        base_actual_complaints=95.0,
+    )
+
+    assert forecast["base_date"] == "2026-11-24"
+    assert forecast["horizon_days"] == 5
+    assert forecast["temperature_type"] == "near"
+    assert forecast["baseline"]["date"] == "2026-11-24"
+    assert forecast["baseline"]["actual_heat_gj"] == 40876.0
+    assert [d["date"] for d in forecast["days"]] == [
+        "2026-11-25",
+        "2026-11-26",
+        "2026-11-27",
+        "2026-11-28",
+        "2026-11-29",
+    ]
+    # 验证 11-25 的前 3 日均值来自 11-22/23/24 的 HDD20 均值
+    d1, d2, d3, d4, d5 = forecast["days"]
+    assert d1["offset_days"] == 1
+    assert abs(d1["hdd20_prev3"] - ((15.66 + 13.14 + 19.44) / 3.0)) <= 0.02
+    assert d1["ref_heat_gj"] > 0
+    assert d2["ref_heat_gj"] < d1["ref_heat_gj"]
+    # 验证第 5 日 11-29 的前 3 日均值来自 11-26/27/28 的 HDD20 均值
+    assert abs(d5["hdd20_prev3"] - ((9.22 + 11.14 + 16.27) / 3.0)) <= 0.02
+    assert d5["delta_vs_base_actual_gj"] is not None
+    assert d5["advice"]["tag"]
+    assert forecast["advisory"]["trend_type"] == "warming"
+    assert forecast["advisory"]["total_ref_heat_gj"] > 0
+
+
+def test_fetch_near_temperature_daily_map_filters_near_type() -> None:
+    """确认预报气温查询 SQL 严格限定 type = 'near'。"""
+    captured = {}
+
+    class DummyResult:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [{"day": date(2026, 11, 25), "avg_temp": 7.82, "min_temp": 1.4, "max_temp": 11.0, "hours_count": 24}]
+
+    class DummySession:
+        def execute(self, sql, params):
+            captured["sql"] = str(sql)
+            captured["params"] = params
+            return DummyResult()
+
+    out = _fetch_near_temperature_daily_map(DummySession(), date(2026, 11, 25), date(2026, 11, 27))
+    assert "type = :temp_type" in captured["sql"]
+    assert captured["params"]["temp_type"] == "near"
+    assert out["2026-11-25"]["hours_count"] == 24
 

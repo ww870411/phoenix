@@ -236,6 +236,44 @@ export function buildJointEvaluationSummarySheet(payload, options = {}) {
     )
   }
 
+  // 未来 3 日参考耗热基准（固定取最新业务日后 3 日 near 预报，含业务日本身作基准对照）
+  const forecast = payload?.forecast || null
+  const forecastDays = Array.isArray(forecast?.days) ? forecast.days : []
+  if (forecastDays.length > 0) {
+    rowSpecs.push({ type: 'blank', height: 10, cells: [] })
+    const forecastRows = []
+    if (forecast?.baseline) {
+      const b = forecast.baseline
+      forecastRows.push([
+        makeCell(b.date || '—', { align: 'center', bold: true, color: '0F172A', bg: 'F1F5F9' }),
+        makeCell('业务日对照', { align: 'center', bold: true, color: '334155', bg: 'F1F5F9' }),
+        makeNumberCell(b.avg_temp, 2, { bg: 'F1F5F9' }),
+        makeNumberCell(b.hdd20_today, 2, { bg: 'F1F5F9' }),
+        makeNumberCell(b.ref_heat_gj, 0, { bold: true, color: '0369A1', bg: 'F1F5F9' }),
+        makeNumberCell(b.ref_unit_heat, 2, { bg: 'F1F5F9' }),
+        makeCell('已知实况', { align: 'center', color: '475569', bg: 'F1F5F9' }),
+      ])
+    }
+    forecastDays.forEach((d) => {
+      forecastRows.push([
+        makeCell(d.date || '—', { align: 'center', bold: true, color: '0F172A' }),
+        makeCell(`+${d.offset_days || ''}日`, { align: 'center', bold: true, color: '1D4ED8' }),
+        makeNumberCell(d.avg_temp, 2),
+        makeNumberCell(d.hdd20_today, 2),
+        makeNumberCell(d.ref_heat_gj, 0, { bold: true, color: '0369A1' }),
+        makeNumberCell(d.ref_unit_heat, 2),
+        makeCell('near 预报', { align: 'center', color: '475569' }),
+      ])
+    })
+    const horizonDays = forecast.horizon_days || forecastDays.length
+    appendSectionTable(
+      rowSpecs,
+      `未来${horizonDays}日耗热量参考基准（业务日 ${forecast.base_date || '—'} 后 ${horizonDays} 日 near 预报）`,
+      ['日期', '角色', '日均气温(℃)', 'HDD20', '参考耗热量(GJ)', '热单耗(GJ/万㎡·日)', '来源'],
+      forecastRows,
+    )
+  }
+
   // 底部模型口径说明
   rowSpecs.push({ type: 'blank', height: 10, cells: [] })
   rowSpecs.push({

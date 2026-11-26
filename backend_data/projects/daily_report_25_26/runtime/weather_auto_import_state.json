@@ -1,7 +1,7 @@
 {
-  "last_attempt_time": "2026-11-26 10:00:27",
+  "last_attempt_time": "2026-11-26 14:00:31",
   "last_attempt_status": "FAILED",
-  "last_attempt_trigger": "定时自动 (10:00)",
+  "last_attempt_trigger": "定时自动 (14:00)",
   "last_attempt_message": "气温获取或入库失败：请求 Open-Meteo 失败: _ssl.c:994: The handshake operation timed out",
   "last_success_time": "2026-11-25 16:00:01",
   "last_success_trigger": "定时自动 (16:00)",
@@ -25,22 +25,25 @@
       "2026-12-01"
     ]
   },
-  "last_failure_time": "2026-11-26 10:00:27",
-  "last_failure_trigger": "定时自动 (10:00)",
+  "last_failure_time": "2026-11-26 14:00:31",
+  "last_failure_trigger": "定时自动 (14:00)",
   "last_failure_message": "气温获取或入库失败：请求 Open-Meteo 失败: _ssl.c:994: The handshake operation timed out",
   "executed_slots_date": "2026-11-26",
   "executed_slots_today": {
-    "10:00": "2026-11-26 10:00:07"
+    "10:00": "2026-11-26 10:00:07",
+    "14:00": "2026-11-26 14:00:10"
   },
   "history": [
     {
-      "time": "2026-11-26 10:00:27",
+      "time": "2026-11-26 14:00:31",
       "status": "FAILED",
       "trigger": "auto",
-      "trigger_label": "定时自动 (10:00)",
-      "scheduled_slot": "10:00",
+      "trigger_label": "定时自动 (14:00)",
+      "scheduled_slot": "14:00",
       "message": "气温获取或入库失败：请求 Open-Meteo 失败: _ssl.c:994: The handshake operation timed out",
-      "summary": null
+      "summary": null,
+      "first_time": "2026-11-26 10:00:27",
+      "repeat_count": 2
     },
     {
       "time": "2026-11-25 16:00:01",

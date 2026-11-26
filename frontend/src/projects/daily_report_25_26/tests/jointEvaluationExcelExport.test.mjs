@@ -56,6 +56,36 @@ const samplePayload = {
     quadrant: { code: 'I', name: 'Ⅰ 高耗热·高投诉' },
   },
   periods: [],
+  forecast: {
+    base_date: '2026-11-25',
+    horizon_days: 5,
+    temperature_type: 'near',
+    baseline: {
+      row_type: 'baseline',
+      date: '2026-11-25',
+      offset_label: '业务日(基准)',
+      avg_temp: 2.5,
+      hdd20_today: 17.5,
+      hdd20_prev3: 16.0,
+      ref_unit_heat: 17.6,
+      ref_heat_gj: 21120,
+      actual_heat_gj: 21840,
+      quadrant: { code: 'IV', name: 'Ⅳ 高耗热·低投诉' },
+    },
+    days: [
+      {
+        row_type: 'forecast',
+        date: '2026-11-26',
+        offset_days: 1,
+        offset_label: '后第1日 (+1d)',
+        avg_temp: 6.0,
+        hdd20_today: 14.0,
+        hdd20_prev3: 16.5,
+        ref_unit_heat: 16.37,
+        ref_heat_gj: 19644,
+      },
+    ],
+  },
   daily_rows: [
     {
       date: '2026-11-24',
@@ -111,7 +141,9 @@ test('buildJointEvaluationSummarySheet 生成商务样式汇总表及附带轨�
   assert.equal(ws.A5.s.font.color.rgb, 'FFFFFF')
   // 轨迹累计对照板块存在
   assert.equal(ws.A12.v, '📈 附带轨迹累计对照（近 2 个有效日先累计后求比）')
-  assert.ok(Array.isArray(ws['!merges']) && ws['!merges'].length >= 6)
+  // 未来 5 日参考基准板块存在
+  assert.equal(ws.A16.v, '未来5日耗热量参考基准（业务日 2026-11-25 后 5 日 near 预报）')
+  assert.ok(Array.isArray(ws['!merges']) && ws['!merges'].length >= 7)
 })
 
 test('buildJointEvaluationDetailSheet 与 Workbook 生成逐日明细、千分位数值、语义色与总计双底线', () => {

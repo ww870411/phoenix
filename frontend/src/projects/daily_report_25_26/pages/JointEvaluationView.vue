@@ -236,7 +236,6 @@
             </div>
             <div class="kpi-main">
               <span class="kpi-value font-mono">{{ formatSignedPercent(summary.heat_deviation_pct) }}</span>
-              <span class="kpi-sub-badge">{{ bandBadgeText }}</span>
             </div>
             <div class="kpi-details">
               <div class="kpi-detail-item">
@@ -263,9 +262,6 @@
             </div>
             <div class="kpi-main">
               <span class="kpi-value font-mono">{{ formatNum(summary.complaint_index, 1) }}</span>
-              <span class="kpi-sub-badge">
-                {{ complaintIndexDeltaText }}
-              </span>
             </div>
             <div class="kpi-details">
               <div class="kpi-detail-item">
@@ -384,15 +380,34 @@
           <article class="card chart-card trend-chart-card">
             <header class="chart-header">
               <div>
-                <h2 class="chart-title">单耗对照与投诉强度联动走势</h2>
+                <h2 class="chart-title">
+                  {{ trendMetricMode === 'heat' ? '耗热量对照与投诉强度联动走势' : '单耗对照与投诉强度联动走势' }}
+                </h2>
                 <p class="chart-desc">
-                  上图：实际单耗 vs HDD20 参考单耗（含日均气温）；下图：实际投诉量（按象限着色）vs 同月参考基准。
+                  {{
+                    trendMetricMode === 'heat'
+                      ? '上图：实际耗热量 vs 参考耗热量基准；下图：实际投诉量（按象限着色）vs 参考投诉基准。'
+                      : '上图：实际单耗 vs 参考单耗基准；下图：实际投诉量（按象限着色）vs 参考投诉基准。'
+                  }}
                 </p>
               </div>
               <div class="chart-toggles">
-                <span class="trend-scope-badge">
-                  {{ queryState.mode === 'rolling' && queryState.periodDays > 1 ? `按 ${periods.length} 个周期展示` : `共 ${dailyRows.length} 个有效日` }}
-                </span>
+                <div class="table-view-switch" role="group" aria-label="走势口径切换">
+                  <button
+                    type="button"
+                    :class="['sub-tab', { active: trendMetricMode === 'heat' }]"
+                    @click="setTrendMetricMode('heat')"
+                  >
+                    耗热量(GJ)
+                  </button>
+                  <button
+                    type="button"
+                    :class="['sub-tab', { active: trendMetricMode === 'unit' }]"
+                    @click="setTrendMetricMode('unit')"
+                  >
+                    单耗(GJ/万㎡)
+                  </button>
+                </div>
               </div>
             </header>
             <div ref="trendChartEl" class="chart-canvas trend-canvas"></div>
@@ -634,6 +649,7 @@ const errorMessage = ref('')
 const payload = ref(null)
 const showModelSpec = ref(false)
 const tableViewMode = ref('daily')
+const trendMetricMode = ref('heat')
 const selectedQuadrantFilter = ref('ALL')
 const highlightedRowKey = ref('')
 const hoveredRowKey = ref('')
@@ -732,6 +748,8 @@ const dailyRows = computed(() => (Array.isArray(payload.value?.daily_rows) ? pay
 const periods = computed(() => (Array.isArray(payload.value?.periods) ? payload.value.periods : []))
 const summary = computed(() => payload.value?.summary || null)
 const trajectorySummary = computed(() => payload.value?.trajectory_summary || null)
+const forecastData = computed(() => payload.value?.forecast || null)
+const forecastDays = computed(() => (Array.isArray(forecastData.value?.days) ? forecastData.value.days : []))
 const hasValidEvaluation = computed(() => {
   if (!payload.value) return false
   if (queryState.mode === 'single') {
@@ -777,24 +795,6 @@ const complaintToneClass = computed(() => {
   const idx = summary.value?.complaint_index
   if (idx == null) return 'tone-slate'
   return idx > 100 ? 'tone-danger' : 'tone-emerald'
-})
-
-const bandBadgeText = computed(() => {
-  const band = summary.value?.empirical_band
-  const status = summary.value?.band_status?.status
-  if (!band) return '—'
-  if (status === 'within_band') return `✓ ${band.label}经验带内`
-  if (status === 'above_p95') return `↑ 超${band.label}95%上界`
-  if (status === 'below_p5') return `↓ 低${band.label}5%下界`
-  return `${band.label}参考`
-})
-
-const complaintIndexDeltaText = computed(() => {
-  const idx = summary.value?.complaint_index
-  if (idx == null) return '—'
-  const diff = idx - 100
-  if (Math.abs(diff) < 0.05) return '持平历史基准'
-  return diff > 0 ? `高于基准 +${diff.toFixed(1)}` : `低于基准 ${diff.toFixed(1)}`
 })
 
 const hasAggregatePoint = computed(() => {
@@ -1299,21 +1299,58 @@ function renderQuadrantChart() {
     }
   })
 
-  // 构造带方向箭头的平滑分步轨迹线（线宽与透明度随时间递增）
+  const isMobile = isMobileViewport()
+  const chartW = quadrantChart.getWidth() || (quadrantChartEl.value?.clientWidth || 620)
+  const chartH = quadrantChart.getHeight() || (quadrantChartEl.value?.clientHeight || 460)
+  const plotLeft = isMobile ? 40 : 56
+  const plotRight = Math.max(plotLeft + 40, chartW - (isMobile ? 14 : 28))
+  const plotTop = isMobile ? 20 : 24
+  const plotBottom = Math.max(plotTop + 40, chartH - (isMobile ? 38 : 44))
+  const spanX = Math.max(xMax - xMin, 1e-6)
+  const spanY = Math.max(yMax - yMin, 1e-6)
+  const toPx = (x, y) => [
+    plotLeft + ((x - xMin) / spanX) * (plotRight - plotLeft),
+    plotBottom - ((y - yMin) / spanY) * (plotBottom - plotTop),
+  ]
+  const toData = (px, py) => [
+    xMin + ((px - plotLeft) / (plotRight - plotLeft)) * spanX,
+    yMin + ((plotBottom - py) / (plotBottom - plotTop)) * spanY,
+  ]
+
+  // 构造带方向箭头的平滑分步轨迹线：按像素缩进起终点至圆点外缘，避免箭头被目标圆点遮挡
   const lineEdges = []
   for (let i = 0; i < pts.length - 1; i += 1) {
     const ratio = pts.length <= 2 ? 1 : i / (pts.length - 2)
     const segColor = chartOptions.colorByTime ? interpolateColor(ratio) : '#6366f1'
+    const p0 = toPx(pts[i].x, pts[i].y)
+    const p1 = toPx(pts[i + 1].x, pts[i + 1].y)
+    const dx = p1[0] - p0[0]
+    const dy = p1[1] - p0[1]
+    const dist = Math.hypot(dx, dy)
+    const rStart = (scatterData[i]?.symbolSize || 12) / 2 + 2
+    const rEnd = (scatterData[i + 1]?.symbolSize || 12) / 2 + 3
+
+    let startCoord = [pts[i].x, pts[i].y]
+    let endCoord = [pts[i + 1].x, pts[i + 1].y]
+    if (dist > rStart + rEnd + 6) {
+      const ux = dx / dist
+      const uy = dy / dist
+      startCoord = toData(p0[0] + ux * rStart, p0[1] + uy * rStart)
+      endCoord = toData(p1[0] - ux * rEnd, p1[1] - uy * rEnd)
+    } else if (dist > rEnd + 3) {
+      const ux = dx / dist
+      const uy = dy / dist
+      const shrinkEnd = Math.min(rEnd, dist * 0.45)
+      endCoord = toData(p1[0] - ux * shrinkEnd, p1[1] - uy * shrinkEnd)
+    }
+
     lineEdges.push({
-      coords: [
-        [pts[i].x, pts[i].y],
-        [pts[i + 1].x, pts[i + 1].y],
-      ],
+      coords: [startCoord, endCoord],
       lineStyle: {
         color: segColor,
-        width: chartOptions.colorByTime ? Number((1.8 + ratio * 1.6).toFixed(2)) : 2.2,
-        opacity: chartOptions.colorByTime ? Number((0.62 + ratio * 0.36).toFixed(2)) : 0.78,
-        curveness: 0.12,
+        width: chartOptions.colorByTime ? Number((2.0 + ratio * 1.5).toFixed(2)) : 2.2,
+        opacity: chartOptions.colorByTime ? Number((0.68 + ratio * 0.30).toFixed(2)) : 0.82,
+        curveness: 0.09,
       },
     })
   }
@@ -1323,7 +1360,6 @@ function renderQuadrantChart() {
     ? scatterData.find(item => item.rowKey === highlightedRowKey.value) || null
     : null
 
-  const isMobile = isMobileViewport()
   const areaLabelSize = isMobile ? 10 : 12
   const areaLabelPad = isMobile ? [6, 6] : [10, 12]
 
@@ -1407,10 +1443,10 @@ function renderQuadrantChart() {
       type: 'lines',
       coordinateSystem: 'cartesian2d',
       symbol: ['none', 'arrow'],
-      symbolSize: 10,
+      symbolSize: isMobile ? 11 : 13,
       data: lineEdges,
       silent: true,
-      z: 3,
+      z: 6,
     },
     {
       name: '运行点位',
@@ -1581,6 +1617,20 @@ function renderTrendChart() {
 
   const usePeriods = queryState.mode === 'rolling' && queryState.periodDays > 1
   const items = usePeriods ? periods.value : dailyRows.value
+  const baseIso = forecastData.value?.base_date || ''
+  const lastHistDate = !usePeriods && items.length ? items[items.length - 1]?.date : ''
+  const showForecastTail = Boolean(
+    !usePeriods &&
+    baseIso &&
+    lastHistDate === baseIso &&
+    forecastDays.value.length > 0,
+  )
+  const forecastExtras = showForecastTail ? forecastDays.value : []
+  const histCount = items.length
+  const combinedEntries = [
+    ...items.map(item => ({ isForecast: false, data: item })),
+    ...forecastExtras.map(f => ({ isForecast: true, data: f })),
+  ]
 
   trendRowKeys = items.map((item, idx) => (usePeriods ? `period-${idx}-${item.start_date}` : item.date))
   trendIndexByRowKey = new Map()
@@ -1589,11 +1639,57 @@ function renderTrendChart() {
   })
   const focusedTrendIndex = highlightedRowKey.value ? trendIndexByRowKey.get(highlightedRowKey.value) : null
 
-  const xLabels = items.map(item => (usePeriods ? item.label : item.date.slice(5)))
-  const actualUnit = items.map(item => (usePeriods ? item.actual_unit_heat_avg : item.actual_unit_heat))
-  const refUnit = items.map(item => (usePeriods ? item.ref_unit_heat_avg : item.ref_unit_heat))
-  const avgTemp = items.map(item => item.avg_temp)
-  const actualComplaints = items.map((item, idx) => {
+  const isMobile = isMobileViewport()
+  const isHeatMode = trendMetricMode.value === 'heat'
+  const actualSeriesName = isHeatMode ? '实际耗热量' : '实际单耗'
+  const refSeriesName = isHeatMode ? '参考耗热量基准' : '参考单耗基准'
+  const xLabels = combinedEntries.map(entry => (usePeriods ? entry.data.label : entry.data.date.slice(5)))
+  const actualSeriesData = combinedEntries.map((entry) => {
+    if (entry.isForecast) return null
+    return isHeatMode
+      ? entry.data.actual_heat_gj
+      : (usePeriods ? entry.data.actual_unit_heat_avg : entry.data.actual_unit_heat)
+  })
+  const refSeriesData = combinedEntries.map((entry) => {
+    const val = isHeatMode
+      ? entry.data.ref_heat_gj
+      : (usePeriods ? entry.data.ref_unit_heat_avg : entry.data.ref_unit_heat)
+    if (!entry.isForecast) return val
+    return {
+      value: val,
+      symbol: 'diamond',
+      symbolSize: 8,
+      itemStyle: {
+        color: '#7c3aed',
+        borderColor: '#ffffff',
+        borderWidth: 1.5,
+      },
+    }
+  })
+  const hdd20BarData = combinedEntries.map((entry) => {
+    const hddVal = entry.isForecast
+      ? entry.data.hdd20_today
+      : (usePeriods ? entry.data.avg_hdd20_today : entry.data.hdd20_today)
+    return {
+      value: hddVal,
+      itemStyle: entry.isForecast
+        ? {
+            color: 'rgba(139, 92, 246, 0.20)',
+            borderColor: 'rgba(124, 58, 237, 0.45)',
+            borderWidth: 1,
+            borderRadius: [4, 4, 0, 0],
+          }
+        : {
+            color: 'rgba(6, 182, 212, 0.22)',
+            borderColor: 'rgba(8, 145, 178, 0.42)',
+            borderWidth: 1,
+            borderRadius: [4, 4, 0, 0],
+          },
+    }
+  })
+  const actualComplaints = combinedEntries.map((entry, idx) => {
+    if (entry.isForecast) return null
+    const item = entry.data
     const isFocused = focusedTrendIndex === idx
     return {
       value: item.actual_complaints,
@@ -1605,39 +1701,93 @@ function renderTrendChart() {
       },
     }
   })
-  const refComplaints = items.map(item => item.ref_complaints)
+  const refComplaints = combinedEntries.map(entry => entry.data.ref_complaints)
 
-  const focusMarkLineTop =
-    focusedTrendIndex != null
-      ? {
-          silent: true,
-          symbol: ['none', 'none'],
-          lineStyle: { color: '#7c3aed', width: 2, type: 'dashed' },
-          label: {
-            position: 'insideEndTop',
-            formatter: `📌 ${xLabels[focusedTrendIndex]}`,
-            color: '#6d28d9',
-            fontWeight: 700,
-            backgroundColor: '#f5f3ff',
-            padding: [2, 6],
-            borderRadius: 4,
+  const topMarkLineItems = []
+  const bottomMarkLineItems = []
+  if (showForecastTail && histCount > 0) {
+    const dividerLine = {
+      xAxis: histCount - 1,
+      lineStyle: { color: 'rgba(249, 115, 22, 0.38)', width: 1.2, type: 'dashed' },
+      label: {
+        position: 'insideStartTop',
+        formatter: '业务日对照',
+        color: '#c2410c',
+        fontSize: 10,
+        fontWeight: 600,
+        backgroundColor: 'rgba(255, 247, 237, 0.85)',
+        padding: [1, 4],
+        borderRadius: 3,
+      },
+    }
+    topMarkLineItems.push(dividerLine)
+    bottomMarkLineItems.push({
+      xAxis: histCount - 1,
+      lineStyle: { color: 'rgba(249, 115, 22, 0.32)', width: 1.2, type: 'dashed' },
+      label: { show: false },
+    })
+  }
+  if (focusedTrendIndex != null) {
+    topMarkLineItems.push({
+      xAxis: focusedTrendIndex,
+      lineStyle: { color: '#7c3aed', width: 2, type: 'dashed' },
+      label: {
+        position: 'insideEndTop',
+        formatter: `📌 ${xLabels[focusedTrendIndex]}`,
+        color: '#6d28d9',
+        fontWeight: 700,
+        backgroundColor: '#f5f3ff',
+        padding: [2, 6],
+        borderRadius: 4,
+      },
+    })
+    bottomMarkLineItems.push({
+      xAxis: focusedTrendIndex,
+      lineStyle: { color: '#7c3aed', width: 2, type: 'dashed' },
+      label: { show: false },
+    })
+  }
+
+  const focusMarkLineTop = topMarkLineItems.length
+    ? { silent: true, symbol: ['none', 'none'], data: topMarkLineItems }
+    : undefined
+  const focusMarkLineBottom = bottomMarkLineItems.length
+    ? { silent: true, symbol: ['none', 'none'], data: bottomMarkLineItems }
+    : undefined
+
+  const forecastMarkAreaTop = showForecastTail && histCount > 0
+    ? {
+        silent: true,
+        data: [[
+          {
+            name: `未来${forecastExtras.length}日预计`,
+            xAxis: histCount - 1,
+            itemStyle: { color: 'rgba(124, 58, 237, 0.055)' },
+            label: {
+              position: 'insideTopRight',
+              color: '#6d28d9',
+              fontSize: isMobile ? 9.5 : 10.5,
+              fontWeight: 700,
+              padding: [4, 6],
+            },
           },
-          data: [{ xAxis: focusedTrendIndex }],
-        }
-      : undefined
+          { xAxis: combinedEntries.length - 1 },
+        ]],
+      }
+    : undefined
 
-  const focusMarkLineBottom =
-    focusedTrendIndex != null
-      ? {
-          silent: true,
-          symbol: ['none', 'none'],
-          lineStyle: { color: '#7c3aed', width: 2, type: 'dashed' },
-          label: { show: false },
-          data: [{ xAxis: focusedTrendIndex }],
-        }
-      : undefined
-
-  const isMobile = isMobileViewport()
+  const forecastMarkAreaBottom = showForecastTail && histCount > 0
+    ? {
+        silent: true,
+        data: [[
+          {
+            xAxis: histCount - 1,
+            itemStyle: { color: 'rgba(124, 58, 237, 0.04)' },
+          },
+          { xAxis: combinedEntries.length - 1 },
+        ]],
+      }
+    : undefined
 
   trendChart.setOption(
     {
@@ -1649,6 +1799,40 @@ function renderTrendChart() {
         backgroundColor: 'rgba(15, 23, 42, 0.94)',
         borderColor: '#334155',
         textStyle: { color: '#f8fafc', fontSize: 12 },
+        formatter: (params) => {
+          const list = Array.isArray(params) ? params : []
+          const idx = list[0]?.dataIndex
+          const entry = idx != null ? combinedEntries[idx] : null
+          if (!entry) return ''
+          if (entry.isForecast) {
+            const f = entry.data
+            const minMax = f.min_temp != null && f.max_temp != null
+              ? `（${formatNum(f.min_temp, 1)} ~ ${formatNum(f.max_temp, 1)}℃）`
+              : ''
+            return [
+              `<div style="font-weight:700;color:#c4b5fd;margin-bottom:4px;">${f.date}（未来第${f.offset_days}日预计 · near）</div>`,
+              `<div>HDD20：<b style="color:#7dd3fc;">${formatNum(f.hdd20_today, 2)}</b>（前3日均值 ${formatNum(f.hdd20_prev3, 2)}）</div>`,
+              `<div>参考耗热量基准：<b style="color:#fbbf24;">${formatNum(f.ref_heat_gj, 0)} GJ</b></div>`,
+              `<div>参考单耗基准：<b style="color:#fdba74;">${formatNum(f.ref_unit_heat, 2)} GJ/万㎡·日</b></div>`,
+              `<div>预报日均气温：<b style="color:#67e8f9;">${formatNum(f.avg_temp, 2)} ℃</b>${minMax}</div>`,
+              `<div>参考投诉基准（${f.month}月）：<b>${formatNum(f.ref_complaints, 1)} 件</b></div>`,
+            ].join('')
+          }
+          const item = entry.data
+          const title = usePeriods ? item.label : `${item.date}${item.date === baseIso ? '（业务日对照）' : ''}`
+          const actualU = usePeriods ? item.actual_unit_heat_avg : item.actual_unit_heat
+          const refU = usePeriods ? item.ref_unit_heat_avg : item.ref_unit_heat
+          const devText = formatSignedPercent(item.heat_deviation_pct)
+          const monthHint = !usePeriods && item.month ? `（${item.month}月）` : ''
+          return [
+            `<div style="font-weight:700;margin-bottom:4px;">${title}</div>`,
+            `<div>实际耗热量：<b>${formatNum(item.actual_heat_gj, 0)} GJ</b></div>`,
+            `<div>参考耗热量基准：<b style="color:#fdba74;">${formatNum(item.ref_heat_gj, 0)} GJ</b>（偏差 ${devText}）</div>`,
+            `<div>实际 / 参考单耗：<b>${formatNum(actualU, 2)}</b> / <b style="color:#fdba74;">${formatNum(refU, 2)}</b> GJ/万㎡</div>`,
+            `<div>日均气温：<b style="color:#67e8f9;">${formatNum(item.avg_temp, 2)} ℃</b></div>`,
+            `<div>实际 / 参考投诉${monthHint}：<b>${formatNum(item.actual_complaints, 0)}</b> / <b>${formatNum(item.ref_complaints, 1)}</b> 件</div>`,
+          ].join('')
+        },
       },
       axisPointer: { link: [{ xAxisIndex: 'all' }] },
       legend: [
@@ -1659,7 +1843,7 @@ function renderTrendChart() {
           itemWidth: isMobile ? 12 : 16,
           itemHeight: isMobile ? 9 : 10,
           textStyle: { color: '#334155', fontSize: isMobile ? 10.5 : 11 },
-          data: ['实际单耗', 'HDD20参考单耗', '日均气温'],
+          data: [actualSeriesName, refSeriesName, '当日HDD20'],
         },
         {
           top: isMobile ? 222 : 250,
@@ -1697,6 +1881,14 @@ function renderTrendChart() {
             color: '#475569',
             fontSize: isMobile ? 10 : 11,
             rotate: isMobile && xLabels.length > 7 ? 35 : 0,
+            formatter: (val, idx) => (idx >= histCount ? `{fc|${val}}` : val),
+            rich: {
+              fc: {
+                color: '#6d28d9',
+                fontWeight: 700,
+                fontSize: isMobile ? 10 : 11,
+              },
+            },
           },
           axisLine: { lineStyle: { color: '#cbd5e1' } },
         },
@@ -1704,21 +1896,31 @@ function renderTrendChart() {
       yAxis: [
         {
           type: 'value',
-          name: '单耗',
+          name: isHeatMode ? '耗热量(GJ)' : '单耗',
           nameGap: isMobile ? 8 : 10,
           gridIndex: 0,
+          scale: true,
+          boundaryGap: ['10%', '10%'],
           nameTextStyle: { color: '#64748b', fontSize: isMobile ? 10 : 11 },
           splitLine: { lineStyle: { color: '#f1f5f9' } },
-          axisLabel: { color: '#475569', fontSize: isMobile ? 10 : 11 },
+          axisLabel: {
+            color: '#475569',
+            fontSize: isMobile ? 10 : 11,
+            formatter: isHeatMode
+              ? val => (Math.abs(Number(val)) >= 10000 ? `${(Number(val) / 10000).toFixed(1)}万` : `${val}`)
+              : undefined,
+          },
         },
         {
           type: 'value',
-          name: '气温℃',
+          name: 'HDD20',
           nameGap: isMobile ? 8 : 10,
           gridIndex: 0,
-          nameTextStyle: { color: '#0284c7', fontSize: isMobile ? 10 : 11 },
+          min: 0,
+          max: value => Math.ceil(Math.max(Number(value?.max || 0), 5) * 1.18),
+          nameTextStyle: { color: '#0891b2', fontSize: isMobile ? 10 : 11 },
           splitLine: { show: false },
-          axisLabel: { color: '#0284c7', fontSize: isMobile ? 10 : 11, formatter: '{value}℃' },
+          axisLabel: { color: '#0891b2', fontSize: isMobile ? 10 : 11 },
         },
         {
           type: 'value',
@@ -1732,44 +1934,46 @@ function renderTrendChart() {
       ],
       series: [
         {
-          name: '实际单耗',
+          name: actualSeriesName,
           type: 'line',
           xAxisIndex: 0,
           yAxisIndex: 0,
+          z: 4,
           smooth: 0.25,
           symbolSize: 7,
-          data: actualUnit,
+          data: actualSeriesData,
           markLine: focusMarkLineTop,
+          markArea: forecastMarkAreaTop,
           itemStyle: { color: '#2563eb' },
           lineStyle: { width: 2.5, color: '#2563eb' },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(37, 99, 235, 0.20)' },
+              { offset: 0, color: 'rgba(37, 99, 235, 0.14)' },
               { offset: 1, color: 'rgba(37, 99, 235, 0.01)' },
             ]),
           },
         },
         {
-          name: 'HDD20参考单耗',
+          name: refSeriesName,
           type: 'line',
           xAxisIndex: 0,
           yAxisIndex: 0,
+          z: 5,
           smooth: 0.25,
           symbolSize: 6,
-          data: refUnit,
+          data: refSeriesData,
           itemStyle: { color: '#f97316' },
           lineStyle: { width: 2.2, type: 'dashed', color: '#f97316' },
         },
         {
-          name: '日均气温',
-          type: 'line',
+          name: '当日HDD20',
+          type: 'bar',
           xAxisIndex: 0,
           yAxisIndex: 1,
-          smooth: 0.25,
-          symbol: 'none',
-          data: avgTemp,
-          itemStyle: { color: '#06b6d4' },
-          lineStyle: { width: 1.5, type: 'dotted', color: '#06b6d4' },
+          z: 1,
+          barMaxWidth: 24,
+          data: hdd20BarData,
+          itemStyle: { color: 'rgba(6, 182, 212, 0.22)' },
         },
         {
           name: '实际投诉量',
@@ -1788,21 +1992,31 @@ function renderTrendChart() {
           },
           data: actualComplaints,
           markLine: focusMarkLineBottom,
+          markArea: forecastMarkAreaBottom,
         },
         {
           name: '参考投诉基准',
           type: 'line',
           xAxisIndex: 1,
           yAxisIndex: 2,
-          symbol: 'none',
+          step: 'middle',
+          symbol: 'circle',
+          showSymbol: false,
+          symbolSize: 5,
           data: refComplaints,
-          itemStyle: { color: '#0f766e' },
-          lineStyle: { width: 2, type: 'dashed', color: '#0f766e' },
+          itemStyle: { color: 'rgba(15, 118, 110, 0.65)' },
+          lineStyle: { width: 1.4, type: 'dashed', color: 'rgba(15, 118, 110, 0.42)' },
         },
       ],
     },
     true,
   )
+}
+
+function setTrendMetricMode(mode) {
+  if (trendMetricMode.value === mode) return
+  trendMetricMode.value = mode
+  renderTrendChart()
 }
 
 function renderAllCharts() {
@@ -1817,10 +2031,14 @@ function syncChartViewportLayout() {
   lastMobileChartMode = nextMobile
   quadrantChart?.resize()
   trendChart?.resize()
-  if (modeChanged && hasValidEvaluation.value) {
-    renderAllCharts()
-    quadrantChart?.resize()
-    trendChart?.resize()
+  if (hasValidEvaluation.value) {
+    if (modeChanged) {
+      renderAllCharts()
+      quadrantChart?.resize()
+      trendChart?.resize()
+    } else {
+      renderQuadrantChart()
+    }
   }
 }
 
@@ -2286,15 +2504,6 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.kpi-sub-badge {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.07);
-  color: #1e293b;
-}
-
 .kpi-details {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2355,7 +2564,7 @@ onBeforeUnmount(() => {
 /* 图表网格 */
 .charts-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -2429,16 +2638,6 @@ onBeforeUnmount(() => {
 .lock-close {
   font-size: 11px;
   opacity: 0.75;
-}
-
-.trend-scope-badge {
-  font-size: 12px;
-  font-weight: 600;
-  color: #1d4ed8;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  padding: 4px 10px;
-  border-radius: 999px;
 }
 
 .q-dot {

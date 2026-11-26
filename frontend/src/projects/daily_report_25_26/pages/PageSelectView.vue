@@ -365,7 +365,7 @@ const GROUP_DEFINITIONS = [
     key: 'analysis_management',
     title: '分析与系统管理',
     description: '每日简报、多维计划图谱、自由分析与算法字典',
-    pageKeys: ['daily_brief', 'period_report', 'dynamic_plan', 'data_analysis', 'data_corrections', 'global_management'],
+    pageKeys: ['data_analysis', 'daily_brief', 'period_report', 'dynamic_plan', 'data_corrections', 'global_management'],
   },
 ]
 

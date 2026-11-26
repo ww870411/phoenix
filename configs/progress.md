@@ -1,5 +1,103 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-26 精简上方 KPI 卡片副徽标展示 (`JointEvaluationView.vue`)
+- **缘由**：用户要求去掉顶部诊断 KPI 卡片中冗余的“✓ 1日经验带内”和“高于基准 +125.5”副徽标字样。
+- **改动点**：
+  - `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`：移除“气象修正供热偏差率”和“用户投诉强度指数”两张 KPI 卡片主体中的 `.kpi-sub-badge` 徽标元素，以及对应未再使用的 `bandBadgeText`、`complaintIndexDeltaText` 计算属性与 `.kpi-sub-badge` 样式规则。
+- **影响面**：仅精简联合评价页面顶部两张 KPI 卡片的视觉徽标，保留卡片主数值、标签与底部说明，不影响图表与接口逻辑。
+
+## 2026-11-26 优化「四象限联合评价演进轨迹」方向箭头显示 (`JointEvaluationView.vue`)
+
+- **缘由与目标**：此前 `演进路径` 的终点直接落在散点圆心且层级（`z: 3`）低于 `运行点位`（`z: 5`），导致方向箭头被圆点遮挡不易辨认。
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 的 `renderQuadrantChart()` 中根据实际像素宽高将每段轨迹起终点自动缩进至前后圆点外缘（`symbolSize` 增至 `13` / 移动端 `11`，层级提升至 `z: 6`），并在视口大小变化时同步重绘四象限轨迹，使各步方向箭头清晰落于目标圆点外沿。
+
+## 2026-11-26 精简联动走势图副标题并将默认口径切换为「耗热量(GJ)」 (`JointEvaluationView.vue`)
+
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 将 `trendMetricMode` 默认值由 `'unit'` 改为 `'heat'`（按钮顺序同步将 `耗热量(GJ)` 置前，可切换为 `单耗(GJ/万㎡)`），并将 `.chart-desc` 副标题精简为按口径匹配的固定短句（「上图：实际耗热量 vs 参考耗热量基准；下图：实际投诉量（按象限着色）vs 参考投诉基准。」与对应单耗口径短句），同时清理无用 `hasForecastTail` 计算属性。
+
+## 2026-11-26 淡化联动走势图「参考投诉基准」虚线 (`JointEvaluationView.vue`)
+
+- **改动点**：将 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 的 `renderTrendChart()` 中 `参考投诉基准` 线宽调整为 `1.4`、线色调整为半透明青绿 `rgba(15, 118, 110, 0.42)`，减少对下方投诉柱条的视觉干扰。
+
+## 2026-11-26 将联动走势图右轴气温线替换为 `当日HDD20` 柱形图 (`JointEvaluationView.vue`)
+
+- **缘由与目标**：避免室外气温折线与参考耗热基准呈现上下镜像造成误解，改用同向的 `当日HDD20` 半透明背景柱形图，使“单日 HDD20 越高但因前 3 日热惯性不同导致参考耗热高低有别”的滞后效应直观可见。
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 的 `renderTrendChart()` 中将上图右轴与第 3 系列由 `日均气温` 点线改为 `当日HDD20` 柱形（实况青蓝半透明、未来 5 日淡紫半透明，置于折线后层 `z: 1`，右轴从 `0` 起算），悬停浮层继续保留日均气温（℃）展示。
+
+## 2026-11-26 将未来5日预计合并入等宽联动走势图并按跨月阶梯绘制投诉基准 (`JointEvaluationView.vue`)
+
+- **缘由与目标**：按用户选定方案将双图网格调整为等宽（`1fr : 1fr`），取消底部独立「未来5日耗热量参考基准」大卡片，将业务日之后 5 日 `near` 预报无缝延续至右侧「单耗/耗热量对照与投诉强度联动走势」时间轴末尾；下方投诉子图未来 5 日仅保留随月份动态变化的参考投诉基准线。
+- **改动点**：
+  - `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`：
+    - 将 `.charts-layout` 由 `1.35fr : 1fr` 改为 `repeat(2, minmax(0, 1fr))` 两卡等宽，移除 `.forecast-card` 独立卡片、`forecastChart` 实例与对应样式；
+    - `renderTrendChart()` 在逐日模式且末尾日期等于 `forecast.base_date` 时自动向后拼接 `forecast.days`（`+1`~`+5` 日），叠加「未来5日预计」浅色背景带与「业务日对照」细虚分割线；
+    - 未来 5 日在单耗/耗热量及日均气温线上以紫钻/青点延续绘制（`actualSeriesData` 实耗与 `actualComplaints` 实际投诉置 `null`），下方 `参考投诉基准` 线开启 `step: 'middle'` 依 `ref_complaints`（按所属月份 `MONTH_COMPLAINT_RATES` 计算）自动体现跨月阶梯差异，悬停浮层区分展示预测日完整 `HDD20`、参考耗热量基准、参考单耗基准、预报气温与分月参考投诉基准。
+
+## 2026-11-26 统一将预报首日对照标识改为「业务日对照」 (`joint_evaluation.py`, `JointEvaluationView.vue`, `jointEvaluationExcelExport.js`)
+
+- **缘由与目标**：避免与“每日参考基准”产生“两个基准”的概念混淆。
+- **改动点**：将 `backend/projects/daily_report_25_26/services/joint_evaluation.py`、`frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 及 `jointEvaluationExcelExport.js` 中 `2026-11-24` 首柱/首行角色标签从 `业务日基准` / `基准` 统一调整为 **`业务日对照`**（窄屏简称 `对照`）。
+
+## 2026-11-26 将预报扩展为「未来5日耗热量参考基准」并拉高图幅、淡化基准虚线 (`joint_evaluation.py`, `JointEvaluationView.vue`, `jointEvaluationExcelExport.js`)
+
+- **缘由与目标**：按用户需求将预报跨度从 3 日扩展至业务日之后 5 日（不含业务日自身），标题更名为「未来5日耗热量参考基准」，整体略微拉高图表并淡化业务日水平参考虚线。
+- **改动点**：
+  - `backend/projects/daily_report_25_26/services/joint_evaluation.py` & `tests/test_joint_evaluation.py`：将 `FORECAST_HORIZON_DAYS` 从 `3` 调整为 `5` 并同步动态汇总文案与 5 日滚动惯性单测（7/7 通过）。
+  - `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`：卡片更名为「未来5日耗热量参考基准」，扩展 6 色渐变调色板（基准 + `+1日` ~ `+5日`）、图例与底部富文本标签；`.forecast-canvas` 高度由 `226px` 增至 `280px`（窄屏 `245px`），`yAxis.max` 调整为 `1.18` 倍并弱化基准虚线（`rgba(249, 115, 22, 0.32)`，`width: 1.2`）。
+  - `frontend/src/projects/daily_report_25_26/utils/jointEvaluationExcelExport.js` & `tests/jointEvaluationExcelExport.test.mjs`：同步采用 `horizon_days` 动态生成「未来5日耗热量参考基准」板块标题。
+
+## 2026-11-26 移除联动走势图右上角有效日数徽标 (`JointEvaluationView.vue`)
+
+- **改动点**：删去 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 中 `.trend-chart-card` 标题栏右侧的 `.trend-scope-badge`（“共 X 个有效日 / 按 X 个周期展示”）标签及对应样式，仅保留口径切换按钮组。
+
+## 2026-11-26 规范联动走势图系列命名与口径切换 (`JointEvaluationView.vue`)
+
+- **缘由与目标**：避免在 `单耗` 折线上混标总耗热 `GJ` 标签造成误解，并将 `HDD20参考单耗` 统一更名为 `参考单耗基准`。
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 的 `renderTrendChart()` 与 `.trend-chart-card` 标题栏移除混单位橙标，将 `HDD20参考单耗` 更名为 `参考单耗基准`，并新增 `单耗(GJ/万㎡) / 耗热量(GJ)` 口径切换（切换至耗热量口径时直接以 `GJ` 绘制 `实际耗热量` vs `参考耗热量基准`），悬停浮层始终同时展示两套口径对照。
+
+## 2026-11-26 在「单耗对照与投诉强度联动走势」中补充展示每日耗热量参考基准 (`JointEvaluationView.vue`)
+
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 的 `renderTrendChart()` 中，在 `HDD20参考单耗` 曲线数据点上标注对应每日/每期参考耗热量基准（`ref_heat_gj`，橙色微徽标并开启 `hideOverlap` 与上下避让），并在联动浮层 `tooltip.formatter` 中同步展示实际耗热量、参考耗热基准及偏差率。
+
+## 2026-11-26 调整「单耗对照与投诉强度联动走势」左轴为自适应刻度 (`JointEvaluationView.vue`)
+
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 的 `renderTrendChart()` 中，为上图左轴 `单耗`（`yAxis[0]`）开启 `scale: true` 与 `boundaryGap: ['10%', '10%']`，解除强制从 `0` 起算限制，清晰放大单耗日间波动与参考偏离对比。
+
+## 2026-11-26 为「未来 3 日参考耗热基准」阶梯柱图增强多色渐变配色 (`JointEvaluationView.vue`)
+
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 的 `renderForecastChart()` 与 `.forecast-card` 中配置分日多色三段垂直渐变柱（业务日基准橙金、+1日靛蓝、+2日翠绿、+3日紫粉）并配彩色阴影、柔和背景轨道、彩色柱底指标富文本及四色渐变图例与顶部彩条。
+
+## 2026-11-26 精简「未来 3 日参考耗热基准」标题副标 (`JointEvaluationView.vue`)
+
+- **改动点**：移除 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 中 `.forecast-head-row` 的 `near 预报 · 业务日基准` 徽标及对应样式，保留简洁标题与图例。
+
+## 2026-11-26 将「未来 3 日参考耗热基准」升级为迷你阶梯柱图展示（方案 A） (`JointEvaluationView.vue`)
+
+- **缘由与目标**：按用户反馈将原 4 卡横排切换为“迷你柱状阶梯图 + 柱底对齐数值”表现形式，通过柱高落差与业务日水平基准虚线，实现 1 秒直观对比基准日与后 3 日参考耗热量变化。
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 新增 `renderForecastChart()` 与 `forecastChart` 生命周期管理（含响应式重载与销毁）；深灰渐变柱 + 水平基准虚线标示业务日基准，天蓝渐变柱展示后 3 日参考耗热量（柱顶直标 GJ 数值），`xAxis` 富文本在柱底像素级对齐显示日期/角色、`HDD20` 与 `热单耗(GJ/万㎡)`。
+
+## 2026-11-26 精简「未来 3 日参考耗热基准」前端卡片与导出展示 (`JointEvaluationView.vue`, `jointEvaluationExcelExport.js`)
+
+- **缘由与目标**：去除冗余计算过程说明、建议长文与多列对比，将业务日基准与后 3 日预报精简为单行 4 列卡片，每项仅保留 `HDD20`、`参考耗热量(GJ)`、`热单耗(GJ/万㎡)` 三个核心数值。
+- **改动点**：
+  - `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`：移除 `forecast-advisory-strip`、统计胶囊及 9 列宽表，改为单行 4 列 `.forecast-strip-grid` 紧凑展示（含业务日基准卡及 `+1日`/`+2日`/`+3日` 卡）。
+  - `frontend/src/projects/daily_report_25_26/utils/jointEvaluationExcelExport.js` & `tests/jointEvaluationExcelExport.test.mjs`：汇总表未来 3 日板块同步精简为只含日期、角色、日均气温、`HDD20`、参考耗热量、热单耗及来源列，并移除调度提示附加行。
+
+## 2026-11-26 为「主城区供热联合评价模型（测试）」新增业务日后 3 日 `near` 预报耗热参考基准与调度建议 (`joint_evaluation.py`, `JointEvaluationView.vue`, `jointEvaluationExcelExport.js`)
+
+- **缘由与目标**：利用系统 `temperature_data` 中 `type = 'near'` 的逐小时气温预报，在联合评价页面固定展示当前最新业务日之后 3 日（不含业务日自身）的模型参考单耗与耗热量计划基准，并将业务日本身单独列出作为对照标尺，辅助生产调度决策。
+- **后端改动**：
+  - `backend/projects/daily_report_25_26/services/joint_evaluation.py`：新增 `_fetch_near_temperature_daily_map()`（按北京时间过滤 `type = 'near'` 聚合日均/最高/最低温）、`_build_daily_forecast_advice()` 与 `build_forecast_payload()`，在 `build_joint_evaluation()` 中固定以 `default_biz_date` 为基准滚算后 3 日参考单耗、参考耗热量基准、同月参考投诉量及较基准日参考/实耗增减幅度，随 `forecast` 字段返回（附带 `baseline` 基准行与 `advisory` 综合调度提示）。
+  - `backend/projects/daily_report_25_26/tests/test_joint_evaluation.py`：新增 `test_forecast_payload_uses_three_days_after_biz_date_excluding_base` 与 `test_fetch_near_temperature_daily_map_filters_near_type`。
+- **前端改动**：
+  - `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue`：保持现有图表聚焦历史评价不变，单独新增「未来 3 日耗热参考基准与调度建议」独立面板与明细表（首行为业务日基准对照，后续为 `+1d`/`+2d`/`+3d` 预报基准及逐日调度建议）。
+  - `frontend/src/projects/daily_report_25_26/utils/jointEvaluationExcelExport.js` & `tests/jointEvaluationExcelExport.test.mjs`：在汇总表导出及单测中同步追加未来 3 日参考基准表与 3 日调度提示。
+- **验证结果**：`python -m pytest backend/projects/daily_report_25_26/tests/test_joint_evaluation.py -v` 7/7 通过；`node --test frontend/src/projects/daily_report_25_26/tests/jointEvaluationExcelExport.test.mjs frontend/src/projects/daily_report_25_26/tests/analysisExcelExport.test.mjs` 4/4 通过；`npm --prefix frontend run build` 通过；容器实库验证 `2026-11-24` 基准及 `2026-11-25~27` 三日 `near` 预报测算数值正常。
+
+## 2026-11-26 调整「分析与系统管理」分组卡片顺序 (`PageSelectView.vue`)
+
+- **改动点**：在 `frontend/src/projects/daily_report_25_26/pages/PageSelectView.vue` 的 `GROUP_DEFINITIONS` 中，将 `analysis_management`（“分析与系统管理”）的 `pageKeys` 由 `['daily_brief', 'period_report', 'dynamic_plan', 'data_analysis', 'data_corrections', 'global_management']` 调整为 `['data_analysis', 'daily_brief', 'period_report', 'dynamic_plan', 'data_corrections', 'global_management']`，使“数据查询与分析”卡片位于该分组第一位。
+
 ## 2026-11-26 为「主城区供热联合评价模型（测试）」升级商务样式化 Excel 导出 (`styledExcelBase.js`, `jointEvaluationExcelExport.js`, `JointEvaluationView.vue`)
 
 - **缘由与目标**：对齐「数据查询与分析」页（`analysisExcelExport.js`）的专业商务表格导出风格，替换 `JointEvaluationView.vue` 原先无样式的 `json_to_sheet` 扁平导出。

@@ -1,3 +1,16 @@
+## 2026-11-26 将 `joint_evaluation` 预报基准对照日 `offset_label` 更名为「业务日对照」 (`joint_evaluation.py`)
+
+- **`projects/daily_report_25_26/services/joint_evaluation.py`**：将 `build_forecast_payload()` 返回的 `baseline.offset_label` 从 `业务日(基准)` 更新为 `业务日对照`。
+
+## 2026-11-26 将 `joint_evaluation` 预报跨度扩展至业务日后 5 日 (`joint_evaluation.py`)
+
+- **`projects/daily_report_25_26/services/joint_evaluation.py` & `tests/test_joint_evaluation.py`**：将 `FORECAST_HORIZON_DAYS` 从 `3` 调整为 `5` 并动态化 `build_forecast_payload()` 趋势摘要天数，同步更新 5 日滚动热惯性单测（7/7 通过）。
+
+## 2026-11-26 为「主城区供热联合评价模型」新增业务日后 3 日 `near` 预报参考耗热基准计算 (`joint_evaluation.py`)
+
+- **`projects/daily_report_25_26/services/joint_evaluation.py`**：新增 `_fetch_near_temperature_daily_map()`、`_build_daily_forecast_advice()` 与 `build_forecast_payload()`，固定以 `default_biz_date` 为基准读取之后 3 日（不含业务日自身）`temperature_data`（`type='near'`）逐小时气温，滚算前 3 日热惯性 `hdd20_prev3`、参考单耗、参考耗热量基准、较基日参考/实耗增减幅度及综合生产调度建议，并在 `build_joint_evaluation()` 返回体中通过 `forecast` 节点输出（同时附带 `baseline` 业务日自身作对照）。
+- **`projects/daily_report_25_26/tests/test_joint_evaluation.py`**：补充未来 3 日预报滚动计算与 `type='near'` 过滤条件单测（7/7 通过）。
+
 ## 2026-11-26 将 `joint_evaluation` 入口卡片名称调整为「主城区供热联合评价模型（测试）」 (`项目列表.json`)
 
 - **`backend_data/shared/项目列表.json`**：将 `daily_report_25_26.pages.joint_evaluation.页面名称` 更新为 `主城区供热联合评价模型（测试）`。
