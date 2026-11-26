@@ -1,5 +1,12 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-26 移除数据审批页、数据展示页与常量指标页子表填报状态数字标签 (`Sheets.vue`)
+- **缘由**：数据审批页面（`data_approval`，`数据结构_审批用表.json`）、数据展示页面（`data_show`，`数据结构_全口径展示表.json`）与常量指标页面（`constant_data`，`数据结构_常量指标表.json`）不适用每日数据填报进度的数量提示标签。
+- **改动点**：
+  - `frontend/src/projects/daily_report_25_26/pages/Sheets.vue`：新增 `isApprovalPage`、`isDisplayPage`、`isConstantDataPage` 与 `showSubmissionStatus` 计算属性；在数据审批页、数据展示页与常量指标页下隐藏单位卡片右上角 `.status-indicator` 与子表胶囊内 `.pill-ratio` 数量标签，恢复子表胶囊默认样式与纯表名提示，并跳过 `/data_entry/sheets/submission-status` 状态接口请求；每日数据填报页面（`data_entry`）保持原有填报进度标签展示不变。
+  - `frontend/src/projects/daily_report_25_26/tests/sheetsSubmissionStatus.test.mjs`（新增）：使用 `@vue/compiler-sfc` 与隔离执行环境验证 `data_entry`、`data_approval`、`data_show`、`constant_data` 四种页面下的标签显示与接口请求行为。
+- **影响面**：仅影响 `Sheets.vue` 在审批用表、全口径展示表与常量指标表列表场景下的状态标签显示及冗余接口调用，不影响 `data_entry` 填报进度提示与任何后端接口。
+
 ## 2026-11-26 精简上方 KPI 卡片副徽标展示 (`JointEvaluationView.vue`)
 - **缘由**：用户要求去掉顶部诊断 KPI 卡片中冗余的“✓ 1日经验带内”和“高于基准 +125.5”副徽标字样。
 - **改动点**：

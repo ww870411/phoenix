@@ -49,6 +49,7 @@
             <div class="unit-card-header">
               <div class="unit-card-title">{{ group.groupName }}</div>
               <div
+                v-if="showSubmissionStatus"
                 class="status-indicator"
                 :class="getUnitStatus(group).statusClass"
                 :title="getUnitStatus(group).title"
@@ -72,7 +73,7 @@
                   <span class="pill-number" v-if="parseSheetNumber(sheet.sheet_name)">{{ parseSheetNumber(sheet.sheet_name) }}</span>
                   <span class="pill-title">{{ cleanSheetBodyName(sheet.sheet_name, group.groupName) }}</span>
                   <span
-                    v-if="getSheetStatus(sheet.sheet_key)"
+                    v-if="showSubmissionStatus && getSheetStatus(sheet.sheet_key)"
                     class="pill-ratio"
                     :class="getSheetRatioClass(sheet.sheet_key)"
                   >
@@ -114,6 +115,32 @@ const pageDisplayName = computed(() => {
   }
   return pageKey.value || '页面'
 })
+
+// 识别数据审批页面、数据展示页面与常量指标页面（不展示每日填报状态标签，也不请求填报状态接口）
+const isApprovalPage = computed(() => {
+  const key = pageKey.value.toLowerCase()
+  const name = typeof pageDisplayName.value === 'string' ? pageDisplayName.value : ''
+  const cfg = typeof pageConfig.value === 'string' ? pageConfig.value : ''
+  return key === 'data_approval' || cfg.includes('数据结构_审批用表.json') || name.includes('审批')
+})
+
+const isDisplayPage = computed(() => {
+  const key = pageKey.value.toLowerCase()
+  const name = typeof pageDisplayName.value === 'string' ? pageDisplayName.value : ''
+  const cfg = typeof pageConfig.value === 'string' ? pageConfig.value : ''
+  return key === 'data_show' || cfg.includes('数据结构_全口径展示表.json') || name.includes('展示')
+})
+
+const isConstantDataPage = computed(() => {
+  const key = pageKey.value.toLowerCase()
+  const name = typeof pageDisplayName.value === 'string' ? pageDisplayName.value : ''
+  const cfg = typeof pageConfig.value === 'string' ? pageConfig.value : ''
+  return key === 'constant_data' || cfg.includes('数据结构_常量指标表.json') || name.includes('常量')
+})
+
+const showSubmissionStatus = computed(
+  () => !isApprovalPage.value && !isDisplayPage.value && !isConstantDataPage.value,
+)
 
 const rawSheets = ref([])
 const sheets = ref([])
@@ -172,9 +199,12 @@ async function loadSheets() {
   submissionStatus.value = {}
   try {
     await ensureProjectsLoaded()
+    const shouldFetchStatus = showSubmissionStatus.value
     const [sheetRes, statusRes] = await Promise.all([
       listSheets(projectKey.value, pageConfig.value),
-      getSheetsSubmissionStatus(projectKey.value, pageConfig.value)
+      shouldFetchStatus
+        ? getSheetsSubmissionStatus(projectKey.value, pageConfig.value)
+        : Promise.resolve(null),
     ])
     
     const catalog = sheetRes?.content || sheetRes // 兼容旧结构
@@ -185,7 +215,7 @@ async function loadSheets() {
       unit_name: meta?.unit_name ?? '',
     }))
     
-    if (statusRes && statusRes.ok && statusRes.status) {
+    if (shouldFetchStatus && statusRes && statusRes.ok && statusRes.status) {
       submissionStatus.value = statusRes.status
     }
 
@@ -212,14 +242,11 @@ function getSheetStatus(sheetKey) {
 }
 
 function openSheet(sheet) {
-  const name = typeof pageDisplayName.value === 'string' ? pageDisplayName.value : ''
-  const isApproval = name.includes('审批')
-  const isDisplay = name.includes('展示') || (typeof pageConfig.value === 'string' && pageConfig.value.includes('数据结构_全口径展示表.json'))
   const base = `/projects/${encodeURIComponent(projectKey.value)}/pages/${encodeURIComponent(pageKey.value)}`
   let path
-  if (isApproval) {
+  if (isApprovalPage.value) {
     path = `${base}/approval/${encodeURIComponent(sheet.sheet_key)}`
-  } else if (isDisplay) {
+  } else if (isDisplayPage.value) {
     path = `${base}/display/${encodeURIComponent(sheet.sheet_key)}`
   } else {
     path = `${base}/sheets/${encodeURIComponent(sheet.sheet_key)}`
@@ -308,6 +335,9 @@ function getSheetStatusClass(sheetKey) {
 }
 
 function getSheetPillClass(sheetKey) {
+  if (!showSubmissionStatus.value) {
+    return {}
+  }
   const status = getSheetStatusClass(sheetKey)
   return {
     'unit-sheet-pill--complete': status === 'complete',
@@ -326,8 +356,11 @@ function getSheetRatioClass(sheetKey) {
 }
 
 function getSheetPillTooltip(sheet) {
-  const st = getSheetStatus(sheet.sheet_key)
   const baseName = sheet.sheet_name || sheet.sheet_key
+  if (!showSubmissionStatus.value) {
+    return baseName
+  }
+  const st = getSheetStatus(sheet.sheet_key)
   if (st && st.text) {
     return `${baseName}（填报进度: ${st.text} 项）`
   }

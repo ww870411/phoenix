@@ -1,3 +1,7 @@
+## 2026-11-26 移除数据审批页、数据展示页与常量指标页子表填报状态数字标签 (`Sheets.vue`)
+- **`src/projects/daily_report_25_26/pages/Sheets.vue`**：新增 `isApprovalPage`、`isDisplayPage`、`isConstantDataPage` 与 `showSubmissionStatus` 计算属性，在 `data_approval`（`数据结构_审批用表.json`）、`data_show`（`数据结构_全口径展示表.json`）与 `constant_data`（`数据结构_常量指标表.json`）列表页隐藏单位卡片右上角 `.status-indicator` 与子表胶囊 `.pill-ratio` 数量标签，并跳过 `/data_entry/sheets/submission-status` 状态请求；`data_entry` 页面维持原有填报状态展示。
+- **`src/projects/daily_report_25_26/tests/sheetsSubmissionStatus.test.mjs`**：新增 `Sheets.vue` 页面态与标签显隐单测（覆盖 `data_entry`、`data_approval`、`data_show`、`constant_data`）。
+
 ## 2026-11-26 精简 KPI 卡片副徽标 (`JointEvaluationView.vue`)
 - 移除 `frontend/src/projects/daily_report_25_26/pages/JointEvaluationView.vue` 顶部「气象修正供热偏差率」与「用户投诉强度指数」两张 KPI 卡片中的 `.kpi-sub-badge` 副徽标（“✓ 1日经验带内”、“高于基准 +125.5”等）及对应 `bandBadgeText` / `complaintIndexDeltaText` 计算属性。
 
