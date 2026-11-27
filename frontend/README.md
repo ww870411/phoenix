@@ -1,3 +1,7 @@
+## 2026-11-27 为远程备份同步新增实时拉取进度条弹窗与源站直连加速开关 (`AdminConsoleView.vue`, `api.js`)
+- **`src/projects/daily_report_25_26/services/api.js`**：新增 `startAdminRemoteSyncPull()`、`getAdminRemoteSyncPullJob()`、`cancelAdminRemoteSyncPullJob()`，对接后端异步拉取与取消接口。
+- **`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`**：将「⚡ 即时快照并拉取」「🚀 一键拉取生产环境最新备份」与存档列表「📥 拉取到本地」切换为异步任务 + 600ms 轮询，新增「⚡ 远程生产备份实时拉取监视器」弹窗（实时展示阶段状态、百分比进度条、已接收/总大小、实时速率、ETA、重试次数、滚动日志、取消拉取及完成后一键打开还原向导），并在「⚙️ 生产连接设置」中增加「自动探测并直连源站加速」开关。
+
 ## 2026-11-26 整体下移「会议排座助手 (`meeting_seating`)」桌椅排布约一席高度 (`seatingLayout.js`)
 - **`src/projects/meeting_seating/utils/seatingLayout.js`**：将 `computeRoomScene()` 的桌椅起始纵坐标 `ty` 下移 `44px`（`wallTop + 160`），并同步调整 `defaultPlants()` 默认花盆纵坐标（`392`/`584`），前排主席席与设备室/大屏留白更舒展。
 

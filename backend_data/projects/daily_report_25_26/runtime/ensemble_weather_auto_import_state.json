@@ -1,32 +1,58 @@
 {
-  "last_attempt_time": "2026-11-26 18:00:10",
-  "last_attempt_status": "SUCCESS",
+  "last_attempt_time": "2026-11-27 18:00:16",
+  "last_attempt_status": "FAILED",
   "last_attempt_trigger": "定时自动 (18:00)",
-  "last_attempt_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-26 ~ 2026-12-30）。",
-  "last_success_time": "2026-11-26 18:00:10",
-  "last_success_trigger": "定时自动 (18:00)",
-  "last_success_message": "35天集合预报获取并入库成功：写入/更新 659 条，跳过已有近端 near 记录 168 条（成员数：31，范围：2026-11-26 ~ 2026-12-30）。",
+  "last_attempt_message": "气温获取或入库失败：请求 35 天集合气温 API 失败: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1011)",
+  "last_success_time": "2026-11-27 12:00:06",
+  "last_success_trigger": "定时自动 (12:00)",
+  "last_success_message": "35天集合预报获取并入库成功：写入/更新 683 条，跳过已有近端 near 记录 144 条（成员数：31，范围：2026-11-27 ~ 2026-12-31）。",
   "last_success_summary": {
-    "inserted_or_updated": 659,
-    "skipped_near": 168,
-    "start_time": "2026-11-26T00:00:00+08:00",
-    "end_time": "2026-12-30T10:00:00+08:00",
-    "truncated_at": "2026-12-30T11:00",
+    "inserted_or_updated": 683,
+    "skipped_near": 144,
+    "start_time": "2026-11-27T00:00:00+08:00",
+    "end_time": "2026-12-31T10:00:00+08:00",
+    "truncated_at": "2026-12-31T11:00",
     "members_count": 31,
     "dates": [
-      "2026-11-26",
-      "2026-12-30"
+      "2026-11-27",
+      "2026-12-31"
     ]
   },
-  "last_failure_time": null,
-  "last_failure_trigger": null,
-  "last_failure_message": null,
-  "executed_slots_date": "2026-11-26",
-  "executed_slots_today": {
-    "12:00": "2026-11-26 12:00:07",
-    "18:00": "2026-11-26 18:00:08"
-  },
+  "last_failure_time": "2026-11-27 18:00:16",
+  "last_failure_trigger": "定时自动 (18:00)",
+  "last_failure_message": "气温获取或入库失败：请求 35 天集合气温 API 失败: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1011)",
+  "executed_slots_date": "2026-11-28",
+  "executed_slots_today": {},
   "history": [
+    {
+      "time": "2026-11-27 18:00:16",
+      "status": "FAILED",
+      "trigger": "auto",
+      "trigger_label": "定时自动 (18:00)",
+      "scheduled_slot": "18:00",
+      "message": "气温获取或入库失败：请求 35 天集合气温 API 失败: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1011)",
+      "summary": null
+    },
+    {
+      "time": "2026-11-27 12:00:06",
+      "status": "SUCCESS",
+      "trigger": "auto",
+      "trigger_label": "定时自动 (12:00)",
+      "scheduled_slot": "12:00",
+      "message": "35天集合预报获取并入库成功：写入/更新 683 条，跳过已有近端 near 记录 144 条（成员数：31，范围：2026-11-27 ~ 2026-12-31）。",
+      "summary": {
+        "inserted_or_updated": 683,
+        "skipped_near": 144,
+        "start_time": "2026-11-27T00:00:00+08:00",
+        "end_time": "2026-12-31T10:00:00+08:00",
+        "truncated_at": "2026-12-31T11:00",
+        "members_count": 31,
+        "dates": [
+          "2026-11-27",
+          "2026-12-31"
+        ]
+      }
+    },
     {
       "time": "2026-11-26 18:00:10",
       "status": "SUCCESS",

@@ -1,3 +1,16 @@
+## 2026-11-27 新增远程备份源站直连探测、Range 并发拉取与异步进度接口 (`admin_console.py`)
+- **`api/v1/admin_console.py`**：
+  - 新增 `PullJob` / `PULL_JOBS`、`POST /admin/database/remote-sync/pull/start`、`GET /admin/database/remote-sync/pull/job/{job_id}` 与 `POST /admin/database/remote-sync/pull/job/{job_id}/cancel`，通过 `_execute_remote_pull()` 与同步 `/pull` 共享核心拉取流程，支持实时进度（百分比/速率/ETA/日志）与中途取消清理；
+  - 新增 `prefer_direct_origin`（默认 `True`）及 `_probe_direct_origin_base_url()`，检测到 CDN `Via` 与 `X-Served-By` 源站时自动探测并切换直连源站绕开海外 CDN 限速；`_download_remote_file_with_verification()` 在远端返回 `206` 时采用 1 MB 分片 4 路并发断点续传。
+- **`tests/test_admin_database_sync.py`**：新增源站直连探测与异步拉取任务进度/取消单测（9/9 通过）。
+
+## 2026-11-27 修复远程备份拉取截断静默保存并新增 Range 断点续传与归档校验 (`admin_console.py`)
+- **`api/v1/admin_console.py`**：
+  - `download_database_backup()` 新增 `_parse_http_range()` 以支持 HTTP `Range`（`206 Partial Content` / `416`）并输出 `Accept-Ranges: bytes` 与 `Cache-Control: no-transform`；
+  - `pull_remote_backup()` 拆出 `_fetch_remote_backup_metadata()`、`_download_remote_file_with_verification()` 与 `_verify_pg_dump_archive()`，支持 2MB 分片断点续传与 200 全量流回退（`httpx` 45s 读超时 + 自动重试 + `Accept-Encoding: identity`），并在落盘前严格校验 `file_size`/`Content-Length` 与 `pg_restore -f -` 全量压缩归档完整性，彻底杜绝半截 `.dump` 覆盖本地存档；
+  - `inspect_database_backup()` 补充 `archive_valid` 完整性校验与截断警告；`_run_restore_thread()` 修正非零退出码状态为 `failed`。
+- **`tests/test_admin_database_sync.py`（新增）**：通过 7 项单元测试验证 Range 下载、分片续传重试、截断拒收、归档校验与恢复失败状态标记（7/7 通过）。
+
 ## 2026-11-26 更新「会议排座助手 (`meeting_seating`)」默认纵向纸张与左上角设备室配置 (`profile_store.py`)
 - **`projects/meeting_seating/services/profile_store.py`**：将默认布局 `paper` 调整为 `portrait`（A4 纵向），并在 `room` 结构中新增 `equipmentRoom` 配置及校验支持。
 

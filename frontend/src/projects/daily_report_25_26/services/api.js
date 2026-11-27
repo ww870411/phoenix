@@ -3443,6 +3443,43 @@ export async function pullAdminRemoteSyncBackup(payload = {}) {
   return response.json()
 }
 
+export async function startAdminRemoteSyncPull(payload = {}) {
+  const response = await authAwareFetch(normalized('/admin/database/remote-sync/pull/start'), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '启动远程备份拉取任务失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getAdminRemoteSyncPullJob(jobId) {
+  const response = await authAwareFetch(normalized(`/admin/database/remote-sync/pull/job/${encodeURIComponent(jobId)}`), {
+    headers: attachAuthHeaders(),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '获取远程拉取进度失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function cancelAdminRemoteSyncPullJob(jobId) {
+  const response = await authAwareFetch(normalized(`/admin/database/remote-sync/pull/job/${encodeURIComponent(jobId)}/cancel`), {
+    method: 'POST',
+    headers: attachAuthHeaders(JSON_HEADERS),
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) {
+    const msg = await parseErrorDetail(response, '取消远程拉取任务失败')
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
 // ----------------------------------------------------------------------
 // 管件现场动态库存与安装使用量填报 API (Fitting Inventory & Daily Usage)
 // ----------------------------------------------------------------------

@@ -405,14 +405,14 @@
       "id": "p_27eb25beac",
       "name": "周调度会",
       "created_at": "2026-11-26T10:17:30",
-      "updated_at": "2026-11-26T10:42:17",
+      "updated_at": "2026-11-26T11:12:53",
       "layout": {
         "version": 3,
         "meeting": "第四次周生产调度会",
         "subtitle": "2026年11月30日",
         "paper": "portrait",
         "mono": false,
-        "numbers": true,
+        "numbers": false,
         "flip": false,
         "showHiddenPreview": false,
         "room": {
@@ -695,6 +695,16 @@
                 "id": "F-6",
                 "name": "",
                 "hidden": false
+              },
+              {
+                "id": "F-7",
+                "name": "",
+                "hidden": false
+              },
+              {
+                "id": "F-8",
+                "name": "",
+                "hidden": false
               }
             ]
           },
@@ -732,6 +742,16 @@
               },
               {
                 "id": "G-6",
+                "name": "",
+                "hidden": false
+              },
+              {
+                "id": "G-7",
+                "name": "",
+                "hidden": false
+              },
+              {
+                "id": "G-8",
                 "name": "",
                 "hidden": false
               }
@@ -773,6 +793,16 @@
                 "id": "H-6",
                 "name": "",
                 "hidden": false
+              },
+              {
+                "id": "H-7",
+                "name": "",
+                "hidden": false
+              },
+              {
+                "id": "H-8",
+                "name": "",
+                "hidden": false
               }
             ]
           }
@@ -781,28 +811,28 @@
           {
             "id": "P-1",
             "x": 335,
-            "y": 350,
+            "y": 420,
             "label": "花盆 1",
             "hidden": false
           },
           {
             "id": "P-2",
-            "x": 565,
-            "y": 350,
+            "x": 560,
+            "y": 420,
             "label": "花盆 2",
             "hidden": false
           },
           {
             "id": "P-3",
-            "x": 340,
-            "y": 640,
+            "x": 335,
+            "y": 660,
             "label": "花盆 3",
             "hidden": false
           },
           {
             "id": "P-4",
             "x": 565,
-            "y": 640,
+            "y": 665,
             "label": "花盆 4",
             "hidden": false
           }

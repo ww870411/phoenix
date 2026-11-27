@@ -11,17 +11,20 @@ import re
 import shutil
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import quote, urlparse
 
 import threading
 import uuid
 import os
 
+import httpx
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -2063,10 +2066,37 @@ def create_database_backup(session: AuthSession = Depends(get_current_session)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"执行数据库备份发生异常: {str(e)}")
 
+def _parse_http_range(range_header: str, file_size: int) -> Optional[Tuple[int, int]]:
+    """解析单段 HTTP Range 请求头（如 `bytes=0-1023`），不合法或越界时返回 None。"""
+    if not range_header or file_size <= 0:
+        return None
+    m = re.match(r"^\s*bytes=(\d*)-(\d*)\s*$", range_header)
+    if not m:
+        return None
+    start_str, end_str = m.group(1), m.group(2)
+    if not start_str and not end_str:
+        return None
+    if not start_str:
+        # 后缀字节请求: bytes=-500
+        suffix_len = int(end_str)
+        if suffix_len <= 0:
+            return None
+        start = max(0, file_size - suffix_len)
+        end = file_size - 1
+    else:
+        start = int(start_str)
+        end = int(end_str) if end_str else (file_size - 1)
+        if start >= file_size or start > end:
+            return None
+        end = min(end, file_size - 1)
+    return start, end
+
+
 @router.get("/admin/database/backup/download/{filename}", summary="下载指定数据库备份文件")
 def download_database_backup(
     filename: str, 
     authorization: Optional[str] = Header(None, alias="Authorization"),
+    range_header: Optional[str] = Header(None, alias="Range"),
     token: Optional[str] = Query(None)
 ):
     auth_token = None
@@ -2085,10 +2115,52 @@ def download_database_backup(
     target_path = DB_BACKUP_DIR / safe_filename
     if not target_path.exists() or not target_path.is_file():
         raise HTTPException(status_code=404, detail="指定备份文件不存在")
+
+    file_size = target_path.stat().st_size
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-transform",
+        "Content-Disposition": f'attachment; filename="{safe_filename}"',
+    }
+
+    if range_header:
+        parsed_range = _parse_http_range(range_header, file_size)
+        if parsed_range is None:
+            raise HTTPException(
+                status_code=416,
+                detail="请求的字节范围无效",
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        start, end = parsed_range
+        part_len = end - start + 1
+
+        def _iter_range():
+            with open(target_path, "rb") as f:
+                f.seek(start)
+                remaining = part_len
+                while remaining > 0:
+                    chunk = f.read(min(64 * 1024, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        return StreamingResponse(
+            _iter_range(),
+            status_code=206,
+            media_type="application/octet-stream",
+            headers={
+                **common_headers,
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Content-Length": str(part_len),
+            },
+        )
+
     return FileResponse(
         path=target_path,
         filename=safe_filename,
-        media_type="application/octet-stream"
+        media_type="application/octet-stream",
+        headers=common_headers,
     )
 
 @router.delete("/admin/database/backup/{filename}", summary="删除指定数据库备份文件")
@@ -2181,14 +2253,19 @@ def inspect_database_backup(payload: DatabaseInspectPayload, session: AuthSessio
                 if t["full_name"] not in seen:
                     seen.add(t["full_name"])
                     unique_tables.append(t)
-                    
-            return {
+
+            archive_valid, archive_err = _verify_pg_dump_archive(target_path)
+            result_payload = {
                 "ok": True,
                 "filename": safe_name,
                 "is_custom_dump": True,
+                "archive_valid": archive_valid,
                 "schemas": sorted(list(schemas)),
                 "tables": unique_tables
             }
+            if not archive_valid:
+                result_payload["warning"] = f"备份归档完整性校验失败（文件可能截断或损坏，请勿用于还原）: {archive_err}"
+            return result_payload
         except Exception as e:
             return {"ok": True, "filename": safe_name, "is_custom_dump": False, "schemas": [], "tables": [], "warning": str(e)}
     else:
@@ -2218,7 +2295,7 @@ def _run_restore_thread(job: RestoreJob):
         proc.wait()
         with job.lock:
             job.returncode = proc.returncode
-            job.status = "completed" if proc.returncode == 0 or proc.returncode is None else "completed"
+            job.status = "completed" if proc.returncode == 0 else "failed"
             job.finished_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
             job.logs.append(f"▶ 恢复流程结束，进程退出代码: {proc.returncode}")
     except Exception as ex:
@@ -2339,10 +2416,12 @@ class RemoteSyncConfigPayload(BaseModel):
     password: Optional[str] = Field(None, description="远程管理员密码")
     token: Optional[str] = Field(None, description="远程管理员访问令牌 (Bearer Token)")
     auto_create_before_pull: Optional[bool] = Field(False, description="拉取前是否先在生产环境生成即时备份")
+    prefer_direct_origin: Optional[bool] = Field(True, description="检测到 CDN 回源源站时自动直连加速")
 
 class RemoteSyncPullPayload(BaseModel):
     filename: Optional[str] = Field(None, description="指定拉取的备份文件名（为空则拉取最新）")
     create_fresh_first: Optional[bool] = Field(None, description="拉取前是否先即时生成最新备份")
+    prefer_direct_origin: Optional[bool] = Field(None, description="是否自动尝试直连源站加速")
     remote_url: Optional[str] = Field(None, description="临时指定远程URL")
     username: Optional[str] = Field(None, description="临时指定用户名")
     password: Optional[str] = Field(None, description="临时指定密码")
@@ -2355,7 +2434,8 @@ def _load_remote_sync_config() -> dict:
         "username": "ww870411",
         "password": "",
         "token": "",
-        "auto_create_before_pull": False
+        "auto_create_before_pull": False,
+        "prefer_direct_origin": True,
     }
     if REMOTE_SYNC_CONFIG_PATH.exists():
         try:
@@ -2449,6 +2529,7 @@ def get_remote_sync_config(session: AuthSession = Depends(get_current_session)):
             "has_token": bool(cfg.get("token")),
             "token_masked": token_masked,
             "auto_create_before_pull": bool(cfg.get("auto_create_before_pull", False)),
+            "prefer_direct_origin": bool(cfg.get("prefer_direct_origin", True)),
         }
     }
 
@@ -2467,6 +2548,8 @@ def update_remote_sync_config(payload: RemoteSyncConfigPayload, session: AuthSes
         cfg["token"] = payload.token.strip()
     if payload.auto_create_before_pull is not None:
         cfg["auto_create_before_pull"] = bool(payload.auto_create_before_pull)
+    if payload.prefer_direct_origin is not None:
+        cfg["prefer_direct_origin"] = bool(payload.prefer_direct_origin)
     _save_remote_sync_config(cfg)
     return {"ok": True, "message": "已成功保存远程同步配置"}
 
@@ -2553,17 +2636,464 @@ def list_remote_backups(session: AuthSession = Depends(get_current_session)):
         raise HTTPException(status_code=status_code, detail=f"获取远程备份列表失败: {err_msg}")
 
 
-@router.post("/admin/database/remote-sync/pull", summary="从远程生产环境拉取指定或最新备份文件至本地")
-def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = Depends(get_current_session)):
-    import ssl
-    import urllib.request
-    import urllib.error
-    from urllib.parse import quote
+def _verify_pg_dump_archive(archive_path: Path) -> Tuple[bool, Optional[str]]:
+    """
+    校验 PostgreSQL Custom Format (`.dump`) 归档文件全量数据块完整性。
 
-    _ensure_admin_console_access(session)
+    说明：`pg_restore -l` 仅读取文件头部目录（TOC），无法发现尾部截断；
+    使用 `pg_restore -f -` 将归档流式解包至空设备可覆盖检查全部压缩数据段与表尾约束。
+    """
+    try:
+        restore_exe = _find_pg_tool("pg_restore")
+    except HTTPException as exc:
+        return False, str(exc.detail)
+
+    try:
+        res = subprocess.run(
+            [restore_exe, "-f", "-", str(archive_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=180,
+        )
+        if res.returncode == 0:
+            return True, None
+        err_msg = (res.stderr or "").strip() or f"pg_restore 退出码 {res.returncode}"
+        return False, err_msg
+    except subprocess.TimeoutExpired:
+        return False, "pg_restore 完整性校验超时"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _parse_content_range_header(value: Optional[str]) -> Optional[Tuple[int, int, Optional[int]]]:
+    """解析 HTTP `Content-Range: bytes start-end/total` 响应头。"""
+    if not value:
+        return None
+    m = re.match(r"^\s*bytes\s+(\d+)-(\d+)/(\d+|\*)\s*$", value, re.IGNORECASE)
+    if not m:
+        return None
+    start = int(m.group(1))
+    end = int(m.group(2))
+    total = int(m.group(3)) if m.group(3) != "*" else None
+    if start > end:
+        return None
+    return start, end, total
+
+
+def _fetch_remote_backup_metadata(
+    remote_url: str,
+    headers: Dict[str, str],
+    remote_filename: Optional[str] = None,
+) -> Tuple[Optional[str], Optional[int]]:
+    """查询远程备份列表，返回目标文件名及其精确字节大小。"""
+    with httpx.Client(verify=False, follow_redirects=True, timeout=httpx.Timeout(20.0)) as client:
+        resp = client.get(f"{remote_url}/api/v1/admin/database/backups", headers=headers)
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=resp.status_code if resp.status_code in (400, 401, 403, 404, 502, 503, 504) else 500,
+                detail=f"查询远程备份列表失败 (HTTP {resp.status_code}): {resp.text[:300]}",
+            )
+        data = resp.json() or {}
+        remote_backups = data.get("backups", []) or []
+        if not remote_backups:
+            raise HTTPException(status_code=404, detail="远程生产环境暂无任何备份文件可拉取")
+        if not remote_filename:
+            first = remote_backups[0]
+            size_val = first.get("file_size")
+            return first.get("filename"), int(size_val) if size_val is not None else None
+        for item in remote_backups:
+            if item.get("filename") == remote_filename:
+                size_val = item.get("file_size")
+                return remote_filename, int(size_val) if size_val is not None else None
+        return remote_filename, None
+
+
+class PullJob:
+    """异步远程备份拉取任务状态与实时进度容器。"""
+
+    def __init__(self, job_id: str, remote_url: str):
+        self.job_id = job_id
+        self.status = "running"
+        self.phase = "init"
+        self.message = "正在初始化远程拉取任务..."
+        self.remote_url = remote_url
+        self.remote_filename = ""
+        self.local_filename = ""
+        self.download_mode = ""
+        self.downloaded_bytes = 0
+        self.total_bytes: Optional[int] = None
+        self.speed_bps = 0.0
+        self.attempt = 1
+        self.max_attempts = 4
+        self.logs: List[str] = []
+        self.result: Optional[Dict[str, Any]] = None
+        self.error: Optional[str] = None
+        self.cancel_requested = False
+        self.created_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+        self.finished_at: Optional[str] = None
+        self._started_mono = time.monotonic()
+        self._dl_started_mono: Optional[float] = None
+        self.lock = threading.Lock()
+
+    def append_log(self, line: str) -> None:
+        ts = datetime.now(tz=EAST_8).strftime("%H:%M:%S")
+        with self.lock:
+            self.logs.append(f"[{ts}] {line}")
+            if len(self.logs) > 200:
+                del self.logs[:-200]
+
+    def update_progress(
+        self,
+        downloaded: int,
+        total: Optional[int],
+        mode: str,
+        attempt: int,
+        max_attempts: int,
+    ) -> None:
+        now = time.monotonic()
+        with self.lock:
+            if self._dl_started_mono is None or (attempt != self.attempt and mode == "stream_200"):
+                self._dl_started_mono = now
+            elapsed = max(0.2, now - (self._dl_started_mono or now))
+            self.downloaded_bytes = downloaded
+            if total is not None:
+                self.total_bytes = total
+            self.download_mode = mode
+            self.attempt = attempt
+            self.max_attempts = max_attempts
+            self.speed_bps = downloaded / elapsed
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self.lock:
+            percent: Optional[float] = None
+            eta_seconds: Optional[int] = None
+            if self.total_bytes and self.total_bytes > 0:
+                percent = round(min(100.0, (self.downloaded_bytes / self.total_bytes) * 100.0), 2)
+                if self.speed_bps > 1.0 and self.downloaded_bytes < self.total_bytes:
+                    eta_seconds = int((self.total_bytes - self.downloaded_bytes) / self.speed_bps)
+            return {
+                "ok": True,
+                "job_id": self.job_id,
+                "status": self.status,
+                "phase": self.phase,
+                "message": self.message,
+                "remote_url": self.remote_url,
+                "remote_filename": self.remote_filename,
+                "local_filename": self.local_filename,
+                "download_mode": self.download_mode,
+                "downloaded_bytes": self.downloaded_bytes,
+                "total_bytes": self.total_bytes,
+                "percent": percent,
+                "speed_bps": round(self.speed_bps, 1),
+                "eta_seconds": eta_seconds,
+                "attempt": self.attempt,
+                "max_attempts": self.max_attempts,
+                "logs": list(self.logs),
+                "result": self.result,
+                "error": self.error,
+                "created_at": self.created_at,
+                "finished_at": self.finished_at,
+            }
+
+
+PULL_JOBS: Dict[str, PullJob] = {}
+
+
+class PullCancelledError(Exception):
+    """用户主动取消远程拉取任务时抛出。"""
+
+
+def _probe_direct_origin_base_url(
+    remote_url: str,
+    probe_url: str,
+    headers: Dict[str, str],
+    resp_headers: httpx.Headers,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> Optional[str]:
+    """
+    当远端经过 CDN（如 CloudFront）且返回 `X-Served-By` 源站域名时，
+    探测该源站是否可直连并具备同等鉴权，若可用则切换直连源站加速。
+    """
+    via_val = (resp_headers.get("Via") or "").lower()
+    origin_host = (resp_headers.get("X-Served-By") or "").strip()
+    if not origin_host or not via_val:
+        return None
+    parsed_cur = urlparse(remote_url)
+    if not parsed_cur.hostname or origin_host.lower() == parsed_cur.hostname.lower():
+        return None
+    if not re.match(r"^[A-Za-z0-9.-]+$", origin_host):
+        return None
+
+    candidate_base = f"{parsed_cur.scheme or 'https'}://{origin_host}"
+    try:
+        with httpx.Client(verify=False, follow_redirects=True, timeout=httpx.Timeout(6.0)) as probe_client:
+            r = probe_client.get(f"{candidate_base}/api/v1/admin/database/backups", headers=headers)
+            if r.status_code == 200:
+                if log_cb:
+                    log_cb(f"⚡ 检测到 CDN 节点 ({via_val[:40]})，已自动切换直连源站 {candidate_base} 加速下载")
+                return candidate_base
+    except Exception as exc:
+        logger.debug("源站直连探测 %s 未通过，保持原地址: %s", candidate_base, exc)
+    return None
+
+
+def _download_remote_file_with_verification(
+    download_url: str,
+    temp_dest_path: Path,
+    headers: Dict[str, str],
+    expected_size: Optional[int],
+    chunk_size: int = 1 * 1024 * 1024,
+    max_retries: int = 4,
+    range_workers: int = 4,
+    prefer_direct_origin: bool = False,
+    remote_url: str = "",
+    remote_filename: str = "",
+    progress_cb: Optional[Callable[[int, Optional[int], str, int, int], None]] = None,
+    log_cb: Optional[Callable[[str], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
+) -> int:
+    """
+    安全拉取远程备份文件并校验字节完整性。
+
+    - 支持自动探测 `X-Served-By` 直连源站绕开海外 CDN 限速；
+    - 若远端支持 HTTP `Range`（返回 206），自动按 1MB 分片多路并发断点续传，单分片异常独立重试；
+    - 若远端暂仅返回 200 全量流，强制使用 `Accept-Encoding: identity` + 单块读超时（45s），
+      严格校验接收字节数 == `expected_size` / `Content-Length`，并实时回调下载字节进度。
+    """
+    base_headers = {**headers, "Accept-Encoding": "identity"}
+    timeout_cfg = httpx.Timeout(connect=20.0, read=45.0, write=30.0, pool=15.0)
+    last_error: Optional[Exception] = None
+    active_download_url = download_url
+    origin_probed = False
+
+    def _check_cancel() -> None:
+        if cancel_check and cancel_check():
+            raise PullCancelledError("用户主动取消远程拉取任务")
+
+    with httpx.Client(
+        verify=False,
+        follow_redirects=True,
+        timeout=timeout_cfg,
+        limits=httpx.Limits(max_connections=max(6, range_workers + 2), max_keepalive_connections=max(4, range_workers)),
+    ) as client:
+        for attempt in range(1, max_retries + 1):
+            _check_cancel()
+            if temp_dest_path.exists():
+                temp_dest_path.unlink()
+
+            probe_end = chunk_size - 1
+            if expected_size is not None and expected_size > 0:
+                probe_end = min(probe_end, expected_size - 1)
+            probe_headers = {**base_headers, "Range": f"bytes=0-{probe_end}"}
+
+            try:
+                if log_cb:
+                    log_cb(f"发起第 {attempt}/{max_retries} 次下载连接...")
+                with client.stream("GET", active_download_url, headers=probe_headers) as resp:
+                    if resp.status_code in (401, 403, 404):
+                        err_body = resp.read().decode("utf-8", errors="ignore")
+                        raise HTTPException(
+                            status_code=resp.status_code,
+                            detail=f"远程备份下载鉴权或文件异常 (HTTP {resp.status_code}): {err_body[:300]}",
+                        )
+                    if resp.status_code not in (200, 206):
+                        err_body = resp.read().decode("utf-8", errors="ignore")
+                        raise RuntimeError(f"HTTP {resp.status_code}: {err_body[:200]}")
+
+                    if prefer_direct_origin and not origin_probed and remote_url and remote_filename:
+                        origin_probed = True
+                        fast_base = _probe_direct_origin_base_url(
+                            remote_url=remote_url,
+                            probe_url=active_download_url,
+                            headers=headers,
+                            resp_headers=resp.headers,
+                            log_cb=log_cb,
+                        )
+                        if fast_base:
+                            active_download_url = f"{fast_base}/api/v1/admin/database/backup/download/{quote(remote_filename)}"
+                            # 切换源站后立即重连以获得全速直连流
+                            raise RuntimeError("__SWITCHED_TO_ORIGIN__")
+
+                    if resp.status_code == 206:
+                        parsed_cr = _parse_content_range_header(resp.headers.get("Content-Range"))
+                        if not parsed_cr or parsed_cr[0] != 0:
+                            raise RuntimeError(f"远端返回异常 Content-Range: {resp.headers.get('Content-Range')}")
+                        start, end, total_from_cr = parsed_cr
+                        target_total = total_from_cr if total_from_cr is not None else expected_size
+                        if expected_size is not None and total_from_cr is not None and expected_size != total_from_cr:
+                            raise RuntimeError(f"远程文件总大小不一致: 列表={expected_size}, Content-Range={total_from_cr}")
+                        if target_total is None or target_total <= 0:
+                            raise RuntimeError("无法确定远程文件总大小，终止分片下载")
+
+                        first_expected_len = end - start + 1
+                        if log_cb:
+                            log_cb(f"远端已启用 HTTP Range 并发分片续传模式（{range_workers} 并发，单片 {chunk_size // 1024} KB）")
+
+                        with open(temp_dest_path, "wb") as f:
+                            f.truncate(target_total)
+
+                        first_buf = bytearray()
+                        for data in resp.iter_bytes(chunk_size=128 * 1024):
+                            _check_cancel()
+                            first_buf.extend(data)
+                            if progress_cb:
+                                progress_cb(len(first_buf), target_total, "range_parallel", attempt, max_retries)
+                        if len(first_buf) != first_expected_len:
+                            raise RuntimeError(f"首个分片字节不足: 期望 {first_expected_len}, 实际 {len(first_buf)}")
+
+                        file_lock = threading.Lock()
+                        total_downloaded = len(first_buf)
+                        with open(temp_dest_path, "r+b") as f:
+                            f.seek(0)
+                            f.write(first_buf)
+
+                        slices: List[Tuple[int, int]] = []
+                        cursor = len(first_buf)
+                        while cursor < target_total:
+                            s_end = min(cursor + chunk_size - 1, target_total - 1)
+                            slices.append((cursor, s_end))
+                            cursor = s_end + 1
+
+                        if slices:
+                            def _fetch_slice(s_start: int, s_end: int) -> int:
+                                part_expected = s_end - s_start + 1
+                                last_p_err: Optional[Exception] = None
+                                for part_try in range(1, max_retries + 1):
+                                    _check_cancel()
+                                    part_headers = {**base_headers, "Range": f"bytes={s_start}-{s_end}"}
+                                    buf = bytearray()
+                                    try:
+                                        with client.stream("GET", active_download_url, headers=part_headers) as part_resp:
+                                            if part_resp.status_code != 206:
+                                                raise RuntimeError(f"分片请求期望 206，实际返回 {part_resp.status_code}")
+                                            part_cr = _parse_content_range_header(part_resp.headers.get("Content-Range"))
+                                            if not part_cr or part_cr[0] != s_start or part_cr[1] != s_end:
+                                                raise RuntimeError(
+                                                    f"分片 Content-Range 错位: 期望 {s_start}-{s_end}, 实际 {part_resp.headers.get('Content-Range')}"
+                                                )
+                                            for data in part_resp.iter_bytes(chunk_size=128 * 1024):
+                                                _check_cancel()
+                                                buf.extend(data)
+                                        if len(buf) != part_expected:
+                                            raise RuntimeError(f"分片下载截断: 期望 {part_expected} 字节, 实际 {len(buf)} 字节")
+                                        with file_lock:
+                                            nonlocal total_downloaded
+                                            with open(temp_dest_path, "r+b") as f:
+                                                f.seek(s_start)
+                                                f.write(buf)
+                                            total_downloaded += len(buf)
+                                            if progress_cb:
+                                                progress_cb(total_downloaded, target_total, "range_parallel", attempt, max_retries)
+                                        return len(buf)
+                                    except (HTTPException, PullCancelledError):
+                                        raise
+                                    except Exception as p_exc:
+                                        last_p_err = p_exc
+                                        if log_cb:
+                                            log_cb(f"分片 [{s_start}-{s_end}] 第 {part_try}/{max_retries} 次重试: {p_exc}")
+                                        if part_try < max_retries:
+                                            time.sleep(min(2 ** (part_try - 1), 8))
+                                raise RuntimeError(f"分片 [{s_start}-{s_end}] 连续重试失败: {last_p_err}")
+
+                            workers = max(1, min(int(range_workers), len(slices)))
+                            with ThreadPoolExecutor(max_workers=workers) as pool:
+                                futures = [pool.submit(_fetch_slice, s0, s1) for s0, s1 in slices]
+                                for fut in as_completed(futures):
+                                    fut.result()
+
+                        return total_downloaded
+
+                    # 200 OK 全量流式模式（兼容未开启 Range 的远端服务端）
+                    cl_header = resp.headers.get("Content-Length")
+                    ce_header = (resp.headers.get("Content-Encoding") or "").strip().lower()
+                    header_size = int(cl_header) if (cl_header and cl_header.isdigit() and ce_header in ("", "identity")) else None
+                    if expected_size is not None and header_size is not None and expected_size != header_size:
+                        raise RuntimeError(f"远程文件大小不匹配: 列表={expected_size}, Content-Length={header_size}")
+                    target_total = expected_size if expected_size is not None else header_size
+                    if log_cb:
+                        log_cb(f"使用 200 单流校验下载模式（目标 {target_total or '未知'} 字节）")
+
+                    written = 0
+                    last_notify = 0.0
+                    with open(temp_dest_path, "wb") as f:
+                        for data in resp.iter_bytes(chunk_size=128 * 1024):
+                            _check_cancel()
+                            f.write(data)
+                            written += len(data)
+                            now_t = time.monotonic()
+                            if progress_cb and (now_t - last_notify >= 0.25 or (target_total and written >= target_total)):
+                                last_notify = now_t
+                                progress_cb(written, target_total, "stream_200", attempt, max_retries)
+
+                    if written <= 0:
+                        raise RuntimeError("远程响应体为空 (0 字节)")
+                    if target_total is not None and written != target_total:
+                        raise RuntimeError(
+                            f"远程流提前断开导致文件截断: 期望 {target_total} 字节, 实际仅接收 {written} 字节"
+                        )
+                    return written
+
+            except (HTTPException, PullCancelledError):
+                raise
+            except Exception as exc:
+                if str(exc) == "__SWITCHED_TO_ORIGIN__":
+                    # 直连源站切换不消耗原有重试次数，立即重新以直连地址发起拉取
+                    if temp_dest_path.exists():
+                        temp_dest_path.unlink()
+                    # 递归/重进一次等价于不计失败，但仍保留 max_retries 上限保护
+                    return _download_remote_file_with_verification(
+                        download_url=active_download_url,
+                        temp_dest_path=temp_dest_path,
+                        headers=headers,
+                        expected_size=expected_size,
+                        chunk_size=chunk_size,
+                        max_retries=max_retries,
+                        range_workers=range_workers,
+                        prefer_direct_origin=False,
+                        remote_url=remote_url,
+                        remote_filename=remote_filename,
+                        progress_cb=progress_cb,
+                        log_cb=log_cb,
+                        cancel_check=cancel_check,
+                    )
+                last_error = exc
+                logger.warning(
+                    "远程备份下载第 %s/%s 次尝试失败 (%s): %s",
+                    attempt, max_retries, active_download_url, exc,
+                )
+                if log_cb:
+                    log_cb(f"第 {attempt}/{max_retries} 次尝试中断: {exc}")
+                if attempt < max_retries:
+                    time.sleep(min(2 ** (attempt - 1), 8))
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"远程备份下载在重试 {max_retries} 次后仍未完整接收，已自动清理残缺文件: {last_error}",
+    )
+
+
+def _execute_remote_pull(
+    payload: RemoteSyncPullPayload,
+    session: AuthSession,
+    job: Optional[PullJob] = None,
+) -> Dict[str, Any]:
+    """执行远程备份快照创建（可选）、拉取下载、字节校验与归档检验核心流程。"""
+    def _log(msg: str) -> None:
+        logger.info("[remote-pull] %s", msg)
+        if job:
+            job.append_log(msg)
+
+    def _set_phase(phase: str, message: str) -> None:
+        if job:
+            with job.lock:
+                job.phase = phase
+                job.message = message
+
+    def _is_cancelled() -> bool:
+        return bool(job and job.cancel_requested)
+
     cfg = _load_remote_sync_config()
-    logger.info("收到远程生产数据拉取请求: filename=%s, create_fresh_first=%s, remote_url=%s, user=%s",
-                payload.filename, payload.create_fresh_first, payload.remote_url or cfg.get("remote_url"), session.username)
     if payload.remote_url:
         cfg["remote_url"] = payload.remote_url.strip()
     if payload.username:
@@ -2573,113 +3103,149 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
     if payload.token:
         cfg["token"] = payload.token.strip()
 
-    token = _get_remote_auth_token(cfg)
     remote_url = str(cfg.get("remote_url") or "https://platform.smartview.top").rstrip("/")
+    if job:
+        with job.lock:
+            job.remote_url = remote_url
 
-    ctx = ssl._create_unverified_context()
+    _set_phase("auth", "正在校验远程认证凭证...")
+    token = _get_remote_auth_token(cfg)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
-        "Authorization": f"Bearer {token}"
+        "Authorization": f"Bearer {token}",
     }
 
-    # 1. 若要求在拉取前先即时生成最新快照
     do_create = payload.create_fresh_first if payload.create_fresh_first is not None else cfg.get("auto_create_before_pull", False)
+    prefer_origin = payload.prefer_direct_origin if payload.prefer_direct_origin is not None else bool(cfg.get("prefer_direct_origin", True))
     target_filename = payload.filename
+    expected_size: Optional[int] = None
 
     if do_create:
-        logger.info("准备在远程生产环境创建即时数据库快照: url=%s", remote_url)
+        _set_phase("creating_snapshot", "正在命令远程生产环境执行 pg_dump 生成即时快照...")
+        _log(f"请求远程生产环境生成即时快照: {remote_url}")
         try:
-            create_req = urllib.request.Request(
-                f"{remote_url}/api/v1/admin/database/backup",
-                data=b"{}",
-                headers={**headers, "Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(create_req, context=ctx, timeout=300) as c_resp:
-                c_data = json.loads(c_resp.read().decode("utf-8"))
+            with httpx.Client(verify=False, follow_redirects=True, timeout=httpx.Timeout(300.0)) as client:
+                c_resp = client.post(
+                    f"{remote_url}/api/v1/admin/database/backup",
+                    content=b"{}",
+                    headers={**headers, "Content-Type": "application/json"},
+                )
+                if c_resp.status_code != 200:
+                    raise HTTPException(
+                        status_code=c_resp.status_code if c_resp.status_code in (400, 401, 403, 404, 502, 503, 504) else 500,
+                        detail=f"在远程生产环境创建即时备份失败 (HTTP {c_resp.status_code}): {c_resp.text[:300]}",
+                    )
+                c_data = c_resp.json()
                 if c_data and c_data.get("ok") and c_data.get("filename"):
                     target_filename = c_data.get("filename")
-                    logger.info("远程生产环境即时备份生成完毕: filename=%s", target_filename)
-        except Exception as e:
-            logger.error("在远程生产环境创建即时备份失败: %s", e, exc_info=True)
-            err_msg = str(e)
-            status_code = 500
-            if isinstance(e, urllib.error.HTTPError):
-                status_code = e.code if e.code in (400, 401, 403, 404, 502, 503, 504) else 500
-                try:
-                    err_msg = e.read().decode("utf-8", errors="ignore")
-                except Exception:
-                    pass
-            elif isinstance(e, urllib.error.URLError):
-                status_code = 504
-                err_msg = f"连接生产环境网络异常: {e.reason}"
-            raise HTTPException(status_code=status_code, detail=f"在远程生产环境创建即时备份失败: {err_msg}")
-
-    # 2. 如果未指定文件名，查询远程列表取最新一个 .dump 备份
-    if not target_filename:
-        logger.info("未显式指定文件名，正在查询远程生产环境最新备份存档...")
-        try:
-            list_req = urllib.request.Request(f"{remote_url}/api/v1/admin/database/backups", headers=headers)
-            with urllib.request.urlopen(list_req, context=ctx, timeout=20) as l_resp:
-                l_data = json.loads(l_resp.read().decode("utf-8"))
-                remote_backups = l_data.get("backups", [])
-                if not remote_backups:
-                    raise HTTPException(status_code=404, detail="远程生产环境暂无任何备份文件可拉取")
-                target_filename = remote_backups[0].get("filename")
-                logger.info("成功获取远程最新备份文件名: %s", target_filename)
+                    if c_data.get("file_size") is not None:
+                        expected_size = int(c_data["file_size"])
+                    _log(f"远程即时快照生成完毕: {target_filename} ({c_data.get('file_size_h') or expected_size})")
         except HTTPException:
             raise
+        except httpx.TimeoutException as te:
+            raise HTTPException(status_code=504, detail=f"在远程生产环境创建即时备份超时: {te}")
         except Exception as e:
-            logger.error("查询远程最新备份文件失败: %s", e, exc_info=True)
-            err_msg = str(e)
-            status_code = 500
-            if isinstance(e, urllib.error.HTTPError):
-                status_code = e.code if e.code in (400, 401, 403, 404, 502, 503, 504) else 500
-                try:
-                    err_msg = e.read().decode("utf-8", errors="ignore")
-                except Exception:
-                    pass
-            elif isinstance(e, urllib.error.URLError):
-                status_code = 504
-                err_msg = f"连接生产环境网络异常: {e.reason}"
-            raise HTTPException(status_code=status_code, detail=f"查询远程最新备份文件失败: {err_msg}")
+            raise HTTPException(status_code=500, detail=f"在远程生产环境创建即时备份失败: {e}")
 
-    raw_target_name = Path(target_filename).name
-    if raw_target_name.startswith("远程_"):
-        remote_filename = raw_target_name[len("远程_"):]
-    elif raw_target_name.startswith("远程"):
-        remote_filename = raw_target_name[len("远程"):]
+    if _is_cancelled():
+        raise PullCancelledError("用户主动取消远程拉取任务")
+
+    _set_phase("resolving", "正在解析远程备份元数据与预期字节大小...")
+    explicit_remote_name: Optional[str] = None
+    if target_filename:
+        raw_target_name = Path(target_filename).name
+        if raw_target_name.startswith("远程_"):
+            explicit_remote_name = raw_target_name[len("远程_"):]
+        elif raw_target_name.startswith("远程"):
+            explicit_remote_name = raw_target_name[len("远程"):]
+        else:
+            explicit_remote_name = raw_target_name
+
+    if not explicit_remote_name or expected_size is None:
+        try:
+            resolved_name, listed_size = _fetch_remote_backup_metadata(remote_url, headers, explicit_remote_name)
+            remote_filename = resolved_name or explicit_remote_name
+            if expected_size is None:
+                expected_size = listed_size
+        except HTTPException:
+            if not explicit_remote_name:
+                raise
+            remote_filename = explicit_remote_name
+        except Exception as e:
+            if not explicit_remote_name:
+                raise HTTPException(status_code=502, detail=f"查询远程最新备份文件失败: {e}")
+            remote_filename = explicit_remote_name
+            _log(f"查询远程大小元数据异常，将依赖响应头校验: {e}")
     else:
-        remote_filename = raw_target_name
+        remote_filename = explicit_remote_name
+
+    if not remote_filename:
+        raise HTTPException(status_code=404, detail="未能解析出有效的远程备份文件名")
+
     local_filename = f"远程_{remote_filename}"
-    # 确保本地备份存储目录存在并定义安全下载目标
+    if job:
+        with job.lock:
+            job.remote_filename = remote_filename
+            job.local_filename = local_filename
+            job.total_bytes = expected_size
+
     DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     dest_path = DB_BACKUP_DIR / local_filename
     temp_dest_path = DB_BACKUP_DIR / f"{local_filename}.downloading_{uuid.uuid4().hex[:6]}"
 
-    # 3. 流式下载文件（向远程请求原始文件名）
     download_url = f"{remote_url}/api/v1/admin/database/backup/download/{quote(remote_filename)}"
-    logger.info("准备从远程生产服务器下载备份文件: remote_url=%s, remote_filename=%s -> local=%s", remote_url, remote_filename, local_filename)
-    dl_req = urllib.request.Request(download_url, headers=headers)
-    try:
-        with urllib.request.urlopen(dl_req, context=ctx, timeout=600) as dl_resp:
-            with open(temp_dest_path, "wb") as f:
-                while True:
-                    chunk = dl_resp.read(64 * 1024)
-                    if not chunk:
-                        break
-                    f.write(chunk)
+    _set_phase("downloading", f"正在下载 {remote_filename}...")
+    _log(f"开始拉取 {remote_filename}（预期大小: {expected_size or '未知'} 字节）-> {local_filename}")
 
-        # 下载成功后原子替换目标文件
-        if temp_dest_path.exists():
-            if dest_path.exists():
-                dest_path.unlink()
-            temp_dest_path.replace(dest_path)
+    try:
+        written_bytes = _download_remote_file_with_verification(
+            download_url=download_url,
+            temp_dest_path=temp_dest_path,
+            headers=headers,
+            expected_size=expected_size,
+            prefer_direct_origin=prefer_origin,
+            remote_url=remote_url,
+            remote_filename=remote_filename,
+            progress_cb=job.update_progress if job else None,
+            log_cb=_log,
+            cancel_check=_is_cancelled,
+        )
+
+        if not temp_dest_path.exists():
+            raise HTTPException(status_code=502, detail="远程备份下载后临时文件不存在")
+        actual_size = temp_dest_path.stat().st_size
+        if actual_size <= 0 or actual_size != written_bytes:
+            raise HTTPException(
+                status_code=502,
+                detail=f"本地落盘字节数异常: actual={actual_size}, written={written_bytes}",
+            )
+        if expected_size is not None and actual_size != expected_size:
+            raise HTTPException(
+                status_code=502,
+                detail=f"远程备份文件大小校验未通过（期望 {expected_size} 字节，实际 {actual_size} 字节），已丢弃损坏文件",
+            )
+
+        if not local_filename.lower().endswith(".sql"):
+            _set_phase("verifying", "正在执行 pg_restore 全量归档完整性校验...")
+            _log("下载字节核对一致，正在执行 pg_restore 全量数据段完整性校验...")
+            archive_ok, archive_err = _verify_pg_dump_archive(temp_dest_path)
+            if not archive_ok:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"远程备份归档完整性校验失败（文件可能截断或损坏），已丢弃: {archive_err}",
+                )
+            _log("pg_restore 归档完整性校验通过！")
+
+        if dest_path.exists():
+            dest_path.unlink()
+        temp_dest_path.replace(dest_path)
 
         st = dest_path.stat()
         size_mb = st.st_size / (1024 * 1024)
         size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{st.st_size / 1024:.1f} KB"
-        logger.info("成功从生产环境下载备份文件: %s, 大小: %s", local_filename, size_str)
+        _log(f"成功落盘正式备份: {local_filename} ({size_str})")
 
         audit_log.append_events([{
             "actor_user_id": session.username,
@@ -2687,7 +3253,13 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
             "action": "database_remote_sync_pull",
             "target_type": "database",
             "target_id": local_filename,
-            "detail": {"remote_url": remote_url, "remote_filename": remote_filename, "local_filename": local_filename, "size": size_str}
+            "detail": {
+                "remote_url": remote_url,
+                "remote_filename": remote_filename,
+                "local_filename": local_filename,
+                "size": size_str,
+                "file_size": st.st_size,
+            }
         }])
 
         return {
@@ -2697,31 +3269,108 @@ def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = De
             "file_size": st.st_size,
             "file_size_h": size_str,
             "created_at": datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S"),
-            "message": f"成功从生产环境拉取备份文件并保存为 {local_filename} ({size_str})"
+            "message": f"成功从生产环境拉取并校验通过 {local_filename} ({size_str})"
         }
-    except Exception as e:
+    except Exception:
         if temp_dest_path.exists():
             try:
                 temp_dest_path.unlink()
             except Exception:
                 pass
-        if dest_path.exists() and dest_path.stat().st_size == 0:
-            try:
-                dest_path.unlink()
-            except Exception:
-                pass
-        logger.error("下载远程备份包失败 (remote_filename=%s, url=%s): %s", remote_filename, download_url, e, exc_info=True)
-        status_code = 500
-        err_msg = str(e)
-        if isinstance(e, urllib.error.HTTPError):
-            status_code = e.code if e.code in (400, 401, 403, 404, 502, 503, 504) else 500
-            try:
-                err_msg = e.read().decode("utf-8", errors="ignore")
-            except Exception:
-                pass
-        elif isinstance(e, urllib.error.URLError):
-            status_code = 504
-            err_msg = f"连接生产服务器网络异常或超时: {e.reason}"
-        raise HTTPException(status_code=status_code, detail=f"下载远程备份包失败: {err_msg}")
+        raise
+
+
+def _run_pull_job_thread(job: PullJob, payload: RemoteSyncPullPayload, session: AuthSession) -> None:
+    try:
+        res = _execute_remote_pull(payload, session, job=job)
+        with job.lock:
+            job.status = "completed"
+            job.phase = "done"
+            job.message = res.get("message") or "拉取完成"
+            job.result = res
+            if job.total_bytes is None:
+                job.total_bytes = res.get("file_size")
+            if res.get("file_size"):
+                job.downloaded_bytes = int(res["file_size"])
+            job.finished_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+    except PullCancelledError as ce:
+        job.append_log(f"🛑 {ce}")
+        with job.lock:
+            job.status = "cancelled"
+            job.phase = "cancelled"
+            job.message = str(ce)
+            job.error = str(ce)
+            job.finished_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+    except HTTPException as he:
+        job.append_log(f"❌ 拉取失败 (HTTP {he.status_code}): {he.detail}")
+        with job.lock:
+            job.status = "failed"
+            job.phase = "error"
+            job.message = str(he.detail)
+            job.error = str(he.detail)
+            job.finished_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as exc:
+        logger.exception("异步远程拉取任务异常: %s", exc)
+        job.append_log(f"❌ 拉取发生未预期异常: {exc}")
+        with job.lock:
+            job.status = "failed"
+            job.phase = "error"
+            job.message = str(exc)
+            job.error = str(exc)
+            job.finished_at = datetime.now(tz=EAST_8).strftime("%Y-%m-%d %H:%M:%S")
+
+
+@router.post("/admin/database/remote-sync/pull/start", summary="启动异步远程备份拉取任务（支持实时进度查询）")
+def start_pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    cfg = _load_remote_sync_config()
+    remote_url = str(payload.remote_url or cfg.get("remote_url") or "https://platform.smartview.top").rstrip("/")
+    job_id = f"pull_{uuid.uuid4().hex[:8]}"
+    job = PullJob(job_id, remote_url)
+    PULL_JOBS[job_id] = job
+    thread = threading.Thread(target=_run_pull_job_thread, args=(job, payload, session), daemon=True)
+    thread.start()
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "status": "running",
+        "created_at": job.created_at,
+    }
+
+
+@router.get("/admin/database/remote-sync/pull/job/{job_id}", summary="获取异步远程备份拉取实时进度与日志")
+def get_pull_remote_backup_status(job_id: str, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    job = PULL_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="拉取任务不存在或已过期")
+    return job.snapshot()
+
+
+@router.post("/admin/database/remote-sync/pull/job/{job_id}/cancel", summary="取消正在执行的远程备份拉取任务")
+def cancel_pull_remote_backup(job_id: str, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    job = PULL_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="拉取任务不存在")
+    with job.lock:
+        if job.status == "running":
+            job.cancel_requested = True
+            job.message = "正在取消任务并清理临时文件..."
+    return {"ok": True, "job_id": job_id, "status": job.status}
+
+
+@router.post("/admin/database/remote-sync/pull", summary="从远程生产环境拉取指定或最新备份文件至本地（同步兼容接口）")
+def pull_remote_backup(payload: RemoteSyncPullPayload, session: AuthSession = Depends(get_current_session)):
+    _ensure_admin_console_access(session)
+    try:
+        return _execute_remote_pull(payload, session, job=None)
+    except PullCancelledError as ce:
+        raise HTTPException(status_code=499, detail=str(ce))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("下载远程备份包失败: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"下载远程备份包失败: {e}")
 
 

@@ -21760,6 +21760,60 @@
         "published_by": "ww870411",
         "published_at": "2026-11-26T18:52:52.300048+08:00"
       }
+    },
+    "2026-11-26T00:00:00+08:00": {
+      "units": {
+        "BeiFang": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "BeiHai": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "GongRe": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "JinPu": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "JinZhou": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "ShouDian": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "XiangHai": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "YanJiuYuan": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        },
+        "ZhuangHe": {
+          "status": "pending",
+          "approved_by": null,
+          "approved_at": null
+        }
+      },
+      "publish": {
+        "status": "published",
+        "published_by": "ww870411",
+        "published_at": "2026-11-27T21:05:56.203155+08:00"
+      }
     }
   }
 }

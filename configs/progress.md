@@ -1,5 +1,28 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-27 升级远程备份拉取为“源站直连 + Range 并发加速 + 异步实时进度条” (`admin_console.py`, `api.js`, `AdminConsoleView.vue`, `test_admin_database_sync.py`)
+- **缘由**：经实测通过 `https://platform.smartview.top`（经海外 CloudFront `LAX54-P12` 节点回源）下载速率仅约 23–35 KB/s，单次 33 MB 拉取耗时长达十余分钟且易断流重试；加之原前端点击「⚡ 即时快照并拉取」后采用同步阻塞请求、界面没有任何下载进度与日志反馈，极易让人误以为“卡死无反应”。
+- **改动点**：
+  - `backend/api/v1/admin_console.py`：
+    - 新增 `PullJob` / `PULL_JOBS` 异步拉取任务体系及 `POST /admin/database/remote-sync/pull/start`、`GET /admin/database/remote-sync/pull/job/{job_id}`、`POST /admin/database/remote-sync/pull/job/{job_id}/cancel` 接口（同步 `/pull` 保留兼容并共享 `_execute_remote_pull()` 核心逻辑）；
+    - 新增 `_probe_direct_origin_base_url()` 与 `prefer_direct_origin` 配置开关（默认开启）：当响应头包含 CDN `Via` 与 `X-Served-By` 源站域名且源站鉴权可达时自动切换直连源站下载；
+    - `_download_remote_file_with_verification()` 在远端支持 HTTP `Range` 时改用 1 MB 分片 4 路并发断点续传（`ThreadPoolExecutor` + 独立分片重试），并持续上报已接收字节数、速率、模式与重试次数，支持随时取消并清理临时文件。
+  - `frontend/src/projects/daily_report_25_26/services/api.js` & `pages/AdminConsoleView.vue`：
+    - 新增 `startAdminRemoteSyncPull()`、`getAdminRemoteSyncPullJob()`、`cancelAdminRemoteSyncPullJob()`；
+    - 「即时快照并拉取」「一键拉取最新备份」「拉取到本地」全部改用异步任务 + 600 ms 轮询，弹出「⚡ 远程生产备份实时拉取监视器」弹窗（展示阶段徽标、百分比进度条、已接收 MB/总 MB、实时网速、ETA、尝试次数、滚动终端日志、取消按钮与完成后一键打开还原向导按钮），并在「生产连接设置」中增加「自动探测并直连源站加速」开关。
+  - `backend/tests/test_admin_database_sync.py`：补充源站直连探测与 `PullJob` 进度/取消单测（9/9 通过）。
+- **影响面**：仅增强管理后台远程生产数据拉取的速度、可观测性与取消能力，完全兼容原有同步拉取调用及尚未升级 Range 的远端服务端。
+
+## 2026-11-27 修复远程数据库备份拉取截断静默落盘并补齐断点续传与归档完整性校验 (`admin_console.py`, `test_admin_database_sync.py`)
+- **缘由**：经排查发现远程 `.dump` 备份通过公网 CloudFront 下载大流时偶发中途断开或卡死，而原 `pull_remote_backup()` 使用 `urllib.request` 的 `read(64 * 1024)` 分块读取会在未收满 `Content-Length` 时静默返回空字节 `b""` 且未核对字节总数与归档完整性，导致残缺 `.dump`（如仅含头部 TOC 与前半段数据、缺失后续表数据及末尾约束）被当成成功文件覆盖保存；同时 `inspect_database_backup()` 仅做 `pg_restore -l` 无法识别尾部截断，`_run_restore_thread()` 退出码非 0 时也误标记为 `completed`。
+- **改动点**：
+  - `backend/api/v1/admin_console.py`：
+    - `download_database_backup()` 新增 `_parse_http_range()` 与 HTTP `Range` 分片下载支持（`206 Partial Content`、`Accept-Ranges: bytes`、`Cache-Control: no-transform`），兼容常规全量下载与断点续传客户端；
+    - 新增 `_verify_pg_dump_archive()`、` _parse_content_range_header()`、`_fetch_remote_backup_metadata()` 与 `_download_remote_file_with_verification()`，在 `pull_remote_backup()` 中强制携带 `Accept-Encoding: identity`、按 2MB `Range` 分片断点续传（若远端暂仅返回 `200` 则自动回退为带 45s 单块读超时与 4 次重试的全量流模式）、严格校验 `实际字节 == expected_size / Content-Length` 并通过 `pg_restore -f -` 校验全量归档数据块完整后才原子替换正式文件，任何校验失败立即丢弃临时文件并返回 `502`；
+    - `inspect_database_backup()` 增加 `archive_valid` 与截断告警字段；修复 `_run_restore_thread()` 在 `pg_restore` 退出码非 0 时将 `job.status` 正确置为 `failed`。
+  - `backend/tests/test_admin_database_sync.py`（新增）：覆盖 HTTP Range 解析与 `206`/`416` 下载、2MB 分片断点重试、200 截断重试与 502 拒收、损坏归档拒收保留原文件及恢复失败状态标记共 7 项单元测试（7/7 通过）。
+- **影响面**：仅加固管理后台数据库备份下载、远程拉取、结构校验与恢复状态上报流程，完全向后兼容尚未升级的远端服务器与既有前端接口，未改动数据库表结构与历史备份文件。
+
 ## 2026-11-26 整体下移「会议排座助手 (`meeting_seating`)」桌椅排布约一个座位高度 (`seatingLayout.js`, `profile_store.py`)
 - **缘由**：按用户要求将所有桌椅整体向下方微调约一个座位的尺寸，拉大主席席与正前方大屏/左上角设备室之间的前区通道空间。
 - **改动点**：

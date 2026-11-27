@@ -1441,10 +1441,16 @@
               </div>
 
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 6px; border-top: 1px dashed #e2e8f0;">
-                <label style="font-size: 12px; color: #475569; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                  <input type="checkbox" v-model="remoteSyncForm.auto_create_before_pull" />
-                  <span>默认拉取前先命令生产环境生成最新即时备份</span>
-                </label>
+                <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center;">
+                  <label style="font-size: 12px; color: #475569; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" v-model="remoteSyncForm.auto_create_before_pull" />
+                    <span>默认拉取前先命令生产环境生成最新即时备份</span>
+                  </label>
+                  <label style="font-size: 12px; color: #0369a1; display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500;" title="检测到经过 CloudFront 等 CDN 且响应头含 X-Served-By 源站时，自动切换直连源站绕开限速">
+                    <input type="checkbox" v-model="remoteSyncForm.prefer_direct_origin" />
+                    <span>⚡ 自动探测并直连源站加速（绕开 CDN 限速）</span>
+                  </label>
+                </div>
 
                 <div style="display: flex; gap: 8px;">
                   <button
@@ -1720,6 +1726,122 @@
               </footer>
             </div>
           </div>
+
+          <!-- 🚀 远程生产备份拉取实时进度与控制台日志 Modal -->
+          <div v-if="remotePullJobModalVisible" class="dialog-mask" role="presentation" @click.self="remotePullJob.status !== 'running' && closeRemotePullJobModal()">
+            <div class="dialog-card" style="max-width: 720px; background: #0f172a; color: #f8fafc; text-align: left; border: 1px solid #334155;">
+              <header class="dialog-header" style="background: #1e293b; border-bottom: 1px solid #334155; padding: 12px 20px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 14px; color: #38bdf8; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span>⚡ 远程生产备份实时拉取监视器</span>
+                    <span v-if="remotePullJob.status === 'running'" style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                      {{ pullPhaseLabel(remotePullJob.phase) }}
+                    </span>
+                    <span v-else-if="remotePullJob.status === 'completed'" style="font-size: 11px; background: #22c55e; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                      ✅ 拉取并校验完成
+                    </span>
+                    <span v-else-if="remotePullJob.status === 'cancelled'" style="font-size: 11px; background: #64748b; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                      🛑 已取消
+                    </span>
+                    <span v-else style="font-size: 11px; background: #ef4444; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                      ❌ 异常失败
+                    </span>
+                  </h3>
+                  <div style="margin-top: 4px; font-size: 12px; color: #94a3b8;">
+                    目标文件：<code>{{ remotePullJob.remote_filename || '正在生成/解析...' }}</code>
+                    <span v-if="remotePullJob.download_mode" style="margin-left: 10px; color: #38bdf8;">
+                      {{ remotePullJob.download_mode === 'range_parallel' ? '🚀 Range 多路分片并发' : '📡 200 单流校验下载' }}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  class="close-btn"
+                  type="button"
+                  style="color: #94a3b8;"
+                  :disabled="remotePullJob.status === 'running'"
+                  @click="closeRemotePullJobModal"
+                >×</button>
+              </header>
+
+              <main style="padding: 16px;">
+                <!-- 进度条与速率指标 -->
+                <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 12.5px;">
+                    <span style="color: #e2e8f0; font-weight: 600;">{{ remotePullJob.message || '准备中...' }}</span>
+                    <span style="color: #38bdf8; font-weight: 700; font-family: Consolas, monospace;">
+                      {{ remotePullJob.percent !== null && remotePullJob.percent !== undefined ? `${remotePullJob.percent.toFixed(1)}%` : (remotePullJob.status === 'completed' ? '100%' : '准备中') }}
+                    </span>
+                  </div>
+                  <div style="width: 100%; height: 10px; background: #020617; border-radius: 999px; overflow: hidden; border: 1px solid #334155;">
+                    <div
+                      :style="{
+                        width: `${remotePullJob.status === 'completed' ? 100 : (remotePullJob.percent ?? 8)}%`,
+                        height: '100%',
+                        transition: 'width 0.25s ease',
+                        background: remotePullJob.status === 'failed' ? '#ef4444' : (remotePullJob.status === 'completed' ? '#22c55e' : 'linear-gradient(90deg, #0284c7, #38bdf8)')
+                      }"
+                    ></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 11.5px; color: #94a3b8; font-family: Consolas, monospace;">
+                    <span>
+                      已接收：{{ formatPullBytes(remotePullJob.downloaded_bytes) }}
+                      <template v-if="remotePullJob.total_bytes"> / {{ formatPullBytes(remotePullJob.total_bytes) }}</template>
+                    </span>
+                    <span>速率：{{ formatPullSpeed(remotePullJob.speed_bps) }}</span>
+                    <span>
+                      尝试：第 {{ remotePullJob.attempt || 1 }}/{{ remotePullJob.max_attempts || 4 }} 次
+                      <template v-if="remotePullJob.eta_seconds !== null && remotePullJob.eta_seconds !== undefined && remotePullJob.status === 'running'">
+                        · 预计剩余 {{ formatPullEta(remotePullJob.eta_seconds) }}
+                      </template>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 实时日志终端 -->
+                <div ref="remotePullLogBoxRef" style="height: 220px; overflow-y: auto; background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 10px 12px; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.55; color: #4ade80;">
+                  <div v-for="(log, idx) in (remotePullJob.logs || [])" :key="idx" style="white-space: pre-wrap; word-break: break-all;">
+                    {{ log }}
+                  </div>
+                </div>
+              </main>
+
+              <footer style="background: #1e293b; padding: 12px 20px; border-top: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                <span style="font-size: 12px; color: #94a3b8;">
+                  {{ remotePullJob.status === 'running' ? '支持校验全部字节与 pg_restore 完整性，残缺文件绝不会落盘。' : (remotePullJob.finished_at ? `结束时间: ${remotePullJob.finished_at}` : '') }}
+                </span>
+                <div style="display: flex; gap: 8px;">
+                  <button
+                    v-if="remotePullJob.status === 'running'"
+                    class="btn ghost"
+                    type="button"
+                    style="height: 30px; font-size: 12px; padding: 0 14px; border-radius: 4px; color: #fca5a5; border-color: #7f1d1d;"
+                    :disabled="remotePullCancelling"
+                    @click="handleCancelRemotePullJob"
+                  >
+                    {{ remotePullCancelling ? '正在取消...' : '🛑 取消拉取' }}
+                  </button>
+                  <button
+                    v-if="remotePullJob.status === 'completed' && remotePullJob.result?.filename"
+                    class="btn primary"
+                    type="button"
+                    style="height: 30px; font-size: 12px; padding: 0 16px; border-radius: 4px; background: #16a34a; border-color: #16a34a;"
+                    @click="openRestoreFromPullResult"
+                  >
+                    🚀 立即打开还原向导
+                  </button>
+                  <button
+                    v-if="remotePullJob.status !== 'running'"
+                    class="btn ghost"
+                    type="button"
+                    style="height: 30px; font-size: 12px; padding: 0 16px; border-radius: 4px; color: #e2e8f0; border-color: #475569;"
+                    @click="closeRemotePullJobModal"
+                  >
+                    关闭
+                  </button>
+                </div>
+              </footer>
+            </div>
+          </div>
         </Teleport>
       </section>
     </main>
@@ -1988,6 +2110,9 @@ import {
   testAdminRemoteSyncConnection,
   getAdminRemoteSyncBackups,
   pullAdminRemoteSyncBackup,
+  startAdminRemoteSyncPull,
+  getAdminRemoteSyncPullJob,
+  cancelAdminRemoteSyncPullJob,
   listAdminProjects,
   listSuperFiles,
   makeSuperDirectory,
@@ -2272,7 +2397,8 @@ const remoteSyncForm = reactive({
   has_password: false,
   has_token: false,
   token_masked: '',
-  auto_create_before_pull: false
+  auto_create_before_pull: false,
+  prefer_direct_origin: true
 })
 const remoteTesting = ref(false)
 const remoteSavingConfig = ref(false)
@@ -2285,6 +2411,155 @@ const remoteBackupsModalVisible = ref(false)
 const remoteBackupsLoading = ref(false)
 const remoteBackupsList = ref([])
 
+const remotePullJobModalVisible = ref(false)
+const remotePullCancelling = ref(false)
+const remotePullLogBoxRef = ref(null)
+const remotePullJob = reactive({
+  job_id: '',
+  status: 'running',
+  phase: 'init',
+  message: '',
+  remote_filename: '',
+  local_filename: '',
+  download_mode: '',
+  downloaded_bytes: 0,
+  total_bytes: null,
+  percent: null,
+  speed_bps: 0,
+  eta_seconds: null,
+  attempt: 1,
+  max_attempts: 4,
+  logs: [],
+  result: null,
+  error: null,
+  finished_at: null
+})
+let remotePullPollTimer = null
+
+function formatPullBytes(bytes) {
+  const b = Number(bytes || 0)
+  if (!Number.isFinite(b) || b <= 0) return '0 B'
+  if (b >= 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(2)} MB`
+  if (b >= 1024) return `${(b / 1024).toFixed(1)} KB`
+  return `${b} B`
+}
+
+function formatPullSpeed(bps) {
+  const s = Number(bps || 0)
+  if (!Number.isFinite(s) || s <= 0) return '--'
+  if (s >= 1024 * 1024) return `${(s / (1024 * 1024)).toFixed(2)} MB/s`
+  return `${(s / 1024).toFixed(1)} KB/s`
+}
+
+function formatPullEta(sec) {
+  const s = Math.max(0, Math.round(Number(sec || 0)))
+  if (s < 60) return `${s} 秒`
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m} 分 ${r} 秒`
+}
+
+function pullPhaseLabel(phase) {
+  const map = {
+    init: '初始化中',
+    auth: '校验认证',
+    creating_snapshot: '生成远程快照',
+    resolving: '解析文件信息',
+    downloading: '正在拉取下载',
+    verifying: '校验归档完整性',
+    done: '已完成',
+    cancelled: '已取消',
+    error: '失败'
+  }
+  return map[phase] || '执行中'
+}
+
+function resetRemotePullJobState() {
+  Object.assign(remotePullJob, {
+    job_id: '',
+    status: 'running',
+    phase: 'init',
+    message: '正在启动远程拉取任务...',
+    remote_filename: '',
+    local_filename: '',
+    download_mode: '',
+    downloaded_bytes: 0,
+    total_bytes: null,
+    percent: null,
+    speed_bps: 0,
+    eta_seconds: null,
+    attempt: 1,
+    max_attempts: 4,
+    logs: [],
+    result: null,
+    error: null,
+    finished_at: null
+  })
+}
+
+function closeRemotePullJobModal() {
+  if (remotePullPollTimer) {
+    clearInterval(remotePullPollTimer)
+    remotePullPollTimer = null
+  }
+  remotePullJobModalVisible.value = false
+}
+
+async function handleCancelRemotePullJob() {
+  if (!remotePullJob.job_id || remotePullCancelling.value) return
+  remotePullCancelling.value = true
+  try {
+    await cancelAdminRemoteSyncPullJob(remotePullJob.job_id)
+  } catch (err) {
+    console.warn('取消拉取任务失败:', err)
+  } finally {
+    remotePullCancelling.value = false
+  }
+}
+
+function openRestoreFromPullResult() {
+  const fn = remotePullJob.result?.filename
+  closeRemotePullJobModal()
+  if (!fn) return
+  const found = backupList.value.find(b => b.filename === fn) || { filename: fn }
+  openRestoreModal(found)
+}
+
+function startRemotePullPolling(jobId) {
+  if (remotePullPollTimer) clearInterval(remotePullPollTimer)
+  remotePullPollTimer = setInterval(async () => {
+    try {
+      const res = await getAdminRemoteSyncPullJob(jobId)
+      if (!res || !res.ok) return
+      Object.assign(remotePullJob, res)
+      nextTick(() => {
+        if (remotePullLogBoxRef.value) {
+          remotePullLogBoxRef.value.scrollTop = remotePullLogBoxRef.value.scrollHeight
+        }
+      })
+      if (res.status !== 'running') {
+        clearInterval(remotePullPollTimer)
+        remotePullPollTimer = null
+        remotePulling.value = false
+        remotePullingTarget.value = ''
+        if (res.status === 'completed') {
+          remoteSyncStatusMsg.value = `🎉 ${res.result?.message || res.message}`
+          remoteSyncStatusType.value = 'success'
+          await loadBackupList()
+        } else if (res.status === 'cancelled') {
+          remoteSyncStatusMsg.value = '🛑 已取消远程备份拉取'
+          remoteSyncStatusType.value = 'error'
+        } else {
+          remoteSyncStatusMsg.value = `❌ 拉取失败: ${res.error || res.message || '未知错误'}`
+          remoteSyncStatusType.value = 'error'
+        }
+      }
+    } catch (err) {
+      console.error('轮询远程拉取进度失败:', err)
+    }
+  }, 600)
+}
+
 async function loadRemoteSyncConfig() {
   try {
     const res = await getAdminRemoteSyncConfig()
@@ -2295,6 +2570,7 @@ async function loadRemoteSyncConfig() {
       remoteSyncForm.has_token = Boolean(res.config.has_token)
       remoteSyncForm.token_masked = res.config.token_masked || ''
       remoteSyncForm.auto_create_before_pull = Boolean(res.config.auto_create_before_pull)
+      remoteSyncForm.prefer_direct_origin = res.config.prefer_direct_origin !== undefined ? Boolean(res.config.prefer_direct_origin) : true
     }
   } catch (err) {
     console.warn('读取远程同步配置失败:', err)
@@ -2309,7 +2585,8 @@ async function handleSaveRemoteSyncConfig() {
       username: remoteSyncForm.username,
       password: remoteSyncForm.password || undefined,
       token: remoteSyncForm.token || undefined,
-      auto_create_before_pull: remoteSyncForm.auto_create_before_pull
+      auto_create_before_pull: remoteSyncForm.auto_create_before_pull,
+      prefer_direct_origin: remoteSyncForm.prefer_direct_origin
     }
     const res = await saveAdminRemoteSyncConfig(payload)
     if (res && res.ok) {
@@ -2367,26 +2644,29 @@ async function handlePullSpecificRemoteBackup(filename) {
   remotePullingTarget.value = filename
   remoteSyncStatusMsg.value = `⏳ 正在从生产环境拉取备份文件 ${filename} ...`
   remoteSyncStatusType.value = 'success'
+  resetRemotePullJobState()
+  remotePullJob.remote_filename = filename
+  remotePullJobModalVisible.value = true
   try {
-    const res = await pullAdminRemoteSyncBackup({ filename })
-    if (res && res.ok) {
+    const res = await startAdminRemoteSyncPull({
+      filename,
+      prefer_direct_origin: remoteSyncForm.prefer_direct_origin
+    })
+    if (res && res.ok && res.job_id) {
       remoteBackupsModalVisible.value = false
-      remoteSyncStatusMsg.value = `🎉 ${res.message}`
-      remoteSyncStatusType.value = 'success'
-      await loadBackupList()
-      // 提示是否立即调起恢复向导
-      if (confirm(`🎉 成功从生产环境拉取备份文件 ${res.filename} (${res.file_size_h})！\n\n是否立即打开高级恢复向导，将该备份全量导入本地开发数据库？`)) {
-        const found = backupList.value.find(b => b.filename === res.filename) || { filename: res.filename }
-        openRestoreModal(found)
-      }
+      remotePullJob.job_id = res.job_id
+      startRemotePullPolling(res.job_id)
+    } else {
+      throw new Error('未能创建远程拉取任务')
     }
   } catch (err) {
-    remoteSyncStatusMsg.value = '❌ 拉取失败: ' + (err?.message || '未知错误')
-    remoteSyncStatusType.value = 'error'
-    alert(remoteSyncStatusMsg.value)
-  } finally {
     remotePulling.value = false
     remotePullingTarget.value = ''
+    remotePullJob.status = 'failed'
+    remotePullJob.error = err?.message || '未知错误'
+    remotePullJob.message = remotePullJob.error
+    remoteSyncStatusMsg.value = '❌ 拉取失败: ' + (err?.message || '未知错误')
+    remoteSyncStatusType.value = 'error'
   }
 }
 
@@ -2394,24 +2674,27 @@ async function handlePullLatestRemoteBackup(createFreshFirst = false) {
   remotePulling.value = true
   remoteSyncStatusMsg.value = createFreshFirst ? '⏳ 正在命令生产环境生成即时快照并准备下载...' : '⏳ 正在从生产环境拉取最新备份存档...'
   remoteSyncStatusType.value = 'success'
+  resetRemotePullJobState()
+  remotePullJob.message = remoteSyncStatusMsg.value
+  remotePullJobModalVisible.value = true
   try {
-    const res = await pullAdminRemoteSyncBackup({ create_fresh_first: createFreshFirst })
-    if (res && res.ok) {
-      remoteSyncStatusMsg.value = `🎉 ${res.message}`
-      remoteSyncStatusType.value = 'success'
-      await loadBackupList()
-      // 询问是否立即恢复
-      if (confirm(`🎉 成功从生产环境拉取最新备份文件 ${res.filename} (${res.file_size_h})！\n\n是否立即打开高级恢复向导，将其全量还原到本地开发数据库？`)) {
-        const found = backupList.value.find(b => b.filename === res.filename) || { filename: res.filename }
-        openRestoreModal(found)
-      }
+    const res = await startAdminRemoteSyncPull({
+      create_fresh_first: createFreshFirst,
+      prefer_direct_origin: remoteSyncForm.prefer_direct_origin
+    })
+    if (res && res.ok && res.job_id) {
+      remotePullJob.job_id = res.job_id
+      startRemotePullPolling(res.job_id)
+    } else {
+      throw new Error('未能创建远程拉取任务')
     }
   } catch (err) {
+    remotePulling.value = false
+    remotePullJob.status = 'failed'
+    remotePullJob.error = err?.message || '未知错误'
+    remotePullJob.message = remotePullJob.error
     remoteSyncStatusMsg.value = '❌ 拉取失败: ' + (err?.message || '未知错误')
     remoteSyncStatusType.value = 'error'
-    alert(remoteSyncStatusMsg.value)
-  } finally {
-    remotePulling.value = false
   }
 }
 
@@ -4970,6 +5253,14 @@ watch(
 onBeforeUnmount(() => {
   window.removeEventListener('message', onMessage)
   stopSystemTimer()
+  if (restorePollTimer) {
+    clearInterval(restorePollTimer)
+    restorePollTimer = null
+  }
+  if (remotePullPollTimer) {
+    clearInterval(remotePullPollTimer)
+    remotePullPollTimer = null
+  }
   try {
     if (popupWindowRef.value && !popupWindowRef.value.closed) {
       popupWindowRef.value.close()
