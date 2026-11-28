@@ -1,5 +1,83 @@
 # Phoenix 凤凰计划 · 开发过程记录 (Progress Log)
 
+## 2026-11-28 将「会议排座助手 (`meeting_seating`)」当前 61 席实景排布固化为默认布局 (`seatingLayout.js`, `profile_store.py`, `MeetingSeatingEntryView.vue`)
+- **缘由**：用户已将当前会场排布调整为 61 席（屏幕席 6 席、主席席 7 席、右侧/回字后排/外围/后方 1–3 排各 8 席，4 盆绿植同步居中外移、默认隐藏座位编号），希望将该空间结构正式设为系统默认布局。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/utils/seatingLayout.js` & `backend/projects/meeting_seating/services/profile_store.py`：更新 `buildDefaultLayout()` / `build_default_layout()` 与 `defaultPlants()` 为屏幕席 6、主席席 7、其余各排 8 席（共 61 席）、花盆坐标 `(335,420)/(560,420)/(335,660)/(565,665)`、`numbers: false`，并将 `_default_store()` 缺省存档名调整为「默认排座存档」。
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`、`tests/seatingLayout.test.mjs` & `backend/projects/meeting_seating/tests/test_meeting_seating_api.py`：同步更新默认布局提示文案及前后端单测断言（61 席、`ringW=560` / `ringOuterH=636`）。
+- **影响面**：仅更新「新建默认布局 / 初始化布局 / 复位花盆」时的基准结构，不影响既有「周调度会」存档中已录入的 25 位参会人员名单。
+
+## 2026-11-28 将「会议排座助手 (`meeting_seating`)」后方第 1–3 排调整为 4 桌拼接、每排默认 8 席 (`seatingLayout.js`, `SeatingCanvas.vue`, `MeetingSeatingEntryView.vue`, `profile_store.py`)
+- **缘由**：按会场实际构造，后方第 1、2、3 排为 4 张桌子连接、每张桌子默认 2 个椅子（共 8 席），而中央四边及左右外围保持 3 桌拼接共 6 席。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/utils/seatingLayout.js` & `backend/projects/meeting_seating/services/profile_store.py`：将 `zone === 'rear'` 的默认 `tableCount` 设为 `4`、默认座位数设为 `8`（兼容保留已保存存档中的人员名单与座位数，仅刷新 `tableCount` 为 4 桌拼接）；`computeRoomScene()` 按 `rearW`（`4/3 × ringW`，默认 `592px`）居中对齐中央正方形中轴线绘制 4 段拼接桌与座椅，并在超宽时自动扩展房间左右边界。
+  - `frontend/src/projects/meeting_seating/components/SeatingCanvas.vue` & `pages/MeetingSeatingEntryView.vue`：悬浮提示动态显示 `{{ tbl.tableCount }} 桌拼接`，新增后方排默认 8 席，更新布局提示文案。
+  - `frontend/src/projects/meeting_seating/tests/seatingLayout.test.mjs` & `backend/projects/meeting_seating/tests/test_meeting_seating_api.py`：同步更新默认 27 桌段 / 54 席断言并通过全部测试。
+- **影响面**：仅调整后方 `rear` 排的桌子拼接数量、宽度比例及新建/初始化默认座位数，现有存档中已填写的座位姓名不受影响。
+
+## 2026-11-28 将「会议排座助手 (`meeting_seating`)」右上角出入口升级为双开外开门 (`SeatingCanvas.vue`, `MeetingSeatingEntryView.vue`, `seatingLayout.js`, `profile_store.py`)
+- **缘由**：按用户确认的会场实际构造，右上角出入口为朝会场外侧开启的双开门，原平面图仅绘制为单扇右铰链外开门。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/components/SeatingCanvas.vue`：重构 `doorGeometry`（门洞宽度 `92px`，左右双扇门叶各 `46px`），朝上方外侧对称绘制双扇门板、双扇开启扇形轨迹（填充+虚线圆弧）与居中标签，并完整适配左右镜像模式。
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`、`utils/seatingLayout.js`、`backend/projects/meeting_seating/services/profile_store.py`：同步更新默认门标签及界面文案为「双开出入口（外开） / 右上位置双开外开门」。
+- **影响面**：仅更新会场右上角出入口的几何绘制与默认文字说明，兼容已有存档配置文件。
+
+## 2026-11-28 为「会议排座助手 (`meeting_seating`)」新增空位显示方式选项（“空位” / “-” / 空白） (`profile_store.py`, `seatingLayout.js`, `SeatingCanvas.vue`, `MeetingSeatingEntryView.vue`)
+- **缘由**：此前未安排人员的座位一律显示“空位”二字，用户希望在“显示座位编号”之外新增空位文本样式选项，支持切换显示为“`-`”或完全空白。
+- **改动点**：
+  - `backend/projects/meeting_seating/services/profile_store.py` & `tests/test_meeting_seating_api.py`：在默认布局与 `_sanitize_layout()` 中新增 `emptySeatDisplay` 字段（枚举 `'label' | 'dash' | 'blank'`，默认 `'label'`），持久保存至存档配置。
+  - `frontend/src/projects/meeting_seating/utils/seatingLayout.js` & `tests/seatingLayout.test.mjs`：新增 `normalizeEmptySeatDisplay()`，在默认布局、配置迁移与初始化布局时正确保留或校验 `emptySeatDisplay`。
+  - `frontend/src/projects/meeting_seating/components/SeatingCanvas.vue` & `pages/MeetingSeatingEntryView.vue`：在「01 · 会议资料与会场设施」新增「空位显示方式」下拉选择（显示“空位” / 显示“-” / 显示为空白），画布按所选模式渲染空座占位文本（选“空白”时不渲染占位文本，选“`-`”时采用 `14px` 居中展示）。
+- **影响面**：完全向后兼容历史存档与旧版 JSON（缺省时仍默认显示“空位”），仅影响空座占位文案展示与云端存档持久化。
+
+## 2026-11-28 扩大「会议排座助手 (`meeting_seating`)」主会场画布显示面积 (`MeetingSeatingEntryView.vue`)
+- **缘由**：用户反馈会场区域偏小，希望进一步放大主会场平面图画布可视面积。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`：将 `.seating-shell` 最大宽度放宽至 `1920px`、左侧栏收紧至 `320px`（`gap: 12px`）、缩减 `.stagebody` 与 `.print-sheet` 内边距；将屏幕预览 `.print-sheet` 最大宽度提升至横向 `1280px` / 纵向 `1020px`（同步更新 `sheetStyle` 缩放基准，`<= 960px` 窄屏下取消宽度上限铺满视口）。
+- **影响面**：仅扩大 `meeting_seating` 屏幕端主会场展示空间，A4 打印输出尺寸与座位坐标计算保持不变。
+
+## 2026-11-28 修复「会议排座助手 (`meeting_seating`)」控件尺寸不匹配与画布缩放比例问题 (`MeetingSeatingEntryView.vue`)
+- **缘由**：`MeetingSeatingEntryView.vue` 引入了全局 `theme.css`（包含 `.btn { height: 34px }` 与 `input { min-width: 180px }`），而页面内 `.btn.xs` / `.btn.xxs` 未覆盖固定高度、`input/select/textarea` 缺失 `box-sizing: border-box` 与 `min-width: 0`，导致排控制行 `.rowitem` 按钮高度高于输入框且数字框横向越界、花盆标签按钮过高、工具栏/存档栏控件高度不齐、实景照片缩略图比例不一致，以及 A4 纵向模式下 `.print-sheet` 按 `1120px` 过宽渲染和缩小缩放（`zoom < 1`）反向放大的问题。
+- **改动点**：
+  - `frontend/src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`：
+    - 为 `.seating-app` 内所有元素统一启用 `box-sizing: border-box`，重置输入框/下拉框/文本域 `min-width: 0 !important`，并明确统一控件高度规范（`input/select` 与 `.btn.sm` 均为 `32px`、`.btn` `34px`、`.btn.xs` `28px`、`.btn.xxs` `24px`，全部采用 `inline-flex` 居中对齐）；
+    - 将「02 · 座位布局」`.rowitem` 全部 6 项控件统一锁定为 `28px` 高度（`minmax(0, 1fr) 28px 46px 28px 30px 28px`），消除高低参差与越界；
+    - 为 `.photos-grid img` 固定 `aspect-ratio: 4 / 3; object-fit: cover;` 使双图等高齐平；
+    - 为 `.print-sheet` 增加纸张方向区分（纵向 `is-portrait` 默认 `max-width: 780px`、横向 `1080px`），并重构 `sheetStyle` 按对应基准宽度缩放，修复点击 `－` 缩小反而变宽的问题；同步规范 `<= 480px` 窄屏下顶部按钮组（3列）与存档操作组（2列）的等宽网格排版。
+- **影响面**：仅优化 `meeting_seating` 页面元素尺寸一致性与响应式/缩放排版，A4 打印规则与布局几何计算保持不变。
+
+## 2026-11-28 进一步提速远程数据库备份拉取（12路独立连接并发 + 自适应分片 + 断点续传 + 懒鉴权） (`admin_console.py`, `test_admin_database_sync.py`)
+- **缘由**：经核查当前 `https://platform.smartview.top` 响应头 `X-Served-By` 返回与主域名一致导致源站直连自动探测未触发，仍需经 CloudFront `HKG1-P1` 节点传输；而此前 `_download_remote_file_with_verification()` 仅用 4 并发共享连接、同步拉取 1 MB 首片、整片完成后才上报进度且重试会丢弃已收字节，加上 `_get_remote_auth_token()` 每次前置探测多耗一次请求 RTT，导致大库快照拉取偏慢。
+- **改动点**：
+  - `backend/api/v1/admin_console.py`：
+    - `_download_remote_file_with_verification()` 默认并发数由 `4` 提升至 `12`（每工作线程维护独立 Keep-Alive `httpx.Client`），探测首片缩减为 `256 KB` 以快速进入并发阶段，并新增 `_compute_adaptive_slice_size()`（`512 KB ~ 2 MB` 自适应切片，防止尾部慢连接拖垮整体进度）；
+    - `_fetch_slice()` 新增 64 KB 级实时字节进度上报、单分片断点续传（已收 `>= 64 KB` 断流后仅请求剩余偏移 `bytes={s_start + len(buf)}-{s_end}`）及 `429/503` 退避重试；
+    - `_get_remote_auth_token()` 新增 `verify_token` 参数，`_execute_remote_pull()` 直接复用缓存 Token 并在遇到 `401` 时自动重登重试，省去每次拉取前的前置列表探测 RTT；
+    - `download_database_backup()` 增加 `X-Accel-Buffering: no` 响应头并将 `_iter_range()` 读取块放大至 `256 KB`，降低 OpenResty 代理缓冲与 ASGI 帧开销。
+  - `backend/tests/test_admin_database_sync.py`：补充自适应分片断点续传与 401 懒重登重试单测（11/11 全部通过）。
+- **影响面**：仅提升远程备份拉取及服务端 Range 下载效率，接口协议与完整性校验机制保持不变（注：服务端 `X-Accel-Buffering` 与 `256 KB` 读块优化需同步部署到远端生产环境后方可在服务端生效，客户端 12 路并发与懒鉴权即刻在本地生效）。
+
+## 2026-11-28 突出「数据库备份与恢复」页签「⚡ 即时快照并拉取」为主操作按钮 (`AdminConsoleView.vue`)
+- **缘由**：在 `/admin-console?tab=db_backup` 的「远程生产环境数据直连与一键同步中心」中，实际最高频使用的操作为「⚡ 即时快照并拉取」，但此前主视觉权重给了「🚀 一键拉取生产环境最新备份」，前者仅作次级白色幽灵按钮呈现，视觉辨识度不足。
+- **改动点**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`：将「⚡ 即时快照并拉取」调至操作组首位并升级为主视觉渐变按钮（`.remote-sync-hero-btn` + 「常用」徽标 + 悬浮微动效），将「🚀 一键拉取最新已有备份」（`.remote-sync-latest-btn`）降为白色次级幽灵按钮；手机窄屏下主按钮以 `42px` 全宽置顶显示，其余次级按钮分两行对称排列。
+- **影响面**：仅调整 `db_backup` 页签远程同步区按钮的视觉层级与排序，点击事件与后端拉取逻辑不变。
+
+## 2026-11-28 全面优化管理控制台 `/admin-console` 各标签页及弹窗的手机窄屏响应式排版 (`AdminConsoleView.vue`, `AiAgentSettingsDialog.vue`)
+- **缘由**：此前 `AdminConsoleView.vue` 部分标签页（如数据库表编辑的排序/分页行与过滤行、服务器管理的超级终端与文件表格、账户管理表格、数据库备份与远程同步区及多个 Teleport 弹窗）在手机窄屏（`<= 768px`）存在全局 `min-width: 180px` 撑破容器、按钮组未换行溢出、980px/620px 宽表格需横向滚动、弹窗表单双列挤压以及移动端 `@media (max-width: 768px)` 被后置 `!important` 样式覆盖等问题。
+- **改动点**：
+  - `frontend/src/projects/daily_report_25_26/pages/AdminConsoleView.vue`：
+    - 将移动端 `@media (max-width: 768px)` 与 `@media (max-width: 360px)` 整体移至 `<style scoped>` 末尾确保层叠优先级正确，并重置 `.field`、`input`、`select`、`textarea` 的 `min-width: 0` 杜绝水平撑破；
+    - **后台文件编辑**：将 4 个工具栏按钮包装为 `.files-toolbar-actions`（桌面 `display: contents` 不变，手机端为 2×2 等宽网格），长路径支持自动折行；
+    - **数据库表编辑**：修复 `.db-sub-controls` 窄屏溢出（改为 2×2 紧凑网格）、`.db-filter-item` 卡片化 2 列对齐、状态徽章栏流式换行，并移除 `.db-grid-wrap` / `RevoGrid` 冗余内联高宽使手机端正确收敛至 `440px`；
+    - **项目后台设定**：`permission-central-title` / `permission-central-btn` 支持换行不裁切，`.cache-actions` 在手机端改为日期输入跨两列 + 功能按钮 2 列对称网格；
+    - **服务器管理**：为 `.super-pane` 增加 `min-width: 0` 防止 `<pre>`/表格撑宽网格，补充手机端专属文件卡片流（`.super-mobile-files-list` 支持全选、单选、进入/打开与删除），终端输出区自动折行；
+    - **操作日志**：`360px`–`768px` 维持筛选栏与统计大盘 2×2 紧凑布局减少首屏高度占用，补充 `.audit-migration-modal` 历史日志迁移弹窗的移动端 2×2 指标卡片与按钮适配；
+    - **账户与权限管理**：二级分段控制器（`.segmented-control`）手机端撑满双列等宽；账户列表在 `<= 768px` 切换为专属移动端账号卡片流（`.accounts-mobile-cards`）；修复新建/编辑账号弹窗 `.form-grid` 移动端单列化；
+    - **数据库备份与恢复**：将本地备份区、远程生产同步区及 4 个弹窗（还原配置、还原日志终端、远程备份列表、远程拉取监视器）的内联布局收敛为响应式样式类，增加本地/远程备份存档移动端卡片流（`.db-backup-mobile-cards`、`.remote-backups-mobile-cards`）及弹窗单列/全宽按钮适配。
+  - `frontend/src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`：补充 `@media (max-width: 640px)` 适配，堆叠 Provider 卡片头部与底部操作按钮并解除输入框最小宽度限制。
+- **影响面**：仅改进 `/admin-console` 页面及其弹窗的手机窄屏排版与可读性，桌面端布局、业务接口及状态逻辑均保持不变；`vite build` 生产构建验证通过。
+
 ## 2026-11-27 升级远程备份拉取为“源站直连 + Range 并发加速 + 异步实时进度条” (`admin_console.py`, `api.js`, `AdminConsoleView.vue`, `test_admin_database_sync.py`)
 - **缘由**：经实测通过 `https://platform.smartview.top`（经海外 CloudFront `LAX54-P12` 节点回源）下载速率仅约 23–35 KB/s，单次 33 MB 拉取耗时长达十余分钟且易断流重试；加之原前端点击「⚡ 即时快照并拉取」后采用同步阻塞请求、界面没有任何下载进度与日志反馈，极易让人误以为“卡死无反应”。
 - **改动点**：

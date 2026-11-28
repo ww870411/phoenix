@@ -1,3 +1,22 @@
+## 2026-11-28 将「会议排座助手 (`meeting_seating`)」当前 61 席排布固化为后端默认布局 (`profile_store.py`)
+- **`projects/meeting_seating/services/profile_store.py` & `tests/test_meeting_seating_api.py`**：同步更新 `build_default_layout()`（屏幕席 6、主席席 7、其余各排 8 席，共 61 席，更新花盆坐标与 `numbers=False`）及 `_default_store()` 默认名称，并通过全量单测（2/2）。
+
+## 2026-11-28 同步「会议排座助手 (`meeting_seating`)」后方第 1–3 排为 4 桌默认 8 席 (`profile_store.py`)
+- **`projects/meeting_seating/services/profile_store.py` & `tests/test_meeting_seating_api.py`**：将 `zone="rear"` 行的 `tableCount` 设为 `4`、默认座位数设为 `8`，规范化既有配置中的 `tableCount` 并通过全部单测（2/2）。
+
+## 2026-11-28 更新「会议排座助手 (`meeting_seating`)」默认门标签为双开外开门 (`profile_store.py`)
+- **`projects/meeting_seating/services/profile_store.py`**：将 `build_default_layout()` 中右上角 `room.door.label` 默认文案更新为 `双开出入口（外开）`。
+
+## 2026-11-28 「会议排座助手 (`meeting_seating`)」新增空位显示方式字段持久化 (`profile_store.py`)
+- **`projects/meeting_seating/services/profile_store.py` & `tests/test_meeting_seating_api.py`**：在默认布局及 `_sanitize_layout()` 中支持 `emptySeatDisplay`（`'label' | 'dash' | 'blank'`，默认 `'label'`）校验与存档持久化。
+
+## 2026-11-28 提速远程数据库备份拉取（12路并发 + 自适应分片断点续传 + 懒鉴权） (`admin_console.py`)
+- **`api/v1/admin_console.py`**：
+  - `_download_remote_file_with_verification()` 升级为 `256 KB` 快速探测 + `12` 路每线程独立 Keep-Alive 连接并发拉取，结合 `_compute_adaptive_slice_size()`（`512 KB–2 MB` 自适应切片）、单分片断流偏移续传（`>= 64 KB`）、`429/503` 退避重试与 64 KB 级实时进度上报；
+  - `_get_remote_auth_token()` 支持 `verify_token=False`，`_execute_remote_pull()` 免除前置 Token 验证 RTT 并在遇 `401` 时自动重登重试；
+  - `download_database_backup()` 补充 `X-Accel-Buffering: no` 头并将 `_iter_range()` 块放大至 `256 KB`。
+- **`tests/test_admin_database_sync.py`**：新增自适应分片断点续传与 401 懒重登单测（11/11 通过）。
+
 ## 2026-11-27 新增远程备份源站直连探测、Range 并发拉取与异步进度接口 (`admin_console.py`)
 - **`api/v1/admin_console.py`**：
   - 新增 `PullJob` / `PULL_JOBS`、`POST /admin/database/remote-sync/pull/start`、`GET /admin/database/remote-sync/pull/job/{job_id}` 与 `POST /admin/database/remote-sync/pull/job/{job_id}/cancel`，通过 `_execute_remote_pull()` 与同步 `/pull` 共享核心拉取流程，支持实时进度（百分比/速率/ETA/日志）与中途取消清理；

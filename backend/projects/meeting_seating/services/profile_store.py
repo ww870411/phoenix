@@ -19,6 +19,7 @@ _STORE_LOCK = threading.RLock()
 
 VALID_ZONES = ("front", "innerLeft", "innerRight", "innerRear", "left", "right", "rear")
 FIXED_ZONES = ("front", "innerLeft", "innerRight", "innerRear")
+VALID_EMPTY_SEAT_DISPLAY = ("label", "dash", "blank")
 
 
 def _now_iso() -> str:
@@ -32,38 +33,47 @@ def resolve_profiles_config_path() -> Path:
     return (config_dir / CONFIG_FILENAME).resolve()
 
 
-def _make_row(row_id: str, label: str, zone: str, seat_count: int = 6, hidden: bool = False) -> Dict[str, Any]:
+def _make_row(
+    row_id: str,
+    label: str,
+    zone: str,
+    seat_count: Optional[int] = None,
+    hidden: bool = False,
+    table_count: Optional[int] = None,
+) -> Dict[str, Any]:
+    resolved_table_count = table_count if table_count is not None else (4 if zone == "rear" else 3)
+    resolved_seat_count = seat_count if seat_count is not None else (8 if zone == "rear" else 6)
     seats = [
         {"id": f"{row_id}-{i + 1}", "name": "", "hidden": False}
-        for i in range(max(0, min(24, seat_count)))
+        for i in range(max(0, min(24, resolved_seat_count)))
     ]
     return {
         "id": row_id,
         "label": label,
         "zone": zone,
-        "tableCount": 3,
+        "tableCount": resolved_table_count,
         "hidden": hidden,
         "seats": seats,
     }
 
 
 def build_default_layout() -> Dict[str, Any]:
-    """构建贴合实景会议室的初始平面布局（按边/排控制座位数，每边默认 3 桌拼接共 6 席）。"""
+    """构建贴合实景会议室的默认平面布局（共 61 席：屏幕席 6、主席席 7、其余各排 8 席）。"""
     rows = [
-        _make_row("A", "主席席", "front", 6),
-        _make_row("B", "窗侧内排", "innerLeft", 6),
-        _make_row("C", "右侧内排", "innerRight", 6),
-        _make_row("D", "回字桌后排", "innerRear", 6),
-        _make_row("E", "右侧外围排", "right", 6),
-        _make_row("F", "后方第1排", "rear", 6),
-        _make_row("G", "后方第2排", "rear", 6),
-        _make_row("H", "后方第3排", "rear", 6),
+        _make_row("A", "屏幕席", "front", 6, table_count=3),
+        _make_row("B", "主席席", "innerLeft", 7, table_count=3),
+        _make_row("C", "右侧内排", "innerRight", 8, table_count=3),
+        _make_row("D", "回字桌后排", "innerRear", 8, table_count=3),
+        _make_row("E", "右侧外围排", "right", 8, table_count=3),
+        _make_row("F", "后方第1排", "rear", 8, table_count=4),
+        _make_row("G", "后方第2排", "rear", 8, table_count=4),
+        _make_row("H", "后方第3排", "rear", 8, table_count=4),
     ]
     plants = [
-        {"id": "P-1", "x": 294, "y": 392, "label": "花盆 1", "hidden": False},
-        {"id": "P-2", "x": 474, "y": 392, "label": "花盆 2", "hidden": False},
-        {"id": "P-3", "x": 294, "y": 584, "label": "花盆 3", "hidden": False},
-        {"id": "P-4", "x": 474, "y": 584, "label": "花盆 4", "hidden": False},
+        {"id": "P-1", "x": 335, "y": 420, "label": "花盆 1", "hidden": False},
+        {"id": "P-2", "x": 560, "y": 420, "label": "花盆 2", "hidden": False},
+        {"id": "P-3", "x": 335, "y": 660, "label": "花盆 3", "hidden": False},
+        {"id": "P-4", "x": 565, "y": 665, "label": "花盆 4", "hidden": False},
     ]
     return {
         "version": 3,
@@ -71,11 +81,12 @@ def build_default_layout() -> Dict[str, Any]:
         "subtitle": "",
         "paper": "portrait",
         "mono": False,
-        "numbers": True,
+        "numbers": False,
+        "emptySeatDisplay": "label",
         "flip": False,
         "showHiddenPreview": False,
         "room": {
-            "door": {"enabled": True, "label": "出入口（外开）"},
+            "door": {"enabled": True, "label": "双开出入口（外开）"},
             "equipmentRoom": {"enabled": True, "label": "设备室"},
             "leftWindows": 4,
             "rightWindows": 4,
@@ -138,6 +149,8 @@ def _sanitize_layout(raw: Any) -> Dict[str, Any]:
     layout["paper"] = "portrait" if raw.get("paper") == "portrait" else "landscape"
     layout["mono"] = bool(raw.get("mono", False))
     layout["numbers"] = bool(raw.get("numbers", True))
+    empty_disp = raw.get("emptySeatDisplay")
+    layout["emptySeatDisplay"] = empty_disp if empty_disp in VALID_EMPTY_SEAT_DISPLAY else "label"
     layout["flip"] = bool(raw.get("flip", False))
     layout["showHiddenPreview"] = bool(raw.get("showHiddenPreview", False))
     seq = raw.get("seq", 10)
@@ -207,7 +220,7 @@ def _sanitize_layout(raw: Any) -> Dict[str, Any]:
                     "id": rid,
                     "label": label,
                     "zone": zone,
-                    "tableCount": 3,
+                    "tableCount": 4 if zone == "rear" else 3,
                     "hidden": hidden,
                     "seats": cleaned_seats,
                 }
@@ -281,7 +294,7 @@ def _default_store() -> Dict[str, Any]:
         "profiles": [
             {
                 "id": default_id,
-                "name": "默认实景回字布局",
+                "name": "默认排座存档",
                 "created_at": now,
                 "updated_at": now,
                 "layout": build_default_layout(),

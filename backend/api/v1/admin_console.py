@@ -2120,6 +2120,7 @@ def download_database_backup(
     common_headers = {
         "Accept-Ranges": "bytes",
         "Cache-Control": "no-transform",
+        "X-Accel-Buffering": "no",
         "Content-Disposition": f'attachment; filename="{safe_filename}"',
     }
 
@@ -2139,7 +2140,7 @@ def download_database_backup(
                 f.seek(start)
                 remaining = part_len
                 while remaining > 0:
-                    chunk = f.read(min(64 * 1024, remaining))
+                    chunk = f.read(min(256 * 1024, remaining))
                     if not chunk:
                         break
                     remaining -= len(chunk)
@@ -2454,7 +2455,7 @@ def _save_remote_sync_config(cfg: dict) -> None:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
-def _get_remote_auth_token(cfg: dict, force_relogin: bool = False) -> str:
+def _get_remote_auth_token(cfg: dict, force_relogin: bool = False, verify_token: bool = True) -> str:
     import ssl
     import urllib.request
     import urllib.error
@@ -2470,8 +2471,12 @@ def _get_remote_auth_token(cfg: dict, force_relogin: bool = False) -> str:
         "Accept": "application/json, text/plain, */*"
     }
 
-    # 1. 若已有 token 且不需要强制重新登录，先探测 token 是否有效
+    # 1. 若已有 token 且无需强制重登：
+    #    - verify_token=False 时直接复用缓存 token，省去一次前置 RTT；若后续接口返回 401 再懒重登
+    #    - verify_token=True 时先轻量探测 token 是否有效
     if token and not force_relogin:
+        if not verify_token:
+            return token
         try:
             test_req = urllib.request.Request(
                 f"{remote_url}/api/v1/admin/database/backups",
@@ -2838,14 +2843,27 @@ def _probe_direct_origin_base_url(
     return None
 
 
+def _compute_adaptive_slice_size(remaining_bytes: int, workers: int) -> int:
+    """根据剩余字节数与并发度计算分片大小，兼顾少轮次与防长尾拖慢。"""
+    if remaining_bytes <= 4 * 1024 * 1024:
+        return 512 * 1024
+    if remaining_bytes <= 20 * 1024 * 1024:
+        return 1 * 1024 * 1024
+    target_slices = max(24, workers * 2)
+    raw = remaining_bytes // target_slices
+    # 向上对齐到 256KB，并限制在 [1MB, 2MB] 区间
+    aligned = ((raw + 256 * 1024 - 1) // (256 * 1024)) * (256 * 1024)
+    return max(1 * 1024 * 1024, min(2 * 1024 * 1024, aligned))
+
+
 def _download_remote_file_with_verification(
     download_url: str,
     temp_dest_path: Path,
     headers: Dict[str, str],
     expected_size: Optional[int],
-    chunk_size: int = 1 * 1024 * 1024,
+    chunk_size: Optional[int] = None,
     max_retries: int = 4,
-    range_workers: int = 4,
+    range_workers: int = 12,
     prefer_direct_origin: bool = False,
     remote_url: str = "",
     remote_filename: str = "",
@@ -2857,15 +2875,18 @@ def _download_remote_file_with_verification(
     安全拉取远程备份文件并校验字节完整性。
 
     - 支持自动探测 `X-Served-By` 直连源站绕开海外 CDN 限速；
-    - 若远端支持 HTTP `Range`（返回 206），自动按 1MB 分片多路并发断点续传，单分片异常独立重试；
+    - 探测请求仅拉取 256 KB（或显式传入的 `chunk_size`），随后按自适应分片 + 每线程独立 Keep-Alive
+      连接启动 12 路并发 Range 拉取，单分片支持断点续传与实时字节进度上报；
     - 若远端暂仅返回 200 全量流，强制使用 `Accept-Encoding: identity` + 单块读超时（45s），
       严格校验接收字节数 == `expected_size` / `Content-Length`，并实时回调下载字节进度。
     """
     base_headers = {**headers, "Accept-Encoding": "identity"}
-    timeout_cfg = httpx.Timeout(connect=20.0, read=45.0, write=30.0, pool=15.0)
+    timeout_cfg = httpx.Timeout(connect=20.0, read=45.0, write=30.0, pool=20.0)
     last_error: Optional[Exception] = None
     active_download_url = download_url
     origin_probed = False
+    adaptive_mode = chunk_size is None
+    probe_slice_size = (256 * 1024) if adaptive_mode else int(chunk_size)
 
     def _check_cancel() -> None:
         if cancel_check and cancel_check():
@@ -2875,14 +2896,14 @@ def _download_remote_file_with_verification(
         verify=False,
         follow_redirects=True,
         timeout=timeout_cfg,
-        limits=httpx.Limits(max_connections=max(6, range_workers + 2), max_keepalive_connections=max(4, range_workers)),
+        limits=httpx.Limits(max_connections=max(16, range_workers + 4), max_keepalive_connections=max(12, range_workers)),
     ) as client:
         for attempt in range(1, max_retries + 1):
             _check_cancel()
             if temp_dest_path.exists():
                 temp_dest_path.unlink()
 
-            probe_end = chunk_size - 1
+            probe_end = probe_slice_size - 1
             if expected_size is not None and expected_size > 0:
                 probe_end = min(probe_end, expected_size - 1)
             probe_headers = {**base_headers, "Range": f"bytes=0-{probe_end}"}
@@ -2927,8 +2948,16 @@ def _download_remote_file_with_verification(
                             raise RuntimeError("无法确定远程文件总大小，终止分片下载")
 
                         first_expected_len = end - start + 1
+                        remaining_after_probe = max(0, target_total - first_expected_len)
+                        slice_size = (
+                            _compute_adaptive_slice_size(remaining_after_probe, range_workers)
+                            if adaptive_mode
+                            else int(chunk_size)
+                        )
                         if log_cb:
-                            log_cb(f"远端已启用 HTTP Range 并发分片续传模式（{range_workers} 并发，单片 {chunk_size // 1024} KB）")
+                            log_cb(
+                                f"远端已启用 HTTP Range 并发分片续传模式（{range_workers} 并发，单片 {max(1, slice_size // 1024)} KB）"
+                            )
 
                         with open(temp_dest_path, "wb") as f:
                             f.truncate(target_total)
@@ -2943,7 +2972,9 @@ def _download_remote_file_with_verification(
                             raise RuntimeError(f"首个分片字节不足: 期望 {first_expected_len}, 实际 {len(first_buf)}")
 
                         file_lock = threading.Lock()
+                        progress_lock = threading.Lock()
                         total_downloaded = len(first_buf)
+                        last_progress_ts = 0.0
                         with open(temp_dest_path, "r+b") as f:
                             f.seek(0)
                             f.write(first_buf)
@@ -2951,40 +2982,85 @@ def _download_remote_file_with_verification(
                         slices: List[Tuple[int, int]] = []
                         cursor = len(first_buf)
                         while cursor < target_total:
-                            s_end = min(cursor + chunk_size - 1, target_total - 1)
+                            s_end = min(cursor + slice_size - 1, target_total - 1)
                             slices.append((cursor, s_end))
                             cursor = s_end + 1
 
                         if slices:
+                            thread_local = threading.local()
+                            worker_clients: List[httpx.Client] = []
+                            clients_lock = threading.Lock()
+
+                            def _get_worker_client() -> httpx.Client:
+                                wc = getattr(thread_local, "client", None)
+                                if wc is None:
+                                    wc = httpx.Client(
+                                        verify=False,
+                                        follow_redirects=True,
+                                        timeout=timeout_cfg,
+                                        limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+                                    )
+                                    thread_local.client = wc
+                                    with clients_lock:
+                                        worker_clients.append(wc)
+                                return wc
+
+                            def _add_live_bytes(delta: int, force_emit: bool = False) -> None:
+                                nonlocal total_downloaded, last_progress_ts
+                                if delta == 0 and not force_emit:
+                                    return
+                                with progress_lock:
+                                    total_downloaded = max(0, total_downloaded + delta)
+                                    cur_total = total_downloaded
+                                    now_t = time.monotonic()
+                                    should_emit = (
+                                        progress_cb is not None
+                                        and (force_emit or now_t - last_progress_ts >= 0.2 or cur_total >= target_total)
+                                    )
+                                    if should_emit:
+                                        last_progress_ts = now_t
+                                if should_emit and progress_cb:
+                                    progress_cb(cur_total, target_total, "range_parallel", attempt, max_retries)
+
                             def _fetch_slice(s_start: int, s_end: int) -> int:
                                 part_expected = s_end - s_start + 1
                                 last_p_err: Optional[Exception] = None
+                                buf = bytearray()
+                                live_reported = 0
                                 for part_try in range(1, max_retries + 1):
                                     _check_cancel()
-                                    part_headers = {**base_headers, "Range": f"bytes={s_start}-{s_end}"}
-                                    buf = bytearray()
+                                    # 若此前已收超过 64KB，从断点偏移继续拉取避免浪费带宽；极小切片重头拉取兼容单测
+                                    if len(buf) < 64 * 1024:
+                                        if live_reported > 0:
+                                            _add_live_bytes(-live_reported)
+                                            live_reported = 0
+                                        buf.clear()
+                                    req_start = s_start + len(buf)
+                                    part_headers = {**base_headers, "Range": f"bytes={req_start}-{s_end}"}
+                                    wc = _get_worker_client()
                                     try:
-                                        with client.stream("GET", active_download_url, headers=part_headers) as part_resp:
+                                        with wc.stream("GET", active_download_url, headers=part_headers) as part_resp:
+                                            if part_resp.status_code in (429, 503):
+                                                raise RuntimeError(f"远端临时限流/繁忙 (HTTP {part_resp.status_code})")
                                             if part_resp.status_code != 206:
                                                 raise RuntimeError(f"分片请求期望 206，实际返回 {part_resp.status_code}")
                                             part_cr = _parse_content_range_header(part_resp.headers.get("Content-Range"))
-                                            if not part_cr or part_cr[0] != s_start or part_cr[1] != s_end:
+                                            if not part_cr or part_cr[0] != req_start or part_cr[1] != s_end:
                                                 raise RuntimeError(
-                                                    f"分片 Content-Range 错位: 期望 {s_start}-{s_end}, 实际 {part_resp.headers.get('Content-Range')}"
+                                                    f"分片 Content-Range 错位: 期望 {req_start}-{s_end}, 实际 {part_resp.headers.get('Content-Range')}"
                                                 )
                                             for data in part_resp.iter_bytes(chunk_size=128 * 1024):
                                                 _check_cancel()
                                                 buf.extend(data)
+                                                live_reported += len(data)
+                                                _add_live_bytes(len(data))
                                         if len(buf) != part_expected:
                                             raise RuntimeError(f"分片下载截断: 期望 {part_expected} 字节, 实际 {len(buf)} 字节")
                                         with file_lock:
-                                            nonlocal total_downloaded
                                             with open(temp_dest_path, "r+b") as f:
                                                 f.seek(s_start)
                                                 f.write(buf)
-                                            total_downloaded += len(buf)
-                                            if progress_cb:
-                                                progress_cb(total_downloaded, target_total, "range_parallel", attempt, max_retries)
+                                        _add_live_bytes(0, force_emit=True)
                                         return len(buf)
                                     except (HTTPException, PullCancelledError):
                                         raise
@@ -2997,10 +3073,17 @@ def _download_remote_file_with_verification(
                                 raise RuntimeError(f"分片 [{s_start}-{s_end}] 连续重试失败: {last_p_err}")
 
                             workers = max(1, min(int(range_workers), len(slices)))
-                            with ThreadPoolExecutor(max_workers=workers) as pool:
-                                futures = [pool.submit(_fetch_slice, s0, s1) for s0, s1 in slices]
-                                for fut in as_completed(futures):
-                                    fut.result()
+                            try:
+                                with ThreadPoolExecutor(max_workers=workers) as pool:
+                                    futures = [pool.submit(_fetch_slice, s0, s1) for s0, s1 in slices]
+                                    for fut in as_completed(futures):
+                                        fut.result()
+                            finally:
+                                for wc in worker_clients:
+                                    try:
+                                        wc.close()
+                                    except Exception:
+                                        pass
 
                         return total_downloaded
 
@@ -3108,13 +3191,17 @@ def _execute_remote_pull(
         with job.lock:
             job.remote_url = remote_url
 
-    _set_phase("auth", "正在校验远程认证凭证...")
-    token = _get_remote_auth_token(cfg)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Authorization": f"Bearer {token}",
-    }
+    _set_phase("auth", "正在加载远程认证凭证...")
+    token = _get_remote_auth_token(cfg, verify_token=False)
+
+    def _build_headers(tok: str) -> Dict[str, str]:
+        return {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Authorization": f"Bearer {tok}",
+        }
+
+    headers = _build_headers(token)
 
     do_create = payload.create_fresh_first if payload.create_fresh_first is not None else cfg.get("auto_create_before_pull", False)
     prefer_origin = payload.prefer_direct_origin if payload.prefer_direct_origin is not None else bool(cfg.get("prefer_direct_origin", True))
@@ -3131,6 +3218,15 @@ def _execute_remote_pull(
                     content=b"{}",
                     headers={**headers, "Content-Type": "application/json"},
                 )
+                if c_resp.status_code == 401:
+                    _log("缓存凭证已失效，正在自动重新登录远程生产服务器...")
+                    token = _get_remote_auth_token(cfg, force_relogin=True)
+                    headers = _build_headers(token)
+                    c_resp = client.post(
+                        f"{remote_url}/api/v1/admin/database/backup",
+                        content=b"{}",
+                        headers={**headers, "Content-Type": "application/json"},
+                    )
                 if c_resp.status_code != 200:
                     raise HTTPException(
                         status_code=c_resp.status_code if c_resp.status_code in (400, 401, 403, 404, 502, 503, 504) else 500,
@@ -3165,7 +3261,16 @@ def _execute_remote_pull(
 
     if not explicit_remote_name or expected_size is None:
         try:
-            resolved_name, listed_size = _fetch_remote_backup_metadata(remote_url, headers, explicit_remote_name)
+            try:
+                resolved_name, listed_size = _fetch_remote_backup_metadata(remote_url, headers, explicit_remote_name)
+            except HTTPException as meta_he:
+                if meta_he.status_code == 401:
+                    _log("缓存凭证已失效，正在自动重新登录远程生产服务器...")
+                    token = _get_remote_auth_token(cfg, force_relogin=True)
+                    headers = _build_headers(token)
+                    resolved_name, listed_size = _fetch_remote_backup_metadata(remote_url, headers, explicit_remote_name)
+                else:
+                    raise
             remote_filename = resolved_name or explicit_remote_name
             if expected_size is None:
                 expected_size = listed_size
@@ -3200,18 +3305,38 @@ def _execute_remote_pull(
     _log(f"开始拉取 {remote_filename}（预期大小: {expected_size or '未知'} 字节）-> {local_filename}")
 
     try:
-        written_bytes = _download_remote_file_with_verification(
-            download_url=download_url,
-            temp_dest_path=temp_dest_path,
-            headers=headers,
-            expected_size=expected_size,
-            prefer_direct_origin=prefer_origin,
-            remote_url=remote_url,
-            remote_filename=remote_filename,
-            progress_cb=job.update_progress if job else None,
-            log_cb=_log,
-            cancel_check=_is_cancelled,
-        )
+        try:
+            written_bytes = _download_remote_file_with_verification(
+                download_url=download_url,
+                temp_dest_path=temp_dest_path,
+                headers=headers,
+                expected_size=expected_size,
+                prefer_direct_origin=prefer_origin,
+                remote_url=remote_url,
+                remote_filename=remote_filename,
+                progress_cb=job.update_progress if job else None,
+                log_cb=_log,
+                cancel_check=_is_cancelled,
+            )
+        except HTTPException as dl_he:
+            if dl_he.status_code == 401:
+                _log("下载阶段缓存凭证失效，正在自动重新登录并重试...")
+                token = _get_remote_auth_token(cfg, force_relogin=True)
+                headers = _build_headers(token)
+                written_bytes = _download_remote_file_with_verification(
+                    download_url=download_url,
+                    temp_dest_path=temp_dest_path,
+                    headers=headers,
+                    expected_size=expected_size,
+                    prefer_direct_origin=prefer_origin,
+                    remote_url=remote_url,
+                    remote_filename=remote_filename,
+                    progress_cb=job.update_progress if job else None,
+                    log_cb=_log,
+                    cancel_check=_is_cancelled,
+                )
+            else:
+                raise
 
         if not temp_dest_path.exists():
             raise HTTPException(status_code=502, detail="远程备份下载后临时文件不存在")

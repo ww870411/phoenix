@@ -9,11 +9,19 @@ import {
   resetSeatingNames,
 } from '../utils/seatingLayout.js'
 
-test('默认按边设置座位数：每边3桌拼接且左右竖边略长于上下横边、双侧窗户、左上设备室与右上外开门', () => {
+test('默认按边设置座位数：共61席且左右竖边略长于上下横边、双侧窗户、左上设备室与右上外开门', () => {
   const layout = buildDefaultLayout()
   assert.equal(layout.paper, 'portrait')
+  assert.equal(layout.numbers, false)
+  assert.equal(layout.emptySeatDisplay, 'label')
   assert.equal(layout.rows.length, 8)
-  assert.ok(layout.rows.every((r) => r.tableCount === 3 && r.seats.length === 6))
+  const expectedSeats = { A: 6, B: 7, C: 8, D: 8, E: 8, F: 8, G: 8, H: 8 }
+  assert.ok(
+    layout.rows.every((r) =>
+      r.seats.length === expectedSeats[r.id] &&
+      (r.zone === 'rear' ? r.tableCount === 4 : r.tableCount === 3),
+    ),
+  )
   assert.equal(layout.room.door.enabled, true)
   assert.equal(layout.room.equipmentRoom.enabled, true)
   assert.equal(layout.room.equipmentRoom.label, '设备室')
@@ -22,12 +30,12 @@ test('默认按边设置座位数：每边3桌拼接且左右竖边略长于上�
   assert.equal(layout.plants.length, 4)
 
   const scene = computeRoomScene(layout)
-  // 每条边由 3 张拼接桌构成，8 排共 24 个桌段
-  assert.equal(scene.tables.length, 24)
-  assert.equal(scene.seats.length, 48)
-  // 中央方形左右竖边外沿 (520) 略长于上下横边 (444)
-  assert.equal(scene.ringW, 444)
-  assert.equal(scene.ringOuterH, 520)
+  // 前5排各3桌(15段) + 后方3排各4桌(12段) = 27个桌段；6+7+8*6 = 61席
+  assert.equal(scene.tables.length, 27)
+  assert.equal(scene.seats.length, 61)
+  // 中央方形左右竖边外沿 (636) 略长于上下横边 (560)
+  assert.equal(scene.ringW, 560)
+  assert.equal(scene.ringOuterH, 636)
   assert.ok(scene.ringOuterH > scene.ringW)
 
   // 校验所有横排（非桌面内嵌标签）不与任何桌体或座椅垂直重叠
@@ -59,8 +67,8 @@ test('支持隐藏整排或单座后重新顺编可见座位且座椅不重叠',
 
   const visible = buildSeatCatalog(layout.rows, false)
   const withHidden = buildSeatCatalog(layout.rows, true)
-  assert.equal(visible.list.length, 48 - 1 - 6)
-  assert.equal(withHidden.list.length, 48)
+  assert.equal(visible.list.length, 61 - 1 - 8)
+  assert.equal(withHidden.list.length, 61)
   assert.equal(visible.list[0].code, 'A-01')
 
   // 单边紧凑调整为 9 座时水平坐标单调递增不重叠
@@ -93,14 +101,15 @@ test('支持初始化排座、初始化布局（保留/清空姓名）及旧版 
   const resetKeep = resetRoomLayout(layout, { preserveNames: true })
   assert.equal(resetKeep.meeting, '集团调度会')
   assert.equal(resetKeep.rows[7].hidden, false)
-  assert.equal(resetKeep.plants[0].x, 294)
-  assert.equal(resetKeep.plants[0].y, 392)
+  assert.equal(resetKeep.plants[0].x, 335)
+  assert.equal(resetKeep.plants[0].y, 420)
   assert.equal(resetKeep.rows[0].seats[0].name, '张主任')
   assert.equal(resetKeep.rows[3].seats[0].name, '李部长')
 
-  // 3. 兼容迁移旧版 HTML rows 格式
+  // 3. 兼容迁移旧版 HTML rows 格式及空位显示模式规范化
   const migrated = normalizeOrMigrateLayout({
     meeting: '旧方案测试',
+    emptySeatDisplay: 'blank',
     rows: [
       { id: 'A', label: '前排', zone: 'front', names: ['甲', '乙', '丙', '丁'] },
       { id: 'B', label: '左排', zone: 'innerLeft', names: ['戊'] },
@@ -109,6 +118,10 @@ test('支持初始化排座、初始化布局（保留/清空姓名）及旧版 
     ],
   })
   assert.equal(migrated.meeting, '旧方案测试')
+  assert.equal(migrated.emptySeatDisplay, 'blank')
   assert.equal(migrated.rows[0].seats.length, 4)
   assert.equal(migrated.rows[0].seats[0].name, '甲')
+
+  const keptMeta = resetRoomLayout(migrated, { preserveNames: true })
+  assert.equal(keptMeta.emptySeatDisplay, 'blank')
 })

@@ -1,7 +1,8 @@
 {
-  "remote_url": "https://platform.smartview.top",
+  "remote_url": "https://originplatform.smartview.top",
   "username": "ww870411",
   "password": "w870411w",
-  "token": "98fWzcyV9vJvRJC6vEKQpPh4KRh-OHjrmXq2xkwq8s0",
-  "auto_create_before_pull": false
+  "token": "2cmP-_6djlWqjAGa9rbx3C70tmeK9M8mNwsmXuHR06M",
+  "auto_create_before_pull": false,
+  "prefer_direct_origin": true
 }

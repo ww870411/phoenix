@@ -744,4 +744,14 @@ async function handleTestSingleProvider(provider, index) {
   .provider-grid { grid-template-columns: 1fr; }
   .keys__row { flex-wrap: wrap; }
 }
+
+@media (max-width: 640px) {
+  .ai-settings-dialog__backdrop { padding: 8px; }
+  .ai-settings-dialog__panel { padding: 12px; max-height: calc(100vh - 16px); }
+  .provider-card__head { flex-direction: column; align-items: stretch; }
+  .provider-card__actions { justify-content: flex-start; }
+  .field input, .field select, .field textarea { min-width: 0; width: 100%; }
+  .ai-settings-dialog__actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .ai-settings-dialog__actions .btn { width: 100%; }
+}
 </style>

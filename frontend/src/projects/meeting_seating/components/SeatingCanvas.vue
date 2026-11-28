@@ -79,7 +79,7 @@
         class="wood"
       />
 
-      <!-- 右上位置：朝上方外开门 -->
+      <!-- 右上位置：朝上方双开外开门 -->
       <g v-if="doorGeometry" class="door-group">
         <rect
           :x="mxRect(doorGeometry.doorX, doorGeometry.doorW)"
@@ -90,15 +90,37 @@
           stroke="#b5a18a"
           stroke-width="1"
         />
+        <!-- 门扇开启扇形轨迹（填充与虚线弧） -->
+        <path :d="doorGeometry.leftFillPath" fill="rgba(212, 232, 237, 0.24)" stroke="none" />
+        <path :d="doorGeometry.rightFillPath" fill="rgba(212, 232, 237, 0.24)" stroke="none" />
         <path
-          :d="doorGeometry.arcPath"
-          fill="rgba(212, 232, 237, 0.22)"
+          :d="doorGeometry.leftArcPath"
+          fill="none"
           stroke="#7f6b55"
           stroke-width="1.3"
           stroke-dasharray="4 3"
         />
+        <path
+          :d="doorGeometry.rightArcPath"
+          fill="none"
+          stroke="#7f6b55"
+          stroke-width="1.3"
+          stroke-dasharray="4 3"
+        />
+        <!-- 左右两扇外开门扇 -->
         <rect
-          :x="doorGeometry.leafRectX"
+          :x="doorGeometry.leftLeafX"
+          :y="scene.wallTop - doorGeometry.leafLen"
+          width="5"
+          :height="doorGeometry.leafLen"
+          fill="#c49a6c"
+          stroke="#6f5032"
+          stroke-width="1.2"
+          rx="1"
+          class="wood"
+        />
+        <rect
+          :x="doorGeometry.rightLeafX"
           :y="scene.wallTop - doorGeometry.leafLen"
           width="5"
           :height="doorGeometry.leafLen"
@@ -109,14 +131,15 @@
           class="wood"
         />
         <text
-          :x="mxPoint(doorGeometry.doorX + doorGeometry.doorW / 2 - 4)"
-          :y="scene.wallTop - doorGeometry.leafLen / 2 + 4"
+          :x="mxPoint(doorGeometry.doorX + doorGeometry.doorW / 2)"
+          :y="scene.wallTop - doorGeometry.leafLen / 2"
           text-anchor="middle"
-          font-size="11"
+          dominant-baseline="middle"
+          font-size="10.5"
           font-weight="600"
           fill="#6e5a44"
         >
-          {{ layout.room?.door?.label || '出入口（外开）' }}
+          {{ layout.room?.door?.label || '双开出入口（外开）' }}
         </text>
       </g>
 
@@ -355,7 +378,7 @@
             :y2="tbl.y"
             class="tableSeam"
           />
-          <title>{{ tbl.rowLabel }}（3 桌拼接）</title>
+          <title>{{ tbl.rowLabel }}（{{ tbl.tableCount || 3 }} 桌拼接）</title>
         </g>
       </g>
 
@@ -451,6 +474,7 @@
             class="back"
           />
           <text
+            v-if="seat.displayName"
             :x="mxPoint(seat.x + seat.w / 2)"
             :y="seat.y + (layout.numbers ? Math.round(seat.h * 0.4) : Math.round(seat.h * 0.52))"
             text-anchor="middle"
@@ -523,17 +547,22 @@ const screenRect = computed(() => {
 
 const doorGeometry = computed(() => {
   if (!props.layout?.room?.door?.enabled) return null
-  const doorW = 68
-  const leafLen = 58
-  const doorX = scene.value.wallPad + innerRoomW.value - 134
-  const hingeXRaw = doorX + doorW
-  const openStartXRaw = doorX + doorW - leafLen
-  const hingeX = mxPoint(hingeXRaw)
-  const openStartX = mxPoint(openStartXRaw)
+  const doorW = 92
+  const leafLen = doorW / 2
+  const doorX = scene.value.wallPad + innerRoomW.value - 146
   const wy = scene.value.wallTop + 4
-  const sweepFlag = mirror.value ? 0 : 1
-  const arcPath = `M ${openStartX} ${wy} A ${leafLen} ${leafLen} 0 0 ${sweepFlag} ${hingeX} ${wy - leafLen}`
-  const leafRectX = mirror.value ? hingeX : hingeX - 5
+
+  const leftHingeX = mxPoint(doorX)
+  const rightHingeX = mxPoint(doorX + doorW)
+  const midX = mxPoint(doorX + doorW / 2)
+
+  const leftSweep = mirror.value ? 1 : 0
+  const rightSweep = mirror.value ? 0 : 1
+
+  const leftArcPath = `M ${midX} ${wy} A ${leafLen} ${leafLen} 0 0 ${leftSweep} ${leftHingeX} ${wy - leafLen}`
+  const rightArcPath = `M ${midX} ${wy} A ${leafLen} ${leafLen} 0 0 ${rightSweep} ${rightHingeX} ${wy - leafLen}`
+  const leftFillPath = `M ${leftHingeX} ${wy} L ${midX} ${wy} A ${leafLen} ${leafLen} 0 0 ${leftSweep} ${leftHingeX} ${wy - leafLen} Z`
+  const rightFillPath = `M ${rightHingeX} ${wy} L ${midX} ${wy} A ${leafLen} ${leafLen} 0 0 ${rightSweep} ${rightHingeX} ${wy - leafLen} Z`
 
   return {
     doorX,
@@ -542,8 +571,12 @@ const doorGeometry = computed(() => {
     leftWallLen: doorX - (scene.value.wallPad + 4),
     rightWallStart: doorX + doorW,
     rightWallLen: scene.value.wallPad + innerRoomW.value - 4 - (doorX + doorW),
-    arcPath,
-    leafRectX,
+    leftArcPath,
+    rightArcPath,
+    leftFillPath,
+    rightFillPath,
+    leftLeafX: mxRect(doorX, 5),
+    rightLeafX: mxRect(doorX + doorW - 5, 5),
   }
 })
 
@@ -602,14 +635,26 @@ const renderedPlants = computed(() => {
   return (props.layout?.plants || []).filter((p) => !p.hidden || showHidden.value)
 })
 
+const emptySeatText = computed(() => {
+  const mode = props.layout?.emptySeatDisplay
+  if (mode === 'dash') return '-'
+  if (mode === 'blank') return ''
+  return '空位'
+})
+
 const renderedSeats = computed(() => {
   return scene.value.seats.map((s) => {
+    const trimmed = String(s.name || '').trim()
     const chars = Array.from(s.name)
     const maxChars = s.w < 46 ? 4 : s.w < 58 ? 6 : 8
-    const displayName = chars.length > maxChars ? `${chars.slice(0, maxChars - 1).join('')}…` : s.name || '空位'
+    const displayName = trimmed
+      ? chars.length > maxChars
+        ? `${chars.slice(0, maxChars - 1).join('')}…`
+        : s.name
+      : emptySeatText.value
     let nameFontSize = 14
-    if (!s.name.trim()) {
-      nameFontSize = s.w < 46 ? 9 : 11
+    if (!trimmed) {
+      nameFontSize = emptySeatText.value === '-' ? 14 : s.w < 46 ? 9 : 11
     } else if (s.w < 46) {
       nameFontSize = chars.length > 2 ? 9.5 : 11
     } else if (chars.length > 5) {

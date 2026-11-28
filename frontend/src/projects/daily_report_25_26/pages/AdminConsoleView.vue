@@ -32,36 +32,38 @@
         </header>
 
         <section v-if="activeTab === 'files'" class="content-block">
-          <div class="toolbar">
+          <div class="toolbar files-toolbar">
             <label class="field grow">
               <span>搜索</span>
               <input v-model.trim="fileSearch" type="text" placeholder="输入目录名或文件名关键字（树中筛选）" />
             </label>
-            <button class="btn ghost" type="button" @click="loadDirectories">刷新目录</button>
-            <button
-              class="btn ghost"
-              type="button"
-              :disabled="fileListLoading || fileUploading || !selectedDirectoryPath"
-              @click="triggerFileUpload"
-            >
-              {{ fileUploading ? '上传中…' : '上传到所选目录' }}
-            </button>
-            <button
-              class="btn ghost"
-              type="button"
-              :disabled="!canOpenSelectedFile"
-              @click="openSelectedFileEditor"
-            >
-              打开所选文件
-            </button>
-            <button
-              class="btn danger"
-              type="button"
-              :disabled="fileListLoading || fileUploading || fileDeleting || !selectedTreePath"
-              @click="deleteSelectedTreeNode"
-            >
-              {{ fileDeleting ? '删除中…' : '删除所选' }}
-            </button>
+            <div class="files-toolbar-actions">
+              <button class="btn ghost" type="button" @click="loadDirectories">刷新目录</button>
+              <button
+                class="btn ghost"
+                type="button"
+                :disabled="fileListLoading || fileUploading || !selectedDirectoryPath"
+                @click="triggerFileUpload"
+              >
+                {{ fileUploading ? '上传中…' : '上传到所选目录' }}
+              </button>
+              <button
+                class="btn ghost"
+                type="button"
+                :disabled="!canOpenSelectedFile"
+                @click="openSelectedFileEditor"
+              >
+                打开所选文件
+              </button>
+              <button
+                class="btn danger"
+                type="button"
+                :disabled="fileListLoading || fileUploading || fileDeleting || !selectedTreePath"
+                @click="deleteSelectedTreeNode"
+              >
+                {{ fileDeleting ? '删除中…' : '删除所选' }}
+              </button>
+            </div>
             <input
               ref="adminFileUploadInputRef"
               class="hidden-upload"
@@ -264,7 +266,7 @@
               </div>
             </div>
             <p v-if="dbMessage" class="message">{{ dbMessage }}</p>
-            <div v-if="dbRowsDraft.length" class="db-grid-wrap" style="height: 750px; min-height: 700px;">
+            <div v-if="dbRowsDraft.length" class="db-grid-wrap">
               <RevoGrid
                 :key="dbGridRenderKey"
                 :row-headers="true"
@@ -278,7 +280,6 @@
                 :columns="dbGridColumns"
                 :source="dbGridSource"
                 class="db-data-grid"
-                style="height: 100% !important; min-height: 700px;"
                 @afterfocus="handleDbGridFocus"
                 @afteredit="handleDbGridAfterEdit"
                 @dblclick="openFocusedDbCellEditor"
@@ -306,18 +307,17 @@
           <section class="inner-card permission-central-card">
             <header class="section-header">
               <div>
-                <h3 style="margin: 0; font-size: 15px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                <h3 class="permission-central-title">
                   <span>🎛️ 项目角色与权限配置中枢</span>
-                  <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 12px; font-weight: 500;">三维权限矩阵已打通</span>
+                  <span class="permission-central-badge">三维权限矩阵已打通</span>
                 </h3>
                 <p class="subtext" style="margin-top: 6px;">
                   当前选中项目：<strong style="color: #0284c7;">[{{ getProjectDisplayName(selectedProjectKey) }}]</strong>。各子项目的页面路由访问控制（page_access）与业务操作动作（actions）已全面收敛至三栏权限配置中心统一管控。
                 </p>
               </div>
               <button
-                class="btn primary"
+                class="btn primary permission-central-btn"
                 type="button"
-                style="display: flex; align-items: center; gap: 6px; white-space: nowrap; height: 34px;"
                 @click="jumpToMatrixForProject(selectedProjectKey)"
               >
                 <span>⚙️ 前往配置该项目权限矩阵 ➔</span>
@@ -687,7 +687,7 @@
                   </aside>
 
                   <div class="super-files-wrap" @contextmenu.prevent="openSuperContextMenu($event, 'list', { path: fileManagerPath, name: getItemName(fileManagerPath), is_dir: true })">
-                    <table class="audit-table super-files-table">
+                    <table class="audit-table super-files-table desktop-only-table">
                       <thead>
                         <tr>
                           <th class="super-select-col">
@@ -734,6 +734,50 @@
                         </tr>
                       </tbody>
                     </table>
+
+                    <!-- 手机窄屏服务器文件卡片流 -->
+                    <div class="super-mobile-files-list mobile-only-cards">
+                      <div v-if="fileManagerItems.length" class="super-mobile-select-bar">
+                        <label class="super-mobile-select-all">
+                          <input
+                            type="checkbox"
+                            :checked="isAllCurrentSelected"
+                            :disabled="!fileManagerItems.length"
+                            @change="toggleSelectAllCurrentFiles($event.target.checked)"
+                          />
+                          <span>全选当前目录（{{ fileManagerItems.length }} 项）</span>
+                        </label>
+                      </div>
+                      <div v-if="!fileManagerItems.length && !fileManagerLoading" class="panel-state">目录为空</div>
+                      <div
+                        v-for="item in fileManagerItems"
+                        :key="`m-${item.path}`"
+                        class="super-mobile-file-card"
+                        :class="{ 'super-row-selected': isSuperPathSelected(item.path) }"
+                      >
+                        <div class="super-mobile-file-top">
+                          <label class="super-mobile-file-check">
+                            <input
+                              type="checkbox"
+                              :checked="isSuperPathSelected(item.path)"
+                              @change="toggleSuperPathSelection(item.path, $event.target.checked)"
+                            />
+                            <span class="super-mobile-file-icon">{{ item.is_dir ? '📁' : '📄' }}</span>
+                            <span class="super-mobile-file-name">{{ item.name }}</span>
+                          </label>
+                        </div>
+                        <div class="super-mobile-file-meta">
+                          <span class="super-type-pill" :class="{ 'is-dir': item.is_dir }">{{ item.is_dir ? '目录' : '文件' }}</span>
+                          <span>{{ item.is_dir ? '可点击进入' : formatBytes(item.size) }}</span>
+                        </div>
+                        <div class="super-mobile-file-actions">
+                          <button class="btn ghost btn-sm" type="button" @click="openSuperPath(item)">
+                            {{ item.is_dir ? '进入目录' : '打开编辑' }}
+                          </button>
+                          <button class="btn danger btn-sm" type="button" @click="deleteSuperItem(item.path)">删除</button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -788,7 +832,7 @@
           <section class="inner-card audit-main-card">
             <header class="section-header audit-section-header">
               <div class="header-title-box">
-                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                <h3 class="audit-title-heading">
                   <span>📋 操作审计日志</span>
                   <span class="audit-total-badge">{{ auditStats.total }} 条记录</span>
                 </h3>
@@ -1065,41 +1109,70 @@
               </header>
 
               <div v-if="accountsLoading" class="panel-state">账号列表加载中…</div>
-              <div v-else class="table-container">
-                <table class="admin-table">
-                  <thead>
-                    <tr>
-                      <th>用户名</th>
-                      <th>登录密码</th>
-                      <th>归属单位</th>
-                      <th>系统角色组</th>
-                      <th class="col-actions">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="user in accounts" :key="user.username">
-                      <td class="username-cell">
-                        <strong>{{ user.username }}</strong>
-                      </td>
-                      <td><code>{{ user.password }}</code></td>
-                      <td>
+              <template v-else>
+                <div class="table-container desktop-only-table">
+                  <table class="admin-table">
+                    <thead>
+                      <tr>
+                        <th>用户名</th>
+                        <th>登录密码</th>
+                        <th>归属单位</th>
+                        <th>系统角色组</th>
+                        <th class="col-actions">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="user in accounts" :key="user.username">
+                        <td class="username-cell">
+                          <strong>{{ user.username }}</strong>
+                        </td>
+                        <td><code>{{ user.password }}</code></td>
+                        <td>
+                          <span class="unit-badge" :class="{ empty: !user.unit }">
+                            {{ user.unit || '未分配单位' }}
+                          </span>
+                        </td>
+                        <td>
+                          <span class="role-badge global">{{ user.group }}</span>
+                        </td>
+                        <td class="col-actions">
+                          <div class="action-buttons">
+                            <button class="btn ghost btn-sm" type="button" @click="openEditAccountModal(user)">编辑账号</button>
+                            <button class="btn danger btn-sm" type="button" @click="deleteAccount(user.username)">删除</button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- 手机窄屏账号卡片流 -->
+                <div class="accounts-mobile-cards mobile-only-cards">
+                  <div v-if="!accounts.length" class="panel-state">暂无用户账号</div>
+                  <div v-for="user in accounts" :key="`m-acc-${user.username}`" class="account-mobile-card">
+                    <div class="account-mobile-top">
+                      <strong class="account-mobile-name">👤 {{ user.username }}</strong>
+                      <span class="role-badge global">{{ user.group }}</span>
+                    </div>
+                    <div class="account-mobile-meta">
+                      <div class="account-meta-row">
+                        <span class="meta-label">归属单位</span>
                         <span class="unit-badge" :class="{ empty: !user.unit }">
                           {{ user.unit || '未分配单位' }}
                         </span>
-                      </td>
-                      <td>
-                        <span class="role-badge global">{{ user.group }}</span>
-                      </td>
-                      <td class="col-actions">
-                        <div class="action-buttons">
-                          <button class="btn ghost btn-sm" type="button" @click="openEditAccountModal(user)">编辑账号</button>
-                          <button class="btn danger btn-sm" type="button" @click="deleteAccount(user.username)">删除</button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                      </div>
+                      <div class="account-meta-row">
+                        <span class="meta-label">登录密码</span>
+                        <code class="account-pwd-code">{{ user.password }}</code>
+                      </div>
+                    </div>
+                    <div class="account-mobile-actions">
+                      <button class="btn ghost btn-sm" type="button" @click="openEditAccountModal(user)">✏️ 编辑账号</button>
+                      <button class="btn danger btn-sm" type="button" @click="deleteAccount(user.username)">🗑️ 删除</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
             </section>
           </div>
 
@@ -1278,33 +1351,31 @@
 
         <!-- 数据库备份与恢复 Tab -->
         <section v-else-if="activeTab === 'db_backup'" class="content-block db-backup-block">
-          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 12px;">
-              <div>
-                <h3 style="margin: 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+          <div class="db-backup-hero-card">
+            <div class="db-backup-hero-head">
+              <div class="db-backup-hero-info">
+                <h3 class="db-backup-hero-title">
                   <span>💾 数据库全量备份与按选高级还原中心</span>
-                  <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 12px; font-weight: 500;">PostgreSQL Custom Dump</span>
+                  <span class="db-backup-badge">PostgreSQL Custom Dump</span>
                 </h3>
-                <p style="margin: 6px 0 0; font-size: 13px; color: #64748b; line-height: 1.5;">
-                  默认备份目录：<code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; color: #0f172a;">{{ backupDirInfo || 'phoenix\\backend_data\\shared\\db_backup' }}</code>
+                <p class="db-backup-dir-line">
+                  默认备份目录：<code class="db-backup-dir-code">{{ backupDirInfo || 'phoenix\\backend_data\\shared\\db_backup' }}</code>
                 </p>
               </div>
-              <div style="display: flex; gap: 10px;">
+              <div class="db-backup-hero-actions">
                 <button
-                  class="btn primary"
+                  class="btn primary db-backup-create-btn"
                   type="button"
                   :disabled="backupCreating || backupListLoading"
-                  style="display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 36px; border-radius: 6px; cursor: pointer;"
                   @click="handleCreateBackup"
                 >
                   <span>{{ backupCreating ? '⏳ 正在全量导出中...' : '⚡ 立即创建备份 (.dump)' }}</span>
                 </button>
                 
                 <button
-                  class="btn ghost"
+                  class="btn ghost db-backup-upload-btn"
                   type="button"
                   :disabled="backupUploading"
-                  style="display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 36px; border-radius: 6px; background: #fff; border-color: #cbd5e1; cursor: pointer;"
                   @click="triggerBackupUpload"
                 >
                   <span>{{ backupUploading ? '正在上传...' : '📤 上传本地备份包' }}</span>
@@ -1318,9 +1389,8 @@
                 />
                 
                 <button
-                  class="btn ghost"
+                  class="btn ghost db-backup-refresh-btn"
                   type="button"
-                  style="height: 36px; padding: 0 12px; border-radius: 6px; background: #fff; border-color: #cbd5e1; cursor: pointer;"
                   @click="loadBackupList"
                 >
                   🔄 刷新
@@ -1328,7 +1398,7 @@
               </div>
             </div>
 
-            <div style="font-size: 12px; color: #475569; background: #fff; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 6px; display: flex; gap: 25px; flex-wrap: wrap;">
+            <div class="db-backup-stats-bar">
               <span>📦 备份存档数量：<strong>{{ backupList.length }} 个文件</strong></span>
               <span>💾 已占用存储：<strong>{{ totalBackupSizeFormatted }}</strong></span>
               <span>🛠️ 导出命令工具：<code>pg_dump -Fc (Custom Format)</code></span>
@@ -1336,47 +1406,45 @@
           </div>
 
           <!-- 🌐 远程生产环境数据直连与一键同步专区 -->
-          <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #7dd3fc; border-radius: 8px; padding: 18px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.08);">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
-              <div>
-                <h3 style="margin: 0; font-size: 15px; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+          <div class="remote-sync-card">
+            <div class="remote-sync-head">
+              <div class="remote-sync-info">
+                <h3 class="remote-sync-title">
                   <span>🌐 远程生产环境数据直连与一键同步中心</span>
-                  <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 12px; font-weight: 500;">Live Production Sync</span>
+                  <span class="db-backup-badge">Live Production Sync</span>
                 </h3>
-                <p style="margin: 5px 0 0; font-size: 12.5px; color: #075985;">
-                  直连生产服务器（<code>{{ remoteSyncForm.remote_url }}</code>），一键秒级拉取最新生产数据库快照并支持快速全量同步至本地开发环境。
+                <p class="remote-sync-desc">
+                  直连生产服务器（<code class="remote-sync-url-code">{{ remoteSyncForm.remote_url }}</code>），一键秒级拉取最新生产数据库快照并支持快速全量同步至本地开发环境。
                 </p>
               </div>
 
               <!-- 快捷主操作按钮组 -->
-              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <div class="remote-sync-actions">
                 <button
-                  class="btn primary"
+                  class="btn primary remote-sync-hero-btn"
                   type="button"
                   :disabled="remotePulling || remoteTesting"
-                  style="display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 36px; border-radius: 6px; font-weight: 600; cursor: pointer; background: #0284c7; border-color: #0284c7;"
-                  @click="handlePullLatestRemoteBackup(false)"
-                  title="自动从生产环境下载最新的 .dump 备份文件至本地"
-                >
-                  <span>{{ remotePulling ? '⏳ 正在从生产环境拉取备份中...' : '🚀 一键拉取生产环境最新备份' }}</span>
-                </button>
-
-                <button
-                  class="btn ghost"
-                  type="button"
-                  :disabled="remotePulling || remoteTesting"
-                  style="display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 36px; border-radius: 6px; background: #fff; border-color: #7dd3fc; color: #0369a1; cursor: pointer;"
                   @click="handlePullLatestRemoteBackup(true)"
                   title="先命令生产环境立即执行一次 pg_dump 生成最新快照，然后拉取到本地"
                 >
-                  <span>⚡ 即时快照并拉取</span>
+                  <span>{{ remotePulling ? '⏳ 正在执行快照并拉取...' : '⚡ 即时快照并拉取' }}</span>
+                  <span v-if="!remotePulling" class="remote-sync-rec-tag">常用</span>
                 </button>
 
                 <button
-                  class="btn ghost"
+                  class="btn ghost remote-sync-latest-btn"
+                  type="button"
+                  :disabled="remotePulling || remoteTesting"
+                  @click="handlePullLatestRemoteBackup(false)"
+                  title="自动从生产环境下载最新的 .dump 备份文件至本地"
+                >
+                  <span>{{ remotePulling ? '⏳ 拉取中...' : '🚀 一键拉取最新已有备份' }}</span>
+                </button>
+
+                <button
+                  class="btn ghost remote-sync-secondary-btn"
                   type="button"
                   :disabled="remoteTesting || remotePulling"
-                  style="display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 36px; border-radius: 6px; background: #fff; border-color: #7dd3fc; color: #0369a1; cursor: pointer;"
                   @click="openRemoteBackupsListModal"
                   title="查看生产环境上的所有备份存档历史"
                 >
@@ -1384,9 +1452,8 @@
                 </button>
 
                 <button
-                  class="btn ghost"
+                  class="btn ghost remote-sync-config-btn"
                   type="button"
-                  style="height: 36px; padding: 0 10px; border-radius: 6px; background: #fff; border-color: #7dd3fc; color: #0369a1; cursor: pointer;"
                   @click="showRemoteConfigDrawer = !showRemoteConfigDrawer"
                   title="查看或修改生产环境连接配置与账号密码"
                 >
@@ -1396,68 +1463,67 @@
             </div>
 
             <!-- 折叠配置面板 (点击“生产连接设置”展开) -->
-            <div v-if="showRemoteConfigDrawer" style="margin-top: 14px; padding: 14px 16px; background: #ffffff; border: 1px solid #bae6fd; border-radius: 6px;">
-              <div style="font-weight: 600; font-size: 13px; color: #0c4a6e; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div v-if="showRemoteConfigDrawer" class="remote-sync-drawer">
+              <div class="remote-sync-drawer-head">
                 <span>🛠️ 生产环境连接参数设定</span>
-                <span style="font-size: 11px; color: #64748b; font-weight: normal;">保存在本地开发环境 <code>backend_data/shared/remote_sync_config.json</code></span>
+                <span class="remote-sync-drawer-hint">保存在本地开发环境 <code>backend_data/shared/remote_sync_config.json</code></span>
               </div>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px;">
+              <div class="remote-sync-form-grid">
                 <div>
-                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">生产服务器域名/IP地址:</label>
+                  <label class="remote-sync-label">生产服务器域名/IP地址:</label>
                   <input
                     v-model="remoteSyncForm.remote_url"
                     type="text"
                     placeholder="https://platform.smartview.top"
-                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                    class="remote-sync-input"
                   />
                 </div>
                 <div>
-                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">生产管理员账号 (Username):</label>
+                  <label class="remote-sync-label">生产管理员账号 (Username):</label>
                   <input
                     v-model="remoteSyncForm.username"
                     type="text"
                     placeholder="ww870411"
-                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                    class="remote-sync-input"
                   />
                 </div>
                 <div>
-                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">生产管理员密码 (Password):</label>
+                  <label class="remote-sync-label">生产管理员密码 (Password):</label>
                   <input
                     v-model="remoteSyncForm.password"
                     type="password"
                     :placeholder="remoteSyncForm.has_password ? '已保存密码（留空保持不变）' : '请输入密码'"
-                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                    class="remote-sync-input"
                   />
                 </div>
                 <div>
-                  <label style="display: block; font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px;">或直接填入访问令牌 (Bearer Token, 可选):</label>
+                  <label class="remote-sync-label">或直接填入访问令牌 (Bearer Token, 可选):</label>
                   <input
                     v-model="remoteSyncForm.token"
                     type="password"
                     :placeholder="remoteSyncForm.token_masked || '可选填入已有的 JWT Token'"
-                    style="width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12.5px; box-sizing: border-box;"
+                    class="remote-sync-input"
                   />
                 </div>
               </div>
 
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 6px; border-top: 1px dashed #e2e8f0;">
-                <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center;">
-                  <label style="font-size: 12px; color: #475569; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <div class="remote-sync-drawer-footer">
+                <div class="remote-sync-checks">
+                  <label class="remote-sync-check-item">
                     <input type="checkbox" v-model="remoteSyncForm.auto_create_before_pull" />
                     <span>默认拉取前先命令生产环境生成最新即时备份</span>
                   </label>
-                  <label style="font-size: 12px; color: #0369a1; display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500;" title="检测到经过 CloudFront 等 CDN 且响应头含 X-Served-By 源站时，自动切换直连源站绕开限速">
+                  <label class="remote-sync-check-item is-highlight" title="检测到经过 CloudFront 等 CDN 且响应头含 X-Served-By 源站时，自动切换直连源站绕开限速">
                     <input type="checkbox" v-model="remoteSyncForm.prefer_direct_origin" />
                     <span>⚡ 自动探测并直连源站加速（绕开 CDN 限速）</span>
                   </label>
                 </div>
 
-                <div style="display: flex; gap: 8px;">
+                <div class="remote-sync-drawer-btns">
                   <button
                     class="btn ghost btn-sm"
                     type="button"
                     :disabled="remoteTesting"
-                    style="background: #f8fafc; border-color: #cbd5e1; height: 30px; font-size: 12px; padding: 0 12px; cursor: pointer;"
                     @click="handleTestRemoteConnection"
                   >
                     <span>{{ remoteTesting ? '⏳ 正在测试连通性...' : '📡 测试连通性' }}</span>
@@ -1466,7 +1532,6 @@
                     class="btn primary btn-sm"
                     type="button"
                     :disabled="remoteSavingConfig"
-                    style="height: 30px; font-size: 12px; padding: 0 14px; cursor: pointer;"
                     @click="handleSaveRemoteSyncConfig"
                   >
                     <span>{{ remoteSavingConfig ? '正在保存...' : '💾 保存配置' }}</span>
@@ -1476,91 +1541,114 @@
             </div>
 
             <!-- 同步状态提示信息 -->
-            <div v-if="remoteSyncStatusMsg" style="margin-top: 10px; font-size: 12.5px; padding: 8px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;" :style="remoteSyncStatusType === 'error' ? 'background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5;' : 'background: #f0fdf4; color: #15803d; border: 1px solid #86efac;'">
+            <div v-if="remoteSyncStatusMsg" class="remote-sync-status-msg" :class="remoteSyncStatusType === 'error' ? 'is-error' : 'is-ok'">
               <span>{{ remoteSyncStatusMsg }}</span>
-              <button type="button" style="background: none; border: none; cursor: pointer; color: inherit; font-size: 12px;" @click="remoteSyncStatusMsg = ''">✕</button>
+              <button type="button" class="remote-sync-status-close" @click="remoteSyncStatusMsg = ''">✕</button>
             </div>
           </div>
 
           <!-- 备份列表表格 -->
-          <div class="inner-card">
+          <div class="inner-card db-backup-list-card">
             <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <h4 style="margin: 0; font-size: 14px; color: #1e293b;">📋 历史备份存档列表</h4>
             </div>
 
             <div v-if="backupListLoading" class="panel-state">正在加载备份列表…</div>
             <div v-else-if="!backupList.length" class="panel-state">备份目录中暂无任何备份文件。点击右上角“⚡ 立即创建备份”即可生成！</div>
-            <div v-else class="table-wrap db-backup-table-wrap" style="max-height: 520px; overflow-y: auto; overflow-x: auto; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff;">
-              <table class="db-backup-table" style="width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px;">
-                <thead>
-                  <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; position: sticky; top: 0; z-index: 5;">
-                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 200px;">备份文件名</th>
-                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 110px;">格式类型</th>
-                    <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 80px;">文件大小</th>
-                    <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 140px;">生成时间</th>
-                    <th style="text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 160px;">操作选项</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="b in backupList" :key="b.filename" style="border-bottom: 1px solid #e2e8f0; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
-                    <td style="padding: 12px 16px; font-weight: 600; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="b.filename">
-                      <span style="margin-right: 6px;">📄</span>
-                      <span>{{ b.filename }}</span>
-                    </td>
-                    <td style="padding: 12px 16px; vertical-align: middle;">
-                      <span v-if="b.format === 'custom'" style="background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">Custom (.dump)</span>
-                      <span v-else style="background: #64748b; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">Plain (.sql)</span>
-                    </td>
-                    <td style="padding: 12px 16px; text-align: right; font-weight: 500; color: #334155; vertical-align: middle;">{{ b.file_size_h }}</td>
-                    <td style="padding: 12px 16px; color: #64748b; vertical-align: middle; white-space: nowrap;">{{ b.created_at }}</td>
-                    <td style="padding: 12px 16px; text-align: center; vertical-align: middle;">
-                      <div style="display: flex; gap: 6px; justify-content: center; align-items: center; white-space: nowrap;">
-                        <button class="btn ghost btn-sm" type="button" style="padding: 2px 8px; height: 26px; font-size: 12px;" title="下载到本地" @click="handleDownloadBackup(b.filename)">
-                          📥 下载
-                        </button>
-                        <button class="btn primary btn-sm" type="button" style="padding: 2px 8px; height: 26px; font-size: 12px;" title="高级恢复控制" @click="openRestoreModal(b)">
-                          🔄 恢复...
-                        </button>
-                        <button class="btn danger btn-sm" type="button" style="padding: 2px 6px; height: 26px; font-size: 12px;" title="删除备份" @click="handleDeleteBackup(b.filename)">
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <template v-else>
+              <div class="table-wrap db-backup-table-wrap desktop-only-table" style="max-height: 520px; overflow-y: auto; overflow-x: auto; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff;">
+                <table class="db-backup-table" style="width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px;">
+                  <thead>
+                    <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; position: sticky; top: 0; z-index: 5;">
+                      <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 200px;">备份文件名</th>
+                      <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 110px;">格式类型</th>
+                      <th style="text-align: right; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 80px;">文件大小</th>
+                      <th style="text-align: left; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 140px;">生成时间</th>
+                      <th style="text-align: center; padding: 12px 16px; color: #475569; font-weight: 600; min-width: 160px;">操作选项</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="b in backupList" :key="b.filename" style="border-bottom: 1px solid #e2e8f0; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                      <td style="padding: 12px 16px; font-weight: 600; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="b.filename">
+                        <span style="margin-right: 6px;">📄</span>
+                        <span>{{ b.filename }}</span>
+                      </td>
+                      <td style="padding: 12px 16px; vertical-align: middle;">
+                        <span v-if="b.format === 'custom'" style="background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">Custom (.dump)</span>
+                        <span v-else style="background: #64748b; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">Plain (.sql)</span>
+                      </td>
+                      <td style="padding: 12px 16px; text-align: right; font-weight: 500; color: #334155; vertical-align: middle;">{{ b.file_size_h }}</td>
+                      <td style="padding: 12px 16px; color: #64748b; vertical-align: middle; white-space: nowrap;">{{ b.created_at }}</td>
+                      <td style="padding: 12px 16px; text-align: center; vertical-align: middle;">
+                        <div style="display: flex; gap: 6px; justify-content: center; align-items: center; white-space: nowrap;">
+                          <button class="btn ghost btn-sm" type="button" style="padding: 2px 8px; height: 26px; font-size: 12px;" title="下载到本地" @click="handleDownloadBackup(b.filename)">
+                            📥 下载
+                          </button>
+                          <button class="btn primary btn-sm" type="button" style="padding: 2px 8px; height: 26px; font-size: 12px;" title="高级恢复控制" @click="openRestoreModal(b)">
+                            🔄 恢复...
+                          </button>
+                          <button class="btn danger btn-sm" type="button" style="padding: 2px 6px; height: 26px; font-size: 12px;" title="删除备份" @click="handleDeleteBackup(b.filename)">
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- 手机窄屏备份存档卡片流 -->
+              <div class="db-backup-mobile-cards mobile-only-cards">
+                <div v-for="b in backupList" :key="`m-bak-${b.filename}`" class="db-backup-mobile-card">
+                  <div class="db-backup-mobile-top">
+                    <span class="db-backup-mobile-name">📄 {{ b.filename }}</span>
+                    <span class="db-backup-fmt-pill" :class="b.format === 'custom' ? 'is-custom' : 'is-plain'">
+                      {{ b.format === 'custom' ? 'Custom (.dump)' : 'Plain (.sql)' }}
+                    </span>
+                  </div>
+                  <div class="db-backup-mobile-meta">
+                    <span>📦 {{ b.file_size_h }}</span>
+                    <span>🕒 {{ b.created_at }}</span>
+                  </div>
+                  <div class="db-backup-mobile-actions">
+                    <button class="btn ghost btn-sm" type="button" @click="handleDownloadBackup(b.filename)">📥 下载</button>
+                    <button class="btn primary btn-sm" type="button" @click="openRestoreModal(b)">🔄 恢复</button>
+                    <button class="btn danger btn-sm" type="button" @click="handleDeleteBackup(b.filename)">🗑️ 删除</button>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
         </section>
 
         <!-- 高级数据库恢复配置 Modal (使用 Teleport 脱离父节点全局置顶浮动) -->
         <Teleport to="body">
           <div v-if="restoreModalVisible" class="dialog-mask" role="presentation" @click.self="restoreModalVisible = false">
-            <div class="dialog-card" style="max-width: 680px; text-align: left;">
+            <div class="dialog-card restore-config-modal" style="max-width: 680px; text-align: left;">
               <header class="dialog-header" style="background: #f8fafc; border-bottom: 1px solid #cbd5e1; padding: 14px 20px;">
-                <div>
+                <div class="modal-header-text">
                   <h3 style="margin: 0; font-size: 15px; color: #0f172a;">🔄 高级数据库还原配置控制台</h3>
-                  <p style="margin: 4px 0 0; font-size: 12px; color: #64748b;">
+                  <p style="margin: 4px 0 0; font-size: 12px; color: #64748b; word-break: break-all;">
                     源备份文件：<strong style="color: #0284c7;">{{ restoreTargetFilename }}</strong>
                   </p>
                 </div>
                 <button class="close-btn" type="button" @click="restoreModalVisible = false">×</button>
               </header>
 
-              <main class="dialog-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+              <main class="dialog-body restore-config-body">
                 <!-- 恢复模式 -->
-                <div style="margin-bottom: 18px;">
-                  <label style="font-weight: 600; font-size: 13px; color: #334155; display: block; margin-bottom: 8px;">1. 选择还原模式 (Restore Mode)</label>
-                  <div style="display: flex; gap: 15px;">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                <div class="restore-section-block">
+                  <label class="restore-section-label">1. 选择还原模式 (Restore Mode)</label>
+                  <div class="restore-mode-group">
+                    <label class="restore-radio-option">
                       <input type="radio" value="full" v-model="restoreForm.restore_mode" />
                       <span>🟢 全量还原 (结构与数据)</span>
                     </label>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                    <label class="restore-radio-option">
                       <input type="radio" value="schema_only" v-model="restoreForm.restore_mode" />
                       <span>🔵 仅恢复表结构 (Schema Only)</span>
                     </label>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                    <label class="restore-radio-option">
                       <input type="radio" value="data_only" v-model="restoreForm.restore_mode" />
                       <span>🟠 仅恢复数据记录 (Data Only)</span>
                     </label>
@@ -1568,24 +1656,24 @@
                 </div>
 
                 <!-- 清理选项 -->
-                <div style="margin-bottom: 18px; background: #fffbe0; border: 1px solid #ffe58f; padding: 10px 12px; border-radius: 6px;">
-                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d46b08; font-weight: 500;">
+                <div class="restore-clean-box">
+                  <label class="restore-clean-label">
                     <input type="checkbox" v-model="restoreForm.clean_first" />
                     <span>还原前自动清理删除现有同名对象 (--clean --if-exists)</span>
                   </label>
                 </div>
 
                 <!-- Schema 与 表解析结果高级筛选 -->
-                <div style="margin-bottom: 15px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <label style="font-weight: 600; font-size: 13px; color: #334155;">2. 选择指定的模式 (Schema) 或表 (Table)</label>
+                <div class="restore-section-block">
+                  <div class="restore-section-top">
+                    <label class="restore-section-label">2. 选择指定的模式 (Schema) 或表 (Table)</label>
                     <span v-if="inspectLoading" style="font-size: 12px; color: #0284c7;">正在深入解析备份包...</span>
                   </div>
-                  <div style="font-size: 12px; color: #64748b; margin-bottom: 8px; background: #f1f5f9; padding: 6px 10px; border-radius: 4px;">
+                  <div class="restore-tip-banner">
                     💡 <strong>快捷勾选逻辑</strong>：勾选顶部的 Schema 将自动联动批量选中其下属的所有数据表；恢复范围<strong>100% 仅由下方的被勾选数据表列表决定</strong>。
                   </div>
 
-                  <div v-if="inspectResult && inspectResult.is_custom_dump" style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; background: #fafafa;">
+                  <div v-if="inspectResult && inspectResult.is_custom_dump" class="restore-toc-box">
                     <div v-if="inspectResult.schemas && inspectResult.schemas.length > 0" style="margin-bottom: 12px;">
                       <span style="font-size: 12px; color: #64748b; font-weight: 600; display: block; margin-bottom: 6px;">按 Schema 快捷联动勾选：</span>
                       <div style="display: flex; gap: 12px; flex-wrap: wrap;">
@@ -1597,18 +1685,18 @@
                     </div>
 
                     <div>
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                      <div class="restore-tables-head">
                         <span style="font-size: 12px; color: #64748b; font-weight: 600;">
                           数据表恢复选择清单 (已默认全选，已勾选 <strong style="color: #0284c7;">{{ restoreForm.selected_tables.length }} / {{ (inspectResult.tables || []).length }}</strong> 张表)：
                         </span>
-                        <div style="font-size: 11px; display: flex; gap: 8px;">
+                        <div style="font-size: 11px; display: flex; gap: 8px; flex-shrink: 0;">
                           <button type="button" style="color: #0284c7; background: none; border: none; cursor: pointer;" @click="selectAllInspectTables">全选</button>
                           <button type="button" style="color: #64748b; background: none; border: none; cursor: pointer;" @click="restoreForm.selected_tables = []; restoreForm.selected_schemas = [];">清空</button>
                         </div>
                       </div>
                       
-                      <div style="max-height: 160px; overflow-y: auto; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-size: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px;">
-                        <label v-for="t in inspectResult.tables" :key="t.full_name" style="display: flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      <div class="restore-tables-grid">
+                        <label v-for="t in inspectResult.tables" :key="t.full_name" class="restore-table-item">
                           <input type="checkbox" :value="t.full_name" v-model="restoreForm.selected_tables" />
                           <span>{{ t.full_name }}</span>
                         </label>
@@ -1622,7 +1710,7 @@
                 </div>
               </main>
 
-              <footer class="dialog-footer" style="background: #f8fafc; border-top: 1px solid #cbd5e1; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+              <footer class="dialog-footer restore-modal-footer">
                 <button class="btn ghost" type="button" @click="restoreModalVisible = false">取消</button>
                 <button class="btn primary" type="button" :disabled="restoreStarting" @click="handleExecuteRestore">
                   🚀 开始数据库还原
@@ -1633,10 +1721,10 @@
 
           <!-- 专业控制台日志打字机 Modal -->
           <div v-if="restoreJobModalVisible" class="dialog-mask" role="presentation" @click.self="closeRestoreJobModal">
-            <div class="dialog-card" style="max-width: 760px; background: #0f172a; color: #f8fafc; text-align: left; border: 1px solid #334155;">
-              <header class="dialog-header" style="background: #1e293b; border-bottom: 1px solid #334155; padding: 12px 20px;">
-                <div>
-                  <h3 style="margin: 0; font-size: 14px; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+            <div class="dialog-card restore-job-modal" style="max-width: 760px; background: #0f172a; color: #f8fafc; text-align: left; border: 1px solid #334155;">
+              <header class="dialog-header dark-modal-header">
+                <div class="modal-header-text">
+                  <h3 class="dark-modal-title">
                     <span>💻 PostgreSQL 数据库还原实时控制台终端</span>
                     <span v-if="restoreJobStatus === 'running'" style="font-size: 11px; background: #eab308; color: #000; padding: 1px 6px; border-radius: 4px; font-weight: bold;">正在恢复中...</span>
                     <span v-else-if="restoreJobStatus === 'completed'" style="font-size: 11px; background: #22c55e; color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: bold;">恢复已成功完成</span>
@@ -1646,8 +1734,8 @@
                 <button class="close-btn" type="button" style="color: #94a3b8;" @click="closeRestoreJobModal">×</button>
               </header>
 
-              <main style="padding: 16px;">
-                <div ref="terminalLogBoxRef" style="height: 360px; overflow-y: auto; background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.6; color: #4ade80;">
+              <main class="dark-modal-body">
+                <div ref="terminalLogBoxRef" class="dark-terminal-log-box">
                   <div v-for="(log, idx) in restoreJobLogs" :key="idx" style="white-space: pre-wrap; word-break: break-all;">
                     {{ log }}
                   </div>
@@ -1657,9 +1745,9 @@
                 </div>
               </main>
 
-              <footer style="background: #1e293b; padding: 12px 20px; border-top: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">
+              <footer class="dark-modal-footer">
                 <span style="font-size: 12px; color: #94a3b8;">如恢复全量表，推荐完成后刷新页面加载最新数据。</span>
-                <button class="btn primary" type="button" style="height: 30px; font-size: 12px; padding: 0 16px; border-radius: 4px;" @click="closeRestoreJobModal">
+                <button class="btn primary" type="button" style="height: 32px; font-size: 12px; padding: 0 16px; border-radius: 4px;" @click="closeRestoreJobModal">
                   完成并关闭
                 </button>
               </footer>
@@ -1668,12 +1756,12 @@
 
           <!-- 🌐 浏览远程生产环境备份存档 Modal -->
           <div v-if="remoteBackupsModalVisible" class="dialog-mask" role="presentation" @click.self="remoteBackupsModalVisible = false">
-            <div class="dialog-card" style="max-width: 760px; text-align: left;">
-              <header class="dialog-header" style="background: #f0f9ff; border-bottom: 1px solid #bae6fd; padding: 14px 20px;">
-                <div>
-                  <h3 style="margin: 0; font-size: 15px; color: #0369a1; display: flex; align-items: center; gap: 8px;">
+            <div class="dialog-card remote-backups-modal" style="max-width: 760px; text-align: left;">
+              <header class="dialog-header remote-backups-header">
+                <div class="modal-header-text">
+                  <h3 class="remote-backups-title">
                     <span>🌐 远程生产环境历史备份存档列表</span>
-                    <span style="font-size: 11px; background: #0284c7; color: #fff; padding: 1px 6px; border-radius: 4px;">{{ remoteSyncForm.remote_url }}</span>
+                    <span class="remote-url-pill">{{ remoteSyncForm.remote_url }}</span>
                   </h3>
                   <p style="margin: 4px 0 0; font-size: 12px; color: #075985;">
                     点击对应备份项右侧的“📥 拉取到本地”，即可直接将该历史备份流式下载至本地开发环境。
@@ -1682,45 +1770,66 @@
                 <button class="close-btn" type="button" @click="remoteBackupsModalVisible = false">×</button>
               </header>
 
-              <main class="dialog-body" style="padding: 16px; max-height: 65vh; overflow-y: auto;">
+              <main class="dialog-body remote-backups-body">
                 <div v-if="remoteBackupsLoading" class="panel-state">正在连接远程生产服务器读取备份列表…</div>
                 <div v-else-if="!remoteBackupsList.length" class="panel-state">远程生产环境当前无任何备份文件。</div>
-                <div v-else style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff;">
-                  <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
-                    <thead style="background: #f8fafc; border-bottom: 2px solid #cbd5e1;">
-                      <tr>
-                        <th style="padding: 10px 14px; text-align: left; color: #475569; font-weight: 600;">备份文件名</th>
-                        <th style="padding: 10px 14px; text-align: right; color: #475569; font-weight: 600;">文件大小</th>
-                        <th style="padding: 10px 14px; text-align: left; color: #475569; font-weight: 600;">生成时间</th>
-                        <th style="padding: 10px 14px; text-align: center; color: #475569; font-weight: 600;">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="rb in remoteBackupsList" :key="rb.filename" style="border-bottom: 1px solid #e2e8f0;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
-                        <td style="padding: 10px 14px; font-weight: 600; color: #0f172a;" :title="rb.filename">
-                          <span style="margin-right: 4px;">📄</span>
-                          <span>{{ rb.filename }}</span>
-                        </td>
-                        <td style="padding: 10px 14px; text-align: right; color: #334155; font-weight: 500;">{{ rb.file_size_h }}</td>
-                        <td style="padding: 10px 14px; color: #64748b; white-space: nowrap;">{{ rb.created_at }}</td>
-                        <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
-                          <button
-                            class="btn primary btn-sm"
-                            type="button"
-                            :disabled="remotePulling"
-                            style="padding: 3px 12px; height: 26px; font-size: 12px; border-radius: 4px;"
-                            @click="handlePullSpecificRemoteBackup(rb.filename)"
-                          >
-                            <span>{{ remotePullingTarget === rb.filename ? '⏳ 正在拉取...' : '📥 拉取到本地' }}</span>
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                <template v-else>
+                  <div class="desktop-only-table" style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+                      <thead style="background: #f8fafc; border-bottom: 2px solid #cbd5e1;">
+                        <tr>
+                          <th style="padding: 10px 14px; text-align: left; color: #475569; font-weight: 600;">备份文件名</th>
+                          <th style="padding: 10px 14px; text-align: right; color: #475569; font-weight: 600;">文件大小</th>
+                          <th style="padding: 10px 14px; text-align: left; color: #475569; font-weight: 600;">生成时间</th>
+                          <th style="padding: 10px 14px; text-align: center; color: #475569; font-weight: 600;">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="rb in remoteBackupsList" :key="rb.filename" style="border-bottom: 1px solid #e2e8f0;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                          <td style="padding: 10px 14px; font-weight: 600; color: #0f172a;" :title="rb.filename">
+                            <span style="margin-right: 4px;">📄</span>
+                            <span>{{ rb.filename }}</span>
+                          </td>
+                          <td style="padding: 10px 14px; text-align: right; color: #334155; font-weight: 500;">{{ rb.file_size_h }}</td>
+                          <td style="padding: 10px 14px; color: #64748b; white-space: nowrap;">{{ rb.created_at }}</td>
+                          <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">
+                            <button
+                              class="btn primary btn-sm"
+                              type="button"
+                              :disabled="remotePulling"
+                              style="padding: 3px 12px; height: 26px; font-size: 12px; border-radius: 4px;"
+                              @click="handlePullSpecificRemoteBackup(rb.filename)"
+                            >
+                              <span>{{ remotePullingTarget === rb.filename ? '⏳ 正在拉取...' : '📥 拉取到本地' }}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- 手机窄屏远程存档卡片 -->
+                  <div class="remote-backups-mobile-cards mobile-only-cards">
+                    <div v-for="rb in remoteBackupsList" :key="`m-rb-${rb.filename}`" class="remote-backup-mobile-card">
+                      <div class="remote-backup-mobile-name">📄 {{ rb.filename }}</div>
+                      <div class="db-backup-mobile-meta">
+                        <span>📦 {{ rb.file_size_h }}</span>
+                        <span>🕒 {{ rb.created_at }}</span>
+                      </div>
+                      <button
+                        class="btn primary btn-sm remote-backup-pull-btn"
+                        type="button"
+                        :disabled="remotePulling"
+                        @click="handlePullSpecificRemoteBackup(rb.filename)"
+                      >
+                        <span>{{ remotePullingTarget === rb.filename ? '⏳ 正在拉取...' : '📥 拉取到本地' }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </template>
               </main>
 
-              <footer style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+              <footer class="remote-backups-footer">
                 <span style="font-size: 12px; color: #64748b;">共有 {{ remoteBackupsList.length }} 个远程备份存档</span>
                 <button class="btn ghost btn-sm" type="button" style="height: 30px; padding: 0 16px;" @click="remoteBackupsModalVisible = false">关闭</button>
               </footer>
@@ -1729,10 +1838,10 @@
 
           <!-- 🚀 远程生产备份拉取实时进度与控制台日志 Modal -->
           <div v-if="remotePullJobModalVisible" class="dialog-mask" role="presentation" @click.self="remotePullJob.status !== 'running' && closeRemotePullJobModal()">
-            <div class="dialog-card" style="max-width: 720px; background: #0f172a; color: #f8fafc; text-align: left; border: 1px solid #334155;">
-              <header class="dialog-header" style="background: #1e293b; border-bottom: 1px solid #334155; padding: 12px 20px;">
-                <div>
-                  <h3 style="margin: 0; font-size: 14px; color: #38bdf8; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <div class="dialog-card remote-pull-modal" style="max-width: 720px; background: #0f172a; color: #f8fafc; text-align: left; border: 1px solid #334155;">
+              <header class="dialog-header dark-modal-header">
+                <div class="modal-header-text">
+                  <h3 class="dark-modal-title">
                     <span>⚡ 远程生产备份实时拉取监视器</span>
                     <span v-if="remotePullJob.status === 'running'" style="font-size: 11px; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
                       {{ pullPhaseLabel(remotePullJob.phase) }}
@@ -1747,7 +1856,7 @@
                       ❌ 异常失败
                     </span>
                   </h3>
-                  <div style="margin-top: 4px; font-size: 12px; color: #94a3b8;">
+                  <div style="margin-top: 4px; font-size: 12px; color: #94a3b8; word-break: break-all;">
                     目标文件：<code>{{ remotePullJob.remote_filename || '正在生成/解析...' }}</code>
                     <span v-if="remotePullJob.download_mode" style="margin-left: 10px; color: #38bdf8;">
                       {{ remotePullJob.download_mode === 'range_parallel' ? '🚀 Range 多路分片并发' : '📡 200 单流校验下载' }}
@@ -1763,10 +1872,10 @@
                 >×</button>
               </header>
 
-              <main style="padding: 16px;">
+              <main class="dark-modal-body">
                 <!-- 进度条与速率指标 -->
                 <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;">
-                  <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 12.5px;">
+                  <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; font-size: 12.5px;">
                     <span style="color: #e2e8f0; font-weight: 600;">{{ remotePullJob.message || '准备中...' }}</span>
                     <span style="color: #38bdf8; font-weight: 700; font-family: Consolas, monospace;">
                       {{ remotePullJob.percent !== null && remotePullJob.percent !== undefined ? `${remotePullJob.percent.toFixed(1)}%` : (remotePullJob.status === 'completed' ? '100%' : '准备中') }}
@@ -1798,23 +1907,23 @@
                 </div>
 
                 <!-- 实时日志终端 -->
-                <div ref="remotePullLogBoxRef" style="height: 220px; overflow-y: auto; background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 10px 12px; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.55; color: #4ade80;">
+                <div ref="remotePullLogBoxRef" class="dark-terminal-log-box is-pull-log">
                   <div v-for="(log, idx) in (remotePullJob.logs || [])" :key="idx" style="white-space: pre-wrap; word-break: break-all;">
                     {{ log }}
                   </div>
                 </div>
               </main>
 
-              <footer style="background: #1e293b; padding: 12px 20px; border-top: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+              <footer class="dark-modal-footer">
                 <span style="font-size: 12px; color: #94a3b8;">
                   {{ remotePullJob.status === 'running' ? '支持校验全部字节与 pg_restore 完整性，残缺文件绝不会落盘。' : (remotePullJob.finished_at ? `结束时间: ${remotePullJob.finished_at}` : '') }}
                 </span>
-                <div style="display: flex; gap: 8px;">
+                <div class="dark-modal-footer-btns">
                   <button
                     v-if="remotePullJob.status === 'running'"
                     class="btn ghost"
                     type="button"
-                    style="height: 30px; font-size: 12px; padding: 0 14px; border-radius: 4px; color: #fca5a5; border-color: #7f1d1d;"
+                    style="height: 32px; font-size: 12px; padding: 0 14px; border-radius: 4px; color: #fca5a5; border-color: #7f1d1d;"
                     :disabled="remotePullCancelling"
                     @click="handleCancelRemotePullJob"
                   >
@@ -1824,7 +1933,7 @@
                     v-if="remotePullJob.status === 'completed' && remotePullJob.result?.filename"
                     class="btn primary"
                     type="button"
-                    style="height: 30px; font-size: 12px; padding: 0 16px; border-radius: 4px; background: #16a34a; border-color: #16a34a;"
+                    style="height: 32px; font-size: 12px; padding: 0 16px; border-radius: 4px; background: #16a34a; border-color: #16a34a;"
                     @click="openRestoreFromPullResult"
                   >
                     🚀 立即打开还原向导
@@ -1833,7 +1942,7 @@
                     v-if="remotePullJob.status !== 'running'"
                     class="btn ghost"
                     type="button"
-                    style="height: 30px; font-size: 12px; padding: 0 16px; border-radius: 4px; color: #e2e8f0; border-color: #475569;"
+                    style="height: 32px; font-size: 12px; padding: 0 16px; border-radius: 4px; color: #e2e8f0; border-color: #475569;"
                     @click="closeRemotePullJobModal"
                   >
                     关闭
@@ -6468,6 +6577,9 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   padding: 10px;
   display: grid;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .super-pane h4 {
@@ -7564,407 +7676,821 @@ async function togglePermission(group_name, project_key, type, key, current_val)
   }
 }
 
-/* 手机移动端全面深度适配 (<= 768px) */
-@media (max-width: 768px) {
-  /* 1. 外层容器与内边距释放 */
-  .admin-console-main {
-    padding: 10px 10px !important;
-    gap: 10px !important;
-  }
-
-  .admin-top-nav-row {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-  }
-
-  .return-work-btn {
-    width: 100% !important;
-    justify-content: center !important;
-    padding: 7px 12px !important;
-    font-size: 13px !important;
-    box-sizing: border-box !important;
-  }
-
-  .top-header {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-  }
-
-  .top-header h2 {
-    font-size: 18px !important;
-  }
-
-  /* 2. 顶层 Tab 导航条 -> 现代单行横向丝滑滑轨 */
-  .tab-group {
-    display: flex !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    flex-wrap: nowrap !important;
-    padding: 4px !important;
-    gap: 4px !important;
-    scrollbar-width: none !important;
-    box-sizing: border-box !important;
-    border-radius: 8px !important;
-  }
-
-  .tab-group::-webkit-scrollbar {
-    display: none !important;
-  }
-
-  .tab-btn {
-    flex-shrink: 0 !important;
-    white-space: nowrap !important;
-    padding: 6px 12px !important;
-    font-size: 12.5px !important;
-    border-radius: 6px !important;
-  }
-
-  /* 3. 数据库表编辑 Tab 移动端适配 */
-  .db-header-row {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-  }
-
-  .db-header-actions {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 6px !important;
-  }
-
-  .db-header-actions .btn.primary {
-    grid-column: span 2 !important;
-    height: 36px !important;
-  }
-
-  .db-selector-group {
-    flex-direction: column !important;
-    gap: 8px !important;
-  }
-
-  .db-selector-group .db-field {
-    width: 100% !important;
-  }
-
-  .db-filter-row {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-  }
-
-  .search-grow {
-    min-width: 0 !important;
-    width: 100% !important;
-  }
-
-  .db-status-bar {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 6px !important;
-    padding: 8px 10px !important;
-  }
-
-  .db-data-grid {
-    height: 460px !important;
-    min-height: 340px !important;
-  }
-
-  .db-cell-editor-drawer {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    box-sizing: border-box !important;
-  }
-
-  .db-cell-editor-header,
-  .db-cell-editor-body,
-  .db-cell-editor-footer {
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-  }
-
-  .db-cell-editor-footer {
-    align-items: stretch !important;
-    flex-direction: column !important;
-    gap: 8px !important;
-  }
-
-  .db-cell-editor-footer .inline-actions {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 6px !important;
-  }
-
-  /* 全局卡片头部与按钮组移动端对称对齐 */
-  .top-shell {
-    padding: 12px 10px !important;
-    border-radius: 8px !important;
-  }
-
-  .audit-main-card {
-    padding: 12px 10px !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-    overflow-x: hidden !important;
-  }
-
-  .audit-search-filter-card {
-    padding: 10px !important;
-    margin-top: 10px !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-    overflow-x: hidden !important;
-  }
-
-  .section-header {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-  }
-
-  .header-actions-group {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-    width: 100% !important;
-  }
-
-  .header-action-btn {
-    width: 100% !important;
-    height: 36px !important;
-    font-size: 12px !important;
-    padding: 0 6px !important;
-    box-sizing: border-box !important;
-    min-width: 0 !important;
-  }
-
-  /* 4. 操作日志 Tab 移动端专属卡片流与双模切换 */
-  .desktop-only-table {
-    display: none !important;
-  }
-
-  .mobile-only-cards {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 10px !important;
-  }
-
-  .filter-inputs-grid {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .filter-inputs-grid .field {
-    min-width: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .filter-field-time,
-  .filter-field-project,
-  .filter-field-category,
-  .filter-field-user {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-  }
-
-  .filter-field-keyword {
-    grid-column: 1 / -1 !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    flex: none !important;
-  }
-
-  .filter-inputs-grid select,
-  .filter-inputs-grid input {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-    text-overflow: ellipsis !important;
-  }
-
-  .filter-actions-inline {
-    grid-column: 1 / -1 !important;
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    box-sizing: border-box !important;
-  }
-
-  .filter-actions-inline .btn {
-    height: 36px !important;
-    justify-content: center !important;
-    font-size: 13px !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    box-sizing: border-box !important;
-  }
-
-  .audit-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
-  }
-
-  @media (max-width: 480px) {
-    .header-actions-group {
-      grid-template-columns: 1fr !important;
-    }
-
-    .filter-inputs-grid {
-      grid-template-columns: 1fr !important;
-    }
-
-    .audit-grid {
-      grid-template-columns: 1fr !important;
-    }
-  }
-
-  /* 5. 数据库备份与恢复 Tab 移动端自适应 */
-  .db-backup-stats-row {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-  }
-
-  .db-backup-table-wrap {
-    width: 100% !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    border-radius: 8px !important;
-    border: 1px solid #cbd5e1 !important;
-  }
-
-  .db-backup-table {
-    min-width: 620px !important;
-  }
-
-  .db-backup-table th,
-  .db-backup-table td {
-    padding: 8px 10px !important;
-    font-size: 12px !important;
-  }
-
-  /* 6. 项目后台设定与概览 */
-  .project-switch {
-    display: flex !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    flex-wrap: nowrap !important;
-    gap: 6px !important;
-    padding-bottom: 4px !important;
-    scrollbar-width: none !important;
-  }
-
-  .project-switch::-webkit-scrollbar {
-    display: none !important;
-  }
-
-  .project-switch .list-btn {
-    flex-shrink: 0 !important;
-    white-space: nowrap !important;
-    font-size: 12.5px !important;
-    padding: 6px 12px !important;
-  }
-
-  .overview-grid {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-  }
-
-  .permission-central-card .section-header {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 10px !important;
-  }
-
-  .permission-central-card .btn.primary {
-    width: 100% !important;
-    justify-content: center !important;
-  }
-
-  .cache-actions {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-  }
-
-  .cache-actions label {
-    width: 100% !important;
-  }
-
-  .cache-actions button {
-    width: 100% !important;
-  }
-
-  /* 7. 服务器管理与终端 */
-  .system-grid {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-  }
-
-  .terminal-box {
-    height: 280px !important;
-  }
-
-  .terminal-input-row {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 6px !important;
-  }
-
-  .terminal-input-row .btn {
-    width: 100% !important;
-  }
-
-  /* 8. 账号管理 Tab */
-  .accounts-toolbar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-  }
-
-  .accounts-table-wrap {
-    width: 100% !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    border-radius: 8px !important;
-    border: 1px solid #e2e8f0 !important;
-  }
-
-  .accounts-table {
-    min-width: 600px !important;
-  }
-
-  /* 9. 全局所有弹窗 Dialog / Modal 移动端防溢出保护 */
-  .dialog-card,
-  .editor-modal,
-  .account-form-dialog,
-  .super-modal-content,
-  .restore-modal-card {
-    width: calc(100vw - 16px) !important;
-    max-width: calc(100vw - 16px) !important;
-    max-height: 90vh !important;
-    padding: 12px !important;
-    margin: 0 auto !important;
-    box-sizing: border-box !important;
-    overflow-y: auto !important;
-    border-radius: 10px !important;
-  }
+/* 桌面端辅助结构保持透明不改变既有 Flex 排版 */
+.files-toolbar-actions {
+  display: contents;
 }
+
+.permission-central-title {
+  margin: 0;
+  font-size: 15px;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.permission-central-badge {
+  font-size: 11px;
+  background: #0284c7;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.permission-central-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  height: 34px;
+}
+
+.audit-title-heading {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 数据库备份与恢复 Tab 桌面端基础样式 */
+.db-backup-hero-card {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.db-backup-hero-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 12px;
+}
+
+.db-backup-hero-info {
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.db-backup-hero-title {
+  margin: 0;
+  font-size: 16px;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.db-backup-badge {
+  font-size: 11px;
+  background: #0284c7;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.db-backup-dir-line {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.db-backup-dir-code {
+  background: #e2e8f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.db-backup-hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.db-backup-create-btn,
+.db-backup-upload-btn,
+.db-backup-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.db-backup-create-btn,
+.db-backup-upload-btn {
+  padding: 0 16px;
+}
+
+.db-backup-refresh-btn {
+  padding: 0 12px;
+}
+
+.db-backup-upload-btn,
+.db-backup-refresh-btn {
+  background: #fff;
+  border-color: #cbd5e1;
+}
+
+.db-backup-stats-bar {
+  font-size: 12px;
+  color: #475569;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px 25px;
+  flex-wrap: wrap;
+}
+
+.remote-sync-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #7dd3fc;
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.08);
+}
+
+.remote-sync-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.remote-sync-info {
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.remote-sync-title {
+  margin: 0;
+  font-size: 15px;
+  color: #0369a1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.remote-sync-desc {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: #075985;
+  overflow-wrap: anywhere;
+}
+
+.remote-sync-url-code {
+  word-break: break-all;
+}
+
+.remote-sync-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.remote-sync-hero-btn,
+.remote-sync-latest-btn,
+.remote-sync-secondary-btn,
+.remote-sync-config-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remote-sync-hero-btn {
+  height: 38px;
+  padding: 0 18px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+  border: 1px solid #0369a1;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.28);
+}
+
+.remote-sync-hero-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.36);
+  transform: translateY(-1px);
+}
+
+.remote-sync-rec-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.remote-sync-latest-btn,
+.remote-sync-secondary-btn,
+.remote-sync-config-btn {
+  padding: 0 12px;
+  background: #fff;
+  border-color: #7dd3fc;
+  color: #0369a1;
+}
+
+.remote-sync-config-btn {
+  padding: 0 10px;
+}
+
+.remote-sync-drawer {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+}
+
+.remote-sync-drawer-head {
+  font-weight: 600;
+  font-size: 13px;
+  color: #0c4a6e;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.remote-sync-drawer-hint {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: normal;
+  word-break: break-all;
+}
+
+.remote-sync-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.remote-sync-label {
+  display: block;
+  font-size: 12px;
+  color: #334155;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.remote-sync-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12.5px;
+  box-sizing: border-box;
+}
+
+.remote-sync-drawer-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.remote-sync-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.remote-sync-check-item {
+  font-size: 12px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.remote-sync-check-item.is-highlight {
+  color: #0369a1;
+  font-weight: 500;
+}
+
+.remote-sync-drawer-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.remote-sync-drawer-btns .btn {
+  height: 32px;
+  font-size: 12px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.remote-sync-status-msg {
+  margin-top: 10px;
+  font-size: 12.5px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  word-break: break-word;
+}
+
+.remote-sync-status-msg.is-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.remote-sync-status-msg.is-ok {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.remote-sync-status-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* 弹窗辅助样式 */
+.modal-header-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.restore-config-body {
+  padding: 20px !important;
+  max-height: 70vh;
+  overflow-y: auto;
+  gap: 14px !important;
+}
+
+.restore-section-block {
+  margin-bottom: 4px;
+}
+
+.restore-section-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.restore-section-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.restore-section-top .restore-section-label {
+  margin-bottom: 0;
+}
+
+.restore-mode-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 15px;
+}
+
+.restore-radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.restore-clean-box {
+  background: #fffbe0;
+  border: 1px solid #ffe58f;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.restore-clean-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #d46b08;
+  font-weight: 500;
+}
+
+.restore-tip-banner {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 8px;
+  background: #f1f5f9;
+  padding: 6px 10px;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+
+.restore-toc-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fafafa;
+}
+
+.restore-tables-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.restore-tables-grid {
+  max-height: 160px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px;
+}
+
+.restore-table-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.restore-table-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.restore-modal-footer {
+  background: #f8fafc !important;
+  border-top: 1px solid #cbd5e1 !important;
+  padding: 12px 20px !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+}
+
+.dark-modal-header {
+  background: #1e293b !important;
+  border-bottom: 1px solid #334155 !important;
+  padding: 12px 20px !important;
+}
+
+.dark-modal-title {
+  margin: 0 !important;
+  font-size: 14px !important;
+  color: #38bdf8 !important;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.dark-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.dark-terminal-log-box {
+  height: 360px;
+  overflow-y: auto;
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #4ade80;
+}
+
+.dark-terminal-log-box.is-pull-log {
+  height: 220px;
+  padding: 10px 12px;
+  line-height: 1.55;
+}
+
+.dark-modal-footer {
+  background: #1e293b;
+  padding: 12px 20px;
+  border-top: 1px solid #334155;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dark-modal-footer-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.remote-backups-header {
+  background: #f0f9ff !important;
+  border-bottom: 1px solid #bae6fd !important;
+  padding: 14px 20px !important;
+}
+
+.remote-backups-title {
+  margin: 0 !important;
+  font-size: 15px !important;
+  color: #0369a1 !important;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.remote-url-pill {
+  font-size: 11px;
+  background: #0284c7;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.remote-backups-body {
+  padding: 16px !important;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.remote-backups-footer {
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* 移动端专用卡片流默认隐藏（<=768px 显示） */
+.super-mobile-files-list,
+.accounts-mobile-cards,
+.db-backup-mobile-cards,
+.remote-backups-mobile-cards {
+  display: none;
+}
+
+.super-mobile-select-bar {
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.super-mobile-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.super-mobile-file-card,
+.account-mobile-card,
+.db-backup-mobile-card,
+.remote-backup-mobile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.super-mobile-file-card {
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.super-mobile-file-card.super-row-selected {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.super-mobile-file-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.super-mobile-file-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+  flex: 1;
+}
+
+.super-mobile-file-check input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.super-mobile-file-icon {
+  flex-shrink: 0;
+}
+
+.super-mobile-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.super-mobile-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.super-type-pill {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.super-type-pill.is-dir {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.super-mobile-file-actions,
+.account-mobile-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.account-mobile-top,
+.db-backup-mobile-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.account-mobile-name {
+  font-size: 14px;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.account-mobile-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.account-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-meta-row .meta-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.account-pwd-code {
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #334155;
+  word-break: break-all;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.db-backup-mobile-name,
+.remote-backup-mobile-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-all;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 0;
+}
+
+.db-backup-fmt-pill {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.db-backup-fmt-pill.is-custom {
+  background: #0284c7;
+}
+
+.db-backup-fmt-pill.is-plain {
+  background: #64748b;
+}
+
+.db-backup-mobile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.db-backup-mobile-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.remote-backup-pull-btn {
+  width: 100%;
+  height: 34px;
+  justify-content: center;
+}
+
 .cache-worker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -8752,6 +9278,972 @@ input:checked + .switch-slider:before {
 
 .permission-central-tip-box .tip-content {
   line-height: 1.5 !important;
+}
+
+/* ================================================================== */
+/* 手机窄屏模式全面深度适配（置于样式表末尾，确保完整覆盖层级）       */
+/* ================================================================== */
+@media (max-width: 768px) {
+  /* 0. 全局容器与表单防溢出基线（覆盖 theme.css 的 min-width: 180px） */
+  .admin-console-view {
+    overflow-x: hidden;
+  }
+
+  .admin-console-main {
+    padding: 10px !important;
+    gap: 10px !important;
+  }
+
+  .admin-top-nav-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .return-work-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 7px 12px !important;
+    font-size: 12.5px !important;
+    box-sizing: border-box !important;
+  }
+
+  .top-shell {
+    padding: 12px 10px !important;
+    border-radius: 10px !important;
+  }
+
+  .top-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .top-header h2 {
+    margin: 0 !important;
+    font-size: 18px !important;
+  }
+
+  .top-header .subtext {
+    margin-top: 3px !important;
+    font-size: 12px !important;
+  }
+
+  .content-block {
+    padding: 10px 0 2px !important;
+  }
+
+  .field {
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-console-main input[type="text"],
+  .admin-console-main input[type="password"],
+  .admin-console-main input[type="date"],
+  .admin-console-main input[type="number"],
+  .admin-console-main select,
+  .admin-console-main textarea {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-console-main .field input,
+  .admin-console-main .field select,
+  .admin-console-main .field textarea {
+    width: 100% !important;
+  }
+
+  .admin-console-main select {
+    height: 36px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0 10px;
+    background: #ffffff;
+    font-size: 13px;
+  }
+
+  .section-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .section-header h3 {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  /* 1. 顶层 Tab 横向滑轨 */
+  .tab-group {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-snap-type: x proximity;
+    flex-wrap: nowrap !important;
+    padding: 4px !important;
+    gap: 4px !important;
+    scrollbar-width: none !important;
+    box-sizing: border-box !important;
+    border-radius: 8px !important;
+  }
+
+  .tab-group::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .tab-btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    scroll-snap-align: start;
+    padding: 7px 12px !important;
+    font-size: 12.5px !important;
+    border-radius: 6px !important;
+  }
+
+  /* 2. Tab 1：后台文件编辑 */
+  .files-toolbar-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .files-toolbar-actions .btn {
+    width: 100% !important;
+    height: 36px !important;
+    padding: 0 8px !important;
+    font-size: 12.5px !important;
+    justify-content: center !important;
+    white-space: nowrap;
+  }
+
+  .tree-wrap {
+    padding: 10px !important;
+  }
+
+  .tree-wrap .subtext {
+    word-break: break-all;
+    font-size: 12px;
+  }
+
+  .tree-list {
+    max-height: 360px !important;
+  }
+
+  .tree-row {
+    min-width: 0;
+  }
+
+  .tree-label {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+
+  /* 3. Tab 2：数据库表编辑 */
+  .db-editor-card {
+    padding: 10px !important;
+  }
+
+  .db-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .db-header-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .db-header-actions .btn {
+    width: 100% !important;
+    height: 36px !important;
+    padding: 0 8px !important;
+    font-size: 12.5px !important;
+  }
+
+  .db-header-actions .btn.primary {
+    grid-column: 1 / -1 !important;
+  }
+
+  .db-status-bar {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 8px !important;
+    margin: 10px 0 !important;
+  }
+
+  .db-chip {
+    font-size: 11.5px !important;
+    max-width: 100% !important;
+    word-break: break-all !important;
+  }
+
+  .db-control-panel {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .db-selector-group {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .db-selector-group .db-field {
+    width: 100% !important;
+  }
+
+  .db-filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .search-grow {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .db-sub-controls {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .db-field-compact {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+  }
+
+  .db-select-sm,
+  .db-input-sm {
+    width: 100% !important;
+    height: 34px !important;
+    text-align: left !important;
+  }
+
+  .db-filter-wrap {
+    padding: 10px !important;
+  }
+
+  .db-filter-head {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .db-filter-item {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+    padding: 8px !important;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+
+  .db-filter-item select,
+  .db-filter-item input {
+    height: 34px !important;
+    padding: 0 8px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    background: #ffffff !important;
+    font-size: 12.5px !important;
+  }
+
+  .db-filter-item .btn {
+    height: 34px !important;
+    width: 100% !important;
+  }
+
+  .db-grid-status {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .db-grid-status > span {
+    grid-column: 1 / -1;
+  }
+
+  .db-compact-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 34px !important;
+  }
+
+  .db-grid-wrap,
+  .db-data-grid,
+  .db-grid-wrap :deep(revo-grid),
+  .db-grid-wrap :deep(.revo-viewport),
+  .db-grid-wrap :deep(.main-viewport),
+  .db-grid-wrap :deep(.rg-view-wrap),
+  .db-grid-wrap :deep(revogr-viewport-template) {
+    height: 440px !important;
+    min-height: 320px !important;
+  }
+
+  .db-cell-editor-drawer {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+
+  .db-cell-editor-header,
+  .db-cell-editor-body,
+  .db-cell-editor-footer {
+    padding: 12px 14px !important;
+  }
+
+  .db-full-editor-field textarea {
+    min-height: 160px !important;
+  }
+
+  .db-cell-editor-footer {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .db-cell-editor-footer > .btn {
+    width: 100% !important;
+    height: 36px !important;
+  }
+
+  .db-cell-editor-footer .inline-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .db-cell-editor-footer .inline-actions .btn {
+    width: 100% !important;
+    height: 36px !important;
+  }
+
+  /* 4. Tab 3：项目后台设定 */
+  .project-switch {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-snap-type: x proximity;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    padding-bottom: 4px !important;
+    scrollbar-width: none !important;
+  }
+
+  .project-switch::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .project-switch .list-btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    scroll-snap-align: start;
+    font-size: 12.5px !important;
+    padding: 7px 12px !important;
+  }
+
+  .permission-central-btn {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 36px !important;
+    padding: 7px 12px !important;
+    white-space: normal !important;
+    justify-content: center !important;
+    text-align: center;
+  }
+
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .overview-item {
+    min-width: 0;
+    padding: 10px !important;
+    overflow-wrap: anywhere;
+  }
+
+  .cache-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .cache-actions label {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  .cache-actions button,
+  .cache-actions :deep(.cache-manager-button) {
+    width: 100% !important;
+    min-height: 36px !important;
+    padding: 0 8px !important;
+    font-size: 12.5px !important;
+    box-sizing: border-box !important;
+  }
+
+  .cache-job-log-panel {
+    word-break: break-all;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+
+  /* 5. Tab 4：服务器管理 */
+  .system-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .system-actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .super-card {
+    padding: 10px !important;
+  }
+
+  .super-pane {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .super-preset-row {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    align-items: end !important;
+    gap: 8px !important;
+  }
+
+  .super-preset-row .btn {
+    height: 36px !important;
+    padding: 0 14px !important;
+  }
+
+  .super-terminal-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .super-terminal-actions .subtext {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+
+  .terminal-output {
+    min-height: 160px !important;
+    max-height: 260px !important;
+    max-width: 100% !important;
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
+    box-sizing: border-box !important;
+  }
+
+  .super-pane .toolbar {
+    gap: 8px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .super-pane .toolbar .btn {
+    width: 100% !important;
+    height: 36px !important;
+  }
+
+  .super-batch-toolbar {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+
+  .super-batch-toolbar .field {
+    grid-column: 1 / -1 !important;
+  }
+
+  .super-batch-toolbar .btn:last-child {
+    grid-column: 1 / -1 !important;
+    height: 36px !important;
+  }
+
+  .super-upload-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+
+  .super-upload-actions .subtext {
+    word-break: break-all;
+    margin-top: 0;
+  }
+
+  .super-dir-tree {
+    max-height: 200px !important;
+  }
+
+  .super-files-wrap {
+    max-height: 380px !important;
+    padding: 8px;
+    background: #f8fafc;
+  }
+
+  .super-editor {
+    min-height: 180px !important;
+    box-sizing: border-box !important;
+  }
+
+  .super-editor-actions {
+    justify-content: space-between;
+  }
+
+  /* 6. Tab 5：操作日志 & 迁移弹窗 */
+  .desktop-only-table {
+    display: none !important;
+  }
+
+  .mobile-only-cards {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .audit-main-card {
+    padding: 12px 10px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  .header-actions-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .header-action-btn {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 38px !important;
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+  }
+
+  .audit-search-filter-card {
+    padding: 10px !important;
+    margin-top: 10px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  .filter-inputs-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .filter-inputs-grid .field,
+  .filter-field-time,
+  .filter-field-project,
+  .filter-field-category,
+  .filter-field-user {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .filter-field-keyword {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+
+  .filter-inputs-grid select,
+  .filter-inputs-grid input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .filter-actions-inline {
+    grid-column: 1 / -1 !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  .filter-actions-inline .btn {
+    height: 36px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .audit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .audit-list li {
+    word-break: break-all;
+  }
+
+  .card-top-row {
+    flex-wrap: wrap;
+  }
+
+  .detail-code-box {
+    overflow-x: auto;
+  }
+
+  .audit-migration-modal {
+    padding: 8px !important;
+  }
+
+  .audit-migration-modal__card {
+    width: 100% !important;
+    max-height: 92vh !important;
+    padding: 14px 12px !important;
+    gap: 12px !important;
+  }
+
+  .migration-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .section-title-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .migration-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .migration-table {
+    min-width: 580px;
+  }
+
+  .audit-migration-modal__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .footer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .footer-actions .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0 8px !important;
+    font-size: 12.5px;
+  }
+
+  /* 7. Tab 6：账户与权限管理 */
+  .accounts-management-block {
+    padding: 0 !important;
+    gap: 10px !important;
+  }
+
+  .sub-tab-segmented-container {
+    margin-bottom: 4px !important;
+  }
+
+  .segmented-control {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    box-sizing: border-box !important;
+  }
+
+  .segmented-btn {
+    padding: 8px 6px !important;
+    font-size: 12.5px !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .account-card {
+    padding: 12px 10px !important;
+    margin-top: 0 !important;
+  }
+
+  .account-card .section-header .btn.primary {
+    width: 100%;
+    height: 38px;
+    justify-content: center;
+  }
+
+  .settings-panel-column .column-header {
+    padding: 10px 12px !important;
+  }
+
+  .panel-title-info h4 {
+    font-size: 13.5px !important;
+    line-height: 1.45 !important;
+    word-break: break-word !important;
+  }
+
+  .switch-tile-reborn {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+  }
+
+  /* 8. Tab 7：数据库备份与恢复 */
+  .db-backup-hero-card,
+  .remote-sync-card {
+    padding: 12px 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .db-backup-hero-title,
+  .remote-sync-title {
+    font-size: 14.5px !important;
+  }
+
+  .db-backup-hero-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .db-backup-create-btn {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  .db-backup-upload-btn,
+  .db-backup-refresh-btn {
+    width: 100% !important;
+    padding: 0 8px !important;
+    font-size: 12.5px !important;
+  }
+
+  .db-backup-stats-bar {
+    padding: 8px 10px !important;
+    gap: 6px 14px !important;
+  }
+
+  .remote-sync-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .remote-sync-hero-btn {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    height: 42px !important;
+    font-size: 14px !important;
+  }
+
+  .remote-sync-latest-btn {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    padding: 0 10px !important;
+    font-size: 12.5px !important;
+  }
+
+  .remote-sync-secondary-btn,
+  .remote-sync-config-btn {
+    width: 100% !important;
+    padding: 0 8px !important;
+    font-size: 12.5px !important;
+  }
+
+  .remote-sync-drawer {
+    padding: 10px !important;
+  }
+
+  .remote-sync-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .remote-sync-drawer-btns {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    width: 100% !important;
+  }
+
+  .remote-sync-drawer-btns .btn {
+    width: 100% !important;
+    height: 36px !important;
+  }
+
+  .db-backup-list-card {
+    padding: 12px 10px !important;
+    margin-top: 0 !important;
+  }
+
+  /* 9. 全局所有弹窗 / Modal / 遮罩层移动端精细保护 */
+  .block-modal-overlay,
+  .dialog-mask {
+    padding: 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  .dialog,
+  .account-form-dialog,
+  .dialog-card,
+  .editor-modal,
+  .super-modal-content,
+  .restore-modal-card {
+    width: 100% !important;
+    max-width: calc(100vw - 20px) !important;
+    max-height: 90vh !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 12px !important;
+  }
+
+  .dialog-header,
+  .remote-backups-header,
+  .dark-modal-header {
+    padding: 12px 14px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .dialog-body,
+  .restore-config-body,
+  .remote-backups-body,
+  .dark-modal-body {
+    padding: 14px !important;
+    overflow-y: auto !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .dialog-footer,
+  .restore-modal-footer,
+  .remote-backups-footer,
+  .dark-modal-footer {
+    padding: 12px 14px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .dialog-footer,
+  .restore-modal-footer {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .dialog-footer .btn,
+  .restore-modal-footer .btn {
+    width: 100% !important;
+    height: 38px !important;
+    justify-content: center !important;
+  }
+
+  .restore-mode-group {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .restore-tables-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dark-terminal-log-box {
+    height: 240px !important;
+  }
+
+  .dark-terminal-log-box.is-pull-log {
+    height: 190px !important;
+  }
+
+  .dark-modal-footer-btns {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .dark-modal-footer-btns .btn,
+  .remote-backups-footer .btn {
+    width: 100% !important;
+    height: 36px !important;
+  }
+
+  .temp-import-modal__card {
+    width: calc(100vw - 16px) !important;
+    padding: 14px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .files-toolbar-actions,
+  .filter-inputs-grid,
+  .audit-grid,
+  .overview-grid,
+  .system-grid,
+  .account-mobile-meta {
+    grid-template-columns: 1fr !important;
+  }
+
+  .header-actions-group {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 </style>

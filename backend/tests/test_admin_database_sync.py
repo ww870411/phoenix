@@ -303,6 +303,131 @@ class AdminDatabaseSyncTests(unittest.TestCase):
         self.assertEqual(origin, "https://originplatform.smartview.top")
         self.assertTrue(any("originplatform.smartview.top" in x for x in logs))
 
+    def test_download_remote_file_adaptive_partial_resume(self) -> None:
+        """自适应大分片中途断流（已收 >= 64KB）时，重试应从断点偏移继续拉取而非丢弃已收字节。"""
+        probe_len = 256 * 1024
+        slice_len = 512 * 1024
+        total_len = probe_len + slice_len
+        full_data = (b"P" * probe_len) + (b"Q" * (100 * 1024)) + (b"R" * (slice_len - 100 * 1024))
+        temp_file = self.tmp_dir / "resume.downloading"
+        seen_ranges: list[str] = []
+        slice_calls = {"n": 0}
+
+        class _FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def close(self):
+                pass
+
+            @contextmanager
+            def stream(self, method: str, url: str, headers: dict[str, str] | None = None):
+                rng = (headers or {}).get("Range", "")
+                seen_ranges.append(rng)
+                if rng == f"bytes=0-{probe_len - 1}":
+                    yield _FakeStreamResponse(
+                        206,
+                        [full_data[:probe_len]],
+                        {"Content-Range": f"bytes 0-{probe_len - 1}/{total_len}"},
+                    )
+                elif rng == f"bytes={probe_len}-{total_len - 1}":
+                    slice_calls["n"] += 1
+                    # 首次仅发 100KB 后模拟断流
+                    yield _FakeStreamResponse(
+                        206,
+                        [full_data[probe_len:probe_len + 100 * 1024]],
+                        {"Content-Range": f"bytes {probe_len}-{total_len - 1}/{total_len}"},
+                        raise_exc=httpx.ReadTimeout("mid-slice stall"),
+                    )
+                elif rng == f"bytes={probe_len + 100 * 1024}-{total_len - 1}":
+                    yield _FakeStreamResponse(
+                        206,
+                        [full_data[probe_len + 100 * 1024:]],
+                        {"Content-Range": f"bytes {probe_len + 100 * 1024}-{total_len - 1}/{total_len}"},
+                    )
+                else:
+                    raise AssertionError(f"unexpected range: {rng}")
+
+        with (
+            patch.object(admin_console.httpx, "Client", _FakeClient),
+            patch.object(admin_console.time, "sleep", return_value=None),
+        ):
+            written = admin_console._download_remote_file_with_verification(
+                download_url="https://example.test/download/big.dump",
+                temp_dest_path=temp_file,
+                headers={"Authorization": "Bearer t"},
+                expected_size=total_len,
+                chunk_size=None,
+                max_retries=3,
+            )
+
+        self.assertEqual(written, total_len)
+        self.assertEqual(temp_file.read_bytes(), full_data)
+        self.assertEqual(slice_calls["n"], 1)
+        self.assertIn(f"bytes={probe_len + 100 * 1024}-{total_len - 1}", seen_ranges)
+
+    def test_execute_remote_pull_lazy_token_relogin_on_401(self) -> None:
+        """缓存 token 免前置探测直接发起请求，遇 401 时应自动重登刷新并重试。"""
+        fake_session = SimpleNamespace(username="admin", unit="系统管理员")
+        post_tokens: list[str] = []
+
+        class _FakeResp:
+            def __init__(self, status_code: int, payload: dict):
+                self.status_code = status_code
+                self._payload = payload
+                self.text = str(payload)
+
+            def json(self):
+                return self._payload
+
+        class _FakePostClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def post(self, url, content=None, headers=None):
+                auth = (headers or {}).get("Authorization", "")
+                post_tokens.append(auth)
+                if auth == "Bearer stale_tok":
+                    return _FakeResp(401, {"detail": "expired"})
+                return _FakeResp(200, {"ok": True, "filename": "snap.dump", "file_size": 10, "file_size_h": "10 B"})
+
+        def _fake_download(download_url, temp_dest_path, headers, expected_size, **kwargs):
+            temp_dest_path.write_bytes(b"0123456789")
+            return 10
+
+        with (
+            patch.object(admin_console, "DB_BACKUP_DIR", self.tmp_dir),
+            patch.object(admin_console, "_load_remote_sync_config", return_value={"remote_url": "https://r.test", "token": "stale_tok"}),
+            patch.object(admin_console, "_get_remote_auth_token", side_effect=["stale_tok", "fresh_tok"]) as mock_tok,
+            patch.object(admin_console.httpx, "Client", _FakePostClient),
+            patch.object(admin_console, "_download_remote_file_with_verification", side_effect=_fake_download),
+            patch.object(admin_console, "_verify_pg_dump_archive", return_value=(True, None)),
+            patch.object(admin_console.audit_log, "append_events", return_value=None),
+        ):
+            res = admin_console._execute_remote_pull(
+                admin_console.RemoteSyncPullPayload(create_fresh_first=True),
+                session=fake_session,
+            )
+
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["filename"], "远程_snap.dump")
+        self.assertEqual(post_tokens, ["Bearer stale_tok", "Bearer fresh_tok"])
+        self.assertEqual(mock_tok.call_count, 2)
+        self.assertEqual(mock_tok.call_args_list[0].kwargs.get("verify_token"), False)
+        self.assertEqual(mock_tok.call_args_list[1].kwargs.get("force_relogin"), True)
+
 
 if __name__ == "__main__":
     unittest.main()

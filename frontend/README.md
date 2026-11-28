@@ -1,3 +1,28 @@
+## 2026-11-28 将「会议排座助手 (`meeting_seating`)」当前 61 席排布设为默认布局 (`seatingLayout.js`, `MeetingSeatingEntryView.vue`)
+- **`src/projects/meeting_seating/{utils/seatingLayout.js,pages/MeetingSeatingEntryView.vue}`**：更新 `buildDefaultLayout()` 与 `defaultPlants()` 为屏幕席 6 席、主席席 7 席、其余各排 8 席（共 61 席，隐藏座位编号），同步更新绿植默认点位与界面文案，并通过单测（3/3）。
+
+## 2026-11-28 将「会议排座助手 (`meeting_seating`)」后方第 1–3 排升级为 4 桌连接默认 8 席 (`seatingLayout.js`, `SeatingCanvas.vue`, `MeetingSeatingEntryView.vue`)
+- **`src/projects/meeting_seating/{utils/seatingLayout.js,components/SeatingCanvas.vue,pages/MeetingSeatingEntryView.vue}`**：后方 `rear` 排默认 `tableCount=4`、默认 `8` 席（每桌 2 席），`computeRoomScene()` 按 `4/3 × ringW` 居中绘制 4 桌拼接并自适应左右留白，同步更新单测（3/3 通过）。
+
+## 2026-11-28 将「会议排座助手 (`meeting_seating`)」右上角出入口升级为双开外开门 (`SeatingCanvas.vue`, `MeetingSeatingEntryView.vue`, `seatingLayout.js`)
+- **`src/projects/meeting_seating/{components/SeatingCanvas.vue,pages/MeetingSeatingEntryView.vue,utils/seatingLayout.js}`**：将右上角门绘制升级为左右对称双扇外开门及双圆弧开启轨迹（支持镜像翻转），并同步默认文案为「双开出入口（外开）」。
+
+## 2026-11-28 为「会议排座助手 (`meeting_seating`)」新增空位显示方式选项 (`MeetingSeatingEntryView.vue`, `SeatingCanvas.vue`, `seatingLayout.js`)
+- **`src/projects/meeting_seating/{utils/seatingLayout.js,components/SeatingCanvas.vue,pages/MeetingSeatingEntryView.vue}`**：新增 `emptySeatDisplay`（`'label'` 显示“空位” / `'dash'` 显示“-” / `'blank'` 显示为空白）配置项及「01 · 会议资料与会场设施」下拉开关，并与后端存档自动同步。
+
+## 2026-11-28 放大「会议排座助手 (`meeting_seating`)」主会场区域展示宽度 (`MeetingSeatingEntryView.vue`)
+- **`src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`**：放宽 `.seating-shell`（`1920px`）及 `.print-sheet` 屏幕预览最大宽度（横向 `1280px` / 纵向 `1020px`，同步对齐 `sheetStyle` 缩放基准），微缩左侧栏至 `320px` 及画布留白，移动端取消 `max-width` 铺满视口。
+
+## 2026-11-28 优化「会议排座助手 (`meeting_seating`)」元素尺寸对齐与画布比例 (`MeetingSeatingEntryView.vue`)
+- **`src/projects/meeting_seating/pages/MeetingSeatingEntryView.vue`**：统一 `.seating-app` 内 `box-sizing: border-box` 与 `min-width: 0` 覆盖 `theme.css` 残留限制；对齐 `.btn` / `.btn.sm`（`32px`）/ `.btn.xs`（`28px`）/ `.btn.xxs`（`24px`）与 `input`/`select` 高度，将 `.rowitem` 六列控件统一为 `28px` 等高对齐，固定 `.photos-grid img` `4:3` 等高比例，区分 `.print-sheet.is-portrait`（`780px`）与横向（`1080px`）屏幕预览宽幅并修正 `sheetStyle` 缩放基准，同时补齐 `<= 480px` 窄屏按钮等宽网格。
+
+## 2026-11-28 强化 `db_backup` 页签「⚡ 即时快照并拉取」主操作视觉层级 (`AdminConsoleView.vue`)
+- **`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`**：在远程生产环境同步专区将「⚡ 即时快照并拉取」前置为主按钮（渐变高亮样式与「常用」标签，手机端 `42px` 全宽置顶），将「一键拉取最新已有备份」调整为次级按钮样式。
+
+## 2026-11-28 优化管理控制台 `/admin-console` 手机窄屏响应式排版 (`AdminConsoleView.vue`, `AiAgentSettingsDialog.vue`)
+- **`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`**：全面重构 7 个标签页（后台文件编辑、数据库表编辑、项目后台设定、服务器管理、操作日志、账户与权限管理、数据库备份与恢复）及关联弹窗（账号编辑、历史日志迁移、数据库还原配置/控制台、远程备份列表/拉取监视器）在 `<= 768px` / `<= 360px` 窄屏下的网格、按钮组、表格与弹窗排版；为服务器文件列表、系统账户列表、本地/远程备份存档列表新增手机端卡片流，并将移动端媒体查询移至样式表末尾确保生效。
+- **`src/projects/daily_report_25_26/components/AiAgentSettingsDialog.vue`**：新增 `<= 640px` 移动端适配，优化 Provider 卡片头部、输入框宽度与底部按钮排版。
+
 ## 2026-11-27 为远程备份同步新增实时拉取进度条弹窗与源站直连加速开关 (`AdminConsoleView.vue`, `api.js`)
 - **`src/projects/daily_report_25_26/services/api.js`**：新增 `startAdminRemoteSyncPull()`、`getAdminRemoteSyncPullJob()`、`cancelAdminRemoteSyncPullJob()`，对接后端异步拉取与取消接口。
 - **`src/projects/daily_report_25_26/pages/AdminConsoleView.vue`**：将「⚡ 即时快照并拉取」「🚀 一键拉取生产环境最新备份」与存档列表「📥 拉取到本地」切换为异步任务 + 600ms 轮询，新增「⚡ 远程生产备份实时拉取监视器」弹窗（实时展示阶段状态、百分比进度条、已接收/总大小、实时速率、ETA、重试次数、滚动日志、取消拉取及完成后一键打开还原向导），并在「⚙️ 生产连接设置」中增加「自动探测并直连源站加速」开关。

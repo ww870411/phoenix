@@ -32,9 +32,15 @@ def test_profile_store_crud_and_row_schema(tmp_path: Path, monkeypatch: pytest.M
     active = initial["active_profile"]
     layout = active["layout"]
 
-    # 默认按边/排管理：8排，每排3张拼接桌默认6席共48席
+    # 默认按边/排管理：共8排，屏幕席6席、主席席7席、其余6排各8席（共61席）
     assert len(layout["rows"]) == 8
-    assert all(r["tableCount"] == 3 and len(r["seats"]) == 6 for r in layout["rows"])
+    expected_counts = {"A": 6, "B": 7, "C": 8, "D": 8, "E": 8, "F": 8, "G": 8, "H": 8}
+    for r in layout["rows"]:
+        assert len(r["seats"]) == expected_counts[r["id"]]
+        if r["zone"] == "rear":
+            assert r["tableCount"] == 4
+        else:
+            assert r["tableCount"] == 3
     assert len(layout["plants"]) == 4
     assert layout["paper"] == "portrait"
     assert layout["room"]["door"]["enabled"] is True
@@ -55,12 +61,14 @@ def test_profile_store_crud_and_row_schema(tmp_path: Path, monkeypatch: pytest.M
     edited_layout["rows"][-1]["hidden"] = True
     edited_layout["plants"][0]["x"] = 410
     edited_layout["plants"][0]["y"] = 360
+    edited_layout["emptySeatDisplay"] = "dash"
     updated = profile_store.update_profile(new_id, layout=edited_layout)
     saved_layout = updated["profile"]["layout"]
     assert saved_layout["rows"][0]["seats"][0]["name"] == "张主任"
     assert saved_layout["rows"][0]["seats"][1]["hidden"] is True
     assert saved_layout["rows"][-1]["hidden"] is True
     assert saved_layout["plants"][0]["x"] == 410
+    assert saved_layout["emptySeatDisplay"] == "dash"
 
     # 重命名存档
     renamed = profile_store.rename_profile(new_id, "年度扩大会议方案")

@@ -147,6 +147,19 @@
               </div>
             </div>
 
+            <div style="margin-top: 8px">
+              <label class="field-label" for="empty-seat-display">空位显示方式</label>
+              <select
+                id="empty-seat-display"
+                :value="layout.emptySeatDisplay || 'label'"
+                @change="mutateLayout((d) => { d.emptySeatDisplay = normalizeEmptySeatDisplay($event.target.value) })"
+              >
+                <option value="label">显示“空位”</option>
+                <option value="dash">显示“-”</option>
+                <option value="blank">显示为空白</option>
+              </select>
+            </div>
+
             <div class="sub-box">
               <div class="sub-box-title">会场门窗与设备室</div>
               <div class="checks-stack">
@@ -156,7 +169,7 @@
                     :checked="layout.room?.door?.enabled"
                     @change="mutateLayout((d) => { d.room.door.enabled = $event.target.checked })"
                   />
-                  右上位置外开门（朝上方外开）
+                  右上位置双开外开门（朝上方外开）
                 </label>
                 <label class="checkline">
                   <input
@@ -203,7 +216,7 @@
               <h3>02 · 座位布局（按边/排设置）</h3>
               <button type="button" class="btn xs warn" @click="openResetLayoutModal">初始化布局</button>
             </div>
-            <p class="hint">每边默认 3 张拼接桌配 6 把椅子；点击排名称可改名，数量范围 0–24，可整排隐藏。</p>
+            <p class="hint">中央各边 3 桌拼接（屏幕席 6 席、主席席 7 席、其余 8 席），后方各排 4 桌 8 席；点击排名称可改名，数量范围 0–24，可整排隐藏。</p>
 
             <div class="rows-list">
               <div
@@ -431,7 +444,11 @@
           </div>
 
           <div ref="stageBodyRef" class="stagebody">
-            <div class="print-sheet" :class="{ mono: layout.mono }" :style="sheetStyle">
+            <div
+              class="print-sheet"
+              :class="{ mono: layout.mono, 'is-portrait': layout.paper === 'portrait' }"
+              :style="sheetStyle"
+            >
               <div class="sheethead">
                 <h2>{{ layout.meeting || '会议座位安排图' }}</h2>
                 <div v-if="layout.subtitle" class="sheetsub">{{ layout.subtitle }}</div>
@@ -457,7 +474,7 @@
 
               <div class="sheetfoot">
                 <span>{{ footerCountText }}</span>
-                <span>显示屏方向为会场正前方 · 右上外开出入口</span>
+                <span>显示屏方向为会场正前方 · 右上双开外开出入口</span>
               </div>
             </div>
           </div>
@@ -508,7 +525,7 @@
             </label>
             <label class="checkline">
               <input v-model="profileModal.source" type="radio" value="default" />
-              新建默认实景布局
+              新建默认布局
             </label>
           </div>
         </div>
@@ -544,7 +561,7 @@
       <div class="modal-card">
         <h4>初始化会场布局</h4>
         <p class="hint" style="margin-bottom: 10px">
-          将恢复各边默认 6 座（3 桌拼接）、4 盆花盆位置、门窗设置并取消隐藏；支持随时「撤销」。
+          将恢复默认桌椅配置（屏幕席 6 席、主席席 7 席，右侧/后排各 8 席）、4 盆花盆位置、门窗设置并取消隐藏；支持随时「撤销」。
         </p>
         <div class="checks-stack">
           <label class="checkline">
@@ -589,6 +606,7 @@ import {
   cloneLayout,
   defaultPlants,
   makeRow,
+  normalizeEmptySeatDisplay,
   normalizeOrMigrateLayout,
   resetRoomLayout,
   resetSeatingNames,
@@ -738,8 +756,16 @@ const saveStateText = computed(() => {
 
 const sheetStyle = computed(() => {
   if (isPrinting.value || zoom.value === 1) return {}
+  const baseW = layout.value.paper === 'portrait' ? 1020 : 1280
+  const scaledW = Math.round(baseW * zoom.value)
+  if (zoom.value < 1) {
+    return {
+      width: '100%',
+      maxWidth: `${scaledW}px`,
+    }
+  }
   return {
-    width: `${Math.round(zoom.value * 100)}%`,
+    width: `${scaledW}px`,
     maxWidth: 'none',
   }
 })
@@ -1048,7 +1074,7 @@ function addRow() {
     do {
       id = `R${d.seq++}`
     } while (d.rows.some((r) => r.id === id))
-    d.rows.push(makeRow(id, `${labels[zone] || '自定义'}第${num}排`, zone, 6))
+    d.rows.push(makeRow(id, `${labels[zone] || '自定义'}第${num}排`, zone, zone === 'rear' ? 8 : 6))
   })
 }
 
@@ -1248,12 +1274,12 @@ function submitResetLayoutModal() {
   if (!preserve) personDraft.value = ''
   resetLayoutModal.value.open = false
   noticeText.value = preserve
-    ? '已初始化默认实景布局，并保留了已排姓名（可撤销）'
+    ? '已初始化默认布局，并保留了已排姓名（可撤销）'
     : '已完成全部初始化（恢复默认布局并清空排座，可撤销）'
 }
 
 function resetToInitial() {
-  if (!window.confirm('确认全部初始化为默认实景回字布局并清空已填名单？')) return
+  if (!window.confirm('确认全部初始化为默认布局并清空已填名单？')) return
   const fresh = resetRoomLayout(layout.value, { preserveNames: false, clearMeta: true })
   mutateLayout((d) => {
     Object.assign(d, fresh)
@@ -1261,7 +1287,7 @@ function resetToInitial() {
   selectedSeat.value = null
   swapSource.value = null
   personDraft.value = ''
-  noticeText.value = '已全部初始化为默认实景回字布局'
+  noticeText.value = '已全部初始化为默认布局'
 }
 
 function locateSeat(item) {
@@ -1397,10 +1423,17 @@ onBeforeUnmount(() => {
   color: #20342e;
 }
 
+.seating-app,
+.seating-app *,
+.seating-app *::before,
+.seating-app *::after {
+  box-sizing: border-box;
+}
+
 .seating-shell {
-  max-width: 1760px;
+  max-width: 1920px;
   margin: 0 auto;
-  padding: 14px 18px 28px;
+  padding: 12px 16px 24px;
 }
 
 .top-toolbar {
@@ -1492,8 +1525,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 240px;
+  flex: 1 1 260px;
+  min-width: 0;
 }
 
 .profile-label {
@@ -1504,6 +1537,8 @@ onBeforeUnmount(() => {
 }
 
 .profile-select {
+  flex: 1;
+  min-width: 0;
   max-width: 360px;
 }
 
@@ -1511,12 +1546,13 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 
@@ -1573,34 +1609,50 @@ onBeforeUnmount(() => {
   line-height: 1.45;
 }
 
-input,
+input:not([type='checkbox']):not([type='radio']),
 select,
 textarea {
   width: 100%;
-  min-width: 0;
-  padding: 7px 9px;
+  min-width: 0 !important;
+  max-width: 100%;
+  padding: 6px 9px;
   border: 1px solid #ccd8d0;
   border-radius: 7px;
   background: #fff;
   color: #20342e;
   font: inherit;
   font-size: 13px;
+  line-height: 1.3;
+  box-sizing: border-box;
+}
+
+input:not([type='checkbox']):not([type='radio']),
+select {
+  height: 32px;
 }
 
 textarea {
   resize: vertical;
+  min-height: 82px;
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   cursor: pointer;
   border: 1px solid #ccd8d0;
   border-radius: 7px;
-  padding: 7px 11px;
+  height: 34px;
+  padding: 0 11px;
   background: #fff;
   color: #20342e;
   font: inherit;
   font-size: 13px;
+  line-height: 1;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .btn:hover:not(:disabled) {
@@ -1613,17 +1665,20 @@ textarea {
 }
 
 .btn.sm {
-  padding: 6px 10px;
+  height: 32px;
+  padding: 0 10px;
   font-size: 12.5px;
 }
 
 .btn.xs {
-  padding: 4px 8px;
+  height: 28px;
+  padding: 0 9px;
   font-size: 12px;
 }
 
 .btn.xxs {
-  padding: 3px 6px;
+  height: 24px;
+  padding: 0 7px;
   font-size: 11px;
   border-radius: 5px;
 }
@@ -1718,23 +1773,34 @@ textarea {
 
 .rowitem {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 26px 46px 26px 28px 26px;
+  grid-template-columns: minmax(0, 1fr) 28px 46px 28px 30px 28px;
   gap: 4px;
   align-items: center;
 }
 
 .rowitem input {
-  padding: 4px 2px;
+  height: 28px;
+  padding: 0 2px;
   text-align: center;
   font-size: 12.5px;
 }
 
+.rowitem .btn.xxs {
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  font-size: 12px;
+}
+
 .rowitem .rowname {
+  display: flex;
+  align-items: center;
+  height: 28px;
   text-align: left;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  padding: 5px 7px;
+  padding: 0 8px;
   border: 0;
   border-radius: 6px;
   background: #f1f5f2;
@@ -1762,11 +1828,20 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 6px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
   border-radius: 6px;
   background: #ffffff;
   border: 1px solid #e0e8e3;
   font-size: 12px;
+  min-width: 0;
+}
+
+.plant-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .selected-banner {
@@ -1824,7 +1899,10 @@ textarea {
 }
 
 .photos-grid img {
+  display: block;
   width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
   border-radius: 6px;
   border: 1px solid #dce4df;
 }
@@ -1882,20 +1960,25 @@ textarea {
 }
 
 .stagebody {
-  padding: 14px;
+  padding: 10px;
   background: #f7f9f7;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 .print-sheet {
+  width: 100%;
   background: #ffffff;
   border: 1px solid #dce4df;
-  padding: 16px;
-  max-width: 1120px;
+  padding: 12px 14px;
+  max-width: 1280px;
   margin: auto;
   display: flex;
   flex-direction: column;
+}
+
+.print-sheet.is-portrait {
+  max-width: 1020px;
 }
 
 .sheethead {
@@ -2099,11 +2182,13 @@ textarea {
   }
 
   .stagebody {
-    padding: 6px;
+    padding: 4px;
   }
 
-  .print-sheet {
-    padding: 8px;
+  .print-sheet,
+  .print-sheet.is-portrait {
+    padding: 6px;
+    max-width: none;
   }
 
   .sheethead h2 {
@@ -2134,9 +2219,29 @@ textarea {
 }
 
 @media (max-width: 480px) {
-  .toolbar-actions .btn.sm,
+  .toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .toolbar-actions .btn.sm {
+    width: 100%;
+    height: 30px;
+    padding: 0 4px;
+    font-size: 12px;
+  }
+
+  .profile-btn-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
   .profile-btn-group .btn.sm {
-    padding: 5px 8px;
+    width: 100%;
+    height: 32px;
+    padding: 0 6px;
     font-size: 12px;
   }
 

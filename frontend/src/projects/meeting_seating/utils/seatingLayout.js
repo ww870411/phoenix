@@ -6,13 +6,20 @@ export function cloneLayout(obj) {
   return JSON.parse(JSON.stringify(obj))
 }
 
-export function makeRow(id, label, zone, seatCount = 6) {
-  const count = Math.max(0, Math.min(24, Math.floor(seatCount)))
+export function normalizeEmptySeatDisplay(value) {
+  if (value === 'dash' || value === 'blank') return value
+  return 'label'
+}
+
+export function makeRow(id, label, zone, seatCount = null) {
+  const tableCount = zone === 'rear' ? 4 : 3
+  const defaultSeats = seatCount === null || seatCount === undefined ? (zone === 'rear' ? 8 : 6) : seatCount
+  const count = Math.max(0, Math.min(24, Math.floor(defaultSeats)))
   return {
     id,
     label,
     zone,
-    tableCount: 3,
+    tableCount,
     hidden: false,
     seats: Array.from({ length: count }, (_, idx) => ({
       id: `${id}-${idx + 1}`,
@@ -24,20 +31,19 @@ export function makeRow(id, label, zone, seatCount = 6) {
 
 export function defaultPlants() {
   return [
-    { id: 'P-1', x: 294, y: 392, label: '花盆 1', hidden: false },
-    { id: 'P-2', x: 474, y: 392, label: '花盆 2', hidden: false },
-    { id: 'P-3', x: 294, y: 584, label: '花盆 3', hidden: false },
-    { id: 'P-4', x: 474, y: 584, label: '花盆 4', hidden: false },
+    { id: 'P-1', x: 335, y: 420, label: '花盆 1', hidden: false },
+    { id: 'P-2', x: 560, y: 420, label: '花盆 2', hidden: false },
+    { id: 'P-3', x: 335, y: 660, label: '花盆 3', hidden: false },
+    { id: 'P-4', x: 565, y: 665, label: '花盆 4', hidden: false },
   ]
 }
 
 /**
- * 构建贴合实景会议室的初始平面布局：
- * - 左上角为设备室，右上角为朝上方外开门
- * - 左、右两侧墙体均有窗
- * - 中央方形每边由 3 张桌子拼接而成，左右两竖边略长于上下两横边（桌角对齐）
- * - 每边默认 6 把椅子（3 桌 × 每桌 2 把紧凑布局），按边/排直接调节座位数
- * - 默认纸张为 A4 纵向（贴合会场平面长宽比）
+ * 构建贴合实景会议室的默认平面布局（共 61 席）：
+ * - 左上角为设备室，右上角为朝上方双开外开门，左/右两侧墙体均有 4 扇窗
+ * - 屏幕席 6 席、主席席 7 席、右侧内排 8 席、回字桌后排 8 席、右侧外围排 8 席（均 3 桌拼接）
+ * - 后方第 1–3 排各 8 席（4 桌拼接）
+ * - 4 盆绿植坐标与当前会场实景对齐，默认纸张为 A4 纵向、隐藏座位编号
  */
 export function buildDefaultLayout() {
   return {
@@ -46,25 +52,26 @@ export function buildDefaultLayout() {
     subtitle: '',
     paper: 'portrait',
     mono: false,
-    numbers: true,
+    numbers: false,
+    emptySeatDisplay: 'label',
     flip: false,
     showHiddenPreview: false,
     room: {
-      door: { enabled: true, label: '出入口（外开）' },
+      door: { enabled: true, label: '双开出入口（外开）' },
       equipmentRoom: { enabled: true, label: '设备室' },
       leftWindows: 4,
       rightWindows: 4,
       screenLabel: '显示屏 / 会场正前方',
     },
     rows: [
-      makeRow('A', '主席席', 'front', 6),
-      makeRow('B', '窗侧内排', 'innerLeft', 6),
-      makeRow('C', '右侧内排', 'innerRight', 6),
-      makeRow('D', '回字桌后排', 'innerRear', 6),
-      makeRow('E', '右侧外围排', 'right', 6),
-      makeRow('F', '后方第1排', 'rear', 6),
-      makeRow('G', '后方第2排', 'rear', 6),
-      makeRow('H', '后方第3排', 'rear', 6),
+      makeRow('A', '屏幕席', 'front', 6),
+      makeRow('B', '主席席', 'innerLeft', 7),
+      makeRow('C', '右侧内排', 'innerRight', 8),
+      makeRow('D', '回字桌后排', 'innerRear', 8),
+      makeRow('E', '右侧外围排', 'right', 8),
+      makeRow('F', '后方第1排', 'rear', 8),
+      makeRow('G', '后方第2排', 'rear', 8),
+      makeRow('H', '后方第3排', 'rear', 8),
     ],
     plants: defaultPlants(),
     seq: 10,
@@ -138,7 +145,7 @@ export function normalizeOrMigrateLayout(raw) {
       id: rid,
       label: String(r?.label || rid).slice(0, 32),
       zone,
-      tableCount: 3,
+      tableCount: zone === 'rear' ? 4 : 3,
       hidden: Boolean(r?.hidden),
       seats,
     }
@@ -158,6 +165,7 @@ export function normalizeOrMigrateLayout(raw) {
     paper: raw.paper === 'portrait' ? 'portrait' : 'landscape',
     mono: Boolean(raw.mono),
     numbers: raw.numbers !== false,
+    emptySeatDisplay: normalizeEmptySeatDisplay(raw.emptySeatDisplay),
     flip: Boolean(raw.flip),
     showHiddenPreview: Boolean(raw.showHiddenPreview),
     room: {
@@ -249,11 +257,10 @@ export function computeRoomScene(layout, showHidden = false) {
   const wallPad = 24
   const wallTop = 68
 
-  const maxHorizSeats = Math.max(
+  const maxHorizCenterSeats = Math.max(
     6,
     f.seats.length,
     b.seats.length,
-    ...rearRows.map((row) => row.seats.length),
   )
   const maxVertSeats = Math.max(
     6,
@@ -262,19 +269,28 @@ export function computeRoomScene(layout, showHidden = false) {
     ...leftRows.concat(rightRows).map((row) => row.seats.length),
   )
 
-  const ringW = maxHorizSeats <= 6 ? 444 : maxHorizSeats * 68 + 16
+  const ringW = maxHorizCenterSeats <= 6 ? 444 : maxHorizCenterSeats * 68 + 16
   // 保证左右竖边内跨度 >= 横边长度，使左右两竖边外沿（ringInnerH + 2*tableDepth）始终略长于上下横边
   const ringInnerH = Math.max(ringW, maxVertSeats <= 6 ? 444 : maxVertSeats * 58 + 16)
   const ringOuterH = ringInnerH + tableDepth * 2
+
+  const maxRearSeats = rearRows.length ? Math.max(8, ...rearRows.map((row) => row.seats.length)) : 8
+  const rearW = rearRows.length
+    ? Math.max(Math.round((ringW * 4) / 3), maxRearSeats <= 8 ? 592 : maxRearSeats * 68 + 16)
+    : ringW
+  const rearHalfExtra = rearRows.length ? Math.max(0, Math.ceil((rearW - ringW) / 2)) : 0
 
   const sideBlockW = 122
   const rearStep = 114
   const rearStartOffset = 84
   const hasEqRoom = layout?.room?.equipmentRoom?.enabled !== false
   const leftMargin = hasEqRoom ? 142 : 114
-  const tx = wallPad + leftMargin + leftRows.length * sideBlockW
+  const baseTx = wallPad + leftMargin + leftRows.length * sideBlockW
+  const tx = Math.max(baseTx, wallPad + 28 + rearHalfExtra)
   const ty = wallTop + 160
-  const W = tx + ringW + 114 + rightRows.length * sideBlockW + wallPad
+  const baseRightEdge = tx + ringW + 114 + rightRows.length * sideBlockW
+  const rearRightEdge = tx + ringW / 2 + rearW / 2 + 28
+  const W = Math.max(baseRightEdge, rearRightEdge) + wallPad
   const H = ty + ringOuterH + rearStartOffset + rearRows.length * rearStep + 44
 
   const tables = []
@@ -288,13 +304,14 @@ export function computeRoomScene(layout, showHidden = false) {
 
   function pushSplicedTables(row, x, y, totalLen, orientation) {
     if (row.hidden && !showHidden) return
-    const count = 3
+    const count = row.zone === 'rear' ? 4 : Math.max(1, Number(row.tableCount || 3))
     const segLen = totalLen / count
     for (let i = 0; i < count; i += 1) {
       tables.push({
         key: `${row.id}-t${i + 1}`,
         rowId: row.id,
         rowLabel: row.label,
+        tableCount: count,
         hidden: Boolean(row.hidden),
         orientation,
         x: orientation === 'h' ? x + i * segLen : x,
@@ -432,11 +449,12 @@ export function computeRoomScene(layout, showHidden = false) {
     pushVerticalSeats(row, seatX, ty + tableDepth, ringInnerH, 'left')
   })
 
-  // 后方各排（预留充足行距，避免排名称标签与下一排桌子重合）
+  // 后方各排（4张桌子连接，居中对齐中央正方形中轴线，预留充足行距）
+  const rearX = tx + (ringW - rearW) / 2
   rearRows.forEach((row, idx) => {
     const tblY = ty + ringOuterH + rearStartOffset + idx * rearStep
-    pushSplicedTables(row, tx, tblY, ringW, 'h')
-    pushHorizontalSeats(row, tx, ringW, tblY + tableDepth + 4, 'up', tblY + tableDepth + 55, false)
+    pushSplicedTables(row, rearX, tblY, rearW, 'h')
+    pushHorizontalSeats(row, rearX, rearW, tblY + tableDepth + 4, 'up', tblY + tableDepth + 55, false)
   })
 
   return {
@@ -482,6 +500,7 @@ export function resetRoomLayout(currentLayout, { preserveNames = true, clearMeta
     fresh.paper = currentLayout.paper === 'portrait' ? 'portrait' : 'landscape'
     fresh.mono = Boolean(currentLayout.mono)
     fresh.numbers = currentLayout.numbers !== false
+    fresh.emptySeatDisplay = normalizeEmptySeatDisplay(currentLayout.emptySeatDisplay)
   }
 
   if (!preserveNames || !currentLayout?.rows?.length) {
